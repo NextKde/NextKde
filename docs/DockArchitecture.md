@@ -132,7 +132,9 @@ change without changing the identity of an existing Toplevel.
 
 File: `modules/dock/AppGroupService.qml`
 
-This derives app groups from `ConfigService.pinnedAppIds` and
+This derives app groups from the top-level `app` entries in
+`ConfigService.dockItems` (currently exposed as the compatibility projection
+`ConfigService.pinnedAppIds`) and
 `WindowService.records`. It is the shared model for future grouped Dock,
 Alt+Tab, and Stage Manager views.
 
@@ -150,9 +152,11 @@ Group shape:
 }
 ```
 
-The current Dock policy is `pinnedVisible === true` only when a pinned app
-has no open windows. A future macOS/KDE grouped view may show the pinned app
-and its windows together without changing identity or persistence code.
+The current Dock uses an iPadOS-style policy: pinned apps always remain in
+their fixed position. A running pinned app displays a dot and active state;
+its windows are omitted only from the Dock's separate unpinned-window section.
+All windows remain in `WindowService`, so a future preview, Alt+Tab, or Stage
+Manager view can still access every individual window.
 
 ## Current Dock compatibility facade
 
@@ -175,25 +179,34 @@ to `DockModelService`.
 
 ## Persistence contract
 
-File: `config/dock/config.json` relative to the current shell directory.
+File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
+state outside the watched QML source directory.
 
 Current user configuration fields:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "baseHeight": 60,
   "maxWidthRatio": 0.9,
   "theme": "dark",
   "iconOverrides": {},
-  "pinnedAppIds": [],
+  "dockItems": [
+    { "type": "app", "appId": "code.desktop" },
+    {
+      "type": "folder",
+      "id": "dev-tools",
+      "name": "开发工具",
+      "appIds": ["code.desktop", "org.kde.kate.desktop"]
+    }
+  ],
   "proportions": {}
 }
 ```
 
 Persist:
 
-- canonical `pinnedAppIds`
+- ordered `dockItems`; app IDs inside them are canonical desktop IDs
 - layout proportions and size preferences
 - theme and behavior preferences
 - canonical-ID keyed icon overrides
@@ -207,11 +220,15 @@ Do not persist:
 - preview images
 - icon resolution cache
 
+`pinnedAppIds` is retained only as a compatibility projection for the current
+flat Dock UI. New features must read and mutate `dockItems` through
+`ConfigService.setDockItems`, `addAppItem`, and `removeAppItem`.
+
 When the configuration format changes, increment `version`, provide defaults
 for missing fields, preserve unknown fields where practical, and write the
-new format only after a successful migration. Future work should move the
-file to an XDG configuration path while retaining a one-time migration from
-the current shell-directory path.
+new format only after a successful migration. Runtime state is already stored
+under Quickshell's XDG-backed state directory; do not move it back into the
+watched QML source tree.
 
 ## Planned feature contracts
 
