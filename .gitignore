@@ -1,0 +1,10 @@
+# Runtime/user-specific dock state
+config/dock/config.json
+
+# Local editor/assistant settings
+.claude/settings.local.json
+
+# Quickshell runtime logs and generated crash data
+*.log
+*.qslog
+*.qslog.gz
