@@ -238,6 +238,10 @@ The current implementation is `DockContextMenu.qml`, anchored with a
 Quickshell `PopupWindow` so the menu does not change the adaptive Dock height.
 Right-click is handled by `DockIcon`; left-click behavior is unchanged.
 
+The first folder slice uses `DockFolderIcon.qml` and `DockFolderMenu.qml`.
+Folders are persisted in `dockItems` and can currently be created from the
+App context menu. Editing names and drag-and-drop are intentionally deferred.
+
 Current context menu actions call service methods:
 
 ```text
