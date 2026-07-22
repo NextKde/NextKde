@@ -8,3 +8,6 @@ config/dock/config.json
 *.log
 *.qslog
 *.qslog.gz
+
+# Locally compiled KWin window bridge
+tools/kwin-window-bridge/build/
