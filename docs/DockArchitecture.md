@@ -177,6 +177,42 @@ New UI components should prefer `AppIdentityService`, `WindowService`, and
 `AppGroupService` directly. Do not add new identity or window tracking logic
 to `DockModelService`.
 
+## Application launcher module boundary
+
+Files: `modules/applauncher/AppLauncher.qml`,
+`modules/applauncher/AppLauncherWindow.qml`, and
+`modules/applauncher/AppLauncherService.qml`.
+
+The application launcher is a shell module, not a Dock popup. `shell.qml`
+instantiates it independently, which allows a global shortcut, IPC, search,
+and application-grid navigation to operate without importing Dock visuals.
+
+Its public control API is:
+
+```js
+AppLauncherService.show()
+AppLauncherService.hide()
+AppLauncherService.toggle()
+```
+
+Dock has one strictly presentation-only responsibility: it calls
+`setDockPresentation(width, height, background, primary, secondary)` whenever
+its adaptive layout or material changes. The launcher independently selects
+the same preferred output policy as Dock. Passing material values through this
+API is intentional: `modules/applauncher` must not import `qs.modules.dock`,
+because Dock already imports the launcher control service.
+The launcher uses that published geometry to remain exactly Dock-width and
+half-screen-height without reimplementing adaptive layout math. For an
+initially narrow Dock it uses a minimum usable launcher size of `600×500px`;
+once the Dock reaches 600px it resumes the Dock-width / half-screen-height
+rule. Do not put application search, shortcut registration, or grid state back
+into `DockContainer.qml`.
+
+Launcher persistence is separate at
+`Quickshell.stateDir + "/applauncher/config.json"`. Its versioned schema owns
+`rootItems` (`app` or future `folder`), `hiddenAppIds`, and per-app overrides.
+Do not store launcher folders or application-grid order in Dock configuration.
+
 ## Persistence contract
 
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
@@ -193,12 +229,7 @@ Current user configuration fields:
   "iconOverrides": {},
   "dockItems": [
     { "type": "app", "appId": "code.desktop" },
-    {
-      "type": "folder",
-      "id": "dev-tools",
-      "name": "开发工具",
-      "appIds": ["code.desktop", "org.kde.kate.desktop"]
-    }
+    { "type": "app", "appId": "org.kde.kate.desktop" }
   ],
   "proportions": {}
 }
@@ -206,7 +237,7 @@ Current user configuration fields:
 
 Persist:
 
-- ordered `dockItems`; app IDs inside them are canonical desktop IDs
+- ordered `dockItems`; app IDs are canonical desktop IDs
 - layout proportions and size preferences
 - theme and behavior preferences
 - canonical-ID keyed icon overrides
@@ -237,10 +268,6 @@ watched QML source tree.
 The current implementation is `DockContextMenu.qml`, anchored with a
 Quickshell `PopupWindow` so the menu does not change the adaptive Dock height.
 Right-click is handled by `DockIcon`; left-click behavior is unchanged.
-
-The first folder slice uses `DockFolderIcon.qml` and `DockFolderMenu.qml`.
-Folders are persisted in `dockItems` and can currently be created from the
-App context menu. Editing names and drag-and-drop are intentionally deferred.
 
 Current context menu actions call service methods:
 
