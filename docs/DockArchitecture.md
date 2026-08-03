@@ -21,20 +21,71 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 ## Service layers
 
 ```text
-AppIdentityService
-        ↓
-WindowService
-        ↓
-AppGroupService
-        ↓
-Dock / Alt+Tab / Preview / Stage Manager
+AppPresentationService ──→ AppLauncher / QuickSearch / shared AppIcon
+        ↑
+AppIdentityService → WindowService → AppGroupService → Dock / Alt+Tab / Preview / Stage Manager
+AppActionService ──→ launch / pin / unpin / hide / edit requests
 ```
+
+### AppPresentationService
+
+File: `modules/common/AppPresentationService.qml`
+
+This is the shared presentation boundary for Dock, QuickSearch and AppLauncher.
+Use `catalog()` to enumerate installed visible applications and
+`descriptor(entry, rawId)` for display name/defaults/icon source. Both return
+the same custom name/icon override, so UI surfaces must not walk
+`DesktopEntries` or resolve theme icons themselves. Keep folder layout,
+sorting and hidden-app state in AppLauncher-only configuration.
+
+Public functions:
+
+```js
+catalog() -> [descriptor] // visible installed apps, sorted by displayName
+descriptor(entry, rawId) -> {
+    desktopId, rawAppId, entry,
+    defaultName, defaultIcon,
+    displayName, iconSource, override
+}
+iconSource(candidate) -> QML image source
+overrideFor(desktopId, rawId) -> override
+setOverrides(overrides)
+```
+
+`catalogRevision` changes when Quickshell's installed application model
+changes. `revision` changes when a user edit changes the shared overrides.
+Consumers that keep a derived model bind to both revisions.
+
+`AppIcon.qml` is the common asynchronous rendering wrapper. New visual
+surfaces should pass it the already-resolved `descriptor.iconSource`; do not
+reintroduce per-surface `IconImage` behaviour.
+
+### AppActionService
+
+File: `modules/common/AppActionService.qml`
+
+Use this service for every cross-surface application action:
+
+```js
+launch(applicationOrDesktopEntry)
+pin(appId)
+unpin(appId)
+hide(appId)
+edit(application)
+```
+
+`launch()` executes the DesktopEntry once in the common layer. Persistence
+actions emit requests: Dock handles pin/unpin, AppLauncher handles hide/edit.
+This is intentional dependency inversion; common code must not import either
+UI module. New surfaces call the service and never duplicate launch commands
+or configuration mutations.
+
 
 ### AppIdentityService
 
 File: `modules/dock/AppIdentityService.qml`
 
-This is the only service that resolves application identity. It currently
+This is the only service that resolves *runtime window identity*. It currently
 uses Quickshell `DesktopEntries` and the Wayland `appId` supplied by a
 `Toplevel`.
 
@@ -63,7 +114,7 @@ must not be written to configuration.
 Icon resolution order:
 
 ```text
-ConfigService.iconOverrides[desktopId]
+AppPresentationService override[desktopId]
     ↓
 DesktopEntry.icon
     ↓
@@ -77,6 +128,11 @@ heuristic matching. Some applications install a URI handler desktop file
 alongside the real application desktop file; the handler may have the same
 startup class but no `Icon` field. The resolver must not let that handler
 shadow the icon-bearing application entry.
+
+`DockConfigService.iconOverrides` remains in old configuration files only for
+round-trip compatibility. Do not read or write it for new features: all new
+name/icon edits belong to AppLauncher persistence and are published through
+`AppPresentationService`.
 
 If a future Hyprland adapter exposes `class` or `initialClass`, pass those as
 additional lookup hints into this service. Do not add a second matching
