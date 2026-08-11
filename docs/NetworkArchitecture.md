@@ -27,13 +27,13 @@ orange warning badge instead of an offline icon.
 - `NetworkStatus.qml` renders the passive Bar indicator and hover details.
 - `NetworkTraffic.qml` samples the active interface's kernel RX/TX byte
   counters and renders only presentation-friendly transfer rates.
-- `NetworkPanel.qml` is the read-only Wi-Fi card that will later be embedded
-  into the iOS-style top control centre.
+- `NetworkPanel.qml` renders the Wi-Fi picker popup that the Bar and the
+  control centre's Wi-Fi card both open for scan/connect/disconnect actions.
 - `BarWindow.qml` only places the component.
-- Future quick settings, Wi-Fi picker, and connection dialogs consume
-  `NetworkService` rather than duplicating state logic.
+- Control-centre and picker UI consume `NetworkService` rather than
+  duplicating state logic.
 
-## Planned write API
+## Write API
 
 `connectWifi(ssid, password)` connects normal WPA/open networks. Enterprise
 networks use `connectEnterpriseWifi(ssid, identity, password, eapMethod,
