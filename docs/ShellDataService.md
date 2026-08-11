@@ -25,9 +25,28 @@ It accepts newline-delimited JSON events on:
 `$XDG_RUNTIME_DIR/shell-data-service.sock`
 
 `{"type":"active_app","appID":"firefox.desktop","name":"Firefox"}`
-starts attribution; `{"type":"session","active":false}` pauses it.
+starts attribution; `{"type":"active_app","appID":""}` pauses it, and
+`{"type":"session","active":false}` pauses attribution too.
 `{"type":"refresh_desktop"}` requests an immediate desktop-directory scan
 after a shell-originated rename, deletion, paste, or folder creation.
+
+## Metrics
+
+The service samples CPU (delta of `/proc/stat`), memory (`/proc/meminfo`),
+root-disk usage (`df`), CPU frequency (`cpufreq` policies with a
+`/proc/cpuinfo` fallback), and temperatures (CPU/PKG thermal zones, plus a
+full `hwmon`/`thermal` sensor listing) every ten seconds. History keeps the
+latest 360 samples. QML consumes the `metrics` section through the
+`MetricsService` singleton in `qs.modules.common`; it never polls `/proc`.
+
+## Activity
+
+Boot uptime is seeded once from `journalctl --list-boots` (streamed per boot
+so a years-long journal costs one line per boot, not a full copy), and the
+running session's online/app time is settled every second and persisted every
+ten seconds. The QML `ActivityUsageService` singleton reports the foreground
+window via `active_app` events and reads the `activity` section for the
+desk cards.
 
 Desktop changes are watched by the Go service through `fsnotify` (Linux:
 `inotify`) and debounced for 120ms; neither the service nor QML polls the
