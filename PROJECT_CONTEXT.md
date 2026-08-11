@@ -57,6 +57,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 9. **Dock 自适应**: 唯一自变量 `iconSize`，高度/间距/圆角全部按比例推导。`dockHeight = Math.round(iconSize × (1 + 2×vpad))`，默认 `vpad=0.20` 即 **`iconSize × 1.40`**；最小图标 24px，最大 dock 高 60px。核心文件 `AdaptiveMath.mjs`。Dock 的 folder 功能已移除（legacy folder 在加载时被摊平为 app）。
 10. **桌面文件**: `DesktopFilesService.qml` 不自己扫盘，消费 `shell-data-service` 的 `snapshot.json` + socket 通知；视图只负责呈现与交互。支持排序（名称/类型/修改时间）、框选、重命名、回收站、文件夹投放（hold-to-drop 520ms 进度条）、多选拖动、新建文件/文件夹、外部 URL 拖入、cut/copy 语义。
 11. **系统指标收口**: CPU/内存/磁盘/频率/温度的采样、历史（10s 采样，360 条）与传感器枚举全部在 Go 服务（`shell-data-service`）完成，QML 经 `common/MetricsService.qml` 单例每 10s 读 `snapshot.json`；活动账本（在线时长 + 按应用时长）由 Go 服务从 journald 播种并每秒 settle，`ActivityUsageService.qml` 只负责把前台窗口经 socket 上报 `active_app` 事件。Bar 的 `CpuTemperature` 与 DeskCenter 系统卡读同一快照，数值永不漂移。`SystemMetricsService`/`activity-usage.json` 已移除。
+12. **全局快捷键**: KDE **Command Shortcut** 机制（`.desktop` + `X-KDE-GlobalAccel-CommandShortcut=true` + `qs ipc call`），与用户已有的 `net.local.qs.desktop` 同款。快捷键表在 `tools/global-shortcuts/shortcuts.json`，`install.py`/`uninstall.py` 生成 desktop 文件、写 `kglobalshortcutsrc` 默认绑定、冲突检测（同键已被他方占用则跳过并提示）。触发链路：kglobalaccel 按键 → 运行 `qs ipc call <target> <action>` → 各模块 `IpcHandler`（applauncher/quicksearch 已有，`control-center` 在 `bar/Bar.qml` 新增，转发 `ControlCenterService.toggleRequested`，由 `BarWindow` 打开面板）。改键在 KDE 系统设置 → 快捷键里改，比脚本直改安全。
 
 ## 开发规范
 
@@ -75,7 +76,6 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 ## 已知问题和未完成工作
 
 ### P0（路线图最高优先级）
-- **全局快捷键层**: 缺统一注册与冲突检测。
 - **Alt+Tab 窗口切换器**: 架构已铺好（`AppGroupService` 为复用而设），无成品。
 - **控制中心真实控制**: 显示亮度未检测到后端（`ControlCenterPanel.qml` 显示静态 48% + 「未检测到后端」）；Wi-Fi 连接/断开/忘记/802.1X **已实现**（`NetworkService.qml` 的 `connectWifi`/`disconnectActiveWifi`/`forgetWifiProfile`/`connectEnterpriseWifi`），但 `NetworkService.qml` 内有过期注释声称未实现，需清理并对齐文档。
 
