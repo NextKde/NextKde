@@ -59,6 +59,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 11. **系统指标收口**: CPU/内存/磁盘/频率/温度的采样、历史（10s 采样，360 条）与传感器枚举全部在 Go 服务（`shell-data-service`）完成，QML 经 `common/MetricsService.qml` 单例每 10s 读 `snapshot.json`；活动账本（在线时长 + 按应用时长）由 Go 服务从 journald 播种并每秒 settle，`ActivityUsageService.qml` 只负责把前台窗口经 socket 上报 `active_app` 事件。Bar 的 `CpuTemperature` 与 DeskCenter 系统卡读同一快照，数值永不漂移。`SystemMetricsService`/`activity-usage.json` 已移除。
 12. **全局快捷键**: KDE **Command Shortcut** 机制（`.desktop` + `X-KDE-GlobalAccel-CommandShortcut=true` + `qs ipc call`），与用户已有的 `net.local.qs.desktop` 同款。快捷键表在 `tools/global-shortcuts/shortcuts.json`，`install.py`/`uninstall.py` 生成 desktop 文件、写 `kglobalshortcutsrc` 默认绑定、冲突检测（同键已被他方占用则跳过并提示）。触发链路：kglobalaccel 按键 → 运行 `qs ipc call <target> <action>` → 各模块 `IpcHandler`（applauncher/quicksearch 已有，`control-center` 在 `bar/Bar.qml` 新增，转发 `ControlCenterService.toggleRequested`，由 `BarWindow` 打开面板）。改键在 KDE 系统设置 → 快捷键里改，比脚本直改安全。
 13. **Alt+Tab 切换（QuickSearch 窗口模式）**: 窗口结果按 MRU 排序（`WindowService._mruOrder`，新窗口置前、当前激活窗口置末尾），打开即选中最近使用的窗口；列表行有 KWin 实时缩略图（`requestThumbnail`，app 图标兜底，2s 慢轮询补抓）。Alt+Tab 已由 Command Shortcut 绑定到 `quicksearch toggle window`。
+14. **控制中心亮度**: 读 `/sys/class/backlight/*`（首设备 current/max），写走 **logind `SetBrightness`**（session owner 无需 /sys 写权限）；面板拖拽条 + `%` 显示，无亮度设备时显示「无亮度设备」并禁用拖拽。状态在 `ControlCenterService`（`brightnessAvailable`/`brightnessPercent`/`setBrightness`），与音量同模式。
 
 ## 开发规范
 
@@ -77,7 +78,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 ## 已知问题和未完成工作
 
 ### P0（路线图最高优先级）
-- **控制中心真实控制**: 显示亮度未检测到后端（`ControlCenterPanel.qml` 显示静态 48% + 「未检测到后端」）；Wi-Fi 连接/断开/忘记/802.1X **已实现**（`NetworkService.qml` 的 `connectWifi`/`disconnectActiveWifi`/`forgetWifiProfile`/`connectEnterpriseWifi`），但 `NetworkService.qml` 内有过期注释声称未实现，需清理并对齐文档。
+- **Wi-Fi 文档对齐**: Wi-Fi 连接/断开/忘记/802.1X **已实现**（`NetworkService.qml` 的 `connectWifi`/`disconnectActiveWifi`/`forgetWifiProfile`/`connectEnterpriseWifi`），但 `NetworkService.qml` 内有过期注释声称未实现，需清理并对齐文档。
 
 ### 待优化
 - 天气图标用 Unicode 字符（`☀⛅☁☔❄`）表示状况符号；桌面天气卡片云层用 SVG（`assets/weather-cloud*.svg`），其余太阳/雨/雪/雾用 `Rectangle`/`Canvas` 绘制。缺完整天气 SVG 图标集。
