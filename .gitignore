@@ -3,6 +3,7 @@ config/dock/config.json
 
 # Local editor/assistant settings
 .claude/settings.local.json
+.zcode/
 
 # Quickshell runtime logs and generated crash data
 *.log
