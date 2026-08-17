@@ -12,3 +12,7 @@ config/dock/config.json
 
 # Locally compiled KWin window bridge
 tools/kwin-window-bridge/build/
+
+# Local service/helper builds
+.build/
+tools/file-clipboard-helper/build/

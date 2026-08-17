@@ -30,6 +30,19 @@ starts attribution; `{"type":"active_app","appID":""}` pauses it, and
 `{"type":"refresh_desktop"}` requests an immediate desktop-directory scan
 after a shell-originated rename, deletion, paste, or folder creation.
 
+The desktop reader opens one persistent connection and writes
+`{"type":"subscribe_desktop"}`. The service immediately responds with a
+`desktop_changed` marker, then sends the same marker after every changed full
+snapshot. One-shot clipboard requests use:
+
+```json
+{"type":"clipboard_set","mode":"cut","paths":["/home/user/Desktop/a.txt"]}
+{"type":"clipboard_read"}
+```
+
+Clipboard replies are JSON lines containing `ok`, `mode`, `paths`, and an
+optional `error`.
+
 ## Metrics
 
 The service samples CPU (delta of `/proc/stat`), memory (`/proc/meminfo`),
@@ -49,11 +62,18 @@ window via `active_app` events and reads the `activity` section for the
 desk cards.
 
 Desktop changes are watched by the Go service through `fsnotify` (Linux:
-`inotify`) and debounced for 120ms; neither the service nor QML polls the
-Desktop directory. After writing a changed snapshot, the service sends
-`desktop_changed` to connected local socket clients, so the desktop grid
-reloads the atomic snapshot immediately. The QML desktop reader keeps one
-connection open; one-shot event senders simply close after writing.
+`inotify`) and debounced for 100ms. Filesystem events are wake-up signals only:
+after a burst, the service rescans the complete directory, compares it with the
+last state, atomically writes the changed snapshot, and only then sends
+`desktop_changed`. A five-second low-frequency reconciliation repairs an
+overflowed or missed inotify event. QML never constructs state from individual
+create/remove events.
+
+The initial complete desktop snapshot is written before the socket begins
+accepting clients. Every new desktop subscription also receives an immediate
+marker. If another marker arrives while QML is reading `snapshot.json`, QML
+queues one more read rather than dropping it. These guarantees prevent the
+startup-empty and “one file behind” failure modes.
 KWin and logind adapters belong beside the service, not in individual widgets.
 
 ## Desktop files
@@ -67,13 +87,67 @@ grid; it must not scan directories itself. `.desktop` launchers additionally
 publish their display name and icon, while activation is delegated to
 `gio launch` rather than manually interpreting their command line.
 
+## File clipboard
+
+The Go process remains the only service managed by systemd. It starts and
+supervises `quickshell-file-clipboard-helper` when the desktop copies or cuts
+files. This helper is a small windowless Qt program because Wayland requires
+the clipboard owner to remain alive and Qt exposes the required multi-format
+`QMimeData` API.
+
+The helper publishes all of the following together:
+
+- `text/uri-list`
+- `application/x-kde-cutselection` (`1` for cut, `0` for copy)
+- `x-special/gnome-copied-files`
+
+This lets Dolphin and compatible file managers distinguish copy from cut. On
+paste, the helper reads the current clipboard formats; QML never trusts stale
+in-process cut state after another application has replaced the clipboard.
+The helper is not a second systemd service and must be installed beside
+`shell-data-service` so the Go process can locate and supervise it.
+
 ## Installation
 
+Dependencies are Go, CMake, a C++ compiler, Qt 6 Gui development files,
+`socat`, and systemd user services. On Arch-based systems the build packages
+are typically `go cmake gcc qt6-base`; on Debian/Ubuntu they are typically
+`golang cmake g++ qt6-base-dev`.
+
+From the repository root:
+
 ```sh
-cd tools/shell-data-service
-go build -o ~/.local/lib/quickshell/shell-data-service .
-mkdir -p ~/.config/systemd/user
-cp systemd/shell-data-service.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now shell-data-service.service
+./tools/install-shell-data-service.sh
 ```
+
+The installer builds both binaries, installs them to
+`~/.local/lib/quickshell`, installs the user unit, and restarts the Go service.
+Only `shell-data-service.service` is enabled.
+
+Useful checks:
+
+```sh
+systemctl --user status shell-data-service.service
+journalctl --user -u shell-data-service.service -f
+```
+
+## GitHub release checklist
+
+- Keep both helper sources in the repository; do not commit `build/`, CMake
+  caches, or newly built executables.
+- Treat the Go service and Qt helper as one release unit. Prebuilt archives
+  must contain both binaries in the same directory.
+- Source installation is the portable default. Linux binaries should be built
+  per supported distribution/runtime because glibc and dynamically linked Qt
+  versions are not universally compatible.
+- Document the required Qt 6 runtime even for prebuilt releases. Plasma 6
+  normally already provides it, but this must not be assumed for other
+  compositors.
+- Test on a real Wayland session: desktop-to-Dolphin copy and cut,
+  Dolphin-to-desktop copy and cut, filenames containing spaces/non-ASCII text,
+  service restart, Quickshell-first startup, and service-first startup.
+- Package managers may install to a system libexec directory, but must either
+  keep the two binaries together or set
+  `QUICKSHELL_FILE_CLIPBOARD_HELPER` in the service environment.
+- If the Qt helper is unavailable, cut must report an explicit error; silently
+  downgrading a move to a copy is not an acceptable fallback.
