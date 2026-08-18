@@ -50,7 +50,7 @@ root-disk usage (`df`), CPU frequency (`cpufreq` policies with a
 `/proc/cpuinfo` fallback), and temperatures (CPU/PKG thermal zones, plus a
 full `hwmon`/`thermal` sensor listing) every ten seconds. History keeps the
 latest 360 samples. QML consumes the `metrics` section through the
-`MetricsService` singleton in `qs.modules.common`; it never polls `/proc`.
+`MetricsService` singleton in `qs.desktop.modules.common`; it never polls `/proc`.
 
 ## Activity
 

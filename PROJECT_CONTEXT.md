@@ -11,10 +11,10 @@
 
 - **框架**: Quickshell v0.3.0 + Qt 6
 - **桌面环境**: KDE Plasma (Wayland)，此前用 Hyprland
-- **数据服务**: Go (`tools/shell-data-service`，systemd --user 服务)
-- **KWin 扩展**: C++ D-Bus bridge + KWin JavaScript 脚本 (`tools/kwin-window-bridge/`)
-- **KWin 玻璃特效**: C++ effect + GLSL 折射 shader (`kwin-effects-glass/`，Dual Kawase 模糊 + Snell 折射)
-- **客户端 shader**: Qt Shader Binary (`shaders/liquid.frag` + `compile.sh`，用 `qsb` 编译)
+- **数据服务**: Go (`services/shell-data-service`，systemd --user 服务)
+- **KWin 扩展**: C++ D-Bus bridge + KWin JavaScript 脚本 (`helpers/kwin-window-bridge/`)
+- **KWin 玻璃特效**: C++ effect + GLSL 折射 shader (`integrations/kwin-effects-glass/`，Dual Kawase 模糊 + Snell 折射)
+- **客户端 shader**: Qt Shader Binary (`desktop/shaders/liquid.frag` + `compile.sh`，用 `qsb` 编译)
 - **图标主题**: KDE 用 `MacTahoe-blue-light`，Qt6ct 用 `Tela-circle-dracula-dark`
 
 ## 模块结构
@@ -48,7 +48,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 3. **液态玻璃分层**（重要，按是否依赖 compositor blur 分两路）:
    - **compositor blur 路线**: `BackgroundEffect.blurRegion: RoundedBlurRegion { ... }` 把圆角模糊区域交给 KWin 原生 blur，再叠 `LiquidGlassSurface.qml`（材质：反射/壁纸取色/高光发丝线，不生成 blur region）。圆角区域用 `RoundedBlurRegion.qml` 的「2 矩形 + 4 椭圆」拼合（Wayland Region 只有矩形原语）。**Dock / AppLauncher / QuickSearch / Weather / Notification / DockPreview / DockMusicPopup 走这条路**。
    - **无 compositor blur 路线**: `BackgroundEffect.blurRegion: null` + `EnhancedGlassSurface.qml`（dark base layer `rgba(0.03,0.03,0.05,0.30)` + 复用 `LiquidGlassSurface` 材质）。为 popup 提供自带可读性，不依赖 KWin blur。**ControlCenter / Bluetooth / Network 三个 bar popup 走这条路**。
-   - **KWin effect**: `kwin-effects-glass/` 是 Plasma 6 blur 的 fork，含 Dual Kawase 模糊 + Snell 折射 shader（`snells-glass.glsl`），已编译安装。客户端 `shaders/liquid.frag` 也含 SDF 圆角 + 径向折射 + 噪声 + glow。
+   - **KWin effect**: `integrations/kwin-effects-glass/` 是 Plasma 6 blur 的 fork，含 Dual Kawase 模糊 + Snell 折射 shader（`snells-glass.glsl`），已编译安装。客户端 `desktop/shaders/liquid.frag` 也含 SDF 圆角 + 径向折射 + 噪声 + glow。
 4. **AppLauncher 揭示动画**: 已移除展开动画（KWin backdrop blur 无法与 QML 逐帧动画同步会留白卡），改为**静态模糊区域 + 前景 fade**。关闭是原子的，不留空玻璃卡。
 5. **KWin 窗口管理**: 以标准 Wayland `ToplevelManager`（`Quickshell.Wayland._ToplevelManagement`，Hyprland/KDE 通用）为主；KWin 不实现 `zwlr-foreign-toplevel-management-v1`，故用 KWin Script + C++ D-Bus bridge 作为**回退**（foreign toplevel 为空时启用）。
 6. **图标解析**: bridge 中用 `KIconLoader` + `kdeglobals` 读取主题；裸路径须转 `file:///`。
@@ -57,17 +57,17 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 9. **Dock 自适应**: 唯一自变量 `iconSize`，高度/间距/圆角全部按比例推导。`dockHeight = Math.round(iconSize × (1 + 2×vpad))`，默认 `vpad=0.20` 即 **`iconSize × 1.40`**；最小图标 24px，最大 dock 高 60px。核心文件 `AdaptiveMath.mjs`。Dock 的 folder 功能已移除（legacy folder 在加载时被摊平为 app）。
 10. **桌面文件**: `DesktopFilesService.qml` 不自己扫盘，消费 `shell-data-service` 的 `snapshot.json` + socket 通知；视图只负责呈现与交互。支持排序（名称/类型/修改时间）、框选、重命名、回收站、文件夹投放（hold-to-drop 520ms 进度条）、多选拖动、新建文件/文件夹、外部 URL 拖入、cut/copy 语义。
 11. **系统指标收口**: CPU/内存/磁盘/频率/温度的采样、历史（10s 采样，360 条）与传感器枚举全部在 Go 服务（`shell-data-service`）完成，QML 经 `common/MetricsService.qml` 单例每 10s 读 `snapshot.json`；活动账本（在线时长 + 按应用时长）由 Go 服务从 journald 播种并每秒 settle，`ActivityUsageService.qml` 只负责把前台窗口经 socket 上报 `active_app` 事件。Bar 的 `CpuTemperature` 与 DeskCenter 系统卡读同一快照，数值永不漂移。`SystemMetricsService`/`activity-usage.json` 已移除。
-12. **全局快捷键**: KDE **Command Shortcut** 机制（`.desktop` + `X-KDE-GlobalAccel-CommandShortcut=true` + `qs ipc call`），与用户已有的 `net.local.qs.desktop` 同款。快捷键表在 `tools/global-shortcuts/shortcuts.json`，`install.py`/`uninstall.py` 生成 desktop 文件、写 `kglobalshortcutsrc` 默认绑定、冲突检测（同键已被他方占用则跳过并提示）。触发链路：kglobalaccel 按键 → 运行 `qs ipc call <target> <action>` → 各模块 `IpcHandler`（applauncher/quicksearch 已有，`control-center` 在 `bar/Bar.qml` 新增，转发 `ControlCenterService.toggleRequested`，由 `BarWindow` 打开面板）。改键在 KDE 系统设置 → 快捷键里改，比脚本直改安全。
+12. **全局快捷键**: KDE **Command Shortcut** 机制（`.desktop` + `X-KDE-GlobalAccel-CommandShortcut=true` + `qs ipc call`），与用户已有的 `net.local.qs.desktop` 同款。快捷键表在 `helpers/global-shortcuts/shortcuts.json`，`install.py`/`uninstall.py` 生成 desktop 文件、写 `kglobalshortcutsrc` 默认绑定、冲突检测（同键已被他方占用则跳过并提示）。触发链路：kglobalaccel 按键 → 运行 `qs ipc call <target> <action>` → 各模块 `IpcHandler`（applauncher/quicksearch 已有，`control-center` 在 `bar/Bar.qml` 新增，转发 `ControlCenterService.toggleRequested`，由 `BarWindow` 打开面板）。改键在 KDE 系统设置 → 快捷键里改，比脚本直改安全。
 13. **Alt+Tab 切换（QuickSearch 窗口模式）**: 窗口结果按 MRU 排序（`WindowService._mruOrder`，新窗口置前、当前激活窗口置末尾），打开即选中最近使用的窗口；列表行有 KWin 实时缩略图（`requestThumbnail`，app 图标兜底，2s 慢轮询补抓）。Alt+Tab 已由 Command Shortcut 绑定到 `quicksearch toggle window`。
 14. **控制中心亮度**: 读 `/sys/class/backlight/*`（首设备 current/max），写走 **logind `SetBrightness`**（session owner 无需 /sys 写权限）；面板拖拽条 + `%` 显示，无亮度设备时显示「无亮度设备」并禁用拖拽。状态在 `ControlCenterService`（`brightnessAvailable`/`brightnessPercent`/`setBrightness`），与音量同模式。
 15. **控制中心液态按钮**: 合成器 blur 是窗口级的，单个控件读不到窗口背后像素。`common/LiquidGlassControl.qml` 用 `ShaderEffectSource`（捕获窗口内层）→ `FastBlur` → `OpacityMask`（圆形裁剪）→ 玻璃高光/描边，实现控件级磨砂；`sourceItem` 为空时降级纯玻璃圆。媒体卡播放按钮模糊一层淡壁纸色调底（`WallpaperPaletteService` 主/次色 16%/7% 渐变，兼作卡片液态底），呈"吸收环境色调的磨砂透镜"。勿用封面作按钮模糊源（会透出封面碎块感）。
 16. **通知历史中心**: 会话内历史（不跨重启）。dismiss/expire 前快照（`NotificationGroupService._pushHistory`），**DND 期间 untrack 的通知也立即快照**（否则永不触发 dismiss 直接丢失）。`ControlCenterService.notificationHistory`（ListModel，上限 50）+ `historyGroups`（按 app 分组 JS 数组，随模型变化重建）。控制中心 Card 9：分组头（图标+应用名）+ 每条通知行 + 单条 × 删除 + 全部清空。action 执行仍缺失（快照只存文本）。
-17. **工作区概览 / Stage Manager**: `modules/overview/`（概览全屏遮罩：顶栏虚拟桌面条 + 当前桌面窗口缩略图网格）。数据层：KWin 脚本快照加 `desktops`/`onAllDesktops` 字段（`window.desktops` 的 id 列表）+ `publishDesktops()` 事件（desktopAdded/Removed/NameChanged/currentDesktopChanged 均触发）；bridge 命令新增 `desktops`（查询列表）、`switch-desktop`、`move-to-desktop`（KWin script 处理，走 `workspace.currentDesktop`/`window.desktops`）；`WindowService` 透传 `desktops` 列表/`currentDesktopId` + 三个命令函数。快捷键 `Meta+Tab`（`overview toggle`）。点击桌面切换、点窗口激活并关闭概览、Esc 关闭、←→ 选桌面、回车切到选中桌面。
+17. **工作区概览 / Stage Manager**: `desktop/modules/overview/`（概览全屏遮罩：顶栏虚拟桌面条 + 当前桌面窗口缩略图网格）。数据层：KWin 脚本快照加 `desktops`/`onAllDesktops` 字段（`window.desktops` 的 id 列表）+ `publishDesktops()` 事件（desktopAdded/Removed/NameChanged/currentDesktopChanged 均触发）；bridge 命令新增 `desktops`（查询列表）、`switch-desktop`、`move-to-desktop`（KWin script 处理，走 `workspace.currentDesktop`/`window.desktops`）；`WindowService` 透传 `desktops` 列表/`currentDesktopId` + 三个命令函数。快捷键 `Meta+Tab`（`overview toggle`）。点击桌面切换、点窗口激活并关闭概览、Esc 关闭、←→ 选桌面、回车切到选中桌面。
 
 ## 开发规范
 
 - **验证**: 用 `.agents/skills/verify/SKILL.md` 中的 verify 流程（启动独立 Quickshell 实例查日志）。
-- **静态检查**: `qmllint` + `node modules/dock/test_adaptive.mjs`（8 项）+ `git diff --check`。
+- **静态检查**: `qmllint` + `node desktop/modules/dock/test_adaptive.mjs`（8 项）+ `git diff --check`。
 - **提交格式**: `feat(scope): description` 或 `feat: description`。
 - **尺寸不写死**: 新组件按 `iconSize` 或 `cellSize` 比例缩放。
 - **玻璃面选择**: 需 compositor blur 的表面用 `LiquidGlassSurface` + `RoundedBlurRegion`；无 blur 依赖的 popup 用 `EnhancedGlassSurface`（自带 dark base）。不要混用——给 `EnhancedGlassSurface` 再加 `blurRegion` 会双重遮挡。
@@ -84,7 +84,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 - **Wi-Fi 文档对齐**: Wi-Fi 连接/断开/忘记/802.1X **已实现**（`NetworkService.qml` 的 `connectWifi`/`disconnectActiveWifi`/`forgetWifiProfile`/`connectEnterpriseWifi`），但 `NetworkService.qml` 内有过期注释声称未实现，需清理并对齐文档。
 
 ### 待优化
-- 天气图标用 Unicode 字符（`☀⛅☁☔❄`）表示状况符号；桌面天气卡片云层用 SVG（`assets/weather-cloud*.svg`），其余太阳/雨/雪/雾用 `Rectangle`/`Canvas` 绘制。缺完整天气 SVG 图标集。
+- 天气图标用 Unicode 字符（`☀⛅☁☔❄`）表示状况符号；桌面天气卡片云层用 SVG（`desktop/assets/weather-cloud*.svg`），其余太阳/雨/雪/雾用 `Rectangle`/`Canvas` 绘制。缺完整天气 SVG 图标集。
 - DeskCenter 未启用液态玻璃（保证文字可读性）。
 - Bar 高 35px，左右各缩进 15px（`margins.left/right: 15`）。
 - 隐藏应用无恢复入口。

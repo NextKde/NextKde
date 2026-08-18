@@ -1,6 +1,6 @@
 # Network status architecture
 
-`modules/bar/NetworkService.qml` is the only adapter between shell UI and
+`desktop/modules/bar/NetworkService.qml` is the only adapter between shell UI and
 NetworkManager in this project. It polls `nmcli` asynchronously every three
 seconds and performs only explicit user-requested writes. No Bar component may invoke
 `nmcli` or parse its output directly.

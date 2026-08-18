@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Quickshell Settings
+Comment=Configure the Quickshell desktop environment
+Icon=preferences-desktop
+Categories=Settings;DesktopSettings;Qt;
+# Packaging replaces this command with the installed Settings launcher.
+Exec=kos-settings
+StartupNotify=true
