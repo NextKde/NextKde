@@ -24,6 +24,14 @@ public:
                                            QString::number(height, 'f', 2)}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockPosition(const QString &position) {
+        return snapshotFromReply(callDock({QStringLiteral("updatePosition"), position}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockAutoHide(bool autoHide) {
+        return snapshotFromReply(callDock({QStringLiteral("updateAutoHide"), autoHide ? QStringLiteral("true") : QStringLiteral("false")}));
+    }
+
 signals:
     void lastErrorChanged();
 
@@ -48,7 +56,8 @@ private:
         setLastError({});
         return {
             {QStringLiteral("baseHeight"), object.value(QStringLiteral("baseHeight")).toDouble()},
-        };
+            {QStringLiteral("position"), object.value(QStringLiteral("position")).toString()},
+            {QStringLiteral("autoHide"), object.value(QStringLiteral("autoHide")).toBool()},};
     }
 
     QString callDock(const QStringList &arguments) {
@@ -91,7 +100,7 @@ int main(int argc, char *argv[]) {
     // Keep this window out of the Shell's KWin rules. This must match the
     // installed desktop entry basename: kos-settings.desktop.
     application.setApplicationName(QStringLiteral("kos-settings"));
-    application.setApplicationDisplayName(QStringLiteral("Quickshell Settings"));
+    application.setApplicationDisplayName(QStringLiteral(""));
     application.setDesktopFileName(QStringLiteral("kos-settings"));
     application.setOrganizationName(QStringLiteral("Quickshell"));
 

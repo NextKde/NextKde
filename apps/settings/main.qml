@@ -12,7 +12,7 @@ ApplicationWindow {
     minimumWidth: 840
     minimumHeight: 560
     visible: true
-    title: "设置"
+    title: "kos设置界面"
     color: theme.background
 
     property int currentPage: 0
@@ -33,9 +33,9 @@ ApplicationWindow {
             const color = systemPalette.window
             return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
         }
-        readonly property color background: dark ? "#101114" : "#edf0f6"
-        readonly property color sidebar: dark ? "#202125" : "#fafbff"
-        readonly property color contentSurface: dark ? "#151619" : "#fafbff"
+        readonly property color background: dark ? "#000000" : "#f2f2f7"
+        readonly property color sidebar: dark ? "#1c1c1e" : "#fafbff"
+        readonly property color contentSurface: dark ? "#000000" : "#fafbff"
         readonly property color primaryText: dark ? "#f5f5f7" : "#1c1c1e"
         readonly property color secondaryText: dark ? "#98989d" : "#6d6d72"
         readonly property color tertiaryText: dark ? "#8e8e93" : "#8e8e93"
@@ -102,7 +102,7 @@ ApplicationWindow {
         visible: window.searchText.length === 0
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
-            radius: 13
+            radius: 18
             color: parent.highlighted ? theme.selected
                 : (parent.hovered ? theme.sidebarHover : "transparent")
         }
@@ -187,15 +187,42 @@ ApplicationWindow {
         spacing: 7
         property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
         property real dockHeight: 60
+        property int dockPositionIndex: 0
+        property bool dockAutoHide: false
+        readonly property var dockPositions: ["bottom", "left", "right"]
         property string errorText: ""
         property bool layoutDirty: false
+
+        function positionIndexFromString(position) {
+            const idx = dockPositions.indexOf(position)
+            return idx >= 0 ? idx : 0
+        }
 
         function applyState(state) {
             if (!state || state.baseHeight === undefined)
                 return
             dockHeight = Number(state.baseHeight)
+            dockPositionIndex = positionIndexFromString(state.position)
+            dockAutoHide = Boolean(state.autoHide)
             layoutDirty = false
             errorText = ""
+        }
+
+        function saveAutoHide(checked) {
+            if (!bridge)
+                return
+            applyState(bridge.updateDockAutoHide(checked))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function savePosition(index) {
+            if (!bridge)
+                return
+            const position = dockPositions[index]
+            applyState(bridge.updateDockPosition(position))
+            if (bridge.lastError)
+                errorText = bridge.lastError
         }
 
         function refresh() {
@@ -234,7 +261,7 @@ ApplicationWindow {
         Component.onCompleted: refresh()
 
         Text {
-            text: "大小".toUpperCase()
+            text: "大小和位置".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -243,27 +270,32 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 65
-            radius: 22
             color: theme.card
+            radius: 18
+            implicitHeight: 97
 
             Column {
                 anchors.fill: parent
 
                 Item {
                     width: parent.width
-                    height: 65
+                    height: 48
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 13
+                        anchors.leftMargin: 16
                         anchors.rightMargin: 16
                         spacing: 12
                         SettingIcon { symbol: "▰"; tint: "#0a84ff" }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Text { text: "Dock 高度"; color: theme.primaryText; font.pixelSize: 14 }
-                            Text { text: Math.round(dockPage.dockHeight) + " pt"; color: theme.secondaryText; font.pixelSize: 12 }
+                        Text {
+                            text: "Dock 高度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(dockPage.dockHeight) + " pt"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
                             Layout.preferredWidth: 190
@@ -276,54 +308,79 @@ ApplicationWindow {
                         }
                     }
                 }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "▣"; tint: "#0a84ff" }
+                        Text {
+                            text: "Dock 位置"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidNavBar {
+                            id: positionNavBar
+                            model: [
+                                { id: "bottom", icon: "↓" },
+                                { id: "left",   icon: "←" },
+                                { id: "right",  icon: "→" }
+                            ]
+                            size: "tiny"
+                            accentColor: "#0a84ff"
+                            currentIndex: dockPage.dockPositionIndex
+                            onSelectionChanged: function(index) {
+                                dockPage.savePosition(index)
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        Item { Layout.preferredHeight: 12 }
-
         Text {
-            Layout.fillWidth: true
-            visible: errorText.length > 0
-            text: errorText
-            color: "#ff453a"
-            wrapMode: Text.Wrap
-            font.pixelSize: 12
-            Layout.topMargin: 8
-        }
-
-        Item { Layout.preferredHeight: 14 }
-
-        Text {
-            text: "预览"
+            text: "行为".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
             Layout.leftMargin: 13
         }
+
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 90
-            radius: 22
-            color: theme.dark ? "#26262a" : "#d8d8de"
-            Rectangle {
-                width: Math.max(130, parent.width * 0.98 * 0.76)
-                height: Math.max(22, dockPage.dockHeight * 0.55)
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 14
-                radius: height / 2
-                color: Qt.rgba(0.07, 0.07, 0.09, 0.78)
-                Row {
-                    anchors.centerIn: parent
-                    spacing: Math.max(5, parent.height * 0.16)
-                    Repeater {
-                        model: 6
-                        delegate: Rectangle {
-                            width: parent.parent.height * 0.56
-                            height: width
-                            radius: width * 0.24
-                            color: index === 2 ? "#0a84ff" : Qt.rgba(0.55, 0.55, 0.60, 0.85)
-                        }
+            color: theme.card
+            radius: 18
+            implicitHeight: 48
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "◐"; tint: "#34c759" }
+                Text {
+                    text: "自动隐藏"
+                    color: theme.primaryText
+                    font.pixelSize: 14
+                }
+                Item { Layout.fillWidth: true }
+                LiquidControls.LiquidGlassSwitch {
+                    checked: dockPage.dockAutoHide
+                    onToggled: function(checked) {
+                        dockPage.saveAutoHide(checked)
                     }
                 }
             }
@@ -335,21 +392,12 @@ ApplicationWindow {
 
         Rectangle {
             id: sidebar
-            x: 14
-            y: 14
+            x: 0
+            y: 0
             width: 302
-            height: parent.height - 28
-            radius: 28
+            height: parent.height
+            radius: 0
             color: theme.sidebar
-            border.width: 1
-            border.color: theme.floatingBorder
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                shadowEnabled: true
-                shadowColor: theme.floatingShadow
-                shadowBlur: 0.35
-                shadowVerticalOffset: 8
-            }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -422,14 +470,12 @@ ApplicationWindow {
 
         Rectangle {
             id: contentSurface
-            x: sidebar.x + sidebar.width + 14
-            y: 14
-            width: parent.width - x - 14
-            height: parent.height - 28
-            radius: 32
-            color: theme.contentSurface
-            border.width: 1
-            border.color: theme.floatingBorder
+            x: sidebar.width
+            y: 0
+            width: parent.width - x
+            height: parent.height
+            radius: 0
+            color: theme.background
 
             Flickable {
                 id: pageScroll
@@ -481,7 +527,7 @@ ApplicationWindow {
                             Rectangle {
                                 Layout.fillWidth: true
                                 implicitHeight: settingsList.contentHeight
-                                radius: 20
+                                radius: 28
                                 color: theme.card
                                 ListView {
                                     id: settingsList
