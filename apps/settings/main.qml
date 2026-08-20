@@ -191,6 +191,13 @@ ApplicationWindow {
         readonly property var dockPositions: ["bottom", "left", "right"]
         property int iconModeIndex: 0
         readonly property var iconModes: ["color", "grayscale", "tint"]
+        property int visibilityModeIndex: 0
+        readonly property var visibilityModes: ["always", "smart", "persistent"]
+        readonly property var visibilityDescriptions: [
+            "Dock 始终显示并为应用窗口保留空间",
+            "仅在窗口占用 Dock 区域时收起",
+            "不使用 Dock 时始终收起"
+        ]
         property real iconOpacity: 0.5
         property string iconTintColor: "#a855f7"
         readonly property var tintPresets: [
@@ -228,6 +235,11 @@ ApplicationWindow {
             if (mode === "duotone")
                 mode = "tint"
             const idx = iconModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
+        function visibilityModeIndexFromString(mode) {
+            const idx = visibilityModes.indexOf(mode)
             return idx >= 0 ? idx : 0
         }
 
@@ -322,6 +334,7 @@ ApplicationWindow {
             iconOpacity = Number(state.iconOpacity)
             iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
             syncTintControls(colorFromHex(iconTintColor))
+            visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             iconOpacityDirty = false
             layoutDirty = false
             errorText = ""
@@ -349,6 +362,15 @@ ApplicationWindow {
             if (!bridge)
                 return
             applyState(bridge.updateDockIconTintColor(color))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveVisibilityMode(index) {
+            if (!bridge)
+                return
+            const mode = visibilityModes[index]
+            applyState(bridge.updateDockVisibilityMode(mode))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -494,6 +516,91 @@ ApplicationWindow {
                             onSelectionChanged: function(index) {
                                 dockPage.savePosition(index)
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "Dock 显示".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: 97
+
+            Column {
+                anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◉"; tint: "#0a84ff" }
+                        Text {
+                            text: "显示方式"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidNavBar {
+                            id: visibilityNavBar
+                            model: [
+                                { id: "always", label: "始终显示", icon: "●" },
+                                { id: "smart", label: "智能隐藏", icon: "◐" },
+                                { id: "persistent", label: "持续隐藏", icon: "◒" }
+                            ]
+                            size: "tiny"
+                            accentColor: "#0a84ff"
+                            labelFontPixelSize: 10
+                            labelFontWeight: Font.DemiBold
+                            currentIndex: dockPage.visibilityModeIndex
+
+                            Connections {
+                                target: visibilityNavBar
+                                function onSelectionChanged(index) {
+                                    dockPage.saveVisibilityMode(index)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 42
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        Text {
+                            text: dockPage.visibilityDescriptions[dockPage.visibilityModeIndex]
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
                 }

@@ -40,6 +40,10 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updateIconTintColor"), color}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockVisibilityMode(const QString &mode) {
+        return snapshotFromReply(callDock({QStringLiteral("updateVisibilityMode"), mode}));
+    }
+
 signals:
     void lastErrorChanged();
 
@@ -67,7 +71,8 @@ private:
             {QStringLiteral("position"), object.value(QStringLiteral("position")).toString()},
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
-            {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},};
+            {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
+            {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},};
     }
 
     QString callDock(const QStringList &arguments) {
