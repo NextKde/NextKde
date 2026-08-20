@@ -32,6 +32,14 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updateAutoHide"), autoHide ? QStringLiteral("true") : QStringLiteral("false")}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockIconMode(const QString &mode) {
+        return snapshotFromReply(callDock({QStringLiteral("updateIconMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockIconOpacity(double opacity) {
+        return snapshotFromReply(callDock({QStringLiteral("updateIconOpacity"), QString::number(opacity, 'f', 2)}));
+    }
+
 signals:
     void lastErrorChanged();
 
@@ -57,7 +65,9 @@ private:
         return {
             {QStringLiteral("baseHeight"), object.value(QStringLiteral("baseHeight")).toDouble()},
             {QStringLiteral("position"), object.value(QStringLiteral("position")).toString()},
-            {QStringLiteral("autoHide"), object.value(QStringLiteral("autoHide")).toBool()},};
+            {QStringLiteral("autoHide"), object.value(QStringLiteral("autoHide")).toBool()},
+            {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
+            {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},};
     }
 
     QString callDock(const QStringList &arguments) {

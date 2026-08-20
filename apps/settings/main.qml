@@ -188,8 +188,11 @@ ApplicationWindow {
         property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
         property real dockHeight: 60
         property int dockPositionIndex: 0
-        property bool dockAutoHide: false
         readonly property var dockPositions: ["bottom", "left", "right"]
+        property int iconModeIndex: 0
+        readonly property var iconModes: ["color", "grayscale"]
+        property real iconOpacity: 0.5
+        property bool iconOpacityDirty: false
         property string errorText: ""
         property bool layoutDirty: false
 
@@ -198,22 +201,21 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
+        function iconModeIndexFromString(mode) {
+            const idx = iconModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
         function applyState(state) {
             if (!state || state.baseHeight === undefined)
                 return
             dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
-            dockAutoHide = Boolean(state.autoHide)
+            iconModeIndex = iconModeIndexFromString(state.iconMode)
+            iconOpacity = Number(state.iconOpacity)
+            iconOpacityDirty = false
             layoutDirty = false
             errorText = ""
-        }
-
-        function saveAutoHide(checked) {
-            if (!bridge)
-                return
-            applyState(bridge.updateDockAutoHide(checked))
-            if (bridge.lastError)
-                errorText = bridge.lastError
         }
 
         function savePosition(index) {
@@ -221,6 +223,15 @@ ApplicationWindow {
                 return
             const position = dockPositions[index]
             applyState(bridge.updateDockPosition(position))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveIconMode(index) {
+            if (!bridge)
+                return
+            const mode = iconModes[index]
+            applyState(bridge.updateDockIconMode(mode))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -256,6 +267,23 @@ ApplicationWindow {
                 return
             layoutDirty = false
             saveLayout()
+        }
+
+        function previewIconOpacity(position) {
+            const nextOpacity = Math.max(0.1, Math.round(position * 100) / 100)
+            if (Math.abs(iconOpacity - nextOpacity) < 0.001)
+                return
+            iconOpacity = nextOpacity
+            iconOpacityDirty = true
+        }
+
+        function commitIconOpacity() {
+            if (!iconOpacityDirty || !bridge)
+                return
+            iconOpacityDirty = false
+            applyState(bridge.updateDockIconOpacity(iconOpacity))
+            if (bridge.lastError)
+                errorText = bridge.lastError
         }
 
         Component.onCompleted: refresh()
@@ -352,37 +380,102 @@ ApplicationWindow {
         }
 
         Text {
-            text: "行为".toUpperCase()
+            text: "图标风格".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
             Layout.leftMargin: 13
+            Layout.topMargin: 14
         }
 
         Rectangle {
             Layout.fillWidth: true
             color: theme.card
             radius: 18
-            implicitHeight: 48
+            implicitHeight: iconOpacityColumn.implicitHeight
 
-            RowLayout {
+            Column {
+                id: iconOpacityColumn
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
-                SettingIcon { symbol: "◐"; tint: "#34c759" }
-                Text {
-                    text: "自动隐藏"
-                    color: theme.primaryText
-                    font.pixelSize: 14
-                }
-                Item { Layout.fillWidth: true }
-                LiquidControls.LiquidGlassSwitch {
-                    checked: dockPage.dockAutoHide
-                    onToggled: function(checked) {
-                        dockPage.saveAutoHide(checked)
+
+                Item {
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◐"; tint: "#af52de" }
+                        Text {
+                            text: "Dock 颜色"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidNavBar {
+                            id: iconModeNavBar
+                            model: [
+                                { id: "color", label: "彩色" },
+                                { id: "grayscale", label: "黑白" }
+                            ]
+                            size: "tiny"
+                            accentColor: "#af52de"
+                            currentIndex: dockPage.iconModeIndex
+
+                            Connections {
+                                target: iconModeNavBar
+                                function onSelectionChanged(index) {
+                                    dockPage.saveIconMode(index)
+                                }
+                            }
+                        }
                     }
                 }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                    visible: dockPage.iconModeIndex === 1
+                }
+
+                Item {
+                    id: iconOpacityRow
+                    width: parent.width
+                    height: dockPage.iconModeIndex === 1 ? 48 : 0
+                    visible: dockPage.iconModeIndex === 1
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◓"; tint: "#af52de" }
+                        Text {
+                            text: "不透明度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(dockPage.iconOpacity * 100) + "%"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: dockPage.iconOpacity
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                dockPage.previewIconOpacity(position)
+                            }
+                            onCommitRequested: dockPage.commitIconOpacity()
+                        }
+                    }
+                }
+
             }
         }
     }
