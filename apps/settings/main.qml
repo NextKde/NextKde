@@ -190,8 +190,31 @@ ApplicationWindow {
         property int dockPositionIndex: 0
         readonly property var dockPositions: ["bottom", "left", "right"]
         property int iconModeIndex: 0
-        readonly property var iconModes: ["color", "grayscale"]
+        readonly property var iconModes: ["color", "grayscale", "tint"]
         property real iconOpacity: 0.5
+        property string iconTintColor: "#a855f7"
+        readonly property var tintPresets: [
+            { label: "紫色", color: "#a855f7" },
+            { label: "红色", color: "#ef4444" },
+            { label: "蓝色", color: "#3b82f6" },
+            { label: "橙色", color: "#f97316" }
+        ]
+        property real tintHuePosition: 0.75
+        property real tintTonePosition: 0.5
+        readonly property color pureTintHue: Qt.hsva(tintHuePosition, 1, 1, 1)
+        readonly property color selectedTintColor: toneColor(tintTonePosition)
+        readonly property var hueRamp: [
+            Qt.hsva(0 / 6, 1, 1, 1), Qt.hsva(1 / 6, 1, 1, 1),
+            Qt.hsva(2 / 6, 1, 1, 1), Qt.hsva(3 / 6, 1, 1, 1),
+            Qt.hsva(4 / 6, 1, 1, 1), Qt.hsva(5 / 6, 1, 1, 1),
+            Qt.hsva(6 / 6, 1, 1, 1)
+        ]
+        readonly property var toneRamp: [
+            Qt.rgba(1, 1, 1, 1), blend(Qt.rgba(1, 1, 1, 1), pureTintHue, 1 / 3),
+            blend(Qt.rgba(1, 1, 1, 1), pureTintHue, 2 / 3), pureTintHue,
+            blend(pureTintHue, Qt.rgba(0, 0, 0, 1), 1 / 3),
+            blend(pureTintHue, Qt.rgba(0, 0, 0, 1), 2 / 3), Qt.rgba(0, 0, 0, 1)
+        ]
         property bool iconOpacityDirty: false
         property string errorText: ""
         property bool layoutDirty: false
@@ -202,8 +225,92 @@ ApplicationWindow {
         }
 
         function iconModeIndexFromString(mode) {
+            if (mode === "duotone")
+                mode = "tint"
             const idx = iconModes.indexOf(mode)
             return idx >= 0 ? idx : 0
+        }
+
+        function colorHex(color) {
+            function channel(value) {
+                return Math.round(value * 255).toString(16).padStart(2, "0")
+            }
+            return "#" + channel(color.r) + channel(color.g) + channel(color.b)
+        }
+
+        function colorFromHex(value) {
+            const hex = String(value).replace("#", "")
+            if (hex.length !== 6)
+                return Qt.rgba(0.66, 0.33, 0.97, 1)
+            return Qt.rgba(
+                parseInt(hex.slice(0, 2), 16) / 255,
+                parseInt(hex.slice(2, 4), 16) / 255,
+                parseInt(hex.slice(4, 6), 16) / 255,
+                1)
+        }
+
+        function blend(first, second, amount) {
+            return Qt.rgba(
+                first.r + (second.r - first.r) * amount,
+                first.g + (second.g - first.g) * amount,
+                first.b + (second.b - first.b) * amount,
+                1)
+        }
+
+        function toneColor(position) {
+            if (position <= 0.5)
+                return blend(Qt.rgba(1, 1, 1, 1), pureTintHue, position * 2)
+            return blend(pureTintHue, Qt.rgba(0, 0, 0, 1), (position - 0.5) * 2)
+        }
+
+        function hueForColor(color) {
+            const maximum = Math.max(color.r, color.g, color.b)
+            const minimum = Math.min(color.r, color.g, color.b)
+            const delta = maximum - minimum
+            if (delta < 0.0001)
+                return tintHuePosition
+            let hue = 0
+            if (maximum === color.r)
+                hue = ((color.g - color.b) / delta) % 6
+            else if (maximum === color.g)
+                hue = (color.b - color.r) / delta + 2
+            else
+                hue = (color.r - color.g) / delta + 4
+            return ((hue / 6) + 1) % 1
+        }
+
+        function nearestToneForColor(color) {
+            let closestPosition = 0.5
+            let closestDistance = Number.MAX_VALUE
+            for (let step = 0; step <= 200; step++) {
+                const position = step / 200
+                const candidate = toneColor(position)
+                const distance = Math.pow(candidate.r - color.r, 2)
+                    + Math.pow(candidate.g - color.g, 2)
+                    + Math.pow(candidate.b - color.b, 2)
+                if (distance < closestDistance) {
+                    closestDistance = distance
+                    closestPosition = position
+                }
+            }
+            return closestPosition
+        }
+
+        function syncTintControls(color) {
+            tintHuePosition = hueForColor(color)
+            tintTonePosition = nearestToneForColor(color)
+        }
+
+        function presetMatches(preset) {
+            return preset.color === iconTintColor
+        }
+
+        function tintPresetIndex() {
+            for (let index = 0; index < tintPresets.length; index++) {
+                if (presetMatches(tintPresets[index]))
+                    return index
+            }
+            return 0
         }
 
         function applyState(state) {
@@ -213,6 +320,8 @@ ApplicationWindow {
             dockPositionIndex = positionIndexFromString(state.position)
             iconModeIndex = iconModeIndexFromString(state.iconMode)
             iconOpacity = Number(state.iconOpacity)
+            iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
+            syncTintControls(colorFromHex(iconTintColor))
             iconOpacityDirty = false
             layoutDirty = false
             errorText = ""
@@ -234,6 +343,18 @@ ApplicationWindow {
             applyState(bridge.updateDockIconMode(mode))
             if (bridge.lastError)
                 errorText = bridge.lastError
+        }
+
+        function saveTintColor(color) {
+            if (!bridge)
+                return
+            applyState(bridge.updateDockIconTintColor(color))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function applyTintPreset(index) {
+            saveTintColor(tintPresets[index].color)
         }
 
         function refresh() {
@@ -410,17 +531,21 @@ ApplicationWindow {
                         Text {
                             text: "Dock 颜色"
                             color: theme.primaryText
-                            font.pixelSize: 14
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
                         }
                         Item { Layout.fillWidth: true }
                         LiquidControls.LiquidNavBar {
                             id: iconModeNavBar
                             model: [
                                 { id: "color", label: "彩色" },
-                                { id: "grayscale", label: "黑白" }
+                                { id: "grayscale", label: "黑白" },
+                                { id: "tint", label: "染色" }
                             ]
                             size: "tiny"
-                            accentColor: "#af52de"
+                            accentColor: "#0a84ff"
+                            labelFontPixelSize: 10
+                            labelFontWeight: Font.DemiBold
                             currentIndex: dockPage.iconModeIndex
 
                             Connections {
@@ -439,20 +564,20 @@ ApplicationWindow {
                     anchors.leftMargin: 53
                     height: 1
                     color: theme.separator
-                    visible: dockPage.iconModeIndex === 1
+                    visible: dockPage.iconModeIndex > 0
                 }
 
                 Item {
                     id: iconOpacityRow
                     width: parent.width
-                    height: dockPage.iconModeIndex === 1 ? 48 : 0
-                    visible: dockPage.iconModeIndex === 1
+                    height: dockPage.iconModeIndex > 0 ? 48 : 0
+                    visible: dockPage.iconModeIndex > 0
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
                         anchors.rightMargin: 16
                         spacing: 12
-                        SettingIcon { symbol: "◓"; tint: "#af52de" }
+                        SettingIcon { symbol: "◔"; tint: "#5ac8fa" }
                         Text {
                             text: "不透明度"
                             color: theme.primaryText
@@ -472,6 +597,158 @@ ApplicationWindow {
                                 dockPage.previewIconOpacity(position)
                             }
                             onCommitRequested: dockPage.commitIconOpacity()
+                        }
+                    }
+                }
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                    visible: dockPage.iconModeIndex === 2
+                }
+
+                Item {
+                    width: parent.width
+                    height: dockPage.iconModeIndex === 2 ? 58 : 0
+                    visible: dockPage.iconModeIndex === 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 8
+                        SettingIcon { symbol: "▦"; tint: "#ff9f0a" }
+                        Text {
+                            text: "快速方案"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidNavBar {
+                            id: tintPresetNavBar
+                            model: [
+                                { id: "purple", label: "紫色" },
+                                { id: "red", label: "红色" },
+                                { id: "blue", label: "蓝色" },
+                                { id: "orange", label: "橙色" }
+                            ]
+                            size: "tiny"
+                            accentColor: "#0a84ff"
+                            labelFontPixelSize: 10
+                            labelFontWeight: Font.DemiBold
+                            currentIndex: dockPage.tintPresetIndex()
+                            onSelectionChanged: function(index) {
+                                dockPage.applyTintPreset(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                    visible: dockPage.iconModeIndex === 2
+                }
+
+                Item {
+                    width: parent.width
+                    height: dockPage.iconModeIndex === 2 ? 48 : 0
+                    visible: dockPage.iconModeIndex === 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 9
+                        SettingIcon { symbol: "●"; tint: dockPage.iconTintColor }
+                        Text {
+                            text: "自定义颜色"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Rectangle {
+                            id: tintPreview
+                            width: 28
+                            height: 28
+                            radius: 9
+                            color: dockPage.iconTintColor
+                            border.width: 1
+                            border.color: theme.dark ? "#55ffffff" : "#22000000"
+                        }
+                        Text {
+                            text: "›"
+                            color: theme.chevron
+                            font.pixelSize: 24
+                            font.weight: Font.Light
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                    visible: dockPage.iconModeIndex === 2
+                }
+
+                Item {
+                    width: parent.width
+                    height: dockPage.iconModeIndex === 2 ? 48 : 0
+                    visible: dockPage.iconModeIndex === 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.ColorRampSlider {
+                            Layout.preferredWidth: 190
+                            value: dockPage.tintHuePosition
+                            rampColors: dockPage.hueRamp
+                            thumbColor: dockPage.pureTintHue
+                            onPreviewChanged: function(position) {
+                                dockPage.tintHuePosition = position
+                            }
+                            onCommitRequested: dockPage.saveTintColor(
+                                dockPage.colorHex(dockPage.selectedTintColor))
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                    visible: dockPage.iconModeIndex === 2
+                }
+
+                Item {
+                    width: parent.width
+                    height: dockPage.iconModeIndex === 2 ? 48 : 0
+                    visible: dockPage.iconModeIndex === 2
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.ColorRampSlider {
+                            Layout.preferredWidth: 190
+                            value: dockPage.tintTonePosition
+                            rampColors: dockPage.toneRamp
+                            thumbColor: dockPage.selectedTintColor
+                            onPreviewChanged: function(position) {
+                                dockPage.tintTonePosition = position
+                            }
+                            onCommitRequested: dockPage.saveTintColor(
+                                dockPage.colorHex(dockPage.selectedTintColor))
                         }
                     }
                 }

@@ -25,6 +25,8 @@ Item {
     property bool disabled: false
     property color accentColor: "#ff453a"
     property color itemColor: "#ffffff"
+    property real labelFontPixelSize: 0 // 0 = use the selected size preset
+    property int labelFontWeight: Font.Normal
     property bool alwaysShowGlass: false
 
     signal selectionChanged(int index)
@@ -49,7 +51,9 @@ Item {
     readonly property real thumbWidth: Math.max(itemWidth * 0.5, itemWidth - 12 * scaleFactor)
     readonly property real thumbHeight: dims.thumbHeight * scaleFactor
     readonly property real iconSize: Math.max(6, Math.round(dims.iconSize * scaleFactor))
-    readonly property real fontSize: Math.max(6, Math.round(dims.fontSize * scaleFactor))
+    readonly property real fontSize: labelFontPixelSize > 0
+        ? labelFontPixelSize
+        : Math.max(6, Math.round(dims.fontSize * scaleFactor))
     readonly property real minThumbX: (itemWidth - thumbWidth) / 2
     readonly property real maxThumbX: sliderWidth - thumbWidth - (itemWidth - thumbWidth) / 2
     readonly property int _selectedIndex: model.length > 0
@@ -435,7 +439,9 @@ Item {
                     text: modelData.label || ""
                     color: index === root.currentIndex ? root.accentColor : root.itemColor
                     font.pixelSize: root.fontSize
-                    font.weight: index === root.currentIndex ? Font.DemiBold : Font.Normal
+                    font.weight: index === root.currentIndex
+                        ? Math.max(root.labelFontWeight, Font.DemiBold)
+                        : root.labelFontWeight
                 }
             }
         }

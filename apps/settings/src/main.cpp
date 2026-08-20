@@ -28,16 +28,16 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updatePosition"), position}));
     }
 
-    Q_INVOKABLE QVariantMap updateDockAutoHide(bool autoHide) {
-        return snapshotFromReply(callDock({QStringLiteral("updateAutoHide"), autoHide ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
     Q_INVOKABLE QVariantMap updateDockIconMode(const QString &mode) {
         return snapshotFromReply(callDock({QStringLiteral("updateIconMode"), mode}));
     }
 
     Q_INVOKABLE QVariantMap updateDockIconOpacity(double opacity) {
         return snapshotFromReply(callDock({QStringLiteral("updateIconOpacity"), QString::number(opacity, 'f', 2)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockIconTintColor(const QString &color) {
+        return snapshotFromReply(callDock({QStringLiteral("updateIconTintColor"), color}));
     }
 
 signals:
@@ -65,9 +65,9 @@ private:
         return {
             {QStringLiteral("baseHeight"), object.value(QStringLiteral("baseHeight")).toDouble()},
             {QStringLiteral("position"), object.value(QStringLiteral("position")).toString()},
-            {QStringLiteral("autoHide"), object.value(QStringLiteral("autoHide")).toBool()},
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
-            {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},};
+            {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
+            {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},};
     }
 
     QString callDock(const QStringList &arguments) {

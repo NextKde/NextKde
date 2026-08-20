@@ -15,4 +15,5 @@ helpers/kwin-window-bridge/build/
 
 # Local service/helper builds
 .build/
+apps/settings/build/
 helpers/file-clipboard-helper/build/
