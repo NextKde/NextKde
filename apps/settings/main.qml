@@ -194,9 +194,9 @@ ApplicationWindow {
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         readonly property var visibilityDescriptions: [
-            "Dock 始终显示并为应用窗口保留空间",
-            "仅在窗口占用 Dock 区域时收起",
-            "不使用 Dock 时始终收起"
+            "Dock 始终显示，并为应用窗口保留一条边缘空间",
+            "有窗口覆盖或停靠 Dock 边缘时才收起 Dock，窗口移开后自动恢复显示",
+            "平时收起只留一条小白条，鼠标滑到屏幕边缘或点击白条可唤起 Dock"
         ]
         property real iconOpacity: 0.5
         property string iconTintColor: "#a855f7"
@@ -559,11 +559,19 @@ ApplicationWindow {
                         LiquidControls.LiquidNavBar {
                             id: visibilityNavBar
                             model: [
-                                { id: "always", label: "始终显示", icon: "●" },
-                                { id: "smart", label: "智能隐藏", icon: "◐" },
-                                { id: "persistent", label: "持续隐藏", icon: "◒" }
+                                { id: "always", label: "始终显示" },
+                                { id: "smart", label: "智能隐藏" },
+                                { id: "persistent", label: "持续隐藏" }
                             ]
+                            // Text-only + "tiny", matching the Dock 颜色 bar's
+                            // height so the two segmented controls read as one
+                            // consistent set — no stacked icon+label to overflow
+                            // the pill.
                             size: "tiny"
+                            // 4-char labels are wider than the tiny preset's 56px
+                            // item; give each item a little more room (height and
+                            // pill stay identical to the Dock 颜色 bar).
+                            itemWidthOverride: 76
                             accentColor: "#0a84ff"
                             labelFontPixelSize: 10
                             labelFontWeight: Font.DemiBold

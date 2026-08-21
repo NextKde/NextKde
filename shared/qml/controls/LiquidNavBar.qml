@@ -22,6 +22,9 @@ Item {
     property string size: "medium"    // tiny | small | medium | large | XL
     property real barHeight: 0        // 0 = use preset height; otherwise scale the
                                       // chosen preset proportionally to this height
+    property real itemWidthOverride: 0 // >0 widens each item beyond the preset (e.g.
+                                      // to fit a 4-char CJK label) without changing
+                                      // the preset height/pill look.
     property bool disabled: false
     property color accentColor: "#ff453a"
     property color itemColor: "#ffffff"
@@ -46,7 +49,8 @@ Item {
     readonly property var dims: presets[size] ?? presets.medium
     readonly property real scaleFactor: barHeight > 0 ? barHeight / dims.height : 1
     readonly property real sliderHeight: barHeight > 0 ? barHeight : dims.height
-    readonly property real itemWidth: dims.itemWidth * scaleFactor
+    readonly property real itemWidth: itemWidthOverride > 0
+        ? itemWidthOverride : dims.itemWidth * scaleFactor
     readonly property real sliderWidth: itemWidth * Math.max(1, model.length)
     readonly property real thumbWidth: Math.max(itemWidth * 0.5, itemWidth - 12 * scaleFactor)
     readonly property real thumbHeight: dims.thumbHeight * scaleFactor
