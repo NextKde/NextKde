@@ -7,6 +7,11 @@ import QtQuick.Effects
 Item {
     id: root
 
+    SystemPalette {
+        id: controlPalette
+        colorGroup: SystemPalette.Active
+    }
+
     implicitWidth: 240
     implicitHeight: 44
 
@@ -14,7 +19,13 @@ Item {
     property bool enabled: true
     property color accentColor: "#0a84ff"
     property color trackColor: Qt.rgba(0.5, 0.5, 0.55, 0.35)
-    property color thumbColor: "#ffffff"
+    readonly property bool darkAppearance: {
+        const color = controlPalette.window
+        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
+    }
+    property color thumbColor: darkAppearance ? "#ffffff" : "#e7f1ff"
+    property color thumbBorderColor: darkAppearance
+        ? "transparent" : "#6ba6df"
     property real trackHeight: 6
     property real thumbWidth: 36
     property real thumbHeight: 18
@@ -154,14 +165,16 @@ Item {
             anchors.fill: parent
             radius: height / 2
             color: root.thumbColor
+            border.width: 1
+            border.color: root.thumbBorderColor
             opacity: 1 - root._expansion
 
             // 均匀的玻璃白渐变：不再叠加顶部高光层，避免拇指出现白色蒙层
             gradient: Gradient {
                 orientation: Gradient.Vertical
-                GradientStop { position: 0; color: "#ffffff" }
-                GradientStop { position: 0.5; color: "#fafafc" }
-                GradientStop { position: 1; color: "#f2f2f5" }
+                GradientStop { position: 0; color: Qt.lighter(root.thumbColor, 1.04) }
+                GradientStop { position: 0.5; color: root.thumbColor }
+                GradientStop { position: 1; color: Qt.darker(root.thumbColor, 1.06) }
             }
         }
 

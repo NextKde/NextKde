@@ -28,6 +28,7 @@ Item {
     property bool disabled: false
     property color accentColor: "#ff453a"
     property color itemColor: "#ffffff"
+    property color trackColor: Qt.rgba(1, 1, 1, 0.10)
     property real labelFontPixelSize: 0 // 0 = use the selected size preset
     property int labelFontWeight: Font.Normal
     property bool alwaysShowGlass: false
@@ -191,7 +192,7 @@ Item {
         id: track
         anchors.fill: parent
         radius: height / 2
-        color: Qt.rgba(1, 1, 1, 0.10)
+        color: root.trackColor
 
         layer.enabled: true
         layer.effect: OpacityMask {
@@ -439,7 +440,8 @@ Item {
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    visible: modelData.label && modelData.label.toString().length > 0
+                    visible: Boolean(modelData.label
+                        && modelData.label.toString().length > 0)
                     text: modelData.label || ""
                     color: index === root.currentIndex ? root.accentColor : root.itemColor
                     font.pixelSize: root.fontSize

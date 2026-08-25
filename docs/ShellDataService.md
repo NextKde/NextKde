@@ -47,9 +47,13 @@ optional `error`.
 
 The service samples CPU (delta of `/proc/stat`), memory (`/proc/meminfo`),
 root-disk usage (`df`), CPU frequency (`cpufreq` policies with a
-`/proc/cpuinfo` fallback), and temperatures (CPU/PKG thermal zones, plus a
-full `hwmon`/`thermal` sensor listing) every ten seconds. History keeps the
-latest 360 samples. QML consumes the `metrics` section through the
+`/proc/cpuinfo` fallback), and temperatures every ten seconds. The current CPU
+temperature prefers the direct `coretemp`/`k10temp` package sensor, then falls
+back to CPU package thermal zones; it is not an average of duplicate ACPI and
+per-core readings. `maximum5MinuteMilliC` is the rolling maximum of those
+package samples over the latest five minutes. A full `hwmon`/`thermal` sensor
+listing remains available for the detail view, and history keeps the latest
+360 samples. QML consumes the `metrics` section through the
 `MetricsService` singleton in `qs.desktop.modules.common`; it never polls `/proc`.
 
 ## Activity

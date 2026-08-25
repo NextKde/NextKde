@@ -55,20 +55,16 @@ ApplicationWindow {
     }
     readonly property var contentByPage: [
         {
-            subtitle: "Dock",
-            summary: "调整停靠栏的内容、尺寸和窗口交互。",
+            subtitle: "显示",
             groups: []
         },
         {
-            subtitle: "显示",
-            summary: "显示器设置将逐步替换 KDE 的显示配置模块。",
-            groups: [
-                { header: "显示器", rows: [
-                    { icon: "▱", tint: "#34c759", title: "显示器布局", detail: "即将支持" },
-                    { icon: "↔", tint: "#34c759", title: "分辨率与缩放", detail: "即将支持" },
-                    { icon: "⟳", tint: "#34c759", title: "刷新率与旋转", detail: "即将支持" }
-                ] }
-            ]
+            subtitle: "主题",
+            groups: []
+        },
+        {
+            subtitle: "Dock",
+            groups: []
         }
     ]
 
@@ -129,6 +125,18 @@ ApplicationWindow {
             }
         }
         onClicked: window.currentPage = pageIndex
+    }
+
+    // One visual contract for every segmented choice in Settings. Individual
+    // rows only provide model/currentIndex and content-driven width overrides.
+    component SettingsNavBar: LiquidControls.LiquidNavBar {
+        size: "tiny"
+        accentColor: theme.dark ? "#64b5ff" : "#0066cc"
+        itemColor: theme.dark ? "#ffffff" : "#1c1c1e"
+        trackColor: theme.dark
+            ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"
+        labelFontPixelSize: 10
+        labelFontWeight: Font.DemiBold
     }
 
     component SettingRow: Item {
@@ -193,11 +201,6 @@ ApplicationWindow {
         readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
-        readonly property var visibilityDescriptions: [
-            "Dock 始终显示，并为应用窗口保留一条边缘空间",
-            "有窗口覆盖或停靠 Dock 边缘时才收起 Dock，窗口移开后自动恢复显示",
-            "平时收起只留一条小白条，鼠标滑到屏幕边缘或点击白条可唤起 Dock"
-        ]
         property real iconOpacity: 0.5
         property string iconTintColor: "#a855f7"
         readonly property var tintPresets: [
@@ -503,15 +506,13 @@ ApplicationWindow {
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
-                        LiquidControls.LiquidNavBar {
+                        SettingsNavBar {
                             id: positionNavBar
                             model: [
                                 { id: "bottom", icon: "↓" },
                                 { id: "left",   icon: "←" },
                                 { id: "right",  icon: "→" }
                             ]
-                            size: "tiny"
-                            accentColor: "#0a84ff"
                             currentIndex: dockPage.dockPositionIndex
                             onSelectionChanged: function(index) {
                                 dockPage.savePosition(index)
@@ -535,7 +536,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             color: theme.card
             radius: 18
-            implicitHeight: 97
+            implicitHeight: 54
 
             Column {
                 anchors.fill: parent
@@ -556,7 +557,7 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                         }
                         Item { Layout.fillWidth: true }
-                        LiquidControls.LiquidNavBar {
+                        SettingsNavBar {
                             id: visibilityNavBar
                             model: [
                                 { id: "always", label: "始终显示" },
@@ -567,14 +568,10 @@ ApplicationWindow {
                             // height so the two segmented controls read as one
                             // consistent set — no stacked icon+label to overflow
                             // the pill.
-                            size: "tiny"
                             // 4-char labels are wider than the tiny preset's 56px
                             // item; give each item a little more room (height and
                             // pill stay identical to the Dock 颜色 bar).
                             itemWidthOverride: 76
-                            accentColor: "#0a84ff"
-                            labelFontPixelSize: 10
-                            labelFontWeight: Font.DemiBold
                             currentIndex: dockPage.visibilityModeIndex
 
                             Connections {
@@ -587,31 +584,6 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    width: parent.width
-                    height: 42
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        Text {
-                            text: dockPage.visibilityDescriptions[dockPage.visibilityModeIndex]
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.fillWidth: true
-                            wrapMode: Text.Wrap
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-                }
             }
         }
 
@@ -650,17 +622,13 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                         }
                         Item { Layout.fillWidth: true }
-                        LiquidControls.LiquidNavBar {
+                        SettingsNavBar {
                             id: iconModeNavBar
                             model: [
                                 { id: "color", label: "彩色" },
                                 { id: "grayscale", label: "黑白" },
                                 { id: "tint", label: "染色" }
                             ]
-                            size: "tiny"
-                            accentColor: "#0a84ff"
-                            labelFontPixelSize: 10
-                            labelFontWeight: Font.DemiBold
                             currentIndex: dockPage.iconModeIndex
 
                             Connections {
@@ -741,7 +709,7 @@ ApplicationWindow {
                             font.weight: Font.DemiBold
                         }
                         Item { Layout.fillWidth: true }
-                        LiquidControls.LiquidNavBar {
+                        SettingsNavBar {
                             id: tintPresetNavBar
                             model: [
                                 { id: "purple", label: "紫色" },
@@ -749,10 +717,6 @@ ApplicationWindow {
                                 { id: "blue", label: "蓝色" },
                                 { id: "orange", label: "橙色" }
                             ]
-                            size: "tiny"
-                            accentColor: "#0a84ff"
-                            labelFontPixelSize: 10
-                            labelFontWeight: Font.DemiBold
                             currentIndex: dockPage.tintPresetIndex()
                             onSelectionChanged: function(index) {
                                 dockPage.applyTintPreset(index)
@@ -872,6 +836,546 @@ ApplicationWindow {
         }
     }
 
+    component DisplaySettingsPage: ColumnLayout {
+        id: displayPage
+
+        Layout.fillWidth: true
+        spacing: 7
+
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property real blurStrength: 0.42
+        property real liquidStrength: 1.0
+        property bool blurDirty: false
+        property bool liquidDirty: false
+        property string errorText: ""
+
+        function percentage(value) {
+            return Math.round(value * 100) + "%"
+        }
+
+        function applyState(state) {
+            if (!state || state.blurStrength === undefined
+                    || state.liquidStrength === undefined)
+                return
+            blurStrength = Math.max(0, Math.min(1, Number(state.blurStrength)))
+            liquidStrength = Math.max(0, Math.min(1, Number(state.liquidStrength)))
+            blurDirty = false
+            liquidDirty = false
+            errorText = ""
+        }
+
+        function refresh() {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.appearanceSnapshot())
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function previewBlur(value) {
+            blurStrength = Math.max(0, Math.min(1, value))
+            blurDirty = true
+        }
+
+        function commitBlur() {
+            if (!blurDirty || !bridge)
+                return
+            blurDirty = false
+            applyState(bridge.updateBlurStrength(blurStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function previewLiquid(value) {
+            liquidStrength = Math.max(0, Math.min(1, value))
+            liquidDirty = true
+        }
+
+        function commitLiquid() {
+            if (!liquidDirty || !bridge)
+                return
+            liquidDirty = false
+            applyState(bridge.updateLiquidStrength(liquidStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setSystemAppearance(index) {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            if (!bridge.applySystemAppearance(index === 1)) {
+                errorText = bridge.lastError
+                return
+            }
+            errorText = ""
+        }
+
+        Component.onCompleted: refresh()
+
+        Text {
+            text: "系统外观".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 54
+            radius: 18
+            color: theme.card
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+
+                SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
+                Text {
+                    text: "色彩模式"
+                    color: theme.primaryText
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
+                Item { Layout.fillWidth: true }
+                SettingsNavBar {
+                    id: systemAppearanceNavBar
+                    model: [
+                        { id: "light", label: "明亮" },
+                        { id: "dark", label: "暗色" }
+                    ]
+                    currentIndex: theme.dark ? 1 : 0
+                    onSelectionChanged: function(index) {
+                        displayPage.setSystemAppearance(index)
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "液态玻璃".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 97
+            radius: 18
+            color: theme.card
+
+            Column {
+                anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 48
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
+                        Text {
+                            text: "模糊强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: displayPage.percentage(displayPage.blurStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: displayPage.blurStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                displayPage.previewBlur(position)
+                            }
+                            onCommitRequested: displayPage.commitBlur()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 48
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "≈"; tint: "#af52de" }
+                        Text {
+                            text: "液态强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: displayPage.percentage(displayPage.liquidStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: displayPage.liquidStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                displayPage.previewLiquid(position)
+                            }
+                            onCommitRequested: displayPage.commitLiquid()
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: displayPage.errorText.length > 0
+            text: displayPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
+
+    component ThemeSettingsPage: ColumnLayout {
+        id: themePage
+
+        Layout.fillWidth: true
+        spacing: 10
+
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property string shellStyle: "macos"
+        property bool barIntegratedWithDock: false
+        property string errorText: ""
+        readonly property var styles: [
+            {
+                id: "windows12",
+                name: "Windows 12",
+                description: "居中任务栏、轻亚克力表面与紧凑圆角组件",
+                accent: "#3b82f6"
+            },
+            {
+                id: "macos",
+                name: "macOS",
+                description: "悬浮 Dock、通透顶部栏与更柔和的大圆角组件",
+                accent: "#0a84ff"
+            },
+            {
+                id: "material",
+                name: "Material Design",
+                description: "Tonal 表面、状态指示和标准化层级与动效",
+                accent: "#6750a4"
+            }
+        ]
+
+        function isValidStyle(style) {
+            return style === "windows12" || style === "macos"
+                || style === "material"
+        }
+
+        function applyState(state) {
+            if (!state || !isValidStyle(state.shellStyle))
+                return
+            shellStyle = state.shellStyle
+            barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
+            errorText = ""
+        }
+
+        function refresh() {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.appearanceSnapshot())
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function selectStyle(style) {
+            if (!bridge || !isValidStyle(style)) {
+                errorText = bridge ? "未知的主题形态" : "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateShellStyle(style))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setBarIntegratedWithDock(enabled) {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateBarIntegratedWithDock(enabled))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Component.onCompleted: refresh()
+
+        Text {
+            text: "界面形态".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+
+        Repeater {
+            model: themePage.styles
+
+            delegate: Rectangle {
+                id: styleCard
+                required property var modelData
+
+                Layout.fillWidth: true
+                implicitHeight: 148
+                radius: 22
+                color: theme.card
+                border.width: themePage.shellStyle === modelData.id ? 2 : 1
+                border.color: themePage.shellStyle === modelData.id
+                    ? modelData.accent : theme.floatingBorder
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 18
+
+                    Rectangle {
+                        Layout.preferredWidth: 226
+                        Layout.fillHeight: true
+                        radius: 14
+                        color: theme.dark ? "#101216" : "#e9edf4"
+                        clip: true
+
+                        Rectangle {
+                            x: 18
+                            y: 24
+                            width: 78
+                            height: 45
+                            radius: modelData.id === "windows12" ? 8
+                                : modelData.id === "material" ? 14 : 20
+                            color: Qt.alpha(modelData.accent, 0.22)
+                            border.width: 1
+                            border.color: Qt.alpha(modelData.accent, 0.32)
+                        }
+                        Rectangle {
+                            x: 104
+                            y: 24
+                            width: 52
+                            height: 45
+                            radius: modelData.id === "windows12" ? 8
+                                : modelData.id === "material" ? 14 : 20
+                            color: theme.dark ? "#2d3038" : "#ffffff"
+                            opacity: 0.88
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: modelData.id === "windows12"
+                                ? undefined : parent.top
+                            anchors.bottom: modelData.id === "windows12"
+                                ? parent.bottom : undefined
+                            height: modelData.id === "windows12" ? 28 : 10
+                            color: modelData.id === "material"
+                                ? Qt.alpha(modelData.accent, 0.24)
+                                : (theme.dark ? "#30333b" : "#f8f9fc")
+                            opacity: modelData.id === "macos" ? 0.70 : 0.94
+                        }
+
+                        Rectangle {
+                            visible: modelData.id !== "windows12"
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 7
+                            width: modelData.id === "macos" ? 116 : 142
+                            height: 26
+                            radius: modelData.id === "macos" ? 13 : 10
+                            color: modelData.id === "material"
+                                ? Qt.alpha(modelData.accent, 0.38)
+                                : (theme.dark ? "#454952" : "#ffffff")
+                            border.width: 1
+                            border.color: Qt.alpha("#ffffff", 0.25)
+                        }
+
+                        Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: modelData.id === "windows12" ? 7 : 13
+                            spacing: 7
+                            Repeater {
+                                model: 5
+                                delegate: Rectangle {
+                                    width: 10
+                                    height: 10
+                                    radius: styleCard.modelData.id === "material" ? 3 : 5
+                                    color: index === 2
+                                        ? styleCard.modelData.accent
+                                        : (theme.dark ? "#d9dce3" : "#58606c")
+                                }
+                            }
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 5
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.name
+                                color: theme.primaryText
+                                font.pixelSize: 17
+                                font.weight: Font.DemiBold
+                            }
+                            Rectangle {
+                                visible: themePage.shellStyle === modelData.id
+                                width: 24
+                                height: 24
+                                radius: 12
+                                color: modelData.accent
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "✓"
+                                    color: "white"
+                                    font.pixelSize: 13
+                                    font.weight: Font.Bold
+                                }
+                            }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: modelData.description
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+                        Item { Layout.fillHeight: true }
+                        Text {
+                            text: themePage.shellStyle === modelData.id
+                                ? "当前形态" : "选择此形态"
+                            color: modelData.accent
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: themePage.selectStyle(styleCard.modelData.id)
+                }
+            }
+        }
+
+        Text {
+            text: "BAR 布局"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 4
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 64
+            radius: 18
+            color: theme.card
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "⇲"; tint: "#ff9f0a" }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: "Bar 融入 Dock"
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: "仅在 Dock 位于底部时生效；侧边 Dock 自动保留顶部 Bar"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+                }
+                LiquidControls.LiquidGlassSwitch {
+                    checked: themePage.barIntegratedWithDock
+                    accentColor: "#0a84ff"
+                    trackColor: theme.divider
+                    onToggled: function(checked) {
+                        themePage.setBarIntegratedWithDock(checked)
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            text: "主题会立即更新 Dock。Bar 保持统一外观，可通过上方开关选择独立顶栏或底部统一宿主。"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: themePage.errorText.length > 0
+            text: themePage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
+
     Item {
         anchors.fill: parent
 
@@ -933,18 +1437,27 @@ ApplicationWindow {
                 SidebarEntry {
                     Layout.fillWidth: true
                     pageIndex: 0
-                    label: "Dock"
-                    navSymbol: "▰"
-                    navTint: "#0a84ff"
+                    label: "显示"
+                    navSymbol: "▱"
+                    navTint: "#34c759"
                 }
 
                 SidebarEntry {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
                     pageIndex: 1
-                    label: "显示"
-                    navSymbol: "▱"
-                    navTint: "#34c759"
+                    label: "主题"
+                    navSymbol: "◈"
+                    navTint: "#af52de"
+                }
+
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 2
+                    label: "Dock"
+                    navSymbol: "▰"
+                    navTint: "#0a84ff"
                 }
 
                 Item {
@@ -969,14 +1482,16 @@ ApplicationWindow {
                 anchors.rightMargin: 30
                 anchors.topMargin: 24
                 anchors.bottomMargin: 24
-                contentWidth: width
+                contentWidth: Math.max(width, pageContent.width)
                 contentHeight: pageContent.implicitHeight
                 clip: true
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
                 ColumnLayout {
                     id: pageContent
-                    width: Math.min(pageScroll.width, 700)
+                    readonly property real maximumWidth: 700
+                    width: Math.max(0, Math.min(pageScroll.width, maximumWidth))
+                    x: Math.max(0, Math.round((pageScroll.width - width) / 2))
                     spacing: 0
 
                     Text {
@@ -984,17 +1499,8 @@ ApplicationWindow {
                         color: theme.primaryText
                         font.pixelSize: 24
                         font.weight: Font.Bold
-                        Layout.bottomMargin: 4
+                        Layout.bottomMargin: 18
                     }
-                    Text {
-                        Layout.fillWidth: true
-                        text: window.contentByPage[window.currentPage].summary
-                        color: theme.secondaryText
-                        font.pixelSize: 13
-                        wrapMode: Text.Wrap
-                        Layout.bottomMargin: 12
-                    }
-
                     Repeater {
                         model: window.currentPage === 0
                             ? [] : window.contentByPage[window.currentPage].groups
@@ -1028,17 +1534,15 @@ ApplicationWindow {
                     }
 
                     DockSettingsPage {
-                        visible: window.currentPage === 0
+                        visible: window.currentPage === 2
                     }
 
-                    Text {
-                        Layout.fillWidth: true
-                        visible: window.currentPage !== 0
-                        text: "部分项目仍在准备中。设置应用会通过明确的配置或 IPC 接口与桌面环境通信。"
-                        color: theme.tertiaryText
-                        font.pixelSize: 12
-                        wrapMode: Text.Wrap
-                        Layout.topMargin: -5
+                    ThemeSettingsPage {
+                        visible: window.currentPage === 1
+                    }
+
+                    DisplaySettingsPage {
+                        visible: window.currentPage === 0
                     }
                 }
             }

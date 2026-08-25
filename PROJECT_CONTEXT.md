@@ -63,6 +63,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 15. **控制中心液态按钮**: 合成器 blur 是窗口级的，单个控件读不到窗口背后像素。`common/LiquidGlassControl.qml` 用 `ShaderEffectSource`（捕获窗口内层）→ `FastBlur` → `OpacityMask`（圆形裁剪）→ 玻璃高光/描边，实现控件级磨砂；`sourceItem` 为空时降级纯玻璃圆。媒体卡播放按钮模糊一层淡壁纸色调底（`WallpaperPaletteService` 主/次色 16%/7% 渐变，兼作卡片液态底），呈"吸收环境色调的磨砂透镜"。勿用封面作按钮模糊源（会透出封面碎块感）。
 16. **通知历史中心**: 会话内历史（不跨重启）。dismiss/expire 前快照（`NotificationGroupService._pushHistory`），**DND 期间 untrack 的通知也立即快照**（否则永不触发 dismiss 直接丢失）。`ControlCenterService.notificationHistory`（ListModel，上限 50）+ `historyGroups`（按 app 分组 JS 数组，随模型变化重建）。控制中心 Card 9：分组头（图标+应用名）+ 每条通知行 + 单条 × 删除 + 全部清空。action 执行仍缺失（快照只存文本）。
 17. **工作区概览 / Stage Manager**: `desktop/modules/overview/`（概览全屏遮罩：顶栏虚拟桌面条 + 当前桌面窗口缩略图网格）。数据层：KWin 脚本快照加 `desktops`/`onAllDesktops` 字段（`window.desktops` 的 id 列表）+ `publishDesktops()` 事件（desktopAdded/Removed/NameChanged/currentDesktopChanged 均触发）；bridge 命令新增 `desktops`（查询列表）、`switch-desktop`、`move-to-desktop`（KWin script 处理，走 `workspace.currentDesktop`/`window.desktops`）；`WindowService` 透传 `desktops` 列表/`currentDesktopId` + 三个命令函数。快捷键 `Meta+Tab`（`overview toggle`）。点击桌面切换、点窗口激活并关闭概览、Esc 关闭、←→ 选桌面、回车切到选中桌面。
+18. **全局外观形态**: `common/AppearanceConfigService.qml` 持久化 schema 3（玻璃强度、`windows12|macos|material`、`barIntegratedWithDock`），`AppearanceTokens.qml` v3 导出语义 Token。生产 Dock 已消费几何、状态背景、指示器和动效；Bar 保持统一视觉。底部 Dock 开启融合后，时间作为 `DockInfoCarousel` 的音乐/天气/时钟页面，`BarStatusArea` 成为右侧附件；侧边 Dock 自动回退顶部 Bar。DeskCenter 尚未接入。完整规则见 `docs/AppearanceArchitecture.md`。
 
 ## 开发规范
 
@@ -124,4 +125,6 @@ d7ab27b feat(dock): add KWin window bridge and themed icons (2026-07-22)
 - [NetworkArchitecture.md](docs/NetworkArchitecture.md) - 网络服务适配层
 - [ShellDataService.md](docs/ShellDataService.md) - Go 数据服务边界
 - [DesktopCompletionRoadmap.md](docs/DesktopCompletionRoadmap.md) - 完整桌面路线图
+- [AppearanceArchitecture.md](docs/AppearanceArchitecture.md) - 全局外观 schema、IPC、Token 与接入规范
+- [AppearanceSystemRoadmap.md](docs/AppearanceSystemRoadmap.md) - 三种形态的分阶段开放路线
 - [codex-history/index.md](docs/codex-history/index.md) - Codex 开发对话历史（52 个会话）

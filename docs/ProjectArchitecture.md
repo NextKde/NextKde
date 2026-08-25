@@ -17,6 +17,16 @@ integrations/                         external desktop integrations such as KWin
 `shared/` must be portable: no Quickshell, KWin, or Wayland-only imports.
 Cross-process state uses a service or a contract under `shared/contracts/`.
 
+## Global appearance
+
+Shell-wide glass strength and shape style are owned by
+[`AppearanceConfigService.qml`](../desktop/modules/common/AppearanceConfigService.qml).
+Consumers use semantic values from
+[`AppearanceTokens.qml`](../desktop/modules/common/AppearanceTokens.qml); the
+standalone Settings app reaches them only through `appearance-settings` IPC.
+The schema, token tables, migration rules, and rollout sequence are documented
+in [`AppearanceArchitecture.md`](AppearanceArchitecture.md).
+
 ## Desktop environment
 
 The root [`shell.qml`](../shell.qml) is intentionally only a stable Quickshell

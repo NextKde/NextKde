@@ -44,6 +44,78 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updateVisibilityMode"), mode}));
     }
 
+    Q_INVOKABLE QVariantMap appearanceSnapshot() {
+        return appearanceSnapshotFromReply(callAppearance({QStringLiteral("snapshot")}));
+    }
+
+    Q_INVOKABLE QVariantMap updateBlurStrength(double strength) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateBlurStrength"),
+            QString::number(strength, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLiquidStrength(double strength) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateLiquidStrength"),
+            QString::number(strength, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateShellStyle(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateShellStyle"), style}));
+    }
+
+    Q_INVOKABLE QVariantMap updateBarIntegratedWithDock(bool enabled) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateBarIntegratedWithDock"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")}));
+    }
+
+    Q_INVOKABLE QVariantMap resetAppearanceStrengths() {
+        return appearanceSnapshotFromReply(callAppearance({QStringLiteral("resetStrengths")}));
+    }
+
+    Q_INVOKABLE bool applySystemAppearance(bool dark) {
+        const QString scheme = dark ? QStringLiteral("Layan")
+                                   : QStringLiteral("LayanLight");
+        QProcess process;
+        process.start(QStringLiteral("plasma-apply-colorscheme"), {scheme});
+        if (!process.waitForStarted(1500)) {
+            setLastError(QStringLiteral("无法启动 KDE 色彩方案工具"));
+            return false;
+        }
+        if (!process.waitForFinished(5000)) {
+            process.kill();
+            process.waitForFinished();
+            setLastError(QStringLiteral("KDE 色彩方案切换超时"));
+            return false;
+        }
+        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+            const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
+            setLastError(error.isEmpty() ? QStringLiteral("KDE 色彩方案切换失败") : error);
+            return false;
+        }
+
+        QProcess kwin;
+        kwin.start(QStringLiteral("qdbus6"), {
+            QStringLiteral("org.kde.KWin"),
+            QStringLiteral("/KWin"),
+            QStringLiteral("reconfigure")});
+        if (!kwin.waitForStarted(1500) || !kwin.waitForFinished(3000)
+                || kwin.exitStatus() != QProcess::NormalExit || kwin.exitCode() != 0) {
+            if (kwin.state() != QProcess::NotRunning) {
+                kwin.kill();
+                kwin.waitForFinished();
+            }
+            const auto error = QString::fromUtf8(kwin.readAllStandardError()).trimmed();
+            setLastError(error.isEmpty()
+                ? QStringLiteral("KWin 装饰刷新失败") : error);
+            return false;
+        }
+        setLastError({});
+        return true;
+    }
+
 signals:
     void lastErrorChanged();
 
@@ -75,11 +147,53 @@ private:
             {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},};
     }
 
+    QVariantMap appearanceSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的外观配置"));
+            return {};
+        }
+
+        const QJsonObject object = document.object();
+        if (!object.contains(QStringLiteral("blurStrength"))
+                || !object.contains(QStringLiteral("liquidStrength"))
+                || !object.contains(QStringLiteral("shellStyle"))
+                || !object.contains(QStringLiteral("barIntegratedWithDock"))) {
+            setLastError(QStringLiteral("桌面环境返回的外观配置不完整"));
+            return {};
+        }
+
+        setLastError({});
+        return {
+            {QStringLiteral("blurStrength"), object.value(QStringLiteral("blurStrength")).toDouble()},
+            {QStringLiteral("liquidStrength"), object.value(QStringLiteral("liquidStrength")).toDouble()},
+            {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
+            {QStringLiteral("barIntegratedWithDock"),
+                object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
+            {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
+        };
+    }
+
     QString callDock(const QStringList &arguments) {
+        return callShell(QStringLiteral("dock-settings"), arguments,
+                         QStringLiteral("Dock 设置请求失败"));
+    }
+
+    QString callAppearance(const QStringList &arguments) {
+        return callShell(QStringLiteral("appearance-settings"), arguments,
+                         QStringLiteral("外观设置请求失败"));
+    }
+
+    QString callShell(const QString &target, const QStringList &arguments,
+                      const QString &fallbackError) {
         QProcess process;
         QStringList command{QStringLiteral("--path"), QStringLiteral(SETTINGS_SHELL_DIR),
                             QStringLiteral("ipc"), QStringLiteral("call"),
-                            QStringLiteral("dock-settings")};
+                            target};
         command.append(arguments);
         process.start(QStringLiteral("quickshell"), command);
         if (!process.waitForStarted(1500)) {
@@ -94,7 +208,7 @@ private:
         }
         if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
             const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty() ? QStringLiteral("Dock 设置请求失败") : error);
+            setLastError(error.isEmpty() ? fallbackError : error);
             return {};
         }
         return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
