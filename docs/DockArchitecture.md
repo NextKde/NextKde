@@ -274,28 +274,41 @@ Do not store launcher folders or application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Current user configuration fields:
+Current user configuration fields (schema version 3):
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "baseHeight": 60,
-  "maxWidthRatio": 0.9,
   "theme": "dark",
+  "position": "bottom",
+  "barHeight": 35,
   "iconOverrides": {},
   "dockItems": [
     { "type": "app", "appId": "code.desktop" },
     { "type": "app", "appId": "org.kde.kate.desktop" }
   ],
-  "proportions": {}
+  "pinnedAppIds": [],
+  "proportions": {},
+  "iconMode": "grayscale",
+  "iconOpacity": 0.5,
+  "iconTintColor": "#a855f7",
+  "visibilityMode": "always"
 }
 ```
+
+Schema 3 added `visibilityMode` (see the next section), the icon appearance
+triplet (`iconMode`: `color | grayscale | tint`, `iconOpacity`,
+`iconTintColor`), and explicit `position`/`barHeight`. `pinnedAppIds` is still
+written for one compatibility release; new code reads `dockItems`. Legacy
+`smartHideEnabled: true` migrates to `"smart"`, legacy `autoHide: true` to
+`"persistent"`, with `"smart"` winning if both were set.
 
 Persist:
 
 - ordered `dockItems`; app IDs are canonical desktop IDs
 - layout proportions and size preferences
-- theme and behavior preferences
+- theme, icon appearance, position, and visibility behavior preferences
 - canonical-ID keyed icon overrides
 
 Do not persist:
@@ -316,6 +329,56 @@ for missing fields, preserve unknown fields where practical, and write the
 new format only after a successful migration. Runtime state is already stored
 under Quickshell's XDG-backed state directory; do not move it back into the
 watched QML source tree.
+
+## Visibility modes and auto-hide
+
+`DockConfigService.visibilityMode` is a single mutually exclusive enum:
+`always`, `smart` (hide only when a window overlaps the Dock area), or
+`persistent` (stay hidden regardless of windows). Never persist separate
+booleans for these; that only produces illegal combinations.
+
+Components:
+
+- `DockAutoHideController.qml` — a plain per-surface component, **not** a
+  singleton, so each screen/position surface owns an independent state machine
+  (Bootstrapping/Shown/HidePending/Hiding/Hidden/RevealPending/Showing/Held).
+  It drives one `revealProgress` value; every visual offset, opacity and scale
+  derives from it. It never persists configuration or creates windows.
+- `DockRevealHandle.qml` — the iOS-style white home indicator shown while
+  hidden. Pure visual + pointer input; separates the visual pill from a larger
+  invisible hit target and reads no services.
+- `DockAutoHideMath.mjs` + `test_autohide.mjs` — pure, unit-tested geometry
+  and policy functions (`visibleDockRect`, eligibility filtering, conflict
+  hysteresis). Geometry and policy must not be scattered into QML bindings.
+- All show-mode timing/easing constants live in `DockAnimation.qml`.
+
+Non-negotiable invariants:
+
+1. Collision judgement always uses the **static rectangle the Dock would
+   occupy at full reveal**, computed from screen geometry and configured
+   sizes — never the animated transform position, `mapToItem`, or global
+   coordinate sampling.
+2. Hiding never destroys the `PanelWindow`, toggles `visible`, changes
+   anchors, or spawns a second layer-shell window for the handle; it only
+   translates `dockWrapper` inside the permanently mapped surface.
+3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
+   the handle hit target. All other transparent surface area must pass clicks
+   through. In `always` mode the handle hit target is zero-sized.
+4. `exclusiveZone` stays `dockThickness + edgeMargin` in `always` mode and is
+   fixed at `0` in `smart`/`persistent`; it must not change per animation
+   frame, or maximized windows reflow on every hide/show.
+5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
+   Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
+   force the Dock visible; popups must join the `activeDockPopup` coordinator
+   rather than being special-cased in the controller.
+
+Window data contract: `WindowService` normalized records carry
+`geometry`/`screenName`/`isMaximized`/`isVisible` plus `providerReady`; the
+KWin bridge publishes `frameGeometry`, output, maximized and visibility per
+window and re-snapshots on their change signals (each connection defensively
+try/caught). When a provider exposes no geometry, degrade to "hide only on
+same-screen fullscreen" — never substitute "an active window exists" for
+collision.
 
 ## Planned feature contracts
 

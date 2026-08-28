@@ -1,6 +1,6 @@
 # 全局外观系统架构
 
-> 状态：阶段 1 与 Dock 形态阶段第一轮已实现（2026-08-24）。本文是后续开发和 AI 接续工作的规范来源；产品路线见 [AppearanceSystemRoadmap.md](AppearanceSystemRoadmap.md)。
+> 状态：阶段 1、Dock 形态、Bar 融合与 Dock 窗口动画已实现（2026-08-28）。本文是后续开发和 AI 接续工作的规范来源。
 
 ## 1. 当前能力与边界
 
@@ -10,6 +10,7 @@
 - **玻璃材质**：`blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由现有液态玻璃表面消费，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置。仅当 Dock 位于底部时生效；开启后顶部 Bar 将 `exclusiveZone`、启动器顶部边距和 DeskCenter 顶部安全区归零/收缩，再将时间与系统状态内容装入 Dock。
+- **Dock 窗口动画**：`dockWindowAnimationStyle`，值为 `scale | genie`，默认 `scale`。由 `DockWindowAnimationTargetService` 向 KWin dock-window-animation effect 发布图标矩形，设置页可选择并持久化。
 
 主题选择会立即更新 Dock 的几何、间距、状态背景、运行指示器和动效。Bar 始终保持统一视觉；是否融入 Dock 完全由独立开关决定。后续只需继续接入 DeskCenter。
 
@@ -62,12 +63,15 @@ Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter�
 | `desktop/modules/bar/DockStatusSvgIcon.qml` | Wi‑Fi、设置、控制中心的项目 SVG 遮罩渲染器；彩色模式输出白色，黑白模式叠加统一透明度，染色模式使用公共 tonal 色与阴影 |
 | `desktop/modules/bar/BarWindow.qml` | 独立顶栏的 layer-shell 几何宿主 |
 | `desktop/modules/dock/DockInfoCarousel.qml` | Dock 音乐、天气、融合时钟、常驻温度的固定宽度轮播宿主 |
+| `desktop/modules/dock/DockSideInfoCarousel.qml` | 左/右 Dock 的单行信息轮播；父 Row 旋转 90°，面板反向旋转保持文字正立，沿边占两个图标位 |
+| `desktop/modules/dock/DockMetricGlyph.qml` | Dock 信息卡的主题无关高对比度字形（温度/时钟），Canvas/仓库 SVG 绘制纯白像素 |
 | `desktop/modules/dock/DockClockWidget.qml` | 左侧为液态时间与日期，右侧为带图标的日落/日出时间；使用与天气/音乐同规格的壁纸环境色卡片 |
 | `desktop/modules/dock/DockTemperatureWidget.qml` | 常驻 Dock 温度页；左侧用白色加粗的系统主题温度图标、蓝/红状态点和紧凑上下行显示平均/最高温度，右侧复用 DeskCenter 的 CPU/内存/存储三环语义与配色；只消费公共 `MetricsService` 快照 |
 | `desktop/modules/dock/DockContainer.qml` | Token 驱动的 Dock 自适应比例和圆角 |
 | `desktop/modules/dock/DockWindow.qml` | Token 驱动的贴边距离与玻璃环境系数 |
 | `desktop/modules/dock/DockIcon.qml` | Token 驱动的状态背景、指示器、放大与位移 |
 | `desktop/modules/dock/DockAnimation.qml` | 将 motion Token 投影到 Dock 动效语义 |
+| `desktop/modules/dock/DockWindowAnimationTargetService.qml` | 向 KWin dock-window-animation effect 发布合成器全局坐标下的 Dock 图标矩形（采样自渲染后的 AppIcon），驱动 `dockWindowAnimationStyle` |
 
 ### 3.1 系统图标契约
 
@@ -92,21 +96,22 @@ SystemIcon { role: "controlCenter" }
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 3：
+schema 4：
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "blurStrength": 0.42,
   "liquidStrength": 1.0,
   "shellStyle": "macos",
-  "barIntegratedWithDock": false
+  "barIntegratedWithDock": false,
+  "dockWindowAnimationStyle": "scale"
 }
 ```
 
 - 默认 `shellStyle` 为 `macos`，因为它最接近引入主题前的现有 Shell 形态，升级不会突然重排界面。
-- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`。升级时保留原值，补入 `shellStyle: "macos"` 与 `barIntegratedWithDock: false`，并防抖写回 schema 3。
-- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法强度不会覆盖内存默认值。
+- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`。升级时保留原值，补入缺失字段的默认值，并防抖写回最新 schema。
+- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
 - `resetStrengths()` 只恢复 `0.42 / 1.0`，不重置主题形态或 Dock 数据。
@@ -122,6 +127,7 @@ target：`appearance-settings`。所有更新都返回完整 JSON snapshot。
 | `updateLiquidStrength` | real | 更新液态强度 |
 | `updateShellStyle` | string | 更新 Shell 形态 |
 | `updateBarIntegratedWithDock` | bool | 更新 Bar/Dock 宿主策略 |
+| `updateDockWindowAnimationStyle` | string | 更新 Dock 窗口动画风格（`scale`/`genie`） |
 | `resetStrengths` | 无 | 只重置两项玻璃强度 |
 
 snapshot 示例：
@@ -132,6 +138,7 @@ snapshot 示例：
   "liquidStrength": 1,
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
+  "dockWindowAnimationStyle": "scale",
   "tokenVersion": 4
 }
 ```
@@ -199,7 +206,7 @@ quickshell --path /home/amao/OneDrive/quickshell ipc call appearance-settings up
 | `motion.standardEasing` | OutCubic | OutCubic | OutQuart |
 | `motion.springEnabled` | false | true | false |
 
-Token schema 版本为 `AppearanceTokens.version === 3`。v2 新增 Dock 状态、边缘和指示器 Token；v3 将 Bar 统一为单一视觉契约，并把 `unifiedWithDock` 改为独立配置投影。修改现有 Token 语义或删除字段时必须升版本。
+Token schema 版本为 `AppearanceTokens.version === 4`。v2 新增 Dock 状态、边缘和指示器 Token；v3 将 Bar 统一为单一视觉契约，并把 `unifiedWithDock` 改为独立配置投影；v4 随 Bar/Dock 融合宿主实现提升版本号，Token 表语义未变。修改现有 Token 语义或删除字段时必须升版本。
 
 ## 7. 消费规则
 
@@ -224,7 +231,7 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 
 - Token 决定视觉形态，现有业务 service 决定数据和行为。
 - 主题热切换不能重建应用模型、改变 pinned 顺序或清除窗口状态。
-- `bar.unifiedWithDock` 是独立布局要求，不是把两个 layer-shell 窗口简单叠在底部。开启后无论 Dock 位于底部、左侧还是右侧，顶部 Bar surface 都把排斥区设为零并隐藏。底部 Dock 把时间放入信息轮播、状态区作为右侧附件；左/右 Dock 使用正立的小型时间块，并把状态序列沿侧边排列。侧边 Dock 的天气/音乐/温度轮播仍遵循现有纵向布局限制，不在本修复中强行旋转横向卡片。
+- `bar.unifiedWithDock` 是独立布局要求，不是把两个 layer-shell 窗口简单叠在底部。开启后无论 Dock 位于底部、左侧还是右侧，顶部 Bar surface 都把排斥区设为零并隐藏。底部 Dock 把时间放入信息轮播、状态区作为右侧附件；左/右 Dock 使用 `DockSideInfoCarousel` 单行轮播（父 Row 旋转 90°、内容反向旋转保持文字正立，沿边占两个图标位），状态序列沿侧边排列。
 - 融合宿主必须按 Dock 边缘决定弹窗方向：底部向上、左侧向右、右侧向左，包括托盘菜单/提示、网络、蓝牙和电池；控制中心卡片组在左侧 Dock 时镜像到屏幕左侧。恢复独立顶部 Bar 后仍向下展开。
 - Bar 状态区的 CPU 等通用语义图标通过 `SystemIcon`/`SystemIconResolver` 消费当前系统图标主题。Wi‑Fi、设置、控制中心使用项目自绘 SVG：独立 Bar 与 Dock `color` 模式输出白色，`grayscale` 叠加与应用图标相同的 `iconOpacity`，`tint` 将 72% 基准亮度投影到 `iconTintColor` 后再叠加轻微暗影，避免纯色 SVG 比其他图标突兀。电池保留电量绘制，但在 Dock `tint` 模式下使用同一 tonal 色、透明度和阴影。快捷状态组只保留布局 padding，不绘制整组白色蒙层。
 - Dock 的 `iconMode` 同时约束 Dock 内的应用图标、原生 SystemTray 图标、自绘 Wi‑Fi/设置/控制中心图标，以及天气/时间/温度卡片背景。`color` 保留内容原色；`grayscale` 按亮度去色；`tint` 先保留亮度层级再投影到 `iconTintColor`。该规则只在状态区被 Dock 承载时作用于 Bar 组件，独立顶部 Bar 仍使用系统主题原色。电池是状态相关的专用绘制，明确排除在此投影之外。
@@ -269,7 +276,7 @@ git diff --check
 
 开始后续外观工作前，AI 应依次：
 
-1. 阅读本文与 `AppearanceSystemRoadmap.md`。
+1. 阅读本文。
 2. 检查工作区未提交修改，避免覆盖用户正在开发的 Dock/Bar/桌面文件。
 3. 读取当前运行时 snapshot，不猜测用户选择。
 4. 一次只让一个主要 surface 消费 Token，并保留原业务行为。

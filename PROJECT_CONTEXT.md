@@ -1,7 +1,7 @@
 # Quickshell 项目上下文
 
-> 本文件由 Codex 开发对话历史提炼，供 Trae/AI 助手快速恢复开发上下文。
-> 完整对话历史见 `docs/codex-history/`，架构详情见 `docs/` 下各文档。
+> 本文件提炼项目开发上下文，供 AI 助手快速恢复开发上下文。
+> 架构详情见 `docs/` 下各文档（索引在文末）。
 
 ## 项目概述
 
@@ -63,7 +63,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 15. **控制中心液态按钮**: 合成器 blur 是窗口级的，单个控件读不到窗口背后像素。`common/LiquidGlassControl.qml` 用 `ShaderEffectSource`（捕获窗口内层）→ `FastBlur` → `OpacityMask`（圆形裁剪）→ 玻璃高光/描边，实现控件级磨砂；`sourceItem` 为空时降级纯玻璃圆。媒体卡播放按钮模糊一层淡壁纸色调底（`WallpaperPaletteService` 主/次色 16%/7% 渐变，兼作卡片液态底），呈"吸收环境色调的磨砂透镜"。勿用封面作按钮模糊源（会透出封面碎块感）。
 16. **通知历史中心**: 会话内历史（不跨重启）。dismiss/expire 前快照（`NotificationGroupService._pushHistory`），**DND 期间 untrack 的通知也立即快照**（否则永不触发 dismiss 直接丢失）。`ControlCenterService.notificationHistory`（ListModel，上限 50）+ `historyGroups`（按 app 分组 JS 数组，随模型变化重建）。控制中心 Card 9：分组头（图标+应用名）+ 每条通知行 + 单条 × 删除 + 全部清空。action 执行仍缺失（快照只存文本）。
 17. **工作区概览 / Stage Manager**: `desktop/modules/overview/`（概览全屏遮罩：顶栏虚拟桌面条 + 当前桌面窗口缩略图网格）。数据层：KWin 脚本快照加 `desktops`/`onAllDesktops` 字段（`window.desktops` 的 id 列表）+ `publishDesktops()` 事件（desktopAdded/Removed/NameChanged/currentDesktopChanged 均触发）；bridge 命令新增 `desktops`（查询列表）、`switch-desktop`、`move-to-desktop`（KWin script 处理，走 `workspace.currentDesktop`/`window.desktops`）；`WindowService` 透传 `desktops` 列表/`currentDesktopId` + 三个命令函数。快捷键 `Meta+Tab`（`overview toggle`）。点击桌面切换、点窗口激活并关闭概览、Esc 关闭、←→ 选桌面、回车切到选中桌面。
-18. **全局外观形态**: `common/AppearanceConfigService.qml` 持久化 schema 3（玻璃强度、`windows12|macos|material`、`barIntegratedWithDock`），`AppearanceTokens.qml` v3 导出语义 Token。生产 Dock 已消费几何、状态背景、指示器和动效；Bar 保持统一视觉。底部 Dock 开启融合后，时间作为 `DockInfoCarousel` 的音乐/天气/时钟页面，`BarStatusArea` 成为右侧附件；侧边 Dock 自动回退顶部 Bar。DeskCenter 尚未接入。完整规则见 `docs/AppearanceArchitecture.md`。
+18. **全局外观形态**: `common/AppearanceConfigService.qml` 持久化 schema 4（玻璃强度、`windows12|macos|material`、`barIntegratedWithDock`、`dockWindowAnimationStyle: scale|genie`），`AppearanceTokens.qml` v4 导出语义 Token。生产 Dock 已消费几何、状态背景、指示器和动效；Bar 保持统一视觉。底部 Dock 开启融合后，时间作为 `DockInfoCarousel` 的音乐/天气/时钟页面，`BarStatusArea` 成为右侧附件；侧边 Dock 用 `DockSideInfoCarousel`（内容反向旋转保持正立）并自动回退顶部 Bar。DeskCenter 尚未接入。完整规则见 `docs/AppearanceArchitecture.md`。
 
 ## 开发规范
 
@@ -81,8 +81,12 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 
 ## 已知问题和未完成工作
 
-### P0（路线图最高优先级）
-- **Wi-Fi 文档对齐**: Wi-Fi 连接/断开/忘记/802.1X **已实现**（`NetworkService.qml` 的 `connectWifi`/`disconnectActiveWifi`/`forgetWifiProfile`/`connectEnterpriseWifi`），但 `NetworkService.qml` 内有过期注释声称未实现，需清理并对齐文档。
+### 未完成
+
+- **会话与电源**：控制中心目前只有注销入口；锁屏、休眠、重启、关机和用户切换仍缺失，低电量/无权限/操作失败的状态反馈待补。
+- **多显示器每屏布局**：DeskCenter 小组件布局、桌面文件图标布局、Dock 位置/显示规则、壁纸与取色尚未按显示器持久化。
+- **可访问性与键盘导航**：焦点顺序、高对比度、减少动画与全键盘操作未完善。
+- **设置中心覆盖面**：`kos-settings` 已有显示/主题/Dock 页面；快捷键、DeskCenter 等模块设置仍待纳入。
 
 ### 待优化
 - 天气图标用 Unicode 字符（`☀⛅☁☔❄`）表示状况符号；桌面天气卡片云层用 SVG（`desktop/assets/weather-cloud*.svg`），其余太阳/雨/雪/雾用 `Rectangle`/`Canvas` 绘制。缺完整天气 SVG 图标集。
@@ -95,36 +99,28 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 
 ## Git 历史
 
-最近提交（`git log --oneline` 查看完整列表）：
+近期里程碑提交（完整列表用 `git log --oneline` 查看，当前约 100 个提交）：
 
 ```
-6d122a8 feat: enhance desktop shell interactions          (2026-08-05)
-f4d44d2 feat: refine shell surfaces and glass effects     (2026-08-03)
-fcd94e8 feat: add launcher and unified shell surfaces     (2026-07-28)
-d3037ed Add adaptive glass palettes                       (2026-07-23)
-d95d2f3 Add QML liquid glass surfaces                     (2026-07-22)
-d7ab27b feat(dock): add KWin window bridge and themed icons (2026-07-22)
-8c18ab9 feat: add dock edit mode interactions             (2026-07-18)
-2208235 feat: support drag into dock folders              (2026-07-18)
-92bb0f4 feat: add iPadOS-style bar and dock folders       (2026-07-18)
-43d2afb feat: adopt iPad-style pinned dock model          (2026-07-18)
-4c9d539 chore: create dock baseline                       (2026-07-18)
+1fd8ba6 dock的融合模式                                  (2026-08-27)
+255affd feat(common): public ContextMenu + MenuItemRow; dock uses it
+5f75f7f feat: add TrayNotificationBridge to forward tray attention to notifications
 ```
 
-> 注：`2208235` 的 "drag into dock folders" 指早期的 Dock folder 功能，该功能现已移除（加载时摊平为 app）；当前文件夹交互只在 AppLauncher 与 DeskCenter 桌面文件中。
+早期里程碑（2026-07 至 2026-08 上旬）：Dock 基线、iPadOS 固定模型、KWin window bridge、液态玻璃表面、启动器/搜索/通知统一 surface、玻璃调色板等，见 `git log`。
+
+> 注：历史提交中的 "dock folders" 指早期的 Dock folder 功能，该功能现已移除（加载时摊平为 app）；当前文件夹交互只在 AppLauncher 与 DeskCenter 桌面文件中。
 
 ## 配置与状态
 
-- `config/dock/config.json` 是 Dock 的**种子模板**；运行时实际读取 `Quickshell.stateDir + "/dock/config.json"`，修改源文件不影响已运行的实例。
-- 各模块状态文件位于 `Quickshell.stateDir/` 下：`dock/config.json`、`applauncher/config.json`、`bar/usage-history.json`、`weather/current.json`、`activity-usage.json`。
+- Dock 配置只存在于运行时 `Quickshell.stateDir + "/dock/config.json"`（仓库内无种子模板；首次运行由 `DockConfigService` 用内置默认值生成）。
+- 各模块状态文件位于 `Quickshell.stateDir/` 下：`dock/config.json`、`applauncher/config.json`（含 `icons/` 自定义图标缓存）、`bar/usage-history.json`、`weather/current.json`、`appearance/config.json`。
 - `shell-data-service` 的快照在 `$XDG_STATE_HOME/quickshell/shell-data-service/`（`state.json` + `snapshot.json`），socket 在 `$XDG_RUNTIME_DIR/shell-data-service.sock`。
 
 ## 文档索引
 
-- [DockArchitecture.md](docs/DockArchitecture.md) - Dock 身份/窗口/持久化约定
+- [ProjectArchitecture.md](docs/ProjectArchitecture.md) - 仓库级运行时边界与依赖方向
+- [DockArchitecture.md](docs/DockArchitecture.md) - Dock 身份/窗口/持久化/显示模式约定
+- [AppearanceArchitecture.md](docs/AppearanceArchitecture.md) - 全局外观 schema、IPC、Token 与接入规范
 - [NetworkArchitecture.md](docs/NetworkArchitecture.md) - 网络服务适配层
 - [ShellDataService.md](docs/ShellDataService.md) - Go 数据服务边界
-- [DesktopCompletionRoadmap.md](docs/DesktopCompletionRoadmap.md) - 完整桌面路线图
-- [AppearanceArchitecture.md](docs/AppearanceArchitecture.md) - 全局外观 schema、IPC、Token 与接入规范
-- [AppearanceSystemRoadmap.md](docs/AppearanceSystemRoadmap.md) - 三种形态的分阶段开放路线
-- [codex-history/index.md](docs/codex-history/index.md) - Codex 开发对话历史（52 个会话）
