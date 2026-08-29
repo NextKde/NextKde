@@ -241,8 +241,6 @@ docs/           architecture documentation
 
 Planned next, in rough priority order:
 
-- **Session & power** — lock, suspend, reboot, shutdown and user-switch entries
-  in the control center (only logout exists today), with failure feedback.
 - **Per-monitor layouts** — persist DeskCenter widgets, desktop-icon layout,
   Dock position/visibility, and wallpaper sampling per display.
 - **DeskCenter theming** — let desktop cards consume the appearance token layer
