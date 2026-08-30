@@ -91,6 +91,15 @@ KosApplicationWindow {
             && !Boolean(value(todo, "completed", false))
     }
 
+    function priorityColor(todo) {
+        const priority = Number(value(todo, "priority", 0))
+        if (priority > 0 && priority <= 3)
+            return AppTheme.destructive
+        if (priority <= 6 && priority > 0)
+            return AppTheme.warning
+        return AppTheme.accent
+    }
+
     function addTask() {
         const title = taskField.text.trim()
         if (title.length === 0)
@@ -427,12 +436,7 @@ KosApplicationWindow {
                                     Layout.preferredWidth: 4
                                     Layout.preferredHeight: 34
                                     radius: 2
-                                    color: Number(root.value(taskDelegate.modelData,
-                                        "priority", 0)) >= 3
-                                        ? AppTheme.destructive
-                                        : (Number(root.value(taskDelegate.modelData,
-                                            "priority", 0)) === 2
-                                            ? AppTheme.warning : AppTheme.accent)
+                                    color: root.priorityColor(taskDelegate.modelData)
                                     opacity: Number(root.value(taskDelegate.modelData,
                                         "priority", 0)) > 0 ? 1 : 0.18
                                 }

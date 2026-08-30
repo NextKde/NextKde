@@ -49,6 +49,17 @@ Dialog {
         return index >= 0 ? index : 0
     }
 
+    function priorityIndex(priority) {
+        const value = Number(priority)
+        if (value <= 0)
+            return 0
+        if (value <= 3)
+            return 3
+        if (value <= 6)
+            return 2
+        return 1
+    }
+
     function datePart(value) {
         const match = String(value ?? "").match(/^(\d{4}-\d{2}-\d{2})/)
         return match ? match[1] : ""
@@ -78,7 +89,7 @@ Dialog {
         const timeMatch = String(value(todo, "due", "")).match(/T(\d{2}:\d{2})/)
         dueTimeField.text = timeMatch ? timeMatch[1] : "18:00"
         allDayCheck.checked = Boolean(value(todo, "allDay", false))
-        priorityBox.currentIndex = Math.max(0, Math.min(3, Number(value(todo, "priority", 0))))
+        priorityBox.currentIndex = priorityIndex(value(todo, "priority", 0))
         recurrenceBox.currentIndex = recurrenceIndex(value(todo, "recurrence", "none"))
         reminderBox.currentIndex = reminderIndex(value(todo, "reminderMinutes", -1))
         open()
@@ -88,6 +99,7 @@ Dialog {
     function todoPayload() {
         const recurrenceValues = ["none", "daily", "weekly", "monthly", "yearly"]
         const reminderValues = [-1, 0, 5, 15, 30, 60, 1440]
+        const priorityValues = [0, 9, 5, 1]
         const list = availableLists.length > 0
             ? availableLists[Math.max(0, listBox.currentIndex)] : ({ id: "inbox" })
         const date = dueDateField.text.trim()
@@ -98,10 +110,11 @@ Dialog {
             due: date.length > 0 ? date + "T"
                 + (allDayCheck.checked ? "00:00" : dueTimeField.text.trim()) + ":00" : "",
             allDay: allDayCheck.checked,
-            priority: priorityBox.currentIndex,
+            priority: priorityValues[priorityBox.currentIndex],
             recurrence: recurrenceBox.currentIndex > 0 && date.length === 0
                 ? "none" : recurrenceValues[recurrenceBox.currentIndex],
-            reminderMinutes: reminderValues[reminderBox.currentIndex]
+            reminderMinutes: date.length > 0
+                ? reminderValues[reminderBox.currentIndex] : -1
         }
     }
 
@@ -183,6 +196,7 @@ Dialog {
                     ComboBox {
                         id: recurrenceBox
                         Layout.fillWidth: true
+                        enabled: dueDateField.text.trim().length > 0
                         model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
                             qsTr("Monthly"), qsTr("Yearly")]
                         Accessible.name: qsTr("Task recurrence")
@@ -195,6 +209,7 @@ Dialog {
                     ComboBox {
                         id: reminderBox
                         Layout.fillWidth: true
+                        enabled: dueDateField.text.trim().length > 0
                         model: [qsTr("None"), qsTr("At due time"), qsTr("5 minutes before"),
                             qsTr("15 minutes before"), qsTr("30 minutes before"),
                             qsTr("1 hour before"), qsTr("1 day before")]
