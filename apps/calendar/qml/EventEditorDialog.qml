@@ -36,6 +36,11 @@ Dialog {
         return dateText(next)
     }
 
+    function nextDateFromText(value) {
+        const parsed = new Date(String(value) + "T12:00:00")
+        return Number.isNaN(parsed.getTime()) ? String(value) : nextDateText(parsed)
+    }
+
     function isoDatePart(value, fallback) {
         const match = String(value ?? "").match(/^(\d{4}-\d{2}-\d{2})/)
         return match ? match[1] : fallback
@@ -64,7 +69,7 @@ Dialog {
         descriptionField.text = ""
         locationField.text = ""
         startDateField.text = dateText(date)
-        endDateField.text = nextDateText(date)
+        endDateField.text = dateText(date)
         startTimeField.text = "09:00"
         endTimeField.text = "10:00"
         allDayCheck.checked = false
@@ -138,6 +143,13 @@ Dialog {
                 CheckBox {
                     id: allDayCheck
                     text: qsTr("All day")
+                    onToggled: {
+                        const next = root.nextDateFromText(startDateField.text.trim())
+                        if (checked && endDateField.text.trim() === startDateField.text.trim())
+                            endDateField.text = next
+                        else if (!checked && endDateField.text.trim() === next)
+                            endDateField.text = startDateField.text.trim()
+                    }
                 }
 
                 Item { Layout.fillWidth: true }

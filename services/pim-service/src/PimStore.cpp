@@ -155,11 +155,18 @@ QString recurrencePreset(const KCalendarCore::Incidence::Ptr &incidence)
 int reminderMinutes(const KCalendarCore::Incidence::Ptr &incidence)
 {
     for (const KCalendarCore::Alarm::Ptr &alarm : incidence->alarms()) {
-        if (!alarm->enabled() || !alarm->hasStartOffset())
+        if (!alarm->enabled())
             continue;
-        const int seconds = alarm->startOffset().asSeconds();
-        if (seconds <= 0)
-            return -seconds / 60;
+        if (alarm->hasStartOffset()) {
+            const int seconds = alarm->startOffset().asSeconds();
+            if (seconds <= 0)
+                return -seconds / 60;
+        }
+        if (alarm->hasEndOffset()) {
+            const int endSeconds = alarm->endOffset().asSeconds();
+            if (endSeconds <= 0)
+                return -endSeconds / 60;
+        }
     }
     return -1;
 }
@@ -171,7 +178,11 @@ void applyReminder(const KCalendarCore::Incidence::Ptr &incidence, int minutes)
         return;
     auto alarm = incidence->newAlarm();
     alarm->setDisplayAlarm(incidence->summary());
-    alarm->setStartOffset(KCalendarCore::Duration(-minutes * 60));
+    const auto todo = qSharedPointerDynamicCast<KCalendarCore::Todo>(incidence);
+    if (todo && !todo->hasStartDate() && todo->hasDueDate())
+        alarm->setEndOffset(KCalendarCore::Duration(-minutes * 60));
+    else
+        alarm->setStartOffset(KCalendarCore::Duration(-minutes * 60));
     alarm->setEnabled(true);
 }
 
@@ -188,8 +199,9 @@ bool applyRecurrence(const KCalendarCore::Incidence::Ptr &incidence,
         incidence->removeCustomProperty(customApp, keyRecurrence);
         return true;
     }
-    if (!incidence->dtStart().isValid()) {
-        *message = QStringLiteral("A recurring item requires a start date");
+    const auto todo = qSharedPointerDynamicCast<KCalendarCore::Todo>(incidence);
+    if (!incidence->dtStart().isValid() && (!todo || !todo->hasDueDate())) {
+        *message = QStringLiteral("A recurring item requires a start or due date");
         return false;
     }
     if (recurrence == QLatin1String("daily"))
@@ -612,6 +624,7 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
     const auto event = d->calendar->event(uid);
     if (!event)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Event not found"));
+    const KCalendarCore::Event::Ptr updated(event->clone());
     QJsonObject input;
     QString message;
     if (!parsePayload(payload, &input, &message))
@@ -622,24 +635,24 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
         if (title.isEmpty())
             valid = false;
         else
-            event->setSummary(title);
+            updated->setSummary(title);
     }
     if (input.contains(QStringLiteral("description")))
-        event->setDescription(boundedString(input, QStringLiteral("description"), 32768,
-                                            &valid));
+        updated->setDescription(boundedString(input, QStringLiteral("description"), 32768,
+                                              &valid));
     if (input.contains(QStringLiteral("location")))
-        event->setLocation(boundedString(input, QStringLiteral("location"), 1024, &valid));
+        updated->setLocation(boundedString(input, QStringLiteral("location"), 1024, &valid));
     if (!valid)
         return errorResponse(QStringLiteral("invalid_event"),
                              QStringLiteral("Event title or text length is invalid"));
     const bool allDay = input.contains(QStringLiteral("allDay"))
-        ? input.value(QStringLiteral("allDay")).toBool() : event->allDay();
+        ? input.value(QStringLiteral("allDay")).toBool() : updated->allDay();
     QTimeZone zone(input.value(QStringLiteral("timeZone")).toString().toUtf8());
     if (!zone.isValid())
-        zone = event->dtStart().timeZone().isValid()
-            ? event->dtStart().timeZone() : d->calendar->timeZone();
-    QDateTime start = event->dtStart();
-    QDateTime end = event->dtEnd();
+        zone = updated->dtStart().timeZone().isValid()
+            ? updated->dtStart().timeZone() : d->calendar->timeZone();
+    QDateTime start = updated->dtStart();
+    QDateTime end = updated->dtEnd();
     if (input.contains(QStringLiteral("start")))
         start = parseDateTime(input.value(QStringLiteral("start")), allDay, zone);
     if (input.contains(QStringLiteral("end")))
@@ -647,21 +660,27 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
     if (!start.isValid() || !end.isValid() || end <= start)
         return errorResponse(QStringLiteral("invalid_event"),
                              QStringLiteral("Event dates are invalid"));
-    event->setAllDay(allDay);
-    event->setDtStart(start);
-    event->setDtEnd(end);
+    updated->setAllDay(allDay);
+    updated->setDtStart(start);
+    updated->setDtEnd(end);
     if (input.contains(QStringLiteral("calendarId")))
-        event->setCustomProperty(customApp, keyCalendarId,
-                                 input.value(QStringLiteral("calendarId")).toString());
-    if (!applyRecurrence(event, input, &message))
+        updated->setCustomProperty(customApp, keyCalendarId,
+                                   input.value(QStringLiteral("calendarId")).toString());
+    if (!applyRecurrence(updated, input, &message))
         return errorResponse(QStringLiteral("invalid_recurrence"), message);
     if (input.contains(QStringLiteral("reminderMinutes")))
-        applyReminder(event, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+        applyReminder(updated, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+    if (!d->calendar->deleteEvent(event) || !d->calendar->addEvent(updated)) {
+        if (!d->calendar->event(uid))
+            d->calendar->addEvent(event);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to replace event"));
+    }
     ++d->revision;
     if (!d->save(&message))
         return errorResponse(QStringLiteral("storage_error"), message);
     emit changed(d->revision);
-    return successResponse(d->revision, eventObject(event));
+    return successResponse(d->revision, eventObject(updated));
 }
 
 QString PimStore::removeEvent(const QString &uid)
@@ -745,6 +764,7 @@ QString PimStore::updateTodo(const QString &uid, const QString &payload)
     const auto todo = d->calendar->todo(uid);
     if (!todo)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Todo not found"));
+    const KCalendarCore::Todo::Ptr updated(todo->clone());
     QJsonObject input;
     QString message;
     if (!parsePayload(payload, &input, &message))
@@ -755,55 +775,61 @@ QString PimStore::updateTodo(const QString &uid, const QString &payload)
         if (title.isEmpty())
             valid = false;
         else
-            todo->setSummary(title);
+            updated->setSummary(title);
     }
     if (input.contains(QStringLiteral("description")))
-        todo->setDescription(boundedString(input, QStringLiteral("description"), 32768,
-                                           &valid));
+        updated->setDescription(boundedString(input, QStringLiteral("description"), 32768,
+                                              &valid));
     if (!valid)
         return errorResponse(QStringLiteral("invalid_todo"),
                              QStringLiteral("Todo title or description is invalid"));
     const bool allDay = input.contains(QStringLiteral("allDay"))
-        ? input.value(QStringLiteral("allDay")).toBool() : todo->allDay();
-    todo->setAllDay(allDay);
+        ? input.value(QStringLiteral("allDay")).toBool() : updated->allDay();
+    updated->setAllDay(allDay);
     const QTimeZone zone = d->calendar->timeZone();
     if (input.contains(QStringLiteral("start")))
-        todo->setDtStart(parseDateTime(input.value(QStringLiteral("start")), allDay, zone));
+        updated->setDtStart(parseDateTime(input.value(QStringLiteral("start")), allDay, zone));
     if (input.contains(QStringLiteral("due")))
-        todo->setDtDue(parseDateTime(input.value(QStringLiteral("due")), allDay, zone), true);
+        updated->setDtDue(parseDateTime(input.value(QStringLiteral("due")), allDay, zone), true);
     if (input.contains(QStringLiteral("priority")))
-        todo->setPriority(std::clamp(input.value(QStringLiteral("priority")).toInt(), 0, 9));
+        updated->setPriority(std::clamp(input.value(QStringLiteral("priority")).toInt(), 0, 9));
     if (input.contains(QStringLiteral("listId"))) {
         const QString listId = input.value(QStringLiteral("listId")).toString();
         if (!d->hasList(listId))
             return errorResponse(QStringLiteral("invalid_list"), QStringLiteral("List not found"));
-        todo->setCustomProperty(customApp, keyListId, listId);
+        updated->setCustomProperty(customApp, keyListId, listId);
     }
     if (input.contains(QStringLiteral("parentId"))) {
         const QString parentId = input.value(QStringLiteral("parentId")).toString();
         if (parentId == uid || (!parentId.isEmpty() && !d->calendar->todo(parentId)))
             return errorResponse(QStringLiteral("invalid_parent"),
                                  QStringLiteral("Todo parent is invalid"));
-        todo->setCustomProperty(customApp, keyParentId, parentId);
+        updated->setCustomProperty(customApp, keyParentId, parentId);
     }
     if (input.contains(QStringLiteral("order")))
-        todo->setCustomProperty(customApp, keyOrder,
-                                QString::number(input.value(QStringLiteral("order")).toDouble()));
+        updated->setCustomProperty(customApp, keyOrder,
+                                   QString::number(input.value(QStringLiteral("order")).toDouble()));
     if (input.contains(QStringLiteral("completed"))) {
         if (input.value(QStringLiteral("completed")).toBool())
-            todo->setCompleted(QDateTime::currentDateTimeUtc());
+            updated->setCompleted(QDateTime::currentDateTimeUtc());
         else
-            todo->setCompleted(false);
+            updated->setCompleted(false);
     }
-    if (!applyRecurrence(todo, input, &message))
+    if (!applyRecurrence(updated, input, &message))
         return errorResponse(QStringLiteral("invalid_recurrence"), message);
     if (input.contains(QStringLiteral("reminderMinutes")))
-        applyReminder(todo, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+        applyReminder(updated, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+    if (!d->calendar->deleteTodo(todo) || !d->calendar->addTodo(updated)) {
+        if (!d->calendar->todo(uid))
+            d->calendar->addTodo(todo);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to replace todo"));
+    }
     ++d->revision;
     if (!d->save(&message))
         return errorResponse(QStringLiteral("storage_error"), message);
     emit changed(d->revision);
-    return successResponse(d->revision, todoObject(todo));
+    return successResponse(d->revision, todoObject(updated));
 }
 
 QString PimStore::removeTodo(const QString &uid)

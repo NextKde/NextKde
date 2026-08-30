@@ -32,6 +32,8 @@ private slots:
     void eventPersistsAcrossRestart();
     void recurringEventExpandsForRange();
     void todoListsAndCompletionPersist();
+    void recurringTodoCanUseDueDate();
+    void invalidUpdatesDoNotMutateItems();
     void exportsAndImportsIcalendar();
 };
 
@@ -123,6 +125,77 @@ void PimStoreTest::todoListsAndCompletionPersist()
     QCOMPARE(todos.size(), 1);
     QVERIFY(todos.first().toObject().value(QStringLiteral("completed")).toBool());
     QCOMPARE(todos.first().toObject().value(QStringLiteral("listId")).toString(), listId);
+}
+
+void PimStoreTest::recurringTodoCanUseDueDate()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PimStore store(directory.path());
+    const QJsonObject created = parseObject(store.createTodo(encode({
+        {QStringLiteral("title"), QStringLiteral("Daily journal")},
+        {QStringLiteral("due"), QStringLiteral("2026-09-03T18:00:00+08:00")},
+        {QStringLiteral("recurrence"), QStringLiteral("daily")},
+        {QStringLiteral("recurrenceCount"), 5},
+        {QStringLiteral("reminderMinutes"), 15},
+    })));
+    QVERIFY2(created.value(QStringLiteral("ok")).toBool(),
+             qPrintable(created.value(QStringLiteral("error")).toObject()
+                            .value(QStringLiteral("message")).toString()));
+    const QJsonObject item = created.value(QStringLiteral("item")).toObject();
+    QCOMPARE(item.value(QStringLiteral("recurrence")).toString(), QStringLiteral("daily"));
+    QCOMPARE(item.value(QStringLiteral("reminderMinutes")).toInt(), 15);
+
+    PimStore reloaded(directory.path());
+    const QJsonArray todos = parseObject(reloaded.snapshot())
+                                 .value(QStringLiteral("todos")).toArray();
+    QCOMPARE(todos.size(), 1);
+    QCOMPARE(todos.first().toObject().value(QStringLiteral("recurrence")).toString(),
+             QStringLiteral("daily"));
+    QCOMPARE(todos.first().toObject().value(QStringLiteral("reminderMinutes")).toInt(), 15);
+}
+
+void PimStoreTest::invalidUpdatesDoNotMutateItems()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PimStore store(directory.path());
+
+    const QJsonObject eventResponse = parseObject(store.createEvent(encode({
+        {QStringLiteral("title"), QStringLiteral("Original event")},
+        {QStringLiteral("start"), QStringLiteral("2026-09-02T09:00:00+08:00")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-02T10:00:00+08:00")},
+    })));
+    QVERIFY(eventResponse.value(QStringLiteral("ok")).toBool());
+    const QString eventId = eventResponse.value(QStringLiteral("item")).toObject()
+                                .value(QStringLiteral("id")).toString();
+    const QJsonObject badEventUpdate = parseObject(store.updateEvent(eventId, encode({
+        {QStringLiteral("title"), QStringLiteral("Leaked event title")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-02T08:00:00+08:00")},
+    })));
+    QVERIFY(!badEventUpdate.value(QStringLiteral("ok")).toBool());
+
+    const QJsonObject todoResponse = parseObject(store.createTodo(encode({
+        {QStringLiteral("title"), QStringLiteral("Original todo")},
+    })));
+    QVERIFY(todoResponse.value(QStringLiteral("ok")).toBool());
+    const QString todoId = todoResponse.value(QStringLiteral("item")).toObject()
+                               .value(QStringLiteral("id")).toString();
+    const QJsonObject badTodoUpdate = parseObject(store.updateTodo(todoId, encode({
+        {QStringLiteral("title"), QStringLiteral("Leaked todo title")},
+        {QStringLiteral("listId"), QStringLiteral("missing-list")},
+    })));
+    QVERIFY(!badTodoUpdate.value(QStringLiteral("ok")).toBool());
+
+    const QJsonObject snapshot = parseObject(store.snapshot());
+    const QJsonArray events = snapshot.value(QStringLiteral("events")).toArray();
+    const QJsonArray todos = snapshot.value(QStringLiteral("todos")).toArray();
+    QCOMPARE(events.size(), 1);
+    QCOMPARE(todos.size(), 1);
+    QCOMPARE(events.first().toObject().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Original event"));
+    QCOMPARE(todos.first().toObject().value(QStringLiteral("title")).toString(),
+             QStringLiteral("Original todo"));
 }
 
 void PimStoreTest::exportsAndImportsIcalendar()
