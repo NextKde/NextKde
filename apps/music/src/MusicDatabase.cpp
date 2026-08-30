@@ -7,6 +7,8 @@
 #include <QSqlQuery>
 #include <QUuid>
 
+#include <algorithm>
+
 namespace {
 
 constexpr int schemaVersion = 1;
@@ -213,7 +215,14 @@ bool MusicDatabase::applyScan(const ScanResult &result, QString *errorMessage)
     const qint64 libraryRootId = rootId(result.rootPath, errorMessage);
     if (libraryRootId < 0)
         return false;
-    const qint64 scanToken = QDateTime::currentMSecsSinceEpoch();
+    qint64 scanToken = QDateTime::currentMSecsSinceEpoch();
+    QSqlQuery tokenQuery(m_database);
+    tokenQuery.prepare(QStringLiteral("SELECT COALESCE(MAX(last_seen), 0) FROM tracks "
+                                      "WHERE root_id = ?"));
+    tokenQuery.addBindValue(libraryRootId);
+    if (!tokenQuery.exec() || !tokenQuery.next())
+        return fail(tokenQuery, errorMessage);
+    scanToken = std::max(scanToken, tokenQuery.value(0).toLongLong() + 1);
     if (!m_database.transaction()) {
         setError(errorMessage, m_database.lastError().text());
         return false;
