@@ -201,17 +201,24 @@ A desktop entry template is provided at
 Build all four independent applications and their services/tests together:
 
 ```sh
-cmake --preset apps-dev
+cmake --preset apps-dev -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build --preset apps-dev
 ctest --preset apps-dev
-cmake --install .build/apps-dev --prefix "$HOME/.local"
+cmake --install .build/apps-dev
 ```
 
 Use `calendar-dev`, `todo-dev`, `weather-dev`, or `music-dev` instead when only
 one dependency set is available. Calendar/Todo install a D-Bus-activated local
 PIM service; Weather uses `shell-data-service`; Music uses system GStreamer
 plugins and publishes MPRIS. Each app directory contains English and Chinese
-usage notes.
+usage notes. Set the prefix while configuring (as above), because the generated
+D-Bus activation file records the final service executable path.
+
+For a user-prefix install, copy
+`~/.local/etc/xdg/autostart/kos-pim-service.desktop` to
+`~/.config/autostart/` if reminders must start at login before either PIM app
+has been opened. System packages should configure `CMAKE_INSTALL_SYSCONFDIR`
+to the distribution's XDG configuration directory (normally `/etc`).
 
 ### 8. Global shortcuts
 

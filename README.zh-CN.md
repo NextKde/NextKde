@@ -176,16 +176,22 @@ cmake --build .build/apps/settings
 一次构建、测试并安装四个独立应用及其服务：
 
 ```sh
-cmake --preset apps-dev
+cmake --preset apps-dev -DCMAKE_INSTALL_PREFIX="$HOME/.local"
 cmake --build --preset apps-dev
 ctest --preset apps-dev
-cmake --install .build/apps-dev --prefix "$HOME/.local"
+cmake --install .build/apps-dev
 ```
 
 如果只具备一组依赖，可改用 `calendar-dev`、`todo-dev`、`weather-dev` 或
 `music-dev`。日历/待办会安装可由 D-Bus 激活的本地 PIM 服务；天气使用
 `shell-data-service`；音乐使用系统 GStreamer 插件并发布 MPRIS。每个应用
-目录内都有中英文使用说明。
+目录内都有中英文使用说明。请像上例一样在配置阶段指定安装前缀，因为生成的
+D-Bus 激活文件会记录服务可执行文件的最终路径。
+
+使用用户前缀安装时，若希望尚未打开日历/待办也能在登录后收到提醒，请把
+`~/.local/etc/xdg/autostart/kos-pim-service.desktop` 复制到
+`~/.config/autostart/`。发行版系统包应把 `CMAKE_INSTALL_SYSCONFDIR` 配置为
+系统 XDG 配置目录（通常是 `/etc`）。
 
 ### 8. 全局快捷键
 
