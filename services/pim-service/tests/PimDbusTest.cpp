@@ -39,8 +39,8 @@ private slots:
 
 void PimDbusTest::servicePublishesMutations()
 {
-    const QStringList arguments = QCoreApplication::arguments();
-    QVERIFY2(arguments.size() >= 2, "PIM service executable argument is missing");
+    const QString serviceExecutable = qEnvironmentVariable("KOS_PIM_TEST_SERVICE");
+    QVERIFY2(!serviceExecutable.isEmpty(), "PIM service executable environment is missing");
     QTemporaryDir storage;
     QVERIFY(storage.isValid());
 
@@ -48,7 +48,7 @@ void PimDbusTest::servicePublishesMutations()
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("KOS_PIM_STORAGE_DIR"), storage.path());
     service.setProcessEnvironment(environment);
-    service.setProgram(arguments.at(1));
+    service.setProgram(serviceExecutable);
     service.start();
     QVERIFY(service.waitForStarted(5000));
 

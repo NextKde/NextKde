@@ -57,8 +57,9 @@ if(BUILD_TESTING)
     )
     add_test(NAME kos-pim.dbus
         COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
+            ${CMAKE_COMMAND} -E env
+            KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
             $<TARGET_FILE:kos-pim-dbus-test>
-            $<TARGET_FILE:kos-pim-service>
     )
     set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20)
 endif()
