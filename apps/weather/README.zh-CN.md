@@ -22,7 +22,8 @@ cmake --preset weather-dev
 cmake --build --preset weather-dev
 ```
 
-可执行文件位于 `.build/weather-dev/apps/weather/`。
+应用位于 `.build/weather-dev/apps/weather/`。同一 preset 会同时构建 Go 数据
+服务，因此除 Qt 6 外还需要 Go 工具链。
 
 ## 已包含范围
 
@@ -34,7 +35,11 @@ cmake --build --preset weather-dev
 
 第 1 版不包含雷达、灾害推送、自动定位和天气服务商账号同步。
 
-## 运行依赖
+## 运行服务
 
-请在用户会话中启动 `shell-data-service.service`。服务未运行时，KOS 天气仍可
-打开并显示先前缓存的预报，但地点搜索、刷新、切换地点和切换单位不可用。
+CMake 会把 `kos-shell-data-service` 安装在应用旁边。若桌面数据服务已经运行，
+KOS 天气会直接复用；否则应用会按需启动已安装的服务。服务或网络暂时不可用
+时，先前缓存的预报仍会继续显示。
+
+仓库原有的 `shell-data-service.service` 仍可用于登录时启动整个 Shell 的共享
+服务，但独立安装天气应用不再强制依赖它。

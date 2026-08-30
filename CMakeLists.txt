@@ -58,6 +58,10 @@ if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
     add_subdirectory(services/pim-service)
 endif()
 
+if(KOS_BUILD_WEATHER)
+    add_subdirectory(services/shell-data-service)
+endif()
+
 include(KosApplication)
 
 if(KOS_BUILD_CALENDAR)

@@ -24,7 +24,9 @@ cmake --preset weather-dev
 cmake --build --preset weather-dev
 ```
 
-The executable is written below `.build/weather-dev/apps/weather/`.
+The application is written below `.build/weather-dev/apps/weather/`. The same
+preset builds the Go data service, so a Go toolchain is required in addition
+to Qt 6.
 
 ## Included scope
 
@@ -37,8 +39,12 @@ The executable is written below `.build/weather-dev/apps/weather/`.
 Radar, severe-weather push, automatic geolocation, and provider-account sync
 are outside version 1.
 
-## Runtime dependency
+## Runtime service
 
-Start `shell-data-service.service` in the user session. Without it, KOS
-Weather still opens and displays a previously cached forecast, but search,
-refresh, location changes, and unit changes are unavailable.
+CMake installs `kos-shell-data-service` beside the application. KOS Weather
+reuses an already-running desktop service when present and otherwise starts
+the installed service on demand. A previously cached forecast remains visible
+if the service or network is temporarily unavailable.
+
+The repository's existing `shell-data-service.service` remains available for
+shell-wide login startup; it is optional for a standalone Weather install.

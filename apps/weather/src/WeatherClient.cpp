@@ -1,5 +1,6 @@
 #include "WeatherClient.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -8,6 +9,11 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLocale>
+#include <QProcess>
+#include <QStandardPaths>
+#include <QStringList>
+
+#include <utility>
 
 namespace {
 
@@ -30,6 +36,29 @@ QString runtimeRoot()
 QVariantList arrayToList(const QJsonValue &value)
 {
     return value.isArray() ? value.toArray().toVariantList() : QVariantList{};
+}
+
+QString serviceExecutable()
+{
+    QStringList candidates;
+    const QString configured = qEnvironmentVariable("KOS_SHELL_DATA_SERVICE");
+    if (!configured.isEmpty())
+        candidates.append(configured);
+    candidates.append(QDir(QCoreApplication::applicationDirPath())
+                          .filePath(QStringLiteral("kos-shell-data-service")));
+#ifdef KOS_WEATHER_SERVICE_BUILD_PATH
+    candidates.append(QStringLiteral(KOS_WEATHER_SERVICE_BUILD_PATH));
+#endif
+    candidates.append(QStandardPaths::findExecutable(
+        QStringLiteral("kos-shell-data-service")));
+    candidates.append(QStandardPaths::findExecutable(
+        QStringLiteral("shell-data-service")));
+
+    for (const QString &candidate : std::as_const(candidates)) {
+        if (!candidate.isEmpty() && QFileInfo(candidate).isExecutable())
+            return QFileInfo(candidate).absoluteFilePath();
+    }
+    return {};
 }
 
 } // namespace
@@ -203,6 +232,31 @@ void WeatherClient::clearSearch()
     }
 }
 
+void WeatherClient::ensureServiceStarted()
+{
+    if (m_serviceStartAttempted
+        || qEnvironmentVariableIsSet("KOS_WEATHER_DISABLE_SERVICE_AUTOSTART")) {
+        return;
+    }
+    m_serviceStartAttempted = true;
+    const QString executable = serviceExecutable();
+    if (executable.isEmpty()) {
+        setTransportError(tr("Weather data service is not installed"));
+        return;
+    }
+
+    QProcess process;
+    process.setProgram(executable);
+    process.setStandardInputFile(QProcess::nullDevice());
+    process.setStandardOutputFile(QProcess::nullDevice());
+    process.setStandardErrorFile(QProcess::nullDevice());
+    if (!process.startDetached())
+        setTransportError(tr("Unable to start the weather data service"));
+    QTimer::singleShot(5000, this, [this] {
+        m_serviceStartAttempted = false;
+    });
+}
+
 void WeatherClient::connectSocket()
 {
     if (m_socket.state() != QLocalSocket::UnconnectedState)
@@ -212,6 +266,7 @@ void WeatherClient::connectSocket()
 
 void WeatherClient::onSocketConnected()
 {
+    m_serviceStartAttempted = false;
     emit connectedChanged();
     const QByteArray subscription = QJsonDocument(QJsonObject{
         {QStringLiteral("type"), QStringLiteral("subscribe_weather")},
@@ -231,6 +286,8 @@ void WeatherClient::onSocketError(QLocalSocket::LocalSocketError error)
 {
     if (error != QLocalSocket::PeerClosedError && !m_ready)
         setTransportError(tr("Weather data service is unavailable"));
+    if (error != QLocalSocket::PeerClosedError)
+        ensureServiceStarted();
     if (m_socket.state() == QLocalSocket::UnconnectedState && !m_reconnectTimer.isActive())
         m_reconnectTimer.start();
 }

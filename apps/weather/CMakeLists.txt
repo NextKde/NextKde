@@ -18,8 +18,16 @@ kos_add_application(kos-weather
 target_include_directories(kos-weather PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+add_dependencies(kos-weather kos-shell-data-service)
+target_compile_definitions(kos-weather PRIVATE
+    KOS_WEATHER_SERVICE_BUILD_PATH="${KOS_SHELL_DATA_SERVICE_EXECUTABLE}"
+)
 
 if(BUILD_TESTING)
+    set_property(TEST kos-weather.qml-smoke APPEND PROPERTY ENVIRONMENT
+        "KOS_WEATHER_DISABLE_SERVICE_AUTOSTART=1"
+    )
+
     qt_add_executable(kos-weather-client-test
         tests/WeatherClientTest.cpp
         src/WeatherClient.cpp
@@ -35,5 +43,8 @@ if(BUILD_TESTING)
         Qt6::Test
     )
     add_test(NAME kos-weather.client-snapshot COMMAND kos-weather-client-test)
-    set_tests_properties(kos-weather.client-snapshot PROPERTIES TIMEOUT 10)
+    set_tests_properties(kos-weather.client-snapshot PROPERTIES
+        ENVIRONMENT "KOS_WEATHER_DISABLE_SERVICE_AUTOSTART=1"
+        TIMEOUT 10
+    )
 endif()

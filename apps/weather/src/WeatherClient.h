@@ -64,6 +64,7 @@ signals:
     void searchResultsChanged();
 
 private:
+    void ensureServiceStarted();
     void connectSocket();
     void onSocketConnected();
     void onSocketDisconnected();
@@ -89,6 +90,7 @@ private:
     bool m_ready = false;
     bool m_loading = false;
     bool m_searching = false;
+    bool m_serviceStartAttempted = false;
     QString m_status = QStringLiteral("idle");
     QString m_units = QStringLiteral("metric");
     QString m_errorMessage;

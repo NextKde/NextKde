@@ -16,6 +16,21 @@ shell-data-service/weather.go
 KOS Weather              Quickshell WeatherService
 ```
 
+## Service delivery and lifecycle
+
+The Weather CMake module builds the Go service from source and installs it as
+`kos-shell-data-service` beside `kos-weather`. The Qt client first connects to
+the shared socket; after a failed connection it reuses an executable selected
+in this order: the explicit `KOS_SHELL_DATA_SERVICE` override, an installed
+sibling, the current build output, or `PATH`. Standard output and error are
+detached so the service is independent of the launching window.
+
+The Go process holds a non-blocking lock beside its Unix socket before removing
+or binding the socket. Concurrent Weather launches therefore converge on one
+state owner instead of allowing a late process to steal the socket. Existing
+shell installations may still start the same service at login through the
+systemd user unit; standalone Weather does not require that unit to be enabled.
+
 ## Contract
 
 The `weather` member of the service snapshot follows

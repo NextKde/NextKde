@@ -113,7 +113,7 @@ not load application UI into Quickshell.
 | Session | KDE Plasma 6 on Wayland (developed on Plasma/KWin 6.7) |
 | Shell runtime | [Quickshell](https://quickshell.org) 0.3.0 (`qs`) |
 | Build tools | Go, CMake, a C++ compiler, Qt 6 Gui development files, `socat` |
-| Standalone apps | Qt 6 Quick/Controls/D-Bus/SQL; KF6CalendarCore for Calendar/Todo; GStreamer and TagLib for Music |
+| Standalone apps | Qt 6 Quick/Controls/D-Bus/SQL; KF6CalendarCore for Calendar/Todo; Go for Weather; GStreamer and TagLib for Music |
 | Runtime integration | NetworkManager (`nmcli`), systemd user session, logind |
 | Optional | `cliphist` (clipboard history), `qdbus6`/`kwriteconfig6` (effect sync) |
 
@@ -209,10 +209,11 @@ cmake --install .build/apps-dev
 
 Use `calendar-dev`, `todo-dev`, `weather-dev`, or `music-dev` instead when only
 one dependency set is available. Calendar/Todo install a D-Bus-activated local
-PIM service; Weather uses `shell-data-service`; Music uses system GStreamer
-plugins and publishes MPRIS. Each app directory contains English and Chinese
-usage notes. Set the prefix while configuring (as above), because the generated
-D-Bus activation file records the final service executable path.
+PIM service; Weather builds and installs its shared Go data service and starts
+it on demand; Music uses system GStreamer plugins and publishes MPRIS. Each app
+directory contains English and Chinese usage notes. Set the prefix while
+configuring (as above), because the generated D-Bus activation file records the
+final service executable path.
 
 For a user-prefix install, copy
 `~/.local/etc/xdg/autostart/kos-pim-service.desktop` to

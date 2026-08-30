@@ -20,7 +20,8 @@ manageable:
 Use `apps-dev` to build all four. Each application owns its executable, QML
 module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
 small application runtime rather than a feature layer; applications do not
-import one another.
+import one another. The Weather preset additionally builds and installs its Go
+data service, which the application starts on demand.
 
 `settings` predates this workspace and remains on its existing build path
 until its source-path-dependent QML loader is migrated separately.

@@ -96,7 +96,7 @@ Quickshell。
 | 会话 | KDE Plasma 6 + Wayland（开发环境为 Plasma/KWin 6.7） |
 | Shell 运行时 | [Quickshell](https://quickshell.org) 0.3.0（`qs`） |
 | 构建工具 | Go、CMake、C++ 编译器、Qt 6 Gui 开发文件、`socat` |
-| 独立应用 | Qt 6 Quick/Controls/D-Bus/SQL；日历/待办需要 KF6CalendarCore；音乐需要 GStreamer 与 TagLib |
+| 独立应用 | Qt 6 Quick/Controls/D-Bus/SQL；日历/待办需要 KF6CalendarCore；天气需要 Go；音乐需要 GStreamer 与 TagLib |
 | 运行时集成 | NetworkManager（`nmcli`）、systemd 用户会话、logind |
 | 可选 | `cliphist`（剪贴板历史）、`qdbus6`/`kwriteconfig6`（特效同步） |
 
@@ -183,10 +183,10 @@ cmake --install .build/apps-dev
 ```
 
 如果只具备一组依赖，可改用 `calendar-dev`、`todo-dev`、`weather-dev` 或
-`music-dev`。日历/待办会安装可由 D-Bus 激活的本地 PIM 服务；天气使用
-`shell-data-service`；音乐使用系统 GStreamer 插件并发布 MPRIS。每个应用
-目录内都有中英文使用说明。请像上例一样在配置阶段指定安装前缀，因为生成的
-D-Bus 激活文件会记录服务可执行文件的最终路径。
+`music-dev`。日历/待办会安装可由 D-Bus 激活的本地 PIM 服务；天气会构建、
+安装共享 Go 数据服务并在需要时自动启动；音乐使用系统 GStreamer 插件并发布
+MPRIS。每个应用目录内都有中英文使用说明。请像上例一样在配置阶段指定安装
+前缀，因为生成的 D-Bus 激活文件会记录服务可执行文件的最终路径。
 
 使用用户前缀安装时，若希望尚未打开日历/待办也能在登录后收到提醒，请把
 `~/.local/etc/xdg/autostart/kos-pim-service.desktop` 复制到
