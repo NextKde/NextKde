@@ -3,6 +3,17 @@
 #include <algorithm>
 #include <utility>
 
+namespace {
+
+const QChar albumSeparator(0x1f);
+
+QString trackArtist(const TrackRecord &track)
+{
+    return track.artist.isEmpty() ? track.albumArtist : track.artist;
+}
+
+} // namespace
+
 TrackListModel::TrackListModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -137,13 +148,22 @@ void TrackListModel::rebuild()
     QList<TrackRecord> filtered;
     const QString needle = m_search.trimmed();
     for (const TrackRecord &track : std::as_const(m_source)) {
-        if (m_mode == QLatin1String("album")
-            && track.album.compare(m_filterValue, Qt::CaseInsensitive) != 0) {
-            continue;
+        if (m_mode == QLatin1String("album")) {
+            const qsizetype separator = m_filterValue.indexOf(albumSeparator);
+            const QString album = separator < 0
+                ? m_filterValue : m_filterValue.left(separator);
+            const QString albumArtist = separator < 0
+                ? QString{} : m_filterValue.mid(separator + 1);
+            if (track.album.compare(album, Qt::CaseInsensitive) != 0
+                || (separator >= 0
+                    && track.albumArtist.compare(albumArtist,
+                                                 Qt::CaseInsensitive) != 0)) {
+                continue;
+            }
         }
         if (m_mode == QLatin1String("artist")
-            && track.artist.compare(m_filterValue, Qt::CaseInsensitive) != 0
-            && track.albumArtist.compare(m_filterValue, Qt::CaseInsensitive) != 0) {
+            && trackArtist(track).compare(m_filterValue,
+                                          Qt::CaseInsensitive) != 0) {
             continue;
         }
         if (!needle.isEmpty()

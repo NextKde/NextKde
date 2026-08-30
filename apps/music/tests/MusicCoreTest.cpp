@@ -157,6 +157,15 @@ void MusicCoreTest::trackModelFiltersAndSorts()
     model.setSearch({});
     model.setMode(QStringLiteral("recent"));
     QCOMPARE(model.trackIdAt(0), 1);
+    model.setFilterValue(QStringLiteral("Test Album") + QChar(0x1f)
+                         + QStringLiteral("Alice"));
+    model.setMode(QStringLiteral("album"));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.trackIdAt(0), 2);
+    model.setFilterValue(QStringLiteral("Bob"));
+    model.setMode(QStringLiteral("artist"));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.trackIdAt(0), 1);
 }
 
 QTEST_GUILESS_MAIN(MusicCoreTest)

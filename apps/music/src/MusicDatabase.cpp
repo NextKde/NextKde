@@ -184,8 +184,13 @@ qint64 MusicDatabase::rootId(const QString &path, QString *errorMessage) const
     QSqlQuery query(m_database);
     query.prepare(QStringLiteral("SELECT id FROM library_roots WHERE path = ?"));
     query.addBindValue(path);
-    if (!query.exec() || !query.next()) {
+    if (!query.exec()) {
         fail(query, errorMessage);
+        return -1;
+    }
+    if (!query.next()) {
+        setError(errorMessage, QStringLiteral("Music library root is no longer registered: %1")
+                                   .arg(path));
         return -1;
     }
     return query.value(0).toLongLong();

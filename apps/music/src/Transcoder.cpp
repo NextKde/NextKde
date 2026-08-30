@@ -8,6 +8,7 @@
 #include <gst/gst.h>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace {
 
@@ -227,9 +228,11 @@ void Transcoder::pollBus()
             const QUrl completedOutput = m_outputUrl;
             const QString temporaryPath = m_temporaryPath;
             destroyPipeline(false);
-            if (QFileInfo::exists(completedOutput.toLocalFile()))
-                QFile::remove(completedOutput.toLocalFile());
-            if (!QFile::rename(temporaryPath, completedOutput.toLocalFile())) {
+            const QByteArray temporaryName = QFile::encodeName(temporaryPath);
+            const QByteArray outputName = QFile::encodeName(completedOutput.toLocalFile());
+            // On the Linux/KDE target, rename(2) replaces an existing file
+            // atomically, so a failed overwrite leaves the original intact.
+            if (std::rename(temporaryName.constData(), outputName.constData()) != 0) {
                 QFile::remove(temporaryPath);
                 setError(QStringLiteral("Unable to finalize the converted file"));
                 setStatus(QStringLiteral("Failed"));

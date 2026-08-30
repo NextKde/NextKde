@@ -120,6 +120,13 @@ void MusicEngineTest::transcodesToAnInstalledFormat()
     QCOMPARE(transcoder.status(), QStringLiteral("Completed"));
     QVERIFY(QFileInfo(outputPath).size() > 0);
 
+    completed.clear();
+    QVERIFY2(transcoder.start(QUrl::fromLocalFile(inputPath),
+                              QUrl::fromLocalFile(outputPath), formatId, true),
+             qPrintable(transcoder.errorMessage()));
+    QTRY_COMPARE_WITH_TIMEOUT(completed.size(), 1, 15000);
+    QCOMPARE(transcoder.status(), QStringLiteral("Completed"));
+
     QString warning;
     const auto scanned = MetadataScanner::scanFile(
         outputPath, directory.filePath(QStringLiteral("artwork")), &warning);

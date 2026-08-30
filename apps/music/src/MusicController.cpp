@@ -21,9 +21,21 @@
 
 namespace {
 
+const QChar albumSeparator(0x1f);
+
 QString fallbackName(const QString &value, const QString &fallback)
 {
     return value.trimmed().isEmpty() ? fallback : value.trimmed();
+}
+
+QString trackArtist(const TrackRecord &track)
+{
+    return track.artist.isEmpty() ? track.albumArtist : track.artist;
+}
+
+QString albumFilter(const TrackRecord &track)
+{
+    return track.album + albumSeparator + track.albumArtist;
 }
 
 } // namespace
@@ -185,7 +197,8 @@ QString MusicController::repeatMode() const { return m_repeatMode; }
 bool MusicController::canGoNext() const
 {
     return !m_queueIds.isEmpty()
-        && (m_shuffle || m_repeatMode == QLatin1String("playlist")
+        && ((m_shuffle && m_queueIds.size() > 1)
+            || m_repeatMode == QLatin1String("playlist")
             || m_queueIndex + 1 < m_queueIds.size());
 }
 bool MusicController::canGoPrevious() const
@@ -336,10 +349,16 @@ void MusicController::playPlaylistRow(int row)
 
 void MusicController::playAlbum(const QString &album)
 {
+    const qsizetype separator = album.indexOf(albumSeparator);
+    const QString albumName = separator < 0 ? album : album.left(separator);
+    const QString albumArtist = separator < 0 ? QString{} : album.mid(separator + 1);
     QList<TrackRecord> tracks;
     std::copy_if(m_tracks.cbegin(), m_tracks.cend(), std::back_inserter(tracks),
-                 [&album](const TrackRecord &track) {
-                     return track.album.compare(album, Qt::CaseInsensitive) == 0;
+                 [&albumName, &albumArtist, separator](const TrackRecord &track) {
+                     return track.album.compare(albumName, Qt::CaseInsensitive) == 0
+                         && (separator < 0
+                             || track.albumArtist.compare(albumArtist,
+                                                          Qt::CaseInsensitive) == 0);
                  });
     std::stable_sort(tracks.begin(), tracks.end(), [](const TrackRecord &left,
                                                       const TrackRecord &right) {
@@ -360,13 +379,25 @@ void MusicController::playAlbum(const QString &album)
 
 void MusicController::playArtist(const QString &artist)
 {
-    QList<qint64> ids;
+    QList<TrackRecord> tracks;
     for (const TrackRecord &track : std::as_const(m_tracks)) {
-        if (track.artist.compare(artist, Qt::CaseInsensitive) == 0
-            || track.albumArtist.compare(artist, Qt::CaseInsensitive) == 0) {
-            ids.append(track.id);
-        }
+        if (trackArtist(track).compare(artist, Qt::CaseInsensitive) == 0)
+            tracks.append(track);
     }
+    std::stable_sort(tracks.begin(), tracks.end(), [](const TrackRecord &left,
+                                                      const TrackRecord &right) {
+        const int albumOrder = left.album.localeAwareCompare(right.album);
+        if (albumOrder != 0)
+            return albumOrder < 0;
+        if (left.discNumber != right.discNumber)
+            return left.discNumber < right.discNumber;
+        if (left.trackNumber != right.trackNumber)
+            return left.trackNumber < right.trackNumber;
+        return left.title.localeAwareCompare(right.title) < 0;
+    });
+    QList<qint64> ids;
+    for (const TrackRecord &track : std::as_const(tracks))
+        ids.append(track.id);
     if (!ids.isEmpty()) {
         setQueue(ids, 0);
         startCurrentTrack();
@@ -711,21 +742,21 @@ void MusicController::refreshGroups()
     QMap<QString, Group> artistsByName;
     for (const TrackRecord &track : std::as_const(m_tracks)) {
         const QString albumName = fallbackName(track.album, tr("Unknown album"));
-        Group &album = albumsByName[albumName.toCaseFolded()];
+        const QString albumArtist = fallbackName(
+            track.albumArtist, fallbackName(track.artist, tr("Unknown artist")));
+        Group &album = albumsByName[albumFilter(track).toCaseFolded()];
         album.name = albumName;
-        album.filterValue = track.album;
-        album.subtitle = fallbackName(track.albumArtist, track.artist);
+        album.filterValue = albumFilter(track);
+        album.subtitle = albumArtist;
         if (album.artwork.isEmpty())
             album.artwork = track.artworkUrl;
         ++album.count;
 
-        const QString artistName = fallbackName(
-            track.albumArtist.isEmpty() ? track.artist : track.albumArtist,
-            tr("Unknown artist"));
+        const QString artistValue = trackArtist(track);
+        const QString artistName = fallbackName(artistValue, tr("Unknown artist"));
         Group &artist = artistsByName[artistName.toCaseFolded()];
         artist.name = artistName;
-        artist.filterValue = track.albumArtist.isEmpty()
-            ? track.artist : track.albumArtist;
+        artist.filterValue = artistValue;
         if (artist.artwork.isEmpty())
             artist.artwork = track.artworkUrl;
         ++artist.count;
@@ -801,10 +832,8 @@ void MusicController::startCurrentTrack()
         return;
     emit currentTrackChanged();
     emit durationChanged();
-    if (m_engine.load(QUrl(track->url), true)) {
+    if (m_engine.load(QUrl(track->url), true))
         m_database.recordPlayed(track->id);
-        refreshLibrary();
-    }
 }
 
 void MusicController::advance(bool fromEndOfStream)

@@ -148,6 +148,8 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
                               QStringLiteral("Shuffle"), true).type(),
              QDBusMessage::ReplyMessage);
     QVERIFY(controller.shuffle());
+    QVERIFY(!mprisProperty(QString::fromLatin1(playerInterface),
+                           QStringLiteral("CanGoNext")).toBool());
     QCOMPARE(setMprisProperty(QString::fromLatin1(playerInterface),
                               QStringLiteral("Volume"), 0.35).type(),
              QDBusMessage::ReplyMessage);
