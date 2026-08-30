@@ -43,6 +43,21 @@ snapshot. One-shot clipboard requests use:
 Clipboard replies are JSON lines containing `ok`, `mode`, `paths`, and an
 optional `error`.
 
+Weather clients keep a separate persistent connection and write
+`{"type":"subscribe_weather"}`. The service immediately sends a
+`weather_changed` marker and repeats it only after a complete weather snapshot
+has been atomically written. Control requests are newline-delimited JSON:
+
+```json
+{"type":"weather_refresh"}
+{"type":"weather_search","query":"Changsha","language":"en","limit":8}
+{"type":"weather_set_location","location":{"id":"open-meteo:1815577","name":"Changsha","latitude":28.19874,"longitude":112.97087,"timezone":"Asia/Shanghai"}}
+{"type":"weather_set_units","units":"metric"}
+```
+
+The versioned weather object is documented in `WeatherArchitecture.md` and
+validated by `shared/contracts/weather-v1.schema.json`.
+
 ## Metrics
 
 The service samples CPU (delta of `/proc/stat`), memory (`/proc/meminfo`),
@@ -79,6 +94,15 @@ marker. If another marker arrives while QML is reading `snapshot.json`, QML
 queues one more read rather than dropping it. These guarantees prevent the
 startup-empty and “one file behind” failure modes.
 KWin and logind adapters belong beside the service, not in individual widgets.
+
+## Weather
+
+The Go service is the only Open-Meteo client. It owns location search, selected
+location, metric/imperial units, refresh deadlines, failure state, and the
+offline forecast. Quickshell no longer invokes `curl` or maintains a second
+cache. The service requests at most 48 hourly and seven daily points, refreshes
+after one hour, and marks data stale after two hours. Failed refreshes preserve
+the last complete conditions and publish an explicit error.
 
 ## Desktop files
 

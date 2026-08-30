@@ -18,6 +18,7 @@ include(GNUInstallDirs)
 find_package(Qt6 6.5 REQUIRED COMPONENTS
     Core
     Gui
+    Network
     Qml
     Quick
     QuickControls2
