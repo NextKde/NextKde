@@ -38,6 +38,9 @@ constexpr auto keyRecurrence = "RECURRENCE-PRESET";
 
 QString defaultStorageDirectory()
 {
+    const QString configured = qEnvironmentVariable("KOS_PIM_STORAGE_DIR");
+    if (!configured.isEmpty())
+        return configured;
     return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))
         .filePath(QStringLiteral("kos/pim"));
 }
