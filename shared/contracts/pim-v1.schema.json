@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SuceV587/NextKde/shared/contracts/pim-v1.schema.json",
+  "title": "NextKde local PIM snapshot v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "revision",
+    "generatedAt",
+    "writable",
+    "error",
+    "lists",
+    "events",
+    "todos"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "generatedAt": { "type": "integer", "minimum": 0 },
+    "writable": { "type": "boolean" },
+    "error": { "type": "string" },
+    "lists": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/list" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/event" }
+    },
+    "todos": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/todo" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "recurrence": {
+      "enum": ["none", "daily", "weekly", "monthly", "yearly", "custom"]
+    },
+    "list": {
+      "type": "object",
+      "required": ["id", "name", "color", "position"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "color": { "type": "string" },
+        "position": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "id",
+        "seriesId",
+        "title",
+        "description",
+        "location",
+        "start",
+        "end",
+        "allDay",
+        "timeZone",
+        "calendarId",
+        "recurrence",
+        "recurrenceId",
+        "reminderMinutes",
+        "modifiedAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "seriesId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "description": { "type": "string", "maxLength": 32768 },
+        "location": { "type": "string", "maxLength": 1024 },
+        "start": { "type": "string", "minLength": 1 },
+        "end": { "type": "string", "minLength": 1 },
+        "allDay": { "type": "boolean" },
+        "timeZone": { "type": "string" },
+        "calendarId": { "type": "string", "minLength": 1 },
+        "recurrence": { "$ref": "#/$defs/recurrence" },
+        "recurrenceId": { "type": "string" },
+        "reminderMinutes": { "type": "integer", "minimum": -1 },
+        "modifiedAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "todo": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "description",
+        "listId",
+        "parentId",
+        "order",
+        "start",
+        "due",
+        "allDay",
+        "priority",
+        "completed",
+        "completedAt",
+        "recurrence",
+        "reminderMinutes",
+        "modifiedAt"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "description": { "type": "string", "maxLength": 32768 },
+        "listId": { "type": "string", "minLength": 1 },
+        "parentId": { "type": "string" },
+        "order": { "type": "number" },
+        "start": { "type": "string" },
+        "due": { "type": "string" },
+        "allDay": { "type": "boolean" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 9 },
+        "completed": { "type": "boolean" },
+        "completedAt": { "type": "string" },
+        "recurrence": { "$ref": "#/$defs/recurrence" },
+        "reminderMinutes": { "type": "integer", "minimum": -1 },
+        "modifiedAt": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

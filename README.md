@@ -234,6 +234,10 @@ docs/           architecture documentation
   boundary
 - [Shell data service](docs/ShellDataService.md) — Go data-layer ownership and
   protocols
+- [Local PIM architecture](docs/PimArchitecture.md) — Calendar/Todo storage,
+  D-Bus contract, recurrence, and reminders
+- [Weather architecture](docs/WeatherArchitecture.md) — provider, cache, and
+  App/Shell consumer boundary
 - [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) — condensed engineering context and
   key technical decisions
 
@@ -249,8 +253,9 @@ Planned next, in rough priority order:
   (the last surface not yet token-driven).
 - **Settings coverage** — keyboard-shortcut and DeskCenter pages in
   `kos-settings`.
-- **Standalone apps** — fill in the `calendar`, `todo`, and `weather`
-  placeholders under `apps/`.
+- **Standalone app follow-ups** — Calendar week/day views, Todo subtask and
+  reordering controls, weather radar/alerts, and cloud-provider adapters after
+  the local-first version-1 boundaries are stable.
 - **Accessibility & keyboard navigation** — focus order, reduced motion,
   high contrast, full keyboard operation.
 - **Weather icon set** — a complete SVG icon set replacing the current mix of

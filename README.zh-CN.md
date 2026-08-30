@@ -204,6 +204,10 @@ docs/           架构文档
 - [外观架构](docs/AppearanceArchitecture.md)——schema、IPC 契约与语义 Token
 - [网络架构](docs/NetworkArchitecture.md)——NetworkManager 适配层边界
 - [数据服务](docs/ShellDataService.md)——Go 数据层的职责与协议
+- [本地 PIM 架构](docs/PimArchitecture.md)——日历/待办存储、D-Bus 契约、
+  重复规则与提醒
+- [天气架构](docs/WeatherArchitecture.md)——数据提供方、缓存与 App/Shell
+  消费边界
 - [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)——浓缩的工程上下文与关键技术决策
 
 ## 后续开发计划
@@ -217,7 +221,8 @@ docs/           架构文档
 - **DeskCenter 主题接入**——让桌面卡片消费外观 Token 层（最后一个未
   接入的 surface）。
 - **设置覆盖面**——`kos-settings` 增加快捷键与 DeskCenter 设置页。
-- **独立应用**——填充 `apps/` 下的 `calendar`、`todo`、`weather` 占位。
+- **独立应用后续能力**——在本地优先的 v1 边界稳定后，补充日历周/日视图、
+  待办子任务与排序界面、天气雷达/预警和云端提供方适配。
 - **可访问性与键盘导航**——焦点顺序、减少动画、高对比度与全键盘操作。
 - **天气图标集**——用完整 SVG 图标集替换目前 Unicode 字符、Canvas 绘制
   与部分 SVG 混用的方案。

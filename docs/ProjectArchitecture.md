@@ -38,13 +38,21 @@ without an internal rewrite.
 ## Independent applications
 
 Each application is its own normal Qt Quick window and process. Its `main.qml`,
-window, data model, and application-specific assets remain inside its own
-`apps/<name>/` directory. A future `.desktop` file belongs under
-`packaging/desktop/`.
+window, presentation model, and application-specific assets remain inside its
+own `apps/<name>/` directory. Calendar, Todo, Weather, and Music have separate
+CMake switches and presets, so unrelated native dependencies are optional.
+Desktop launchers live with their owning applications and are installed with
+the executable.
 
 `apps/settings/` is the first application. The desktop top-bar gear only
 starts its process through `DesktopAppLauncher`; it never loads Settings UI
 into the Quickshell process.
+
+Calendar and Todo share the D-Bus-activated local service described in
+[`PimArchitecture.md`](PimArchitecture.md). Weather and the shell share the Go
+data service described in [`WeatherArchitecture.md`](WeatherArchitecture.md).
+Music owns its playback process and publishes MPRIS; shell surfaces remain
+ordinary MPRIS clients.
 
 ## Shared glass
 

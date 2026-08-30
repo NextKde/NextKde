@@ -5,9 +5,10 @@ PIM contract with KOS Calendar but does not import Calendar or Shell code.
 
 ## Current status
 
-The first milestone supplies an independently buildable application and a
-keyboard-accessible inbox prototype. Prototype tasks are intentionally
-in-memory until the local PIM service owns durable storage and reminders.
+The application is independently buildable and installable. Tasks and lists
+are durably stored by the shared local PIM service. The UI provides Inbox,
+Today, Planned, Completed, and custom-list views; quick add; task editing;
+completion; due dates; priorities; recurrence presets; reminders; and notes.
 
 ## Build
 
@@ -18,11 +19,15 @@ cmake --build --preset todo-dev
 
 The executable is written below `.build/todo-dev/apps/todo/`.
 
-## Planned scope
+## Version 1 boundary
 
-- Lists, tasks, subtasks, priorities, and manual ordering.
-- Due dates, recurrence, completion history, and reminders.
-- Inbox, Today, Planned, Completed, filters, and search.
-- Transactional local persistence shared with Calendar through a service.
+- Included: persistent lists and tasks, filtered views, due dates, completion,
+  iCalendar priorities, recurrence, reminders, notes, and keyboard shortcuts.
+- The service contract already preserves parent IDs and manual order so later
+  subtask/reordering UI does not require a storage migration.
+- Deferred: search, subtask creation controls, drag reordering, list
+  edit/delete controls, completion history UI, collaboration, and third-party
+  task accounts.
 
-Cloud collaboration and third-party task accounts are deferred.
+Calendar and Todo are separate applications and share only the versioned
+`Kos.Pim` service contract. See `docs/PimArchitecture.md`.
