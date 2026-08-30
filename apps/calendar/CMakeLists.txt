@@ -6,6 +6,7 @@ kos_add_application(kos-calendar
         src/main.cpp
     QML_FILES
         qml/Main.qml
+        qml/EventEditorDialog.qml
     LINK_LIBRARIES
         Kos::PimClient
         Kos::PimClientPlugin

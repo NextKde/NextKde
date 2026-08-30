@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Kos.Pim
 import Kos.Ui
 
 KosApplicationWindow {
@@ -11,16 +12,151 @@ KosApplicationWindow {
     visible: true
     title: qsTr("Todo")
 
+    property string activeFilter: "inbox"
+    property string activeListId: "inbox"
+    readonly property var visibleTodos: filteredTodos()
+
+    function value(record, key, fallback) {
+        if (record === null || record === undefined)
+            return fallback
+        const result = record[key]
+        return result === undefined || result === null ? fallback : result
+    }
+
+    function datePart(value) {
+        return String(value ?? "").slice(0, 10)
+    }
+
+    function todayKey() {
+        return Qt.formatDate(new Date(), "yyyy-MM-dd")
+    }
+
+    function filteredTodos() {
+        const result = []
+        const today = todayKey()
+        const source = pim.todos ?? []
+        for (let index = 0; index < source.length; index++) {
+            const todo = source[index]
+            const completed = Boolean(value(todo, "completed", false))
+            const due = datePart(value(todo, "due", ""))
+            let include = false
+            if (activeFilter === "inbox")
+                include = !completed && String(value(todo, "listId", "inbox")) === "inbox"
+            else if (activeFilter === "today")
+                include = !completed && due === today
+            else if (activeFilter === "planned")
+                include = !completed && due.length > 0
+            else if (activeFilter === "completed")
+                include = completed
+            else if (activeFilter === "list")
+                include = !completed
+                    && String(value(todo, "listId", "inbox")) === activeListId
+            if (include)
+                result.push(todo)
+        }
+        return result
+    }
+
+    function filterTitle() {
+        if (activeFilter === "today") return qsTr("Today")
+        if (activeFilter === "planned") return qsTr("Planned")
+        if (activeFilter === "completed") return qsTr("Completed")
+        if (activeFilter === "list") return listName(activeListId)
+        return qsTr("Inbox")
+    }
+
+    function listName(id) {
+        for (let index = 0; index < pim.lists.length; index++) {
+            const list = pim.lists[index]
+            if (String(value(list, "id", "")) === String(id))
+                return String(value(list, "name", qsTr("List")))
+        }
+        return qsTr("List")
+    }
+
+    function dueLabel(todo) {
+        const due = String(value(todo, "due", ""))
+        if (due.length === 0)
+            return ""
+        const date = due.slice(0, 10)
+        if (Boolean(value(todo, "allDay", false)))
+            return date === todayKey() ? qsTr("Today") : date
+        const match = due.match(/T(\d{2}:\d{2})/)
+        return date + (match ? " · " + match[1] : "")
+    }
+
+    function isOverdue(todo) {
+        const due = datePart(value(todo, "due", ""))
+        return due.length > 0 && due < todayKey()
+            && !Boolean(value(todo, "completed", false))
+    }
+
     function addTask() {
         const title = taskField.text.trim()
         if (title.length === 0)
             return
-        tasks.append({ taskTitle: title, completed: false })
+        pim.createTodo({
+            title: title,
+            listId: activeFilter === "list" ? activeListId : "inbox",
+            order: Date.now()
+        })
         taskField.clear()
         taskField.forceActiveFocus()
     }
 
-    ListModel { id: tasks }
+    function selectFilter(filter, listId) {
+        activeFilter = filter
+        if (listId !== undefined)
+            activeListId = listId
+    }
+
+    PimClient { id: pim }
+
+    TodoEditorDialog {
+        id: todoEditor
+
+        parent: root.contentItem
+        availableLists: pim.lists
+        defaultListId: root.activeFilter === "list" ? root.activeListId : "inbox"
+        onSaveRequested: function(uid, todo) {
+            if (uid.length > 0)
+                pim.updateTodo(uid, todo)
+            else
+                pim.createTodo(todo)
+        }
+        onDeleteRequested: uid => pim.removeTodo(uid)
+    }
+
+    Dialog {
+        id: listDialog
+
+        parent: root.contentItem
+        title: qsTr("New list")
+        modal: true
+        anchors.centerIn: parent
+        width: 380
+        standardButtons: Dialog.Save | Dialog.Cancel
+        onOpened: listNameField.forceActiveFocus()
+        onAccepted: {
+            const name = listNameField.text.trim()
+            if (name.length > 0)
+                pim.createList({ name: name, color: "#4f8cff" })
+            listNameField.clear()
+        }
+
+        contentItem: ColumnLayout {
+            spacing: 8
+
+            Label { text: qsTr("List name"); color: AppTheme.mutedText }
+            LiquidTextField {
+                id: listNameField
+                Layout.fillWidth: true
+                placeholderText: qsTr("e.g. Work")
+                Accessible.name: qsTr("New list name")
+                onAccepted: listDialog.accept()
+            }
+        }
+    }
 
     Shortcut {
         sequence: StandardKey.New
@@ -57,51 +193,89 @@ KosApplicationWindow {
                     Layout.fillWidth: true
                     text: qsTr("Inbox")
                     symbol: "▣"
-                    checked: true
+                    checked: root.activeFilter === "inbox"
                     ButtonGroup.group: navigationGroup
+                    onClicked: root.selectFilter("inbox")
                 }
 
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Today")
                     symbol: "◉"
+                    checked: root.activeFilter === "today"
                     ButtonGroup.group: navigationGroup
+                    onClicked: root.selectFilter("today")
                 }
 
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Planned")
                     symbol: "◫"
+                    checked: root.activeFilter === "planned"
                     ButtonGroup.group: navigationGroup
+                    onClicked: root.selectFilter("planned")
                 }
 
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Completed")
                     symbol: "✓"
+                    checked: root.activeFilter === "completed"
                     ButtonGroup.group: navigationGroup
+                    onClicked: root.selectFilter("completed")
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 16
+
+                    Label {
+                        text: qsTr("MY LISTS")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Button {
+                        text: "+"
+                        flat: true
+                        enabled: pim.connected && pim.writable
+                        Accessible.name: qsTr("Create list")
+                        onClicked: listDialog.open()
+                    }
+                }
+
+                ListView {
+                    id: listNavigation
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    spacing: 3
+                    model: pim.lists
+
+                    delegate: KosNavigationButton {
+                        id: listButton
+
+                        required property var modelData
+                        width: listNavigation.width
+                        text: String(root.value(modelData, "name", qsTr("List")))
+                        symbol: "●"
+                        checked: root.activeFilter === "list"
+                            && root.activeListId === String(root.value(modelData, "id", ""))
+                        ButtonGroup.group: navigationGroup
+                        onClicked: root.selectFilter("list",
+                            String(root.value(modelData, "id", "inbox")))
+                    }
                 }
 
                 Label {
-                    Layout.topMargin: 20
-                    text: qsTr("MY LISTS")
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                }
-
-                KosNavigationButton {
                     Layout.fillWidth: true
-                    text: qsTr("Personal")
-                    symbol: "●"
-                }
-
-                Item { Layout.fillHeight: true }
-
-                Label {
-                    Layout.fillWidth: true
-                    text: qsTr("Prototype tasks remain in memory until the PIM service is connected.")
-                    color: AppTheme.mutedText
+                    text: pim.connected
+                        ? qsTr("Local iCalendar service connected")
+                        : qsTr("Waiting for the local PIM service")
+                    color: pim.connected ? AppTheme.positive : AppTheme.warning
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
                 }
@@ -121,23 +295,32 @@ KosApplicationWindow {
                     spacing: 2
 
                     Label {
-                        text: qsTr("Inbox")
+                        text: root.filterTitle()
                         color: AppTheme.text
                         font.pixelSize: 28
                         font.weight: Font.DemiBold
                     }
 
                     Label {
-                        text: qsTr("%n open task(s)", "", tasks.count)
+                        text: qsTr("%n task(s)", "", root.visibleTodos.length)
                         color: AppTheme.mutedText
                     }
                 }
 
                 Item { Layout.fillWidth: true }
 
+                BusyIndicator {
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    running: pim.busy
+                    visible: running
+                }
+
                 Button {
-                    text: qsTr("Task options")
-                    enabled: false
+                    text: qsTr("New task")
+                    highlighted: true
+                    enabled: pim.connected && pim.writable
+                    onClicked: todoEditor.openNew()
                 }
             }
 
@@ -150,17 +333,39 @@ KosApplicationWindow {
                     LiquidTextField {
                         id: taskField
                         Layout.fillWidth: true
-                        placeholderText: qsTr("Add a task…")
+                        placeholderText: qsTr("Add a task to %1…").arg(
+                            root.activeFilter === "list"
+                                ? root.listName(root.activeListId) : qsTr("Inbox"))
                         Accessible.name: qsTr("New task title")
+                        enabled: pim.connected && pim.writable
                         onAccepted: root.addTask()
                     }
 
                     Button {
                         text: qsTr("Add")
                         highlighted: true
-                        enabled: taskField.text.trim().length > 0
+                        enabled: taskField.enabled && taskField.text.trim().length > 0
                         onClicked: root.addTask()
                     }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: todoError.implicitHeight + 20
+                radius: AppTheme.smallRadius
+                color: AppTheme.withAlpha(AppTheme.warning, AppTheme.dark ? 0.16 : 0.12)
+                border.width: 1
+                border.color: AppTheme.withAlpha(AppTheme.warning, 0.35)
+                visible: pim.errorMessage.length > 0 && pim.ready
+
+                Label {
+                    id: todoError
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    text: pim.errorMessage
+                    color: AppTheme.text
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -173,56 +378,123 @@ KosApplicationWindow {
                         anchors.centerIn: parent
                         width: Math.min(parent.width, implicitWidth)
                         height: implicitHeight
-                        visible: tasks.count === 0
-                        symbol: "✓"
-                        title: qsTr("Nothing to do yet")
-                        description: qsTr("Add a task above. Persistent lists, due dates, recurrence, and reminders arrive with the PIM service.")
-                        actionText: qsTr("Focus task field")
-                        onActionTriggered: taskField.forceActiveFocus()
+                        visible: root.visibleTodos.length === 0
+                        symbol: root.activeFilter === "completed" ? "◇" : "✓"
+                        title: root.activeFilter === "completed"
+                            ? qsTr("No completed tasks") : qsTr("Nothing to do here")
+                        description: pim.connected
+                            ? qsTr("Create a task or choose another list.")
+                            : qsTr("Start the local PIM service to load tasks.")
+                        actionText: pim.connected && pim.writable ? qsTr("New task") : ""
+                        onActionTriggered: todoEditor.openNew()
                     }
 
                     ListView {
                         id: taskList
                         anchors.fill: parent
-                        visible: tasks.count > 0
+                        visible: root.visibleTodos.length > 0
                         clip: true
                         spacing: 6
-                        model: tasks
+                        model: root.visibleTodos
                         currentIndex: -1
 
                         delegate: ItemDelegate {
                             id: taskDelegate
 
-                            required property int index
-                            required property string taskTitle
-                            required property bool completed
-
+                            required property var modelData
                             width: taskList.width
-                            implicitHeight: 52
+                            implicitHeight: 60
+                            leftPadding: String(root.value(modelData, "parentId", "")).length > 0
+                                ? 34 : 10
+                            rightPadding: 8
+                            onClicked: todoEditor.openForTodo(modelData)
 
                             contentItem: RowLayout {
                                 spacing: 10
 
                                 CheckBox {
-                                    checked: taskDelegate.completed
-                                    Accessible.name: qsTr("Mark %1 complete").arg(taskDelegate.taskTitle)
-                                    onToggled: tasks.setProperty(taskDelegate.index, "completed", checked)
+                                    checked: Boolean(root.value(taskDelegate.modelData,
+                                        "completed", false))
+                                    Accessible.name: checked
+                                        ? qsTr("Mark task open") : qsTr("Mark task complete")
+                                    onClicked: pim.updateTodo(String(root.value(
+                                        taskDelegate.modelData, "id", "")), {
+                                            completed: checked
+                                        })
                                 }
 
-                                Label {
+                                Rectangle {
+                                    Layout.preferredWidth: 4
+                                    Layout.preferredHeight: 34
+                                    radius: 2
+                                    color: Number(root.value(taskDelegate.modelData,
+                                        "priority", 0)) >= 3
+                                        ? AppTheme.destructive
+                                        : (Number(root.value(taskDelegate.modelData,
+                                            "priority", 0)) === 2
+                                            ? AppTheme.warning : AppTheme.accent)
+                                    opacity: Number(root.value(taskDelegate.modelData,
+                                        "priority", 0)) > 0 ? 1 : 0.18
+                                }
+
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    text: taskDelegate.taskTitle
-                                    color: taskDelegate.completed
-                                        ? AppTheme.mutedText : AppTheme.text
-                                    font.strikeout: taskDelegate.completed
-                                    elide: Text.ElideRight
+                                    spacing: 2
+
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: String(root.value(taskDelegate.modelData,
+                                            "title", qsTr("Untitled task")))
+                                        color: Boolean(root.value(taskDelegate.modelData,
+                                            "completed", false))
+                                            ? AppTheme.mutedText : AppTheme.text
+                                        font.strikeout: Boolean(root.value(taskDelegate.modelData,
+                                            "completed", false))
+                                        elide: Text.ElideRight
+                                    }
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+
+                                        Label {
+                                            text: root.dueLabel(taskDelegate.modelData)
+                                            color: root.isOverdue(taskDelegate.modelData)
+                                                ? AppTheme.destructive : AppTheme.mutedText
+                                            font.pixelSize: 11
+                                            visible: text.length > 0
+                                        }
+
+                                        Label {
+                                            text: root.listName(String(root.value(
+                                                taskDelegate.modelData, "listId", "inbox")))
+                                            color: AppTheme.mutedText
+                                            font.pixelSize: 11
+                                        }
+
+                                        Label {
+                                            text: "↻"
+                                            color: AppTheme.accent
+                                            visible: String(root.value(taskDelegate.modelData,
+                                                "recurrence", "none")) !== "none"
+                                            Accessible.name: qsTr("Repeating task")
+                                        }
+                                    }
+                                }
+
+                                Button {
+                                    text: "⋯"
+                                    flat: true
+                                    Accessible.name: qsTr("Edit task")
+                                    onClicked: todoEditor.openForTodo(taskDelegate.modelData)
                                 }
 
                                 Button {
                                     text: "×"
                                     flat: true
-                                    Accessible.name: qsTr("Delete %1").arg(taskDelegate.taskTitle)
-                                    onClicked: tasks.remove(taskDelegate.index)
+                                    Accessible.name: qsTr("Delete task")
+                                    onClicked: pim.removeTodo(String(root.value(
+                                        taskDelegate.modelData, "id", "")))
                                 }
                             }
 
