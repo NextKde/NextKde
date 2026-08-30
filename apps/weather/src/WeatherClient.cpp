@@ -288,7 +288,9 @@ void WeatherClient::onSocketError(QLocalSocket::LocalSocketError error)
         setTransportError(tr("Weather data service is unavailable"));
     if (error != QLocalSocket::PeerClosedError)
         ensureServiceStarted();
-    if (m_socket.state() == QLocalSocket::UnconnectedState && !m_reconnectTimer.isActive())
+    if (m_socket.state() != QLocalSocket::UnconnectedState)
+        m_socket.abort();
+    if (!m_reconnectTimer.isActive())
         m_reconnectTimer.start();
 }
 

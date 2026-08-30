@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLocalServer>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -9,9 +10,16 @@ class WeatherClientTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void readsVersionedSnapshot();
     void rejectsUnsupportedSnapshot();
+    void reconnectsWhenServiceAppearsAfterInitialFailure();
 };
+
+void WeatherClientTest::initTestCase()
+{
+    qputenv("KOS_WEATHER_DISABLE_SERVICE_AUTOSTART", "1");
+}
 
 void WeatherClientTest::readsVersionedSnapshot()
 {
@@ -109,6 +117,29 @@ void WeatherClientTest::rejectsUnsupportedSnapshot()
     QVERIFY(!client.ready());
     QCOMPARE(client.status(), QStringLiteral("idle"));
     QVERIFY(client.current().isEmpty());
+}
+
+void WeatherClientTest::reconnectsWhenServiceAppearsAfterInitialFailure()
+{
+    QTemporaryDir stateDirectory;
+    QTemporaryDir runtimeDirectory;
+    QVERIFY(stateDirectory.isValid());
+    QVERIFY(runtimeDirectory.isValid());
+    qputenv("XDG_STATE_HOME", stateDirectory.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtimeDirectory.path().toUtf8());
+
+    WeatherClient client;
+    QTRY_VERIFY_WITH_TIMEOUT(!client.errorMessage().isEmpty(), 1000);
+    QVERIFY(!client.connected());
+
+    const QString socketPath = QDir(runtimeDirectory.path()).filePath(
+        QStringLiteral("shell-data-service.sock"));
+    QLocalServer::removeServer(socketPath);
+    QLocalServer service;
+    QVERIFY2(service.listen(socketPath), qPrintable(service.errorString()));
+
+    QTRY_VERIFY_WITH_TIMEOUT(client.connected(), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(service.hasPendingConnections(), 1000);
 }
 
 QTEST_GUILESS_MAIN(WeatherClientTest)
