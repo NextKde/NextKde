@@ -11,6 +11,7 @@
 
 #include <taglib/attachedpictureframe.h>
 #include <taglib/audioproperties.h>
+#include <taglib/fileref.h>
 #include <taglib/flacfile.h>
 #include <taglib/flacpicture.h>
 #include <taglib/id3v2tag.h>
