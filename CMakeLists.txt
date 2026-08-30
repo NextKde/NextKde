@@ -1,0 +1,55 @@
+cmake_minimum_required(VERSION 3.21)
+
+project(NextKdeApps
+    VERSION 0.1.0
+    DESCRIPTION "Standalone applications for the NextKde desktop"
+    LANGUAGES CXX
+)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+include(CTest)
+include(GNUInstallDirs)
+
+find_package(Qt6 6.5 REQUIRED COMPONENTS
+    Core
+    Gui
+    Qml
+    Quick
+    QuickControls2
+)
+
+qt_standard_project_setup(REQUIRES 6.5)
+qt_policy(SET QTP0001 NEW)
+
+option(KOS_BUILD_CALENDAR "Build the Calendar application" ON)
+option(KOS_BUILD_TODO "Build the Todo application" ON)
+option(KOS_BUILD_WEATHER "Build the Weather application" ON)
+option(KOS_BUILD_MUSIC "Build the Music application" ON)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+add_subdirectory(shared/qml)
+add_subdirectory(apps/common)
+
+include(KosApplication)
+
+if(KOS_BUILD_CALENDAR)
+    add_subdirectory(apps/calendar)
+endif()
+
+if(KOS_BUILD_TODO)
+    add_subdirectory(apps/todo)
+endif()
+
+if(KOS_BUILD_WEATHER)
+    add_subdirectory(apps/weather)
+endif()
+
+if(KOS_BUILD_MUSIC)
+    add_subdirectory(apps/music)
+endif()
