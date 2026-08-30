@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
