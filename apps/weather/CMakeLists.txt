@@ -4,6 +4,7 @@ kos_add_application(kos-weather
     DESKTOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-weather.desktop
     SOURCES
         src/main.cpp
+    QML_SOURCES
         src/WeatherClient.cpp
         src/WeatherClient.h
     QML_FILES

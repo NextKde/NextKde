@@ -2,7 +2,7 @@ include_guard(GLOBAL)
 
 function(kos_add_application target)
     set(oneValueArgs URI DISPLAY_NAME DESKTOP_FILE)
-    set(multiValueArgs SOURCES QML_FILES LINK_LIBRARIES)
+    set(multiValueArgs SOURCES QML_SOURCES QML_FILES LINK_LIBRARIES)
     cmake_parse_arguments(KOS_APP "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     foreach(required_argument URI DISPLAY_NAME DESKTOP_FILE)
@@ -19,6 +19,7 @@ function(kos_add_application target)
         URI ${KOS_APP_URI}
         VERSION 1.0
         RESOURCE_PREFIX /qt/qml
+        SOURCES ${KOS_APP_QML_SOURCES}
         QML_FILES ${KOS_APP_QML_FILES}
     )
 
