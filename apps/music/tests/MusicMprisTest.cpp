@@ -1,7 +1,9 @@
 #include "MusicController.h"
 
 #include <QDBusConnection>
+#include <QDBusArgument>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusVariant>
@@ -81,6 +83,13 @@ QDBusMessage setMprisProperty(const QString &interface, const QString &name,
                 {interface, name, QVariant::fromValue(QDBusVariant(value))});
 }
 
+QVariantMap dbusMap(const QVariant &value)
+{
+    if (value.metaType() == QMetaType::fromType<QDBusArgument>())
+        return qdbus_cast<QVariantMap>(value.value<QDBusArgument>());
+    return value.toMap();
+}
+
 } // namespace
 
 class MusicMprisTest : public QObject {
@@ -114,8 +123,9 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     QTRY_VERIFY_WITH_TIMEOUT(controller.currentTrackId() > 0, 3000);
     QTRY_COMPARE_WITH_TIMEOUT(controller.playbackState(), QStringLiteral("Playing"), 5000);
 
-    const QVariantMap metadata = mprisProperty(QString::fromLatin1(playerInterface),
-                                               QStringLiteral("Metadata")).toMap();
+    const QVariantMap metadata = dbusMap(
+        mprisProperty(QString::fromLatin1(playerInterface),
+                      QStringLiteral("Metadata")));
     QCOMPARE(metadata.value(QStringLiteral("xesam:title")).toString(),
              QStringLiteral("mpris-tone"));
     QCOMPARE(mprisProperty(QString::fromLatin1(playerInterface),
