@@ -23,6 +23,9 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
     Quick
     QuickControls2
 )
+if(BUILD_TESTING)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+endif()
 
 qt_standard_project_setup(REQUIRES 6.5)
 qt_policy(SET QTP0001 NEW)
