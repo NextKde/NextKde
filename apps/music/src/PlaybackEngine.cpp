@@ -47,6 +47,10 @@ PlaybackEngine::PlaybackEngine(QObject *parent)
 
     if (qEnvironmentVariableIsSet("KOS_MUSIC_FAKE_AUDIO")) {
         if (GstElement *sink = gst_element_factory_make("fakesink", "test-audio-sink")) {
+            // playbin stores an object property reference. Sink the factory's
+            // floating reference first so releasing our reference cannot leave
+            // playbin with a dangling audio sink during teardown.
+            gst_object_ref_sink(sink);
             g_object_set(sink, "sync", TRUE, nullptr);
             g_object_set(m_playbin, "audio-sink", sink, nullptr);
             gst_object_unref(sink);
@@ -56,6 +60,7 @@ PlaybackEngine::PlaybackEngine(QObject *parent)
         if (!requestedSink.isEmpty()) {
             if (GstElement *sink = gst_element_factory_make(requestedSink.constData(),
                                                             "requested-audio-sink")) {
+                gst_object_ref_sink(sink);
                 g_object_set(m_playbin, "audio-sink", sink, nullptr);
                 gst_object_unref(sink);
             }
