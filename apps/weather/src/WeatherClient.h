@@ -10,7 +10,7 @@
 #include <QVariantMap>
 #include <qqmlintegration.h>
 
-class WeatherClient final : public QObject {
+class WeatherClient : public QObject {
     Q_OBJECT
     QML_ELEMENT
 
