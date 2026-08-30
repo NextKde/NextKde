@@ -62,4 +62,20 @@ if(BUILD_TESTING)
             $<TARGET_FILE:kos-pim-dbus-test>
     )
     set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20)
+
+    qt_add_executable(kos-pim-client-dbus-test
+        tests/PimClientDbusTest.cpp
+    )
+    target_link_libraries(kos-pim-client-dbus-test PRIVATE
+        Kos::PimClient
+        Qt6::DBus
+        Qt6::Test
+    )
+    add_test(NAME kos-pim.client-dbus
+        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
+            ${CMAKE_COMMAND} -E env
+            KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
+            $<TARGET_FILE:kos-pim-client-dbus-test>
+    )
+    set_tests_properties(kos-pim.client-dbus PROPERTIES TIMEOUT 20)
 endif()

@@ -12,7 +12,7 @@ qt_add_qml_module(kos_pim_client
 add_library(Kos::PimClient ALIAS kos_pim_client)
 add_library(Kos::PimClientPlugin ALIAS kos_pim_client_plugin)
 
-target_include_directories(kos_pim_client PRIVATE
+target_include_directories(kos_pim_client PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
