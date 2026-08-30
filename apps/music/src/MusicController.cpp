@@ -272,6 +272,7 @@ void MusicController::removeLibraryFolder(const QString &pathOrUrl)
         setError(error);
         return;
     }
+    m_pendingScanRoots.removeAll(path);
     refreshLibrary();
     emit userMessage(tr("Music folder removed from the library"));
 }
@@ -321,6 +322,15 @@ void MusicController::playQueueRow(int row)
     persistQueue();
     emit queueChanged();
     emit currentTrackChanged();
+    startCurrentTrack();
+}
+
+void MusicController::playPlaylistRow(int row)
+{
+    const QList<qint64> ids = m_database.playlistTrackIds(m_selectedPlaylistId);
+    if (row < 0 || row >= ids.size())
+        return;
+    setQueue(ids, row);
     startCurrentTrack();
 }
 
@@ -624,8 +634,10 @@ void MusicController::scanFinished()
 {
     const ScanResult result = m_scanWatcher.result();
     QString error;
-    if (!m_database.applyScan(result, &error))
+    if (m_database.libraryRoots().contains(result.rootPath)
+        && !m_database.applyScan(result, &error)) {
         setError(error);
+    }
     m_scanWarnings.append(result.warnings);
     if (m_scanWarnings.size() > 100)
         m_scanWarnings = m_scanWarnings.mid(m_scanWarnings.size() - 100);
@@ -690,6 +702,7 @@ void MusicController::refreshGroups()
 {
     struct Group {
         QString name;
+        QString filterValue;
         QString subtitle;
         QString artwork;
         int count = 0;
@@ -700,6 +713,7 @@ void MusicController::refreshGroups()
         const QString albumName = fallbackName(track.album, tr("Unknown album"));
         Group &album = albumsByName[albumName.toCaseFolded()];
         album.name = albumName;
+        album.filterValue = track.album;
         album.subtitle = fallbackName(track.albumArtist, track.artist);
         if (album.artwork.isEmpty())
             album.artwork = track.artworkUrl;
@@ -710,6 +724,8 @@ void MusicController::refreshGroups()
             tr("Unknown artist"));
         Group &artist = artistsByName[artistName.toCaseFolded()];
         artist.name = artistName;
+        artist.filterValue = track.albumArtist.isEmpty()
+            ? track.artist : track.albumArtist;
         if (artist.artwork.isEmpty())
             artist.artwork = track.artworkUrl;
         ++artist.count;
@@ -717,6 +733,7 @@ void MusicController::refreshGroups()
     m_albums.clear();
     for (const Group &group : albumsByName) {
         m_albums.append(QVariantMap{{QStringLiteral("name"), group.name},
+                                    {QStringLiteral("filterValue"), group.filterValue},
                                     {QStringLiteral("subtitle"), group.subtitle},
                                     {QStringLiteral("artworkUrl"), group.artwork},
                                     {QStringLiteral("count"), group.count}});
@@ -724,6 +741,7 @@ void MusicController::refreshGroups()
     m_artists.clear();
     for (const Group &group : artistsByName) {
         m_artists.append(QVariantMap{{QStringLiteral("name"), group.name},
+                                     {QStringLiteral("filterValue"), group.filterValue},
                                      {QStringLiteral("artworkUrl"), group.artwork},
                                      {QStringLiteral("count"), group.count}});
     }

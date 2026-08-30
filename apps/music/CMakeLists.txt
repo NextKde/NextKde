@@ -34,7 +34,10 @@ kos_add_application(kos-music
         src/TrackListModel.cpp
         src/TrackListModel.h
     QML_FILES
+        qml/Artwork.qml
         qml/Main.qml
+        qml/MusicGroupGrid.qml
+        qml/TrackListView.qml
     LINK_LIBRARIES
         Qt6::Concurrent
         Qt6::DBus

@@ -110,6 +110,7 @@ public:
 
     Q_INVOKABLE void playTrack(qlonglong trackId);
     Q_INVOKABLE void playQueueRow(int row);
+    Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void playAlbum(const QString &album);
     Q_INVOKABLE void playArtist(const QString &artist);
     Q_INVOKABLE void enqueueTrack(qlonglong trackId);
