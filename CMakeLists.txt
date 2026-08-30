@@ -25,6 +25,14 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 
 qt_standard_project_setup(REQUIRES 6.5)
 qt_policy(SET QTP0001 NEW)
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.8)
+    qt_policy(SET QTP0004 NEW)
+endif()
+
+# Keep every generated QML module below one canonical import root. This is
+# required for qmllint and qmlimportscanner to resolve Kos.Ui from each
+# independently built application module.
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml")
 
 option(KOS_BUILD_CALENDAR "Build the Calendar application" ON)
 option(KOS_BUILD_TODO "Build the Todo application" ON)
