@@ -30,6 +30,7 @@ public:
     std::optional<TrackRecord> track(qint64 id, QString *errorMessage = nullptr) const;
     std::optional<TrackRecord> trackForPath(const QString &path,
                                             QString *errorMessage = nullptr) const;
+    qint64 addExternalTrack(const TrackRecord &track, QString *errorMessage = nullptr);
     bool recordPlayed(qint64 trackId, QString *errorMessage = nullptr);
 
     QVariantList playlists(QString *errorMessage = nullptr) const;

@@ -13,10 +13,10 @@ set(KOS_MUSIC_CORE_SOURCES
     src/MusicDatabase.cpp
     src/MusicDatabase.h
     src/MusicTypes.h
+    src/MprisService.cpp
+    src/MprisService.h
     src/PlaybackEngine.cpp
     src/PlaybackEngine.h
-    src/TrackListModel.cpp
-    src/TrackListModel.h
     src/Transcoder.cpp
     src/Transcoder.h
 )
@@ -28,6 +28,11 @@ kos_add_application(kos-music
     SOURCES
         src/main.cpp
         ${KOS_MUSIC_CORE_SOURCES}
+    QML_SOURCES
+        src/MusicController.cpp
+        src/MusicController.h
+        src/TrackListModel.cpp
+        src/TrackListModel.h
     QML_FILES
         qml/Main.qml
     LINK_LIBRARIES

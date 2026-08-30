@@ -345,6 +345,37 @@ std::optional<TrackRecord> MusicDatabase::trackForPath(const QString &path,
     return query.next() ? std::optional<TrackRecord>(readTrack(query)) : std::nullopt;
 }
 
+qint64 MusicDatabase::addExternalTrack(const TrackRecord &track, QString *errorMessage)
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral(
+        "INSERT INTO tracks(root_id, path, url, title, artist, album, album_artist, genre, "
+        "artwork_url, format, duration_ms, file_size, modified_ms, added_at, last_seen, "
+        "track_number, disc_number, year) "
+        "VALUES(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) "
+        "ON CONFLICT(path) DO UPDATE SET url=excluded.url, title=excluded.title, "
+        "artist=excluded.artist, album=excluded.album, album_artist=excluded.album_artist, "
+        "genre=excluded.genre, artwork_url=excluded.artwork_url, format=excluded.format, "
+        "duration_ms=excluded.duration_ms, file_size=excluded.file_size, "
+        "modified_ms=excluded.modified_ms, track_number=excluded.track_number, "
+        "disc_number=excluded.disc_number, year=excluded.year"));
+    const QVariantList values{
+        nonNull(track.path), nonNull(track.url), nonNull(track.title),
+        nonNull(track.artist), nonNull(track.album), nonNull(track.albumArtist),
+        nonNull(track.genre), nonNull(track.artworkUrl), nonNull(track.format),
+        track.durationMs, track.fileSize, track.modifiedMs,
+        QDateTime::currentMSecsSinceEpoch(), track.trackNumber, track.discNumber, track.year,
+    };
+    for (qsizetype index = 0; index < values.size(); ++index)
+        query.bindValue(static_cast<int>(index), values.at(index));
+    if (!query.exec()) {
+        fail(query, errorMessage);
+        return -1;
+    }
+    const std::optional<TrackRecord> stored = trackForPath(track.path, errorMessage);
+    return stored ? stored->id : -1;
+}
+
 bool MusicDatabase::recordPlayed(qint64 trackId, QString *errorMessage)
 {
     QSqlQuery query(m_database);

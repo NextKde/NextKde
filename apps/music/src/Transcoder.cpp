@@ -189,6 +189,7 @@ bool Transcoder::start(const QUrl &input, const QUrl &output, const QString &for
     if (gst_element_set_state(m_pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
         setError(QStringLiteral("GStreamer could not start the conversion"));
         destroyPipeline(true);
+        setStatus(QStringLiteral("Failed"));
         return false;
     }
     return true;
@@ -218,6 +219,7 @@ void Transcoder::pollBus()
             gst_message_unref(message);
             setError(text);
             destroyPipeline(true);
+            setStatus(QStringLiteral("Failed"));
             return;
         }
         if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS) {

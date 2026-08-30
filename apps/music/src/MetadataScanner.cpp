@@ -27,6 +27,7 @@
 #include <taglib/xiphcomment.h>
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
@@ -177,6 +178,51 @@ QString persistArtwork(const Artwork &artwork, const QString &sourcePath,
     return QUrl::fromLocalFile(destination).toString();
 }
 
+std::optional<TrackRecord> readTrackFile(const QFileInfo &inputInfo,
+                                         const QString &artworkCachePath,
+                                         QString *warning)
+{
+    QString path = inputInfo.canonicalFilePath();
+    if (path.isEmpty())
+        path = inputInfo.absoluteFilePath();
+    const QByteArray encodedPath = QFile::encodeName(path);
+    TagLib::FileRef file(encodedPath.constData(), true, TagLib::AudioProperties::Fast);
+    if (file.isNull() || !file.file() || !file.audioProperties()) {
+        if (warning) {
+            *warning = QStringLiteral("Unsupported or unreadable audio file: %1")
+                           .arg(path);
+        }
+        return std::nullopt;
+    }
+    TagLib::Tag *tag = file.tag();
+    const TagLib::PropertyMap properties = file.properties();
+    TrackRecord track;
+    track.path = path;
+    track.url = QUrl::fromLocalFile(path).toString();
+    track.title = tag ? fromTagString(tag->title()).trimmed() : QString{};
+    if (track.title.isEmpty())
+        track.title = inputInfo.completeBaseName();
+    track.artist = tag ? fromTagString(tag->artist()).trimmed() : QString{};
+    track.album = tag ? fromTagString(tag->album()).trimmed() : QString{};
+    track.genre = tag ? fromTagString(tag->genre()).trimmed() : QString{};
+    track.year = tag ? static_cast<int>(tag->year()) : 0;
+    track.trackNumber = tag ? static_cast<int>(tag->track()) : 0;
+    track.albumArtist = firstProperty(properties, "ALBUMARTIST");
+    if (track.albumArtist.isEmpty())
+        track.albumArtist = firstProperty(properties, "ALBUM ARTIST");
+    if (track.albumArtist.isEmpty())
+        track.albumArtist = track.artist;
+    track.discNumber = leadingNumber(firstProperty(properties, "DISCNUMBER"));
+    track.durationMs = file.audioProperties()->lengthInMilliseconds();
+    track.fileSize = inputInfo.size();
+    track.modifiedMs = inputInfo.lastModified().toMSecsSinceEpoch();
+    track.format = inputInfo.suffix().toUpper();
+    track.artworkUrl = persistArtwork(embeddedArtwork(file.file()), path,
+                                      track.modifiedMs, track.fileSize,
+                                      artworkCachePath);
+    return track;
+}
+
 void addWarning(ScanResult *result, const QString &warning)
 {
     if (result->warnings.size() < maximumWarnings)
@@ -197,6 +243,20 @@ QStringList MetadataScanner::supportedExtensions()
         QStringLiteral("wav"), QStringLiteral("wave"), QStringLiteral("wma"),
         QStringLiteral("wv"),
     };
+}
+
+std::optional<TrackRecord> MetadataScanner::scanFile(const QString &path,
+                                                     const QString &artworkCachePath,
+                                                     QString *warning)
+{
+    const QFileInfo info(path);
+    if (!info.isFile() || !info.isReadable()
+        || !supportedExtensions().contains(info.suffix().toLower())) {
+        if (warning)
+            *warning = QStringLiteral("Unsupported or unreadable audio file: %1").arg(path);
+        return std::nullopt;
+    }
+    return readTrackFile(info, artworkCachePath, warning);
 }
 
 ScanResult MetadataScanner::scan(const QString &rootPath,
@@ -226,40 +286,14 @@ ScanResult MetadataScanner::scan(const QString &rootPath,
             continue;
         }
 
-        const QByteArray encodedPath = QFile::encodeName(path);
-        TagLib::FileRef file(encodedPath.constData(), true,
-                             TagLib::AudioProperties::Fast);
-        if (file.isNull() || !file.file() || !file.audioProperties()) {
-            addWarning(&result, QStringLiteral("Unsupported or unreadable audio file: %1")
-                                     .arg(path));
+        QString warning;
+        const std::optional<TrackRecord> track = readTrackFile(info, artworkCachePath,
+                                                               &warning);
+        if (!track) {
+            addWarning(&result, warning);
             continue;
         }
-        TagLib::Tag *tag = file.tag();
-        const TagLib::PropertyMap properties = file.properties();
-        TrackRecord track;
-        track.path = path;
-        track.url = QUrl::fromLocalFile(path).toString();
-        track.title = tag ? fromTagString(tag->title()).trimmed() : QString{};
-        if (track.title.isEmpty())
-            track.title = info.completeBaseName();
-        track.artist = tag ? fromTagString(tag->artist()).trimmed() : QString{};
-        track.album = tag ? fromTagString(tag->album()).trimmed() : QString{};
-        track.genre = tag ? fromTagString(tag->genre()).trimmed() : QString{};
-        track.year = tag ? static_cast<int>(tag->year()) : 0;
-        track.trackNumber = tag ? static_cast<int>(tag->track()) : 0;
-        track.albumArtist = firstProperty(properties, "ALBUMARTIST");
-        if (track.albumArtist.isEmpty())
-            track.albumArtist = firstProperty(properties, "ALBUM ARTIST");
-        if (track.albumArtist.isEmpty())
-            track.albumArtist = track.artist;
-        track.discNumber = leadingNumber(firstProperty(properties, "DISCNUMBER"));
-        track.durationMs = file.audioProperties()->lengthInMilliseconds();
-        track.fileSize = info.size();
-        track.modifiedMs = modifiedMs;
-        track.format = info.suffix().toUpper();
-        track.artworkUrl = persistArtwork(embeddedArtwork(file.file()), path,
-                                          modifiedMs, info.size(), artworkCachePath);
-        result.changedTracks.append(std::move(track));
+        result.changedTracks.append(*track);
     }
     result.visitedPaths.removeDuplicates();
     return result;
