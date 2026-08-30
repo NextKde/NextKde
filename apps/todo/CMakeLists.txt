@@ -6,4 +6,7 @@ kos_add_application(kos-todo
         src/main.cpp
     QML_FILES
         qml/Main.qml
+    LINK_LIBRARIES
+        Kos::PimClient
+        Kos::PimClientPlugin
 )

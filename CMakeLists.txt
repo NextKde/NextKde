@@ -43,10 +43,20 @@ option(KOS_BUILD_TODO "Build the Todo application" ON)
 option(KOS_BUILD_WEATHER "Build the Weather application" ON)
 option(KOS_BUILD_MUSIC "Build the Music application" ON)
 
+if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS DBus)
+    find_package(KF6CalendarCore 6.0 REQUIRED)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 add_subdirectory(shared/qml)
 add_subdirectory(apps/common)
+
+if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
+    add_subdirectory(shared/pim)
+    add_subdirectory(services/pim-service)
+endif()
 
 include(KosApplication)
 
