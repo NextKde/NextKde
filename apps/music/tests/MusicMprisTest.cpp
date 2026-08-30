@@ -62,7 +62,7 @@ QDBusMessage call(const QString &interface, const QString &method,
     return watcher.reply();
 }
 
-QVariant property(const QString &interface, const QString &name)
+QVariant mprisProperty(const QString &interface, const QString &name)
 {
     const QDBusMessage reply = call(QString::fromLatin1(propertiesInterface),
                                     QStringLiteral("Get"),
@@ -74,8 +74,8 @@ QVariant property(const QString &interface, const QString &name)
         ? value.value<QDBusVariant>().variant() : value;
 }
 
-QDBusMessage setProperty(const QString &interface, const QString &name,
-                         const QVariant &value)
+QDBusMessage setMprisProperty(const QString &interface, const QString &name,
+                              const QVariant &value)
 {
     return call(QString::fromLatin1(propertiesInterface), QStringLiteral("Set"),
                 {interface, name, QVariant::fromValue(QDBusVariant(value))});
@@ -103,7 +103,7 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     MusicController controller;
     QVERIFY(controller.ready());
     QVERIFY2(controller.mprisRegistered(), "MPRIS service did not register");
-    QCOMPARE(property(QString::fromLatin1(rootInterface), QStringLiteral("Identity"))
+    QCOMPARE(mprisProperty(QString::fromLatin1(rootInterface), QStringLiteral("Identity"))
                  .toString(),
              QStringLiteral("KOS Music"));
 
@@ -114,12 +114,12 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     QTRY_VERIFY_WITH_TIMEOUT(controller.currentTrackId() > 0, 3000);
     QTRY_COMPARE_WITH_TIMEOUT(controller.playbackState(), QStringLiteral("Playing"), 5000);
 
-    const QVariantMap metadata = property(QString::fromLatin1(playerInterface),
-                                          QStringLiteral("Metadata")).toMap();
+    const QVariantMap metadata = mprisProperty(QString::fromLatin1(playerInterface),
+                                               QStringLiteral("Metadata")).toMap();
     QCOMPARE(metadata.value(QStringLiteral("xesam:title")).toString(),
              QStringLiteral("mpris-tone"));
-    QCOMPARE(property(QString::fromLatin1(playerInterface),
-                      QStringLiteral("PlaybackStatus")).toString(),
+    QCOMPARE(mprisProperty(QString::fromLatin1(playerInterface),
+                           QStringLiteral("PlaybackStatus")).toString(),
              QStringLiteral("Playing"));
 
     QCOMPARE(call(QString::fromLatin1(playerInterface), QStringLiteral("Pause")).type(),
@@ -129,17 +129,17 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
              QDBusMessage::ReplyMessage);
     QTRY_COMPARE_WITH_TIMEOUT(controller.playbackState(), QStringLiteral("Playing"), 3000);
 
-    QCOMPARE(setProperty(QString::fromLatin1(playerInterface),
-                         QStringLiteral("LoopStatus"),
-                         QStringLiteral("Track")).type(),
+    QCOMPARE(setMprisProperty(QString::fromLatin1(playerInterface),
+                              QStringLiteral("LoopStatus"),
+                              QStringLiteral("Track")).type(),
              QDBusMessage::ReplyMessage);
     QCOMPARE(controller.repeatMode(), QStringLiteral("track"));
-    QCOMPARE(setProperty(QString::fromLatin1(playerInterface),
-                         QStringLiteral("Shuffle"), true).type(),
+    QCOMPARE(setMprisProperty(QString::fromLatin1(playerInterface),
+                              QStringLiteral("Shuffle"), true).type(),
              QDBusMessage::ReplyMessage);
     QVERIFY(controller.shuffle());
-    QCOMPARE(setProperty(QString::fromLatin1(playerInterface),
-                         QStringLiteral("Volume"), 0.35).type(),
+    QCOMPARE(setMprisProperty(QString::fromLatin1(playerInterface),
+                              QStringLiteral("Volume"), 0.35).type(),
              QDBusMessage::ReplyMessage);
     QVERIFY(qAbs(controller.volume() - 0.35) < 0.01);
 
