@@ -1,5 +1,7 @@
 # KOS 日历
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS 日历是独立的 Qt Quick 应用，不导入 Quickshell 运行时，也不依赖
 `desktop/` 下的文件。
 

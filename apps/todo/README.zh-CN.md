@@ -1,5 +1,7 @@
 # KOS 待办
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS 待办是独立的 Qt Quick 任务管理应用。它通过带版本的本地 PIM 协议与
 KOS 日历共享数据，但不会导入日历或 Shell 的代码。
 

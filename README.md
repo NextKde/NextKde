@@ -90,6 +90,20 @@ application.
 - **Global shortcuts** — registered as native KDE Command Shortcuts with
   install-time conflict detection; rebindable in *System Settings → Shortcuts*.
 
+### Standalone applications
+
+- **KOS Calendar** — local month calendar with recurrence, reminders, and
+  iCalendar import/export.
+- **KOS Todo** — local lists and tasks with due dates, priorities, recurrence,
+  reminders, and notes.
+- **KOS Weather** — shared-service current, hourly, and seven-day forecasts,
+  saved locations, unit switching, and offline cache.
+- **KOS Music** — GStreamer/TagLib/SQLite local-library player with playlists,
+  persistent queue, audio conversion, and a complete MPRIS provider.
+
+These are four independent CMake modules and normal Qt Quick processes. They do
+not load application UI into Quickshell.
+
 ---
 
 ## Requirements
@@ -99,6 +113,7 @@ application.
 | Session | KDE Plasma 6 on Wayland (developed on Plasma/KWin 6.7) |
 | Shell runtime | [Quickshell](https://quickshell.org) 0.3.0 (`qs`) |
 | Build tools | Go, CMake, a C++ compiler, Qt 6 Gui development files, `socat` |
+| Standalone apps | Qt 6 Quick/Controls/D-Bus/SQL; KF6CalendarCore for Calendar/Todo; GStreamer and TagLib for Music |
 | Runtime integration | NetworkManager (`nmcli`), systemd user session, logind |
 | Optional | `cliphist` (clipboard history), `qdbus6`/`kwriteconfig6` (effect sync) |
 
@@ -181,7 +196,24 @@ cmake --build .build/apps/settings
 A desktop entry template is provided at
 `packaging/desktop/kos-settings.desktop.in`.
 
-### 7. Global shortcuts
+### 7. Calendar, Todo, Weather, and Music
+
+Build all four independent applications and their services/tests together:
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+cmake --install .build/apps-dev --prefix "$HOME/.local"
+```
+
+Use `calendar-dev`, `todo-dev`, `weather-dev`, or `music-dev` instead when only
+one dependency set is available. Calendar/Todo install a D-Bus-activated local
+PIM service; Weather uses `shell-data-service`; Music uses system GStreamer
+plugins and publishes MPRIS. Each app directory contains English and Chinese
+usage notes.
+
+### 8. Global shortcuts
 
 ```sh
 python3 helpers/global-shortcuts/install.py
@@ -192,7 +224,7 @@ default bindings. Re-run it after editing
 `helpers/global-shortcuts/shortcuts.json`; change bindings afterwards in
 *System Settings → Shortcuts*.
 
-### 8. Notification takeover
+### 9. Notification takeover
 
 Quickshell's notification server can only own the D-Bus name if Plasma's
 notification applet is out of the way: remove the notification widget from the
@@ -213,7 +245,7 @@ system tray settings and restart plasmashell once
 ```text
 shell.qml       stable Quickshell entry point
 desktop/        the desktop environment (bar, dock, deskcenter, launcher, …)
-apps/           independent Qt Quick applications (settings, …)
+apps/           independent Qt Quick applications (settings, calendar, todo, weather, music)
 shared/         pure, portable cross-process QML and contracts
 services/       resident background services (shell-data-service, Go)
 helpers/        on-demand native helpers (KWin bridge, shortcuts, clipboard)
@@ -238,6 +270,8 @@ docs/           architecture documentation
   D-Bus contract, recurrence, and reminders
 - [Weather architecture](docs/WeatherArchitecture.md) — provider, cache, and
   App/Shell consumer boundary
+- [Music architecture](docs/MusicArchitecture.md) — library, GStreamer,
+  conversion, MPRIS, research, and version-1 boundary
 - [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) — condensed engineering context and
   key technical decisions
 
@@ -254,8 +288,9 @@ Planned next, in rough priority order:
 - **Settings coverage** — keyboard-shortcut and DeskCenter pages in
   `kos-settings`.
 - **Standalone app follow-ups** — Calendar week/day views, Todo subtask and
-  reordering controls, weather radar/alerts, and cloud-provider adapters after
-  the local-first version-1 boundaries are stable.
+  reordering controls, weather radar/alerts, Music gapless/ReplayGain support,
+  and cloud-provider adapters after the local-first version-1 boundaries are
+  stable.
 - **Accessibility & keyboard navigation** — focus order, reduced motion,
   high contrast, full keyboard operation.
 - **Weather icon set** — a complete SVG icon set replacing the current mix of

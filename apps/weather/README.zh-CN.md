@@ -1,5 +1,7 @@
 # KOS 天气
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS 天气是独立的 Qt Quick 预报应用。它与 Quickshell 天气组件读取同一份带
 版本的服务快照，网络请求和缓存状态不归任何一个界面单独所有。
 

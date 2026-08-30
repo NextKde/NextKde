@@ -75,6 +75,18 @@ KWin 特效，共同替换 Plasma 的 Shell 体验：顶部状态栏、悬浮 Do
 - **全局快捷键**——注册为 KDE 原生 Command Shortcut，安装时检测冲突；
   可在「系统设置 → 快捷键」中改键。
 
+### 独立应用
+
+- **KOS 日历**——本地月历，支持重复规则、提醒和 iCalendar 导入导出。
+- **KOS 待办**——本地清单与任务，支持截止时间、优先级、重复、提醒和备注。
+- **KOS 天气**——读取共享服务的当前、逐小时和七日预报，支持收藏地点、
+  单位切换与离线缓存。
+- **KOS 音乐**——基于 GStreamer/TagLib/SQLite 的本地音乐库播放器，包含
+  播放列表、持久队列、音频转换和完整 MPRIS 服务。
+
+它们是四个独立的 CMake 模块和普通 Qt Quick 进程，不会把应用界面加载进
+Quickshell。
+
 ---
 
 ## 环境要求
@@ -84,6 +96,7 @@ KWin 特效，共同替换 Plasma 的 Shell 体验：顶部状态栏、悬浮 Do
 | 会话 | KDE Plasma 6 + Wayland（开发环境为 Plasma/KWin 6.7） |
 | Shell 运行时 | [Quickshell](https://quickshell.org) 0.3.0（`qs`） |
 | 构建工具 | Go、CMake、C++ 编译器、Qt 6 Gui 开发文件、`socat` |
+| 独立应用 | Qt 6 Quick/Controls/D-Bus/SQL；日历/待办需要 KF6CalendarCore；音乐需要 GStreamer 与 TagLib |
 | 运行时集成 | NetworkManager（`nmcli`）、systemd 用户会话、logind |
 | 可选 | `cliphist`（剪贴板历史）、`qdbus6`/`kwriteconfig6`（特效同步） |
 
@@ -158,7 +171,23 @@ cmake --build .build/apps/settings
 
 桌面入口模板见 `packaging/desktop/kos-settings.desktop.in`。
 
-### 7. 全局快捷键
+### 7. 日历、待办、天气与音乐
+
+一次构建、测试并安装四个独立应用及其服务：
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+cmake --install .build/apps-dev --prefix "$HOME/.local"
+```
+
+如果只具备一组依赖，可改用 `calendar-dev`、`todo-dev`、`weather-dev` 或
+`music-dev`。日历/待办会安装可由 D-Bus 激活的本地 PIM 服务；天气使用
+`shell-data-service`；音乐使用系统 GStreamer 插件并发布 MPRIS。每个应用
+目录内都有中英文使用说明。
+
+### 8. 全局快捷键
 
 ```sh
 python3 helpers/global-shortcuts/install.py
@@ -168,7 +197,7 @@ python3 helpers/global-shortcuts/install.py
 `helpers/global-shortcuts/shortcuts.json` 后需重跑；之后改键请在
 「系统设置 → 快捷键」中进行。
 
-### 8. 通知接管
+### 9. 通知接管
 
 Quickshell 的通知服务只有在 Plasma 通知组件让位后才能拿到 D-Bus 名称：
 在托盘设置中移除通知组件，并重启一次 plasmashell
@@ -188,7 +217,7 @@ Quickshell 的通知服务只有在 Plasma 通知组件让位后才能拿到 D-B
 ```text
 shell.qml       稳定的 Quickshell 入口
 desktop/        桌面环境本体（bar、dock、deskcenter、启动器……）
-apps/           独立 Qt Quick 应用（settings……）
+apps/           独立 Qt Quick 应用（settings、calendar、todo、weather、music）
 shared/         纯 Qt Quick 的跨进程公共 QML 与契约
 services/       常驻后台服务（shell-data-service，Go）
 helpers/        按需启动的原生帮助程序（KWin 桥、快捷键、剪贴板）
@@ -208,6 +237,8 @@ docs/           架构文档
   重复规则与提醒
 - [天气架构](docs/WeatherArchitecture.md)——数据提供方、缓存与 App/Shell
   消费边界
+- [音乐架构](docs/MusicArchitecture.md)——音乐库、GStreamer、转换、MPRIS、
+  开源调研与第一版边界
 - [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)——浓缩的工程上下文与关键技术决策
 
 ## 后续开发计划
@@ -222,7 +253,8 @@ docs/           架构文档
   接入的 surface）。
 - **设置覆盖面**——`kos-settings` 增加快捷键与 DeskCenter 设置页。
 - **独立应用后续能力**——在本地优先的 v1 边界稳定后，补充日历周/日视图、
-  待办子任务与排序界面、天气雷达/预警和云端提供方适配。
+  待办子任务与排序界面、天气雷达/预警、音乐无缝播放/ReplayGain 和云端
+  提供方适配。
 - **可访问性与键盘导航**——焦点顺序、减少动画、高对比度与全键盘操作。
 - **天气图标集**——用完整 SVG 图标集替换目前 Unicode 字符、Canvas 绘制
   与部分 SVG 混用的方案。

@@ -1,5 +1,7 @@
 # KOS Todo
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS Todo is a standalone Qt Quick task manager. It shares a versioned local
 PIM contract with KOS Calendar but does not import Calendar or Shell code.
 

@@ -1,5 +1,7 @@
 # KOS Calendar
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS Calendar is a standalone Qt Quick application. It never imports the
 Quickshell runtime or files under `desktop/`.
 

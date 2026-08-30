@@ -52,7 +52,9 @@ Calendar and Todo share the D-Bus-activated local service described in
 [`PimArchitecture.md`](PimArchitecture.md). Weather and the shell share the Go
 data service described in [`WeatherArchitecture.md`](WeatherArchitecture.md).
 Music owns its playback process and publishes MPRIS; shell surfaces remain
-ordinary MPRIS clients.
+ordinary MPRIS clients. Its engine, local library, conversion, research, and
+future-refactor boundaries are documented in
+[`MusicArchitecture.md`](MusicArchitecture.md).
 
 ## Shared glass
 

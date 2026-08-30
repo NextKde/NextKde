@@ -1,5 +1,7 @@
 # KOS Weather
 
+**[English](README.md) | [中文](README.zh-CN.md)**
+
 KOS Weather is a standalone Qt Quick forecast application. It and the
 Quickshell weather widget consume the same versioned service snapshot; neither
 surface owns network or cache state.
