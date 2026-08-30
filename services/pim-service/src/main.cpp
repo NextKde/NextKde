@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusError>
 #include <QDebug>
 
 int main(int argc, char *argv[])
