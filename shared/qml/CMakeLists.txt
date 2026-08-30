@@ -15,12 +15,6 @@ qt_add_qml_module(kos_ui
         foundation/KosCard.qml
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
-        controls/ColorRampSlider.qml
-        controls/LiquidGlassButton.qml
-        controls/LiquidGlassSwitch.qml
-        controls/LiquidNavBar.qml
-        controls/LiquidSegmentedControl.qml
-        controls/LiquidSlider.qml
         controls/LiquidTextField.qml
 )
 
