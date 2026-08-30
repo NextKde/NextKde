@@ -10,6 +10,8 @@
 #include <KCalendarCore/Todo>
 
 #include <QDateTime>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -17,11 +19,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTimeZone>
+#include <QTimer>
 #include <QUuid>
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace {
@@ -371,6 +376,8 @@ public:
     quint64 revision = 0;
     bool writable = true;
     QString storageError;
+    QTimer *reminderTimer = nullptr;
+    QSet<QString> deliveredReminders;
 };
 
 PimStore::PimStore(const QString &storageDirectory, QObject *parent)
@@ -378,9 +385,94 @@ PimStore::PimStore(const QString &storageDirectory, QObject *parent)
     , d(std::make_unique<Private>(storageDirectory))
 {
     d->load();
+    d->reminderTimer = new QTimer(this);
+    d->reminderTimer->setSingleShot(true);
+    connect(d->reminderTimer, &QTimer::timeout,
+            this, &PimStore::deliverDueReminders);
+    connect(this, &PimStore::changed,
+            this, &PimStore::scheduleNextReminder);
+    QTimer::singleShot(0, this, &PimStore::scheduleNextReminder);
 }
 
 PimStore::~PimStore() = default;
+
+void PimStore::scheduleNextReminder()
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto alarms = d->calendar->alarms(now.addSecs(1), now.addDays(30));
+    qint64 delay = 24LL * 60 * 60 * 1000;
+    for (const KCalendarCore::Alarm::Ptr &alarm : alarms) {
+        QDateTime trigger = alarm->time();
+        if (!trigger.isValid() || trigger <= now)
+            trigger = alarm->nextTime(now);
+        if (!trigger.isValid() || trigger <= now)
+            continue;
+        delay = std::min(delay, now.msecsTo(trigger));
+    }
+    delay = std::clamp<qint64>(delay, 50, std::numeric_limits<int>::max());
+    d->reminderTimer->start(static_cast<int>(delay));
+}
+
+void PimStore::deliverDueReminders()
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    const auto alarms = d->calendar->alarms(now.addSecs(-300), now.addSecs(30));
+    for (const KCalendarCore::Alarm::Ptr &alarm : alarms) {
+        QDateTime trigger = alarm->time();
+        if (!trigger.isValid())
+            trigger = alarm->nextTime(now.addSecs(-301));
+        if (!trigger.isValid() || trigger < now.addSecs(-300) || trigger > now.addSecs(30))
+            continue;
+        const QString key = alarm->parentUid() + QLatin1Char('@')
+            + QString::number(trigger.toMSecsSinceEpoch());
+        if (d->deliveredReminders.contains(key))
+            continue;
+        const KCalendarCore::Incidence::Ptr incidence = d->calendar->incidence(
+            alarm->parentUid());
+        if (!incidence)
+            continue;
+        const auto todo = qSharedPointerDynamicCast<KCalendarCore::Todo>(incidence);
+        if (todo && todo->isCompleted())
+            continue;
+
+        d->deliveredReminders.insert(key);
+        if (d->deliveredReminders.size() > 512)
+            d->deliveredReminders.clear();
+
+        const bool isTodo = incidence->type() == KCalendarCore::IncidenceBase::TypeTodo;
+        const QString title = incidence->summary().isEmpty()
+            ? (isTodo ? QStringLiteral("Task reminder")
+                      : QStringLiteral("Event reminder"))
+            : incidence->summary();
+        QString body = isTodo ? QStringLiteral("This task is due.")
+                              : QStringLiteral("This event is starting.");
+        if (!incidence->location().isEmpty())
+            body += QStringLiteral(" Location: %1").arg(incidence->location());
+
+        QDBusMessage notification = QDBusMessage::createMethodCall(
+            QStringLiteral("org.freedesktop.Notifications"),
+            QStringLiteral("/org/freedesktop/Notifications"),
+            QStringLiteral("org.freedesktop.Notifications"),
+            QStringLiteral("Notify"));
+        QVariantMap hints{
+            {QStringLiteral("desktop-entry"),
+             isTodo ? QStringLiteral("kos-todo") : QStringLiteral("kos-calendar")},
+            {QStringLiteral("urgency"), static_cast<uchar>(1)},
+        };
+        notification.setArguments({
+            QStringLiteral("KOS PIM"),
+            0U,
+            isTodo ? QStringLiteral("view-task") : QStringLiteral("view-calendar"),
+            title,
+            body,
+            QStringList{},
+            hints,
+            10000,
+        });
+        QDBusConnection::sessionBus().asyncCall(notification, 5000);
+    }
+    scheduleNextReminder();
+}
 
 QString PimStore::snapshot() const
 {

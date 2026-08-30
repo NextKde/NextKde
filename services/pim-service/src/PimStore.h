@@ -34,6 +34,10 @@ public slots:
 signals:
     void changed(qulonglong revision);
 
+private slots:
+    void scheduleNextReminder();
+    void deliverDueReminders();
+
 private:
     class Private;
     std::unique_ptr<Private> d;

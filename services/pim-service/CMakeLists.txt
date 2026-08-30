@@ -34,6 +34,10 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/org.nextkde.Kos.Pim1.service
     DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services
 )
+install(FILES
+    data/kos-pim-service.desktop
+    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart
+)
 
 if(BUILD_TESTING)
     qt_add_executable(kos-pim-store-test
