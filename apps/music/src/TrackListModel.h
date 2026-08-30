@@ -3,7 +3,7 @@
 #include "MusicTypes.h"
 
 #include <QAbstractListModel>
-#include <qqmlintegration.h>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <optional>
 

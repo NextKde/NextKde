@@ -59,6 +59,7 @@ if(BUILD_TESTING)
     )
     target_link_libraries(kos-music-core-test PRIVATE
         Qt6::Core
+        Qt6::Qml
         Qt6::Sql
         Qt6::Test
         PkgConfig::TAGLIB
