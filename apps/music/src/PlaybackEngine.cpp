@@ -302,7 +302,7 @@ void PlaybackEngine::updatePosition()
     }
     value = GST_CLOCK_TIME_NONE;
     if (gst_element_query_duration(m_playbin, GST_FORMAT_TIME, &value)
-        && value != GST_CLOCK_TIME_NONE) {
+        && value >= 0) {
         setDuration(value / GST_MSECOND);
     }
 }

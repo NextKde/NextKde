@@ -251,7 +251,7 @@ void Transcoder::updateProgress()
     gint64 duration = GST_CLOCK_TIME_NONE;
     if (!gst_element_query_position(m_pipeline, GST_FORMAT_TIME, &position)
         || !gst_element_query_duration(m_pipeline, GST_FORMAT_TIME, &duration)
-        || duration <= 0 || duration == GST_CLOCK_TIME_NONE) {
+        || duration <= 0) {
         return;
     }
     const double value = std::clamp(static_cast<double>(position)

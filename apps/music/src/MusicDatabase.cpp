@@ -25,6 +25,11 @@ bool execute(QSqlQuery &query, const QString &statement, QString *errorMessage)
     return false;
 }
 
+QString nonNull(const QString &value)
+{
+    return value.isNull() ? QStringLiteral("") : value;
+}
+
 } // namespace
 
 MusicDatabase::~MusicDatabase()
@@ -244,8 +249,9 @@ bool MusicDatabase::applyScan(const ScanResult &result, QString *errorMessage)
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     for (const TrackRecord &track : result.changedTracks) {
         const QVariantList values{
-            libraryRootId, track.path, track.url, track.title, track.artist, track.album,
-            track.albumArtist, track.genre, track.artworkUrl, track.format,
+            libraryRootId, nonNull(track.path), nonNull(track.url), nonNull(track.title),
+            nonNull(track.artist), nonNull(track.album), nonNull(track.albumArtist),
+            nonNull(track.genre), nonNull(track.artworkUrl), nonNull(track.format),
             track.durationMs, track.fileSize, track.modifiedMs, now, scanToken,
             track.trackNumber, track.discNumber, track.year,
         };
