@@ -128,6 +128,10 @@ void WeatherClientTest::reconnectsWhenServiceAppearsAfterInitialFailure()
     qputenv("XDG_STATE_HOME", stateDirectory.path().toUtf8());
     qputenv("XDG_RUNTIME_DIR", runtimeDirectory.path().toUtf8());
 
+    // Keep the server alive until after the client has torn down its socket.
+    // Destroying a QLocalServer with an unaccepted pending connection before
+    // the peer socket can trigger allocator corruption on Qt 6.11.
+    QLocalServer service;
     WeatherClient client;
     QTRY_VERIFY_WITH_TIMEOUT(!client.errorMessage().isEmpty(), 1000);
     QVERIFY(!client.connected());
@@ -135,11 +139,17 @@ void WeatherClientTest::reconnectsWhenServiceAppearsAfterInitialFailure()
     const QString socketPath = QDir(runtimeDirectory.path()).filePath(
         QStringLiteral("shell-data-service.sock"));
     QLocalServer::removeServer(socketPath);
-    QLocalServer service;
     QVERIFY2(service.listen(socketPath), qPrintable(service.errorString()));
 
     QTRY_VERIFY_WITH_TIMEOUT(client.connected(), 3000);
     QTRY_VERIFY_WITH_TIMEOUT(service.hasPendingConnections(), 1000);
+
+    QLocalSocket *serverSocket = service.nextPendingConnection();
+    QVERIFY(serverSocket);
+    serverSocket->disconnectFromServer();
+    if (serverSocket->state() != QLocalSocket::UnconnectedState)
+        QVERIFY(serverSocket->waitForDisconnected(1000));
+    QTRY_VERIFY_WITH_TIMEOUT(!client.connected(), 1000);
 }
 
 QTEST_GUILESS_MAIN(WeatherClientTest)
