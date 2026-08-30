@@ -4,6 +4,7 @@
 #include <QDBusConnection>
 #include <QDBusError>
 #include <QDebug>
+#include <QTimer>
 
 int main(int argc, char *argv[])
 {
@@ -25,5 +26,18 @@ int main(int argc, char *argv[])
         qCritical() << "Unable to own PIM service name:" << bus.lastError().message();
         return 1;
     }
+
+    // D-Bus-activated services must not outlive the session bus. This can
+    // otherwise leave a detached PIM process behind when a user logs out or a
+    // private test session ends.
+    QTimer connectionWatchdog;
+    connectionWatchdog.setInterval(1000);
+    QObject::connect(&connectionWatchdog, &QTimer::timeout, &application,
+                     [&application, &bus] {
+                         if (!bus.isConnected())
+                             application.quit();
+                     });
+    connectionWatchdog.start();
+
     return application.exec();
 }
