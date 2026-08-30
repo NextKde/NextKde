@@ -10,6 +10,8 @@ Dialog {
 
     property string editingId: ""
     property string calendarId: "personal"
+    property string linkedTodoId: ""
+    property var availableLists: []
     readonly property bool editing: editingId.length > 0
 
     signal saveRequested(string uid, var event)
@@ -18,7 +20,7 @@ Dialog {
     title: editing ? qsTr("Edit event") : qsTr("New event")
     modal: true
     width: Math.min(620, parent ? parent.width - 48 : 620)
-    height: Math.min(680, parent ? parent.height - 48 : 680)
+    height: Math.min(730, parent ? parent.height - 48 : 730)
     anchors.centerIn: parent
     standardButtons: Dialog.Save | Dialog.Cancel
 
@@ -63,18 +65,47 @@ Dialog {
         return index >= 0 ? index : 0
     }
 
-    function openForDate(date) {
+    function value(record, key, fallback) {
+        if (record === null || record === undefined)
+            return fallback
+        const result = record[key]
+        return result === undefined || result === null ? fallback : result
+    }
+
+    function listIndex(id) {
+        for (let index = 0; index < availableLists.length; index++) {
+            if (String(value(availableLists[index], "id", "")) === String(id))
+                return index
+        }
+        return 0
+    }
+
+    function priorityIndex(priority) {
+        const number = Number(priority)
+        if (number <= 0) return 0
+        if (number <= 3) return 3
+        if (number <= 6) return 2
+        return 1
+    }
+
+    function openForDate(date, hour) {
+        const startHour = hour === undefined ? 9 : Math.max(0, Math.min(22, Number(hour)))
         editingId = ""
+        calendarId = "personal"
+        linkedTodoId = ""
         titleField.text = ""
         descriptionField.text = ""
         locationField.text = ""
         startDateField.text = dateText(date)
         endDateField.text = dateText(date)
-        startTimeField.text = "09:00"
-        endTimeField.text = "10:00"
+        startTimeField.text = twoDigits(startHour) + ":00"
+        endTimeField.text = twoDigits(startHour + 1) + ":00"
         allDayCheck.checked = false
         recurrenceBox.currentIndex = 0
         reminderBox.currentIndex = 0
+        linkTodoCheck.checked = false
+        todoListBox.currentIndex = listIndex("personal")
+        todoPriorityBox.currentIndex = 0
         open()
         titleField.forceActiveFocus()
     }
@@ -84,6 +115,7 @@ Dialog {
         const fallbackDate = dateText(now)
         editingId = String(event?.seriesId ?? event?.id ?? "")
         calendarId = String(event?.calendarId ?? "personal")
+        linkedTodoId = String(event?.linkedTodoId ?? "")
         titleField.text = String(event?.title ?? "")
         descriptionField.text = String(event?.description ?? "")
         locationField.text = String(event?.location ?? "")
@@ -94,6 +126,9 @@ Dialog {
         allDayCheck.checked = Boolean(event?.allDay)
         recurrenceBox.currentIndex = recurrenceIndex(event?.recurrence)
         reminderBox.currentIndex = reminderIndex(event?.reminderMinutes)
+        linkTodoCheck.checked = linkedTodoId.length > 0
+        todoListBox.currentIndex = listIndex(event?.linkedTodoListId ?? "personal")
+        todoPriorityBox.currentIndex = priorityIndex(event?.linkedTodoPriority ?? 0)
         open()
         titleField.forceActiveFocus()
     }
@@ -101,6 +136,9 @@ Dialog {
     function eventPayload() {
         const recurrenceValues = ["none", "daily", "weekly", "monthly", "yearly"]
         const reminderValues = [-1, 0, 5, 15, 30, 60, 1440]
+        const priorityValues = [0, 9, 5, 1]
+        const list = availableLists.length > 0
+            ? availableLists[Math.max(0, todoListBox.currentIndex)] : ({ id: "inbox" })
         return {
             title: titleField.text.trim(),
             description: descriptionField.text.trim(),
@@ -112,7 +150,10 @@ Dialog {
             allDay: allDayCheck.checked,
             calendarId: calendarId,
             recurrence: recurrenceValues[recurrenceBox.currentIndex],
-            reminderMinutes: reminderValues[reminderBox.currentIndex]
+            reminderMinutes: reminderValues[reminderBox.currentIndex],
+            linkedTodo: linkTodoCheck.checked,
+            todoListId: String(value(list, "id", "inbox")),
+            todoPriority: priorityValues[todoPriorityBox.currentIndex]
         }
     }
 
@@ -204,6 +245,69 @@ Dialog {
                 Layout.fillWidth: true
                 placeholderText: qsTr("Optional location")
                 Accessible.name: qsTr("Event location")
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: todoLinkLayout.implicitHeight + 24
+                radius: AppTheme.smallRadius
+                color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.13 : 0.08)
+                border.width: 1
+                border.color: AppTheme.withAlpha(AppTheme.accent, 0.24)
+
+                ColumnLayout {
+                    id: todoLinkLayout
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+
+                    CheckBox {
+                        id: linkTodoCheck
+                        text: qsTr("Also show this event as a task in Todo")
+                        font.weight: Font.DemiBold
+                        Accessible.description: qsTr("The title and schedule stay synchronized")
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
+                            ? qsTr("Saving will unlink the existing task but keep it in Todo.")
+                            : qsTr("Changes to the title or date will be reflected in both apps.")
+                        color: root.linkedTodoId.length > 0 && !linkTodoCheck.checked
+                            ? AppTheme.warning : AppTheme.mutedText
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: linkTodoCheck.checked
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Label { text: qsTr("Todo list"); color: AppTheme.mutedText }
+                            ComboBox {
+                                id: todoListBox
+                                Layout.fillWidth: true
+                                model: root.availableLists
+                                textRole: "name"
+                                Accessible.name: qsTr("Linked todo list")
+                            }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Label { text: qsTr("Priority"); color: AppTheme.mutedText }
+                            ComboBox {
+                                id: todoPriorityBox
+                                Layout.fillWidth: true
+                                model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
+                                    qsTr("High")]
+                                Accessible.name: qsTr("Linked todo priority")
+                            }
+                        }
+                    }
+                }
             }
 
             RowLayout {

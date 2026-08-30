@@ -112,6 +112,11 @@ QVariantList PimClient::occurrences() const
     return m_occurrences;
 }
 
+QVariantList PimClient::todoOccurrences() const
+{
+    return m_todoOccurrences;
+}
+
 QVariantList PimClient::todos() const
 {
     return m_todos;
@@ -280,6 +285,8 @@ void PimClient::handleReply(QDBusPendingCallWatcher *watcher, ReplyKind kind,
     }
     if (kind == ReplyKind::Range) {
         m_occurrences = object.value(QStringLiteral("occurrences")).toArray().toVariantList();
+        m_todoOccurrences = object.value(QStringLiteral("todoOccurrences"))
+                                .toArray().toVariantList();
         emit occurrencesChanged();
         return;
     }

@@ -47,18 +47,54 @@ void PimClientDbusTest::clientTracksRemoteService()
     client.createTodo({
         {QStringLiteral("title"), QStringLiteral("Client-observed task")},
         {QStringLiteral("listId"), QStringLiteral("inbox")},
+        {QStringLiteral("due"), QStringLiteral("2026-09-04T18:00:00+08:00")},
     });
     QTRY_COMPARE_WITH_TIMEOUT(successSpy.count(), 1, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(snapshotSpy.count() >= 1, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(client.todos().size(), 1, 5000);
     QCOMPARE(client.todos().first().toMap().value(QStringLiteral("title")).toString(),
              QStringLiteral("Client-observed task"));
+    client.setEventRange(QStringLiteral("2026-09-01"), QStringLiteral("2026-09-10"));
+    QTRY_COMPARE_WITH_TIMEOUT(client.todoOccurrences().size(), 1, 5000);
 
     const QString uid = client.todos().first().toMap().value(QStringLiteral("id")).toString();
     client.updateTodo(uid, {{QStringLiteral("completed"), true}});
     QTRY_COMPARE_WITH_TIMEOUT(successSpy.count(), 2, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(
         client.todos().first().toMap().value(QStringLiteral("completed")).toBool(), 5000);
+
+    client.createEvent({
+        {QStringLiteral("title"), QStringLiteral("Client-linked event")},
+        {QStringLiteral("start"), QStringLiteral("2026-09-06T10:00:00+08:00")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-06T11:00:00+08:00")},
+        {QStringLiteral("linkedTodo"), true},
+        {QStringLiteral("todoListId"), QStringLiteral("inbox")},
+    });
+    QTRY_COMPARE_WITH_TIMEOUT(successSpy.count(), 3, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(client.events().size(), 1, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(client.todos().size(), 2, 5000);
+    const QVariantMap linkedEvent = client.events().first().toMap();
+    const QString linkedTodoId = linkedEvent.value(QStringLiteral("linkedTodoId")).toString();
+    QVERIFY(!linkedTodoId.isEmpty());
+
+    client.updateEvent(linkedEvent.value(QStringLiteral("id")).toString(), {
+        {QStringLiteral("title"), QStringLiteral("Client-linked update")},
+        {QStringLiteral("start"), QStringLiteral("2026-09-06T12:00:00+08:00")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-06T13:00:00+08:00")},
+    });
+    QTRY_COMPARE_WITH_TIMEOUT(successSpy.count(), 4, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT([&] {
+        for (const QVariant &entry : client.todos()) {
+            const QVariantMap todo = entry.toMap();
+            if (todo.value(QStringLiteral("id")).toString() == linkedTodoId) {
+                return todo.value(QStringLiteral("title")).toString()
+                    == QStringLiteral("Client-linked update")
+                    && todo.value(QStringLiteral("due")).toString().startsWith(
+                        QStringLiteral("2026-09-06T12:00"));
+            }
+        }
+        return false;
+    }(), 5000);
 
     service.terminate();
     if (!service.waitForFinished(3000)) {

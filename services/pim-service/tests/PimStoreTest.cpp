@@ -33,6 +33,9 @@ private slots:
     void recurringEventExpandsForRange();
     void todoListsAndCompletionPersist();
     void recurringTodoCanUseDueDate();
+    void recurringTodoExpandsForCalendarRange();
+    void linkedEventAndTodoStayInSync();
+    void removingLinkedItemPreservesCounterpart();
     void invalidUpdatesDoNotMutateItems();
     void exportsAndImportsIcalendar();
 };
@@ -153,6 +156,144 @@ void PimStoreTest::recurringTodoCanUseDueDate()
     QCOMPARE(todos.first().toObject().value(QStringLiteral("recurrence")).toString(),
              QStringLiteral("daily"));
     QCOMPARE(todos.first().toObject().value(QStringLiteral("reminderMinutes")).toInt(), 15);
+}
+
+void PimStoreTest::recurringTodoExpandsForCalendarRange()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PimStore store(directory.path());
+    QVERIFY(parseObject(store.createTodo(encode({
+        {QStringLiteral("title"), QStringLiteral("Calendar-visible task")},
+        {QStringLiteral("due"), QStringLiteral("2026-09-03T18:00:00+08:00")},
+        {QStringLiteral("recurrence"), QStringLiteral("daily")},
+        {QStringLiteral("recurrenceCount"), 3},
+    }))).value(QStringLiteral("ok")).toBool());
+
+    const QJsonObject range = parseObject(store.eventsForRange(
+        QStringLiteral("2026-09-01"), QStringLiteral("2026-09-08")));
+    QVERIFY(range.value(QStringLiteral("ok")).toBool());
+    const QJsonArray occurrences = range.value(QStringLiteral("todoOccurrences")).toArray();
+    QCOMPARE(occurrences.size(), 3);
+    QCOMPARE(occurrences.first().toObject().value(QStringLiteral("due"))
+                 .toString().left(10), QStringLiteral("2026-09-03"));
+}
+
+void PimStoreTest::linkedEventAndTodoStayInSync()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QString eventId;
+    QString todoId;
+    {
+        PimStore store(directory.path());
+        const QJsonObject created = parseObject(store.createEvent(encode({
+            {QStringLiteral("title"), QStringLiteral("Release planning")},
+            {QStringLiteral("description"), QStringLiteral("Prepare the milestone")},
+            {QStringLiteral("start"), QStringLiteral("2026-09-10T09:00:00+08:00")},
+            {QStringLiteral("end"), QStringLiteral("2026-09-10T10:30:00+08:00")},
+            {QStringLiteral("linkedTodo"), true},
+            {QStringLiteral("todoListId"), QStringLiteral("personal")},
+            {QStringLiteral("todoPriority"), 2},
+        })));
+        QVERIFY2(created.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(created.value(QStringLiteral("error")).toObject()
+                                .value(QStringLiteral("message")).toString()));
+        const QJsonObject createdEvent = created.value(QStringLiteral("item")).toObject();
+        eventId = createdEvent.value(QStringLiteral("id")).toString();
+        todoId = createdEvent.value(QStringLiteral("linkedTodoId")).toString();
+        QVERIFY(!eventId.isEmpty());
+        QVERIFY(!todoId.isEmpty());
+
+        QJsonObject snapshot = parseObject(store.snapshot());
+        QCOMPARE(snapshot.value(QStringLiteral("todos")).toArray().size(), 1);
+        QJsonObject todo = snapshot.value(QStringLiteral("todos")).toArray()
+                               .first().toObject();
+        QCOMPARE(todo.value(QStringLiteral("id")).toString(), todoId);
+        QCOMPARE(todo.value(QStringLiteral("linkedEventId")).toString(), eventId);
+        QCOMPARE(todo.value(QStringLiteral("due")).toString().left(16),
+                 QStringLiteral("2026-09-10T09:00"));
+        QCOMPARE(todo.value(QStringLiteral("priority")).toInt(), 2);
+
+        QVERIFY(parseObject(store.updateEvent(eventId, encode({
+            {QStringLiteral("title"), QStringLiteral("Release readiness")},
+            {QStringLiteral("start"), QStringLiteral("2026-09-10T11:00:00+08:00")},
+            {QStringLiteral("end"), QStringLiteral("2026-09-10T12:30:00+08:00")},
+        }))).value(QStringLiteral("ok")).toBool());
+        todo = parseObject(store.snapshot()).value(QStringLiteral("todos"))
+                   .toArray().first().toObject();
+        QCOMPARE(todo.value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Release readiness"));
+        QCOMPARE(todo.value(QStringLiteral("due")).toString().left(16),
+                 QStringLiteral("2026-09-10T11:00"));
+
+        QVERIFY(parseObject(store.updateTodo(todoId, encode({
+            {QStringLiteral("title"), QStringLiteral("Ship release")},
+            {QStringLiteral("due"), QStringLiteral("2026-09-11T14:00:00+08:00")},
+            {QStringLiteral("completed"), true},
+        }))).value(QStringLiteral("ok")).toBool());
+        snapshot = parseObject(store.snapshot());
+        const QJsonObject event = snapshot.value(QStringLiteral("events"))
+                                      .toArray().first().toObject();
+        QCOMPARE(event.value(QStringLiteral("title")).toString(),
+                 QStringLiteral("Ship release"));
+        QCOMPARE(event.value(QStringLiteral("start")).toString().left(16),
+                 QStringLiteral("2026-09-11T14:00"));
+        QCOMPARE(event.value(QStringLiteral("end")).toString().left(16),
+                 QStringLiteral("2026-09-11T15:30"));
+        QVERIFY(event.value(QStringLiteral("linkedTodoCompleted")).toBool());
+    }
+
+    PimStore reloaded(directory.path());
+    const QJsonObject snapshot = parseObject(reloaded.snapshot());
+    QCOMPARE(snapshot.value(QStringLiteral("events")).toArray().first().toObject()
+                 .value(QStringLiteral("linkedTodoId")).toString(), todoId);
+    QCOMPARE(snapshot.value(QStringLiteral("todos")).toArray().first().toObject()
+                 .value(QStringLiteral("linkedEventId")).toString(), eventId);
+}
+
+void PimStoreTest::removingLinkedItemPreservesCounterpart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PimStore store(directory.path());
+    const QJsonObject created = parseObject(store.createEvent(encode({
+        {QStringLiteral("title"), QStringLiteral("Keep the task")},
+        {QStringLiteral("start"), QStringLiteral("2026-09-12T09:00:00Z")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-12T10:00:00Z")},
+        {QStringLiteral("linkedTodo"), true},
+        {QStringLiteral("reminderMinutes"), 15},
+    })));
+    QVERIFY(created.value(QStringLiteral("ok")).toBool());
+    const QString eventId = created.value(QStringLiteral("item")).toObject()
+                                .value(QStringLiteral("id")).toString();
+
+    QVERIFY(parseObject(store.removeEvent(eventId))
+                .value(QStringLiteral("ok")).toBool());
+    const QJsonObject snapshot = parseObject(store.snapshot());
+    QCOMPARE(snapshot.value(QStringLiteral("events")).toArray().size(), 0);
+    QCOMPARE(snapshot.value(QStringLiteral("todos")).toArray().size(), 1);
+    QVERIFY(snapshot.value(QStringLiteral("todos")).toArray().first().toObject()
+                .value(QStringLiteral("linkedEventId")).toString().isEmpty());
+    QCOMPARE(snapshot.value(QStringLiteral("todos")).toArray().first().toObject()
+                 .value(QStringLiteral("reminderMinutes")).toInt(), 15);
+
+    const QJsonObject second = parseObject(store.createEvent(encode({
+        {QStringLiteral("title"), QStringLiteral("Keep the event")},
+        {QStringLiteral("start"), QStringLiteral("2026-09-13T09:00:00Z")},
+        {QStringLiteral("end"), QStringLiteral("2026-09-13T10:00:00Z")},
+        {QStringLiteral("linkedTodo"), true},
+    })));
+    QVERIFY(second.value(QStringLiteral("ok")).toBool());
+    const QString secondTodoId = second.value(QStringLiteral("item")).toObject()
+                                     .value(QStringLiteral("linkedTodoId")).toString();
+    QVERIFY(parseObject(store.removeTodo(secondTodoId))
+                .value(QStringLiteral("ok")).toBool());
+    const QJsonArray events = parseObject(store.snapshot())
+                                  .value(QStringLiteral("events")).toArray();
+    QCOMPARE(events.size(), 1);
+    QVERIFY(events.first().toObject().value(QStringLiteral("linkedTodoId"))
+                .toString().isEmpty());
 }
 
 void PimStoreTest::invalidUpdatesDoNotMutateItems()

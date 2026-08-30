@@ -16,6 +16,7 @@ qt_add_qml_module(kos_ui
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
         controls/LiquidTextField.qml
+        controls/LiquidSegmentedControl.qml
 )
 
 add_library(Kos::Ui ALIAS kos_ui)

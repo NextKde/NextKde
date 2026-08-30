@@ -46,6 +46,9 @@ KosApplicationWindow {
                 include = !completed && due === today
             else if (activeFilter === "planned")
                 include = !completed && due.length > 0
+            else if (activeFilter === "calendar")
+                include = !completed
+                    && String(value(todo, "linkedEventId", "")).length > 0
             else if (activeFilter === "completed")
                 include = completed
             else if (activeFilter === "list")
@@ -60,6 +63,7 @@ KosApplicationWindow {
     function filterTitle() {
         if (activeFilter === "today") return qsTr("Today")
         if (activeFilter === "planned") return qsTr("Planned")
+        if (activeFilter === "calendar") return qsTr("Calendar")
         if (activeFilter === "completed") return qsTr("Completed")
         if (activeFilter === "list") return listName(activeListId)
         return qsTr("Inbox")
@@ -223,6 +227,15 @@ KosApplicationWindow {
                     checked: root.activeFilter === "planned"
                     ButtonGroup.group: navigationGroup
                     onClicked: root.selectFilter("planned")
+                }
+
+                KosNavigationButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Calendar")
+                    symbol: "▦"
+                    checked: root.activeFilter === "calendar"
+                    ButtonGroup.group: navigationGroup
+                    onClicked: root.selectFilter("calendar")
                 }
 
                 KosNavigationButton {
@@ -482,6 +495,15 @@ KosApplicationWindow {
                                             visible: String(root.value(taskDelegate.modelData,
                                                 "recurrence", "none")) !== "none"
                                             Accessible.name: qsTr("Repeating task")
+                                        }
+
+                                        Label {
+                                            text: qsTr("Calendar linked")
+                                            color: AppTheme.accent
+                                            font.pixelSize: 10
+                                            font.weight: Font.DemiBold
+                                            visible: String(root.value(taskDelegate.modelData,
+                                                "linkedEventId", "")).length > 0
                                         }
                                     }
                                 }

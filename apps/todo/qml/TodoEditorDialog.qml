@@ -11,7 +11,9 @@ Dialog {
     property string editingId: ""
     property var availableLists: []
     property string defaultListId: "inbox"
+    property string linkedEventId: ""
     readonly property bool editing: editingId.length > 0
+    readonly property bool linkedToCalendar: linkedEventId.length > 0
 
     signal saveRequested(string uid, var todo)
     signal deleteRequested(string uid)
@@ -67,6 +69,7 @@ Dialog {
 
     function openNew() {
         editingId = ""
+        linkedEventId = ""
         titleField.text = ""
         descriptionField.text = ""
         listBox.currentIndex = listIndex(defaultListId)
@@ -82,6 +85,7 @@ Dialog {
 
     function openForTodo(todo) {
         editingId = String(value(todo, "id", ""))
+        linkedEventId = String(value(todo, "linkedEventId", ""))
         titleField.text = String(value(todo, "title", ""))
         descriptionField.text = String(value(todo, "description", ""))
         listBox.currentIndex = listIndex(value(todo, "listId", "inbox"))
@@ -126,6 +130,26 @@ Dialog {
         ColumnLayout {
             width: parent.width
             spacing: 12
+
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: linkedInfo.implicitHeight + 22
+                radius: AppTheme.smallRadius
+                visible: root.linkedToCalendar
+                color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.14 : 0.09)
+                border.width: 1
+                border.color: AppTheme.withAlpha(AppTheme.accent, 0.26)
+
+                Label {
+                    id: linkedInfo
+                    anchors.fill: parent
+                    anchors.margins: 11
+                    text: qsTr("Linked to a Calendar event. Changes to the title and due date will update both apps; reminders are managed by Calendar.")
+                    color: AppTheme.text
+                    wrapMode: Text.WordWrap
+                    font.pixelSize: 11
+                }
+            }
 
             Label { text: qsTr("Title"); color: AppTheme.mutedText }
             LiquidTextField {
@@ -210,6 +234,7 @@ Dialog {
                         id: reminderBox
                         Layout.fillWidth: true
                         enabled: dueDateField.text.trim().length > 0
+                            && !root.linkedToCalendar
                         model: [qsTr("None"), qsTr("At due time"), qsTr("5 minutes before"),
                             qsTr("15 minutes before"), qsTr("30 minutes before"),
                             qsTr("1 hour before"), qsTr("1 day before")]

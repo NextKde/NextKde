@@ -21,6 +21,7 @@ class PimClient : public QObject {
     Q_PROPERTY(QVariantList lists READ lists NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList events READ events NOTIFY snapshotChanged)
     Q_PROPERTY(QVariantList occurrences READ occurrences NOTIFY occurrencesChanged)
+    Q_PROPERTY(QVariantList todoOccurrences READ todoOccurrences NOTIFY occurrencesChanged)
     Q_PROPERTY(QVariantList todos READ todos NOTIFY snapshotChanged)
 
 public:
@@ -35,6 +36,7 @@ public:
     QVariantList lists() const;
     QVariantList events() const;
     QVariantList occurrences() const;
+    QVariantList todoOccurrences() const;
     QVariantList todos() const;
 
     Q_INVOKABLE void refresh();
@@ -97,5 +99,6 @@ private:
     QVariantList m_lists;
     QVariantList m_events;
     QVariantList m_occurrences;
+    QVariantList m_todoOccurrences;
     QVariantList m_todos;
 };

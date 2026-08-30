@@ -41,6 +41,8 @@ constexpr auto keyListId = "LIST-ID";
 constexpr auto keyParentId = "PARENT-ID";
 constexpr auto keyOrder = "ORDER";
 constexpr auto keyRecurrence = "RECURRENCE-PRESET";
+constexpr auto keyLinkedTodoId = "LINKED-TODO-ID";
+constexpr auto keyLinkedEventId = "LINKED-EVENT-ID";
 
 QString defaultStorageDirectory()
 {
@@ -227,13 +229,127 @@ bool applyRecurrence(const KCalendarCore::Incidence::Ptr &incidence,
     return true;
 }
 
+QString linkedEventId(const KCalendarCore::Todo::Ptr &todo)
+{
+    const QString customId = todo->customProperty(customApp, keyLinkedEventId);
+    return customId.isEmpty() ? todo->relatedTo() : customId;
+}
+
+QString linkedTodoId(const KCalendarCore::Event::Ptr &event,
+                     const KCalendarCore::MemoryCalendar *calendar)
+{
+    const QString customId = event->customProperty(customApp, keyLinkedTodoId);
+    if (!customId.isEmpty() && (!calendar || calendar->todo(customId)))
+        return customId;
+    if (!calendar)
+        return customId;
+    for (const KCalendarCore::Todo::Ptr &todo : calendar->rawTodos()) {
+        if (linkedEventId(todo) == event->uid())
+            return todo->uid();
+    }
+    return {};
+}
+
+void linkEventAndTodo(const KCalendarCore::Event::Ptr &event,
+                      const KCalendarCore::Todo::Ptr &todo)
+{
+    event->setCustomProperty(customApp, keyLinkedTodoId, todo->uid());
+    todo->setCustomProperty(customApp, keyLinkedEventId, event->uid());
+    // RELATED-TO keeps the relationship meaningful to other iCalendar tools.
+    // The reverse lookup remains an X-property because one VEVENT can only
+    // carry one standard relation of each type in KCalendarCore.
+    todo->setRelatedTo(event->uid());
+}
+
+void unlinkEventAndTodo(const KCalendarCore::Event::Ptr &event,
+                        const KCalendarCore::Todo::Ptr &todo)
+{
+    if (event && todo && reminderMinutes(todo) < 0)
+        applyReminder(todo, reminderMinutes(event));
+    if (event)
+        event->removeCustomProperty(customApp, keyLinkedTodoId);
+    if (todo) {
+        todo->removeCustomProperty(customApp, keyLinkedEventId);
+        todo->setRelatedTo(QString{});
+    }
+}
+
+bool copyEditableRecurrence(const KCalendarCore::Incidence::Ptr &source,
+                            const KCalendarCore::Incidence::Ptr &destination,
+                            QString *message)
+{
+    const QString preset = recurrencePreset(source);
+    if (preset == QLatin1String("custom"))
+        return true;
+    return applyRecurrence(destination, {
+        {QStringLiteral("recurrence"), preset},
+    }, message);
+}
+
+bool synchronizeTodoFromEvent(const KCalendarCore::Event::Ptr &event,
+                              const KCalendarCore::Todo::Ptr &todo,
+                              const QString &listId, int priority,
+                              QString *message)
+{
+    todo->setSummary(event->summary());
+    todo->setDescription(event->description());
+    todo->setAllDay(event->allDay());
+    todo->setDtStart(event->dtStart());
+    todo->setDtDue(event->dtStart(), true);
+    todo->setPriority(std::clamp(priority, 0, 9));
+    todo->setCustomProperty(customApp, keyListId, listId);
+    if (todo->customProperty(customApp, keyOrder).isEmpty()) {
+        todo->setCustomProperty(customApp, keyOrder,
+                                QString::number(QDateTime::currentMSecsSinceEpoch()));
+    }
+    if (!copyEditableRecurrence(event, todo, message))
+        return false;
+    // The event owns the alarm so a linked pair never emits duplicate desktop
+    // notifications for the same appointment.
+    applyReminder(todo, -1);
+    linkEventAndTodo(event, todo);
+    return true;
+}
+
+bool synchronizeEventFromTodo(const KCalendarCore::Todo::Ptr &todo,
+                              const KCalendarCore::Event::Ptr &event,
+                              QString *message)
+{
+    if (!todo->hasDueDate()) {
+        *message = QStringLiteral("A task linked to a calendar event requires a due date");
+        return false;
+    }
+    todo->setDtStart(todo->dtDue(true));
+    const QDateTime oldStart = event->dtStart();
+    const QDateTime oldEnd = event->dtEnd();
+    const qint64 durationSeconds = std::max<qint64>(60, oldStart.secsTo(oldEnd));
+    const qint64 durationDays = std::max<qint64>(
+        1, oldStart.date().daysTo(oldEnd.date()));
+    const QDateTime start = todo->dtDue(true);
+
+    event->setSummary(todo->summary());
+    event->setDescription(todo->description());
+    event->setAllDay(todo->allDay());
+    event->setDtStart(start);
+    event->setDtEnd(todo->allDay() ? start.addDays(durationDays)
+                                  : start.addSecs(durationSeconds));
+    if (!copyEditableRecurrence(todo, event, message))
+        return false;
+    linkEventAndTodo(event, todo);
+    return true;
+}
+
 QJsonObject eventObject(const KCalendarCore::Event::Ptr &event,
                         const QDateTime &occurrenceStart = {},
                         const QDateTime &occurrenceEnd = {},
-                        const QDateTime &recurrenceId = {})
+                        const QDateTime &recurrenceId = {},
+                        const KCalendarCore::MemoryCalendar *calendar = nullptr)
 {
     const QDateTime start = occurrenceStart.isValid() ? occurrenceStart : event->dtStart();
     const QDateTime end = occurrenceEnd.isValid() ? occurrenceEnd : event->dtEnd();
+    const QString todoId = linkedTodoId(event, calendar);
+    const KCalendarCore::Todo::Ptr linkedTodo = calendar && !todoId.isEmpty()
+        ? calendar->todo(todoId) : KCalendarCore::Todo::Ptr{};
     return {
         {QStringLiteral("id"), event->uid()},
         {QStringLiteral("seriesId"), event->uid()},
@@ -251,6 +367,11 @@ QJsonObject eventObject(const KCalendarCore::Event::Ptr &event,
         {QStringLiteral("recurrence"), recurrencePreset(event)},
         {QStringLiteral("recurrenceId"), encodeDateTime(recurrenceId)},
         {QStringLiteral("reminderMinutes"), reminderMinutes(event)},
+        {QStringLiteral("linkedTodoId"), todoId},
+        {QStringLiteral("linkedTodoCompleted"), linkedTodo && linkedTodo->isCompleted()},
+        {QStringLiteral("linkedTodoListId"), linkedTodo
+                 ? linkedTodo->customProperty(customApp, keyListId) : QString{}},
+        {QStringLiteral("linkedTodoPriority"), linkedTodo ? linkedTodo->priority() : 0},
         {QStringLiteral("modifiedAt"), encodeDateTime(event->lastModified())},
     };
 }
@@ -276,8 +397,26 @@ QJsonObject todoObject(const KCalendarCore::Todo::Ptr &todo)
                  ? encodeDateTime(todo->completed()) : QString{}},
         {QStringLiteral("recurrence"), recurrencePreset(todo)},
         {QStringLiteral("reminderMinutes"), reminderMinutes(todo)},
+        {QStringLiteral("linkedEventId"), linkedEventId(todo)},
         {QStringLiteral("modifiedAt"), encodeDateTime(todo->lastModified())},
     };
+}
+
+QJsonObject todoOccurrenceObject(const KCalendarCore::Todo::Ptr &todo,
+                                 const QDateTime &occurrenceStart,
+                                 const QDateTime &occurrenceEnd,
+                                 const QDateTime &recurrenceId)
+{
+    QJsonObject object = todoObject(todo);
+    object.insert(QStringLiteral("seriesId"), todo->uid());
+    object.insert(QStringLiteral("recurrenceId"), encodeDateTime(recurrenceId));
+    if (todo->hasStartDate() && occurrenceStart.isValid())
+        object.insert(QStringLiteral("start"), encodeDateTime(occurrenceStart));
+    if (todo->hasDueDate()) {
+        object.insert(QStringLiteral("due"), encodeDateTime(
+            occurrenceEnd.isValid() ? occurrenceEnd : occurrenceStart));
+    }
+    return object;
 }
 
 bool writeAtomic(const QString &path, const QByteArray &contents, QString *message)
@@ -492,7 +631,7 @@ QString PimStore::snapshot() const
     QJsonArray events;
     QList<QJsonObject> sortedEvents;
     for (const KCalendarCore::Event::Ptr &event : d->calendar->rawEvents())
-        sortedEvents.append(eventObject(event));
+        sortedEvents.append(eventObject(event, {}, {}, {}, d->calendar.data()));
     std::sort(sortedEvents.begin(), sortedEvents.end(), [](const QJsonObject &left,
                                                             const QJsonObject &right) {
         return left.value(QStringLiteral("start")).toString()
@@ -546,19 +685,31 @@ QString PimStore::eventsForRange(const QString &startDate, const QString &endDat
         *d->calendar, QDateTime(start, QTime(0, 0), zone),
         QDateTime(end.addDays(1), QTime(0, 0), zone).addMSecs(-1));
     QJsonArray occurrences;
-    while (iterator.hasNext() && occurrences.size() < 5000) {
+    QJsonArray todoOccurrences;
+    while (iterator.hasNext()
+           && occurrences.size() + todoOccurrences.size() < 5000) {
         iterator.next();
         const auto event = qSharedPointerDynamicCast<KCalendarCore::Event>(
             iterator.incidence());
-        if (!event)
+        if (event) {
+            occurrences.append(eventObject(event, iterator.occurrenceStartDate(),
+                                           iterator.occurrenceEndDate(),
+                                           iterator.recurrenceId(), d->calendar.data()));
             continue;
-        occurrences.append(eventObject(event, iterator.occurrenceStartDate(),
-                                       iterator.occurrenceEndDate(), iterator.recurrenceId()));
+        }
+        const auto todo = qSharedPointerDynamicCast<KCalendarCore::Todo>(
+            iterator.incidence());
+        if (todo && todo->hasDueDate()) {
+            todoOccurrences.append(todoOccurrenceObject(
+                todo, iterator.occurrenceStartDate(), iterator.occurrenceEndDate(),
+                iterator.recurrenceId()));
+        }
     }
     return compactJson({
         {QStringLiteral("ok"), true},
         {QStringLiteral("revision"), static_cast<double>(d->revision)},
         {QStringLiteral("occurrences"), occurrences},
+        {QStringLiteral("todoOccurrences"), todoOccurrences},
     });
 }
 
@@ -607,14 +758,35 @@ QString PimStore::createEvent(const QString &payload)
     if (!applyRecurrence(event, input, &message))
         return errorResponse(QStringLiteral("invalid_recurrence"), message);
     applyReminder(event, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+
+    KCalendarCore::Todo::Ptr linkedTodo;
+    if (input.value(QStringLiteral("linkedTodo")).toBool()) {
+        QString listId = input.value(QStringLiteral("todoListId"))
+                             .toString(QStringLiteral("personal"));
+        if (!d->hasList(listId))
+            listId = QStringLiteral("inbox");
+        linkedTodo = KCalendarCore::Todo::Ptr(new KCalendarCore::Todo);
+        linkedTodo->setUid(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        if (!synchronizeTodoFromEvent(
+                event, linkedTodo, listId,
+                input.value(QStringLiteral("todoPriority")).toInt(), &message)) {
+            return errorResponse(QStringLiteral("invalid_linked_todo"), message);
+        }
+    }
     if (!d->calendar->addEvent(event))
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to add event"));
+    if (linkedTodo && !d->calendar->addTodo(linkedTodo)) {
+        d->calendar->deleteEvent(event);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to add the linked todo"));
+    }
     ++d->revision;
     if (!d->save(&message))
         return errorResponse(QStringLiteral("storage_error"), message);
     emit changed(d->revision);
-    return successResponse(d->revision, eventObject(event));
+    return successResponse(d->revision,
+                           eventObject(event, {}, {}, {}, d->calendar.data()));
 }
 
 QString PimStore::updateEvent(const QString &uid, const QString &payload)
@@ -624,6 +796,9 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
     const auto event = d->calendar->event(uid);
     if (!event)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Event not found"));
+    const QString existingTodoId = linkedTodoId(event, d->calendar.data());
+    const KCalendarCore::Todo::Ptr existingTodo = existingTodoId.isEmpty()
+        ? KCalendarCore::Todo::Ptr{} : d->calendar->todo(existingTodoId);
     const KCalendarCore::Event::Ptr updated(event->clone());
     QJsonObject input;
     QString message;
@@ -670,17 +845,66 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
         return errorResponse(QStringLiteral("invalid_recurrence"), message);
     if (input.contains(QStringLiteral("reminderMinutes")))
         applyReminder(updated, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+
+    const bool shouldLink = input.contains(QStringLiteral("linkedTodo"))
+        ? input.value(QStringLiteral("linkedTodo")).toBool()
+        : static_cast<bool>(existingTodo);
+    KCalendarCore::Todo::Ptr updatedTodo;
+    if (shouldLink) {
+        updatedTodo = existingTodo
+            ? KCalendarCore::Todo::Ptr(existingTodo->clone())
+            : KCalendarCore::Todo::Ptr(new KCalendarCore::Todo);
+        if (updatedTodo->uid().isEmpty())
+            updatedTodo->setUid(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        QString listId = input.value(QStringLiteral("todoListId")).toString();
+        if (listId.isEmpty() && existingTodo) {
+            listId = existingTodo->customProperty(customApp, keyListId);
+        }
+        if (listId.isEmpty())
+            listId = d->hasList(QStringLiteral("personal"))
+                ? QStringLiteral("personal") : QStringLiteral("inbox");
+        if (!d->hasList(listId))
+            return errorResponse(QStringLiteral("invalid_list"),
+                                 QStringLiteral("Linked todo list not found"));
+        const int priority = input.contains(QStringLiteral("todoPriority"))
+            ? input.value(QStringLiteral("todoPriority")).toInt()
+            : (existingTodo ? existingTodo->priority() : 0);
+        if (!synchronizeTodoFromEvent(updated, updatedTodo, listId, priority, &message))
+            return errorResponse(QStringLiteral("invalid_linked_todo"), message);
+    } else if (existingTodo) {
+        updatedTodo = KCalendarCore::Todo::Ptr(existingTodo->clone());
+        unlinkEventAndTodo(updated, updatedTodo);
+    } else {
+        updated->removeCustomProperty(customApp, keyLinkedTodoId);
+    }
+
     if (!d->calendar->deleteEvent(event) || !d->calendar->addEvent(updated)) {
         if (!d->calendar->event(uid))
             d->calendar->addEvent(event);
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to replace event"));
     }
+    bool todoUpdated = true;
+    if (updatedTodo && existingTodo) {
+        todoUpdated = d->calendar->deleteTodo(existingTodo)
+            && d->calendar->addTodo(updatedTodo);
+    } else if (updatedTodo) {
+        todoUpdated = d->calendar->addTodo(updatedTodo);
+    }
+    if (!todoUpdated) {
+        d->calendar->deleteEvent(updated);
+        d->calendar->addEvent(event);
+        if (existingTodo && !d->calendar->todo(existingTodo->uid()))
+            d->calendar->addTodo(existingTodo);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to update the linked todo"));
+    }
     ++d->revision;
     if (!d->save(&message))
         return errorResponse(QStringLiteral("storage_error"), message);
     emit changed(d->revision);
-    return successResponse(d->revision, eventObject(updated));
+    return successResponse(d->revision,
+                           eventObject(updated, {}, {}, {}, d->calendar.data()));
 }
 
 QString PimStore::removeEvent(const QString &uid)
@@ -690,9 +914,27 @@ QString PimStore::removeEvent(const QString &uid)
     const auto event = d->calendar->event(uid);
     if (!event)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Event not found"));
+    const QString todoId = linkedTodoId(event, d->calendar.data());
+    const KCalendarCore::Todo::Ptr linkedTodo = todoId.isEmpty()
+        ? KCalendarCore::Todo::Ptr{} : d->calendar->todo(todoId);
+    KCalendarCore::Todo::Ptr unlinkedTodo;
+    if (linkedTodo) {
+        unlinkedTodo = KCalendarCore::Todo::Ptr(linkedTodo->clone());
+        if (reminderMinutes(unlinkedTodo) < 0)
+            applyReminder(unlinkedTodo, reminderMinutes(event));
+        unlinkEventAndTodo(KCalendarCore::Event::Ptr{}, unlinkedTodo);
+    }
     if (!d->calendar->deleteEvent(event))
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to delete event"));
+    if (linkedTodo
+        && (!d->calendar->deleteTodo(linkedTodo) || !d->calendar->addTodo(unlinkedTodo))) {
+        d->calendar->addEvent(event);
+        if (!d->calendar->todo(linkedTodo->uid()))
+            d->calendar->addTodo(linkedTodo);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to unlink the related todo"));
+    }
     ++d->revision;
     QString message;
     if (!d->save(&message))
@@ -764,6 +1006,9 @@ QString PimStore::updateTodo(const QString &uid, const QString &payload)
     const auto todo = d->calendar->todo(uid);
     if (!todo)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Todo not found"));
+    const QString existingEventId = linkedEventId(todo);
+    const KCalendarCore::Event::Ptr existingEvent = existingEventId.isEmpty()
+        ? KCalendarCore::Event::Ptr{} : d->calendar->event(existingEventId);
     const KCalendarCore::Todo::Ptr updated(todo->clone());
     QJsonObject input;
     QString message;
@@ -819,11 +1064,33 @@ QString PimStore::updateTodo(const QString &uid, const QString &payload)
         return errorResponse(QStringLiteral("invalid_recurrence"), message);
     if (input.contains(QStringLiteral("reminderMinutes")))
         applyReminder(updated, input.value(QStringLiteral("reminderMinutes")).toInt(-1));
+
+    KCalendarCore::Event::Ptr updatedEvent;
+    if (existingEvent) {
+        updatedEvent = KCalendarCore::Event::Ptr(existingEvent->clone());
+        if (!synchronizeEventFromTodo(updated, updatedEvent, &message))
+            return errorResponse(QStringLiteral("invalid_linked_event"), message);
+        // The VEVENT is the single reminder owner for a linked pair.
+        applyReminder(updated, -1);
+    } else if (!existingEventId.isEmpty()) {
+        updated->removeCustomProperty(customApp, keyLinkedEventId);
+        updated->setRelatedTo(QString{});
+    }
     if (!d->calendar->deleteTodo(todo) || !d->calendar->addTodo(updated)) {
         if (!d->calendar->todo(uid))
             d->calendar->addTodo(todo);
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to replace todo"));
+    }
+    if (updatedEvent
+        && (!d->calendar->deleteEvent(existingEvent)
+            || !d->calendar->addEvent(updatedEvent))) {
+        d->calendar->deleteTodo(updated);
+        d->calendar->addTodo(todo);
+        if (!d->calendar->event(existingEvent->uid()))
+            d->calendar->addEvent(existingEvent);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to update the linked event"));
     }
     ++d->revision;
     if (!d->save(&message))
@@ -839,9 +1106,26 @@ QString PimStore::removeTodo(const QString &uid)
     const auto todo = d->calendar->todo(uid);
     if (!todo)
         return errorResponse(QStringLiteral("not_found"), QStringLiteral("Todo not found"));
+    const QString eventId = linkedEventId(todo);
+    const KCalendarCore::Event::Ptr linkedEvent = eventId.isEmpty()
+        ? KCalendarCore::Event::Ptr{} : d->calendar->event(eventId);
+    KCalendarCore::Event::Ptr unlinkedEvent;
+    if (linkedEvent) {
+        unlinkedEvent = KCalendarCore::Event::Ptr(linkedEvent->clone());
+        unlinkEventAndTodo(unlinkedEvent, KCalendarCore::Todo::Ptr{});
+    }
     if (!d->calendar->deleteTodo(todo))
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to delete todo"));
+    if (linkedEvent
+        && (!d->calendar->deleteEvent(linkedEvent)
+            || !d->calendar->addEvent(unlinkedEvent))) {
+        d->calendar->addTodo(todo);
+        if (!d->calendar->event(linkedEvent->uid()))
+            d->calendar->addEvent(linkedEvent);
+        return errorResponse(QStringLiteral("calendar_error"),
+                             QStringLiteral("Unable to unlink the related event"));
+    }
     for (const KCalendarCore::Todo::Ptr &candidate : d->calendar->rawTodos()) {
         if (candidate->customProperty(customApp, keyParentId) == uid)
             candidate->removeCustomProperty(customApp, keyParentId);
