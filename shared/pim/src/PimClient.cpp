@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -35,6 +36,12 @@ QString responseError(const QJsonObject &object, const QString &fallback)
     if (error.isString())
         return error.toString(fallback);
     return fallback;
+}
+
+QString localPath(const QString &value)
+{
+    const QUrl url(value);
+    return url.isLocalFile() ? url.toLocalFile() : value;
 }
 
 } // namespace
@@ -180,13 +187,13 @@ void PimClient::removeList(const QString &id)
 
 void PimClient::importIcalendar(const QString &path, bool replaceExisting)
 {
-    invoke(QStringLiteral("importIcalendar"), {path, replaceExisting}, ReplyKind::Mutation,
+    invoke(QStringLiteral("importIcalendar"), {localPath(path), replaceExisting}, ReplyKind::Mutation,
            QStringLiteral("importIcalendar"));
 }
 
 void PimClient::exportIcalendar(const QString &path)
 {
-    invoke(QStringLiteral("exportIcalendar"), {path}, ReplyKind::Mutation,
+    invoke(QStringLiteral("exportIcalendar"), {localPath(path)}, ReplyKind::Mutation,
            QStringLiteral("exportIcalendar"));
 }
 

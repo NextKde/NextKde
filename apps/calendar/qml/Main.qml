@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Kos.Pim
 import Kos.Ui
@@ -14,6 +15,7 @@ KosApplicationWindow {
 
     property date visibleMonth: new Date()
     property date selectedDate: new Date()
+    property string statusMessage: ""
     readonly property var selectedEvents: eventsForDate(selectedDate)
 
     function value(record, key, fallback) {
@@ -92,7 +94,39 @@ KosApplicationWindow {
             if (operation === "createEvent" || operation === "updateEvent"
                     || operation === "removeEvent")
                 Qt.callLater(root.updateEventRange)
+            if (operation === "importIcalendar")
+                root.showStatus(qsTr("Calendar imported"))
+            else if (operation === "exportIcalendar")
+                root.showStatus(qsTr("Calendar exported"))
         }
+    }
+
+    function showStatus(message) {
+        statusMessage = message
+        statusTimer.restart()
+    }
+
+    Timer {
+        id: statusTimer
+        interval: 3500
+        onTriggered: root.statusMessage = ""
+    }
+
+    FileDialog {
+        id: importDialog
+        title: qsTr("Import iCalendar")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("iCalendar files (*.ics)"), qsTr("All files (*)")]
+        onAccepted: pim.importIcalendar(selectedFile.toString(), false)
+    }
+
+    FileDialog {
+        id: exportDialog
+        title: qsTr("Export iCalendar")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "ics"
+        nameFilters: [qsTr("iCalendar files (*.ics)")]
+        onAccepted: pim.exportIcalendar(selectedFile.toString())
     }
 
     EventEditorDialog {
@@ -226,6 +260,12 @@ KosApplicationWindow {
                     visible: running
                 }
 
+                Label {
+                    text: root.statusMessage
+                    color: AppTheme.positive
+                    visible: text.length > 0
+                }
+
                 Button {
                     text: "‹"
                     Accessible.name: qsTr("Previous month")
@@ -248,6 +288,30 @@ KosApplicationWindow {
                     highlighted: true
                     enabled: pim.connected && pim.writable
                     onClicked: eventEditor.openForDate(root.selectedDate)
+                }
+
+                Button {
+                    id: calendarActions
+                    text: "⋯"
+                    Accessible.name: qsTr("Calendar actions")
+                    onClicked: actionsMenu.open()
+
+                    Menu {
+                        id: actionsMenu
+                        y: calendarActions.height
+
+                        MenuItem {
+                            text: qsTr("Import iCalendar…")
+                            enabled: pim.connected && pim.writable
+                            onTriggered: importDialog.open()
+                        }
+
+                        MenuItem {
+                            text: qsTr("Export iCalendar…")
+                            enabled: pim.connected && pim.ready
+                            onTriggered: exportDialog.open()
+                        }
+                    }
                 }
             }
 
