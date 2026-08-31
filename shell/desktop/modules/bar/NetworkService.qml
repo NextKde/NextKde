@@ -204,5 +204,12 @@ QtObject {
         repeat: false
         onTriggered: service.refreshWifiNetworks()
     }
+    property Connections platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected)
+                service.refresh()
+        }
+    }
     Component.onCompleted: refresh()
 }

@@ -92,5 +92,12 @@ QtObject {
         triggeredOnStart: true
         onTriggered: service.reload()
     }
+    property Connections dataTransport: Connections {
+        target: DataClient
+        function onTransportChanged(connected) {
+            if (connected)
+                service.reload()
+        }
+    }
     Component.onCompleted: reload()
 }

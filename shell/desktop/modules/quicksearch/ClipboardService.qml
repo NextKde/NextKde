@@ -179,6 +179,16 @@ QtObject {
         revision += 1
     }
 
+    property Connections platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected) {
+                service._syncWatchImages()
+                service.refresh()
+            }
+        }
+    }
+
     Component.onCompleted: {
         load()
         refresh()

@@ -89,5 +89,13 @@ QtObject {
         return result
     }
 
+    property Connections dataTransport: Connections {
+        target: DataClient
+        function onTransportChanged(connected) {
+            if (connected)
+                service.reload()
+        }
+    }
+
     Component.onCompleted: reload()
 }

@@ -256,6 +256,10 @@ QtObject {
             if (eventName === "desktop.changed")
                 service.reload()
         }
+        function onTransportChanged(connected) {
+            if (connected)
+                service.reload()
+        }
     }
 
     Component.onCompleted: reload()
