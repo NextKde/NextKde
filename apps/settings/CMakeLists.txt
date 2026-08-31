@@ -23,3 +23,6 @@ target_compile_definitions(kos-settings PRIVATE
     SETTINGS_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     SETTINGS_SHELL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../.."
 )
+
+install(TARGETS kos-settings RUNTIME DESTINATION bin)
+install(FILES main.qml DESTINATION share/kos/settings)

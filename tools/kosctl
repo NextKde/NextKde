@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+build_dir=${KOS_BUILD_DIR:-"$project_dir/.build/kosctl"}
+prefix=${KOS_PREFIX:-"$HOME/.local"}
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
+runtime_unit_dir="$config_dir/systemd/user"
+
+qs_bin=$(command -v qs || command -v quickshell || true)
+
+usage() {
+    cat <<'EOF'
+Usage: ./tools/kosctl <doctor|build|install|run|uninstall|shortcuts install|shortcuts uninstall>
+
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS
+EOF
+}
+
+doctor() {
+    local failed=0
+    for command_name in cmake go; do
+        if command -v "$command_name" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
+        else
+            printf 'miss %-12s\n' "$command_name"
+            failed=1
+        fi
+    done
+    if [[ -n "$qs_bin" ]]; then
+        printf 'ok   %-12s %s\n' quickshell "$qs_bin"
+    else
+        printf 'miss %-12s install Quickshell 0.3.x\n' quickshell
+        failed=1
+    fi
+    if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        printf 'ok   %-12s graphical session detected\n' session
+    else
+        printf 'warn %-12s no graphical session (builds still work)\n' session
+    fi
+    return "$failed"
+}
+
+configure_build() {
+    local build_type=${KOS_BUILD_TYPE:-Debug}
+    local plugins=${KOS_BUILD_KWIN_PLUGINS:-OFF}
+    cmake -S "$project_dir" -B "$build_dir" -G Ninja \
+        -DCMAKE_BUILD_TYPE="$build_type" \
+        -DKOS_BUILD_KWIN_PLUGINS="$plugins"
+}
+
+build() {
+    configure_build
+    cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+    mkdir -p "$build_dir/bin"
+    go build -trimpath -o "$build_dir/bin/kos-data-service" "$project_dir/services/data-service"
+}
+
+install_files() {
+    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin"
+    install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
+    install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
+    install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+    install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
+        "$prefix/share/kos/platform/kwin/window-bridge.js"
+
+    local shell_config="$config_dir/quickshell/kos"
+    mkdir -p "$shell_config"
+    cp -a "$project_dir/shell/." "$shell_config/"
+    mkdir -p "$shell_config/shared/qml"
+    rm -f "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+
+    mkdir -p "$runtime_unit_dir"
+    install -m 0644 "$project_dir/packaging/systemd/kos-platform.service" "$runtime_unit_dir/"
+    install -m 0644 "$project_dir/packaging/systemd/kos-data.service" "$runtime_unit_dir/"
+    mkdir -p "$prefix/share/applications"
+    sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
+        "$project_dir/packaging/desktop/kos-settings.desktop.in" \
+        > "$prefix/share/applications/kos-settings.desktop"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user daemon-reload
+        systemctl --user enable --now kos-platform.service kos-data.service
+    fi
+    printf 'Installed KOS to %s (shell config: %s)\n' "$prefix" "$shell_config"
+}
+
+install_all() {
+    build
+    install_files
+}
+
+run_shell() {
+    if [[ -z "$qs_bin" ]]; then
+        echo "Quickshell (qs) is not installed" >&2
+        return 1
+    fi
+    if [[ "${1:-}" == "installed" ]]; then
+        exec "$qs_bin" -c kos
+    fi
+    exec "$qs_bin" -p "$project_dir/shell"
+}
+
+uninstall() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user disable --now kos-platform.service kos-data.service 2>/dev/null || true
+        systemctl --user daemon-reload || true
+    fi
+    rm -f "$runtime_unit_dir/kos-platform.service" "$runtime_unit_dir/kos-data.service"
+    rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+    rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" "$prefix/share/applications/kos-settings.desktop"
+    rm -rf "$config_dir/quickshell/kos"
+    echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
+}
+
+shortcuts() {
+    if [[ ! -x "$prefix/libexec/kos-platform" ]]; then
+        echo "kos-platform is not installed; run ./tools/kosctl install first" >&2
+        return 1
+    fi
+    KOS_SHORTCUTS_FILE="$project_dir/shared/contracts/shortcuts.v1.json" \
+        "$prefix/libexec/kos-platform" shortcuts "$1"
+}
+
+case "${1:-}" in
+    doctor) doctor ;;
+    build) build ;;
+    install) install_all ;;
+    run) run_shell "${2:-}" ;;
+    uninstall) uninstall ;;
+    shortcuts)
+        [[ "${2:-}" == install || "${2:-}" == uninstall ]] || { usage >&2; exit 2; }
+        shortcuts "$2" ;;
+    *) usage >&2; exit 2 ;;
+esac
