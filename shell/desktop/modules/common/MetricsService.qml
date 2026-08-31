@@ -1,7 +1,7 @@
 pragma Singleton
 
 import QtQuick
-import Quickshell.Io
+import qs.desktop.modules.platform
 
 // The Bar thermal indicator, Dock temperature page and DeskCenter system card
 // all consume the shell-data-service metrics snapshot through this singleton,
@@ -31,7 +31,6 @@ QtObject {
     readonly property var memoryHistoryValues: historyValues(memoryHistory)
     readonly property var cpuHistoryValues: historyValues(cpuHistory)
     readonly property var frequencyHistoryValues: historyValues(frequencyHistory)
-    property var _readProcess: null
 
     function historyValues(samples) {
         return samples.map(sample => sample.value)
@@ -48,18 +47,9 @@ QtObject {
     }
 
     function reload() {
-        if (_readProcess)
-            return
-        const process = processFactory.createObject(service, {
-            command: ["sh", "-c",
-                "state=${XDG_STATE_HOME:-$HOME/.local/state}; cat \"$state/quickshell/shell-data-service/snapshot.json\" 2>/dev/null",
-                "metrics-snapshot"]
-        })
-        _readProcess = process
-        process.exited.connect(function() {
-            try {
-                const snapshot = JSON.parse((process.stdout?.text ?? "").trim())
-                const metrics = snapshot.metrics ?? {}
+        DataClient.request("metrics.snapshot", {}, function(response) {
+            if (response.ok) {
+                const metrics = response.result?.metrics ?? response.result ?? {}
                 currentMilliC = Number(metrics.currentMilliC
                     ?? metrics.averageMilliC ?? -1)
                 maximum5MinuteMilliC = Number(metrics.maximum5MinuteMilliC
@@ -75,16 +65,12 @@ QtObject {
                 cpuHistory = normalized(metrics.history, sample => sample.cpu)
                 frequencyHistory = normalized(metrics.history, sample => sample.frequency)
                 ready = true
-            } catch (_) {
+            } else {
                 // The service has not been installed or written its first
                 // snapshot yet. Keep the previous values and the callers'
                 // availability fallbacks.
             }
-            if (service._readProcess === process)
-                service._readProcess = null
-            process.destroy()
         })
-        process.running = true
     }
 
     // History samples older than one hour or outside 0..1 are dropped; the
@@ -101,13 +87,6 @@ QtObject {
                 result.push({ time: at, value: value })
         }
         return result
-    }
-
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
     }
 
     Component.onCompleted: reload()

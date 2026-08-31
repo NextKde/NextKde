@@ -1,8 +1,7 @@
 pragma Singleton
 import QtQuick
-import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland._ToplevelManagement
+import qs.desktop.modules.platform
 
 // WindowService — provider-neutral runtime window model.
 //
@@ -60,86 +59,12 @@ QtObject {
     readonly property bool providerReady:
         svc._kwinReceivedInitialSnapshot
             || (!svc._kwinBridgeEnabled && svc._foreignRebuiltOnce)
-    readonly property string _kwinBridgePath:
-        "/usr/local/libexec/quickshell-kwin-window-bridge"
-    readonly property string _kwinScriptPath:
-        Quickshell.shellDir + "/../helpers/kwin-window-bridge/kwin/contents/code/main.js"
-
-    property Process _kwinBridge: Process {
-        command: [svc._kwinBridgePath]
-        running: svc._kwinBridgeEnabled
-        // Persistent low-latency command channel to the local bridge. The
-        // bridge forwards KWin snapshots and receives commands on stdin.
-        stdinEnabled: true
-        // A StdioCollector retains the complete stream forever. This bridge
-        // is long-lived and emits a snapshot/event stream, so that would make
-        // each new event copy an ever-growing string. SplitParser delivers
-        // one line at a time and keeps only its incomplete tail.
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => svc._consumeKwinBridgeLine(data)
-        }
-        stderr: SplitParser { splitMarker: "\n" }
-        onExited: function(code) {
-            if (code !== 0) {
-                console.log("[WindowService] KWin bridge unavailable code="
-                            + code + ", running self-heal");
-                svc._retryBridge();
-            }
-        }
-    }
-
-    // A bridge orphaned by a prior shell that died abruptly keeps holding the
-    // org.quickshell.KWinWindowBridge D-Bus name, so a freshly spawned bridge
-    // cannot register and exits immediately — leaving window snapshots (and
-    // thus smart-hide geometry) dead for every later launch. Heal by reaping a
-    // genuinely orphaned owner and retrying our bridge a few times (concurrent
-    // live shells are never touched; see _retryBridge).
-    // Process.running may launch the child before Component.onCompleted. Keep
-    // retries available from object construction so an immediate D-Bus-name
-    // collision after a crash cannot permanently leave the window model empty.
-    property int _bridgeRetryRemaining: 3
-    property Timer _bridgeRetryTimer: Timer {
-        interval: 350
-        repeat: false
-        onTriggered: svc._startBridge()
-    }
-
-    function _startBridge() {
-        // Quickshell Process does not restart a finished child by re-setting
-        // running while it is already true, so toggle it.
-        svc._kwinBridge.running = false;
-        svc._kwinBridge.running = true;
-    }
-
-    function _retryBridge() {
-        if (svc._bridgeRetryRemaining <= 0)
-            return;
-        svc._bridgeRetryRemaining--;
-        // Only reaps a *genuinely orphaned* owner (parent already reaped to pid
-        // 1) — the residue of a shell that died abruptly. If the name is held by
-        // a still-alive shell, that is a separate desktop instance running in
-        // parallel, which must never be killed from here; we just give up on our
-        // own bridge instead of fighting it in a kill war.
-        const killProc = _commandProcessFactory.createObject(svc, {
-            command: ["/bin/sh", "-c",
-                "owner=$(busctl --user --no-pager list 2>/dev/null | awk "
-                + "'$1==\"org.quickshell.KWinWindowBridge\"{print $2}'); "
-                + "if [ -z \"$owner\" ]; then exit 0; fi; "
-                + "ppid=$(awk '{print $4}' /proc/$owner/stat 2>/dev/null); "
-                + "[ \"$ppid\" = \"1\" ] && kill \"$owner\""]
-        });
-        killProc.exited.connect(function() {
-            killProc.destroy();
-            svc._bridgeRetryTimer.restart();
-        });
-        killProc.running = true;
-    }
-
-    property Component _commandProcessFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
+    property Connections _platformEvents: Connections {
+        target: PlatformClient
+        function onEventReceived(eventName, payload) {
+            if (eventName === "window.snapshot" || eventName === "desktops"
+                    || eventName === "thumbnail" || eventName === "global-pointer-press")
+                svc._consumeKwinEvent(payload)
         }
     }
 
@@ -170,9 +95,9 @@ QtObject {
         onTriggered: svc._rebuild()
     }
 
-    // Merge pointer double-clicks or quick target changes before spawning a
-    // qdbus6 process. The bridge also coalesces requests, but doing it here
-    // avoids creating needless processes in the first place.
+    // Merge pointer double-clicks or quick target changes before sending an
+    // IPC request. The platform bridge also coalesces requests, but doing it
+    // here avoids needless messages in the first place.
     property Timer _kwinActivationTimer: Timer {
         interval: 24
         repeat: false
@@ -562,14 +487,8 @@ QtObject {
         }
     }
 
-    function _consumeKwinBridgeLine(line) {
-        const message = String(line ?? "");
-        if (message === "READY") {
-            console.info("[WindowService] KWin bridge ready")
-            svc._startKwinScript();
-        } else if (message.startsWith("EVENT ")) {
+    function _consumeKwinEvent(event) {
             try {
-                const event = JSON.parse(message.slice(6));
                 if (event.type !== "snapshot")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));
@@ -625,45 +544,6 @@ QtObject {
             } catch (e) {
                 console.warn("[WindowService] invalid KWin event: " + e);
             }
-        }
-    }
-
-    function _startKwinScript() {
-        if (svc._kwinScriptStarted)
-            return;
-        svc._kwinScriptStarted = true;
-        const unload = _commandProcessFactory.createObject(svc, {
-            command: ["qdbus6", "org.kde.KWin", "/Scripting",
-                      "org.kde.kwin.Scripting.unloadScript", "quickshell-window-bridge"]
-        });
-        unload.exited.connect(function() {
-            unload.destroy();
-            svc._loadKwinScript();
-        });
-        unload.running = true;
-    }
-
-    function _loadKwinScript() {
-        const proc = _commandProcessFactory.createObject(svc, {
-            command: ["qdbus6", "org.kde.KWin", "/Scripting",
-                      "org.kde.kwin.Scripting.loadScript", svc._kwinScriptPath,
-                      "quickshell-window-bridge"]
-        });
-        proc.exited.connect(function(code) {
-            if (code === 0) {
-                const starter = _commandProcessFactory.createObject(svc, {
-                    command: ["qdbus6", "org.kde.KWin", "/Scripting",
-                              "org.kde.kwin.Scripting.start"]
-                });
-                starter.exited.connect(function() { starter.destroy(); });
-                starter.running = true;
-            } else {
-                console.log("[WindowService] KWin script not started: "
-                            + (proc.stderr?.text ?? ""));
-            }
-            proc.destroy();
-        });
-        proc.running = true;
     }
 
     function _enqueueKwinCommand(command) {
@@ -676,15 +556,17 @@ QtObject {
     }
 
     function _sendKwinCommand(command) {
-        if (!svc._kwinBridge.running) {
-            console.warn("[WindowService] KWin bridge is not running");
-            return;
-        }
-        svc._kwinBridge.write(JSON.stringify(command) + "\n");
+        PlatformClient.request("kwin.command", command, function(response) {
+            if (!response?.ok)
+                console.warn("[WindowService] KWin command failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
     }
 
     Component.onCompleted: {
-        if (svc._kwinBridgeEnabled)
+        if (svc._kwinBridgeEnabled) {
+            PlatformClient.request("kwin.subscribe", {}, function() {})
             _scheduleUpdate()
+        }
     }
 }

@@ -1,7 +1,7 @@
 pragma Singleton
 
 import QtQuick
-import Quickshell.Io
+import qs.desktop.modules.platform
 import qs.desktop.modules.dock
 
 // Activity data lives in shell-data-service: boot uptime is seeded from
@@ -21,37 +21,22 @@ QtObject {
     // The active-app sidecar updates the moment a window becomes foreground;
     // a consumer needs this counter to re-read the derived state.
     property int activeAppRevision: 0
-    property var _readProcess: null
-    property var _activeProcess: null
 
     function dayKey(time) {
         return Qt.formatDate(new Date(time), "yyyy-MM-dd")
     }
 
     function reload() {
-        if (_readProcess)
-            return
-        const process = processFactory.createObject(service, {
-            command: ["sh", "-c",
-                "state=${XDG_STATE_HOME:-$HOME/.local/state}; cat \"$state/quickshell/shell-data-service/snapshot.json\" 2>/dev/null",
-                "activity-snapshot"]
-        })
-        _readProcess = process
-        process.exited.connect(function() {
-            try {
-                const snapshot = JSON.parse((process.stdout?.text ?? "").trim())
-                const activity = snapshot.activity ?? {}
+        DataClient.request("activity.snapshot", {}, function(response) {
+            if (response.ok) {
+                const activity = response.result?.activity ?? response.result ?? {}
                 uptimeByDay = activity.uptimeByDay ?? ({})
                 todayAppsById = activity.todayApps ?? ({})
                 ready = true
-            } catch (_) {
+            } else {
                 // The service has not written its first snapshot yet.
             }
-            if (service._readProcess === process)
-                service._readProcess = null
-            process.destroy()
         })
-        process.running = true
     }
 
     // Today's apps ordered by session duration, the format the activity card
@@ -92,33 +77,9 @@ QtObject {
     // Report the foreground desktop id to the service so it can attribute
     // session time. An empty appID ends attribution while no window is active.
     function sendActiveApp() {
-        if (_activeProcess)
-            return
-        const payload = JSON.stringify({
-            type: "active_app",
-            appID: activeAppId,
-            name: activeAppName,
-            icon: activeAppIcon
+        DataClient.request("activity.active-app", {
+            appID: activeAppId, name: activeAppName, icon: activeAppIcon
         })
-        const process = processFactory.createObject(service, {
-            command: ["sh", "-c",
-                "runtime=${XDG_RUNTIME_DIR:-/tmp}; printf '%s\\n' \"$1\" | socat - UNIX-CONNECT:\"$runtime/shell-data-service.sock\"",
-                "activity-active-app", payload]
-        })
-        _activeProcess = process
-        process.exited.connect(function() {
-            if (service._activeProcess === process)
-                service._activeProcess = null
-            process.destroy()
-        })
-        process.running = true
-    }
-
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
     }
     property Connections windowConnection: Connections {
         target: WindowService

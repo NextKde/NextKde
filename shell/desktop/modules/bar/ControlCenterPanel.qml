@@ -8,7 +8,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
-import "../../../../shared/qml/controls" as LiquidControls
+import "../../../shared/qml/controls" as LiquidControls
 
 // Compact desktop adaptation of the supplied Control Center reference.
 // Its geometry intentionally stays small enough for a top-bar popup while
