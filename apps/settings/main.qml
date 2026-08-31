@@ -1080,6 +1080,7 @@ ApplicationWindow {
             ? settingsBridge : null
         property string shellStyle: "macos"
         property bool barIntegratedWithDock: false
+        property string dockWindowAnimationStyle: "scale"
         property string errorText: ""
         readonly property var styles: [
             {
@@ -1107,11 +1108,17 @@ ApplicationWindow {
                 || style === "material"
         }
 
+        function isValidDockWindowAnimationStyle(style) {
+            return style === "scale" || style === "genie"
+        }
+
         function applyState(state) {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
             barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
+            if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
+                dockWindowAnimationStyle = state.dockWindowAnimationStyle
             errorText = ""
         }
 
@@ -1141,6 +1148,16 @@ ApplicationWindow {
                 return
             }
             applyState(bridge.updateBarIntegratedWithDock(enabled))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setDockWindowAnimationStyle(style) {
+            if (!bridge || !isValidDockWindowAnimationStyle(style)) {
+                errorText = bridge ? "未知的窗口动画" : "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateDockWindowAnimationStyle(style))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1355,10 +1372,71 @@ ApplicationWindow {
         }
 
         Text {
+            text: "窗口动画"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 4
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 82
+            radius: 18
+            color: theme.card
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "◒"; tint: "#af52de" }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: "窗口显示/隐藏"
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: themePage.dockWindowAnimationStyle === "genie"
+                            ? "水滴形变缩入图标；打开窗口仍使用常规展开"
+                            : "等比例缩放到图标；最小化与恢复均保持平直路径"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+                }
+                SettingsNavBar {
+                    Layout.preferredWidth: 148
+                    Layout.preferredHeight: 30
+                    // LiquidNavBar delegates expect { id, label, icon }.
+                    // A string model leaves modelData.label undefined, so the
+                    // previous control had no visible text despite rendering
+                    // its track and thumb.
+                    size: "tiny"
+                    barHeight: 30
+                    itemWidthOverride: 74
+                    model: [
+                        { id: "scale", label: "缩放" },
+                        { id: "genie", label: "水滴" }
+                    ]
+                    currentIndex: themePage.dockWindowAnimationStyle === "genie" ? 1 : 0
+                    onSelectionChanged: function(index) {
+                        themePage.setDockWindowAnimationStyle(
+                            index === 1 ? "genie" : "scale")
+                    }
+                }
+            }
+        }
+
+        Text {
             Layout.fillWidth: true
             Layout.leftMargin: 13
             Layout.rightMargin: 13
-            text: "主题会立即更新 Dock。Bar 保持统一外观，可通过上方开关选择独立顶栏或底部统一宿主。"
+            text: "主题会立即更新 Dock。窗口动画会立即同步到 KWin；Bar 可通过上方开关选择独立顶栏或底部统一宿主。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
