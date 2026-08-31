@@ -29,6 +29,8 @@ Plasma 原有面板和通知仍会运行，出现重叠是正常的。
 - CMake 3.21+、Ninja、C++20 编译器、Qt 6 开发包和 Go。
 - 正常 Plasma 会话提供 NetworkManager（`nmcli`）、PipeWire/WirePlumber
   （`wpctl`）、BlueZ（`bluetoothctl`）、`loginctl` 和 `systemctl --user`。
+- 可选剪贴板历史依赖：`wl-clipboard`（`wl-copy`/`wl-paste`）和 `cliphist`。
+  即使未安装它们，桌面文件复制/粘贴仍可使用。
 - 只有编译可选 KWin 插件时才需要 KWin/KF6 开发头文件。
 
 Arch 常用基础包为 `quickshell cmake ninja gcc qt6-base go`；Debian/Ubuntu

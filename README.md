@@ -32,6 +32,8 @@ panels and notifications remain active, so overlap is expected.
 - Runtime tools supplied by a normal Plasma session: NetworkManager (`nmcli`),
   PipeWire/WirePlumber (`wpctl`), BlueZ (`bluetoothctl`), `loginctl`, and
   `systemctl --user`.
+- Optional clipboard history: `wl-clipboard` (`wl-copy`/`wl-paste`) and
+  `cliphist`. File copy/paste through the desktop still works without them.
 - KWin/KF6 development packages only when building the optional KWin plugins.
 
 On Arch, the usual base packages are `quickshell cmake ninja gcc qt6-base go`.

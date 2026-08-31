@@ -46,6 +46,13 @@ doctor() {
             printf 'warn %-12s runtime integration unavailable\n' "$runtime_command"
         fi
     done
+    for runtime_command in wl-copy wl-paste cliphist; do
+        if command -v "$runtime_command" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$runtime_command" "$(command -v "$runtime_command")"
+        else
+            printf 'warn %-12s clipboard history unavailable\n' "$runtime_command"
+        fi
+    done
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
     else
