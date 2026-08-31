@@ -1,0 +1,16 @@
+[Unit]
+Description=KOS Quickshell desktop shell
+Requires=kos-platform.service
+After=graphical-session.target kos-platform.service
+Wants=kos-data.service
+After=kos-data.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@QS_EXEC@ --no-duplicate -c kos
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

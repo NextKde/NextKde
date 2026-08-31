@@ -31,7 +31,9 @@ Plasma 原有面板和通知仍会运行，出现重叠是正常的。
   （`wpctl`）、BlueZ（`bluetoothctl`）、`loginctl` 和 `systemctl --user`。
 - 可选剪贴板历史依赖：`wl-clipboard`（`wl-copy`/`wl-paste`）和 `cliphist`。
   即使未安装它们，桌面文件复制/粘贴仍可使用。
-- 只有编译可选 KWin 插件时才需要 KWin/KF6 开发头文件。
+- 默认安装会编译 KOS 的两个 KWin 插件以及内置的 `kwin-effects-glass`
+  源码，因此需要与当前 KWin 匹配的 KWin/KF6 开发头文件。Arch/CachyOS
+  缺少的 KF6 构建依赖会由安装器通过 `sudo pacman` 补齐。
 
 `kosctl build` 默认通过 `https://goproxy.cn,direct` 下载 Go 模块。如果需要
 使用其他镜像或离线模块缓存，可以在构建前设置 `GOPROXY`，例如
@@ -46,7 +48,7 @@ Arch 常用基础包为 `quickshell cmake ninja gcc qt6-base go`；Debian/Ubuntu
 
 ```sh
 ./tools/kosctl doctor
-KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
+./tools/kosctl install
 ```
 
 该命令会构建并安装：
@@ -55,11 +57,26 @@ KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
 - `kos-data-service` → `~/.local/libexec/`（Go 指标/历史数据常驻进程）；
 - `kos-settings` → `~/.local/bin/`；
 - Quickshell 配置 → `~/.config/quickshell/kos`；
-- `kos-platform.service` 与 `kos-data.service` → systemd 用户单元。
+- `kos-platform.service`、`kos-data.service` 与 `kos-shell.service` → systemd
+  用户单元；Shell 强依赖 platform 服务，并在它之后启动。
+- KOS Dock 动画、Quickshell 右键输入插件和 Glass 特效 → 系统 KWin 插件目录。
 
-安装器会立即启用两个用户服务，不使用 `sudo`。如果系统有匹配的 KWin 开发
-头文件，可用 `KOS_BUILD_KWIN_PLUGINS=ON` 构建插件；系统范围安装插件可能需要
-管理员权限。
+安装器会 enable 并立即启动三个用户服务，同时启用三项 KWin 特效。用户文件仍安装到
+`~/.local`；安装 KWin 插件及 Arch/CachyOS 缺失的构建依赖时会调用 `sudo`，
+密码由当前终端正常接管。Glass 与系统 Blur 冲突，因此安装时会保存 Blur
+状态并停用它；`./tools/kosctl uninstall` 会卸载三项特效并恢复原状态。
+
+只需构建/安装用户态组件时可显式关闭 KWin 插件：
+
+```sh
+KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
+```
+
+查看或配置 Glass 时，可直接打开 KDE 的桌面特效页面：
+
+```sh
+./tools/kosctl glass-settings
+```
 
 启动已安装的 Shell：
 
