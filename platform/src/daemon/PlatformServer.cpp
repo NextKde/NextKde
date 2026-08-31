@@ -4,6 +4,8 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDBusInterface>
+#include <QDBusObjectPath>
+#include <QDBusPendingCallWatcher>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -13,6 +15,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMimeData>
+#include <QMimeDatabase>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -1252,13 +1255,63 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                     QStringLiteral("文件路径无效"), false);
             return true;
         }
-        const QString helper = QStandardPaths::findExecutable(QStringLiteral("quickshell-kde-open-with"));
-        if (helper.isEmpty()) {
+        QDBusInterface portal(QStringLiteral("org.freedesktop.impl.portal.desktop.kde"),
+                              QStringLiteral("/org/freedesktop/portal/desktop"),
+                              QStringLiteral("org.freedesktop.portal.AppChooser"),
+                              QDBusConnection::sessionBus());
+        if (!portal.isValid()) {
             respond(socket, request, false, {}, QStringLiteral("open-with-unavailable"),
                     QStringLiteral("KDE 打开方式面板不可用"), false);
             return true;
         }
-        runCommand(socket, request, helper, {path});
+        const QString mime = QMimeDatabase().mimeTypeForFile(
+            path, QMimeDatabase::MatchExtension).name();
+        QVariantMap options;
+        options.insert(QStringLiteral("content_type"), mime);
+        options.insert(QStringLiteral("uri"), QUrl::fromLocalFile(path).toString());
+        options.insert(QStringLiteral("filename"), QFileInfo(path).fileName());
+        options.insert(QStringLiteral("modal"), true);
+        QString token = requestId(request);
+        token.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_]")),
+                      QStringLiteral("_"));
+        if (token.isEmpty())
+            token = QStringLiteral("request");
+        const QDBusPendingCall pending = portal.asyncCall(
+            QStringLiteral("ChooseApplication"),
+            QVariant::fromValue(QDBusObjectPath(
+                QStringLiteral("/org/freedesktop/portal/desktop/request/kos_open_with_")
+                    + token)),
+            QString(), QString(), QStringList(), options);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, socket, request, path, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage
+                || reply.arguments().size() < 2
+                || reply.arguments().at(0).toUInt() != 0) {
+                respond(socket, request, false, {}, QStringLiteral("open-with-failed"),
+                        QStringLiteral("KDE 打开方式面板调用失败"), true);
+                return;
+            }
+            const QString applicationId = reply.arguments().at(1).toMap()
+                                              .value(QStringLiteral("choice")).toString();
+            if (applicationId.isEmpty()) {
+                respond(socket, request, true,
+                        QJsonObject{{QStringLiteral("cancelled"), true}});
+                return;
+            }
+            const QString desktop = resolveDesktopFile(applicationId);
+            if (desktop.isEmpty()
+                || !QProcess::startDetached(QStringLiteral("gio"),
+                                            {QStringLiteral("launch"), desktop, path})) {
+                respond(socket, request, false, {}, QStringLiteral("open-with-failed"),
+                        QStringLiteral("无法启动选中的应用"), true);
+                return;
+            }
+            respond(socket, request, true,
+                    QJsonObject{{QStringLiteral("desktopId"), applicationId}});
+        });
         return true;
     }
     return false;
