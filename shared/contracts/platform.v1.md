@@ -24,7 +24,8 @@ Current operation groups are:
 
 - `clipboard.set`, `clipboard.read`
 - `file.open`, `file.launch`, `file.rename`, `file.create-folder`,
-  `file.create-file`, `file.trash`, `file.open-with`
+  `file.create-file`, `file.trash`, `file.trash-state`, `file.empty-trash`,
+  `file.open-trash`, `file.open-with`
 - `kwin.subscribe`, `kwin.command`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)

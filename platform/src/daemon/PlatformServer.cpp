@@ -80,6 +80,43 @@ QStringList cleanPaths(const QJsonValue &value)
     return paths;
 }
 
+QString freedesktopTrashRoot()
+{
+    QString dataHome = qEnvironmentVariable("XDG_DATA_HOME");
+    if (dataHome.isEmpty())
+        dataHome = QDir(QStandardPaths::writableLocation(QStandardPaths::HomeLocation))
+            .filePath(QStringLiteral(".local/share"));
+    const QFileInfo info(dataHome);
+    if (!info.isAbsolute())
+        return {};
+    return QDir(info.absoluteFilePath()).filePath(QStringLiteral("Trash"));
+}
+
+bool removeTrashEntry(const QString &path)
+{
+    const QFileInfo info(path);
+    if (info.isSymLink() || !info.isDir())
+        return QFile::remove(path);
+    return QDir(path).removeRecursively();
+}
+
+bool emptyTrashDirectory(const QString &directory)
+{
+    const QFileInfo rootInfo(directory);
+    if (!rootInfo.exists())
+        return true;
+    if (!rootInfo.isDir() || rootInfo.isSymLink())
+        return false;
+    QDirIterator iterator(directory, QDir::NoDotAndDotDot | QDir::AllEntries
+                          | QDir::Hidden | QDir::System);
+    while (iterator.hasNext()) {
+        iterator.next();
+        if (!removeTrashEntry(iterator.filePath()))
+            return false;
+    }
+    return true;
+}
+
 QJsonArray jsonPaths(const QStringList &paths)
 {
     QJsonArray values;
@@ -644,6 +681,47 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
             return true;
         }
         runCommand(socket, request, QStringLiteral("gio"), QStringList{QStringLiteral("trash")} + paths);
+        return true;
+    }
+    if (op == QStringLiteral("file.trash-state")) {
+        const QString root = freedesktopTrashRoot();
+        if (root.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("trash-unavailable"),
+                    QStringLiteral("回收站路径不可用"), false);
+            return true;
+        }
+        const QFileInfo files(root + QStringLiteral("/files"));
+        bool hasItems = false;
+        if (files.exists() && files.isDir() && !files.isSymLink()) {
+            QDirIterator iterator(files.absoluteFilePath(),
+                                   QDir::NoDotAndDotDot | QDir::AllEntries
+                                       | QDir::Hidden | QDir::System);
+            hasItems = iterator.hasNext();
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("hasItems"), hasItems}});
+        return true;
+    }
+    if (op == QStringLiteral("file.empty-trash")) {
+        const QString root = freedesktopTrashRoot();
+        if (root.isEmpty() || !emptyTrashDirectory(root + QStringLiteral("/files"))
+            || !emptyTrashDirectory(root + QStringLiteral("/info"))) {
+            respond(socket, request, false, {}, QStringLiteral("trash-empty-failed"),
+                    QStringLiteral("无法清空回收站"), true);
+            return true;
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("emptied"), true}});
+        return true;
+    }
+    if (op == QStringLiteral("file.open-trash")) {
+        const QString dolphin = QStandardPaths::findExecutable(QStringLiteral("dolphin"));
+        if (dolphin.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("trash-unavailable"),
+                    QStringLiteral("Dolphin 不可用"), false);
+            return true;
+        }
+        runCommand(socket, request, dolphin, {QStringLiteral("trash:")});
         return true;
     }
     if (op == QStringLiteral("file.rename")) {
