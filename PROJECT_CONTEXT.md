@@ -59,11 +59,11 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 11. **系统指标收口**: CPU/内存/磁盘/频率/温度的采样、历史（10s 采样，360 条）与传感器枚举全部在 Go 服务（`shell-data-service`）完成，QML 经 `common/MetricsService.qml` 单例每 10s 读 `snapshot.json`；活动账本（在线时长 + 按应用时长）由 Go 服务从 journald 播种并每秒 settle，`ActivityUsageService.qml` 只负责把前台窗口经 socket 上报 `active_app` 事件。Bar 的 `CpuTemperature` 与 DeskCenter 系统卡读同一快照，数值永不漂移。`SystemMetricsService`/`activity-usage.json` 已移除。
 12. **全局快捷键**: KDE **Command Shortcut** 机制（`.desktop` + `X-KDE-GlobalAccel-CommandShortcut=true` + `qs ipc call`），与用户已有的 `net.local.qs.desktop` 同款。快捷键表在 `helpers/global-shortcuts/shortcuts.json`，`install.py`/`uninstall.py` 生成 desktop 文件、写 `kglobalshortcutsrc` 默认绑定、冲突检测（同键已被他方占用则跳过并提示）。触发链路：kglobalaccel 按键 → 运行 `qs ipc call <target> <action>` → 各模块 `IpcHandler`（applauncher/quicksearch 已有，`control-center` 在 `bar/Bar.qml` 新增，转发 `ControlCenterService.toggleRequested`，由 `BarWindow` 打开面板）。改键在 KDE 系统设置 → 快捷键里改，比脚本直改安全。
 13. **Alt+Tab 切换（QuickSearch 窗口模式）**: 窗口结果按 MRU 排序（`WindowService._mruOrder`，新窗口置前、当前激活窗口置末尾），打开即选中最近使用的窗口；列表行有 KWin 实时缩略图（`requestThumbnail`，app 图标兜底，2s 慢轮询补抓）。Alt+Tab 已由 Command Shortcut 绑定到 `quicksearch toggle window`。
-14. **控制中心亮度**: 读 `/sys/class/backlight/*`（首设备 current/max），写走 **logind `SetBrightness`**（session owner 无需 /sys 写权限）；面板拖拽条 + `%` 显示，无亮度设备时显示「无亮度设备」并禁用拖拽。状态在 `ControlCenterService`（`brightnessAvailable`/`brightnessPercent`/`setBrightness`），与音量同模式。
+14. **控制中心亮度**: 优先走 **KDE Plasma 6 `org.kde.Solid.PowerManagement.Actions.BrightnessControl` 与 `org.kde.ScreenBrightness`**（支持内建屏幕及外接 DDC/CI 显示器，如 DisplayPort/HDMI 屏幕）；降级回退 `/sys/class/backlight/*` 读 + logind `SetBrightness` 写。面板拖拽条 + `%` 显示，无亮度设备时显示「无亮度设备」并禁用拖拽。状态在 `ControlCenterService`（`brightnessAvailable`/`brightnessPercent`/`setBrightness`），与音量同模式。
 15. **控制中心液态按钮**: 合成器 blur 是窗口级的，单个控件读不到窗口背后像素。`common/LiquidGlassControl.qml` 用 `ShaderEffectSource`（捕获窗口内层）→ `FastBlur` → `OpacityMask`（圆形裁剪）→ 玻璃高光/描边，实现控件级磨砂；`sourceItem` 为空时降级纯玻璃圆。媒体卡播放按钮模糊一层淡壁纸色调底（`WallpaperPaletteService` 主/次色 16%/7% 渐变，兼作卡片液态底），呈"吸收环境色调的磨砂透镜"。勿用封面作按钮模糊源（会透出封面碎块感）。
 16. **通知历史中心**: 会话内历史（不跨重启）。dismiss/expire 前快照（`NotificationGroupService._pushHistory`），**DND 期间 untrack 的通知也立即快照**（否则永不触发 dismiss 直接丢失）。`ControlCenterService.notificationHistory`（ListModel，上限 50）+ `historyGroups`（按 app 分组 JS 数组，随模型变化重建）。控制中心 Card 9：分组头（图标+应用名）+ 每条通知行 + 单条 × 删除 + 全部清空。action 执行仍缺失（快照只存文本）。
 17. **工作区概览 / Stage Manager**: `desktop/modules/overview/`（概览全屏遮罩：顶栏虚拟桌面条 + 当前桌面窗口缩略图网格）。数据层：KWin 脚本快照加 `desktops`/`onAllDesktops` 字段（`window.desktops` 的 id 列表）+ `publishDesktops()` 事件（desktopAdded/Removed/NameChanged/currentDesktopChanged 均触发）；bridge 命令新增 `desktops`（查询列表）、`switch-desktop`、`move-to-desktop`（KWin script 处理，走 `workspace.currentDesktop`/`window.desktops`）；`WindowService` 透传 `desktops` 列表/`currentDesktopId` + 三个命令函数。快捷键 `Meta+Tab`（`overview toggle`）。点击桌面切换、点窗口激活并关闭概览、Esc 关闭、←→ 选桌面、回车切到选中桌面。
-18. **全局外观形态**: `common/AppearanceConfigService.qml` 持久化 schema 4（玻璃强度、`windows12|macos|material`、`barIntegratedWithDock`、`dockWindowAnimationStyle: scale|genie`），`AppearanceTokens.qml` v4 导出语义 Token。生产 Dock 已消费几何、状态背景、指示器和动效；Bar 保持统一视觉。底部 Dock 开启融合后，时间作为 `DockInfoCarousel` 的音乐/天气/时钟页面，`BarStatusArea` 成为右侧附件；侧边 Dock 用 `DockSideInfoCarousel`（内容反向旋转保持正立）并自动回退顶部 Bar。DeskCenter 尚未接入。完整规则见 `docs/AppearanceArchitecture.md`。
+18. **全局外观形态**: `common/AppearanceConfigService.qml` 持久化 schema 7（全局及 Dock/Bar/Launcher 玻璃强度与继承关系、`windows12|macos|material`、`barIntegratedWithDock`、Bar 显示/布局模式、`dockWindowAnimationStyle: scale|genie`），`AppearanceTokens.qml` v4 导出语义 Token。生产 Dock 已消费几何、状态背景、指示器和动效；Bar 保持统一视觉。底部 Dock 开启融合后，时间作为 `DockInfoCarousel` 的音乐/天气/时钟页面，`BarStatusArea` 成为右侧附件；侧边 Dock 用 `DockSideInfoCarousel`（内容反向旋转保持正立）并承载系统状态附件。DeskCenter 尚未接入。完整规则见 `docs/AppearanceArchitecture.md`。
 
 ## 开发规范
 
@@ -83,18 +83,20 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 
 ### 未完成
 
-- **会话与电源**：控制中心目前只有注销入口；锁屏、休眠、重启、关机和用户切换仍缺失，低电量/无权限/操作失败的状态反馈待补。
+- **多席位/会话切换（Switch User）兼容性**：在特定多席位（Multi-Seat，如多 Seat 实例）或非标准 DisplayManager 环境下，由于席位通信权限与 VT 切换隔离，会话切换指令可能受限，待后续引入更底层的 session gateway 进行专有适配。
 - **多显示器每屏布局**：DeskCenter 小组件布局、桌面文件图标布局、Dock 位置/显示规则、壁纸与取色尚未按显示器持久化。
 - **可访问性与键盘导航**：焦点顺序、高对比度、减少动画与全键盘操作未完善。
 - **设置中心覆盖面**：`kos-settings` 已有显示/主题/Dock 页面；快捷键、DeskCenter 等模块设置仍待纳入。
 
 ### 待优化
+
 - 天气图标用 Unicode 字符（`☀⛅☁☔❄`）表示状况符号；桌面天气卡片云层用 SVG（`desktop/assets/weather-cloud*.svg`），其余太阳/雨/雪/雾用 `Rectangle`/`Canvas` 绘制。缺完整天气 SVG 图标集。
 - DeskCenter 未启用液态玻璃（保证文字可读性）。
 - Bar 高 35px，左右各缩进 15px（`margins.left/right: 15`）。
 - 隐藏应用无恢复入口。
 
 ### 已搁置
+
 - 跨 Dolphin 文件移动（Wayland 剪贴板限制，`tools/desktop-clipboard-helper/` 为空目录占位）。
 
 ## Git 历史
@@ -119,6 +121,7 @@ AppActionService ──-> launch / pin / unpin / hide / edit requests
 
 ## 文档索引
 
+- [FunctionalArchitecture.md](docs/FunctionalArchitecture.md) - 项目全景功能架构与数据流拓扑
 - [ProjectArchitecture.md](docs/ProjectArchitecture.md) - 仓库级运行时边界与依赖方向
 - [DockArchitecture.md](docs/DockArchitecture.md) - Dock 身份/窗口/持久化/显示模式约定
 - [AppearanceArchitecture.md](docs/AppearanceArchitecture.md) - 全局外观 schema、IPC、Token 与接入规范

@@ -199,6 +199,7 @@ docs/           架构文档
 
 ## 文档
 
+- [功能架构](docs/FunctionalArchitecture.md)——系统全景、功能子系统与跨进程数据流
 - [项目架构](docs/ProjectArchitecture.md)——运行时边界与依赖方向
 - [Dock 架构](docs/DockArchitecture.md)——身份、窗口模型、持久化与显示模式
 - [外观架构](docs/AppearanceArchitecture.md)——schema、IPC 契约与语义 Token
@@ -210,8 +211,6 @@ docs/           架构文档
 
 按大致优先级排列：
 
-- **会话与电源**——控制中心补齐锁屏、休眠、重启、关机与用户切换入口
-  （目前只有注销），并提供失败反馈。
 - **多显示器每屏布局**——DeskCenter 组件、桌面图标布局、Dock 位置/显示
   规则与壁纸取色按显示器持久化。
 - **DeskCenter 主题接入**——让桌面卡片消费外观 Token 层（最后一个未

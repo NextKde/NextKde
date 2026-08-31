@@ -50,13 +50,25 @@ public:
 
     Q_INVOKABLE QVariantMap updateBlurStrength(double strength) {
         return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBlurStrength"),
+            QStringLiteral("updateGlobalBlurStrength"),
             QString::number(strength, 'f', 3)}));
     }
 
     Q_INVOKABLE QVariantMap updateLiquidStrength(double strength) {
         return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateLiquidStrength"),
+            QStringLiteral("updateGlobalLiquidStrength"),
+            QString::number(strength, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalBlurStrength(double strength) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalBlurStrength"),
+            QString::number(strength, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalLiquidStrength(double strength) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalLiquidStrength"),
             QString::number(strength, 'f', 3)}));
     }
 
@@ -71,47 +83,262 @@ public:
             enabled ? QStringLiteral("true") : QStringLiteral("false")}));
     }
 
+    Q_INVOKABLE QVariantMap updateBarVisibilityMode(const QString &mode) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateBarVisibilityMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateBarLayoutMode(const QString &mode) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateBarLayoutMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockWindowAnimationStyle(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateDockWindowAnimationStyle"), style}));
+    }
+
     Q_INVOKABLE QVariantMap resetAppearanceStrengths() {
         return appearanceSnapshotFromReply(callAppearance({QStringLiteral("resetStrengths")}));
     }
 
+    Q_INVOKABLE QVariantMap launcherSnapshot() {
+        return launcherSnapshotFromReply(callLauncher({QStringLiteral("snapshot")}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLauncherDisplayMode(const QString &mode) {
+        return launcherSnapshotFromReply(callLauncher({
+            QStringLiteral("updateDisplayMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLauncherIconSize(double size) {
+        return launcherSnapshotFromReply(callLauncher({
+            QStringLiteral("updateIconSize"),
+            QString::number(size, 'f', 1)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLauncherIconSpacing(double spacing) {
+        return launcherSnapshotFromReply(callLauncher({
+            QStringLiteral("updateIconSpacing"),
+            QString::number(spacing, 'f', 1)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLauncherFontSize(double size) {
+        return launcherSnapshotFromReply(callLauncher({
+            QStringLiteral("updateFontSize"),
+            QString::number(size, 'f', 1)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateLauncherFontWeight(const QString &weight) {
+        return launcherSnapshotFromReply(callLauncher({
+            QStringLiteral("updateFontWeight"), weight}));
+    }
+
+    static QString readKdeConfig(const QString &file, const QString &group, const QString &key) {
+        QProcess proc;
+        proc.start(QStringLiteral("kreadconfig6"), {
+            QStringLiteral("--file"), file,
+            QStringLiteral("--group"), group,
+            QStringLiteral("--key"), key
+        });
+        if (proc.waitForStarted(1000) && proc.waitForFinished(2000) && proc.exitCode() == 0) {
+            return QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+        }
+        return {};
+    }
+
+    static QStringList listInstalledLookAndFeels() {
+        QProcess proc;
+        proc.start(QStringLiteral("plasma-apply-lookandfeel"), {QStringLiteral("-l")});
+        if (proc.waitForStarted(1000) && proc.waitForFinished(3000) && proc.exitCode() == 0) {
+            const QString output = QString::fromUtf8(proc.readAllStandardOutput());
+            QStringList list;
+            const auto lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+            for (const QString &line : lines) {
+                const QString trimmed = line.trimmed();
+                if (!trimmed.isEmpty()) {
+                    list.append(trimmed);
+                }
+            }
+            return list;
+        }
+        return {};
+    }
+
+    static QString resolveThemePartner(const QString &currentTheme, bool targetDark, const QStringList &installed) {
+        if (currentTheme.isEmpty())
+            return {};
+        QStringList candidates;
+
+        if (targetDark) {
+            if (currentTheme.endsWith(QStringLiteral("-w")))
+                candidates.append(currentTheme.chopped(2) + QStringLiteral("-d"));
+            if (currentTheme.endsWith(QStringLiteral("_w")))
+                candidates.append(currentTheme.chopped(2) + QStringLiteral("_d"));
+            if (currentTheme.endsWith(QStringLiteral("Light")))
+                candidates.append(currentTheme.chopped(5) + QStringLiteral("Dark"));
+            if (currentTheme.endsWith(QStringLiteral("-Light")))
+                candidates.append(currentTheme.chopped(6) + QStringLiteral("-Dark"));
+            if (currentTheme.endsWith(QStringLiteral("_Light")))
+                candidates.append(currentTheme.chopped(6) + QStringLiteral("_Dark"));
+            if (currentTheme.contains(QStringLiteral("light"), Qt::CaseInsensitive)) {
+                QString c = currentTheme;
+                candidates.append(c.replace(QStringLiteral("light"), QStringLiteral("dark"), Qt::CaseInsensitive));
+            }
+            if (currentTheme.endsWith(QStringLiteral(".desktop"))) {
+                const QString base = currentTheme.chopped(8);
+                candidates.append(base + QStringLiteral("dark.desktop"));
+                candidates.append(base + QStringLiteral("-dark.desktop"));
+                candidates.append(base + QStringLiteral("Dark.desktop"));
+            }
+            candidates.append(currentTheme + QStringLiteral("-Dark"));
+            candidates.append(currentTheme + QStringLiteral("Dark"));
+            candidates.append(currentTheme + QStringLiteral("-d"));
+        } else {
+            if (currentTheme.endsWith(QStringLiteral("-d")))
+                candidates.append(currentTheme.chopped(2) + QStringLiteral("-w"));
+            if (currentTheme.endsWith(QStringLiteral("_d")))
+                candidates.append(currentTheme.chopped(2) + QStringLiteral("_w"));
+            if (currentTheme.endsWith(QStringLiteral("Dark"))) {
+                candidates.append(currentTheme.chopped(4) + QStringLiteral("Light"));
+                candidates.append(currentTheme.chopped(4));
+            }
+            if (currentTheme.endsWith(QStringLiteral("-Dark"))) {
+                candidates.append(currentTheme.chopped(5) + QStringLiteral("-Light"));
+                candidates.append(currentTheme.chopped(5));
+            }
+            if (currentTheme.endsWith(QStringLiteral("_Dark"))) {
+                candidates.append(currentTheme.chopped(5) + QStringLiteral("_Light"));
+                candidates.append(currentTheme.chopped(5));
+            }
+            if (currentTheme.contains(QStringLiteral("dark"), Qt::CaseInsensitive)) {
+                QString c = currentTheme;
+                candidates.append(c.replace(QStringLiteral("dark"), QStringLiteral("light"), Qt::CaseInsensitive));
+                QString c2 = currentTheme;
+                candidates.append(c2.remove(QStringLiteral("dark"), Qt::CaseInsensitive));
+            }
+            if (currentTheme.endsWith(QStringLiteral("dark.desktop"), Qt::CaseInsensitive)) {
+                candidates.append(currentTheme.chopped(12) + QStringLiteral(".desktop"));
+                candidates.append(currentTheme.chopped(12) + QStringLiteral("light.desktop"));
+            }
+        }
+
+        for (const QString &cand : candidates) {
+            for (const QString &inst : installed) {
+                if (inst.compare(cand, Qt::CaseInsensitive) == 0)
+                    return inst;
+            }
+        }
+        return {};
+    }
+
     Q_INVOKABLE bool applySystemAppearance(bool dark) {
-        const QString scheme = dark ? QStringLiteral("Layan")
-                                   : QStringLiteral("LayanLight");
-        QProcess process;
-        process.start(QStringLiteral("plasma-apply-colorscheme"), {scheme});
-        if (!process.waitForStarted(1500)) {
-            setLastError(QStringLiteral("无法启动 KDE 色彩方案工具"));
-            return false;
+        const QString currentLnF = readKdeConfig(
+            QStringLiteral("kdeglobals"), QStringLiteral("KDE"), QStringLiteral("LookAndFeelPackage"));
+        const QString currentScheme = readKdeConfig(
+            QStringLiteral("kdeglobals"), QStringLiteral("General"), QStringLiteral("ColorScheme"));
+
+        const QStringList installedLnF = listInstalledLookAndFeels();
+        QString targetLnF = resolveThemePartner(currentLnF, dark, installedLnF);
+
+        // If current LookAndFeel didn't find a direct partner, look for standard KDE/Fedora defaults
+        if (targetLnF.isEmpty()) {
+            const QStringList standardFallbacks = dark
+                ? QStringList{QStringLiteral("org.kde.breezedark.desktop"),
+                              QStringLiteral("org.fedoraproject.fedoradark.desktop")}
+                : QStringList{QStringLiteral("org.kde.breeze.desktop"),
+                              QStringLiteral("org.fedoraproject.fedoralight.desktop"),
+                              QStringLiteral("org.fedoraproject.fedora.desktop")};
+            for (const QString &fb : standardFallbacks) {
+                if (installedLnF.contains(fb, Qt::CaseInsensitive)) {
+                    targetLnF = fb;
+                    break;
+                }
+            }
+            // If still empty, search any installed theme matching dark keyword
+            if (targetLnF.isEmpty()) {
+                for (const QString &inst : installedLnF) {
+                    const bool isDarkName = inst.contains(QStringLiteral("dark"), Qt::CaseInsensitive)
+                        || inst.endsWith(QStringLiteral("-d"));
+                    if (isDarkName == dark) {
+                        targetLnF = inst;
+                        break;
+                    }
+                }
+            }
         }
-        if (!process.waitForFinished(5000)) {
-            process.kill();
-            process.waitForFinished();
-            setLastError(QStringLiteral("KDE 色彩方案切换超时"));
-            return false;
+
+        bool applied = false;
+        QString lastErrorOutput;
+
+        if (!targetLnF.isEmpty()) {
+            QProcess process;
+            process.start(QStringLiteral("plasma-apply-lookandfeel"), {QStringLiteral("-a"), targetLnF});
+            if (process.waitForStarted(1500) && process.waitForFinished(5000)) {
+                if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
+                    applied = true;
+                } else {
+                    lastErrorOutput = QString::fromUtf8(process.readAllStandardError()).trimmed();
+                }
+            }
         }
-        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-            const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty() ? QStringLiteral("KDE 色彩方案切换失败") : error);
+
+        // Also resolve and apply matching color scheme if needed
+        if (!currentScheme.isEmpty()) {
+            QString targetScheme;
+            if (dark) {
+                if (currentScheme.endsWith(QStringLiteral("Light")))
+                    targetScheme = currentScheme.chopped(5) + QStringLiteral("Dark");
+                else if (!currentScheme.contains(QStringLiteral("Dark"), Qt::CaseInsensitive))
+                    targetScheme = currentScheme + QStringLiteral("Dark");
+            } else {
+                if (currentScheme.endsWith(QStringLiteral("Dark")))
+                    targetScheme = currentScheme.chopped(4) + QStringLiteral("Light");
+                else if (currentScheme.contains(QStringLiteral("Dark"), Qt::CaseInsensitive)) {
+                    QString c = currentScheme;
+                    targetScheme = c.replace(QStringLiteral("Dark"), QStringLiteral("Light"), Qt::CaseInsensitive);
+                }
+            }
+            if (!targetScheme.isEmpty()) {
+                QProcess schemeProc;
+                schemeProc.start(QStringLiteral("plasma-apply-colorscheme"), {targetScheme});
+                if (schemeProc.waitForStarted(1500) && schemeProc.waitForFinished(5000)) {
+                    if (schemeProc.exitStatus() == QProcess::NormalExit && schemeProc.exitCode() == 0) {
+                        applied = true;
+                    }
+                }
+            }
+        }
+
+        // Final fallback if nothing worked: standard Breeze color schemes
+        if (!applied) {
+            const QString fallbackScheme = dark ? QStringLiteral("BreezeDark") : QStringLiteral("BreezeLight");
+            QProcess schemeProc;
+            schemeProc.start(QStringLiteral("plasma-apply-colorscheme"), {fallbackScheme});
+            if (schemeProc.waitForStarted(1500) && schemeProc.waitForFinished(5000)) {
+                if (schemeProc.exitStatus() == QProcess::NormalExit && schemeProc.exitCode() == 0) {
+                    applied = true;
+                }
+            }
+        }
+
+        if (!applied) {
+            setLastError(lastErrorOutput.isEmpty()
+                ? QStringLiteral("未找到与当前主题匹配的明/暗配色方案")
+                : lastErrorOutput);
             return false;
         }
 
+        // Notify KWin to reconfigure window decoration and compositing
         QProcess kwin;
         kwin.start(QStringLiteral("qdbus6"), {
             QStringLiteral("org.kde.KWin"),
             QStringLiteral("/KWin"),
             QStringLiteral("reconfigure")});
-        if (!kwin.waitForStarted(1500) || !kwin.waitForFinished(3000)
-                || kwin.exitStatus() != QProcess::NormalExit || kwin.exitCode() != 0) {
-            if (kwin.state() != QProcess::NotRunning) {
-                kwin.kill();
-                kwin.waitForFinished();
-            }
-            const auto error = QString::fromUtf8(kwin.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty()
-                ? QStringLiteral("KWin 装饰刷新失败") : error);
-            return false;
+        if (kwin.waitForStarted(1500) && kwin.waitForFinished(3000)) {
+            // Reconfigured
         }
+
         setLastError({});
         return true;
     }
@@ -159,22 +386,79 @@ private:
         }
 
         const QJsonObject object = document.object();
-        if (!object.contains(QStringLiteral("blurStrength"))
-                || !object.contains(QStringLiteral("liquidStrength"))
+        if ((!object.contains(QStringLiteral("globalBlurStrength"))
+                    && !object.contains(QStringLiteral("dockBlurStrength"))
+                    && !object.contains(QStringLiteral("blurStrength")))
+                || (!object.contains(QStringLiteral("globalLiquidStrength"))
+                    && !object.contains(QStringLiteral("dockLiquidStrength"))
+                    && !object.contains(QStringLiteral("liquidStrength")))
                 || !object.contains(QStringLiteral("shellStyle"))
-                || !object.contains(QStringLiteral("barIntegratedWithDock"))) {
+                || !object.contains(QStringLiteral("barIntegratedWithDock"))
+                || !object.contains(QStringLiteral("dockWindowAnimationStyle"))) {
             setLastError(QStringLiteral("桌面环境返回的外观配置不完整"));
+            return {};
+        }
+
+        const double globalBlur = object.contains(QStringLiteral("globalBlurStrength"))
+            ? object.value(QStringLiteral("globalBlurStrength")).toDouble()
+            : (object.contains(QStringLiteral("dockBlurStrength"))
+                ? object.value(QStringLiteral("dockBlurStrength")).toDouble()
+                : object.value(QStringLiteral("blurStrength")).toDouble());
+        const double globalLiquid = object.contains(QStringLiteral("globalLiquidStrength"))
+            ? object.value(QStringLiteral("globalLiquidStrength")).toDouble()
+            : (object.contains(QStringLiteral("dockLiquidStrength"))
+                ? object.value(QStringLiteral("dockLiquidStrength")).toDouble()
+                : object.value(QStringLiteral("liquidStrength")).toDouble());
+
+        const QString barVisibility = object.value(QStringLiteral("barVisibilityMode")).toString(QStringLiteral("always"));
+
+        setLastError({});
+        return {
+            {QStringLiteral("globalBlurStrength"), globalBlur},
+            {QStringLiteral("globalLiquidStrength"), globalLiquid},
+            {QStringLiteral("effectiveDockBlur"), globalBlur},
+            {QStringLiteral("effectiveDockLiquid"), globalLiquid},
+            {QStringLiteral("effectiveBarBlur"), globalBlur},
+            {QStringLiteral("effectiveBarLiquid"), globalLiquid},
+            {QStringLiteral("effectiveLauncherBlur"), globalBlur},
+            {QStringLiteral("effectiveLauncherLiquid"), globalLiquid},
+            {QStringLiteral("blurStrength"), globalBlur},
+            {QStringLiteral("liquidStrength"), globalLiquid},
+            {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
+            {QStringLiteral("barIntegratedWithDock"),
+                object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
+            {QStringLiteral("barVisibilityMode"),
+                barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
+            {QStringLiteral("barLayoutMode"),
+                object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("full"))},
+            {QStringLiteral("dockWindowAnimationStyle"),
+                object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
+            {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
+        };
+    }
+
+    QVariantMap launcherSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的启动台配置"));
+            return {};
+        }
+
+        const QJsonObject object = document.object();
+        if (!object.contains(QStringLiteral("displayMode"))) {
+            setLastError(QStringLiteral("桌面环境返回的启动台配置不完整"));
             return {};
         }
 
         setLastError({});
         return {
-            {QStringLiteral("blurStrength"), object.value(QStringLiteral("blurStrength")).toDouble()},
-            {QStringLiteral("liquidStrength"), object.value(QStringLiteral("liquidStrength")).toDouble()},
-            {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
-            {QStringLiteral("barIntegratedWithDock"),
-                object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
-            {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
+            {QStringLiteral("displayMode"), object.value(QStringLiteral("displayMode")).toString()},
+            {QStringLiteral("iconSize"), object.value(QStringLiteral("iconSize")).toDouble()},
+            {QStringLiteral("iconSpacing"), object.value(QStringLiteral("iconSpacing")).toDouble()},
         };
     }
 
@@ -186,6 +470,11 @@ private:
     QString callAppearance(const QStringList &arguments) {
         return callShell(QStringLiteral("appearance-settings"), arguments,
                          QStringLiteral("外观设置请求失败"));
+    }
+
+    QString callLauncher(const QStringList &arguments) {
+        return callShell(QStringLiteral("applauncher-settings"), arguments,
+                         QStringLiteral("启动台设置请求失败"));
     }
 
     QString callShell(const QString &target, const QStringList &arguments,
