@@ -1,10 +1,10 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Io
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 
 // First Bluetooth picker stage: known/paired devices can be connected or
 // disconnected here. Pairing discovery and PIN workflows stay out of this
@@ -80,13 +80,12 @@ PopupWindow {
 
     function openBluetoothSettings() {
         close()
-        bluetoothSettingsProcess.running = true
-    }
-
-    Process {
-        id: bluetoothSettingsProcess
-        command: ["systemsettings", "kcm_bluetooth"]
-        stderr: StdioCollector {}
+        PlatformClient.request("settings.open", { module: "kcm_bluetooth" },
+            function(response) {
+                if (!response?.ok)
+                    console.warn("[Bluetooth] settings unavailable: "
+                        + (response?.error?.message || "platform unavailable"))
+            })
     }
 
     Connections {

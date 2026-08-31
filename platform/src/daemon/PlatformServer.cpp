@@ -859,6 +859,27 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
 {
     const QString op = operation(request);
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    if (op == QStringLiteral("settings.open")) {
+        const QString module = payload.value(QStringLiteral("module")).toString();
+        static const QSet<QString> allowedModules{
+            QStringLiteral("kcm_bluetooth"),
+            QStringLiteral("kcm_keys"),
+            QStringLiteral("kcm_networkmanagement")};
+        if (!allowedModules.contains(module)) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-settings-module"),
+                    QStringLiteral("设置模块不受支持"), false);
+            return true;
+        }
+        const QString systemsettings = QStandardPaths::findExecutable(
+            QStringLiteral("systemsettings"));
+        if (systemsettings.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("settings-unavailable"),
+                    QStringLiteral("KDE 系统设置不可用"), false);
+            return true;
+        }
+        runCommand(socket, request, systemsettings, {module});
+        return true;
+    }
     if (op == QStringLiteral("audio.get")) {
         runCommand(socket, request, QStringLiteral("wpctl"),
                    {QStringLiteral("get-volume"), QStringLiteral("@DEFAULT_AUDIO_SINK@")}, parseAudio);

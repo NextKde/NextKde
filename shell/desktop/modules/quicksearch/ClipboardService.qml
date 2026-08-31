@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.desktop.modules.platform
 
 // Thin adapter around cliphist. Keeping it here gives QuickSearch one stable
 // clipboard interface while cliphist continues to own persistence and dedupe.
@@ -177,13 +178,12 @@ QtObject {
     }
 
     function openShortcutSettings() {
-        const proc = processFactory.createObject(service, {
-            command: ["systemsettings", "kcm_keys"],
-        })
-        proc.exited.connect(function() {
-            proc.destroy()
-        })
-        proc.running = true
+        PlatformClient.request("settings.open", { module: "kcm_keys" },
+            function(response) {
+                if (!response?.ok)
+                    console.warn("[Clipboard] shortcut settings unavailable: "
+                        + (response?.error?.message || "platform unavailable"))
+            })
     }
 
     function _readList(output) {

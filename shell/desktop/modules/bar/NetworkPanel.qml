@@ -1,10 +1,10 @@
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 
 // Network card shared by the future top control centre. Wi-Fi selection and
 // credential UI are implemented here first; the actual NetworkManager write
@@ -116,16 +116,14 @@ PopupWindow {
 
     function openWirelessSettings() {
         close()
-        wirelessSettingsProcess.running = true
-    }
-
-    // KDE's NetworkManager KCM remains the full settings surface for details
-    // such as profiles, proxies and VPNs; this compact popup stays focused on
-    // choosing a nearby Wi-Fi network.
-    Process {
-        id: wirelessSettingsProcess
-        command: ["systemsettings", "kcm_networkmanagement"]
-        stderr: StdioCollector {}
+        // KDE's NetworkManager KCM remains the full settings surface for
+        // profiles, proxies and VPNs; the platform service owns launching it.
+        PlatformClient.request("settings.open", { module: "kcm_networkmanagement" },
+            function(response) {
+                if (!response?.ok)
+                    console.warn("[Network] settings unavailable: "
+                        + (response?.error?.message || "platform unavailable"))
+            })
     }
 
     function showNetworkDialog(network) {

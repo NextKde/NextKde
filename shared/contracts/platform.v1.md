@@ -27,6 +27,7 @@ Current operation groups are:
   `file.create-file`, `file.trash`, `file.open-with`
 - `kwin.subscribe`, `kwin.command`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
+- `settings.open` (allow-listed KDE System Settings modules)
 - `network.*`, `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
