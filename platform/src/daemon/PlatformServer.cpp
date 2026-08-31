@@ -1133,6 +1133,38 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         respond(socket, request, true, QJsonObject{{QStringLiteral("reconfigured"), true}});
         return true;
     }
+    if (op == QStringLiteral("theme.apply-system")) {
+        const bool dark = payload.value(QStringLiteral("dark")).toBool();
+        const QString lookAndFeel = dark ? QStringLiteral("org.kde.breezedark.desktop")
+                                         : QStringLiteral("org.kde.breeze.desktop");
+        const QString applyLookAndFeel = QStandardPaths::findExecutable(
+            QStringLiteral("plasma-apply-lookandfeel"));
+        const QString applyColorScheme = QStandardPaths::findExecutable(
+            QStringLiteral("plasma-apply-colorscheme"));
+        bool applied = false;
+        if (!applyLookAndFeel.isEmpty()) {
+            applied = QProcess::execute(applyLookAndFeel,
+                {QStringLiteral("--apply"), lookAndFeel}) == 0;
+        }
+        if (!applied && !applyColorScheme.isEmpty()) {
+            const QString scheme = dark ? QStringLiteral("BreezeDark")
+                                        : QStringLiteral("BreezeLight");
+            applied = QProcess::execute(applyColorScheme, {scheme}) == 0;
+        }
+        if (!applied) {
+            respond(socket, request, false, {}, QStringLiteral("theme-apply-failed"),
+                    QStringLiteral("未找到可用的 KDE 明暗主题"), true);
+            return true;
+        }
+        QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                            QStringLiteral("org.kde.KWin"));
+        if (kwin.isValid())
+            kwin.call(QStringLiteral("reconfigure"));
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("dark"), dark},
+                            {QStringLiteral("lookAndFeel"), lookAndFeel}});
+        return true;
+    }
     if (op == QStringLiteral("theme.sync-glass")) {
         const int contentBlur = qBound(1,
             payload.value(QStringLiteral("contentBlurLevel")).toInt(), 15);

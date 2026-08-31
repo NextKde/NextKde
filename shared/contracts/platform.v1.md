@@ -40,6 +40,7 @@ system action. Passwords and raw command output containing secrets must never
 be logged.
 
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
-model and forwards it only to the project-owned KWin effect. `theme.sync-glass`
-and `theme.sync-dock-animation` accept bounded numeric/style values and own the
-KDE configuration writes; Shell never invokes `qdbus6` or `kwriteconfig6`.
+model and forwards it only to the project-owned KWin effect. `theme.apply-system`,
+`theme.sync-glass`, and `theme.sync-dock-animation` accept bounded values and
+own the KDE configuration writes; Shell and Settings never invoke `qdbus6` or
+`kwriteconfig6`.

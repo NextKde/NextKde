@@ -10,6 +10,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
 import qs.desktop.modules.overview
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 
 Item {
     id: shell
@@ -173,6 +174,18 @@ Item {
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
             return snapshot()
+        }
+
+        // The standalone Settings app talks to this narrow Shell endpoint;
+        // only the resident platform daemon performs KDE theme operations.
+        function applySystemAppearance(dark: bool): string {
+            PlatformClient.request("theme.apply-system", { dark: dark },
+                function(response) {
+                    if (!response?.ok)
+                        console.warn("[Appearance] system theme failed: "
+                            + (response?.error?.message || "platform unavailable"))
+                })
+            return JSON.stringify({ accepted: true })
         }
 
         function resetStrengths(): string {
