@@ -71,6 +71,11 @@ public:
             enabled ? QStringLiteral("true") : QStringLiteral("false")}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockWindowAnimationStyle(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateDockWindowAnimationStyle"), style}));
+    }
+
     Q_INVOKABLE QVariantMap resetAppearanceStrengths() {
         return appearanceSnapshotFromReply(callAppearance({QStringLiteral("resetStrengths")}));
     }
@@ -162,7 +167,8 @@ private:
         if (!object.contains(QStringLiteral("blurStrength"))
                 || !object.contains(QStringLiteral("liquidStrength"))
                 || !object.contains(QStringLiteral("shellStyle"))
-                || !object.contains(QStringLiteral("barIntegratedWithDock"))) {
+                || !object.contains(QStringLiteral("barIntegratedWithDock"))
+                || !object.contains(QStringLiteral("dockWindowAnimationStyle"))) {
             setLastError(QStringLiteral("桌面环境返回的外观配置不完整"));
             return {};
         }
@@ -174,6 +180,8 @@ private:
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
             {QStringLiteral("barIntegratedWithDock"),
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
+            {QStringLiteral("dockWindowAnimationStyle"),
+                object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
             {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
         };
     }
