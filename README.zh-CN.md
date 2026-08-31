@@ -33,6 +33,10 @@ Plasma 原有面板和通知仍会运行，出现重叠是正常的。
   即使未安装它们，桌面文件复制/粘贴仍可使用。
 - 只有编译可选 KWin 插件时才需要 KWin/KF6 开发头文件。
 
+`kosctl build` 默认通过 `https://goproxy.cn,direct` 下载 Go 模块。如果需要
+使用其他镜像或离线模块缓存，可以在构建前设置 `GOPROXY`，例如
+`GOPROXY=off ./tools/kosctl build`。
+
 Arch 常用基础包为 `quickshell cmake ninja gcc qt6-base go`；Debian/Ubuntu
 安装发行版对应的 `quickshell cmake ninja-build g++ qt6-base-dev golang`。
 
@@ -140,8 +144,8 @@ git diff --check
 
 请先用 `./tools/kosctl run` 启动独立 Quickshell 实例并检查日志，再替换日常
 Shell。安全运行流程见 [.agents/skills/verify/SKILL.md](.agents/skills/verify/SKILL.md)。
-如果 Go 依赖下载失败，`kosctl build` 会显示代理/网络错误，可切换到发行版的
-Go module 镜像后重试。
+如果 Go 依赖下载失败，`kosctl build` 会显示代理/网络错误，可以设置 `GOPROXY`
+切换到其他镜像后重试。
 
 ## 仓库结构
 

@@ -45,12 +45,13 @@ scan has been atomically persisted.
 From the repository root:
 
 ```sh
-go build ./services/data-service
+GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" go build ./services/data-service
 ./tools/kosctl install
 systemctl --user status kos-data.service
 journalctl --user -u kos-data.service -f
 ```
 
 `kosctl uninstall` stops and removes the service binary and unit but keeps the
-state directory. If a Go module proxy is unavailable, set `GOPROXY` to a
-reachable mirror and retry the build.
+state directory. `kosctl build` uses `https://goproxy.cn,direct` by default;
+set `GOPROXY` to a reachable mirror or `off` for an offline module cache when
+the default proxy is unavailable.

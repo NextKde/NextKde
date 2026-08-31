@@ -13,7 +13,7 @@ usage() {
     cat <<'EOF'
 Usage: ./tools/kosctl <doctor|build|install|run|uninstall|shortcuts install|shortcuts uninstall>
 
-Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
 EOF
 }
 
@@ -75,7 +75,10 @@ build() {
     mkdir -p "$build_dir/bin"
     (
         cd "$project_dir/services/data-service"
-        go build -trimpath -o "$build_dir/bin/kos-data-service" .
+        # Use a reachable default mirror while preserving the standard
+        # GOPROXY override for CI, downstream packagers, and offline caches.
+        GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
+            go build -trimpath -o "$build_dir/bin/kos-data-service" .
     )
 }
 

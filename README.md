@@ -36,6 +36,10 @@ panels and notifications remain active, so overlap is expected.
   `cliphist`. File copy/paste through the desktop still works without them.
 - KWin/KF6 development packages only when building the optional KWin plugins.
 
+`kosctl build` downloads Go modules through `https://goproxy.cn,direct` by
+default. Set `GOPROXY` before building if you need a different mirror or an
+offline module cache, for example `GOPROXY=off ./tools/kosctl build`.
+
 On Arch, the usual base packages are `quickshell cmake ninja gcc qt6-base go`.
 On Debian/Ubuntu, install the equivalent `quickshell cmake ninja-build g++
 qt6-base-dev golang` packages from your distribution or the Quickshell
@@ -155,7 +159,7 @@ Run the checkout in a separate Quickshell instance (`./tools/kosctl run`) and
 inspect its log before changing your daily shell. The repository's
 [verify skill](.agents/skills/verify/SKILL.md) describes the safe runtime
 workflow. If Go dependencies cannot be downloaded, `kosctl build` reports the
-network/proxy error; retry with your distribution's Go module mirror.
+network/proxy error; retry with another mirror by setting `GOPROXY`.
 
 ## Repository layout
 
