@@ -62,7 +62,7 @@ operation list and examples live in
 | `clipboard` | `clipboard.set/read` | Qt `QClipboard`, Wayland MIME ownership |
 | `files` | open, launch, transfer, trash, Open-With | Qt file APIs and `gio` |
 | `kwin` | snapshots, activation, desktops, thumbnails, Dock animation tickets | KWin script + internal D-Bus |
-| `network` | refresh, scan, connect, 802.1X, radio | NetworkManager CLI adapter |
+| `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |
 | `audio` | get volume, set volume/mute | PipeWire/WirePlumber adapter |
 | `bluetooth` | power, list, connect/disconnect | BlueZ adapter |
 | `display` | brightness get/set | brightnessctl/PowerDevil fallback |

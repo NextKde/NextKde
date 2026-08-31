@@ -1,7 +1,7 @@
 import QtQuick
-import Quickshell.Io
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 
 // Live transfer-rate companion for NetworkStatus. NetworkService decides
 // which interface is active; this component only samples that interface's
@@ -14,7 +14,8 @@ Item {
     // future control centre without owning any popup or anchor geometry.
     signal panelToggleRequested()
 
-    property var _sampleProcess: null
+    property bool _samplePending: false
+    property int _sampleGeneration: 0
     property string sampledDevice: ""
     property real _previousRx: -1
     property real _previousTx: -1
@@ -46,6 +47,8 @@ Item {
         _previousTimestamp = 0
         downloadBytesPerSecond = 0
         uploadBytesPerSecond = 0
+        _samplePending = false
+        _sampleGeneration++
     }
 
     function sample() {
@@ -56,26 +59,21 @@ Item {
         }
         if (sampledDevice !== device)
             reset(device)
-        if (_sampleProcess)
+        if (_samplePending)
             return
-
-        // Interface names are passed positionally. The shell never expands a
-        // NetworkManager-provided device name into code or a file path.
-        const proc = processFactory.createObject(root, {
-            command: ["sh", "-c",
-                "cat \"/sys/class/net/$1/statistics/rx_bytes\" "
-                + "\"/sys/class/net/$1/statistics/tx_bytes\" 2>/dev/null",
-                "network-traffic-sample", device]
-        })
-        _sampleProcess = proc
-        proc.exited.connect(function(code) {
-            if (root._sampleProcess === proc)
-                root._sampleProcess = null
-            const fields = (proc.stdout?.text ?? "").trim().split(/\s+/)
-            const rx = Number(fields[0])
-            const tx = Number(fields[1])
+        _samplePending = true
+        const generation = _sampleGeneration
+        PlatformClient.request("network.traffic", { device: device }, function(response) {
+            if (generation !== root._sampleGeneration
+                    || root.sampledDevice !== device) {
+                return
+            }
+            root._samplePending = false
+            const result = response?.ok ? response.result || ({}) : ({})
+            const rx = Number(result.rxBytes)
+            const tx = Number(result.txBytes)
             const now = Date.now()
-            if (code === 0 && root.sampledDevice === device
+            if (response?.ok
                     && Number.isFinite(rx) && Number.isFinite(tx)) {
                 if (root._previousTimestamp > 0 && rx >= root._previousRx
                         && tx >= root._previousTx) {
@@ -88,9 +86,7 @@ Item {
                 root._previousTx = tx
                 root._previousTimestamp = now
             }
-            proc.destroy()
         })
-        proc.running = true
     }
 
     Row {
@@ -156,13 +152,6 @@ Item {
         function onDeviceStateChanged() {
             if (NetworkService.deviceState !== "connected")
                 root.reset("")
-        }
-    }
-
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
         }
     }
 

@@ -28,7 +28,8 @@ Current operation groups are:
 - `kwin.subscribe`, `kwin.command`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)
-- `network.*`, `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
+- `network.*` (including `network.traffic` for read-only interface counters),
+  `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
 KWin events are sent to subscribers as `window.snapshot`, `desktops`,

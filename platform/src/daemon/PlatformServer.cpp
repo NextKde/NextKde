@@ -116,6 +116,15 @@ QStringList splitNmcli(const QString &line)
     return fields;
 }
 
+bool validNetworkDevice(const QString &device)
+{
+    // Linux interface names are at most IFNAMSIZ-1 bytes and cannot contain
+    // path separators. Restricting the alphabet also keeps the sysfs path
+    // below within /sys/class/net instead of relying on shell escaping.
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z0-9_.-]{1,15}$"));
+    return pattern.match(device).hasMatch();
+}
+
 QJsonObject parseNetworkRefresh(const QByteArray &output, int exitCode)
 {
     if (exitCode != 0)
@@ -905,8 +914,8 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("network.details")) {
-        const QString device = payload.value(QStringLiteral("device")).toString();
-        if (device.isEmpty() || device.contains(QChar('/')) || device.contains(QChar(':'))) {
+        const QString device = payload.value(QStringLiteral("device")).toString().trimmed();
+        if (!validNetworkDevice(device)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-device"),
                     QStringLiteral("网络设备无效"), false);
             return true;
@@ -919,8 +928,8 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("network.scan")) {
-        const QString device = payload.value(QStringLiteral("device")).toString();
-        if (device.isEmpty() || device.contains(QChar('/')) || device.contains(QChar(':'))) {
+        const QString device = payload.value(QStringLiteral("device")).toString().trimmed();
+        if (!validNetworkDevice(device)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-device"),
                     QStringLiteral("网络设备无效"), false);
             return true;
@@ -989,7 +998,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         const QString device = payload.value(QStringLiteral("device")).toString();
         const QString password = payload.value(QStringLiteral("password")).toString();
         const QString uuid = payload.value(QStringLiteral("savedProfileUuid")).toString();
-        if (ssid.isEmpty() || device.isEmpty() || device.contains(QChar('/'))) {
+        if (ssid.isEmpty() || !validNetworkDevice(device)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-network"),
                     QStringLiteral("网络参数无效"), false);
             return true;
@@ -1016,7 +1025,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             : method == QStringLiteral("ttls") ? QStringLiteral("pap") : QString();
         const QString anonymous = payload.value(QStringLiteral("anonymousIdentity")).toString();
         if (ssid.isEmpty() || device.isEmpty() || identity.isEmpty() || password.isEmpty()
-            || phase2.isEmpty() || device.contains(QChar('/'))) {
+            || phase2.isEmpty() || !validNetworkDevice(device)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-network"),
                     QStringLiteral("802.1X 参数无效"), false);
             return true;
@@ -1066,12 +1075,40 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("network.disconnect")) {
-        const QString device = payload.value(QStringLiteral("device")).toString();
-        if (device.isEmpty() || device.contains(QChar('/'))) {
+        const QString device = payload.value(QStringLiteral("device")).toString().trimmed();
+        if (!validNetworkDevice(device)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-device"), QStringLiteral("网络设备无效"), false);
             return true;
         }
         runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("device"), QStringLiteral("disconnect"), device});
+        return true;
+    }
+    if (op == QStringLiteral("network.traffic")) {
+        const QString device = payload.value(QStringLiteral("device")).toString().trimmed();
+        if (!validNetworkDevice(device)) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-device"),
+                    QStringLiteral("网络设备无效"), false);
+            return true;
+        }
+        const QString base = QStringLiteral("/sys/class/net/") + device
+            + QStringLiteral("/statistics/");
+        QFile rxFile(base + QStringLiteral("rx_bytes"));
+        QFile txFile(base + QStringLiteral("tx_bytes"));
+        bool rxOk = false;
+        bool txOk = false;
+        const qint64 rx = rxFile.open(QIODevice::ReadOnly)
+            ? QString::fromUtf8(rxFile.readAll()).trimmed().toLongLong(&rxOk) : 0;
+        const qint64 tx = txFile.open(QIODevice::ReadOnly)
+            ? QString::fromUtf8(txFile.readAll()).trimmed().toLongLong(&txOk) : 0;
+        if (!rxOk || !txOk || rx < 0 || tx < 0) {
+            respond(socket, request, false, {}, QStringLiteral("network-traffic-unavailable"),
+                    QStringLiteral("无法读取网络流量"), true);
+            return true;
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("device"), device},
+                            {QStringLiteral("rxBytes"), static_cast<double>(rx)},
+                            {QStringLiteral("txBytes"), static_cast<double>(tx)}});
         return true;
     }
     if (op == QStringLiteral("network.forget")) {
