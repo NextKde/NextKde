@@ -4,7 +4,7 @@ import QtQuick
 import qs.desktop.modules.platform
 
 // The Bar thermal indicator, Dock temperature page and DeskCenter system card
-// all consume the shell-data-service metrics snapshot through this singleton,
+// all consume the kos-data-service metrics snapshot through this singleton,
 // so no QML surface polls /proc or /sys and their values cannot drift apart.
 // The Go service owns sampling, history and sensor enumeration; this file only
 // reads the atomic snapshot and reformats it for the three views.

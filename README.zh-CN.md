@@ -1,237 +1,166 @@
 # KOS Desktop Shell
 
-**[English](README.md) | [中文](README.zh-CN.md)**
+[English](README.md)
 
-一个 iPadOS 风格的桌面环境，运行于 **KDE Plasma 6 (Wayland)**，基于
-[Quickshell](https://quickshell.org) 构建。KOS 不是发行版，也不是某个桌面
-环境的 fork——它是一套完整的 Quickshell 配置，加上少量原生帮助程序和
-KWin 特效，共同替换 Plasma 的 Shell 体验：顶部状态栏、悬浮 Dock、桌面
-组件、应用启动器、通知系统、工作区概览，以及独立的设置应用。
+KOS 是运行在 KDE Plasma 6 Wayland 上的 Quickshell 桌面 Shell，提供顶部栏、
+悬浮 Dock、桌面组件和文件、启动器、搜索、通知、工作区概览及独立设置应用。
+它不会替换 Plasma、KWin、NetworkManager、PipeWire 或 systemd，只接管你选择
+隐藏的界面。
 
-> 状态：个人日用项目，活跃开发中。接口与配置 schema 均有版本号和迁移
-> 逻辑，但功能会持续快速演进。
+## 五分钟预览
 
----
+预览不会安装任何文件，也不需要 root：
 
-## 特性
+```sh
+git clone <repository-url> NextKde
+cd NextKde
+./tools/kosctl doctor       # 检查 Quickshell、CMake、Go 和图形会话
+qs -p "$PWD/shell"          # 等价于 quickshell --path "$PWD/shell"
+```
 
-### Shell 界面
-
-- **顶部状态栏**——系统托盘、带实时速率的网络状态、蓝牙、音量、电池、
-  CPU 温度、时钟与控制中心入口。可独立存在，也可融入 Dock。
-- **Dock**——iPadOS 风格的固定应用 + 运行窗口、悬停放大、拖拽排序、
-  右键菜单、实时窗口预览、带封面取色的 MPRIS 音乐播放器、天气、带角标的
-  回收站。支持三个位置（底部/左/右）、三种显示模式（`始终显示` /
-  `智能隐藏`（窗口碰撞驱动）/ `持续隐藏`，配 iOS 风格小白条唤醒），以及
-  图标外观模式（`彩色` / `黑白` / `染色`）。
-- **Bar ⇄ Dock 融合**——可选择把状态栏并入底部 Dock：时钟加入
-  音乐/天气/温度信息轮播，系统状态区成为右侧附件；侧边 Dock 则使用反向
-  旋转、文字保持正立的单行轮播。
-- **DeskCenter 桌面层**——背景层桌面组件（时钟、天气、日历、带历史
-  环图的系统监控、活动记录、正在播放）与真实的桌面文件表面：排序、
-  框选、重命名、回收站、长按投放文件夹、多选拖动、新建文件/文件夹、
-  外部 URL 拖入，以及与 Dolphin 互通的剪切/复制语义。
-- **应用启动器**——iPadOS 风格全屏网格，拖入创建文件夹，支持自定义
-  名称/图标与隐藏应用。
-- **快速搜索**——增量应用/文件搜索、剪贴板历史（cliphist，含图片），
-  以及带 KWin 实时缩略图的 MRU 窗口切换。
-- **通知**——按应用分组叠加/展开、操作按钮、内联回复、紧急级别样式、
-  勿扰模式，以及控制中心内按应用分组的历史中心。
-- **工作区概览**——Stage Manager 风格的全屏遮罩：虚拟桌面条 + 实时
-  窗口缩略图（`Meta+Tab`）。
-- **控制中心**——Wi-Fi 连接/断开/忘记（含 802.1X：PEAP / TTLS）、蓝牙、
-  音量、经 logind 的真实背光亮度、勿扰、截图、注销与通知历史。
-
-### 外观系统
-
-- 三种 Shell 形态——**Windows 12**、**macOS**、**Material**——由带版本
-  的语义 Token 层（`AppearanceTokens`）驱动，热切换不重建任何界面。
-- 全局**模糊强度**与**液态玻璃强度**滑块，同时作用于 QML 玻璃材质与
-  KWin 玻璃特效。
-- 独立的**设置应用**（`kos-settings`）运行于自有进程，只通过带版本的
-  IPC 契约（`appearance-settings`）与 Shell 通信。
-
-### 图形与特效
-
-- **KWin 玻璃特效**（`integrations/kwin-effects-glass`）：Plasma 6 模糊
-  的 fork，含 Dual Kawase 模糊、Snell 折射、按表面的高光方向，以及双向
-  染色（深色背景提亮、亮色背景压暗）。
-- **Dock 窗口动画特效**（`integrations/kwin-dock-window-animation`）：
-  iPadOS 风格的 `scale` / `genie` 开关窗动画；Shell 发布精确的屏幕图标
-  矩形，使窗口准确落回图标。
-- **右键菜单输入特效**（`integrations/kwin-context-menu-input`）：在合成
-  器层面实现菜单的外部点击关闭。
-- 客户端 SDF 圆角、折射、噪声与辉光 shader，使用 `qsb` 编译。
-
-### 平台服务
-
-- **`shell-data-service`（Go）**——持久与历史数据的唯一所有者：
-  CPU/内存/磁盘/频率/温度采样与历史、开机与按应用的活动账本、桌面目录
-  监听与原子快照，以及由其监督的 Qt 剪贴板帮助程序（同时发布 URI、KDE
-  与 GNOME 三种格式，区分复制/剪切）。
-- **KWin 窗口桥**（`helpers/kwin-window-bridge`）——C++ D-Bus 桥 + KWin
-  脚本，提供窗口枚举、几何、激活、最小化、缩略图与虚拟桌面数据；KWin
-  本身不实现 `zwlr-foreign-toplevel-management-v1`。
-- **全局快捷键**——注册为 KDE 原生 Command Shortcut，安装时检测冲突；
-  可在「系统设置 → 快捷键」中改键。
-
----
+按 `Ctrl+C` 退出。未安装两个常驻服务前，指标、窗口和桌面文件可能为空；
+Plasma 原有面板和通知仍会运行，出现重叠是正常的。
 
 ## 环境要求
 
-| 组件 | 要求 |
-| --- | --- |
-| 会话 | KDE Plasma 6 + Wayland（开发环境为 Plasma/KWin 6.7） |
-| Shell 运行时 | [Quickshell](https://quickshell.org) 0.3.0（`qs`） |
-| 构建工具 | Go、CMake、C++ 编译器、Qt 6 Gui 开发文件、`socat` |
-| 运行时集成 | NetworkManager（`nmcli`）、systemd 用户会话、logind |
-| 可选 | `cliphist`（剪贴板历史）、`qdbus6`/`kwriteconfig6`（特效同步） |
+- KDE Plasma 6 Wayland 会话（KWin 负责窗口列表）。
+- Quickshell 0.3.x（`qs` 或 `quickshell`），安装方法见
+  [Quickshell 官方文档](https://quickshell.org/docs/)。
+- CMake 3.21+、Ninja、C++20 编译器、Qt 6 开发包和 Go。
+- 正常 Plasma 会话提供 NetworkManager（`nmcli`）、PipeWire/WirePlumber
+  （`wpctl`）、BlueZ（`bluetoothctl`）、`loginctl` 和 `systemctl --user`。
+- 只有编译可选 KWin 插件时才需要 KWin/KF6 开发头文件。
 
-Arch 系发行版的构建依赖通常是 `go cmake gcc qt6-base`；Debian/Ubuntu 为
-`golang cmake g++ qt6-base-dev`。编译 KWin 特效还需要 KWin 开发包
-（`kwin-dev` / `kwin-devel`）与 KF6 开发头文件。
+Arch 常用基础包为 `quickshell cmake ninja gcc qt6-base go`；Debian/Ubuntu
+安装发行版对应的 `quickshell cmake ninja-build g++ qt6-base-dev golang`。
 
-## 安装
+## 完整安装
 
-克隆仓库后，按需安装各组件。除 KWin 特效外，所有内容都安装到用户目录
-或 `/usr/local`，可以干净卸载。
-
-### 1. 运行 Shell
+在仓库根目录执行唯一入口：
 
 ```sh
-quickshell --path /path/to/quickshell
-# 或者，如果你的 quickshell 二进制叫 qs：
-qs -p /path/to/quickshell
+./tools/kosctl doctor
+KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
 ```
 
-入口是 `shell.qml`，它只负责实例化 `desktop/DesktopEnvironment.qml`。
+该命令会构建并安装：
 
-### 2. 数据服务（推荐）
+- `kos-platform` → `~/.local/libexec/`（唯一的 C++/Qt 平台常驻进程）；
+- `kos-data-service` → `~/.local/libexec/`（Go 指标/历史数据常驻进程）；
+- `kos-settings` → `~/.local/bin/`；
+- Quickshell 配置 → `~/.config/quickshell/kos`；
+- `kos-platform.service` 与 `kos-data.service` → systemd 用户单元。
 
-构建 Go 服务与 Qt 剪贴板帮助程序，安装到 `~/.local/lib/quickshell` 并
-启用 systemd 用户单元：
+安装器会立即启用两个用户服务，不使用 `sudo`。如果系统有匹配的 KWin 开发
+头文件，可用 `KOS_BUILD_KWIN_PLUGINS=ON` 构建插件；系统范围安装插件可能需要
+管理员权限。
+
+启动已安装的 Shell：
 
 ```sh
-./tools/install-shell-data-service.sh
+qs -c kos
 ```
 
-没有它，系统指标、活动账本、桌面文件以及跨应用的文件复制/剪切不可用。
+开发时使用 `./tools/kosctl run`，它通过 `qs -p shell` 加载当前检出目录。
 
-### 3. KWin 窗口桥（Plasma 下必需）
+### 首次 Plasma 设置
+
+KOS 提供自己的通知服务。日常使用前请从 Plasma 面板/系统托盘移除通知组件，
+否则 Plasma 会占用通知 D-Bus 名称。恢复 Plasma 时再加回该组件。KOS 不会自动
+修改你的面板布局。
+
+### 全局快捷键
+
+默认快捷键由原生平台程序安装，不再依赖 Python：
 
 ```sh
-cmake -S helpers/kwin-window-bridge -B .build/kwin-window-bridge
-cmake --build .build/kwin-window-bridge
-sudo install -m 0755 .build/kwin-window-bridge/quickshell-kwin-window-bridge \
-    /usr/local/libexec/quickshell-kwin-window-bridge
+./tools/kosctl shortcuts install
 ```
 
-Shell 运行时由 `WindowService` 自动启动桥接并加载 KWin 脚本；在实现了
-foreign-toplevel-management 的合成器上桥接保持闲置。
-
-### 4. KWin 玻璃特效（推荐）
-
-`integrations/kwin-effects-glass` 内 vendored 的 fork 是权威源码；发行版
-打包与手动编译方法见其 [README](integrations/kwin-effects-glass/README.md)。
-安装后在「系统设置 → 桌面特效」中启用（插件 ID 为 `blurplus`）。之后模糊
-与折射强度由 Shell 的外观设置实时驱动。
-
-### 5. 可选的内置 KWin 特效
+定义位于 `shared/contracts/shortcuts.v1.json`，之后可在「系统设置 → 快捷键」
+中修改。只删除 KOS 的绑定：
 
 ```sh
-for effect in kwin-dock-window-animation kwin-context-menu-input; do
-    cmake -S "integrations/$effect" -B ".build/$effect"
-    cmake --build ".build/$effect"
-    sudo cmake --install ".build/$effect"
-done
+./tools/kosctl shortcuts uninstall
 ```
 
-在「系统设置 → 桌面特效」中启用。Dock 窗口动画风格（`scale` / `genie`）
-跟随 Shell 的外观配置。
-
-### 6. 设置应用
-
-```sh
-cmake -S apps/settings -B .build/apps/settings
-cmake --build .build/apps/settings
-```
-
-桌面入口模板见 `packaging/desktop/kos-settings.desktop.in`。
-
-### 7. 全局快捷键
-
-```sh
-python3 helpers/global-shortcuts/install.py
-```
-
-注册带冲突检测的 KDE Command Shortcut 并写入默认绑定。修改
-`helpers/global-shortcuts/shortcuts.json` 后需重跑；之后改键请在
-「系统设置 → 快捷键」中进行。
-
-### 8. 通知接管
-
-Quickshell 的通知服务只有在 Plasma 通知组件让位后才能拿到 D-Bus 名称：
-在托盘设置中移除通知组件，并重启一次 plasmashell
-（`systemctl --user restart plasma-plasmashell`）。
-
-### 默认快捷键
-
-| 快捷键 | 功能 |
-| --- | --- |
-| `Meta+Space` | 应用启动器 |
-| `Meta+Shift+Space` | 窗口切换器（MRU） |
-| `Meta+B` | 控制中心 |
-| `Meta+Tab` | 工作区概览 |
-
-## 项目结构
+## 架构概览
 
 ```text
-shell.qml       稳定的 Quickshell 入口
-desktop/        桌面环境本体（bar、dock、deskcenter、启动器……）
-apps/           独立 Qt Quick 应用（settings……）
-shared/         纯 Qt Quick 的跨进程公共 QML 与契约
-services/       常驻后台服务（shell-data-service，Go）
-helpers/        按需启动的原生帮助程序（KWin 桥、快捷键、剪贴板）
-integrations/   KWin 特效等合成器集成
-tools/          安装、构建与诊断脚本
-docs/           架构文档
+qs -c kos ──► shell/shell.qml ──► shell/desktop/       Quickshell 进程
+                    │ JSONL Unix socket
+                    ├──────────────► kos-platform       C++/Qt 适配器
+                    └──────────────► kos-data.sock      Go 持久数据服务
+
+apps/settings/       独立 Qt Quick 进程，只通过 Shell IPC 通信
+integrations/kwin/   两个 KWin 插件 .so（KWin 加载模型要求）
+vendor/              第三方 kwin-effects-glass 源码
+shared/contracts/    带版本的 IPC 与快捷键契约
 ```
 
-## 文档
+平台 socket 为 `$XDG_RUNTIME_DIR/kos-platform.sock`，数据 socket 为
+`$XDG_RUNTIME_DIR/kos-data.sock`，权限均为 `0600`。所有消息都是带版本和
+`requestId` 的 JSON Lines，并使用统一结果/错误模型，详见
+[PlatformArchitecture.md](docs/PlatformArchitecture.md) 与
+[platform.v1.md](shared/contracts/platform.v1.md)。
 
-- [功能架构](docs/FunctionalArchitecture.md)——系统全景、功能子系统与跨进程数据流
-- [项目架构](docs/ProjectArchitecture.md)——运行时边界与依赖方向
-- [Dock 架构](docs/DockArchitecture.md)——身份、窗口模型、持久化与显示模式
-- [外观架构](docs/AppearanceArchitecture.md)——schema、IPC 契约与语义 Token
-- [网络架构](docs/NetworkArchitecture.md)——NetworkManager 适配层边界
-- [数据服务](docs/ShellDataService.md)——Go 数据层的职责与协议
-- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md)——浓缩的工程上下文与关键技术决策
+`kos-platform` 负责 KWin 窗口命令、Wayland 文件剪贴板、文件操作/Open-With、
+网络/音频/蓝牙/亮度/会话/主题适配、截图选择和快捷键安装。
+`kos-data-service` 负责采样、历史、活动归属和桌面目录快照。两个 KWin 特效仍
+是独立共享库，因为 KWin 要求每个插件有独立 ID。
 
-## 后续开发计划
-
-按大致优先级排列：
-
-- **多显示器每屏布局**——DeskCenter 组件、桌面图标布局、Dock 位置/显示
-  规则与壁纸取色按显示器持久化。
-- **DeskCenter 主题接入**——让桌面卡片消费外观 Token 层（最后一个未
-  接入的 surface）。
-- **设置覆盖面**——`kos-settings` 增加快捷键与 DeskCenter 设置页。
-- **独立应用**——填充 `apps/` 下的 `calendar`、`todo`、`weather` 占位。
-- **可访问性与键盘导航**——焦点顺序、减少动画、高对比度与全键盘操作。
-- **天气图标集**——用完整 SVG 图标集替换目前 Unicode 字符、Canvas 绘制
-  与部分 SVG 混用的方案。
-
-已搁置：跨文件管理器的拖拽移动（受 Wayland DnD action 协商限制），目前
-仅由剪贴板桥接覆盖复制/剪切。
-
-## 开发
+## 常用命令
 
 ```sh
-qmllint <改动的 QML 文件>
-node desktop/modules/dock/test_adaptive.mjs
-node desktop/modules/dock/test_autohide.mjs
+./tools/kosctl doctor
+./tools/kosctl build
+./tools/kosctl run
+./tools/kosctl install
+./tools/kosctl uninstall
+systemctl --user status kos-platform.service kos-data.service
+journalctl --user -u kos-platform.service -u kos-data.service -f
+```
+
+`uninstall` 会停止服务并移除安装的二进制、单元和 Shell 配置，但保留
+`$XDG_STATE_HOME/quickshell/...` 中的用户状态，方便恢复。
+
+## 开发与验证
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+python3 platform/tests/test_contract.py
+node shell/desktop/modules/dock/test_adaptive.mjs
+node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check
 ```
 
-运行时验证会启动独立的 Quickshell 实例并检查日志，流程见
-`.agents/skills/verify/SKILL.md`。提交格式为 `feat(scope): description`。
+请先用 `./tools/kosctl run` 启动独立 Quickshell 实例并检查日志，再替换日常
+Shell。安全运行流程见 [.agents/skills/verify/SKILL.md](.agents/skills/verify/SKILL.md)。
+如果 Go 依赖下载失败，`kosctl build` 会显示代理/网络错误，可切换到发行版的
+Go module 镜像后重试。
+
+## 仓库结构
+
+```text
+shell/                     唯一 Quickshell 配置根目录
+apps/settings/             独立设置应用
+shared/qml/                可移植控件
+shared/contracts/          JSONL 与快捷键契约
+services/data-service/     Go 数据服务
+platform/                  一个 kos-platform CMake 工程和可执行文件
+integrations/kwin/         两个本项目 KWin 插件
+vendor/kwin-effects-glass/ 第三方特效
+packaging/                 systemd 与 desktop 文件
+tools/kosctl               构建/安装/运行/检查/卸载入口
+docs/                      架构和运维文档
+```
+
+架构边界见 [ProjectArchitecture.md](docs/ProjectArchitecture.md)，数据层见
+[ShellDataService.md](docs/ShellDataService.md)，平台操作、权限和错误模型见
+[PlatformArchitecture.md](docs/PlatformArchitecture.md)。
+
+## 许可证
+
+KOS 使用 GPL-3.0-or-later，见 [LICENSE](LICENSE)。vendored 玻璃特效保留其
+兼容许可证：`vendor/kwin-effects-glass/LICENSE`。

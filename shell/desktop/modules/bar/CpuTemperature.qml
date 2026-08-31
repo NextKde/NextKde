@@ -6,7 +6,7 @@ import qs.desktop.modules.dock
 import qs.desktop.modules.common
 
 // Compact CPU thermal indicator. Sampling, sensor enumeration, and the rolling
-// history now live in shell-data-service; this indicator only formats the
+// history now live in kos-data-service; this indicator only formats the
 // shared MetricsService snapshot (updated every ten seconds by the service).
 Item {
     id: root

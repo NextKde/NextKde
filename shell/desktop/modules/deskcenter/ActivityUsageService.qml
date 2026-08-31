@@ -4,7 +4,7 @@ import QtQuick
 import qs.desktop.modules.platform
 import qs.desktop.modules.dock
 
-// Activity data lives in shell-data-service: boot uptime is seeded from
+// Activity data lives in kos-data-service: boot uptime is seeded from
 // journald by the Go service and the running session is settled there every
 // second. This singleton only reads the activity section of the atomic
 // snapshot and reports the foreground app back to the service, which

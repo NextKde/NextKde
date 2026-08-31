@@ -4,7 +4,7 @@ import qs.desktop.modules.common
 
 // Permanent thermal page for DockInfoCarousel. It is deliberately a pure
 // MetricsService consumer: the Bar, Dock and DeskCenter all render the same
-// shell-data-service snapshot and never start their own sensor pollers.
+// kos-data-service snapshot and never start their own sensor pollers.
 Item {
     id: widget
 

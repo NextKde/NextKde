@@ -43,35 +43,35 @@ Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter�
 2. `AppearanceTokens` 只把配置映射成语义值，不执行 IO，也不拥有业务数据。
 3. 消费组件读取 Token，不应散落 `shellStyle === ...` 分支。
 4. Dock 的固定项、尺寸、位置、图标模式和显示策略仍归 `DockConfigService` 所有；切换形态不得覆盖这些用户设置。
-5. 独立进程 `apps/settings` 不允许 import `desktop/`，只通过 IPC 读写。
+5. 独立进程 `apps/settings` 不允许 import `shell/desktop/`，只通过 IPC 读写。
 
 ## 3. 文件索引
 
 | 文件 | 责任 |
 | --- | --- |
-| `desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
-| `desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token |
-| `desktop/modules/common/qmldir` | 注册公共组件与 singleton |
-| `desktop/modules/common/SystemIconResolver.qml` | 将语义角色、状态和回退候选解析为当前系统主题图标 |
-| `desktop/modules/common/SystemIcon.qml` | 统一的小型状态/菜单图标渲染组件 |
-| `desktop/DesktopEnvironment.qml` | `appearance-settings` IPC target |
+| `shell/desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
+| `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token |
+| `shell/desktop/modules/common/qmldir` | 注册公共组件与 singleton |
+| `shell/desktop/modules/common/SystemIconResolver.qml` | 将语义角色、状态和回退候选解析为当前系统主题图标 |
+| `shell/desktop/modules/common/SystemIcon.qml` | 统一的小型状态/菜单图标渲染组件 |
+| `shell/desktop/DesktopEnvironment.qml` | `appearance-settings` IPC target |
 | `apps/settings/src/main.cpp` | Settings 到 Quickshell IPC 的进程桥 |
 | `apps/settings/main.qml` | “显示”和“主题”页面，包括 Bar 融合开关 |
-| `desktop/modules/bar/BarDateStatus.qml` | 独立顶部 Bar 的时间日期内容 |
-| `desktop/modules/bar/BarStatusArea.qml` | 可复用的托盘、网络、电池与控制中心内容；向 Dock 提供稳定的单行最大宽度预算 |
-| `desktop/modules/bar/SysTray.qml` | 系统托盘宿主；原生托盘项与 Wi‑Fi、电池、设置、控制中心共用连续 Grid，融合 Dock 高度达到 48px 时自动折为两行 |
-| `desktop/modules/bar/DockStatusSvgIcon.qml` | Wi‑Fi、设置、控制中心的项目 SVG 遮罩渲染器；彩色模式输出白色，黑白模式叠加统一透明度，染色模式使用公共 tonal 色与阴影 |
-| `desktop/modules/bar/BarWindow.qml` | 独立顶栏的 layer-shell 几何宿主 |
-| `desktop/modules/dock/DockInfoCarousel.qml` | Dock 音乐、天气、融合时钟、常驻温度的固定宽度轮播宿主 |
-| `desktop/modules/dock/DockSideInfoCarousel.qml` | 左/右 Dock 的单行信息轮播；父 Row 旋转 90°，面板反向旋转保持文字正立，沿边占两个图标位 |
-| `desktop/modules/dock/DockMetricGlyph.qml` | Dock 信息卡的主题无关高对比度字形（温度/时钟），Canvas/仓库 SVG 绘制纯白像素 |
-| `desktop/modules/dock/DockClockWidget.qml` | 左侧为液态时间与日期，右侧为带图标的日落/日出时间；使用与天气/音乐同规格的壁纸环境色卡片 |
-| `desktop/modules/dock/DockTemperatureWidget.qml` | 常驻 Dock 温度页；左侧用白色加粗的系统主题温度图标、蓝/红状态点和紧凑上下行显示平均/最高温度，右侧复用 DeskCenter 的 CPU/内存/存储三环语义与配色；只消费公共 `MetricsService` 快照 |
-| `desktop/modules/dock/DockContainer.qml` | Token 驱动的 Dock 自适应比例和圆角 |
-| `desktop/modules/dock/DockWindow.qml` | Token 驱动的贴边距离与玻璃环境系数 |
-| `desktop/modules/dock/DockIcon.qml` | Token 驱动的状态背景、指示器、放大与位移 |
-| `desktop/modules/dock/DockAnimation.qml` | 将 motion Token 投影到 Dock 动效语义 |
-| `desktop/modules/dock/DockWindowAnimationTargetService.qml` | 向 KWin dock-window-animation effect 发布合成器全局坐标下的 Dock 图标矩形（采样自渲染后的 AppIcon），驱动 `dockWindowAnimationStyle` |
+| `shell/desktop/modules/bar/BarDateStatus.qml` | 独立顶部 Bar 的时间日期内容 |
+| `shell/desktop/modules/bar/BarStatusArea.qml` | 可复用的托盘、网络、电池与控制中心内容；向 Dock 提供稳定的单行最大宽度预算 |
+| `shell/desktop/modules/bar/SysTray.qml` | 系统托盘宿主；原生托盘项与 Wi‑Fi、电池、设置、控制中心共用连续 Grid，融合 Dock 高度达到 48px 时自动折为两行 |
+| `shell/desktop/modules/bar/DockStatusSvgIcon.qml` | Wi‑Fi、设置、控制中心的项目 SVG 遮罩渲染器；彩色模式输出白色，黑白模式叠加统一透明度，染色模式使用公共 tonal 色与阴影 |
+| `shell/desktop/modules/bar/BarWindow.qml` | 独立顶栏的 layer-shell 几何宿主 |
+| `shell/desktop/modules/dock/DockInfoCarousel.qml` | Dock 音乐、天气、融合时钟、常驻温度的固定宽度轮播宿主 |
+| `shell/desktop/modules/dock/DockSideInfoCarousel.qml` | 左/右 Dock 的单行信息轮播；父 Row 旋转 90°，面板反向旋转保持文字正立，沿边占两个图标位 |
+| `shell/desktop/modules/dock/DockMetricGlyph.qml` | Dock 信息卡的主题无关高对比度字形（温度/时钟），Canvas/仓库 SVG 绘制纯白像素 |
+| `shell/desktop/modules/dock/DockClockWidget.qml` | 左侧为液态时间与日期，右侧为带图标的日落/日出时间；使用与天气/音乐同规格的壁纸环境色卡片 |
+| `shell/desktop/modules/dock/DockTemperatureWidget.qml` | 常驻 Dock 温度页；左侧用白色加粗的系统主题温度图标、蓝/红状态点和紧凑上下行显示平均/最高温度，右侧复用 DeskCenter 的 CPU/内存/存储三环语义与配色；只消费公共 `MetricsService` 快照 |
+| `shell/desktop/modules/dock/DockContainer.qml` | Token 驱动的 Dock 自适应比例和圆角 |
+| `shell/desktop/modules/dock/DockWindow.qml` | Token 驱动的贴边距离与玻璃环境系数 |
+| `shell/desktop/modules/dock/DockIcon.qml` | Token 驱动的状态背景、指示器、放大与位移 |
+| `shell/desktop/modules/dock/DockAnimation.qml` | 将 motion Token 投影到 Dock 动效语义 |
+| `shell/desktop/modules/dock/DockWindowAnimationTargetService.qml` | 向 KWin dock-window-animation effect 发布合成器全局坐标下的 Dock 图标矩形（采样自渲染后的 AppIcon），驱动 `dockWindowAnimationStyle` |
 
 ### 3.1 系统图标契约
 
@@ -148,8 +148,8 @@ snapshot 示例：
 手动检查：
 
 ```bash
-quickshell --path /home/amao/OneDrive/quickshell ipc call appearance-settings snapshot
-quickshell --path /home/amao/OneDrive/quickshell ipc call appearance-settings updateShellStyle material
+quickshell --path shell ipc call appearance-settings snapshot
+quickshell --path shell ipc call appearance-settings updateShellStyle material
 ```
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
@@ -238,7 +238,7 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 - Bar 状态区的 CPU 等通用语义图标通过 `SystemIcon`/`SystemIconResolver` 消费当前系统图标主题。Wi‑Fi、设置、控制中心使用项目自绘 SVG：独立 Bar 与 Dock `color` 模式输出白色，`grayscale` 叠加与应用图标相同的 `iconOpacity`，`tint` 将 72% 基准亮度投影到 `iconTintColor` 后再叠加轻微暗影，避免纯色 SVG 比其他图标突兀。电池保留电量绘制，但在 Dock `tint` 模式下使用同一 tonal 色、透明度和阴影。快捷状态组只保留布局 padding，不绘制整组白色蒙层。
 - Dock 的 `iconMode` 同时约束 Dock 内的应用图标、原生 SystemTray 图标、自绘 Wi‑Fi/设置/控制中心图标，以及天气/时间/温度卡片背景。`color` 保留内容原色；`grayscale` 按亮度去色；`tint` 先保留亮度层级再投影到 `iconTintColor`。该规则只在状态区被 Dock 承载时作用于 Bar 组件，独立顶部 Bar 仍使用系统主题原色。电池是状态相关的专用绘制，明确排除在此投影之外。
 - 融合模式的状态托盘把原生 SystemTray 项与 Wi‑Fi、电池、设置、控制中心组成一条连续序列，以 `48px` 可用高度为两行阈值：至少两个项目且达到阈值时按列连续填入两行，否则保持单行；独立顶部 Bar 永远单行。Dock 温度页在融合与非融合模式下都保留；融合后状态附件隐藏重复的 CPU 摘要，恢复独立 Bar 后摘要重新显示。Dock 高度求解使用 `BarStatusArea.layoutMaximumWidth` 的单行最大宽度，最终宽度才采用折行后的实际宽度，禁止让行数反向参与高度求解形成 binding loop。
-- Dock 温度页、独立 Bar 温度摘要和 DeskCenter 温度区必须只读取公共 `MetricsService`。该 singleton 从 `shell-data-service` 的原子快照取值；任何 surface 都不得另外读取 `/proc`、`/sys` 或启动新的采样进程。快照尚未就绪时 Dock 页仍占位并显示 `--`，不能从轮播中消失。
+- Dock 温度页、独立 Bar 温度摘要和 DeskCenter 温度区必须只读取公共 `MetricsService`。该 singleton 从 `kos-data-service` 的原子快照取值；任何 surface 都不得另外读取 `/proc`、`/sys` 或启动新的采样进程。快照尚未就绪时 Dock 页仍占位并显示 `--`，不能从轮播中消失。
 - Material 的 `tonal` 需要从系统 palette/壁纸 palette 派生，不得在组件里硬编码紫色。设置页紫色仅用于预览识别。
 - 可读性遮罩和最小对比度优先于透明度；局部 multiplier 只允许弱化或增强材质细节。
 
@@ -264,11 +264,11 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 
 ```bash
 qmllint apps/settings/main.qml
-qmllint desktop/modules/common/AppearanceConfigService.qml \
-  desktop/modules/common/AppearanceTokens.qml desktop/DesktopEnvironment.qml
+qmllint shell/desktop/modules/common/AppearanceConfigService.qml \
+  shell/desktop/modules/common/AppearanceTokens.qml shell/desktop/DesktopEnvironment.qml
 cmake --build apps/settings/build
-node desktop/modules/dock/test_adaptive.mjs
-node desktop/modules/dock/test_autohide.mjs
+node shell/desktop/modules/dock/test_adaptive.mjs
+node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check
 ```
 

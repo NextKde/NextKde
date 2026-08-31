@@ -76,7 +76,7 @@ PanelWindow {
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
     readonly property var activityUsage: ActivityUsageService
-    // File metadata is supplied by shell-data-service; this surface only
+    // File metadata is supplied by kos-data-service; this surface only
     // lays it out as a right-aligned desktop grid.
     readonly property var desktopFiles: DesktopFilesService
 
@@ -867,7 +867,7 @@ PanelWindow {
                     Item {
                 id: systemContent
                 anchors.fill: parent
-                // The shell-data-service snapshot drives this card through
+                // The kos-data-service snapshot drives this card through
                 // the shared MetricsService, so the rings and trends read the
                 // exact values the Bar's thermal indicator shows.
                 readonly property var metrics: MetricsService

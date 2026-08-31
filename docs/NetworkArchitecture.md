@@ -1,9 +1,9 @@
 # Network status architecture
 
-`desktop/modules/bar/NetworkService.qml` is the only adapter between shell UI and
-NetworkManager in this project. It polls `nmcli` asynchronously every three
-seconds and performs only explicit user-requested writes. No Bar component may invoke
-`nmcli` or parse its output directly.
+`shell/desktop/modules/bar/NetworkService.qml` is the presentation adapter between
+shell UI and the `network.*` operations exposed by `kos-platform`. The C++
+platform module polls/updates NetworkManager through `nmcli` and returns a
+normalized JSON object. No QML component invokes `nmcli` or parses its output.
 
 ## Public state contract
 
