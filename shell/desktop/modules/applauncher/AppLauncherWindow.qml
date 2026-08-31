@@ -890,28 +890,6 @@ PanelWindow {
     // The closing card remains visible only as an animation; it must not
     // continue to capture keyboard input after Escape or a click on Dock.
     focusable: root.open && !externalDialogOpen
-    Keys.onPressed: function (event) {
-        if (event.key === Qt.Key_Escape) {
-            if (editingApplication) {
-                closeApplicationEditor();
-            } else if (openFolder) {
-                if (folderRenameActive)
-                    folderRenameActive = false;
-                else if (folderEditMode)
-                    folderEditMode = false;
-                else
-                    closeFolder();
-            } else if (editMode)
-                editMode = false;
-            else if (clearSearch()) {
-                // Escape first returns to the complete app grid. A second
-                // Escape closes the launcher, matching native launchers.
-            } else
-                AppLauncherService.hide();
-            event.accepted = true;
-        }
-    }
-
     Timer {
         id: searchFocusTimer
         interval: 1
@@ -1042,9 +1020,9 @@ PanelWindow {
         title: "选择应用图标"
         fileMode: FileDialog.OpenFile
         nameFilters: ["图片和 SVG (*.svg *.png *.jpg *.jpeg *.webp)", "所有文件 (*)"]
-        // Bind to the actual layer-shell window rather than an editor item,
-        // and make the native chooser own application input while it is open.
-        parentWindow: root
+        // PanelWindow is a Quickshell proxy, not a QWindow. Its private
+        // backing window is the QQuickWindow required by Qt Quick Dialogs.
+        parentWindow: root._backingWindow
         modality: Qt.ApplicationModal
         onVisibleChanged: {
             root.externalDialogOpen = visible;
@@ -1150,7 +1128,34 @@ PanelWindow {
                 Item {
                     id: launcherContent
                     anchors.fill: parent
+                    focus: root.open && !root.externalDialogOpen
                     opacity: root.contentRevealProgress
+                    // Keys is an Item attachment. Keeping the handler on the
+                    // common visual ancestor lets Escape bubble up from the
+                    // search, folder and editor controls without attaching it
+                    // to the non-Item PanelWindow proxy.
+                    Keys.onPressed: function (event) {
+                        if (event.key !== Qt.Key_Escape)
+                            return;
+                        if (root.editingApplication) {
+                            root.closeApplicationEditor();
+                        } else if (root.openFolder) {
+                            if (root.folderRenameActive)
+                                root.folderRenameActive = false;
+                            else if (root.folderEditMode)
+                                root.folderEditMode = false;
+                            else
+                                root.closeFolder();
+                        } else if (root.editMode) {
+                            root.editMode = false;
+                        } else if (root.clearSearch()) {
+                            // Escape first returns to the complete app grid. A
+                            // second Escape closes the launcher.
+                        } else {
+                            AppLauncherService.hide();
+                        }
+                        event.accepted = true;
+                    }
                     // A subtle settle zoom + slide up from the dock direction
                     // as the foreground fades in. Both fold into the same
                     // contentRevealProgress Behavior; the backdrop blur stays
