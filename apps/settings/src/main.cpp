@@ -72,60 +72,6 @@ public:
             QString::number(strength, 'f', 3)}));
     }
 
-    Q_INVOKABLE QVariantMap updateDockBlurInherit(bool inherit) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateDockBlurInherit"),
-            inherit ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateDockBlurStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateDockBlurStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateDockLiquidStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateDockLiquidStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarBlurInherit(bool inherit) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarBlurInherit"),
-            inherit ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarBlurStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarBlurStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarLiquidStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarLiquidStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherBlurInherit(bool inherit) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateLauncherBlurInherit"),
-            inherit ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherBlurStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateLauncherBlurStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherLiquidStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateLauncherLiquidStrength"),
-            QString::number(strength, 'f', 3)}));
-    }
-
     Q_INVOKABLE QVariantMap updateShellStyle(const QString &style) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateShellStyle"), style}));
@@ -145,6 +91,11 @@ public:
     Q_INVOKABLE QVariantMap updateBarLayoutMode(const QString &mode) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateBarLayoutMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockWindowAnimationStyle(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateDockWindowAnimationStyle"), style}));
     }
 
     Q_INVOKABLE QVariantMap resetAppearanceStrengths() {
@@ -442,7 +393,8 @@ private:
                     && !object.contains(QStringLiteral("dockLiquidStrength"))
                     && !object.contains(QStringLiteral("liquidStrength")))
                 || !object.contains(QStringLiteral("shellStyle"))
-                || !object.contains(QStringLiteral("barIntegratedWithDock"))) {
+                || !object.contains(QStringLiteral("barIntegratedWithDock"))
+                || !object.contains(QStringLiteral("dockWindowAnimationStyle"))) {
             setLastError(QStringLiteral("桌面环境返回的外观配置不完整"));
             return {};
         }
@@ -458,45 +410,18 @@ private:
                 ? object.value(QStringLiteral("dockLiquidStrength")).toDouble()
                 : object.value(QStringLiteral("liquidStrength")).toDouble());
 
-        const bool dockInherit = object.value(QStringLiteral("dockBlurInherit")).toBool(true);
-        const double dockBlur = object.value(QStringLiteral("dockBlurStrength")).toDouble(0.42);
-        const double dockLiquid = object.value(QStringLiteral("dockLiquidStrength")).toDouble(1.0);
-
-        const bool barInherit = object.contains(QStringLiteral("barBlurInherit"))
-            ? object.value(QStringLiteral("barBlurInherit")).toBool(true)
-            : object.value(QStringLiteral("barBlurInheritDock")).toBool(true);
-        const double barBlur = object.value(QStringLiteral("barBlurStrength")).toDouble(0.42);
-        const double barLiquid = object.value(QStringLiteral("barLiquidStrength")).toDouble(1.0);
-
-        const bool launcherInherit = object.contains(QStringLiteral("launcherBlurInherit"))
-            ? object.value(QStringLiteral("launcherBlurInherit")).toBool(true)
-            : object.value(QStringLiteral("launcherBlurInheritDock")).toBool(true);
-        const double launcherBlur = object.value(QStringLiteral("launcherBlurStrength")).toDouble(0.42);
-        const double launcherLiquid = object.value(QStringLiteral("launcherLiquidStrength")).toDouble(1.0);
-
         const QString barVisibility = object.value(QStringLiteral("barVisibilityMode")).toString(QStringLiteral("always"));
 
         setLastError({});
         return {
             {QStringLiteral("globalBlurStrength"), globalBlur},
             {QStringLiteral("globalLiquidStrength"), globalLiquid},
-            {QStringLiteral("dockBlurInherit"), dockInherit},
-            {QStringLiteral("dockBlurStrength"), dockBlur},
-            {QStringLiteral("dockLiquidStrength"), dockLiquid},
-            {QStringLiteral("barBlurInherit"), barInherit},
-            {QStringLiteral("barBlurInheritDock"), barInherit},
-            {QStringLiteral("barBlurStrength"), barBlur},
-            {QStringLiteral("barLiquidStrength"), barLiquid},
-            {QStringLiteral("launcherBlurInherit"), launcherInherit},
-            {QStringLiteral("launcherBlurInheritDock"), launcherInherit},
-            {QStringLiteral("launcherBlurStrength"), launcherBlur},
-            {QStringLiteral("launcherLiquidStrength"), launcherLiquid},
-            {QStringLiteral("effectiveDockBlur"), object.value(QStringLiteral("effectiveDockBlur")).toDouble(dockInherit ? globalBlur : dockBlur)},
-            {QStringLiteral("effectiveDockLiquid"), object.value(QStringLiteral("effectiveDockLiquid")).toDouble(dockInherit ? globalLiquid : dockLiquid)},
-            {QStringLiteral("effectiveBarBlur"), object.value(QStringLiteral("effectiveBarBlur")).toDouble(barInherit ? globalBlur : barBlur)},
-            {QStringLiteral("effectiveBarLiquid"), object.value(QStringLiteral("effectiveBarLiquid")).toDouble(barInherit ? globalLiquid : barLiquid)},
-            {QStringLiteral("effectiveLauncherBlur"), object.value(QStringLiteral("effectiveLauncherBlur")).toDouble(launcherInherit ? globalBlur : launcherBlur)},
-            {QStringLiteral("effectiveLauncherLiquid"), object.value(QStringLiteral("effectiveLauncherLiquid")).toDouble(launcherInherit ? globalLiquid : launcherLiquid)},
+            {QStringLiteral("effectiveDockBlur"), globalBlur},
+            {QStringLiteral("effectiveDockLiquid"), globalLiquid},
+            {QStringLiteral("effectiveBarBlur"), globalBlur},
+            {QStringLiteral("effectiveBarLiquid"), globalLiquid},
+            {QStringLiteral("effectiveLauncherBlur"), globalBlur},
+            {QStringLiteral("effectiveLauncherLiquid"), globalLiquid},
             {QStringLiteral("blurStrength"), globalBlur},
             {QStringLiteral("liquidStrength"), globalLiquid},
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
@@ -506,6 +431,8 @@ private:
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),
                 object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("full"))},
+            {QStringLiteral("dockWindowAnimationStyle"),
+                object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
             {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
         };
     }

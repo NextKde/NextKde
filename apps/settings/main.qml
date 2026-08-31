@@ -930,11 +930,13 @@ ApplicationWindow {
             font.weight: Font.DemiBold
             Layout.leftMargin: 13
             Layout.topMargin: 14
+            visible: false
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: dockBlurCol.implicitHeight
+            visible: false
             radius: 18
             color: theme.card
 
@@ -1349,6 +1351,7 @@ ApplicationWindow {
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property string shellStyle: "macos"
+        property string dockWindowAnimationStyle: "scale"
         property string errorText: ""
         readonly property var styles: [
             {
@@ -1376,10 +1379,16 @@ ApplicationWindow {
                 || style === "material"
         }
 
+        function isValidDockWindowAnimationStyle(style) {
+            return style === "scale" || style === "genie"
+        }
+
         function applyState(state) {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
+            if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
+                dockWindowAnimationStyle = state.dockWindowAnimationStyle
             errorText = ""
         }
 
@@ -1403,6 +1412,15 @@ ApplicationWindow {
                 errorText = bridge.lastError
         }
 
+        function setDockWindowAnimationStyle(style) {
+            if (!bridge || !isValidDockWindowAnimationStyle(style)) {
+                errorText = bridge ? "未知的窗口动画" : "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateDockWindowAnimationStyle(style))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
         Component.onCompleted: refresh()
 
         Text {
@@ -1559,6 +1577,77 @@ ApplicationWindow {
             Layout.leftMargin: 13
             Layout.rightMargin: 13
             text: "选择界面形态会立即切换桌面组件的圆角、间距与表面质感规范。"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+
+        Text {
+            text: "窗口动画"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 4
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 82
+            radius: 18
+            color: theme.card
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "◒"; tint: "#af52de" }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: "窗口显示/隐藏"
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: themePage.dockWindowAnimationStyle === "genie"
+                            ? "水滴形变缩入图标；打开窗口仍使用常规展开"
+                            : "等比例缩放到图标；最小化与恢复均保持平直路径"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+                }
+                SettingsNavBar {
+                    Layout.preferredWidth: 148
+                    Layout.preferredHeight: 30
+                    // LiquidNavBar delegates expect { id, label, icon }.
+                    // A string model leaves modelData.label undefined, so the
+                    // previous control had no visible text despite rendering
+                    // its track and thumb.
+                    size: "tiny"
+                    barHeight: 30
+                    itemWidthOverride: 74
+                    model: [
+                        { id: "scale", label: "缩放" },
+                        { id: "genie", label: "水滴" }
+                    ]
+                    currentIndex: themePage.dockWindowAnimationStyle === "genie" ? 1 : 0
+                    onSelectionChanged: function(index) {
+                        themePage.setDockWindowAnimationStyle(
+                            index === 1 ? "genie" : "scale")
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            text: "窗口动画会立即同步到 KWin；顶栏与 Dock 的布局在各自设置页中管理。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1874,11 +1963,13 @@ ApplicationWindow {
             font.weight: Font.DemiBold
             Layout.leftMargin: 13
             Layout.topMargin: 4
+            visible: false
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: barBlurCol.implicitHeight
+            visible: false
             radius: 18
             color: theme.card
 
@@ -2017,6 +2108,7 @@ ApplicationWindow {
             Layout.leftMargin: 13
             Layout.rightMargin: 13
             text: "Bar 保持通透液态外观，可在上方选择跟随 Dock 模糊基准或在此独立定制。"
+            visible: false
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -2463,11 +2555,13 @@ ApplicationWindow {
             font.weight: Font.DemiBold
             Layout.leftMargin: 13
             Layout.topMargin: 14
+            visible: false
         }
 
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: launcherBlurCol.implicitHeight
+            visible: false
             radius: 18
             color: theme.card
 
