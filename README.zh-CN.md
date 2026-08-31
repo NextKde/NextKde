@@ -132,6 +132,7 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 cmake --preset debug
 cmake --build --preset debug
 python3 platform/tests/test_contract.py
+python3 tools/check-docs.py
 node shell/desktop/modules/dock/test_adaptive.mjs
 node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check
