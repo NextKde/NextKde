@@ -19,7 +19,7 @@ EOF
 
 doctor() {
     local failed=0
-    for command_name in cmake go; do
+    for command_name in cmake ninja c++ go; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
         else
@@ -28,11 +28,24 @@ doctor() {
         fi
     done
     if [[ -n "$qs_bin" ]]; then
-        printf 'ok   %-12s %s\n' quickshell "$qs_bin"
+        local qs_version
+        qs_version=$("$qs_bin" --version 2>&1 | head -n 1 || true)
+        if [[ "$qs_version" =~ Quickshell\ 0\.3\. ]]; then
+            printf 'ok   %-12s %s (%s)\n' quickshell "$qs_bin" "$qs_version"
+        else
+            printf 'warn %-12s %s (expected Quickshell 0.3.x)\n' quickshell "$qs_version"
+        fi
     else
         printf 'miss %-12s install Quickshell 0.3.x\n' quickshell
         failed=1
     fi
+    for runtime_command in nmcli wpctl bluetoothctl systemctl; do
+        if command -v "$runtime_command" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$runtime_command" "$(command -v "$runtime_command")"
+        else
+            printf 'warn %-12s runtime integration unavailable\n' "$runtime_command"
+        fi
+    done
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
     else
@@ -53,16 +66,22 @@ build() {
     configure_build
     cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
     mkdir -p "$build_dir/bin"
-    go build -trimpath -o "$build_dir/bin/kos-data-service" "$project_dir/services/data-service"
+    (
+        cd "$project_dir/services/data-service"
+        go build -trimpath -o "$build_dir/bin/kos-data-service" .
+    )
 }
 
 install_files() {
-    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin"
+    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin" \
+        "$prefix/share/kos/settings"
     install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
     install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
     install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
     install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
         "$prefix/share/kos/platform/kwin/window-bridge.js"
+    install -m 0644 "$project_dir/apps/settings/main.qml" \
+        "$prefix/share/kos/settings/main.qml"
 
     local shell_config="$config_dir/quickshell/kos"
     mkdir -p "$shell_config"

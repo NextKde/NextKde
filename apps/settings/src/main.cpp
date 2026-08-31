@@ -1,9 +1,12 @@
 #include <QGuiApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QVariantMap>
 
 class SettingsBridge final : public QObject {
@@ -283,10 +286,21 @@ private:
                          QStringLiteral("启动台设置请求失败"));
     }
 
+    static QString shellDirectory() {
+        const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
+        if (!configured.isEmpty())
+            return configured;
+        const QString installed = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
+        if (QFileInfo::exists(QDir(installed).filePath(QStringLiteral("shell.qml"))))
+            return installed;
+        return QStringLiteral(SETTINGS_SHELL_DIR);
+    }
+
     QString callShell(const QString &target, const QStringList &arguments,
                       const QString &fallbackError) {
         QProcess process;
-        QStringList command{QStringLiteral("--path"), QStringLiteral(SETTINGS_SHELL_DIR),
+        QStringList command{QStringLiteral("--path"), shellDirectory(),
                             QStringLiteral("ipc"), QStringLiteral("call"),
                             target};
         command.append(arguments);
@@ -331,8 +345,12 @@ int main(int argc, char *argv[]) {
     SettingsBridge bridge;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
-    const QUrl entrypoint = QUrl::fromLocalFile(
-        QStringLiteral(SETTINGS_QML_DIR "/main.qml"));
+    QString settingsQml = QDir(QCoreApplication::applicationDirPath()).filePath(
+        QStringLiteral("../share/kos/settings/main.qml"));
+    if (!QFileInfo::exists(settingsQml))
+        settingsQml = QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
+            QStringLiteral("main.qml"));
+    const QUrl entrypoint = QUrl::fromLocalFile(settingsQml);
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;
