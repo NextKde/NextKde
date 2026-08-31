@@ -26,6 +26,7 @@ Current operation groups are:
 - `file.open`, `file.launch`, `file.rename`, `file.create-folder`,
   `file.create-file`, `file.trash`, `file.open-with`
 - `kwin.subscribe`, `kwin.command`
+- `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `network.*`, `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
@@ -37,3 +38,8 @@ clients must not call that private interface directly.
 Platform adapters validate all paths and operation names before executing a
 system action. Passwords and raw command output containing secrets must never
 be logged.
+
+`kwin.animation.*` accepts a JSON string payload produced by the Dock animation
+model and forwards it only to the project-owned KWin effect. `theme.sync-glass`
+and `theme.sync-dock-animation` accept bounded numeric/style values and own the
+KDE configuration writes; Shell never invokes `qdbus6` or `kwriteconfig6`.

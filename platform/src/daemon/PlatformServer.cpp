@@ -824,6 +824,34 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
         respond(socket, request, true);
         return true;
     }
+    if (op == QStringLiteral("kwin.animation.update-targets")
+        || op == QStringLiteral("kwin.animation.prepare-launch")) {
+        const QString payload = request.value(QStringLiteral("payload")).toObject()
+                                     .value(QStringLiteral("payload")).toString();
+        if (payload.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"),
+                    QStringLiteral("动画参数无效"), false);
+            return true;
+        }
+        QDBusInterface effect(QStringLiteral("org.kde.KWin"),
+                              QStringLiteral("/KOSDockWindowAnimation"),
+                              QStringLiteral("org.kos.KWin.DockWindowAnimation"));
+        if (!effect.isValid()) {
+            respond(socket, request, false, {}, QStringLiteral("kwin-effect-unavailable"),
+                    QStringLiteral("Dock 窗口动画特效不可用"), true);
+            return true;
+        }
+        const QString method = op.endsWith(QStringLiteral("update-targets"))
+            ? QStringLiteral("updateTargets") : QStringLiteral("prepareLaunch");
+        const QDBusMessage reply = effect.call(method, payload);
+        if (reply.type() == QDBusMessage::ErrorMessage) {
+            respond(socket, request, false, {}, QStringLiteral("kwin-effect-failed"),
+                    QStringLiteral("Dock 窗口动画特效调用失败"), true);
+            return true;
+        }
+        respond(socket, request, true, QJsonObject{{QStringLiteral("accepted"), true}});
+        return true;
+    }
     return false;
 }
 
@@ -1103,6 +1131,79 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         if (kwin.isValid())
             kwin.call(QStringLiteral("reconfigure"));
         respond(socket, request, true, QJsonObject{{QStringLiteral("reconfigured"), true}});
+        return true;
+    }
+    if (op == QStringLiteral("theme.sync-glass")) {
+        const int contentBlur = qBound(1,
+            payload.value(QStringLiteral("contentBlurLevel")).toInt(), 15);
+        const int dockBlur = qBound(1,
+            payload.value(QStringLiteral("dockBlurLevel")).toInt(), 15);
+        const int refraction = qBound(0,
+            payload.value(QStringLiteral("refractionLevel")).toInt(), 20);
+        const QString kwriteconfig = QStandardPaths::findExecutable(
+            QStringLiteral("kwriteconfig6"));
+        if (kwriteconfig.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("theme-unavailable"),
+                    QStringLiteral("KDE 主题配置工具不可用"), false);
+            return true;
+        }
+        const QList<QStringList> writes{
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("BlurStrength"), QString::number(contentBlur)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("DockBlurStrength"), QString::number(dockBlur)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionStrength"), QString::number(refraction)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blur"), QStringLiteral("--key"),
+             QStringLiteral("BlurStrength"), QString::number(contentBlur)}};
+        for (const QStringList &arguments : writes) {
+            if (QProcess::execute(kwriteconfig, arguments) != 0) {
+                respond(socket, request, false, {}, QStringLiteral("theme-write-failed"),
+                        QStringLiteral("无法保存玻璃特效配置"), true);
+                return true;
+            }
+        }
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                               QStringLiteral("org.kde.kwin.Effects"));
+        if (effects.isValid()) {
+            effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
+            effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("blur"));
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("configured"), true},
+                            {QStringLiteral("kwinAvailable"), effects.isValid()}});
+        return true;
+    }
+    if (op == QStringLiteral("theme.sync-dock-animation")) {
+        const QString style = payload.value(QStringLiteral("style")).toString();
+        if (style != QStringLiteral("scale") && style != QStringLiteral("genie")) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-style"),
+                    QStringLiteral("窗口动画样式无效"), false);
+            return true;
+        }
+        const QString kwriteconfig = QStandardPaths::findExecutable(
+            QStringLiteral("kwriteconfig6"));
+        if (kwriteconfig.isEmpty()
+            || QProcess::execute(kwriteconfig,
+                {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+                 QStringLiteral("Effect-kos_dock_window_animation"), QStringLiteral("--key"),
+                 QStringLiteral("AnimationStyle"), style}) != 0) {
+            respond(socket, request, false, {}, QStringLiteral("theme-write-failed"),
+                    QStringLiteral("无法保存窗口动画配置"), true);
+            return true;
+        }
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                               QStringLiteral("org.kde.kwin.Effects"));
+        if (effects.isValid())
+            effects.call(QStringLiteral("reconfigureEffect"),
+                         QStringLiteral("kos_dock_window_animation"));
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("configured"), true},
+                            {QStringLiteral("kwinAvailable"), effects.isValid()}});
         return true;
     }
     if (op == QStringLiteral("theme.toggle")) {

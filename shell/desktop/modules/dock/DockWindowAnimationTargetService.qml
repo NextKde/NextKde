@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell.Io
+import qs.desktop.modules.platform
 
 // Publishes the current compositor-global Dock icon rectangles to the private
 // KOS KWin effect. Geometry is sampled from the rendered AppIcon item, not its
@@ -11,8 +12,6 @@ QtObject {
 
     property var _icons: []
     property string _lastPayload: ""
-    property string _queuedPayload: ""
-    property var _publisher: null
     property double _retryAfter: 0
     property bool _animationMonitorEnabled: true
 
@@ -55,30 +54,13 @@ QtObject {
     }
 
     function _send(payload) {
-        if (_publisher) {
-            _queuedPayload = payload
-            return
-        }
-        const process = processFactory.createObject(service, {
-            command: ["qdbus6", "org.kde.KWin", "/KOSDockWindowAnimation",
-                "org.kos.KWin.DockWindowAnimation.updateTargets", payload]
-        })
-        _publisher = process
-        process.exited.connect(function(code) {
-            if (service._publisher === process)
-                service._publisher = null
-            if (code !== 0) {
+        PlatformClient.request("kwin.animation.update-targets", { payload: payload },
+            function(response) {
+            if (!response?.ok) {
                 service._lastPayload = ""
                 service._retryAfter = Date.now() + 2000
             }
-            process.destroy()
-            if (service._queuedPayload) {
-                const queued = service._queuedPayload
-                service._queuedPayload = ""
-                service._send(queued)
-            }
         })
-        process.running = true
     }
 
     function publishNow() {
@@ -125,8 +107,9 @@ QtObject {
     }
 
     // Arm KWin before executing the application. The callback is deliberately
-    // invoked only after qdbus exits, which guarantees that the one-shot
-    // ticket exists before the new client can create its first window.
+    // invoked only after the platform daemon acknowledges the one-shot ticket,
+    // which guarantees it exists before the new client creates its first
+    // window.
     function prepareLaunch(application, callback) {
         const appId = String(application?.desktopId
             ?? application?.id ?? "")
@@ -158,19 +141,14 @@ QtObject {
                       entry?.startupClass ?? ""],
             expiresInMs: 5000
         })
-        const process = processFactory.createObject(service, {
-            command: ["qdbus6", "org.kde.KWin", "/KOSDockWindowAnimation",
-                "org.kos.KWin.DockWindowAnimation.prepareLaunch", payload]
-        })
-        process.exited.connect(function(code) {
-            if (code !== 0)
+        PlatformClient.request("kwin.animation.prepare-launch", { payload: payload },
+            function(response) {
+            if (!response?.ok)
                 console.warn("[DockAnimation] could not arm launch ticket app=" + appId)
             else
                 console.log("[DockAnimation] armed launch ticket app=" + appId)
             callback()
-            process.destroy()
         })
-        process.running = true
         return true
     }
 
@@ -221,10 +199,4 @@ QtObject {
         onTriggered: service._animationMonitorEnabled = true
     }
 
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
 }
