@@ -10,8 +10,8 @@ add_subdirectory(platform)
 add_subdirectory(apps/settings)
 
 if(KOS_BUILD_KWIN_PLUGINS)
-    add_subdirectory(integrations/kwin-dock-window-animation)
-    add_subdirectory(integrations/kwin-context-menu-input)
+    add_subdirectory(integrations/kwin/dock-window-animation)
+    add_subdirectory(integrations/kwin/context-menu-input)
 endif()
 
 # Quickshell loads this tree at runtime; CMake only installs it and does not
