@@ -37,7 +37,7 @@ Current operation groups are:
   `theme.*`, and `screenshot.*`
 
 KWin events are sent to subscribers as `window.snapshot`, `desktops`,
-`thumbnail`, and related event names. KWin's internal script-to-daemon channel
+`thumbnail`, `animation.started`, and related event names. KWin's internal script-to-daemon channel
 continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
 clients must not call that private interface directly.
 
