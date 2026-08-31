@@ -53,6 +53,7 @@ profile. `forgetWifiProfile(ssid, profileUuid)` deletes only the UUID resolved
 from the selected scan row, after the panel's explicit confirmation.
 
 `refreshWifiNetworks()` returns de-duplicated nearby SSIDs (the strongest AP per
-name) only when the user opens the panel. Each candidate also carries the UUID
-of a matching saved Wi-Fi profile, resolved from NetworkManager; reconnect uses
-that UUID rather than assuming the editable profile name equals the SSID.
+name) only when the user opens the panel. When NetworkManager's saved profile
+name matches the SSID (its default), the candidate also carries that profile's
+UUID for reconnect/forget actions. Saved-profile metadata is best-effort and
+must never prevent the nearby-network list from loading.

@@ -678,6 +678,84 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     process->start();
 }
 
+void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
+                                       const QJsonObject &request)
+{
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    const auto respondFailed = [this, guardedSocket, request](const QString &code) {
+        respond(guardedSocket.data(), request, false, {}, code,
+                QStringLiteral("平台网络状态查询失败"), true);
+    };
+
+    // nmcli treats --wait as a global option, so it must precede the command
+    // name. First collect NetworkManager's global state, then append the
+    // device table expected by parseNetworkRefresh, separated by ASCII RS.
+    auto *general = new QProcess(this);
+    general->setProgram(QStringLiteral("nmcli"));
+    general->setArguments({QStringLiteral("--wait"), QStringLiteral("2"),
+                           QStringLiteral("-t"), QStringLiteral("-f"),
+                           QStringLiteral("RUNNING,STATE,CONNECTIVITY,WIFI"),
+                           QStringLiteral("general")});
+    const auto generalFinished = std::make_shared<bool>(false);
+    connect(general, &QProcess::errorOccurred, this,
+            [general, generalFinished, respondFailed](QProcess::ProcessError) {
+        if (*generalFinished)
+            return;
+        *generalFinished = true;
+        respondFailed(QStringLiteral("command-unavailable"));
+        general->deleteLater();
+    });
+    connect(general, &QProcess::finished, this,
+            [this, guardedSocket, request, general, generalFinished,
+             respondFailed](int exitCode, QProcess::ExitStatus) {
+        if (*generalFinished)
+            return;
+        *generalFinished = true;
+        const QByteArray generalOutput = general->readAllStandardOutput();
+        general->deleteLater();
+        if (exitCode != 0) {
+            respondFailed(QStringLiteral("command-failed"));
+            return;
+        }
+
+        auto *devices = new QProcess(this);
+        devices->setProgram(QStringLiteral("nmcli"));
+        devices->setArguments({QStringLiteral("--wait"), QStringLiteral("2"),
+                               QStringLiteral("-t"), QStringLiteral("-f"),
+                               QStringLiteral("DEVICE,TYPE,STATE,CONNECTION"),
+                               QStringLiteral("device"), QStringLiteral("status")});
+        const auto devicesFinished = std::make_shared<bool>(false);
+        connect(devices, &QProcess::errorOccurred, this,
+                [devices, devicesFinished, respondFailed](QProcess::ProcessError) {
+            if (*devicesFinished)
+                return;
+            *devicesFinished = true;
+            respondFailed(QStringLiteral("command-unavailable"));
+            devices->deleteLater();
+        });
+        connect(devices, &QProcess::finished, this,
+                [this, guardedSocket, request, devices, devicesFinished,
+                 respondFailed, generalOutput](int deviceExitCode,
+                                                QProcess::ExitStatus) {
+            if (*devicesFinished)
+                return;
+            *devicesFinished = true;
+            QByteArray output = generalOutput;
+            output.append('\x1e');
+            output.append(devices->readAllStandardOutput());
+            devices->deleteLater();
+            if (deviceExitCode != 0) {
+                respondFailed(QStringLiteral("command-failed"));
+                return;
+            }
+            respond(guardedSocket.data(), request, true,
+                    parseNetworkRefresh(output, deviceExitCode));
+        });
+        devices->start();
+    });
+    general->start();
+}
+
 void PlatformServer::startClipboardHistoryWatcher(QProcess *&watcher,
                                                    const QStringList &arguments)
 {
@@ -1421,9 +1499,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("network.refresh")) {
-        runCommand(socket, request, QStringLiteral("nmcli"),
-                   {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("RUNNING,STATE,CONNECTIVITY,WIFI"), QStringLiteral("general"),
-                    QStringLiteral("--wait"), QStringLiteral("2")}, parseNetworkRefresh);
+        runNetworkRefresh(socket, request);
         return true;
     }
     if (op == QStringLiteral("network.details")) {
@@ -1447,13 +1523,14 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("网络设备无效"), false);
             return true;
         }
-        // Resolve saved profiles in the same adapter call as the RF scan. The
-        // profile UUID is immutable even when a user renames the connection,
-        // so the UI can safely reconnect or forget the selected network.
+        // Resolve saved profiles before the RF scan so matching rows can carry
+        // their immutable UUID. `connection show` accepts only summary fields;
+        // NetworkManager uses NAME as the Wi-Fi profile identifier by default.
+        // This metadata is optional: failure must not hide otherwise valid APs.
         auto *profiles = new QProcess(this);
         profiles->setProgram(QStringLiteral("nmcli"));
         profiles->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
-                                QStringLiteral("UUID,TYPE,802-11-wireless.ssid"),
+                                QStringLiteral("UUID,TYPE,NAME"),
                                 QStringLiteral("connection"), QStringLiteral("show")});
         connect(profiles, &QProcess::finished, this,
                 [this, socket, request, device, profiles](int profileExit,
@@ -1461,11 +1538,6 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             const QHash<QString, QString> savedProfiles = parseSavedWifiProfiles(
                 profiles->readAllStandardOutput(), profileExit);
             profiles->deleteLater();
-            if (profileExit != 0) {
-                respond(socket, request, false, {}, QStringLiteral("network-unavailable"),
-                        QStringLiteral("无法读取已保存的网络配置"), true);
-                return;
-            }
             auto *scan = new QProcess(this);
             scan->setProgram(QStringLiteral("nmcli"));
             scan->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
