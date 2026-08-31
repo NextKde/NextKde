@@ -51,6 +51,21 @@ class Bridge final : public QObject {
     Q_CLASSINFO("D-Bus Interface", "org.kos.Platform")
 
 public slots:
+    // KWin effects expose animationStarted as a D-Bus signal. Keep the
+    // subscription inside the resident platform process so Shell does not
+    // need to spawn a gdbus monitor of its own.
+    void AnimationStarted(const QString &appId, const QString &windowId,
+                          const QString &transition, int durationMs)
+    {
+        publishEvent(QJsonObject{
+            {QStringLiteral("type"), QStringLiteral("animation.started")},
+            {QStringLiteral("appId"), appId},
+            {QStringLiteral("windowId"), windowId},
+            {QStringLiteral("transition"), transition},
+            {QStringLiteral("durationMs"), durationMs},
+        });
+    }
+
     void Publish(const QString &payload)
     {
         QJsonParseError error;
@@ -416,6 +431,19 @@ bool startKWinBridge(const KWinEventHandler &handler)
         delete g_bridge;
         g_bridge = nullptr;
         return false;
+    }
+
+    // Forward the private effect signal into the platform JSONL event stream.
+    // The connection is harmless while the optional effect is not installed;
+    // KWin simply has no signal source yet and the daemon remains available.
+    if (!bus.connect(QStringLiteral("org.kde.KWin"),
+                    QStringLiteral("/KOSDockWindowAnimation"),
+                    QStringLiteral("org.kos.KWin.DockWindowAnimation"),
+                    QStringLiteral("animationStarted"),
+                    g_bridge,
+                    SLOT(AnimationStarted(QString,QString,QString,int)))) {
+        QTextStream(stderr) << "Could not subscribe to Dock animation signal: "
+                            << bus.lastError().message() << Qt::endl;
     }
 
     // KWin's script is deliberately loaded by the same resident process. The

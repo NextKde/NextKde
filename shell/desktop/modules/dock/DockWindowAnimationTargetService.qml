@@ -1,7 +1,6 @@
 pragma Singleton
 
 import QtQuick
-import Quickshell.Io
 import qs.desktop.modules.platform
 
 // Publishes the current compositor-global Dock icon rectangles to the private
@@ -13,7 +12,6 @@ QtObject {
     property var _icons: []
     property string _lastPayload: ""
     property double _retryAfter: 0
-    property bool _animationMonitorEnabled: true
 
     function registerIcon(icon) {
         if (!icon || _icons.indexOf(icon) >= 0)
@@ -76,14 +74,12 @@ QtObject {
             .replace(/\.desktop$/i, "")
     }
 
-    function _consumeAnimationSignal(line) {
-        const match = String(line || "").match(
-            /animationStarted \('([^']*)', '([^']*)', '([^']*)', (?:uint32 )?([0-9]+)\)/)
-        if (!match || match[3] !== "minimize")
+    function _consumeAnimationEvent(event) {
+        if (!event || event.transition !== "minimize")
             return
 
-        const appId = _normalizedAppId(match[1])
-        const windowId = match[2]
+        const appId = _normalizedAppId(event.appId)
+        const windowId = String(event.windowId || "")
         let selected = null
         for (let index = 0; index < _icons.length; index++) {
             const candidate = _icons[index]
@@ -103,7 +99,7 @@ QtObject {
             }
         }
         if (selected)
-            selected.playWindowToIconHandoff(Number(match[4]))
+            selected.playWindowToIconHandoff(Number(event.durationMs || 0))
     }
 
     // Arm KWin before executing the application. The callback is deliberately
@@ -177,26 +173,12 @@ QtObject {
         }
     }
 
-    property Process animationMonitor: Process {
-        command: ["gdbus", "monitor", "--session",
-            "--dest", "org.kde.KWin",
-            "--object-path", "/KOSDockWindowAnimation"]
-        running: service._animationMonitorEnabled
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => service._consumeAnimationSignal(data)
+    property Connections platformEvents: Connections {
+        target: PlatformClient
+        function onEventReceived(eventName, payload) {
+            if (eventName === "animation.started")
+                service._consumeAnimationEvent(payload)
         }
-        stderr: SplitParser { splitMarker: "\n" }
-        onExited: function(code) {
-            service._animationMonitorEnabled = false
-            animationMonitorRetry.restart()
-        }
-    }
-
-    property Timer animationMonitorRetry: Timer {
-        interval: 1000
-        repeat: false
-        onTriggered: service._animationMonitorEnabled = true
     }
 
 }
