@@ -102,7 +102,7 @@ QtObject {
             _listProcess = null
             if (response?.ok)
                 service._readList(response.result?.stdout ?? "")
-            else
+            else if (response?.error?.code !== "command-unavailable")
                 console.warn("[Clipboard] cliphist list failed: "
                     + (response?.error?.message || "platform unavailable"))
         })

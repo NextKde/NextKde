@@ -3,6 +3,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
 import qs.desktop.modules.applauncher
+import qs.desktop.modules.common
 
 // Free-slot desktop surface. Grid placement stays self-contained here while
 // filesystem and menu actions are delegated to the host window.

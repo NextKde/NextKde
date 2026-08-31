@@ -34,7 +34,10 @@ panels and notifications remain active, so overlap is expected.
   `systemctl --user`.
 - Optional clipboard history: `wl-clipboard` (`wl-copy`/`wl-paste`) and
   `cliphist`. File copy/paste through the desktop still works without them.
-- KWin/KF6 development packages only when building the optional KWin plugins.
+- The default installation builds the two KOS KWin plugins and the vendored
+  `kwin-effects-glass`, so matching KWin/KF6 development files are required.
+  On Arch/CachyOS, the installer obtains missing KF6 build dependencies with
+  `sudo pacman`.
 
 `kosctl build` downloads Go modules through `https://goproxy.cn,direct` by
 default. Set `GOPROXY` before building if you need a different mirror or an
@@ -51,7 +54,7 @@ Run the single entry point from the repository root:
 
 ```sh
 ./tools/kosctl doctor
-KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
+./tools/kosctl install
 ```
 
 `kosctl install` builds and installs:
@@ -61,12 +64,31 @@ KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
   process);
 - `kos-settings` to `~/.local/bin/`;
 - the Quickshell tree to `~/.config/quickshell/kos`;
-- `kos-platform.service` and `kos-data.service` as systemd user units.
+- `kos-platform.service`, `kos-data.service`, and `kos-shell.service` as
+  systemd user units. The shell requires the platform service and starts only
+  after it is ready.
+- KOS Dock Animation, Quickshell Context Menu Input, and Glass into KWin's
+  system plugin directories.
 
-The installer enables both units immediately. It never uses `sudo`. Build the
-KWin plugins separately with `KOS_BUILD_KWIN_PLUGINS=ON` if your system has the
-matching KWin development headers; installing a system-wide KWin plugin may
-require administrator permission on your distribution.
+The installer enables and immediately starts all three user units and all three
+KWin effects. User
+files remain under `~/.local`; system KWin files and missing Arch/CachyOS build
+dependencies are installed with `sudo`, whose password prompt remains in the
+calling terminal. Glass conflicts with stock Blur, so the installer remembers
+and disables Blur. `./tools/kosctl uninstall` removes all three effects and
+restores the previous Blur state.
+
+To build and install only the user-level components, opt out explicitly:
+
+```sh
+KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
+```
+
+Open KDE's Desktop Effects page to inspect or configure Glass with:
+
+```sh
+./tools/kosctl glass-settings
+```
 
 Start the installed shell with:
 

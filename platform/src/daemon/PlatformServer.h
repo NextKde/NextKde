@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QPointer>
 #include <QProcess>
 #include <QSet>
 
@@ -35,6 +36,7 @@ private:
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {});
+    void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
     QString operation(const QJsonObject &request) const;

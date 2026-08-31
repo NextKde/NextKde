@@ -40,9 +40,6 @@ Item {
     IpcHandler {
         target: "dock-settings"
 
-        property real dockHeight: ConfigService.baseHeight
-        property string dockTheme: ConfigService.theme
-
         function snapshot(): string {
             const theme = ConfigService.isValidTheme(ConfigService.theme)
                 ? ConfigService.theme : "dark"
