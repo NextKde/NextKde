@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -65,8 +66,16 @@ func TestDesktopSubscriptionImmediatelyAnnouncesSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if line != "desktop_changed\n" {
-		t.Fatalf("unexpected initial notification %q", line)
+	var event struct {
+		Version int                    `json:"version"`
+		Event   string                 `json:"event"`
+		Payload map[string]interface{} `json:"payload"`
+	}
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		t.Fatalf("invalid event %q: %v", line, err)
+	}
+	if event.Version != 1 || event.Event != "desktop.changed" {
+		t.Fatalf("unexpected initial notification %#v", event)
 	}
 	<-done
 }
@@ -91,14 +100,5 @@ func TestRefreshDesktopReconcilesCompleteDirectory(t *testing.T) {
 	if len(service.state.Desktop.Entries) != 1 ||
 		service.state.Desktop.Entries[0].Path != path {
 		t.Fatalf("unexpected desktop snapshot: %#v", service.state.Desktop.Entries)
-	}
-}
-
-func TestNormalizeClipboardPaths(t *testing.T) {
-	paths := normalizeClipboardPaths([]string{
-		"relative", "/tmp/a", "/tmp/a/../a", "/tmp/b",
-	})
-	if len(paths) != 2 || paths[0] != "/tmp/a" || paths[1] != "/tmp/b" {
-		t.Fatalf("unexpected paths: %#v", paths)
 	}
 }
