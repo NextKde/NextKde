@@ -1,0 +1,5 @@
+module qs.desktop.modules.notifications
+
+NotificationCenter 1.0 NotificationCenter.qml
+NotificationWindow 1.0 NotificationWindow.qml
+NotificationGroupService 1.0 NotificationGroupService.qml

@@ -1,0 +1,4 @@
+module qs.desktop
+
+DesktopEnvironment 1.0 DesktopEnvironment.qml
+singleton DesktopAppLauncher 1.0 DesktopAppLauncher.qml

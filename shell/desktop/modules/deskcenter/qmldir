@@ -1,0 +1,10 @@
+module qs.desktop.modules.deskcenter
+
+DeskCenter 1.0 DeskCenter.qml
+DeskCenterWindow 1.0 DeskCenterWindow.qml
+DeskWidgetCard 1.0 DeskWidgetCard.qml
+OfficialDragReorderDemo 1.0 OfficialDragReorderDemo.qml
+FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
+
+singleton ActivityUsageService 1.0 ActivityUsageService.qml
+singleton DesktopFilesService 1.0 DesktopFilesService.qml
