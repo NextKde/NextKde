@@ -42,7 +42,7 @@ QtObject {
     property real   barHeight:    35
     // Icon appearance source of truth. Shader inputs are derived from iconMode
     // instead of persisted separately, preventing impossible mixed states.
-    property string iconMode:        "grayscale"   // "color" | "grayscale" | "tint"
+    property string iconMode:        "color"       // "color" | "grayscale" | "tint"
     property real   iconOpacity:     0.5
     property string iconTintColor:   "#a855f7"
     readonly property real iconSaturation: iconMode === "color" ? 1.0 : 0.0
