@@ -7,7 +7,7 @@
 外观设置分为彼此正交的三个维度：
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 调用 KDE 的 `LayanLight / Layan` 色彩方案。目前不写入本项目配置。
-- **玻璃材质**：`blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由现有液态玻璃表面消费，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。
+- **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置。仅当 Dock 位于底部时生效；开启后顶部 Bar 将 `exclusiveZone`、启动器顶部边距和 DeskCenter 顶部安全区归零/收缩，再将时间与系统状态内容装入 Dock。
 - **Dock 窗口动画**：`dockWindowAnimationStyle`，值为 `scale | genie`，默认 `scale`。由 `DockWindowAnimationTargetService` 向 KWin dock-window-animation effect 发布图标矩形，设置页可选择并持久化。
@@ -96,21 +96,23 @@ SystemIcon { role: "controlCenter" }
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 4：
+schema 8：
 
 ```json
 {
-  "version": 4,
-  "blurStrength": 0.42,
-  "liquidStrength": 1.0,
+  "version": 8,
+  "globalBlurStrength": 0.42,
+  "globalLiquidStrength": 1.0,
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
+  "barVisibilityMode": "always",
+  "barLayoutMode": "full",
   "dockWindowAnimationStyle": "scale"
 }
 ```
 
 - 默认 `shellStyle` 为 `macos`，因为它最接近引入主题前的现有 Shell 形态，升级不会突然重排界面。
-- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`。升级时保留原值，补入缺失字段的默认值，并防抖写回最新 schema。
+- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
 - 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
