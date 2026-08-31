@@ -50,6 +50,21 @@ QString cleanPath(const QString &path)
     return info.isAbsolute() ? info.absoluteFilePath() : QString{};
 }
 
+QString resolveDesktopFile(const QString &id)
+{
+    if (id.isEmpty() || id.contains(QChar('/')))
+        return {};
+    if (QFileInfo(id).isAbsolute() && QFileInfo(id).isFile())
+        return QFileInfo(id).absoluteFilePath();
+    const QStringList roots = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    for (const QString &root : roots) {
+        const QString candidate = QDir(root).filePath(id);
+        if (QFileInfo(candidate).isFile())
+            return QFileInfo(candidate).absoluteFilePath();
+    }
+    return {};
+}
+
 QStringList cleanPaths(const QJsonValue &value)
 {
     QStringList paths;
@@ -427,8 +442,13 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 {
     if (!socket || socket->state() != QLocalSocket::ConnectedState)
         return;
+    QString eventName = event.value(QStringLiteral("type")).toString();
+    if (eventName == QStringLiteral("snapshot"))
+        eventName = QStringLiteral("window.snapshot");
+    else if (eventName == QStringLiteral("action"))
+        eventName = QStringLiteral("window.action");
     QJsonObject message{{QStringLiteral("version"), kProtocolVersion},
-                        {QStringLiteral("event"), event.value(QStringLiteral("type"))},
+                        {QStringLiteral("event"), eventName},
                         {QStringLiteral("payload"), event}};
     socket->write(QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n');
     socket->flush();
@@ -537,13 +557,21 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.launch")) {
-        const QString desktop = cleanPath(payload.value(QStringLiteral("desktopFile")).toString());
+        const QString desktop = resolveDesktopFile(payload.value(QStringLiteral("desktopFile")).toString());
         const QString target = cleanPath(payload.value(QStringLiteral("path")).toString());
-        if (desktop.isEmpty() || target.isEmpty()) {
+        if (desktop.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-desktop-file"),
+                    QStringLiteral("启动器不存在"), false);
+            return true;
+        }
+        if (target.isEmpty() && payload.contains(QStringLiteral("path"))) {
             respond(socket, request, false, {}, QStringLiteral("invalid-path"), QStringLiteral("文件路径无效"), false);
             return true;
         }
-        runCommand(socket, request, QStringLiteral("gio"), {QStringLiteral("launch"), desktop, target});
+        QStringList args{QStringLiteral("launch"), desktop};
+        if (!target.isEmpty())
+            args.append(target);
+        runCommand(socket, request, QStringLiteral("gio"), args);
         return true;
     }
     if (op == QStringLiteral("file.trash")) {
@@ -569,13 +597,17 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.create-folder") || op == QStringLiteral("file.create-file")) {
-        const QString path = cleanPath(payload.value(QStringLiteral("path")).toString());
-        if (path.isEmpty()) {
+        const QString directory = cleanPath(payload.value(QStringLiteral("directory")).toString());
+        if (directory.isEmpty() || !QFileInfo(directory).isDir()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-path"), QStringLiteral("文件路径无效"), false);
             return true;
         }
-        const bool ok = op.endsWith(QStringLiteral("folder"))
-            ? QDir().mkpath(path) : QFile(path).open(QIODevice::WriteOnly);
+        const QString baseName = op.endsWith(QStringLiteral("folder"))
+            ? QStringLiteral("untitled folder") : QStringLiteral("untitled file.txt");
+        QString path = uniquePath(directory, baseName);
+        const bool ok = path.isEmpty() ? false
+            : (op.endsWith(QStringLiteral("folder")) ? QDir().mkpath(path)
+               : [&path] { QFile file(path); return file.open(QIODevice::WriteOnly); }());
         if (ok)
             respond(socket, request, true, QJsonObject{{QStringLiteral("path"), path}});
         else
@@ -792,6 +824,106 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                    {QStringLiteral("radio"), QStringLiteral("wifi"), payload.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("on") : QStringLiteral("off")});
         return true;
     }
+    if (op == QStringLiteral("network.connect")) {
+        const QString ssid = payload.value(QStringLiteral("ssid")).toString();
+        const QString device = payload.value(QStringLiteral("device")).toString();
+        const QString password = payload.value(QStringLiteral("password")).toString();
+        const QString uuid = payload.value(QStringLiteral("savedProfileUuid")).toString();
+        if (ssid.isEmpty() || device.isEmpty() || device.contains(QChar('/'))) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-network"),
+                    QStringLiteral("网络参数无效"), false);
+            return true;
+        }
+        if (!password.isEmpty()) {
+            runCommand(socket, request, QStringLiteral("nmcli"),
+                       {QStringLiteral("--wait"), QStringLiteral("20"), QStringLiteral("device"), QStringLiteral("wifi"), QStringLiteral("connect"), ssid, QStringLiteral("password"), password, QStringLiteral("ifname"), device});
+        } else if (!uuid.isEmpty()) {
+            runCommand(socket, request, QStringLiteral("nmcli"),
+                       {QStringLiteral("--wait"), QStringLiteral("20"), QStringLiteral("connection"), QStringLiteral("up"), QStringLiteral("uuid"), uuid, QStringLiteral("ifname"), device});
+        } else {
+            runCommand(socket, request, QStringLiteral("nmcli"),
+                       {QStringLiteral("--wait"), QStringLiteral("20"), QStringLiteral("device"), QStringLiteral("wifi"), QStringLiteral("connect"), ssid, QStringLiteral("ifname"), device});
+        }
+        return true;
+    }
+    if (op == QStringLiteral("network.connect-enterprise")) {
+        const QString ssid = payload.value(QStringLiteral("ssid")).toString();
+        const QString device = payload.value(QStringLiteral("device")).toString();
+        const QString identity = payload.value(QStringLiteral("identity")).toString();
+        const QString password = payload.value(QStringLiteral("password")).toString();
+        const QString method = payload.value(QStringLiteral("eapMethod")).toString().toLower();
+        const QString phase2 = method == QStringLiteral("peap") ? QStringLiteral("mschapv2")
+            : method == QStringLiteral("ttls") ? QStringLiteral("pap") : QString();
+        const QString anonymous = payload.value(QStringLiteral("anonymousIdentity")).toString();
+        if (ssid.isEmpty() || device.isEmpty() || identity.isEmpty() || password.isEmpty()
+            || phase2.isEmpty() || device.contains(QChar('/'))) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-network"),
+                    QStringLiteral("802.1X 参数无效"), false);
+            return true;
+        }
+        const QString profile = QStringLiteral("quickshell-8021x-") + ssid;
+        QStringList args{QStringLiteral("connection"), QStringLiteral("delete"), profile};
+        // Deleting a missing profile is harmless; use a separate process for
+        // each explicit command so no shell interpolation is required.
+        auto *deleteProcess = new QProcess(this);
+        deleteProcess->setProgram(QStringLiteral("nmcli"));
+        deleteProcess->setArguments(args);
+        connect(deleteProcess, &QProcess::finished, this, [this, socket, request, payload, profile, ssid, device, identity, password, method, phase2, anonymous, deleteProcess](int, QProcess::ExitStatus) {
+            deleteProcess->deleteLater();
+            QStringList add{QStringLiteral("connection"), QStringLiteral("add"), QStringLiteral("type"), QStringLiteral("wifi"), QStringLiteral("ifname"), device, QStringLiteral("con-name"), profile, QStringLiteral("ssid"), ssid};
+            auto *addProcess = new QProcess(this);
+            addProcess->setProgram(QStringLiteral("nmcli"));
+            addProcess->setArguments(add);
+            connect(addProcess, &QProcess::finished, this, [this, socket, request, profile, device, identity, password, method, phase2, anonymous, addProcess](int exitCode, QProcess::ExitStatus) {
+                addProcess->deleteLater();
+                if (exitCode != 0) {
+                    respond(socket, request, false, {}, QStringLiteral("network-failed"), QStringLiteral("无法创建网络配置"), true);
+                    return;
+                }
+                QStringList modify{QStringLiteral("connection"), QStringLiteral("modify"), profile,
+                    QStringLiteral("wifi-sec.key-mgmt"), QStringLiteral("wpa-eap"),
+                    QStringLiteral("802-1x.eap"), method, QStringLiteral("802-1x.identity"), identity,
+                    QStringLiteral("802-1x.password"), password, QStringLiteral("802-1x.phase2-auth"), phase2,
+                    QStringLiteral("connection.autoconnect"), QStringLiteral("yes")};
+                if (!anonymous.isEmpty())
+                    modify << QStringLiteral("802-1x.anonymous-identity") << anonymous;
+                auto *modifyProcess = new QProcess(this);
+                modifyProcess->setProgram(QStringLiteral("nmcli"));
+                modifyProcess->setArguments(modify);
+                connect(modifyProcess, &QProcess::finished, this, [this, socket, request, profile, device, modifyProcess](int modifyExit, QProcess::ExitStatus) {
+                    modifyProcess->deleteLater();
+                    if (modifyExit != 0) {
+                        respond(socket, request, false, {}, QStringLiteral("network-failed"), QStringLiteral("无法保存网络配置"), true);
+                        return;
+                    }
+                    runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("--wait"), QStringLiteral("25"), QStringLiteral("connection"), QStringLiteral("up"), profile, QStringLiteral("ifname"), device});
+                });
+                modifyProcess->start();
+            });
+            addProcess->start();
+        });
+        deleteProcess->start();
+        return true;
+    }
+    if (op == QStringLiteral("network.disconnect")) {
+        const QString device = payload.value(QStringLiteral("device")).toString();
+        if (device.isEmpty() || device.contains(QChar('/'))) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-device"), QStringLiteral("网络设备无效"), false);
+            return true;
+        }
+        runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("device"), QStringLiteral("disconnect"), device});
+        return true;
+    }
+    if (op == QStringLiteral("network.forget")) {
+        const QString uuid = payload.value(QStringLiteral("uuid")).toString();
+        static const QRegularExpression uuidPattern(QStringLiteral("^[0-9A-Fa-f-]{8,}$"));
+        if (!uuidPattern.match(uuid).hasMatch()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-profile"), QStringLiteral("网络配置无效"), false);
+            return true;
+        }
+        runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("connection"), QStringLiteral("delete"), QStringLiteral("uuid"), uuid});
+        return true;
+    }
     if (op == QStringLiteral("bluetooth.power")) {
         runCommand(socket, request, QStringLiteral("bluetoothctl"),
                    {QStringLiteral("power"), payload.value(QStringLiteral("enabled")).toBool() ? QStringLiteral("on") : QStringLiteral("off")});
@@ -860,6 +992,24 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         if (kwin.isValid())
             kwin.call(QStringLiteral("reconfigure"));
         respond(socket, request, true, QJsonObject{{QStringLiteral("reconfigured"), true}});
+        return true;
+    }
+    if (op == QStringLiteral("theme.toggle")) {
+        auto *reader = new QProcess(this);
+        reader->setProgram(QStringLiteral("kreadconfig6"));
+        reader->setArguments({QStringLiteral("--file"), QStringLiteral("kdeglobals"),
+                              QStringLiteral("--group"), QStringLiteral("General"),
+                              QStringLiteral("--key"), QStringLiteral("ColorScheme")});
+        connect(reader, &QProcess::finished, this, [this, socket, request, reader](int, QProcess::ExitStatus) {
+            const QString scheme = QString::fromUtf8(reader->readAllStandardOutput()).trimmed();
+            reader->deleteLater();
+            const bool dark = scheme.contains(QStringLiteral("dark"), Qt::CaseInsensitive);
+            const QString package = dark ? QStringLiteral("org.kde.breeze.desktop")
+                                         : QStringLiteral("org.kde.breezedark.desktop");
+            runCommand(socket, request, QStringLiteral("plasma-apply-lookandfeel"),
+                       {QStringLiteral("--apply"), package});
+        });
+        reader->start();
         return true;
     }
     if (op == QStringLiteral("screenshot.capture")) {
