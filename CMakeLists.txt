@@ -19,3 +19,6 @@ endif()
 install(DIRECTORY shell/ DESTINATION share/kos/shell
     PATTERN "*.qml" PATTERN "*.qmlc" EXCLUDE)
 install(DIRECTORY shared/ DESTINATION share/kos/shared)
+# `apps/settings/main.qml` is also runnable directly from an installed prefix;
+# its portable relative import resolves to share/shared/qml/controls there.
+install(DIRECTORY shared/qml/controls/ DESTINATION share/shared/qml/controls)

@@ -74,7 +74,7 @@ build() {
 
 install_files() {
     mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin" \
-        "$prefix/share/kos/settings"
+        "$prefix/share/kos/settings" "$prefix/share/shared/qml"
     install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
     install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
     install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
@@ -82,6 +82,8 @@ install_files() {
         "$prefix/share/kos/platform/kwin/window-bridge.js"
     install -m 0644 "$project_dir/apps/settings/main.qml" \
         "$prefix/share/kos/settings/main.qml"
+    rm -rf "$prefix/share/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$prefix/share/shared/qml/"
 
     local shell_config="$config_dir/quickshell/kos"
     mkdir -p "$shell_config"
@@ -91,13 +93,18 @@ install_files() {
     cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
 
     mkdir -p "$runtime_unit_dir"
-    install -m 0644 "$project_dir/packaging/systemd/kos-platform.service" "$runtime_unit_dir/"
-    install -m 0644 "$project_dir/packaging/systemd/kos-data.service" "$runtime_unit_dir/"
+    sed "s|%h/.local|$prefix|g" \
+        "$project_dir/packaging/systemd/kos-platform.service" \
+        > "$runtime_unit_dir/kos-platform.service"
+    sed "s|%h/.local|$prefix|g" \
+        "$project_dir/packaging/systemd/kos-data.service" \
+        > "$runtime_unit_dir/kos-data.service"
+    chmod 0644 "$runtime_unit_dir/kos-platform.service" "$runtime_unit_dir/kos-data.service"
     mkdir -p "$prefix/share/applications"
     sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
         "$project_dir/packaging/desktop/kos-settings.desktop.in" \
         > "$prefix/share/applications/kos-settings.desktop"
-    if command -v systemctl >/dev/null 2>&1; then
+    if [[ "${KOS_SKIP_SYSTEMD:-0}" != "1" ]] && command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload
         systemctl --user enable --now kos-platform.service kos-data.service
     fi
@@ -127,7 +134,9 @@ uninstall() {
     fi
     rm -f "$runtime_unit_dir/kos-platform.service" "$runtime_unit_dir/kos-data.service"
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
-    rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" "$prefix/share/applications/kos-settings.desktop"
+    rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" \
+        "$prefix/share/kos/settings/main.qml" "$prefix/share/applications/kos-settings.desktop"
+    rm -rf "$prefix/share/shared/qml/controls"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
 }
