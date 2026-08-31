@@ -10,10 +10,6 @@ config/dock/config.json
 *.qslog
 *.qslog.gz
 
-# Locally compiled KWin window bridge
-helpers/kwin-window-bridge/build/
-
-# Local service/helper builds
+# Local build outputs
 .build/
 apps/settings/build/
-helpers/file-clipboard-helper/build/
