@@ -36,6 +36,7 @@ QtObject {
     property string _lastSnapshotJson: ""
     property var _pendingKwinActivation: null
     property bool _kwinScriptStarted: false
+    property bool _kwinSubscribePending: false
     property var _thumbnailUrlsByHandle: ({})
     property var _thumbnailPendingByHandle: ({})
     // A QML binding can depend on this counter to observe a map entry update.
@@ -65,6 +66,23 @@ QtObject {
             if (eventName === "window.snapshot" || eventName === "desktops"
                     || eventName === "thumbnail" || eventName === "global-pointer-press")
                 svc._consumeKwinEvent(payload)
+        }
+    }
+    property Connections _platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected) {
+                svc._subscribeKwin()
+            } else {
+                // The platform daemon drops subscriber sockets on restart;
+                // discard its stale snapshot until the fresh bridge state is
+                // delivered after reconnection.
+                svc._kwinSubscribePending = false
+                svc._kwinReceivedInitialSnapshot = false
+                svc._lastSnapshotJson = ""
+                svc._kwinWindows = []
+                svc._rebuild()
+            }
         }
     }
 
@@ -563,9 +581,21 @@ QtObject {
         })
     }
 
+    function _subscribeKwin() {
+        if (!_kwinBridgeEnabled || _kwinSubscribePending)
+            return
+        _kwinSubscribePending = true
+        PlatformClient.request("kwin.subscribe", {}, function(response) {
+            _kwinSubscribePending = false
+            if (!response?.ok)
+                console.warn("[WindowService] KWin subscription failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
+    }
+
     Component.onCompleted: {
         if (svc._kwinBridgeEnabled) {
-            PlatformClient.request("kwin.subscribe", {}, function() {})
+            _subscribeKwin()
             _scheduleUpdate()
         }
     }
