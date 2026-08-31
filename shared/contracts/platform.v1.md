@@ -22,10 +22,11 @@ Errors use stable machine-readable codes:
 
 Current operation groups are:
 
-- `clipboard.set`, `clipboard.read`, `clipboard.history.watch-images`,
+- `clipboard.set`, `clipboard.read`, `clipboard.save-image`,
+  `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
   `clipboard.history.delete`, `clipboard.history.clear`
-- `file.open`, `file.launch`, `file.rename`, `file.create-folder`,
+- `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
   `file.create-file`, `file.trash`, `file.trash-state`, `file.empty-trash`,
   `file.open-trash`, `file.open-with`
 - `kwin.subscribe`, `kwin.command`

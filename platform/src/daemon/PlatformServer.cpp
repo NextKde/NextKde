@@ -8,12 +8,14 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMimeData>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QTimer>
@@ -74,6 +76,38 @@ QString cleanPath(const QString &path)
     if (canonicalParent.isEmpty())
         return {};
     return QDir(canonicalParent).filePath(fileName);
+}
+
+QString cleanCreatePath(const QString &path)
+{
+    if (path.isEmpty() || path.contains(QChar('\0')))
+        return {};
+    const QFileInfo raw(path);
+    if (!raw.isAbsolute())
+        return {};
+    const QString cleaned = QDir::cleanPath(raw.absoluteFilePath());
+    QString cursor = cleaned;
+    QStringList suffix;
+    while (!QFileInfo(cursor).exists()) {
+        const QFileInfo missing(cursor);
+        if (missing.fileName().isEmpty() || missing.fileName() == QStringLiteral(".")
+            || missing.fileName() == QStringLiteral(".."))
+            return {};
+        suffix.prepend(missing.fileName());
+        const QString parent = missing.path();
+        if (parent == cursor)
+            return {};
+        cursor = parent;
+    }
+    const QFileInfo base(cursor);
+    if (!base.isDir() || base.isSymLink())
+        return {};
+    QString result = base.canonicalFilePath();
+    if (result.isEmpty())
+        return {};
+    for (const QString &part : suffix)
+        result = QDir(result).filePath(part);
+    return result;
 }
 
 QString resolveDesktopFile(const QString &id)
@@ -839,6 +873,40 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
                             {QStringLiteral("paths"), jsonPaths(localClipboardPaths(mime))}});
         return true;
     }
+    if (op == QStringLiteral("clipboard.save-image")) {
+        const QString destination = cleanCreatePath(request.value(QStringLiteral("payload"))
+                                                  .toObject()
+                                                  .value(QStringLiteral("destination"))
+                                                  .toString());
+        const QMimeData *mime = clipboard->mimeData(QClipboard::Clipboard);
+        if (destination.isEmpty() || !mime) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-request"),
+                    QStringLiteral("剪贴板请求无效"), false);
+            return true;
+        }
+        QImage image;
+        if (mime->hasImage())
+            image = qvariant_cast<QImage>(mime->imageData());
+        if (image.isNull() && mime->hasFormat(QStringLiteral("image/png")))
+            image.loadFromData(mime->data(QStringLiteral("image/png")), "PNG");
+        if (image.isNull()) {
+            respond(socket, request, false, {}, QStringLiteral("clipboard-image-unavailable"),
+                    QStringLiteral("剪贴板中没有 PNG 图片"), false);
+            return true;
+        }
+        QSaveFile output(destination);
+        if (!output.open(QIODevice::WriteOnly) || !image.save(&output, "PNG")
+            || !output.commit()) {
+            respond(socket, request, false, {}, QStringLiteral("clipboard-image-save-failed"),
+                    QStringLiteral("无法保存剪贴板图片"), true);
+            return true;
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("path"), destination},
+                            {QStringLiteral("width"), image.width()},
+                            {QStringLiteral("height"), image.height()}});
+        return true;
+    }
     if (op == QStringLiteral("clipboard.history.watch-images")) {
         m_watchImages = request.value(QStringLiteral("payload")).toObject()
                             .value(QStringLiteral("enabled")).toBool();
@@ -915,6 +983,47 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
             return true;
         }
         runCommand(socket, request, QStringLiteral("xdg-open"), {path});
+        return true;
+    }
+    if (op == QStringLiteral("file.copy")) {
+        const QString source = cleanPath(payload.value(QStringLiteral("source")).toString());
+        const QString destination = cleanCreatePath(payload.value(QStringLiteral("destination")).toString());
+        if (source.isEmpty() || destination.isEmpty() || !QFileInfo(source).isFile()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-path"),
+                    QStringLiteral("文件路径无效"), false);
+            return true;
+        }
+        if (!QDir().mkpath(QFileInfo(destination).path())) {
+            respond(socket, request, false, {}, QStringLiteral("copy-failed"),
+                    QStringLiteral("无法创建目标目录"), true);
+            return true;
+        }
+        QFile input(source);
+        QSaveFile output(destination);
+        if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) {
+            respond(socket, request, false, {}, QStringLiteral("copy-failed"),
+                    QStringLiteral("无法复制文件"), true);
+            return true;
+        }
+        bool copied = true;
+        while (!input.atEnd()) {
+            const QByteArray chunk = input.read(1024 * 1024);
+            if (chunk.isEmpty() && !input.atEnd()) {
+                copied = false;
+                break;
+            }
+            if (output.write(chunk) != chunk.size()) {
+                copied = false;
+                break;
+            }
+        }
+        if (!copied || !output.commit()) {
+            respond(socket, request, false, {}, QStringLiteral("copy-failed"),
+                    QStringLiteral("无法复制文件"), true);
+            return true;
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("path"), destination}});
         return true;
     }
     if (op == QStringLiteral("file.launch")) {

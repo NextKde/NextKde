@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 
 // AppLauncherConfigService — persistent launcher-only layout data.
 //
@@ -383,49 +384,34 @@ QtObject {
         const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "png"
         const safeId = appId.replace(/[^A-Za-z0-9._-]/g, "_")
         const destination = configDir + "/icons/" + safeId + "." + extension
-        const proc = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$2/icons\" && cp -- \"$1\" \"$3\"",
-            "applauncher-icon-import", source, configDir, destination,
-        ])
-        if (!proc)
-            return ""
-        proc.exited.connect(function(code) {
-            if (code !== 0)
-                console.warn("[AppLauncherConfig] icon import failed code=" + code)
+        PlatformClient.request("file.copy", { source: source, destination: destination },
+            function(response) {
+            if (!response?.ok)
+                console.warn("[AppLauncherConfig] icon import failed: "
+                    + (response?.error?.message || "platform unavailable"))
             else
                 console.log("[AppLauncherConfig] icon imported app=" + appId)
-            service.customIconImportFinished(appId, destination, code === 0)
-            proc.destroy()
+            service.customIconImportFinished(appId, destination, !!response?.ok)
         })
-        proc.running = true
         return destination
     }
 
-    // wl-paste is the standard Wayland clipboard reader used by Hyprland
-    // setups. Limit this first path to PNG so a copied image has a predictable
-    // extension and can be loaded by IconImage without format guessing.
+    // Ask the platform service for a PNG snapshot so image MIME handling and
+    // destination validation stay in one desktop-integration boundary.
     function importClipboardPngIcon(appId) {
         if (!appId)
             return ""
         const safeId = appId.replace(/[^A-Za-z0-9._-]/g, "_")
         const destination = configDir + "/icons/" + safeId + "-clipboard.png"
-        const proc = _makeProcess([
-            "sh", "-c",
-            "command -v wl-paste >/dev/null 2>&1 && mkdir -p \"$1/icons\" && wl-paste --type image/png > \"$2\" && test -s \"$2\"",
-            "applauncher-clipboard-icon", configDir, destination,
-        ])
-        if (!proc)
-            return ""
-        proc.exited.connect(function(code) {
-            if (code !== 0)
-                console.warn("[AppLauncherConfig] clipboard PNG import failed")
+        PlatformClient.request("clipboard.save-image", { destination: destination },
+            function(response) {
+            if (!response?.ok)
+                console.warn("[AppLauncherConfig] clipboard PNG import failed: "
+                    + (response?.error?.message || "platform unavailable"))
             else
                 console.log("[AppLauncherConfig] clipboard icon imported app=" + appId)
-            service.customIconImportFinished(appId, destination, code === 0)
-            proc.destroy()
+            service.customIconImportFinished(appId, destination, !!response?.ok)
         })
-        proc.running = true
         return destination
     }
 
