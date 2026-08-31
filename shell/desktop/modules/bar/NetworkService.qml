@@ -57,12 +57,12 @@ QtObject {
         PlatformClient.request("network.details", { device: deviceName }, function(response) {
             if (!response?.ok || deviceName === "")
                 return
-            const rows = String(response.result?.stdout || "").trim().split("\n")
-            if (rows[0] && rows[0] !== "--")
-                connectionName = rows[0]
-            ipv4 = (rows[1] || "").replace(/\/\d+$/, "")
-            if (connectionType === "wifi")
-                ssid = connectionName
+            const result = response.result || ({})
+            if (result.connectionName)
+                connectionName = String(result.connectionName)
+            ipv4 = String(result.ipv4 || "").replace(/\/\d+$/, "")
+            if (connectionType === "wifi" && result.ssid)
+                ssid = String(result.ssid)
         })
     }
 

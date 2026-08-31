@@ -17,6 +17,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include <algorithm>
 #include <functional>
 
 namespace KosPlatform {
@@ -192,11 +193,64 @@ QJsonObject parseNetworkScan(const QByteArray &output, int exitCode)
                     > bySsid.value(ssid).value(QStringLiteral("signalStrength")).toInt())
                 bySsid.insert(ssid, item);
         }
+        QList<QJsonObject> sorted;
+        sorted.reserve(bySsid.size());
         for (const auto &item : bySsid)
+            sorted.append(item);
+        std::sort(sorted.begin(), sorted.end(), [](const QJsonObject &left,
+                                                   const QJsonObject &right) {
+            const bool leftActive = left.value(QStringLiteral("active")).toBool();
+            const bool rightActive = right.value(QStringLiteral("active")).toBool();
+            if (leftActive != rightActive)
+                return leftActive;
+            const int leftSignal = left.value(QStringLiteral("signalStrength")).toInt();
+            const int rightSignal = right.value(QStringLiteral("signalStrength")).toInt();
+            if (leftSignal != rightSignal)
+                return leftSignal > rightSignal;
+            return left.value(QStringLiteral("ssid")).toString()
+                < right.value(QStringLiteral("ssid")).toString();
+        });
+        for (const auto &item : sorted)
             networks.append(item);
     }
     return QJsonObject{{QStringLiteral("available"), exitCode == 0},
                        {QStringLiteral("networks"), networks}};
+}
+
+QHash<QString, QString> parseSavedWifiProfiles(const QByteArray &output, int exitCode)
+{
+    QHash<QString, QString> profiles;
+    if (exitCode != 0)
+        return profiles;
+    for (const QString &line : QString::fromUtf8(output).split(QChar('\n'), Qt::SkipEmptyParts)) {
+        const QStringList fields = splitNmcli(line);
+        if (fields.size() < 3 || fields.value(1) != QStringLiteral("802-11-wireless"))
+            continue;
+        const QString uuid = fields.value(0).trimmed();
+        const QString ssid = fields.mid(2).join(QStringLiteral(":"));
+        if (!uuid.isEmpty() && !ssid.isEmpty() && !profiles.contains(ssid))
+            profiles.insert(ssid, uuid);
+    }
+    return profiles;
+}
+
+QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return QJsonObject{{QStringLiteral("available"), false}};
+    const QStringList rows = QString::fromUtf8(output).trimmed()
+                                 .split(QChar('\n'), Qt::KeepEmptyParts);
+    QString connection = rows.value(0).trimmed();
+    if (connection == QStringLiteral("--"))
+        connection.clear();
+    QString ipv4 = rows.value(1).trimmed();
+    const qsizetype slash = ipv4.indexOf(QChar('/'));
+    if (slash >= 0)
+        ipv4.truncate(slash);
+    return QJsonObject{{QStringLiteral("available"), true},
+                       {QStringLiteral("connectionName"), connection},
+                       {QStringLiteral("ssid"), connection},
+                       {QStringLiteral("ipv4"), ipv4}};
 }
 
 QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
@@ -803,7 +857,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("network.details")) {
         const QString device = payload.value(QStringLiteral("device")).toString();
-        if (device.isEmpty() || device.contains(QChar('/'))) {
+        if (device.isEmpty() || device.contains(QChar('/')) || device.contains(QChar(':'))) {
             respond(socket, request, false, {}, QStringLiteral("invalid-device"),
                     QStringLiteral("网络设备无效"), false);
             return true;
@@ -811,12 +865,69 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         runCommand(socket, request, QStringLiteral("nmcli"),
                    {QStringLiteral("-t"), QStringLiteral("-f"),
                     QStringLiteral("GENERAL.CONNECTION,IP4.ADDRESS"),
-                    QStringLiteral("device"), QStringLiteral("show"), device});
+                    QStringLiteral("device"), QStringLiteral("show"), device},
+                   parseNetworkDetails);
         return true;
     }
     if (op == QStringLiteral("network.scan")) {
-        runCommand(socket, request, QStringLiteral("nmcli"),
-                   {QStringLiteral("-t"), QStringLiteral("-f"), QStringLiteral("IN-USE,SSID,SIGNAL,SECURITY"), QStringLiteral("device"), QStringLiteral("wifi"), QStringLiteral("list"), QStringLiteral("--rescan"), QStringLiteral("auto")}, parseNetworkScan);
+        const QString device = payload.value(QStringLiteral("device")).toString();
+        if (device.isEmpty() || device.contains(QChar('/')) || device.contains(QChar(':'))) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-device"),
+                    QStringLiteral("网络设备无效"), false);
+            return true;
+        }
+        // Resolve saved profiles in the same adapter call as the RF scan. The
+        // profile UUID is immutable even when a user renames the connection,
+        // so the UI can safely reconnect or forget the selected network.
+        auto *profiles = new QProcess(this);
+        profiles->setProgram(QStringLiteral("nmcli"));
+        profiles->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                                QStringLiteral("UUID,TYPE,802-11-wireless.ssid"),
+                                QStringLiteral("connection"), QStringLiteral("show")});
+        connect(profiles, &QProcess::finished, this,
+                [this, socket, request, device, profiles](int profileExit,
+                                                          QProcess::ExitStatus) {
+            const QHash<QString, QString> savedProfiles = parseSavedWifiProfiles(
+                profiles->readAllStandardOutput(), profileExit);
+            profiles->deleteLater();
+            if (profileExit != 0) {
+                respond(socket, request, false, {}, QStringLiteral("network-unavailable"),
+                        QStringLiteral("无法读取已保存的网络配置"), true);
+                return;
+            }
+            auto *scan = new QProcess(this);
+            scan->setProgram(QStringLiteral("nmcli"));
+            scan->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                                QStringLiteral("IN-USE,SSID,SIGNAL,SECURITY"),
+                                QStringLiteral("device"), QStringLiteral("wifi"),
+                                QStringLiteral("list"), QStringLiteral("ifname"), device,
+                                QStringLiteral("--rescan"), QStringLiteral("auto")});
+            connect(scan, &QProcess::finished, this,
+                    [this, socket, request, savedProfiles, scan](int scanExit,
+                                                                  QProcess::ExitStatus) {
+                const QJsonObject result = parseNetworkScan(
+                    scan->readAllStandardOutput(), scanExit);
+                scan->deleteLater();
+                if (scanExit != 0) {
+                    respond(socket, request, false, {}, QStringLiteral("network-scan-failed"),
+                            QStringLiteral("Wi‑Fi 扫描失败"), true);
+                    return;
+                }
+                QJsonArray networks = result.value(QStringLiteral("networks")).toArray();
+                for (int index = 0; index < networks.size(); ++index) {
+                    QJsonObject network = networks.at(index).toObject();
+                    network.insert(QStringLiteral("savedProfileUuid"),
+                                   savedProfiles.value(network.value(QStringLiteral("ssid"))
+                                                           .toString()));
+                    networks[index] = network;
+                }
+                QJsonObject normalized{{QStringLiteral("available"), true},
+                                       {QStringLiteral("networks"), networks}};
+                respond(socket, request, true, normalized);
+            });
+            scan->start();
+        });
+        profiles->start();
         return true;
     }
     if (op == QStringLiteral("network.wifi-power")) {
