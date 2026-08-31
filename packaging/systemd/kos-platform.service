@@ -1,0 +1,14 @@
+[Unit]
+Description=KOS platform integration service
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/libexec/kos-platform daemon
+Environment=KOS_PLATFORM_KWIN_SCRIPT=%h/.local/share/kos/platform/kwin/window-bridge.js
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

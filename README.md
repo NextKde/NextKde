@@ -1,271 +1,189 @@
 # KOS Desktop Shell
 
-**[English](README.md) | [中文](README.zh-CN.md)**
+[中文文档](README.zh-CN.md)
 
-An iPadOS-inspired desktop environment for **KDE Plasma 6 (Wayland)**, built on
-[Quickshell](https://quickshell.org). KOS is not a distribution or a fork of a
-desktop environment — it is a complete Quickshell configuration plus a small set
-of native helpers and KWin effects that together replace the Plasma shell
-experience: a top bar, a floating dock, desktop widgets, a launcher, a
-notification system, a workspace overview, and a standalone settings
-application.
+KOS is a Quickshell-based desktop shell for KDE Plasma 6 on Wayland. It adds a
+top bar, floating dock, desktop widgets and files, launcher, search,
+notifications, workspace overview, and a standalone settings app. KOS does
+not replace Plasma, KWin, NetworkManager, PipeWire, or systemd; it runs beside
+them and only takes over the surfaces you choose to hide.
 
-> Status: personal daily-driver project under active development. Interfaces
-> and configuration schemas are versioned and migrated, but expect rapid
-> evolution.
+## Five-minute preview
 
----
+Previewing the UI does not install anything and does not need root access:
 
-## Features
+```sh
+git clone <repository-url> NextKde
+cd NextKde
+./tools/kosctl doctor          # check Quickshell, CMake, Go, and the session
+qs -p "$PWD/shell"             # equivalent: quickshell --path "$PWD/shell"
+```
 
-### Shell surfaces
-
-- **Top Bar** — system tray, network status with live traffic rates, Bluetooth,
-  volume, battery, CPU temperature, clock, and the control-center entry. Can
-  either stay independent or be fused into the Dock.
-- **Dock** — iPadOS-style pinned apps + running windows, magnification,
-  drag-to-reorder, right-click context menus, live window previews, MPRIS music
-  player with cover-art palette, weather, and a trash applet with badge. Three
-  positions (bottom / left / right), three visibility modes (`always` /
-  `smart` window-collision auto-hide / `persistent`) with an iOS-style home
-  indicator, and icon appearance modes (`color` / `grayscale` / `tint`).
-- **Bar ⇄ Dock fusion** — optionally merge the bar into a bottom Dock: the
-  clock joins the music/weather/temperature info carousel and the status area
-  becomes a trailing accessory. Side docks get a counter-rotated, vertically
-  readable carousel instead.
-- **DeskCenter** — background-layer desktop widgets (clock, weather, calendar,
-  system monitors with history rings, activity ledger, now-playing) and a real
-  desktop file surface: sorting, box selection, rename, trash, hold-to-drop
-  folder insertion, multi-select drag, new file/folder, external URL drops, and
-  cut/copy semantics that interoperate with Dolphin.
-- **App Launcher** — iPadOS-style full-screen grid with drag-to-create folders,
-  custom names/icons, and hidden apps.
-- **Quick Search** — incremental app/file search, clipboard history (cliphist,
-  including images), and an MRU window switcher with live KWin thumbnails.
-- **Notifications** — per-app grouping with stacked/expanded cards, action
-  buttons, inline reply, critical-urgency styling, do-not-disturb, and a
-  grouped history center inside the control center.
-- **Workspace Overview** — Stage-Manager-style fullscreen overlay with a
-  virtual-desktop strip and live window thumbnails (`Meta+Tab`).
-- **Control Center** — Wi-Fi connect/disconnect/forget including 802.1X
-  (PEAP / TTLS), Bluetooth, volume, real backlight brightness via logind,
-  do-not-disturb, screenshot, logout, and notification history.
-
-### Appearance system
-
-- Three shell styles — **Windows 12**, **macOS**, **Material** — driven by a
-  versioned semantic-token layer (`AppearanceTokens`), hot-switchable without
-  rebuilding any surface.
-- Global **blur strength** and **liquid-glass strength** sliders that feed both
-  the QML glass materials and the KWin glass effect.
-- Standalone **Settings application** (`kos-settings`) running in its own
-  process; it talks to the shell exclusively through a versioned IPC contract
-  (`appearance-settings`).
-
-### Graphics & effects
-
-- **KWin glass effect** (`integrations/kwin-effects-glass`): a Plasma 6 blur
-  fork with Dual Kawase blur, Snell's-law refraction, per-surface highlight
-  direction, and bidirectional tint (dark backgrounds lift toward white, bright
-  backgrounds darken).
-- **Dock window animation effect** (`integrations/kwin-dock-window-animation`):
-  iPadOS-style `scale` / `genie` open-close animations; the shell publishes the
-  exact on-screen icon rectangles so windows land precisely on their icons.
-- **Context-menu input effect** (`integrations/kwin-context-menu-input`):
-  compositor-level outside-click dismissal for shell context menus.
-- Client-side SDF rounded-corner, refraction, noise and glow shaders compiled
-  with `qsb`.
-
-### Platform services
-
-- **`shell-data-service` (Go)** — the single owner of durable and historical
-  data: CPU/memory/disk/frequency/temperature sampling with history, boot and
-  per-app activity ledger, desktop-directory watching with atomic snapshots,
-  and a supervised Qt clipboard helper that publishes copy/cut in URI, KDE, and
-  GNOME formats simultaneously.
-- **KWin window bridge** (`helpers/kwin-window-bridge`) — a C++ D-Bus bridge
-  plus a KWin script that supplies window enumeration, geometry, activation,
-  minimization, thumbnails and virtual-desktop data, because KWin does not
-  implement `zwlr-foreign-toplevel-management-v1`.
-- **Global shortcuts** — registered as native KDE Command Shortcuts with
-  install-time conflict detection; rebindable in *System Settings → Shortcuts*.
-
----
+Close the preview with `Ctrl+C`. The preview can show empty metrics, windows,
+and desktop files until the two user services are installed. Existing Plasma
+panels and notifications remain active, so overlap is expected.
 
 ## Requirements
 
-| Component | Requirement |
-| --- | --- |
-| Session | KDE Plasma 6 on Wayland (developed on Plasma/KWin 6.7) |
-| Shell runtime | [Quickshell](https://quickshell.org) 0.3.0 (`qs`) |
-| Build tools | Go, CMake, a C++ compiler, Qt 6 Gui development files, `socat` |
-| Runtime integration | NetworkManager (`nmcli`), systemd user session, logind |
-| Optional | `cliphist` (clipboard history), `qdbus6`/`kwriteconfig6` (effect sync) |
+- KDE Plasma 6 running on Wayland (KWin is required for the window provider).
+- Quickshell 0.3.x (`qs` or `quickshell`). Install it from the
+  [official Quickshell documentation](https://quickshell.org/docs/).
+- CMake 3.21+, Ninja, a C++20 compiler, Qt 6 development packages, and Go.
+- Runtime tools supplied by a normal Plasma session: NetworkManager (`nmcli`),
+  PipeWire/WirePlumber (`wpctl`), BlueZ (`bluetoothctl`), `loginctl`, and
+  `systemctl --user`.
+- Optional clipboard history: `wl-clipboard` (`wl-copy`/`wl-paste`) and
+  `cliphist`. File copy/paste through the desktop still works without them.
+- KWin/KF6 development packages only when building the optional KWin plugins.
 
-On Arch-based systems the build dependencies are typically
-`go cmake gcc qt6-base`; on Debian/Ubuntu `golang cmake g++ qt6-base-dev`.
-Building the KWin effects additionally needs the KWin development package
-(`kwin-dev` / `kwin-devel`) and KF6 development headers.
+`kosctl build` downloads Go modules through `https://goproxy.cn,direct` by
+default. Set `GOPROXY` before building if you need a different mirror or an
+offline module cache, for example `GOPROXY=off ./tools/kosctl build`.
 
-## Installation
+On Arch, the usual base packages are `quickshell cmake ninja gcc qt6-base go`.
+On Debian/Ubuntu, install the equivalent `quickshell cmake ninja-build g++
+qt6-base-dev golang` packages from your distribution or the Quickshell
+release channel.
 
-Clone the repository, then install the components you need. Everything except
-the KWin effects installs into user or `/usr/local` locations and can be
-removed cleanly.
+## Complete user installation
 
-### 1. Run the shell
-
-```sh
-quickshell --path /path/to/quickshell
-# or, if `qs` is your quickshell binary:
-qs -p /path/to/quickshell
-```
-
-The entry point is `shell.qml`; it only instantiates
-`desktop/DesktopEnvironment.qml`.
-
-### 2. Data service (recommended)
-
-Builds the Go service plus the Qt clipboard helper, installs them to
-`~/.local/lib/quickshell`, and enables the systemd user unit:
+Run the single entry point from the repository root:
 
 ```sh
-./tools/install-shell-data-service.sh
+./tools/kosctl doctor
+KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
 ```
 
-Without it, system metrics, the activity ledger, desktop files, and
-cross-application file copy/cut are unavailable.
+`kosctl install` builds and installs:
 
-### 3. KWin window bridge (required on Plasma)
+- `kos-platform` to `~/.local/libexec/` (one resident C++/Qt platform process);
+- `kos-data-service` to `~/.local/libexec/` (the resident Go metrics/history
+  process);
+- `kos-settings` to `~/.local/bin/`;
+- the Quickshell tree to `~/.config/quickshell/kos`;
+- `kos-platform.service` and `kos-data.service` as systemd user units.
+
+The installer enables both units immediately. It never uses `sudo`. Build the
+KWin plugins separately with `KOS_BUILD_KWIN_PLUGINS=ON` if your system has the
+matching KWin development headers; installing a system-wide KWin plugin may
+require administrator permission on your distribution.
+
+Start the installed shell with:
 
 ```sh
-cmake -S helpers/kwin-window-bridge -B .build/kwin-window-bridge
-cmake --build .build/kwin-window-bridge
-sudo install -m 0755 .build/kwin-window-bridge/quickshell-kwin-window-bridge \
-    /usr/local/libexec/quickshell-kwin-window-bridge
+qs -c kos
 ```
 
-`WindowService` starts the bridge and loads its KWin script automatically when
-the shell runs; on compositors that implement foreign-toplevel-management the
-bridge stays unused.
+For development, keep using `./tools/kosctl run`, which loads the checkout with
+`qs -p shell`.
 
-### 4. KWin glass effect (recommended)
+### First Plasma setup
 
-The vendored fork in `integrations/kwin-effects-glass` is the authoritative
-source; see its [README](integrations/kwin-effects-glass/README.md) for
-distribution packages or manual build instructions. After installing, enable
-the effect (plugin ID `blurplus`) in *System Settings → Desktop Effects*. Blur
-and refraction strength are then driven live by the shell's appearance
-settings.
+KOS provides its own notification server. Remove Plasma's notification widget
+from the panel/system tray before starting a daily session, otherwise Plasma
+will keep the notification D-Bus name. Re-add it when reverting to Plasma's
+shell. KOS does not modify your panel layout automatically.
 
-### 5. Optional internal KWin effects
+### Global shortcuts
+
+The defaults are installed without Python:
 
 ```sh
-for effect in kwin-dock-window-animation kwin-context-menu-input; do
-    cmake -S "integrations/$effect" -B ".build/$effect"
-    cmake --build ".build/$effect"
-    sudo cmake --install ".build/$effect"
-done
+./tools/kosctl shortcuts install
 ```
 
-Enable them in *System Settings → Desktop Effects*. The dock animation style
-(`scale` / `genie`) follows the shell's appearance configuration.
-
-### 6. Settings application
+Bindings are stored in `shared/contracts/shortcuts.v1.json` and can be changed
+later in *System Settings → Shortcuts*. Remove only KOS bindings with:
 
 ```sh
-cmake -S apps/settings -B .build/apps/settings
-cmake --build .build/apps/settings
+./tools/kosctl shortcuts uninstall
 ```
 
-A desktop entry template is provided at
-`packaging/desktop/kos-settings.desktop.in`.
-
-### 7. Global shortcuts
-
-```sh
-python3 helpers/global-shortcuts/install.py
-```
-
-This registers KDE Command Shortcuts with conflict detection and seeds the
-default bindings. Re-run it after editing
-`helpers/global-shortcuts/shortcuts.json`; change bindings afterwards in
-*System Settings → Shortcuts*.
-
-### 8. Notification takeover
-
-Quickshell's notification server can only own the D-Bus name if Plasma's
-notification applet is out of the way: remove the notification widget from the
-system tray settings and restart plasmashell once
-(`systemctl --user restart plasma-plasmashell`).
-
-### Default shortcuts
-
-| Shortcut | Action |
-| --- | --- |
-| `Meta+Space` | Toggle app launcher |
-| `Meta+Shift+Space` | Toggle window switcher (MRU) |
-| `Meta+B` | Toggle control center |
-| `Meta+Tab` | Toggle workspace overview |
-
-## Project layout
+## Architecture at a glance
 
 ```text
-shell.qml       stable Quickshell entry point
-desktop/        the desktop environment (bar, dock, deskcenter, launcher, …)
-apps/           independent Qt Quick applications (settings, …)
-shared/         pure, portable cross-process QML and contracts
-services/       resident background services (shell-data-service, Go)
-helpers/        on-demand native helpers (KWin bridge, shortcuts, clipboard)
-integrations/   KWin effects and other compositor integrations
-tools/          install, build, and diagnostic scripts
-docs/           architecture documentation
+qs -c kos ──► shell/shell.qml ──► shell/desktop/       Quickshell process
+                    │ JSONL Unix sockets
+                    ├──────────────► kos-platform       C++/Qt adapters
+                    └──────────────► kos-data.sock      Go durable data service
+
+apps/settings/       independent Qt Quick process; talks to Shell IPC only
+integrations/kwin/   two KWin plugin .so targets (KWin's loading model)
+vendor/              third-party kwin-effects-glass source
+shared/contracts/    versioned IPC and shortcut contracts
 ```
 
-## Documentation
+The platform socket is `$XDG_RUNTIME_DIR/kos-platform.sock`; the data socket is
+`$XDG_RUNTIME_DIR/kos-data.sock`. Both are Unix sockets with mode `0600`.
+Shell, platform, and data messages are newline-delimited JSON with a version,
+request ID, operation, result, and stable error model. See
+[PlatformArchitecture.md](docs/PlatformArchitecture.md) and
+[shared/contracts/platform.v1.md](shared/contracts/platform.v1.md).
 
-- [Project architecture](docs/ProjectArchitecture.md) — runtime boundaries and
-  dependency direction
-- [Dock architecture](docs/DockArchitecture.md) — identity, window model,
-  persistence, and visibility modes
-- [Appearance architecture](docs/AppearanceArchitecture.md) — schema, IPC
-  contract, and semantic tokens
-- [Network architecture](docs/NetworkArchitecture.md) — NetworkManager adapter
-  boundary
-- [Shell data service](docs/ShellDataService.md) — Go data-layer ownership and
-  protocols
-- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) — condensed engineering context and
-  key technical decisions
+`kos-platform` owns KWin window commands, Wayland clipboard ownership, file
+operations/Open-With, network/audio/Bluetooth/brightness/session/theme adapters,
+screenshot selection, and shortcut installation. `kos-data-service` owns
+sampling, history, activity attribution, and desktop-directory snapshots. The
+two KWin effects remain separate shared libraries because KWin requires a
+plugin ID for each effect.
 
-## Roadmap
-
-Planned next, in rough priority order:
-
-- **Per-monitor layouts** — persist DeskCenter widgets, desktop-icon layout,
-  Dock position/visibility, and wallpaper sampling per display.
-- **DeskCenter theming** — let desktop cards consume the appearance token layer
-  (the last surface not yet token-driven).
-- **Settings coverage** — keyboard-shortcut and DeskCenter pages in
-  `kos-settings`.
-- **Standalone apps** — fill in the `calendar`, `todo`, and `weather`
-  placeholders under `apps/`.
-- **Accessibility & keyboard navigation** — focus order, reduced motion,
-  high contrast, full keyboard operation.
-- **Weather icon set** — a complete SVG icon set replacing the current mix of
-  Unicode glyphs, Canvas drawing, and partial SVGs.
-
-Shelved: cross-file-manager drag-move beyond the clipboard bridge (Wayland DnD
-action negotiation limits).
-
-## Development
+## Useful commands
 
 ```sh
-qmllint <changed-qml-files>
-node desktop/modules/dock/test_adaptive.mjs
-node desktop/modules/dock/test_autohide.mjs
+./tools/kosctl doctor
+./tools/kosctl build
+./tools/kosctl run
+./tools/kosctl install
+./tools/kosctl uninstall
+systemctl --user status kos-platform.service kos-data.service
+journalctl --user -u kos-platform.service -u kos-data.service -f
+```
+
+`uninstall` stops the services, removes installed binaries, units, and the
+Quickshell config, and deliberately preserves
+`$XDG_STATE_HOME/quickshell/...` so user preferences and history are recoverable.
+
+## Development and verification
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+python3 platform/tests/test_contract.py
+python3 tools/check-docs.py
+node shell/desktop/modules/dock/test_adaptive.mjs
+node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check
 ```
 
-Runtime verification launches a separate Quickshell instance and inspects its
-log; see `.agents/skills/verify/SKILL.md`. Commits follow
-`feat(scope): description`.
+Run the checkout in a separate Quickshell instance (`./tools/kosctl run`) and
+inspect its log before changing your daily shell. The repository's
+[verify skill](.agents/skills/verify/SKILL.md) describes the safe runtime
+workflow. If Go dependencies cannot be downloaded, `kosctl build` reports the
+network/proxy error; retry with another mirror by setting `GOPROXY`.
+
+## Repository layout
+
+```text
+shell/                    only Quickshell configuration root
+apps/settings/            independent settings application
+shared/qml/               portable controls
+shared/contracts/          JSONL and shortcut contracts
+services/data-service/     Go resident data service
+platform/                 one kos-platform CMake project and executable
+integrations/kwin/        two project-owned KWin plugins
+vendor/kwin-effects-glass/ third-party effect
+packaging/                systemd and desktop files
+tools/kosctl               build/install/run/doctor/uninstall entry point
+docs/                     architecture and operational documentation
+```
+
+See [ProjectArchitecture.md](docs/ProjectArchitecture.md) for dependency
+direction, [ShellDataService.md](docs/ShellDataService.md) for the data layer,
+and [PlatformArchitecture.md](docs/PlatformArchitecture.md) for operations,
+permissions, and error handling.
+
+## License
+
+KOS is GPL-3.0-or-later; see [LICENSE](LICENSE). The vendored glass effect
+retains its own compatible license in
+`vendor/kwin-effects-glass/LICENSE`.
