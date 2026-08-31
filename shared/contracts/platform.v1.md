@@ -43,6 +43,10 @@ system action. Existing paths are canonicalized and new targets are resolved
 through a canonical existing parent. Passwords and raw command output
 containing secrets must never be logged.
 
+`kos-platform shortcuts install` refuses to overwrite a shortcut owned by a
+different desktop service. Uninstall removes only the IDs declared in
+`shortcuts.v1.json`, then asks `kglobalaccel` to unregister those actions.
+
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,
 `theme.sync-glass`, and `theme.sync-dock-animation` accept bounded values and

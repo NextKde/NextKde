@@ -70,7 +70,7 @@ operation list and examples live in
 | `session` | lock, suspend, hibernate, logout, power | logind/systemd adapter |
 | `theme` | toggle/reconfigure, glass and Dock-animation sync | KDE config and KWin reconfigure |
 | `screenshot` | interactive capture | first available supported utility |
-| `shortcuts` | install/uninstall | atomic `kglobalshortcutsrc` + desktop entries |
+| `shortcuts` | install/uninstall, conflict checks, live registration | atomic `kglobalshortcutsrc` + desktop entries |
 
 ## Failure and recovery
 
