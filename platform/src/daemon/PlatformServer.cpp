@@ -504,12 +504,24 @@ PlatformServer::PlatformServer(QObject *parent)
 {
     connect(&m_server, &QLocalServer::newConnection,
             this, &PlatformServer::acceptConnections);
-    startClipboardHistoryWatcher(m_textHistoryWatcher,
-        {QStringLiteral("wl-paste"), QStringLiteral("--type"), QStringLiteral("text"),
-         QStringLiteral("--watch"), QStringLiteral("cliphist"), QStringLiteral("store")});
-    startClipboardHistoryWatcher(m_imageHistoryWatcher,
-        {QStringLiteral("wl-paste"), QStringLiteral("--type"), QStringLiteral("image"),
-         QStringLiteral("--watch"), QStringLiteral("cliphist"), QStringLiteral("store")});
+    const QString wlPaste = QStandardPaths::findExecutable(QStringLiteral("wl-paste"));
+    const QString cliphist = QStandardPaths::findExecutable(QStringLiteral("cliphist"));
+    if (wlPaste.isEmpty() || cliphist.isEmpty()) {
+        QStringList missing;
+        if (wlPaste.isEmpty())
+            missing.append(QStringLiteral("wl-paste (wl-clipboard)"));
+        if (cliphist.isEmpty())
+            missing.append(QStringLiteral("cliphist"));
+        qInfo().noquote() << "Clipboard history disabled; optional tools missing:"
+                          << missing.join(QStringLiteral(", "));
+    } else {
+        startClipboardHistoryWatcher(m_textHistoryWatcher,
+            {wlPaste, QStringLiteral("--type"), QStringLiteral("text"),
+             QStringLiteral("--watch"), cliphist, QStringLiteral("store")});
+        startClipboardHistoryWatcher(m_imageHistoryWatcher,
+            {wlPaste, QStringLiteral("--type"), QStringLiteral("image"),
+             QStringLiteral("--watch"), cliphist, QStringLiteral("store")});
+    }
 }
 
 bool PlatformServer::listen()
