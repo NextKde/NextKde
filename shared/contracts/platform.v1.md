@@ -39,8 +39,9 @@ continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
 clients must not call that private interface directly.
 
 Platform adapters validate all paths and operation names before executing a
-system action. Passwords and raw command output containing secrets must never
-be logged.
+system action. Existing paths are canonicalized and new targets are resolved
+through a canonical existing parent. Passwords and raw command output
+containing secrets must never be logged.
 
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,

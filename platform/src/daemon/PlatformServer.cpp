@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <memory>
 
 namespace KosPlatform {
 namespace {
@@ -45,10 +46,33 @@ QJsonObject errorObject(const QString &code, const QString &message, bool retrya
 
 QString cleanPath(const QString &path)
 {
-    if (path.isEmpty())
+    if (path.isEmpty() || path.contains(QChar('\0')))
         return {};
-    const QFileInfo info(path);
-    return info.isAbsolute() ? info.absoluteFilePath() : QString{};
+    const QFileInfo raw(path);
+    if (!raw.isAbsolute())
+        return {};
+
+    // Canonicalise existing entries so `..` and symlink aliases cannot make
+    // two requests refer to different paths. For a new rename/create target,
+    // canonicalise its existing parent and append only the final component;
+    // this preserves legitimate non-existent targets while keeping the
+    // operation inside a real directory boundary.
+    const QString cleaned = QDir::cleanPath(raw.absoluteFilePath());
+    const QFileInfo info(cleaned);
+    if (info.exists())
+        return info.canonicalFilePath();
+
+    const QString fileName = info.fileName();
+    const QFileInfo parentInfo(info.path());
+    if (fileName.isEmpty() || fileName == QStringLiteral(".")
+        || fileName == QStringLiteral("..")
+        || !parentInfo.exists() || !parentInfo.isDir()
+        || parentInfo.isSymLink())
+        return {};
+    const QString canonicalParent = parentInfo.canonicalFilePath();
+    if (canonicalParent.isEmpty())
+        return {};
+    return QDir(canonicalParent).filePath(fileName);
 }
 
 QString resolveDesktopFile(const QString &id)
@@ -567,9 +591,13 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     auto *process = new QProcess(this);
     process->setProgram(program);
     process->setArguments(arguments);
+    const auto replied = std::make_shared<bool>(false);
     connect(process, &QProcess::finished, this,
-            [this, socket, request, process, parser](int exitCode,
+            [this, socket, request, process, parser, replied](int exitCode,
                                                       QProcess::ExitStatus) {
+        if (*replied)
+            return;
+        *replied = true;
         const QByteArray output = process->readAllStandardOutput();
         const QByteArray error = process->readAllStandardError();
         if (exitCode == 0) {
@@ -580,6 +608,15 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
             respond(socket, request, false, {}, QStringLiteral("command-failed"),
                     QStringLiteral("平台命令执行失败"), true);
         }
+        process->deleteLater();
+    });
+    connect(process, &QProcess::errorOccurred, this,
+            [this, socket, request, process, replied](QProcess::ProcessError) {
+        if (*replied)
+            return;
+        *replied = true;
+        respond(socket, request, false, {}, QStringLiteral("command-unavailable"),
+                QStringLiteral("平台命令不可用"), true);
         process->deleteLater();
     });
     process->start();

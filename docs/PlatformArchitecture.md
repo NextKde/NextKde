@@ -45,7 +45,8 @@ operation list and examples live in
 
 - Both sockets are created under `$XDG_RUNTIME_DIR` with mode `0600`.
 - Operations are explicit allow-listed names; clients cannot provide a shell
-  command. Paths must be absolute, normalized, and validated before use.
+  command. Paths must be absolute, canonicalized (including existing symlinks),
+  and validated against an existing parent directory before use.
 - Wi-Fi credentials are positional process arguments and are never logged or
   persisted by the platform service.
 - Destructive session operations are explicit (`session.reboot`,
