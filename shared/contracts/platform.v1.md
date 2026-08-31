@@ -22,7 +22,9 @@ Errors use stable machine-readable codes:
 
 Current operation groups are:
 
-- `clipboard.set`, `clipboard.read`
+- `clipboard.set`, `clipboard.read`, `clipboard.history.watch-images`,
+  `clipboard.history.list`, `clipboard.history.copy`,
+  `clipboard.history.delete`, `clipboard.history.clear`
 - `file.open`, `file.launch`, `file.rename`, `file.create-folder`,
   `file.create-file`, `file.trash`, `file.trash-state`, `file.empty-trash`,
   `file.open-trash`, `file.open-with`

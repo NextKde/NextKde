@@ -60,7 +60,7 @@ operation list and examples live in
 
 | Module | Operations | Implementation boundary |
 | --- | --- | --- |
-| `clipboard` | `clipboard.set/read` | Qt `QClipboard`, Wayland MIME ownership |
+| `clipboard` | `clipboard.set/read`, history watch/list/copy/delete/clear | Qt `QClipboard`, Wayland MIME ownership, platform-supervised cliphist |
 | `files` | open, launch, transfer, trash, Trash state/empty, Open-With | Qt file APIs and `gio` |
 | `kwin` | snapshots, activation, desktops, thumbnails, Dock animation tickets | KWin script + internal D-Bus |
 | `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |

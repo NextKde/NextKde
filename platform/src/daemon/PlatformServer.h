@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QProcess>
 #include <QSet>
 
 namespace KosPlatform {
@@ -42,11 +43,20 @@ private:
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
+    void startClipboardHistoryWatcher(QProcess *&watcher,
+                                      const QStringList &arguments);
+    void runClipboardDecode(QLocalSocket *socket, const QJsonObject &request,
+                            const QString &record);
+    void runClipboardDelete(QLocalSocket *socket, const QJsonObject &request,
+                            const QString &record);
 
     QLocalServer m_server;
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;
     QSet<QLocalSocket *> m_windowSubscribers;
+    QProcess *m_textHistoryWatcher = nullptr;
+    QProcess *m_imageHistoryWatcher = nullptr;
+    bool m_watchImages = true;
 };
 
 } // namespace KosPlatform

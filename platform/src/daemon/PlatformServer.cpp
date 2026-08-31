@@ -16,6 +16,7 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QTimer>
 
 #include <algorithm>
 #include <functional>
@@ -466,6 +467,12 @@ PlatformServer::PlatformServer(QObject *parent)
 {
     connect(&m_server, &QLocalServer::newConnection,
             this, &PlatformServer::acceptConnections);
+    startClipboardHistoryWatcher(m_textHistoryWatcher,
+        {QStringLiteral("wl-paste"), QStringLiteral("--type"), QStringLiteral("text"),
+         QStringLiteral("--watch"), QStringLiteral("cliphist"), QStringLiteral("store")});
+    startClipboardHistoryWatcher(m_imageHistoryWatcher,
+        {QStringLiteral("wl-paste"), QStringLiteral("--type"), QStringLiteral("image"),
+         QStringLiteral("--watch"), QStringLiteral("cliphist"), QStringLiteral("store")});
 }
 
 bool PlatformServer::listen()
@@ -622,6 +629,161 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     process->start();
 }
 
+void PlatformServer::startClipboardHistoryWatcher(QProcess *&watcher,
+                                                   const QStringList &arguments)
+{
+    if (watcher)
+        return;
+    if (arguments.isEmpty())
+        return;
+    auto *process = new QProcess(this);
+    watcher = process;
+    const QString program = arguments.first();
+    const QStringList args = arguments.mid(1);
+    process->setProgram(program);
+    process->setArguments(args);
+    connect(process, &QProcess::errorOccurred, this,
+            [program](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            qWarning() << "Clipboard history watcher unavailable:" << program;
+    });
+    connect(process, &QProcess::finished, this,
+            [this, process, program, args](int, QProcess::ExitStatus) {
+        // wl-paste --watch exits when the Wayland connection disappears. Keep
+        // the one resident watcher recoverable without spawning a Shell-side
+        // supervisor or multiplying helper executables.
+        QTimer::singleShot(2000, this, [this, process, program, args] {
+            if (process->state() != QProcess::NotRunning)
+                return;
+            if (process == m_imageHistoryWatcher && !m_watchImages)
+                return;
+            process->setProgram(program);
+            process->setArguments(args);
+            process->start();
+        });
+    });
+    process->start();
+}
+
+void PlatformServer::runClipboardDecode(QLocalSocket *socket,
+                                         const QJsonObject &request,
+                                         const QString &record)
+{
+    if (record.isEmpty()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-entry"),
+                QStringLiteral("剪贴板记录无效"), false);
+        return;
+    }
+    auto *decode = new QProcess(this);
+    decode->setProgram(QStringLiteral("cliphist"));
+    decode->setArguments({QStringLiteral("decode")});
+    const auto replied = std::make_shared<bool>(false);
+    connect(decode, &QProcess::errorOccurred, this,
+            [this, socket, request, decode, replied](QProcess::ProcessError) {
+        if (*replied)
+            return;
+        *replied = true;
+        respond(socket, request, false, {}, QStringLiteral("clipboard-unavailable"),
+                QStringLiteral("剪贴板历史不可用"), true);
+        decode->deleteLater();
+    });
+    connect(decode, &QProcess::finished, this,
+            [this, socket, request, decode, replied](int exitCode, QProcess::ExitStatus) {
+        if (*replied)
+            return;
+        if (exitCode != 0) {
+            *replied = true;
+            respond(socket, request, false, {}, QStringLiteral("clipboard-decode-failed"),
+                    QStringLiteral("无法恢复剪贴板记录"), true);
+            decode->deleteLater();
+            return;
+        }
+        const QByteArray decoded = decode->readAllStandardOutput();
+        decode->deleteLater();
+        auto *copy = new QProcess(this);
+        copy->setProgram(QStringLiteral("wl-copy"));
+        connect(copy, &QProcess::started, this,
+                [copy, decoded] {
+            copy->write(decoded);
+            copy->closeWriteChannel();
+        });
+        connect(copy, &QProcess::errorOccurred, this,
+                [this, socket, request, copy, replied](QProcess::ProcessError) {
+            if (*replied)
+                return;
+            *replied = true;
+            respond(socket, request, false, {}, QStringLiteral("clipboard-unavailable"),
+                    QStringLiteral("无法写入剪贴板"), true);
+            copy->deleteLater();
+        });
+        connect(copy, &QProcess::finished, this,
+                [this, socket, request, copy, replied](int exitCode, QProcess::ExitStatus) {
+            if (*replied)
+                return;
+            *replied = true;
+            if (exitCode == 0)
+                respond(socket, request, true,
+                        QJsonObject{{QStringLiteral("copied"), true}});
+            else
+                respond(socket, request, false, {}, QStringLiteral("clipboard-copy-failed"),
+                        QStringLiteral("无法写入剪贴板"), true);
+            copy->deleteLater();
+        });
+        copy->start();
+    });
+    connect(decode, &QProcess::started, this,
+            [decode, record] {
+        decode->write(record.toUtf8());
+        decode->write("\n");
+        decode->closeWriteChannel();
+    });
+    decode->start();
+}
+
+void PlatformServer::runClipboardDelete(QLocalSocket *socket,
+                                         const QJsonObject &request,
+                                         const QString &record)
+{
+    if (record.isEmpty()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-entry"),
+                QStringLiteral("剪贴板记录无效"), false);
+        return;
+    }
+    auto *process = new QProcess(this);
+    process->setProgram(QStringLiteral("cliphist"));
+    process->setArguments({QStringLiteral("delete")});
+    const auto replied = std::make_shared<bool>(false);
+    connect(process, &QProcess::errorOccurred, this,
+            [this, socket, request, process, replied](QProcess::ProcessError) {
+        if (*replied)
+            return;
+        *replied = true;
+        respond(socket, request, false, {}, QStringLiteral("clipboard-unavailable"),
+                QStringLiteral("剪贴板历史不可用"), true);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::finished, this,
+            [this, socket, request, process, replied](int exitCode, QProcess::ExitStatus) {
+        if (*replied)
+            return;
+        *replied = true;
+        if (exitCode == 0)
+            respond(socket, request, true,
+                    QJsonObject{{QStringLiteral("deleted"), true}});
+        else
+            respond(socket, request, false, {}, QStringLiteral("clipboard-delete-failed"),
+                    QStringLiteral("无法删除剪贴板记录"), true);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::started, this,
+            [process, record] {
+        process->write(record.toUtf8());
+        process->write("\n");
+        process->closeWriteChannel();
+    });
+    process->start();
+}
+
 bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &request)
 {
     const QString op = operation(request);
@@ -675,6 +837,68 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
         respond(socket, request, true,
                 QJsonObject{{QStringLiteral("mode"), mimeOperation(mime)},
                             {QStringLiteral("paths"), jsonPaths(localClipboardPaths(mime))}});
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.history.watch-images")) {
+        m_watchImages = request.value(QStringLiteral("payload")).toObject()
+                            .value(QStringLiteral("enabled")).toBool();
+        if (!m_watchImages && m_imageHistoryWatcher)
+            m_imageHistoryWatcher->kill();
+        else if (m_watchImages && m_imageHistoryWatcher
+                 && m_imageHistoryWatcher->state() == QProcess::NotRunning)
+            m_imageHistoryWatcher->start();
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("enabled"), m_watchImages}});
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.history.list")) {
+        runCommand(socket, request, QStringLiteral("cliphist"),
+                   {QStringLiteral("list")});
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.history.copy")) {
+        runClipboardDecode(socket, request,
+                           request.value(QStringLiteral("payload")).toObject()
+                               .value(QStringLiteral("record")).toString());
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.history.delete")) {
+        runClipboardDelete(socket, request,
+                           request.value(QStringLiteral("payload")).toObject()
+                               .value(QStringLiteral("record")).toString());
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.history.clear")) {
+        auto *process = new QProcess(this);
+        process->setProgram(QStringLiteral("cliphist"));
+        process->setArguments({QStringLiteral("wipe")});
+        const auto replied = std::make_shared<bool>(false);
+        connect(process, &QProcess::errorOccurred, this,
+                [this, socket, request, process, replied](QProcess::ProcessError) {
+            if (*replied)
+                return;
+            *replied = true;
+            respond(socket, request, false, {}, QStringLiteral("clipboard-unavailable"),
+                    QStringLiteral("剪贴板历史不可用"), true);
+            process->deleteLater();
+        });
+        connect(process, &QProcess::finished, this,
+                [this, socket, request, process, replied](int exitCode, QProcess::ExitStatus) {
+            if (*replied)
+                return;
+            *replied = true;
+            if (exitCode == 0) {
+                if (auto *clipboard = QGuiApplication::clipboard())
+                    clipboard->clear(QClipboard::Clipboard);
+                respond(socket, request, true,
+                        QJsonObject{{QStringLiteral("cleared"), true}});
+            } else {
+                respond(socket, request, false, {}, QStringLiteral("clipboard-clear-failed"),
+                        QStringLiteral("无法清空剪贴板历史"), true);
+            }
+            process->deleteLater();
+        });
+        process->start();
         return true;
     }
     return false;

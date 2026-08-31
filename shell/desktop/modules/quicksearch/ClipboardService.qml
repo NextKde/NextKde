@@ -5,8 +5,8 @@ import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
 
-// Thin adapter around cliphist. Keeping it here gives QuickSearch one stable
-// clipboard interface while cliphist continues to own persistence and dedupe.
+// Presentation adapter for the platform-owned clipboard history. cliphist is
+// supervised by kos-platform, while QuickSearch only keeps the parsed model.
 QtObject {
     id: service
 
@@ -19,30 +19,11 @@ QtObject {
     property int revision: 0
     property var _listProcess: null
 
-    // cliphist is only a database. Separate text and image watchers preserve
-    // the original Wayland MIME type instead of turning image entries into a
-    // filename or text preview.
-    property Process textHistoryWatcher: Process {
-        command: ["wl-paste", "--type", "text", "--watch", "cliphist", "store"]
-        running: true
-        stderr: SplitParser {
-            splitMarker: "\n"
-            onRead: data => console.warn("[Clipboard] text watcher: " + data)
-        }
-    }
-    property Process imageHistoryWatcher: Process {
-        command: ["wl-paste", "--type", "image", "--watch", "cliphist", "store"]
-        running: service.watchImages
-        stderr: SplitParser {
-            splitMarker: "\n"
-            onRead: data => console.warn("[Clipboard] image watcher: " + data)
-        }
-    }
-
     function setWatchImages(enabled) {
         if (service.watchImages === enabled)
             return
         service.watchImages = enabled
+        _syncWatchImages()
         service.scheduleSave()
     }
 
@@ -80,6 +61,15 @@ QtObject {
         proc.running = true
     }
 
+    function _syncWatchImages() {
+        PlatformClient.request("clipboard.history.watch-images",
+            { enabled: service.watchImages }, function(response) {
+            if (!response?.ok)
+                console.warn("[Clipboard] image history watcher unavailable: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
+    }
+
     function load() {
         const proc = processFactory.createObject(service, {
             command: ["sh", "-c", "cat \"$1\"", "clipboard-config-load", configPath],
@@ -97,6 +87,7 @@ QtObject {
                     console.warn("[Clipboard] load config parse error: " + e)
                 }
             }
+            service._syncWatchImages()
             proc.destroy()
         })
         proc.running = true
@@ -106,75 +97,50 @@ QtObject {
         if (_listProcess)
             return
 
-        const proc = processFactory.createObject(service, {
-            command: ["cliphist", "list"],
-        })
-        _listProcess = proc
-        proc.exited.connect(function(code) {
-            if (service._listProcess === proc)
-                service._listProcess = null
-            if (code === 0)
-                service._readList(proc.stdout?.text ?? "")
+        _listProcess = true
+        PlatformClient.request("clipboard.history.list", {}, function(response) {
+            _listProcess = null
+            if (response?.ok)
+                service._readList(response.result?.stdout ?? "")
             else
                 console.warn("[Clipboard] cliphist list failed: "
-                             + (proc.stderr?.text ?? ""))
-            proc.destroy()
+                    + (response?.error?.message || "platform unavailable"))
         })
-        proc.running = true
     }
 
     function copy(selectionRecord) {
-        // cliphist decode intentionally receives the complete original list
-        // row (id + tab + preview), not an id alone. Passing it positionally
-        // keeps clipboard data out of shell evaluation and restores image
-        // bytes with their original MIME type.
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c", "printf '%s\\n' \"$1\" | cliphist decode | wl-copy",
-                      "quicksearch-clipboard-copy", String(selectionRecord)],
-        })
-        proc.exited.connect(function(code) {
-            if (code !== 0)
+        PlatformClient.request("clipboard.history.copy",
+            { record: String(selectionRecord) }, function(response) {
+            if (!response?.ok)
                 console.warn("[Clipboard] failed to copy history entry: "
-                             + (proc.stderr?.text ?? ""))
-            proc.destroy()
+                    + (response?.error?.message || "platform unavailable"))
         })
-        proc.running = true
     }
 
     function deleteEntry(selectionRecord) {
         if (!selectionRecord)
             return
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c", "printf '%s\\n' \"$1\" | cliphist delete",
-                      "quicksearch-clipboard-delete", String(selectionRecord)],
-        })
-        proc.exited.connect(function(code) {
-            if (code === 0)
+        PlatformClient.request("clipboard.history.delete",
+            { record: String(selectionRecord) }, function(response) {
+            if (response?.ok)
                 service.refresh()
             else
                 console.warn("[Clipboard] failed to delete entry: "
-                             + (proc.stderr?.text ?? ""))
-            proc.destroy()
+                    + (response?.error?.message || "platform unavailable"))
         })
-        proc.running = true
     }
 
     function clearAll() {
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c", "cliphist wipe && wl-copy --clear"],
-        })
-        proc.exited.connect(function(code) {
-            if (code === 0) {
+        PlatformClient.request("clipboard.history.clear", {}, function(response) {
+            if (response?.ok) {
                 service.entries = []
                 service.revision += 1
                 service.refresh()
             } else {
                 console.warn("[Clipboard] failed to clear history: "
-                             + (proc.stderr?.text ?? ""))
+                    + (response?.error?.message || "platform unavailable"))
             }
-            proc.destroy()
         })
-        proc.running = true
     }
 
     function openShortcutSettings() {
