@@ -49,7 +49,9 @@ QtObject {
             ? String(entry?.id ?? raw) : String(entry?.id ?? raw) + ".desktop"
         const override = overrideFor(desktopId, raw)
         const defaultName = entry?.name ?? raw
-        const defaultIcon = iconSource(entry?.icon ?? "") || String(entry?.icon ?? "")
+        // Never leak an unresolved icon name into Image.source: Qt treats a
+        // bare name as a relative qrc URL and emits a Cannot open warning.
+        const defaultIcon = iconSource(entry?.icon ?? "") || genericIconSource()
         return { desktopId: desktopId, rawAppId: raw, entry: entry,
             defaultName: defaultName, defaultIcon: defaultIcon,
             displayName: override.name || defaultName,
@@ -77,11 +79,16 @@ QtObject {
     }
 
     function iconSource(candidate) {
-        const value = String(candidate ?? "").trim()
-        if (!value)
+        const requestedValue = String(candidate ?? "").trim()
+        if (!requestedValue)
             return ""
-        if (_iconCache[value] !== undefined)
-            return _iconCache[value]
+        if (_iconCache[requestedValue] !== undefined)
+            return _iconCache[requestedValue]
+        // FairyWren's hwloc SVG contains path data that QtSvg rejects and the
+        // Papirus variant can request an unbounded render buffer. lstopo is a
+        // topology viewer, so a standard CPU icon is an accurate safe alias.
+        const value = requestedValue.toLowerCase() === "hwloc"
+            ? "preferences-devices-cpu" : requestedValue
         let resolved = ""
         // Keep shell surfaces on Quickshell's icon provider. The Dock's KWin
         // animation bridge converts provider URLs that wrap local custom
@@ -95,8 +102,20 @@ QtObject {
         if (!resolved && (value.startsWith(":/")
                           || /^[a-z][a-z0-9+.-]*:/i.test(value)))
             resolved = value
-        _iconCache[value] = resolved
+        _iconCache[requestedValue] = resolved
         return resolved
+    }
+
+    function genericIconSource() {
+        // Prefer a generic executable icon, but use system-run on themes that
+        // do not ship the freedesktop MIME icon.
+        try {
+            const name = Quickshell.hasThemeIcon("application-x-executable")
+                ? "application-x-executable" : "system-run"
+            return Quickshell.iconPath(name, true) || ""
+        } catch (e) {
+            return ""
+        }
     }
 
     function normalize(value) {

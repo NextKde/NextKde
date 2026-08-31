@@ -2155,7 +2155,8 @@ PanelWindow {
                                     AppIcon {
                                         width: 52
                                         height: 52
-                                        source: AppPresentationService.iconSource(root.editorIcon) || root.editorIcon || "application-x-executable"
+                                        source: AppPresentationService.iconSource(root.editorIcon)
+                                            || AppPresentationService.genericIconSource()
                                         opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
                                         saturation: ConfigService.iconSaturation
                                         tintEnabled: ConfigService.iconTintEnabled
