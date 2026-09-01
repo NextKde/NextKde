@@ -52,6 +52,11 @@ ApplicationWindow {
             ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055)
         readonly property color floatingShadow: dark
             ? Qt.rgba(0, 0, 0, 0.42) : Qt.rgba(0.17, 0.21, 0.30, 0.16)
+        readonly property color previewPane: dark ? "#14151a" : "#eef2f7"
+        readonly property color previewBar: dark ? "#2c2d35" : "#ffffff"
+        readonly property color previewTaskbar: dark ? "#1e2028" : "#ffffff"
+        readonly property color previewDock: dark ? "#323540" : "#ffffff"
+        readonly property color previewIcon: dark ? "#a0a4b0" : "#7c8290"
     }
     readonly property var contentByPage: [
         {
@@ -63,7 +68,15 @@ ApplicationWindow {
             groups: []
         },
         {
+            subtitle: "顶栏",
+            groups: []
+        },
+        {
             subtitle: "Dock",
+            groups: []
+        },
+        {
+            subtitle: "启动台",
             groups: []
         }
     ]
@@ -229,6 +242,92 @@ ApplicationWindow {
         property string errorText: ""
         property bool layoutDirty: false
 
+        property bool dockBlurInherit: true
+        property real dockBlurStrength: 0.42
+        property real dockLiquidStrength: 1.0
+        property bool dockBlurDirty: false
+        property bool dockLiquidDirty: false
+
+        function percentage(value) {
+            return Math.round(value * 100) + "%"
+        }
+
+        function setDockBlurInherit(enabled) {
+            if (!bridge) return
+            applyAppearanceState(bridge.updateDockBlurInherit(enabled))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Timer {
+            id: liveDockBlurDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (dockPage.bridge && dockPage.dockBlurDirty) {
+                    dockPage.bridge.updateDockBlurStrength(dockPage.dockBlurStrength)
+                }
+            }
+        }
+
+        Timer {
+            id: liveDockLiquidDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (dockPage.bridge && dockPage.dockLiquidDirty) {
+                    dockPage.bridge.updateDockLiquidStrength(dockPage.dockLiquidStrength)
+                }
+            }
+        }
+
+        function previewDockBlur(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(dockBlurStrength - clamped) < 0.005)
+                return
+            dockBlurStrength = clamped
+            dockBlurDirty = true
+            liveDockBlurDebounce.restart()
+        }
+
+        function commitDockBlur() {
+            liveDockBlurDebounce.stop()
+            if (!dockBlurDirty || !bridge)
+                return
+            dockBlurDirty = false
+            applyAppearanceState(bridge.updateDockBlurStrength(dockBlurStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function previewDockLiquid(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(dockLiquidStrength - clamped) < 0.005)
+                return
+            dockLiquidStrength = clamped
+            dockLiquidDirty = true
+            liveDockLiquidDebounce.restart()
+        }
+
+        function commitDockLiquid() {
+            liveDockLiquidDebounce.stop()
+            if (!dockLiquidDirty || !bridge)
+                return
+            dockLiquidDirty = false
+            applyAppearanceState(bridge.updateDockLiquidStrength(dockLiquidStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function applyAppearanceState(state) {
+            if (!state) return
+            dockBlurInherit = state.dockBlurInherit !== undefined ? Boolean(state.dockBlurInherit) : true
+            dockBlurStrength = Number.isFinite(Number(state.dockBlurStrength)) ? Number(state.dockBlurStrength) : 0.42
+            dockLiquidStrength = Number.isFinite(Number(state.dockLiquidStrength)) ? Number(state.dockLiquidStrength) : 1.0
+            dockBlurDirty = false
+            dockLiquidDirty = false
+        }
+
         function positionIndexFromString(position) {
             const idx = dockPositions.indexOf(position)
             return idx >= 0 ? idx : 0
@@ -388,6 +487,7 @@ ApplicationWindow {
                 return
             }
             applyState(bridge.dockSnapshot())
+            applyAppearanceState(bridge.appearanceSnapshot())
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -482,18 +582,30 @@ ApplicationWindow {
                         }
                     }
                 }
+            }
+        }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
+        Text {
+            text: "DOCK 程序栏".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: 111
+
+            Column {
+                anchors.fill: parent
 
                 Item {
                     width: parent.width
-                    height: 48
+                    height: 54
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
@@ -520,26 +632,14 @@ ApplicationWindow {
                         }
                     }
                 }
-            }
-        }
 
-        Text {
-            text: "Dock 显示".toUpperCase()
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 14
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            color: theme.card
-            radius: 18
-            implicitHeight: 54
-
-            Column {
-                anchors.fill: parent
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
 
                 Item {
                     width: parent.width
@@ -551,9 +651,9 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◉"; tint: "#0a84ff" }
                         Text {
-                            text: "显示方式"
+                            text: "Dock 显示方式"
                             color: theme.primaryText
-                            font.pixelSize: 15
+                            font.pixelSize: 14
                             font.weight: Font.DemiBold
                         }
                         Item { Layout.fillWidth: true }
@@ -564,26 +664,14 @@ ApplicationWindow {
                                 { id: "smart", label: "智能隐藏" },
                                 { id: "persistent", label: "持续隐藏" }
                             ]
-                            // Text-only + "tiny", matching the Dock 颜色 bar's
-                            // height so the two segmented controls read as one
-                            // consistent set — no stacked icon+label to overflow
-                            // the pill.
-                            // 4-char labels are wider than the tiny preset's 56px
-                            // item; give each item a little more room (height and
-                            // pill stay identical to the Dock 颜色 bar).
                             itemWidthOverride: 76
                             currentIndex: dockPage.visibilityModeIndex
-
-                            Connections {
-                                target: visibilityNavBar
-                                function onSelectionChanged(index) {
-                                    dockPage.saveVisibilityMode(index)
-                                }
+                            onSelectionChanged: function(index) {
+                                dockPage.saveVisibilityMode(index)
                             }
                         }
                     }
                 }
-
             }
         }
 
@@ -834,6 +922,153 @@ ApplicationWindow {
 
             }
         }
+
+        Text {
+            text: "外观与模糊效果".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+            visible: false
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: dockBlurCol.implicitHeight
+            visible: false
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: dockBlurCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "跟随显示设置"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: "关闭后可为 Dock 单独自定义背景模糊与液态强度"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        LiquidControls.LiquidGlassSwitch {
+                            checked: dockPage.dockBlurInherit
+                            accentColor: "#30d158"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                dockPage.setDockBlurInherit(checked)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !dockPage.dockBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !dockPage.dockBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
+                        Text {
+                            text: "Dock 模糊强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: dockPage.percentage(dockPage.dockBlurStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: dockPage.dockBlurStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                dockPage.previewDockBlur(position)
+                            }
+                            onCommitRequested: dockPage.commitDockBlur()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !dockPage.dockBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !dockPage.dockBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "≈"; tint: "#af52de" }
+                        Text {
+                            text: "Dock 液态强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: dockPage.percentage(dockPage.dockLiquidStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: dockPage.dockLiquidStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                dockPage.previewDockLiquid(position)
+                            }
+                            onCommitRequested: dockPage.commitDockLiquid()
+                        }
+                    }
+                }
+            }
+        }
     }
 
     component DisplaySettingsPage: ColumnLayout {
@@ -855,11 +1090,16 @@ ApplicationWindow {
         }
 
         function applyState(state) {
-            if (!state || state.blurStrength === undefined
-                    || state.liquidStrength === undefined)
+            if (!state)
                 return
-            blurStrength = Math.max(0, Math.min(1, Number(state.blurStrength)))
-            liquidStrength = Math.max(0, Math.min(1, Number(state.liquidStrength)))
+            const rawBlur = state.globalBlurStrength !== undefined
+                ? state.globalBlurStrength : state.blurStrength
+            const rawLiquid = state.globalLiquidStrength !== undefined
+                ? state.globalLiquidStrength : state.liquidStrength
+            if (rawBlur === undefined || rawLiquid === undefined)
+                return
+            blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
+            liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
             blurDirty = false
             liquidDirty = false
             errorText = ""
@@ -875,30 +1115,62 @@ ApplicationWindow {
                 errorText = bridge.lastError
         }
 
+        Timer {
+            id: liveBlurDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (displayPage.bridge && displayPage.blurDirty) {
+                    displayPage.bridge.updateGlobalBlurStrength(displayPage.blurStrength)
+                }
+            }
+        }
+
+        Timer {
+            id: liveLiquidDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (displayPage.bridge && displayPage.liquidDirty) {
+                    displayPage.bridge.updateGlobalLiquidStrength(displayPage.liquidStrength)
+                }
+            }
+        }
+
         function previewBlur(value) {
-            blurStrength = Math.max(0, Math.min(1, value))
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(blurStrength - clamped) < 0.005)
+                return
+            blurStrength = clamped
             blurDirty = true
+            liveBlurDebounce.restart()
         }
 
         function commitBlur() {
+            liveBlurDebounce.stop()
             if (!blurDirty || !bridge)
                 return
             blurDirty = false
-            applyState(bridge.updateBlurStrength(blurStrength))
+            applyState(bridge.updateGlobalBlurStrength(blurStrength))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
 
         function previewLiquid(value) {
-            liquidStrength = Math.max(0, Math.min(1, value))
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(liquidStrength - clamped) < 0.005)
+                return
+            liquidStrength = clamped
             liquidDirty = true
+            liveLiquidDebounce.restart()
         }
 
         function commitLiquid() {
+            liveLiquidDebounce.stop()
             if (!liquidDirty || !bridge)
                 return
             liquidDirty = false
-            applyState(bridge.updateLiquidStrength(liquidStrength))
+            applyState(bridge.updateGlobalLiquidStrength(liquidStrength))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1079,7 +1351,6 @@ ApplicationWindow {
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property string shellStyle: "macos"
-        property bool barIntegratedWithDock: false
         property string dockWindowAnimationStyle: "scale"
         property string errorText: ""
         readonly property var styles: [
@@ -1116,7 +1387,6 @@ ApplicationWindow {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
-            barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
             errorText = ""
@@ -1142,16 +1412,6 @@ ApplicationWindow {
                 errorText = bridge.lastError
         }
 
-        function setBarIntegratedWithDock(enabled) {
-            if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
-                return
-            }
-            applyState(bridge.updateBarIntegratedWithDock(enabled))
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
-
         function setDockWindowAnimationStyle(style) {
             if (!bridge || !isValidDockWindowAnimationStyle(style)) {
                 errorText = bridge ? "未知的窗口动画" : "尚未构建 Settings 桥接程序"
@@ -1161,7 +1421,6 @@ ApplicationWindow {
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
-
         Component.onCompleted: refresh()
 
         Text {
@@ -1190,80 +1449,59 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 14
-                    spacing: 18
+                    spacing: 16
 
                     Rectangle {
-                        Layout.preferredWidth: 226
+                        Layout.preferredWidth: 156
                         Layout.fillHeight: true
                         radius: 14
-                        color: theme.dark ? "#101216" : "#e9edf4"
+                        color: theme.previewPane
                         clip: true
-
-                        Rectangle {
-                            x: 18
-                            y: 24
-                            width: 78
-                            height: 45
-                            radius: modelData.id === "windows12" ? 8
-                                : modelData.id === "material" ? 14 : 20
-                            color: Qt.alpha(modelData.accent, 0.22)
-                            border.width: 1
-                            border.color: Qt.alpha(modelData.accent, 0.32)
-                        }
-                        Rectangle {
-                            x: 104
-                            y: 24
-                            width: 52
-                            height: 45
-                            radius: modelData.id === "windows12" ? 8
-                                : modelData.id === "material" ? 14 : 20
-                            color: theme.dark ? "#2d3038" : "#ffffff"
-                            opacity: 0.88
-                        }
 
                         Rectangle {
                             anchors.left: parent.left
                             anchors.right: parent.right
-                            anchors.top: modelData.id === "windows12"
-                                ? undefined : parent.top
-                            anchors.bottom: modelData.id === "windows12"
-                                ? parent.bottom : undefined
-                            height: modelData.id === "windows12" ? 28 : 10
-                            color: modelData.id === "material"
-                                ? Qt.alpha(modelData.accent, 0.24)
-                                : (theme.dark ? "#30333b" : "#f8f9fc")
-                            opacity: modelData.id === "macos" ? 0.70 : 0.94
+                            anchors.top: parent.top
+                            height: 14
+                            color: theme.previewBar
+                            visible: styleCard.modelData.id !== "windows12"
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 14
+                                height: 4
+                                radius: 2
+                                color: styleCard.modelData.accent
+                            }
                         }
 
                         Rectangle {
-                            visible: modelData.id !== "windows12"
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 7
-                            width: modelData.id === "macos" ? 116 : 142
-                            height: 26
-                            radius: modelData.id === "macos" ? 13 : 10
-                            color: modelData.id === "material"
-                                ? Qt.alpha(modelData.accent, 0.38)
-                                : (theme.dark ? "#454952" : "#ffffff")
-                            border.width: 1
-                            border.color: Qt.alpha("#ffffff", 0.25)
-                        }
+                            anchors.bottomMargin: styleCard.modelData.id === "macos" ? 8 : 0
+                            width: styleCard.modelData.id === "windows12"
+                                ? parent.width : (styleCard.modelData.id === "macos" ? 112 : 92)
+                            height: styleCard.modelData.id === "windows12" ? 18 : 16
+                            radius: styleCard.modelData.id === "windows12"
+                                ? 0 : (styleCard.modelData.id === "macos" ? 8 : 4)
+                            color: styleCard.modelData.id === "windows12"
+                                ? theme.previewTaskbar : theme.previewDock
 
-                        Row {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: modelData.id === "windows12" ? 7 : 13
-                            spacing: 7
-                            Repeater {
-                                model: 5
-                                delegate: Rectangle {
-                                    width: 10
-                                    height: 10
-                                    radius: styleCard.modelData.id === "material" ? 3 : 5
-                                    color: index === 2
-                                        ? styleCard.modelData.accent
-                                        : (theme.dark ? "#d9dce3" : "#58606c")
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+
+                                Repeater {
+                                    model: 4
+                                    Rectangle {
+                                        width: 8
+                                        height: 8
+                                        radius: styleCard.modelData.id === "macos" ? 4 : 2
+                                        color: index === 0
+                                            ? styleCard.modelData.accent : theme.previewIcon
+                                    }
                                 }
                             }
                         }
@@ -1271,46 +1509,56 @@ ApplicationWindow {
 
                     ColumnLayout {
                         Layout.fillWidth: true
-                        spacing: 5
+                        Layout.fillHeight: true
+                        spacing: 6
 
                         RowLayout {
                             Layout.fillWidth: true
+                            spacing: 8
+
                             Text {
-                                Layout.fillWidth: true
-                                text: modelData.name
+                                text: styleCard.modelData.name
                                 color: theme.primaryText
                                 font.pixelSize: 17
-                                font.weight: Font.DemiBold
+                                font.weight: Font.Bold
                             }
+
                             Rectangle {
-                                visible: themePage.shellStyle === modelData.id
-                                width: 24
-                                height: 24
-                                radius: 12
-                                color: modelData.accent
+                                visible: themePage.shellStyle === styleCard.modelData.id
+                                Layout.preferredWidth: 46
+                                Layout.preferredHeight: 20
+                                radius: 10
+                                color: Qt.rgba(0.04, 0.52, 1, 0.16)
+
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "✓"
-                                    color: "white"
-                                    font.pixelSize: 13
-                                    font.weight: Font.Bold
+                                    text: "当前"
+                                    color: styleCard.modelData.accent
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
                                 }
                             }
+
+                            Item { Layout.fillWidth: true }
                         }
+
                         Text {
                             Layout.fillWidth: true
-                            text: modelData.description
+                            text: styleCard.modelData.description
                             color: theme.secondaryText
-                            font.pixelSize: 12
+                            font.pixelSize: 13
                             wrapMode: Text.Wrap
                         }
+
                         Item { Layout.fillHeight: true }
+
                         Text {
-                            text: themePage.shellStyle === modelData.id
-                                ? "当前形态" : "选择此形态"
-                            color: modelData.accent
+                            text: themePage.shellStyle === styleCard.modelData.id
+                                ? "已应用到桌面" : "点击切换此形态"
+                            color: themePage.shellStyle === styleCard.modelData.id
+                                ? styleCard.modelData.accent : theme.tertiaryText
                             font.pixelSize: 12
-                            font.weight: Font.DemiBold
+                            font.weight: Font.Medium
                         }
                     }
                 }
@@ -1325,50 +1573,13 @@ ApplicationWindow {
         }
 
         Text {
-            text: "BAR 布局"
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            text: "选择界面形态会立即切换桌面组件的圆角、间距与表面质感规范。"
             color: theme.secondaryText
             font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 4
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 64
-            radius: 18
-            color: theme.card
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
-                SettingIcon { symbol: "⇲"; tint: "#ff9f0a" }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-                    Text {
-                        text: "Bar 融入 Dock"
-                        color: theme.primaryText
-                        font.pixelSize: 14
-                        font.weight: Font.DemiBold
-                    }
-                    Text {
-                        text: "仅在 Dock 位于底部时生效；侧边 Dock 自动保留顶部 Bar"
-                        color: theme.secondaryText
-                        font.pixelSize: 11
-                    }
-                }
-                LiquidControls.LiquidGlassSwitch {
-                    checked: themePage.barIntegratedWithDock
-                    accentColor: "#0a84ff"
-                    trackColor: theme.divider
-                    onToggled: function(checked) {
-                        themePage.setBarIntegratedWithDock(checked)
-                    }
-                }
-            }
+            wrapMode: Text.Wrap
         }
 
         Text {
@@ -1436,7 +1647,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.leftMargin: 13
             Layout.rightMargin: 13
-            text: "主题会立即更新 Dock。窗口动画会立即同步到 KWin；Bar 可通过上方开关选择独立顶栏或底部统一宿主。"
+            text: "窗口动画会立即同步到 KWin；顶栏与 Dock 的布局在各自设置页中管理。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1448,6 +1659,1048 @@ ApplicationWindow {
             Layout.rightMargin: 13
             visible: themePage.errorText.length > 0
             text: themePage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
+
+    component BarSettingsPage: ColumnLayout {
+        id: barPage
+
+        Layout.fillWidth: true
+        spacing: 10
+
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property bool barIntegratedWithDock: false
+        property int barVisibilityModeIndex: 0
+        readonly property var barVisibilityModes: ["always", "smart", "persistent"]
+        property int barLayoutModeIndex: 0
+        readonly property var barLayoutModes: ["full", "floating"]
+        property bool barBlurInherit: true
+        property real barBlurStrength: 0.42
+        property real barLiquidStrength: 1.0
+        property bool barBlurDirty: false
+        property bool barLiquidDirty: false
+        property string errorText: ""
+
+        function percentage(value) {
+            return Math.round(value * 100) + "%"
+        }
+
+        function barVisibilityModeIndexFromString(mode) {
+            const idx = barVisibilityModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
+        function barLayoutModeIndexFromString(mode) {
+            const idx = barLayoutModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
+        function applyState(state) {
+            if (!state) return
+            barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
+            barVisibilityModeIndex = barVisibilityModeIndexFromString(state.barVisibilityMode)
+            barLayoutModeIndex = barLayoutModeIndexFromString(state.barLayoutMode)
+            barBlurInherit = state.barBlurInherit !== undefined
+                ? Boolean(state.barBlurInherit)
+                : (state.barBlurInheritDock !== undefined ? Boolean(state.barBlurInheritDock) : true)
+            barBlurStrength = Number.isFinite(Number(state.barBlurStrength)) ? Number(state.barBlurStrength) : 0.42
+            barLiquidStrength = Number.isFinite(Number(state.barLiquidStrength)) ? Number(state.barLiquidStrength) : 1.0
+            barBlurDirty = false
+            barLiquidDirty = false
+            errorText = ""
+        }
+
+        function refresh() {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.appearanceSnapshot())
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setBarIntegratedWithDock(enabled) {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateBarIntegratedWithDock(enabled))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveBarVisibilityMode(index) {
+            if (!bridge)
+                return
+            const mode = barVisibilityModes[index]
+            applyState(bridge.updateBarVisibilityMode(mode))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveBarLayoutMode(index) {
+            if (!bridge)
+                return
+            const mode = barLayoutModes[index]
+            applyState(bridge.updateBarLayoutMode(mode))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setBarBlurInherit(enabled) {
+            if (!bridge) return
+            applyState(bridge.updateBarBlurInherit(enabled))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Timer {
+            id: liveBarBlurDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (barPage.bridge && barPage.barBlurDirty) {
+                    barPage.bridge.updateBarBlurStrength(barPage.barBlurStrength)
+                }
+            }
+        }
+
+        Timer {
+            id: liveBarLiquidDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (barPage.bridge && barPage.barLiquidDirty) {
+                    barPage.bridge.updateBarLiquidStrength(barPage.barLiquidStrength)
+                }
+            }
+        }
+
+        function previewBarBlur(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(barBlurStrength - clamped) < 0.005)
+                return
+            barBlurStrength = clamped
+            barBlurDirty = true
+            liveBarBlurDebounce.restart()
+        }
+
+        function commitBarBlur() {
+            liveBarBlurDebounce.stop()
+            if (!barBlurDirty || !bridge)
+                return
+            barBlurDirty = false
+            applyState(bridge.updateBarBlurStrength(barBlurStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function previewBarLiquid(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(barLiquidStrength - clamped) < 0.005)
+                return
+            barLiquidStrength = clamped
+            barLiquidDirty = true
+            liveBarLiquidDebounce.restart()
+        }
+
+        function commitBarLiquid() {
+            liveBarLiquidDebounce.stop()
+            if (!barLiquidDirty || !bridge)
+                return
+            barLiquidDirty = false
+            applyState(bridge.updateBarLiquidStrength(barLiquidStrength))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Component.onCompleted: refresh()
+
+        Text {
+            text: "显示与布局".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: barLayoutCol.implicitHeight
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: barLayoutCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "⎍"; tint: "#5ac8fa" }
+                        Text {
+                            text: "顶栏形态"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            id: barLayoutNavBar
+                            model: [
+                                { id: "full", label: "全宽贴边" },
+                                { id: "floating", label: "悬浮胶囊" }
+                            ]
+                            itemWidthOverride: 76
+                            currentIndex: barPage.barLayoutModeIndex
+                            onSelectionChanged: function(index) {
+                                barPage.saveBarLayoutMode(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◉"; tint: "#0a84ff" }
+                        Text {
+                            text: "Bar 显示方式"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            id: barVisibilityNavBar
+                            model: [
+                                { id: "always", label: "始终显示" },
+                                { id: "smart", label: "智能隐藏" },
+                                { id: "persistent", label: "持续隐藏" }
+                            ]
+                            itemWidthOverride: 76
+                            currentIndex: barPage.barVisibilityModeIndex
+                            onSelectionChanged: function(index) {
+                                barPage.saveBarVisibilityMode(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 64
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "⇲"; tint: "#ff9f0a" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "Bar 融入 Dock"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: "仅在 Dock 位于底部时生效；侧边 Dock 自动保留顶部 Bar"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        LiquidControls.LiquidGlassSwitch {
+                            checked: barPage.barIntegratedWithDock
+                            accentColor: "#0a84ff"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                barPage.setBarIntegratedWithDock(checked)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "外观与模糊效果".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 4
+            visible: false
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: barBlurCol.implicitHeight
+            visible: false
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: barBlurCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "跟随显示设置"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: "关闭后可为顶栏及控制中心单独自定义背景模糊与液态强度"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        LiquidControls.LiquidGlassSwitch {
+                            checked: barPage.barBlurInherit
+                            accentColor: "#30d158"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                barPage.setBarBlurInherit(checked)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !barPage.barBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !barPage.barBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
+                        Text {
+                            text: "顶栏模糊强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: barPage.percentage(barPage.barBlurStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: barPage.barBlurStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                barPage.previewBarBlur(position)
+                            }
+                            onCommitRequested: barPage.commitBarBlur()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !barPage.barBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !barPage.barBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "≈"; tint: "#af52de" }
+                        Text {
+                            text: "顶栏液态强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: barPage.percentage(barPage.barLiquidStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: barPage.barLiquidStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                barPage.previewBarLiquid(position)
+                            }
+                            onCommitRequested: barPage.commitBarLiquid()
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            text: "Bar 保持通透液态外观，可在上方选择跟随 Dock 模糊基准或在此独立定制。"
+            visible: false
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: barPage.errorText.length > 0
+            text: barPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
+
+    component LauncherSettingsPage: ColumnLayout {
+        id: launcherPage
+
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
+        property string displayMode: "bottom"
+        readonly property var displayModes: ["bottom", "center", "fullscreen"]
+        property int displayModeIndex: 0
+        property real iconSize: 52
+        property real iconSpacing: 24
+        property real fontSize: 11
+        property string fontWeight: "normal"
+        readonly property var fontWeights: ["normal", "medium", "bold"]
+        property int fontWeightIndex: 0
+        property string errorText: ""
+
+        property bool launcherBlurInherit: true
+        property real launcherBlurStrength: 0.42
+        property real launcherLiquidStrength: 1.0
+        property bool launcherBlurDirty: false
+        property bool launcherLiquidDirty: false
+
+        function percentage(value) {
+            return Math.round(value * 100) + "%"
+        }
+
+        function applyAppearanceSnapshot(snapshot) {
+            if (!snapshot) return
+            launcherBlurInherit = snapshot.launcherBlurInherit !== undefined
+                ? Boolean(snapshot.launcherBlurInherit)
+                : (snapshot.launcherBlurInheritDock !== undefined ? Boolean(snapshot.launcherBlurInheritDock) : true)
+            launcherBlurStrength = Number.isFinite(Number(snapshot.launcherBlurStrength))
+                ? Number(snapshot.launcherBlurStrength) : 0.42
+            launcherLiquidStrength = Number.isFinite(Number(snapshot.launcherLiquidStrength))
+                ? Number(snapshot.launcherLiquidStrength) : 1.0
+            launcherBlurDirty = false
+            launcherLiquidDirty = false
+        }
+
+        function applySnapshot(snapshot) {
+            if (!snapshot) return
+            if (snapshot.displayMode !== undefined) {
+                displayMode = snapshot.displayMode
+                const idx = displayModes.indexOf(displayMode)
+                displayModeIndex = idx >= 0 ? idx : 0
+            }
+            if (snapshot.iconSize !== undefined) {
+                iconSize = snapshot.iconSize
+            }
+            if (snapshot.iconSpacing !== undefined) {
+                iconSpacing = snapshot.iconSpacing
+            }
+            if (snapshot.fontSize !== undefined) {
+                fontSize = snapshot.fontSize
+            }
+            if (snapshot.fontWeight !== undefined) {
+                fontWeight = snapshot.fontWeight
+                const idx = fontWeights.indexOf(fontWeight)
+                fontWeightIndex = idx >= 0 ? idx : 0
+            }
+        }
+
+        function reloadFromBridge() {
+            if (!bridge) return
+            const snap = bridge.launcherSnapshot()
+            applySnapshot(snap)
+            const appSnap = bridge.appearanceSnapshot()
+            applyAppearanceSnapshot(appSnap)
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function setLauncherBlurInherit(enabled) {
+            if (!bridge) return
+            const snap = bridge.updateLauncherBlurInherit(enabled)
+            applyAppearanceSnapshot(snap)
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Timer {
+            id: liveLauncherBlurDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (launcherPage.bridge && launcherPage.launcherBlurDirty) {
+                    launcherPage.bridge.updateLauncherBlurStrength(launcherPage.launcherBlurStrength)
+                }
+            }
+        }
+
+        Timer {
+            id: liveLauncherLiquidDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (launcherPage.bridge && launcherPage.launcherLiquidDirty) {
+                    launcherPage.bridge.updateLauncherLiquidStrength(launcherPage.launcherLiquidStrength)
+                }
+            }
+        }
+
+        function previewLauncherBlur(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(launcherBlurStrength - clamped) < 0.005)
+                return
+            launcherBlurStrength = clamped
+            launcherBlurDirty = true
+            liveLauncherBlurDebounce.restart()
+        }
+
+        function commitLauncherBlur() {
+            liveLauncherBlurDebounce.stop()
+            if (!launcherBlurDirty || !bridge)
+                return
+            launcherBlurDirty = false
+            const snap = bridge.updateLauncherBlurStrength(launcherBlurStrength)
+            applyAppearanceSnapshot(snap)
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function previewLauncherLiquid(value) {
+            const clamped = Math.max(0, Math.min(1, value))
+            if (Math.abs(launcherLiquidStrength - clamped) < 0.005)
+                return
+            launcherLiquidStrength = clamped
+            launcherLiquidDirty = true
+            liveLauncherLiquidDebounce.restart()
+        }
+
+        function commitLauncherLiquid() {
+            liveLauncherLiquidDebounce.stop()
+            if (!launcherLiquidDirty || !bridge)
+                return
+            launcherLiquidDirty = false
+            const snap = bridge.updateLauncherLiquidStrength(launcherLiquidStrength)
+            applyAppearanceSnapshot(snap)
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveDisplayMode(index) {
+            displayModeIndex = index
+            displayMode = displayModes[index] || "bottom"
+            if (bridge) {
+                const snap = bridge.updateLauncherDisplayMode(displayMode)
+                applySnapshot(snap)
+                if (bridge.lastError)
+                    errorText = bridge.lastError
+            }
+        }
+
+        function saveFontWeight(index) {
+            fontWeightIndex = index
+            fontWeight = fontWeights[index] || "normal"
+            if (bridge) {
+                const snap = bridge.updateLauncherFontWeight(fontWeight)
+                applySnapshot(snap)
+                if (bridge.lastError)
+                    errorText = bridge.lastError
+            }
+        }
+
+        function previewIconSize(position) {
+            iconSize = Math.round(40 + position * 40)
+        }
+
+        function commitIconSize() {
+            if (bridge) {
+                const snap = bridge.updateLauncherIconSize(iconSize)
+                applySnapshot(snap)
+                if (bridge.lastError)
+                    errorText = bridge.lastError
+            }
+        }
+
+        function previewIconSpacing(position) {
+            iconSpacing = Math.round(10 + position * 38)
+        }
+
+        function commitIconSpacing() {
+            if (bridge) {
+                const snap = bridge.updateLauncherIconSpacing(iconSpacing)
+                applySnapshot(snap)
+                if (bridge.lastError)
+                    errorText = bridge.lastError
+            }
+        }
+
+        function previewFontSize(position) {
+            fontSize = Math.round(9 + position * 9)
+        }
+
+        function commitFontSize() {
+            if (bridge) {
+                const snap = bridge.updateLauncherFontSize(fontSize)
+                applySnapshot(snap)
+                if (bridge.lastError)
+                    errorText = bridge.lastError
+            }
+        }
+
+        Component.onCompleted: reloadFromBridge()
+
+        Text {
+            text: "显示形态".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: 54
+
+            Item {
+                anchors.fill: parent
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
+                    spacing: 12
+                    SettingIcon { symbol: "❖"; tint: "#ff9500" }
+                    Text {
+                        text: "启动台形态"
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                    }
+                    Item { Layout.fillWidth: true }
+                    SettingsNavBar {
+                        id: launcherModeNavBar
+                        model: [
+                            { id: "bottom",     label: "底部吸附" },
+                            { id: "center",     label: "屏幕居中" },
+                            { id: "fullscreen", label: "全屏覆盖" }
+                        ]
+                        itemWidthOverride: 76
+                        currentIndex: launcherPage.displayModeIndex
+                        onSelectionChanged: function(index) {
+                            launcherPage.saveDisplayMode(index)
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "网格、图标与文字".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: 221
+
+            Column {
+                anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◉"; tint: "#ff9500" }
+                        Text {
+                            text: "图标尺寸"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(launcherPage.iconSize) + " px"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: (launcherPage.iconSize - 40) / 40
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                launcherPage.previewIconSize(position)
+                            }
+                            onCommitRequested: launcherPage.commitIconSize()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↔"; tint: "#ff9500" }
+                        Text {
+                            text: "图标间距"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(launcherPage.iconSpacing) + " px"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: (launcherPage.iconSpacing - 10) / 38
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                launcherPage.previewIconSpacing(position)
+                            }
+                            onCommitRequested: launcherPage.commitIconSpacing()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "T"; tint: "#ff9500" }
+                        Text {
+                            text: "字体大小"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(launcherPage.fontSize) + " px"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: (launcherPage.fontSize - 9) / 9
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                launcherPage.previewFontSize(position)
+                            }
+                            onCommitRequested: launcherPage.commitFontSize()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "B"; tint: "#ff9500" }
+                        Text {
+                            text: "字体粗细"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            id: launcherFontWeightNavBar
+                            model: [
+                                { id: "normal", label: "常规" },
+                                { id: "medium", label: "中黑" },
+                                { id: "bold",   label: "粗体" }
+                            ]
+                            itemWidthOverride: 56
+                            currentIndex: launcherPage.fontWeightIndex
+                            onSelectionChanged: function(index) {
+                                launcherPage.saveFontWeight(index)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "外观与模糊效果".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+            visible: false
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: launcherBlurCol.implicitHeight
+            visible: false
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: launcherBlurCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "跟随显示设置"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: "关闭后可为启动台单独自定义背景模糊与液态强度"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        LiquidControls.LiquidGlassSwitch {
+                            checked: launcherPage.launcherBlurInherit
+                            accentColor: "#30d158"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                launcherPage.setLauncherBlurInherit(checked)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !launcherPage.launcherBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !launcherPage.launcherBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
+                        Text {
+                            text: "启动台模糊强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: launcherPage.percentage(launcherPage.launcherBlurStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: launcherPage.launcherBlurStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                launcherPage.previewLauncherBlur(position)
+                            }
+                            onCommitRequested: launcherPage.commitLauncherBlur()
+                        }
+                    }
+                }
+
+                Rectangle {
+                    visible: !launcherPage.launcherBlurInherit
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    visible: !launcherPage.launcherBlurInherit
+                    width: parent.width
+                    height: 48
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "≈"; tint: "#af52de" }
+                        Text {
+                            text: "启动台液态强度"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: launcherPage.percentage(launcherPage.launcherLiquidStrength)
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignRight
+                        }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190
+                            value: launcherPage.launcherLiquidStrength
+                            trackColor: theme.divider
+                            onPreviewChanged: function(position) {
+                                launcherPage.previewLauncherLiquid(position)
+                            }
+                            onCommitRequested: launcherPage.commitLauncherLiquid()
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: launcherPage.errorText.length > 0
+            text: launcherPage.errorText
             color: "#ff453a"
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1533,9 +2786,27 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
                     pageIndex: 2
+                    label: "顶栏"
+                    navSymbol: "⎍"
+                    navTint: "#5ac8fa"
+                }
+
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 3
                     label: "Dock"
                     navSymbol: "▰"
                     navTint: "#0a84ff"
+                }
+
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 4
+                    label: "启动台"
+                    navSymbol: "❖"
+                    navTint: "#ff9500"
                 }
 
                 Item {
@@ -1580,7 +2851,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: window.currentPage === 0
+                        model: (window.currentPage >= 0 && window.currentPage <= 4)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -1611,7 +2882,15 @@ ApplicationWindow {
                         }
                     }
 
+                    LauncherSettingsPage {
+                        visible: window.currentPage === 4
+                    }
+
                     DockSettingsPage {
+                        visible: window.currentPage === 3
+                    }
+
+                    BarSettingsPage {
                         visible: window.currentPage === 2
                     }
 
