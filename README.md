@@ -113,6 +113,16 @@ Clone the repository, then install the components you need. Everything except
 the KWin effects installs into user or `/usr/local` locations and can be
 removed cleanly.
 
+### Optional application policy
+
+Standalone applications under `apps/` are optional companions to the desktop
+shell, not part of its required runtime. They may live in this repository and
+share its UI or data contracts, but the default shell path must not build,
+install, or start them (or their services). Each application must provide its
+own documented build and install entry point, with only that application's
+dependencies enabled. A user who only wants the Shell must never need calendar,
+music, or other optional-app dependencies.
+
 ### 1. Run the shell
 
 ```sh
@@ -248,7 +258,8 @@ Planned next, in rough priority order:
 - **Settings coverage** — keyboard-shortcut and DeskCenter pages in
   `kos-settings`.
 - **Standalone apps** — fill in the `calendar`, `todo`, and `weather`
-  placeholders under `apps/`.
+  placeholders under `apps/`, while keeping every application independently
+  buildable and optional for Shell-only users.
 - **Accessibility & keyboard navigation** — focus order, reduced motion,
   high contrast, full keyboard operation.
 - **Weather icon set** — a complete SVG icon set replacing the current mix of
