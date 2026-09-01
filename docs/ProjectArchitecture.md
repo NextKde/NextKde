@@ -42,6 +42,27 @@ window, data model, and application-specific assets remain inside its own
 `apps/<name>/` directory. A future `.desktop` file belongs under
 `packaging/desktop/`.
 
+### Optional application contract
+
+Applications are optional companions, not dependencies of the Quickshell
+desktop path. When an application platform has a top-level CMake build, every
+application option must default to `OFF`; its documented build preset or
+command enables only the requested application and its direct dependencies.
+Building, installing, or running the Shell must neither build nor install an
+optional application.
+
+An application-owned service must be activated on demand by that application
+or through D-Bus activation. It must not install a session autostart entry by
+default. This keeps calendar, todo, music, and similar future applications from
+creating resident processes for Shell-only users.
+
+Optional services are enhancements, never a single point of failure for an
+existing Shell feature. If a Shell surface consumes optional service data, it
+must retain a local, documented fallback. In particular, weather surfaces must
+continue to use the existing keyless Open-Meteo request/cache path whenever the
+shared weather service is not installed, unavailable, or returns an invalid
+snapshot.
+
 `apps/settings/` is the first application. The desktop top-bar gear only
 starts its process through `DesktopAppLauncher`; it never loads Settings UI
 into the Quickshell process.
