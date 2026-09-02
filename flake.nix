@@ -33,7 +33,6 @@
         config = lib.mkIf config.services.kos.enable {
           environment.systemPackages = [
             self.packages.${system}.kos-desktop
-            pkgs.kdePackages.quickshell
           ];
 
           # KWin plugins go to system-level path
