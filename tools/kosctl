@@ -343,9 +343,10 @@ dev_all() {
     fi
 
     if [[ -n "$qs_bin" ]]; then
-        # A manual dev shell from a previous `dev` run would fight this one
-        # for the dev sockets and windows.
-        "$qs_bin" -c kos-dev kill >/dev/null 2>&1 || true
+        # A manual source-tree shell from a previous `dev` run would fight
+        # this one for the dev sockets and windows. --path and --config are
+        # mutually exclusive, so select this source configuration by path.
+        "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     fi
 
     printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
@@ -365,8 +366,22 @@ dev_all() {
     trap cleanup_dev EXIT INT TERM
 
     if [[ -n "$qs_bin" ]]; then
-        env "${env_overrides[@]}" \
-            "$qs_bin" -n -c kos-dev -p "$project_dir/shell"
+        # This is an explicit source-tree configuration, not an installed
+        # named config: -p cannot be combined with either -c or -n.
+        # Handle its exit explicitly before returning so cleanup still runs
+        # while the local PID variables are in scope under `set -u`.
+        local shell_status=0
+        if env "${env_overrides[@]}" \
+                "$qs_bin" -p "$project_dir/shell"; then
+            shell_status=0
+        else
+            shell_status=$?
+        fi
+        cleanup_dev
+        trap - EXIT INT TERM
+        if (( shell_status != 0 )); then
+            return "$shell_status"
+        fi
     else
         printf 'warn Quickshell is unavailable; dev daemons are running without a shell\n' >&2
         printf 'press Ctrl+C to stop the dev daemons\n'
