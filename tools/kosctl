@@ -326,6 +326,7 @@ sync_qml() {
 # while the development platform owns that bridge, then restored on exit.
 dev_all() {
     local dev_runtime="$build_dir/dev-runtime"
+    local platform_log="$dev_runtime/platform.log"
     local resume_installed_platform=0
     local platform_pid=""
     local data_pid=""
@@ -359,10 +360,12 @@ dev_all() {
     fi
 
     printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
+    : > "$platform_log"
     env "${env_overrides[@]}" \
         KOS_PLATFORM_KWIN_SCRIPT="$project_dir/platform/kwin/window-bridge.js" \
-        "$build_dir/platform/kos-platform" daemon &
+        "$build_dir/platform/kos-platform" daemon > "$platform_log" 2>&1 &
     platform_pid=$!
+    printf 'Platform event log: %s\n' "$platform_log"
 
     printf 'Starting dev data service (%s)\n' "$dev_runtime/kos-data.sock"
     env "${env_overrides[@]}" \

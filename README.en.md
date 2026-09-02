@@ -153,6 +153,8 @@ QSG_RENDER_LOOP=basic ./tools/kosctl dev
 
 This temporarily pauses the installed platform so the source build receives
 KWin window events; it is restored automatically when the command exits.
+High-volume low-level window events are written to
+`.build/kosctl/dev-runtime/platform.log`, leaving QML output in the terminal.
 
 Settings opened from the source Shell's gear automatically targets that same
 source session. You can also launch it manually from a second terminal:
