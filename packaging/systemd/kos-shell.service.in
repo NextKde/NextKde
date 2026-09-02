@@ -1,0 +1,34 @@
+[Unit]
+Description=KOS Quickshell desktop shell
+Requires=kos-platform.service
+After=graphical-session.target kos-platform.service
+Wants=kos-data.service
+After=kos-data.service
+# KDE marks graphical-session.target active before kwin_wayland has its
+# Wayland socket ready. Waiting on the compositor service prevents the
+# platform daemon and shell from starting too early and aborting on
+# "could not connect to display" (SIGABRT, then a 2s restart loop).
+After=plasma-kwin_wayland.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# `KillMode=mixed`: on stop, SIGTERM only the main qs process (which exits
+# promptly). Without this, systemd's default KillMode=control-group SIGTERMs
+# every process in the cgroup — including desktop apps the shell launched via
+# QProcess::startDetached() (which only fork+setsid and do NOT leave the
+# launching cgroup), so a restart would hang 90s waiting for Electron apps to
+# die and then SIGKILL them. mixed keeps launched apps alive across restarts.
+KillMode=mixed
+# The installed shell must be stable: `sync`/`install` overwrite the config
+# directory it watches. Disable the file watcher so a copy in progress can
+# never trigger a hot-reload of half-written QML (which crashes quickshell).
+# QML edits take effect via `kosctl start`, or via `kosctl dev` (which runs
+# from the source tree with its own watcher and sockets).
+Environment=QS_DISABLE_FILE_WATCHER=1
+ExecStart=@QS_EXEC@ --no-duplicate -c kos
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

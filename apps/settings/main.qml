@@ -214,6 +214,8 @@ ApplicationWindow {
         readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
+        property int windowGroupingIndex: 0
+        readonly property var windowGroupings: ["grouped", "separate"]
         property real iconOpacity: 0.5
         property string iconTintColor: "#a855f7"
         readonly property var tintPresets: [
@@ -345,6 +347,11 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
+        function windowGroupingIndexFromString(mode) {
+            const idx = windowGroupings.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
         function colorHex(color) {
             function channel(value) {
                 return Math.round(value * 255).toString(16).padStart(2, "0")
@@ -437,6 +444,7 @@ ApplicationWindow {
             iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
             syncTintControls(colorFromHex(iconTintColor))
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
+            windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             iconOpacityDirty = false
             layoutDirty = false
             errorText = ""
@@ -473,6 +481,15 @@ ApplicationWindow {
                 return
             const mode = visibilityModes[index]
             applyState(bridge.updateDockVisibilityMode(mode))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveWindowGrouping(index) {
+            if (!bridge)
+                return
+            const mode = windowGroupings[index]
+            applyState(bridge.updateDockWindowGrouping(mode))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -580,6 +597,52 @@ ApplicationWindow {
                             }
                             onCommitRequested: dockPage.commitLayout()
                         }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "窗口".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: 54
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "▦"; tint: "#5856d6" }
+                Text {
+                    text: "是否按应用合并窗口"
+                    color: theme.primaryText
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+                Item { Layout.fillWidth: true }
+                LiquidControls.LiquidGlassSwitch {
+                    id: windowGroupingSwitch
+                    checked: dockPage.windowGroupingIndex === 0
+                    accentColor: "#0a84ff"
+                    trackColor: theme.divider
+                    onToggled: function(checked) {
+                        const requestedIndex = checked ? 0 : 1
+                        if (requestedIndex !== dockPage.windowGroupingIndex) {
+                            dockPage.saveWindowGrouping(requestedIndex)
+                        }
+                        // The shared switch owns its checked state after a
+                        // click. Put it back to the IPC-confirmed value.
+                        windowGroupingSwitch.checked = dockPage.windowGroupingIndex === 0
                     }
                 }
             }
