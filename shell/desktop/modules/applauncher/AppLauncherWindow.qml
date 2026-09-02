@@ -44,6 +44,26 @@ PanelWindow {
     readonly property bool isFullscreenMode: displayMode === "fullscreen"
     readonly property bool isCenterMode: displayMode === "center"
     readonly property bool isBottomMode: displayMode === "bottom"
+    // Fullscreen is a separate Launchpad presentation, not a stretched bottom
+    // sheet. Keep its pages independent from the persisted application order.
+    property int fullscreenPage: 0
+    readonly property int fullscreenPageSize: Math.max(1,
+        appGrid ? appGrid.fullscreenPageSize : 1)
+    readonly property int fullscreenPageCount: Math.max(1,
+        Math.ceil(filteredApplications.length / fullscreenPageSize))
+    readonly property int fullscreenPageOffset: isFullscreenMode
+        ? fullscreenPage * fullscreenPageSize : 0
+    readonly property var displayedGridItems: {
+        if (!isFullscreenMode)
+            return filteredApplications
+        const start = fullscreenPageOffset
+        return filteredApplications.slice(start, start + fullscreenPageSize)
+    }
+    readonly property real gridIconSize: isFullscreenMode
+        ? Math.max(72, configIconSize) : configIconSize
+    readonly property color launcherForegroundColor: isFullscreenMode
+        ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
+    onFilteredApplicationsChanged: _clampFullscreenPage()
 
     // Automatically determine whether dark or light mode is active based on foreground color
     readonly property bool isDark: {
@@ -379,7 +399,12 @@ PanelWindow {
         // Grid navigation should stop at its edges. Wrapping from the first
         // result to the final row is fast but surprising in an app launcher.
         selectedIndex = Math.max(0, Math.min(count - 1, selectedIndex + delta));
-        appGrid.positionViewAtIndex(selectedIndex, GridView.Contain);
+        if (isFullscreenMode) {
+            fullscreenPage = Math.floor(selectedIndex / fullscreenPageSize)
+            fullscreenSelectionPositionTimer.restart()
+        } else {
+            appGrid.positionViewAtIndex(selectedIndex, GridView.Contain);
+        }
     }
 
     function clearSearch() {
@@ -388,8 +413,30 @@ PanelWindow {
         searchBar.inputItem.text = "";
         query = "";
         selectedIndex = 0;
+        fullscreenPage = 0;
         keyboardSelectionActive = false;
         return true;
+    }
+
+    function setFullscreenPage(page) {
+        fullscreenPage = Math.max(0, Math.min(fullscreenPageCount - 1,
+            Math.round(page)))
+        selectedIndex = fullscreenPage * fullscreenPageSize
+        keyboardSelectionActive = false
+    }
+
+    function stepFullscreenPage(delta) {
+        const nextPage = Math.max(0, Math.min(fullscreenPageCount - 1,
+            fullscreenPage + delta))
+        if (nextPage === fullscreenPage)
+            return false
+        setFullscreenPage(nextPage)
+        return true
+    }
+
+    function _clampFullscreenPage() {
+        fullscreenPage = Math.max(0, Math.min(fullscreenPageCount - 1,
+            fullscreenPage))
     }
 
     function activateSelected() {
@@ -641,7 +688,7 @@ PanelWindow {
                 verticalCenter: fieldPill.verticalCenter
             }
             text: "⌕"
-            color: AppLauncherService.dockForegroundColor
+            color: root.launcherForegroundColor
             opacity: 0.65
             font.pixelSize: 17
         }
@@ -655,7 +702,7 @@ PanelWindow {
                 leftMargin: 32
                 rightMargin: text.length > 0 ? 32 : 10
             }
-            color: AppLauncherService.dockForegroundColor
+            color: root.launcherForegroundColor
             selectionColor: Qt.rgba(1, 1, 1, 0.30)
             selectedTextColor: AppLauncherService.dockForegroundColor
             font.pixelSize: 12
@@ -664,6 +711,7 @@ PanelWindow {
             onTextEdited: {
                 root.query = text;
                 root.selectedIndex = 0;
+                root.fullscreenPage = 0;
                 root.keyboardSelectionActive = text.length > 0;
             }
             Keys.onPressed: function (event) {
@@ -696,7 +744,7 @@ PanelWindow {
             }
             visible: searchInput.text.length > 0
             text: "×"
-            color: AppLauncherService.dockForegroundColor
+            color: root.launcherForegroundColor
             opacity: searchClearMouse.containsMouse ? 0.95 : 0.58
             font {
                 pixelSize: 17
@@ -719,7 +767,7 @@ PanelWindow {
             }
             visible: searchInput.text.length === 0
             text: "搜索应用"
-            color: AppLauncherService.dockForegroundColor
+            color: root.launcherForegroundColor
             opacity: 0.45
             font.pixelSize: 12
         }
@@ -730,6 +778,7 @@ PanelWindow {
         console.log("[AppLauncherWindow] visible=" + visible + " card=" + launcherWidth + "x" + launcherHeight);
         if (visible) {
             selectedIndex = 0;
+            fullscreenPage = 0;
             keyboardSelectionActive = false;
             searchFocusTimer.restart();
         } else {
@@ -767,6 +816,25 @@ PanelWindow {
             appGrid.contentY = Math.max(0, Math.min(maxContentY, root.pendingGridContentY));
             root.pendingGridContentY = -1;
         }
+    }
+
+    // A page switch recreates the GridView delegates. Position the selected
+    // item after that pass so keyboard navigation never points to an item on a
+    // page that is no longer mapped.
+    Timer {
+        id: fullscreenSelectionPositionTimer
+        interval: 1
+        repeat: false
+        onTriggered: appGrid.positionViewAtIndex(
+            root.selectedIndex - root.fullscreenPageOffset, GridView.Contain)
+    }
+
+    // A physical wheel emits several events for one gesture. Keep page turns
+    // intentional rather than skipping multiple Launchpad pages at once.
+    Timer {
+        id: fullscreenPageWheelCooldown
+        interval: 180
+        repeat: false
     }
 
     Timer {
@@ -953,6 +1021,31 @@ PanelWindow {
         height: root.isFullscreenMode ? parent.height : root.launcherHeight
         clip: true
 
+        // The fullscreen presentation owns the entire output, not merely the
+        // centered app grid. Create this wheel receiver only for that mode so
+        // edge scrolling flips pages too, while other presentations retain no
+        // extra wheel receiver at all.
+        Loader {
+            active: root.isFullscreenMode
+            anchors.fill: parent
+            z: 90
+            sourceComponent: Component {
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.NoButton
+                    onWheel: function(wheel) {
+                        const delta = wheel.angleDelta.y + wheel.pixelDelta.y
+                        if (delta === 0 || fullscreenPageWheelCooldown.running)
+                            return
+                        if (root.stepFullscreenPage(delta >= 0 ? -1 : 1)) {
+                            fullscreenPageWheelCooldown.restart()
+                            wheel.accepted = true
+                        }
+                    }
+                }
+            }
+        }
+
         Item {
             id: launcherCard
             anchors.fill: parent
@@ -970,7 +1063,11 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: background.radius
-                    color: "transparent"
+                    // A Launchpad backdrop is deliberately quieter than a
+                    // card: KWin keeps the wallpaper blurred underneath while
+                    // this veil removes the hard, refractive glass-sheet look.
+                    color: root.isFullscreenMode
+                        ? Qt.rgba(0.025, 0.035, 0.060, 0.34) : "transparent"
                     border.width: root.isFullscreenMode ? 0 : 1
                     border.color: root.isDark
                         ? Qt.rgba(1, 1, 1, 0.16)
@@ -1052,7 +1149,8 @@ PanelWindow {
                                 top: parent.top
                                 left: parent.left
                                 right: parent.right
-                                topMargin: root.isFullscreenMode ? 32 : 14
+                                topMargin: root.isFullscreenMode
+                                    ? Math.round(parent.height * 0.13) : 14
                                 leftMargin: 22
                                 rightMargin: 22
                             }
@@ -1114,21 +1212,39 @@ PanelWindow {
                         GridView {
                             id: appGrid
                             enabled: root.editingApplication === null
-                            anchors {
-                                top: parent.top
-                                left: parent.left
-                                right: parent.right
-                                bottom: parent.bottom
-                                margins: 18
-                                topMargin: root.isFullscreenMode ? 32 : 14
-                            }
-                            topMargin: root.isFullscreenMode ? 75 : 57
+                            // Never switch between mutually exclusive anchor
+                            // sets at runtime. Qt can retain both for one frame
+                            // and reports an anchor conflict, leaving the grid's
+                            // input region unreliable after returning from
+                            // fullscreen. Explicit geometry is stable in every
+                            // presentation.
+                            width: root.isFullscreenMode
+                                ? Math.min(parent.width - 72, 1280)
+                                : parent.width - 36
+                            readonly property int fullscreenRowCount: root.isFullscreenMode
+                                ? Math.max(4, Math.min(5,
+                                    Math.floor((parent.height - 260) / cellHeight))) : 0
+                            height: root.isFullscreenMode
+                                ? fullscreenRowCount * cellHeight : parent.height - 32
+                            x: Math.round((parent.width - width) / 2)
+                            y: root.isFullscreenMode
+                                ? Math.round((parent.height - height) / 2) : 14
                             clip: true
-                            readonly property real targetCellWidth: root.configIconSize + root.configIconSpacing * 2
-                            readonly property int columnCount: Math.max(4, Math.floor(width / Math.max(68, targetCellWidth)))
+                            interactive: !root.isFullscreenMode
+                            boundsBehavior: Flickable.StopAtBounds
+                            readonly property real targetCellWidth: root.isFullscreenMode
+                                ? Math.max(118, root.gridIconSize + 40)
+                                : root.configIconSize + root.configIconSpacing * 2
+                            readonly property int columnCount: root.isFullscreenMode
+                                ? Math.max(6, Math.min(10, Math.floor(width / targetCellWidth)))
+                                : Math.max(4, Math.floor(width / Math.max(68, targetCellWidth)))
+                            readonly property int fullscreenPageSize: root.isFullscreenMode
+                                ? Math.max(1, columnCount * fullscreenRowCount) : 1
                             cellWidth: width > 0 ? width / columnCount : targetCellWidth
-                            cellHeight: Math.max(88, Math.round(root.configIconSize + root.configFontSize * 2 + 24))
-                            model: root.open ? root.filteredApplications : []
+                            cellHeight: root.isFullscreenMode
+                                ? Math.max(122, Math.round(root.gridIconSize + 50))
+                                : Math.max(88, Math.round(root.configIconSize + root.configFontSize * 2 + 24))
+                            model: root.open ? root.displayedGridItems : []
 
                         delegate: Item {
                             id: appDelegate
@@ -1208,10 +1324,10 @@ PanelWindow {
                             Rectangle {
                                 id: appCard
                                 anchors.centerIn: parent
-                                width: Math.round(root.configIconSize + 30)
-                                height: Math.round(root.configIconSize + 44)
-                                radius: Math.max(10, Math.round(root.configIconSize * 0.25))
-                                color: root.folderMergeArmed && root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.30) : (root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.14) : (root.keyboardSelectionActive && index === root.selectedIndex ? Qt.rgba(1, 1, 1, 0.18) : (appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")))
+                                width: Math.round(root.gridIconSize + 30)
+                                height: Math.round(root.gridIconSize + 44)
+                                radius: Math.max(10, Math.round(root.gridIconSize * 0.25))
+                                color: root.folderMergeArmed && root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.30) : (root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.14) : (root.keyboardSelectionActive && (index + root.fullscreenPageOffset) === root.selectedIndex ? Qt.rgba(1, 1, 1, 0.18) : (appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")))
                                 border.width: root.folderMergeTargetKey === root._itemKey(modelData) ? 1 : 0
                                 border.color: Qt.rgba(0.36, 0.68, 1, root.folderMergeTargetKey === root._itemKey(modelData) ? 0.20 + root.folderMergeProgress * 0.42 : 0)
                                 rotation: 0
@@ -1261,8 +1377,8 @@ PanelWindow {
 
                                 AppIcon {
                                     visible: modelData.type === "app"
-                                    width: root.configIconSize
-                                    height: root.configIconSize
+                                    width: root.gridIconSize
+                                    height: root.gridIconSize
                                     anchors {
                                         top: parent.top
                                         horizontalCenter: parent.horizontalCenter
@@ -1281,8 +1397,8 @@ PanelWindow {
                                 // the transparent glass beneath this preview.
                                 Rectangle {
                                     visible: modelData.type === "folder"
-                                    width: root.configIconSize
-                                    height: root.configIconSize
+                                    width: root.gridIconSize
+                                    height: root.gridIconSize
                                     anchors {
                                         top: parent.top
                                         horizontalCenter: parent.horizontalCenter
@@ -1298,16 +1414,16 @@ PanelWindow {
                                     Grid {
                                         anchors {
                                             top: parent.top
-                                            topMargin: Math.max(3, Math.round(root.configIconSize * 0.115))
+                                        topMargin: Math.max(3, Math.round(root.gridIconSize * 0.115))
                                             horizontalCenter: parent.horizontalCenter
                                         }
                                         columns: 3
-                                        spacing: Math.max(1, Math.round(root.configIconSize * 0.04))
+                                        spacing: Math.max(1, Math.round(root.gridIconSize * 0.04))
                                         Repeater {
                                             model: modelData.type === "folder" ? modelData.apps.slice(0, 9) : []
                                             delegate: AppIcon {
                                                 required property var modelData
-                                                width: Math.max(8, Math.round(root.configIconSize * 0.23))
+                                                width: Math.max(8, Math.round(root.gridIconSize * 0.23))
                                                 height: width
                                                 source: modelData.icon
                                                 opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
@@ -1324,19 +1440,21 @@ PanelWindow {
                                     id: appName
                                     anchors {
                                         top: parent.top
-                                        topMargin: root.configIconSize + 13
+                                        topMargin: root.gridIconSize + 13
                                         horizontalCenter: parent.horizontalCenter
                                     }
-                                    width: Math.min(Math.round(root.configIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
+                                    width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                     text: modelData.type === "folder" ? modelData.name : modelData.app.name
-                                    color: AppLauncherService.dockForegroundColor
+                                    color: root.launcherForegroundColor
                                     style: Text.Normal
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
                                     wrapMode: Text.NoWrap
                                     font {
-                                        pixelSize: root.configFontSize
+                                        pixelSize: root.isFullscreenMode
+                                            ? Math.max(11, root.configFontSize + 1)
+                                            : root.configFontSize
                                         weight: root.resolvedFontWeight
                                         letterSpacing: 0.3
                                     }
@@ -1356,6 +1474,11 @@ PanelWindow {
                                         // drag sorting and app-to-app folder creation.
                                         // App settings remain a deliberate right-click
                                         // menu action so the two gestures never clash.
+                                        // Launchpad pages deliberately remain stable;
+                                        // rearranging across page boundaries belongs in
+                                        // the bottom/center organizer views.
+                                        if (root.isFullscreenMode)
+                                            return;
                                         appDelegate.heldForEdit = true;
                                         root.editMode = true;
                                     }
@@ -1392,7 +1515,8 @@ PanelWindow {
                                 // If this handler captures the initial press early,
                                 // `active` arrives before editMode becomes true and
                                 // the live slot-preview state is never initialized.
-                                enabled: root.editMode && root.editingApplication === null && !appDelegate.dropping
+                                enabled: root.editMode && !root.isFullscreenMode
+                                    && root.editingApplication === null && !appDelegate.dropping
                                 target: null
                                 acceptedButtons: Qt.LeftButton
                                 onActiveChanged: {
@@ -1460,9 +1584,45 @@ PanelWindow {
                         anchors.centerIn: parent
                         visible: !root.openFolder && root.filteredApplications.length === 0
                         text: root.applications.length === 0 ? "正在加载应用程序…" : "未找到匹配的应用"
-                        color: AppLauncherService.dockForegroundColor
+                        color: root.launcherForegroundColor
                         opacity: 0.55
                         font.pixelSize: 14
+                    }
+
+                    // Launchpad-style page dots replace the long scrolling
+                    // application sheet in fullscreen mode. They are kept
+                    // outside the GridView, so changing pages never affects
+                    // persisted application order or folder data.
+                    Row {
+                        id: fullscreenPageDots
+                        anchors {
+                            horizontalCenter: parent.horizontalCenter
+                            bottom: parent.bottom
+                            bottomMargin: Math.max(26, Math.round(parent.height * 0.055))
+                        }
+                        spacing: 8
+                        visible: root.isFullscreenMode && !root.openFolder
+                            && root.fullscreenPageCount > 1
+                        Repeater {
+                            model: root.fullscreenPageCount
+                            delegate: Rectangle {
+                                required property int index
+                                width: index === root.fullscreenPage ? 8 : 6
+                                height: width
+                                radius: width / 2
+                                color: Qt.rgba(1, 1, 1,
+                                    index === root.fullscreenPage ? 0.88 : 0.38)
+                                Behavior on width {
+                                    NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -5
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.setFullscreenPage(index)
+                                }
+                            }
+                        }
                     }
                 }
 
