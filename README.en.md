@@ -25,7 +25,7 @@ Install equivalent packages on other distributions. See the
 ### 2. Clone the repository
 
 ```sh
-git clone https://github.com/SuceV587/NextKde.git
+git clone git@gitee.com:xiaoyintx_ciallo/test.git
 cd NextKde
 ```
 

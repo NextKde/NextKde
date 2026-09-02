@@ -24,7 +24,7 @@ sudo pacman -S git quickshell cmake ninja gcc qt6-base go
 ### 2. 下载代码
 
 ```sh
-git clone https://github.com/SuceV587/NextKde.git
+git clone git@gitee.com:xiaoyintx_ciallo/test.git
 cd NextKde
 ```
 

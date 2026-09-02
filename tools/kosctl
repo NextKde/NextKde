@@ -14,6 +14,10 @@ kwin_effect_state="$prefix/share/kos/kwin-effect-state"
 qs_bin=$(command -v qs || command -v quickshell || true)
 qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
 
+is_nixos() {
+    [[ -f /etc/NIXOS ]]
+}
+
 kwin_plugins_enabled() {
     case "${KOS_BUILD_KWIN_PLUGINS:-ON}" in
         0|OFF|off|FALSE|false|NO|no) return 1 ;;
@@ -23,7 +27,12 @@ kwin_plugins_enabled() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+
+NixOS remote install:
+  git clone <repo> && cd Nextkde
+  ./tools/kosctl nix install      # build + deploy systemd services
+  ./tools/kosctl start            # apply now
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
 EOF
@@ -31,11 +40,13 @@ EOF
 
 doctor() {
     local failed=0
+    local nixos_hint=0
     for command_name in cmake ninja c++ go; do
         if command -v "$command_name" >/dev/null 2>&1; then
             printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
         else
             printf 'miss %-12s\n' "$command_name"
+            nixos_hint=1
             failed=1
         fi
     done
@@ -49,6 +60,7 @@ doctor() {
         fi
     else
         printf 'miss %-12s install Quickshell 0.3.x\n' quickshell
+        nixos_hint=1
         failed=1
     fi
     for runtime_command in nmcli wpctl bluetoothctl systemctl; do
@@ -85,6 +97,16 @@ doctor() {
     else
         printf 'warn %-12s no graphical session (builds still work)\n' session
     fi
+    if is_nixos && (( nixos_hint )); then
+        printf '\n'
+        printf '  NixOS detected. Missing build dependencies can be installed:\n'
+        printf '    Option A (recommended, uses this project flake):\n'
+        printf '      ./tools/kosctl nix build\n'
+        printf '    Option B (manual nix-env):\n'
+        printf '      nix-env -iA nixos.cmake nixos.ninja nixos.go\n'
+        printf '      nix-env -iA nixos.kdePackages.quickshell\n'
+        printf '\n'
+    fi
     return "$failed"
 }
 
@@ -117,7 +139,35 @@ prepare_cmake_build_dir() {
 
 ensure_kwin_build_dependencies() {
     kwin_plugins_enabled || return 0
-    if command -v pacman >/dev/null 2>&1; then
+    if is_nixos; then
+        local -a missing_packages=()
+        local -a nix_packages=(
+            kdePackages.extra-cmake-modules
+            kdePackages.kconfig
+            kdePackages.ki18n
+            kdePackages.kguiaddons
+            kdePackages.kcmutils
+            kdePackages.kdecoration
+            gettext
+            libxcb
+            cmake
+            ninja
+        )
+        local package
+        for package in "${nix_packages[@]}"; do
+            local short_name="${package##*.}"
+            if ! nix-env -q "$short_name" >/dev/null 2>&1 && \
+               ! nix-env -q "$package" >/dev/null 2>&1; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KWin/Glass build dependencies require installation via nix-env:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            nix-env -iA nixos."${missing_packages[@]}" 2>/dev/null || \
+                nix-env -i "${missing_packages[@]}"
+        fi
+    elif command -v pacman >/dev/null 2>&1; then
         local package
         local -a missing_packages=()
         local -a arch_packages=(
@@ -440,6 +490,19 @@ reload_kwin_effects() {
 install_kwin_plugins() {
     kwin_plugins_enabled || return 0
 
+    if is_nixos; then
+        printf '\n'
+        printf '  NixOS detected: KWin plugins are managed by NixOS, not by manual install.\n'
+        printf '  Use ./tools/kosctl nix build to build the full package including KWin plugins,\n'
+        printf '  then add it to your NixOS configuration or install via:\n'
+        printf '    nix build --impure %s#packages.x86_64-linux.kos-desktop\n' "$project_dir"
+        printf '    sudo cp -a result/lib/kwin/* /run/current-system/sw/lib/kwin/ 2>/dev/null || true\n'
+        printf '  Or use ./tools/kosctl nix switch with NIXOS_SYSTEM=<hostname>.\n'
+        printf '\n'
+        enable_kwin_effects
+        return 0
+    fi
+
     local stage_dir="$build_dir/system-install-stage"
     if [[ "$stage_dir" != "$build_dir/"* ]]; then
         printf 'Refusing unsafe staging path: %s\n' "$stage_dir" >&2
@@ -486,6 +549,15 @@ install_kwin_plugins() {
 }
 
 install_all() {
+    if is_nixos; then
+        printf '\n'
+        printf '  NixOS detected. For the best experience, use the flake-based install:\n'
+        printf '    ./tools/kosctl nix build        # Build the Nix package\n'
+        printf '    ./tools/kosctl nix switch       # Build and apply system-wide\n'
+        printf '\n'
+        printf '  Proceeding with manual install (components will be installed to %s)...\n' "$prefix"
+        printf '\n'
+    fi
     ensure_kwin_build_dependencies
     build
     install_files
@@ -607,6 +679,120 @@ shortcuts() {
         "$prefix/libexec/kos-platform" shortcuts "$1"
 }
 
+nix_deploy() {
+    local result_dir="$project_dir/result"
+    if [[ ! -L "$result_dir" ]] || [[ ! -d "$result_dir" ]]; then
+        printf 'result symlink not found. Run ./tools/kosctl nix build first.\n' >&2
+        return 1
+    fi
+
+    # Deploy systemd user services
+    mkdir -p "$runtime_unit_dir"
+    cp "$result_dir/lib/systemd/user/kos-platform.service" "$runtime_unit_dir/"
+    cp "$result_dir/lib/systemd/user/kos-data.service" "$runtime_unit_dir/"
+    cp "$result_dir/lib/systemd/user/kos-shell.service" "$runtime_unit_dir/"
+
+    # Deploy shell config to quickshell config directory
+    local shell_config="$config_dir/quickshell/kos"
+    mkdir -p "$shell_config/shared/qml"
+    cp -a "$result_dir/share/kos-desktop/." "$shell_config/"
+    mkdir -p "$shell_config/shared/qml"
+    rm -rf "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+
+    # Reload and enable services
+    systemctl --user daemon-reload
+    systemctl --user enable kos-platform.service kos-data.service kos-shell.service
+
+    # Enable KWin effects in kwinrc
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
+            false --type bool --notify false
+        local effect
+        for effect in kos_dock_window_animation kos_context_menu_input glass; do
+            kwriteconfig6 --file kwinrc --group Plugins --key "${effect}Enabled" \
+                true --type bool --notify false
+        done
+    fi
+
+    printf '\n'
+    printf '  KOS deployed from Nix store\n'
+    printf '    systemd services: %s\n' "$runtime_unit_dir"
+    printf '    shell config:     %s\n' "$shell_config"
+    printf '\n'
+    printf '  To apply: log out and back in, or reboot.\n'
+    printf '  Apply now without logging out: ./tools/kosctl start\n'
+    printf '\n'
+}
+
+nix_install() {
+    if ! command -v nix >/dev/null 2>&1; then
+        printf 'nix is not installed. Install it first:\n'
+        printf '  curl -L https://nixos.org/nix/install | sh\n'
+        return 1
+    fi
+    if [[ ! -f "$project_dir/flake.nix" ]]; then
+        printf 'flake.nix not found in %s\n' "$project_dir" >&2
+        return 1
+    fi
+    local nix_subcmd="${1:-build}"
+    case "$nix_subcmd" in
+        build)
+            printf '==> Building KOS via flake.nix...\n'
+            nix build --impure "$project_dir#packages.x86_64-linux.kos-desktop" \
+                --out-link "$project_dir/result"
+            printf 'Build output: %s/result\n' "$project_dir"
+            ;;
+        install)
+            # Build if no result exists
+            if [[ ! -L "$project_dir/result" ]]; then
+                printf '==> Building KOS via flake.nix...\n'
+                nix build --impure "$project_dir#packages.x86_64-linux.kos-desktop" \
+                    --out-link "$project_dir/result"
+            fi
+            printf '==> Deploying KOS from Nix store...\n'
+            nix_deploy
+            ;;
+        start)
+            start_all
+            ;;
+        shell)
+            printf '==> Entering Nix development shell...\n'
+            nix develop "$project_dir" --impure
+            ;;
+        *)
+            printf 'Unknown nix subcommand: %s\n' "$nix_subcmd" >&2
+            printf 'Usage: ./tools/kosctl nix [build|install|start|shell]\n' >&2
+            return 1
+            ;;
+    esac
+}
+
+nix_status() {
+    if ! command -v nix >/dev/null 2>&1; then
+        printf 'miss nix          Nix package manager not installed\n'
+        return 0
+    fi
+    printf 'ok   %-12s %s\n' nix "$(command -v nix)"
+    if [[ -L "$project_dir/result" ]]; then
+        local result_target
+        result_target=$(readlink -f "$project_dir/result" 2>/dev/null || true)
+        if [[ -n "$result_target" ]]; then
+            printf 'ok   %-12s %s -> %s\n' "result" "$project_dir/result" "$result_target"
+        fi
+    else
+        printf 'info %-12s no build result (run ./tools/kosctl nix build)\n' "result"
+    fi
+    local unit_dir="$config_dir/systemd/user"
+    for unit in kos-platform.service kos-data.service kos-shell.service; do
+        if [[ -f "$unit_dir/$unit" ]]; then
+            printf 'ok   %-12s %s\n' "$unit" "deployed"
+        else
+            printf 'miss %-12s %s\n' "$unit" "not deployed"
+        fi
+    done
+}
+
 case "${1:-}" in
     doctor) doctor ;;
     build) build ;;
@@ -617,6 +803,10 @@ case "${1:-}" in
     run) run_shell "${2:-}" ;;
     uninstall) uninstall ;;
     glass-settings) open_glass_settings ;;
+    nix)
+        [[ "${2:-}" == build || "${2:-}" == install || "${2:-}" == start || "${2:-}" == shell ]] || { usage >&2; exit 2; }
+        nix_install "$2" ;;
+    nix-status) nix_status ;;
     shortcuts)
         [[ "${2:-}" == install || "${2:-}" == uninstall ]] || { usage >&2; exit 2; }
         shortcuts "$2" ;;
