@@ -25,7 +25,7 @@ usage() {
     cat <<'EOF'
 Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|shortcuts install|shortcuts uninstall>
 
-Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_DEV_PLATFORM, GOPROXY
 EOF
 }
 
@@ -319,24 +319,26 @@ sync_qml() {
     printf 'Synced shell QML to %s; run ./tools/kosctl start to apply it.\n' "$shell_config"
 }
 
-# dev — run the whole stack (platform, data service, shell) straight from the
-# source tree and build outputs. The dev daemons listen on dedicated sockets;
-# the dev shell only sees those sockets via environment variables. KWin has
-# one global window-event bridge, so the installed platform service is paused
-# while the development platform owns that bridge, then restored on exit.
+# dev — run the source Shell and data service. By default it reuses the
+# installed platform service: KWin authorizes its ScreenShot2 screenshot API
+# against the installed desktop entry, so Dock previews remain available.
+# Set KOS_DEV_PLATFORM=1 only while developing platform C++ itself.
 dev_all() {
     local dev_runtime="$build_dir/dev-runtime"
     local platform_log="$dev_runtime/platform.log"
+    local use_dev_platform=0
     local resume_installed_platform=0
     local platform_pid=""
     local data_pid=""
     local cleaned_up=0
     mkdir -p "$dev_runtime"
-    local -a env_overrides=(
-        KOS_PLATFORM_SOCKET="$dev_runtime/kos-platform.sock"
+    case "${KOS_DEV_PLATFORM:-0}" in
+        1|ON|on|TRUE|true|YES|yes) use_dev_platform=1 ;;
+    esac
+    local -a shell_env=(
         KOS_DATA_SOCKET="$dev_runtime/kos-data.sock"
     )
-    if [[ ! -x "$build_dir/platform/kos-platform" ]]; then
+    if (( use_dev_platform )) && [[ ! -x "$build_dir/platform/kos-platform" ]]; then
         echo "kos-platform is not built; run ./tools/kosctl build first" >&2
         return 1
     fi
@@ -352,23 +354,35 @@ dev_all() {
         "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     fi
 
-    if command -v systemctl >/dev/null 2>&1 \
-            && systemctl --user is-active --quiet kos-platform.service; then
-        printf 'Pausing installed platform so dev receives KWin window events\n'
-        systemctl --user stop kos-platform.service
-        resume_installed_platform=1
+    if (( use_dev_platform )); then
+        if command -v systemctl >/dev/null 2>&1 \
+                && systemctl --user is-active --quiet kos-platform.service; then
+            printf 'Pausing installed platform so dev receives KWin window events\n'
+            systemctl --user stop kos-platform.service
+            resume_installed_platform=1
+        fi
+        shell_env+=(KOS_PLATFORM_SOCKET="$dev_runtime/kos-platform.sock")
+        printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
+        : > "$platform_log"
+        env KOS_PLATFORM_SOCKET="$dev_runtime/kos-platform.sock" \
+            KOS_PLATFORM_KWIN_SCRIPT="$project_dir/platform/kwin/window-bridge.js" \
+            "$build_dir/platform/kos-platform" daemon > "$platform_log" 2>&1 &
+        platform_pid=$!
+        printf 'Platform event log: %s\n' "$platform_log"
+        printf 'warn KOS_DEV_PLATFORM=1: KWin will reject Dock screenshot previews\n' >&2
+    else
+        if command -v systemctl >/dev/null 2>&1 \
+                && ! systemctl --user is-active --quiet kos-platform.service; then
+            systemctl --user start kos-platform.service || {
+                echo "installed kos-platform is unavailable; run ./tools/kosctl install first" >&2
+                return 1
+            }
+        fi
+        printf 'Using installed platform for KWin events and authorized Dock previews\n'
     fi
 
-    printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
-    : > "$platform_log"
-    env "${env_overrides[@]}" \
-        KOS_PLATFORM_KWIN_SCRIPT="$project_dir/platform/kwin/window-bridge.js" \
-        "$build_dir/platform/kos-platform" daemon > "$platform_log" 2>&1 &
-    platform_pid=$!
-    printf 'Platform event log: %s\n' "$platform_log"
-
     printf 'Starting dev data service (%s)\n' "$dev_runtime/kos-data.sock"
-    env "${env_overrides[@]}" \
+    env KOS_DATA_SOCKET="$dev_runtime/kos-data.sock" \
         "$build_dir/bin/kos-data-service" &
     data_pid=$!
 
@@ -393,7 +407,7 @@ dev_all() {
         # Handle its exit explicitly before returning so cleanup still runs
         # while the local PID variables are in scope under `set -u`.
         local shell_status=0
-        if env "${env_overrides[@]}" \
+        if env "${shell_env[@]}" \
                 "$qs_bin" -p "$project_dir/shell"; then
             shell_status=0
         else
@@ -407,14 +421,16 @@ dev_all() {
     else
         printf 'warn Quickshell is unavailable; dev daemons are running without a shell\n' >&2
         printf 'press Ctrl+C to stop the dev daemons\n'
-        while kill -0 "$platform_pid" 2>/dev/null \
-                && kill -0 "$data_pid" 2>/dev/null; do
+        while kill -0 "$data_pid" 2>/dev/null; do
+            if (( use_dev_platform )) && ! kill -0 "$platform_pid" 2>/dev/null; then
+                break
+            fi
             sleep 1
         done
     fi
     cleanup_dev
     trap - EXIT INT TERM
-    printf 'Dev stack stopped. Run ./tools/kosctl start to hand the KWin bridge back to the installed services.\n'
+    printf 'Dev stack stopped.\n'
 }
 
 remember_blur_state() {

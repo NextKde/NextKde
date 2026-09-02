@@ -151,10 +151,10 @@ one terminal and leave it running; press `Ctrl+C` to stop it:
 QSG_RENDER_LOOP=basic ./tools/kosctl dev
 ```
 
-This temporarily pauses the installed platform so the source build receives
-KWin window events; it is restored automatically when the command exits.
-High-volume low-level window events are written to
-`.build/kosctl/dev-runtime/platform.log`, leaving QML output in the terminal.
+By default this reuses the installed platform, so Dock window events and
+thumbnail previews keep working while QML output stays in the terminal. Use
+`KOS_DEV_PLATFORM=1 ./tools/kosctl dev` only for platform C++ work; KWin will
+reject screenshot requests from that development binary, so previews are unavailable.
 
 Settings opened from the source Shell's gear automatically targets that same
 source session. You can also launch it manually from a second terminal:

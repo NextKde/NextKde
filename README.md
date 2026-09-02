@@ -147,8 +147,8 @@ qs -p "$PWD/shell"
 QSG_RENDER_LOOP=basic ./tools/kosctl dev
 ```
 
-该命令会暂时暂停安装版 platform，让源码版接收 KWin 窗口事件；退出时会自动恢复。
-频繁的底层窗口事件写入 `.build/kosctl/dev-runtime/platform.log`，终端保留 QML 输出。
+默认复用安装版 platform，因此 Dock 的窗口事件和缩略图预览可正常工作；终端保留 QML 输出。
+只有调试 platform C++ 时才使用 `KOS_DEV_PLATFORM=1 ./tools/kosctl dev`；KWin 会拒绝该开发二进制的截图请求，预览图片不可用。
 
 从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
 
