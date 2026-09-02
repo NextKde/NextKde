@@ -42,9 +42,8 @@ Item {
     readonly property int windowCount: DockModelService.windowCount
     readonly property bool hasPlayingMusic: DockMprisService.hasPlayingPlayer
     readonly property bool hasWeather: WeatherService.available
-    // Side Docks have no readable top-bar clock counterpart, so keep their
-    // compact carousel useful even when the bottom-only Bar integration flag
-    // is off.
+    // Side Dock Stack information keeps its clock page. The separate
+    // top-of-Dock clock is intentionally not injected by DesktopEnvironment.
     readonly property bool hasClock: clockInInfoCarousel || vertical
     // Temperature is a permanent horizontal Dock page. MetricsService may
     // still be loading its first snapshot; the card remains and shows "--".

@@ -25,8 +25,10 @@ Item {
     height: implicitHeight
     visible: NetworkService.available
 
+    // A local TUN/proxy can make NetworkManager's internet probe return
+    // "limited" despite a working Wi-Fi connection. Keep connection state
+    // authoritative and warn only for captive/no-route states.
     readonly property bool hasIssue: NetworkService.connectivity === "portal"
-        || NetworkService.connectivity === "limited"
         || (NetworkService.deviceState === "connected"
             && NetworkService.connectivity === "none")
     readonly property bool connected: NetworkService.deviceState === "connected"

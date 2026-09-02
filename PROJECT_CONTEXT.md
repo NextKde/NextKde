@@ -41,6 +41,21 @@ delete user history.
 `wpctl`, `bluetoothctl`, `qdbus6`, `systemctl`, `gio`, `socat`, or `sh -c`.
 `MetricsService` and `ActivityUsageService` consume `DataClient` snapshots.
 
+## Code-review gate
+
+Reject QML or Settings changes that execute desktop-integration or
+system-control commands, or call desktop integration APIs directly. In
+particular, QML must not use `qdbus6`, `kwriteconfig6`, `nmcli`, `wpctl`,
+`bluetoothctl`, `systemctl`, or `gio` for desktop integration.
+Add a bounded, versioned operation to `shared/contracts/platform.v1.md`,
+implement it in `kos-platform`, and call it through `PlatformClient.qml` (or
+through a Shell `IpcHandler` for Settings). Review the behavior when the daemon
+is unavailable, including the user-visible fallback or retry path.
+
+An existing atomic write of module-owned configuration under
+`Quickshell.stateDir` is a narrow legacy exception; keep it limited to local
+state persistence and track its service-owned replacement separately.
+
 ## Build and operations
 
 Use the root entry point:
@@ -49,9 +64,25 @@ Use the root entry point:
 ./tools/kosctl doctor
 ./tools/kosctl build
 ./tools/kosctl install
+./tools/kosctl start
+./tools/kosctl sync
+./tools/kosctl dev
 ./tools/kosctl run
 ./tools/kosctl uninstall
 ```
+
+`install` is non-disruptive: it installs files and enables the user units but
+never restarts running services or hot-loads KWin effects (replacing plugin
+files in place and reloading them has crashed `kwin_wayland`). `start` applies
+the latest installed revision immediately by restarting the services; the KWin
+effects are only persisted to kwinrc and load on the next KWin/session start.
+It also adopts manually launched `qs -c kos` instances under systemd
+supervision. `sync` copies QML-only changes into the installed config (no
+hot-reload — the installed shell runs with its file watcher disabled, so a
+copy in progress can never trigger a half-written hot-reload), and `dev` runs
+the full stack from the source tree on dedicated sockets (`KOS_PLATFORM_SOCKET`,
+`KOS_DATA_SOCKET`) beside the installed services. All launch modes share one
+pinned state directory via the `StateDir` pragma in `shell/shell.qml`.
 
 `CMakePresets.json` provides Debug/Release configurations. Go dependencies are
 resolved by the configured Go module proxy. KWin plugin builds may be disabled

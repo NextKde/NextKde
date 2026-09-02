@@ -5,7 +5,6 @@ BarWindow 1.0 BarWindow.qml
 BarAutoHideController 1.0 BarAutoHideController.qml
 BarDateStatus 1.0 BarDateStatus.qml
 BarStatusArea 1.0 BarStatusArea.qml
-SideDockClockStatus 1.0 SideDockClockStatus.qml
 DockStatusSvgIcon 1.0 DockStatusSvgIcon.qml
 Battery 1.0 Battery.qml
 CpuTemperature 1.0 CpuTemperature.qml

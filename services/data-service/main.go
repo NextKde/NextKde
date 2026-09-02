@@ -1,5 +1,6 @@
 // kos-data-service owns persistent shell telemetry. It deliberately has no
-// GUI dependencies: Quickshell only consumes snapshot.json.
+// GUI dependencies: Quickshell consumes it over the kos-data.sock JSONL API;
+// snapshot.json is only the service's own persisted state, not a QML input.
 package main
 
 import (
@@ -930,8 +931,12 @@ func serve(s *Service, path string) error {
 
 func main() {
 	s := newService()
-	runtime := homePath("XDG_RUNTIME_DIR", "/tmp")
-	socket := filepath.Join(runtime, "kos-data.sock")
+	// KOS_DATA_SOCKET lets a development service listen beside the installed
+	// one (see kosctl dev); the installed layout never sets it.
+	socket := os.Getenv("KOS_DATA_SOCKET")
+	if socket == "" {
+		socket = filepath.Join(homePath("XDG_RUNTIME_DIR", "/tmp"), "kos-data.sock")
+	}
 	// Publish the initial full directory snapshot before accepting subscribers.
 	// This removes the startup race where QML connected while snapshot.json was
 	// still stale and then waited indefinitely for a second filesystem event.

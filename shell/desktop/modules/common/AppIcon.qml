@@ -25,11 +25,16 @@ Item {
         asynchronous: root.asynchronous
         backer.cache: false
         visible: false
+        // Provide a live texture directly to ShaderEffect. A separate
+        // ShaderEffectSource keeps an extra QQuickItem alive across a
+        // LayerShell window hide/show and can crash Qt Quick during cleanup.
+        layer.enabled: true
+        layer.smooth: root.smooth
     }
 
     ShaderEffect {
         anchors.fill: iconImage
-        property variant source: ShaderEffectSource { sourceItem: iconImage; hideSource: false }
+        property variant source: iconImage
         property real opacityMult: root.opacityMultiplier
         property real sat: root.saturation
         property real iconTintEnabled: root.tintEnabled

@@ -11,8 +11,11 @@ QtObject {
     id: client
 
     readonly property int protocolVersion: 1
+    // KOS_DATA_SOCKET redirects the shell to a development data service
+    // (kosctl dev); unset in the installed layout.
     readonly property string socketPath:
-        (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/kos-data.sock"
+        Quickshell.env("KOS_DATA_SOCKET")
+        || ((Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/kos-data.sock")
     property bool enabled: true
     property var _queue: []
     property var _pending: ({})

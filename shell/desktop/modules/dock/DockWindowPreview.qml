@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
 
-// Multi-window thumbnail preview popup with macOS-style window cards and "+" new window button.
+// Multi-window thumbnail preview popup with macOS-style window cards.
 PopupWindow {
     id: preview
 
@@ -39,20 +39,23 @@ PopupWindow {
     readonly property int windowCount: effectiveWindows.length
     readonly property real cardWidth: 220
     readonly property real cardHeight: 160
-    readonly property real plusCardWidth: 64
     readonly property real rowPadding: 10
     readonly property real rowSpacing: 8
 
     readonly property real calculatedWidth: rowPadding * 2
-        + (windowCount > 0 ? windowCount * (cardWidth + rowSpacing) : 0)
-        + plusCardWidth
+        + windowCount * cardWidth
+        + Math.max(0, windowCount - 1) * rowSpacing
 
     readonly property real maxAllowedWidth: {
         const screenW = anchorItem?.targetScreen?.width ?? Quickshell.screens[0]?.width ?? 1920
         return Math.max(300, screenW * 0.88)
     }
 
-    implicitWidth: Math.min(maxAllowedWidth, Math.max(300, calculatedWidth))
+    // A single 220px card needs only its two 10px margins. The previous 300px
+    // floor existed for the removed new-window card and left a visible blank
+    // strip to the right of a lone preview.
+    implicitWidth: Math.min(maxAllowedWidth,
+                            Math.max(cardWidth + rowPadding * 2, calculatedWidth))
     implicitHeight: 184
     color: "transparent"
     grabFocus: false
@@ -205,18 +208,20 @@ PopupWindow {
                             id: cardBg
                             anchors.fill: parent
                             radius: 8
+                            // Let the popup's glass show through; the card no
+                            // longer adds a separate dark rectangle behind a
+                            // window preview. Keep the active window visibly
+                            // distinct when the pointer is elsewhere.
                             color: cardMouse.containsMouse
-                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10))
-                                : (ThemeService.isDark ? Qt.rgba(0.06, 0.06, 0.08, 0.40) : Qt.rgba(1, 1, 1, 0.35))
-                            border.width: isWinActivated ? 1.5 : 1
-                            border.color: isWinActivated
-                                ? ThemeService.accentColor
-                                : (cardMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(1, 1, 1, 0.10))
+                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06))
+                                : (isWinActivated
+                                    ? Qt.rgba(ThemeService.accentColor.r,
+                                        ThemeService.accentColor.g,
+                                        ThemeService.accentColor.b, 0.16)
+                                    : "transparent")
+                            border.width: 0
 
                             Behavior on color {
-                                ColorAnimation { duration: 100 }
-                            }
-                            Behavior on border.color {
                                 ColorAnimation { duration: 100 }
                             }
 
@@ -224,10 +229,17 @@ PopupWindow {
                             Item {
                                 id: thumbnailBox
                                 anchors.top: parent.top
+                                anchors.bottom: titleText.top
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                anchors.margins: 6
-                                height: 114
+                                anchors.topMargin: 6
+                                anchors.leftMargin: 6
+                                anchors.rightMargin: 6
+                                // Keep a compact, deliberate gap above the
+                                // title instead of reserving a fixed-height
+                                // thumbnail area that makes short previews
+                                // appear detached from their label.
+                                anchors.bottomMargin: 5
 
                                 Image {
                                     id: thumbMetrics
@@ -370,91 +382,6 @@ PopupWindow {
                                     WindowService.activateWindow(cardDelegate.winId)
                                     DockModelService.setDockPopupVisible(preview, false)
                                 }
-                            }
-                        }
-                    }
-                }
-
-                // '+' New Window Button Card
-                Item {
-                    id: plusCard
-                    width: preview.plusCardWidth
-                    height: preview.cardHeight
-
-                    Rectangle {
-                        id: plusBg
-                        anchors.fill: parent
-                        radius: 8
-                        color: plusMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10))
-                            : (ThemeService.isDark ? Qt.rgba(0.06, 0.06, 0.08, 0.35) : Qt.rgba(1, 1, 1, 0.25))
-                        border.width: 1
-                        border.color: plusMouse.containsMouse
-                            ? Qt.rgba(1, 1, 1, 0.30)
-                            : Qt.rgba(1, 1, 1, 0.10)
-
-                        Behavior on color {
-                            ColorAnimation { duration: 100 }
-                        }
-                        Behavior on border.color {
-                            ColorAnimation { duration: 100 }
-                        }
-
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Rectangle {
-                                width: 32
-                                height: 32
-                                radius: 16
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: plusMouse.containsMouse
-                                    ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
-                                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08))
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "＋"
-                                    color: ThemeService.foregroundColor
-                                    font.pixelSize: 18
-                                    font.bold: true
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "新建窗口"
-                                color: ThemeService.foregroundColor
-                                style: Text.Outline
-                                styleColor: Qt.rgba(0, 0, 0, 0.40)
-                                opacity: 0.78
-                                font {
-                                    pixelSize: 10
-                                    weight: Font.DemiBold
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            id: plusMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            acceptedButtons: Qt.LeftButton
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                const targetAppId = preview.appId
-                                    || (preview.effectiveWindows.length > 0
-                                        ? (preview.effectiveWindows[0].identity?.desktopId
-                                           || preview.effectiveWindows[0].desktopId
-                                           || preview.effectiveWindows[0].appId
-                                           || preview.effectiveWindows[0].identity?.rawAppId
-                                           || preview.effectiveWindows[0].rawAppId)
-                                        : "")
-                                console.log("[DockPreview] plus card clicked targetAppId=" + targetAppId)
-                                if (targetAppId)
-                                    DockModelService.launchNewWindow(targetAppId)
-                                DockModelService.setDockPopupVisible(preview, false)
                             }
                         }
                     }

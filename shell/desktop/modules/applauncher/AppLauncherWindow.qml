@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Dialogs
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -605,149 +604,18 @@ PanelWindow {
         }
     }
 
-    // iOS App-Library style liquid header band. The whole top strip is one
-    // continuous frosted lens over the grid: it captures the grid region
-    // directly beneath the band and blurs whatever icons scroll under it, so
-    // the entire top flows with content - not just an isolated search pill.
-    // The capture rect tracks the grid's contentY so the lens always shows the
-    // live content below. The search field floats centered on this band with a
-    // subtle highlight to mark it as editable, but the blur belongs to the
-    // full-width band, so there is no seam between the field and its flanks.
+    // KWin owns the complete launcher glass region. This header deliberately
+    // adds no client-side capture, blur, tint, or refraction.
     component LiquidSearchBar: Item {
         id: searchBar
-        // The grid whose scrolling content this lens frosts over.
-        required property GridView sourceGrid
         // Exposed so the launcher can drive focus and read the query.
         property alias inputItem: searchInput
         // The band spans the header's full width; only its height is fixed.
         height: 49
 
-        // Region of the grid directly beneath this band, in the grid's own
-        // (viewport) coordinates. A GridView is captured as its rendered
-        // viewport - the visible window already reflects contentY - so the
-        // source rect must NOT add contentY again. Doing so pushes the capture
-        // past the grid's bounds as it scrolls, and the lens frosts blank
-        // space beyond the first rows. The grid's top is aligned with the
-        // band's top, so the band's slice (y = 0) always lands inside the
-        // grid's bounds: at rest it frosts the grid's empty top margin, and as
-        // icons scroll up they slide into the slice and become the flowing
-        // background.
-        readonly property rect _lensRect: {
-            if (!sourceGrid)
-                return Qt.rect(0, 0, 0, 0);
-            const topLeft = searchBar.mapToItem(sourceGrid, 0, 0);
-            return Qt.rect(topLeft.x, topLeft.y, searchBar.width, searchBar.height);
-        }
-
-        ShaderEffectSource {
-            id: lensSource
-            visible: false
-            sourceItem: searchBar.sourceGrid
-            sourceRect: searchBar._lensRect
-            live: true
-            hideSource: false
-            smooth: true
-        }
-        FastBlur {
-            id: lensBlur
-            anchors.fill: parent
-            source: lensSource
-            radius: 16
-            transparentBorder: true
-            cached: true
-        }
-        // Clip the blur to the card's own top corners and let the bottom fade
-        // out, so the band reads as the card's top edge itself rather than a
-        // separate rounded pill floating over it. The mask is a vertical
-        // gradient: fully opaque at the top, transparent at the bottom.
-        OpacityMask {
-            anchors.fill: parent
-            source: lensBlur
-            maskSource: lensFade
-        }
+        // A transparent input hit area with a focus outline. KWin supplies
+        // the visual glass behind it.
         Item {
-            id: lensFade
-            anchors.fill: parent
-            visible: false
-            layer.enabled: true
-            // Rounded only at the top corners (matching the card radius) so
-            // the band's upper edge merges with the card outline.
-            Rectangle {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                }
-                height: parent.height
-                radius: 20
-                // Extend below the band so only the top corners stay rounded;
-                // the bottom edge is handled by the fade, not a hard corner.
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop {
-                        position: 0.0
-                        color: "white"
-                    }
-                    GradientStop {
-                        position: 0.55
-                        color: "white"
-                    }
-                    GradientStop {
-                        position: 1.0
-                        color: "transparent"
-                    }
-                }
-            }
-        }
-
-        // A soft top-down tint keeps the search text readable while letting
-        // the band dissolve into the content below (no hard lower edge).
-        Rectangle {
-            anchors.fill: parent
-            radius: 20
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0.0
-                    color: "transparent"
-                }
-                GradientStop {
-                    position: 0.6
-                    color: "transparent"
-                }
-                GradientStop {
-                    position: 1.0
-                    color: "transparent"
-                }
-            }
-        }
-        // Specular sheen concentrated at the very top edge, like light on the
-        // card's glass rim.
-        Rectangle {
-            anchors.fill: parent
-            radius: 20
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0.0
-                    color: "transparent"
-                }
-                GradientStop {
-                    position: 0.35
-                    color: "transparent"
-                }
-                GradientStop {
-                    position: 1.0
-                    color: "transparent"
-                }
-            }
-        }
-
-        // The editable search field: a centered capsule rendered with the
-        // same liquid-glass material as the launcher card, so it reads as a
-        // solid glass lens resting in the flowing band rather than a flat
-        // dark plate. A faint focus ring marks it as editable.
-        LiquidGlassSurface {
             id: fieldPill
             anchors {
                 horizontalCenter: parent.horizontalCenter
@@ -755,17 +623,8 @@ PanelWindow {
             }
             width: Math.min(460, Math.max(300, searchBar.width * 0.46))
             height: 35
-            radius: height / 2
-            baseColor: root.isDark ? Qt.rgba(0, 0, 0, 0.22) : Qt.rgba(1, 1, 1, 0.35)
-            surfaceOpacity: 1.0
-            materialDepth: 1.0
-            blurStrength: AppearanceConfigService.effectiveLauncherBlur
-            liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-            ambientPrimary: WallpaperPaletteService.primary
-            ambientSecondary: WallpaperPaletteService.secondary
-            ambientStrength: 0.8
+            property real radius: height / 2
 
-            // Focus ring over the glass body.
             Rectangle {
                 anchors.fill: parent
                 radius: fieldPill.radius
@@ -1105,22 +964,17 @@ PanelWindow {
                 anchors.fill: parent
                 property real radius: root.isFullscreenMode ? 0 : 28
 
-                // Frosted liquid glass backdrop for the launcher card
-                LiquidGlassSurface {
+                // KWin owns the launcher card's actual blur and refraction
+                // through BackgroundEffect below. Keeping this client-side
+                // layer transparent avoids a duplicate grey QML sheen.
+                Rectangle {
                     anchors.fill: parent
                     radius: background.radius
-                    baseColor: root.isDark
-                        ? Qt.rgba(0.08, 0.09, 0.12, 0.35)
-                        : Qt.rgba(0.95, 0.95, 0.98, 0.45)
-                    blurStrength: AppearanceConfigService.effectiveLauncherBlur
-                    liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-                    ambientPrimary: WallpaperPaletteService.primary
-                    ambientSecondary: WallpaperPaletteService.secondary
-                    ambientStrength: 0.40 * AppearanceTokens.glass.ambientMultiplier
+                    color: "transparent"
                     border.width: root.isFullscreenMode ? 0 : 1
                     border.color: root.isDark
-                        ? Qt.rgba(1, 1, 1, 0.12)
-                        : Qt.rgba(1, 1, 1, 0.60)
+                        ? Qt.rgba(1, 1, 1, 0.16)
+                        : Qt.rgba(1, 1, 1, 0.42)
                 }
 
                 // This foreground layer deliberately excludes the backdrop
@@ -1206,7 +1060,6 @@ PanelWindow {
 
                             LiquidSearchBar {
                                 id: searchBar
-                                sourceGrid: appGrid
                                 anchors {
                                     left: parent.left
                                     right: parent.right
@@ -1424,11 +1277,9 @@ PanelWindow {
 
                                 // Folder artwork is a compact 3×3 preview of its first
                                 // nine apps. It intentionally stays within the same
-                                // icon footprint as ordinary root applications, but
-                                // reads as a liquid-glass tile: translucent over the
-                                // launcher blur with the material's top reflection,
-                                // matching the folder dialog material language.
-                                LiquidGlassSurface {
+                                // icon footprint as ordinary root applications. KWin owns
+                                // the transparent glass beneath this preview.
+                                Rectangle {
                                     visible: modelData.type === "folder"
                                     width: root.configIconSize
                                     height: root.configIconSize
@@ -1438,12 +1289,11 @@ PanelWindow {
                                         topMargin: 8
                                     }
                                     radius: Math.max(8, Math.round(root.configIconSize * 0.23))
-                                    baseColor: root.isDark ? Qt.rgba(0, 0, 0, 0.20) : Qt.rgba(1, 1, 1, 0.35)
-                                    surfaceOpacity: 1.0
-                                    materialDepth: 1.0
-                                    ambientPrimary: WallpaperPaletteService.primary
-                                    ambientSecondary: WallpaperPaletteService.secondary
-                                    ambientStrength: 0.8
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: root.isDark
+                                        ? Qt.rgba(1, 1, 1, 0.14)
+                                        : Qt.rgba(0, 0, 0, 0.12)
 
                                     Grid {
                                         anchors {
@@ -1644,7 +1494,7 @@ PanelWindow {
                             }
                         }
 
-                        LiquidGlassSurface {
+                        Rectangle {
                             id: folderDialog
                             // The dialog is a true square whose side follows 80% of
                             // launcher height (or capped in fullscreen).
@@ -1656,12 +1506,13 @@ PanelWindow {
                             opacity: root.folderDialogOpen ? 1 : 0
                             scale: root.folderDialogOpen ? 1 : 0.85
                             radius: 22
-                            // Translucent over the launcher's blur region: the folder
-                            // reads as liquid glass rising out of the wallpaper, with
-                            // the material's top reflection and inset edge lines.
-                            baseColor: root.isDark ? Qt.rgba(0.06, 0.07, 0.10, 0.55) : Qt.rgba(0.95, 0.95, 0.97, 0.65)
-                            surfaceOpacity: 0.98
-                            materialDepth: 1.2
+                            // KWin supplies the glass; QML only defines dialog geometry
+                            // and a minimal edge for pointer and text affordance.
+                            color: "transparent"
+                            border.width: 1
+                            border.color: root.isDark
+                                ? Qt.rgba(1, 1, 1, 0.16)
+                                : Qt.rgba(0, 0, 0, 0.14)
 
                             Behavior on opacity {
                                 NumberAnimation {

@@ -78,22 +78,6 @@ PanelWindow {
         opacity: hide.barOpacity
         visible: root.barEnabled && hide.revealProgress > 0.001
 
-        LiquidGlassSurface {
-            id: barGlassBackground
-            anchors.fill: parent
-            radius: (AppearanceConfigService.barLayoutMode === "floating") ? 12 : 0
-            visible: true
-            baseColor: ThemeService.backgroundColor
-            surfaceOpacity: 1.0
-            blurStrength: AppearanceConfigService.effectiveBarBlur
-            liquidStrength: AppearanceConfigService.effectiveBarLiquid
-            ambientPrimary: WallpaperPaletteService.primary
-            ambientSecondary: WallpaperPaletteService.secondary
-            ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-            border.width: 1
-            border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
-        }
-
         HoverHandler {
             id: contentHoverHandler
         }

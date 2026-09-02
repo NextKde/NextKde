@@ -3,7 +3,9 @@
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDir>
@@ -36,6 +38,11 @@ constexpr auto kGnomeFilesMime = "x-special/gnome-copied-files";
 
 QString runtimeSocketPath()
 {
+    // KOS_PLATFORM_SOCKET lets a development daemon listen beside the
+    // installed one (see kosctl dev); the installed layout never sets it.
+    const QString overridePath = qEnvironmentVariable("KOS_PLATFORM_SOCKET");
+    if (!overridePath.isEmpty())
+        return overridePath;
     const QString runtime = qEnvironmentVariable("XDG_RUNTIME_DIR");
     if (!runtime.isEmpty())
         return runtime + QStringLiteral("/kos-platform.sock");
@@ -297,8 +304,16 @@ QJsonObject parseNetworkScan(const QByteArray &output, int exitCode)
                              {QStringLiteral("secured"), !fields.mid(3).join(QStringLiteral(":")).trimmed().isEmpty()},
                              {QStringLiteral("enterprise"), fields.mid(3).join(QStringLiteral(":")).contains(QStringLiteral("802.1x"), Qt::CaseInsensitive)},
                              {QStringLiteral("active"), fields.value(0).trimmed() == QStringLiteral("*")}};
-            if (!bySsid.contains(ssid) || item.value(QStringLiteral("signalStrength")).toInt()
-                    > bySsid.value(ssid).value(QStringLiteral("signalStrength")).toInt())
+            const QJsonObject existing = bySsid.value(ssid);
+            const int existingSignal = existing.value(QStringLiteral("signalStrength")).toInt();
+            const bool replace = !bySsid.contains(ssid)
+                || item.value(QStringLiteral("signalStrength")).toInt() > existingSignal
+                // Multiple APs may advertise one SSID at exactly the same
+                // strength. Preserve the associated BSSID in that tie so the
+                // Shell keeps its connected checkmark after de-duplication.
+                || (item.value(QStringLiteral("active")).toBool()
+                    && !existing.value(QStringLiteral("active")).toBool());
+            if (replace)
                 bySsid.insert(ssid, item);
         }
         QList<QJsonObject> sorted;
@@ -364,11 +379,14 @@ QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
 QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
 {
     const QString text = QString::fromUtf8(output);
+    const QStringList sections = text.split(QChar(0x1e));
+    const QString controller = sections.value(0);
+    const QString deviceList = sections.size() > 1 ? sections.value(1) : text;
     const QRegularExpression powered(QStringLiteral("Powered:\\s*(yes|no)"),
                                      QRegularExpression::CaseInsensitiveOption);
-    const auto powerMatch = powered.match(text);
+    const auto powerMatch = powered.match(controller);
     QJsonArray devices;
-    for (const QString &line : text.split(QChar('\n'), Qt::SkipEmptyParts)) {
+    for (const QString &line : deviceList.split(QChar('\n'), Qt::SkipEmptyParts)) {
         const auto match = QRegularExpression(QStringLiteral("^Device\\s+(\\S+)\\s+(.+)$")).match(line.trimmed());
         if (match.hasMatch())
             devices.append(QJsonObject{{QStringLiteral("address"), match.captured(1)},
@@ -379,6 +397,31 @@ QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
     return QJsonObject{{QStringLiteral("available"), exitCode == 0 && powerMatch.hasMatch()},
                        {QStringLiteral("powered"), powerMatch.hasMatch() && powerMatch.captured(1).toLower() == QStringLiteral("yes")},
                        {QStringLiteral("devices"), devices}};
+}
+
+QJsonObject readSysfsBrightness()
+{
+    const QDir backlights(QStringLiteral("/sys/class/backlight"));
+    const QFileInfoList entries = backlights.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
+                                                           QDir::Name);
+    for (const QFileInfo &entry : entries) {
+        QFile currentFile(entry.filePath() + QStringLiteral("/brightness"));
+        QFile maximumFile(entry.filePath() + QStringLiteral("/max_brightness"));
+        if (!currentFile.open(QIODevice::ReadOnly) || !maximumFile.open(QIODevice::ReadOnly))
+            continue;
+        bool currentOk = false;
+        bool maximumOk = false;
+        const int current = QString::fromUtf8(currentFile.readAll()).trimmed().toInt(&currentOk);
+        const int maximum = QString::fromUtf8(maximumFile.readAll()).trimmed().toInt(&maximumOk);
+        if (!currentOk || !maximumOk || maximum <= 0)
+            continue;
+        return QJsonObject{{QStringLiteral("available"), true},
+                           {QStringLiteral("percent"), qRound(qBound(0.0,
+                               current * 100.0 / maximum, 100.0))},
+                           {QStringLiteral("device"), entry.fileName()},
+                           {QStringLiteral("maximum"), maximum}};
+    }
+    return QJsonObject{{QStringLiteral("available"), false}};
 }
 
 QJsonObject parseBrightness(const QByteArray &output, int exitCode)
@@ -636,6 +679,8 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 {
+    if (event.value(QStringLiteral("type")).toString() == QStringLiteral("snapshot"))
+        m_latestWindowSnapshot = event;
     for (auto *socket : std::as_const(m_windowSubscribers))
         sendEvent(socket, event);
 }
@@ -644,12 +689,13 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
                                 const QString &program, const QStringList &arguments,
                                 std::function<QJsonObject(const QByteArray &, int)> parser)
 {
+    const QPointer<QLocalSocket> guardedSocket(socket);
     auto *process = new QProcess(this);
     process->setProgram(program);
     process->setArguments(arguments);
     const auto replied = std::make_shared<bool>(false);
     connect(process, &QProcess::finished, this,
-            [this, socket, request, process, parser, replied](int exitCode,
+            [this, guardedSocket, request, process, parser, replied](int exitCode,
                                                       QProcess::ExitStatus) {
         if (*replied)
             return;
@@ -657,21 +703,21 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
         const QByteArray output = process->readAllStandardOutput();
         const QByteArray error = process->readAllStandardError();
         if (exitCode == 0) {
-            respond(socket, request, true,
+            respond(guardedSocket.data(), request, true,
                     parser ? parser(output, exitCode) : parseOutput(output, exitCode));
         } else {
             Q_UNUSED(error);
-            respond(socket, request, false, {}, QStringLiteral("command-failed"),
+            respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
                     QStringLiteral("平台命令执行失败"), true);
         }
         process->deleteLater();
     });
     connect(process, &QProcess::errorOccurred, this,
-            [this, socket, request, process, replied](QProcess::ProcessError) {
+            [this, guardedSocket, request, process, replied](QProcess::ProcessError) {
         if (*replied)
             return;
         *replied = true;
-        respond(socket, request, false, {}, QStringLiteral("command-unavailable"),
+        respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
                 QStringLiteral("平台命令不可用"), true);
         process->deleteLater();
     });
@@ -754,6 +800,56 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
         devices->start();
     });
     general->start();
+}
+
+void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
+{
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    auto *show = new QProcess(this);
+    show->setProgram(QStringLiteral("bluetoothctl"));
+    show->setArguments({QStringLiteral("show")});
+    connect(show, &QProcess::finished, this,
+            [this, guardedSocket, request, show](int showExit, QProcess::ExitStatus) {
+        const QByteArray controller = show->readAllStandardOutput();
+        show->deleteLater();
+        if (showExit != 0) {
+            respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
+                    QStringLiteral("无法读取蓝牙状态"), true);
+            return;
+        }
+        auto *devices = new QProcess(this);
+        devices->setProgram(QStringLiteral("bluetoothctl"));
+        devices->setArguments({QStringLiteral("devices")});
+        connect(devices, &QProcess::finished, this,
+                [this, guardedSocket, request, controller, devices](int devicesExit,
+                                                                       QProcess::ExitStatus) {
+            const QByteArray deviceList = devices->readAllStandardOutput();
+            devices->deleteLater();
+            if (devicesExit != 0) {
+                respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
+                        QStringLiteral("无法读取蓝牙设备"), true);
+                return;
+            }
+            QByteArray output = controller;
+            output.append('\x1e');
+            output.append(deviceList);
+            respond(guardedSocket.data(), request, true, parseBluetooth(output, 0));
+        });
+        connect(devices, &QProcess::errorOccurred, this,
+                [this, guardedSocket, request, devices](QProcess::ProcessError) {
+            respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
+                    QStringLiteral("蓝牙服务不可用"), true);
+            devices->deleteLater();
+        });
+        devices->start();
+    });
+    connect(show, &QProcess::errorOccurred, this,
+            [this, guardedSocket, request, show](QProcess::ProcessError) {
+        respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
+                QStringLiteral("蓝牙服务不可用"), true);
+        show->deleteLater();
+    });
+    show->start();
 }
 
 void PlatformServer::startClipboardHistoryWatcher(QProcess *&watcher,
@@ -1413,6 +1509,11 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
     if (op == QStringLiteral("kwin.subscribe")) {
         m_windowSubscribers.insert(socket);
         respond(socket, request, true, QJsonObject{{QStringLiteral("subscribed"), true}});
+        // A subscriber commonly appears after a Shell reload. KWin emits
+        // snapshots only on state changes, so replay the cached authoritative
+        // state now instead of leaving the Dock empty until the next change.
+        if (!m_latestWindowSnapshot.isEmpty())
+            sendEvent(socket, m_latestWindowSnapshot);
         return true;
     }
     if (op == QStringLiteral("kwin.command")) {
@@ -1712,7 +1813,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("bluetooth.list")) {
-        runCommand(socket, request, QStringLiteral("bluetoothctl"), {QStringLiteral("devices")}, parseBluetooth);
+        runBluetoothList(socket, request);
         return true;
     }
     if (op == QStringLiteral("bluetooth.connect") || op == QStringLiteral("bluetooth.disconnect")) {
@@ -1748,24 +1849,39 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("display.brightness.get")) {
         const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
-        if (brightnessctl.isEmpty()) {
-            respond(socket, request, false, {}, QStringLiteral("brightness-unavailable"),
-                    QStringLiteral("亮度控制不可用"), false);
-            return true;
-        }
-        runCommand(socket, request, brightnessctl, {QStringLiteral("-m")}, parseBrightness);
+        if (!brightnessctl.isEmpty())
+            runCommand(socket, request, brightnessctl, {QStringLiteral("-m")}, parseBrightness);
+        else
+            respond(socket, request, true, readSysfsBrightness());
         return true;
     }
     if (op == QStringLiteral("display.brightness.set")) {
         const int value = qBound(0, payload.value(QStringLiteral("percent")).toInt(), 100);
         const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
-        if (brightnessctl.isEmpty()) {
+        if (!brightnessctl.isEmpty()) {
+            runCommand(socket, request, brightnessctl,
+                       {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
+            return true;
+        }
+        const QJsonObject backlight = readSysfsBrightness();
+        if (!backlight.value(QStringLiteral("available")).toBool()) {
             respond(socket, request, false, {}, QStringLiteral("brightness-unavailable"),
                     QStringLiteral("亮度控制不可用"), false);
             return true;
         }
-        runCommand(socket, request, brightnessctl,
-                   {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
+        const quint32 rawValue = qRound(value * backlight.value(QStringLiteral("maximum")).toInt() / 100.0);
+        QDBusInterface session(QStringLiteral("org.freedesktop.login1"),
+                               QStringLiteral("/org/freedesktop/login1/session/auto"),
+                               QStringLiteral("org.freedesktop.login1.Session"),
+                               QDBusConnection::systemBus());
+        const QDBusMessage reply = session.call(QStringLiteral("SetBrightness"),
+                                                QStringLiteral("backlight"),
+                                                backlight.value(QStringLiteral("device")).toString(), rawValue);
+        if (reply.type() == QDBusMessage::ErrorMessage)
+            respond(socket, request, false, {}, QStringLiteral("brightness-set-failed"),
+                    QStringLiteral("无法设置显示亮度"), true);
+        else
+            respond(socket, request, true, QJsonObject{{QStringLiteral("percent"), value}});
         return true;
     }
     if (op == QStringLiteral("theme.reconfigure")) {

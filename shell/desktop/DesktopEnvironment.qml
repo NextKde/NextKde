@@ -26,11 +26,6 @@ Item {
         }
     }
 
-    Component {
-        id: integratedSideClock
-        SideDockClockStatus {}
-    }
-
     // Theme watching is non-visual and only loads a tiny FileView. The
     // AppLauncher and its icon grid remain lazy.
     Component.onCompleted: IconThemeReloadService.initialize()
@@ -49,6 +44,8 @@ Item {
                 ? ConfigService.iconMode : "color"
             const visibilityMode = ConfigService.isValidVisibilityMode(ConfigService.visibilityMode)
                 ? ConfigService.visibilityMode : "always"
+            const windowGrouping = ConfigService.isValidWindowGrouping(ConfigService.windowGrouping)
+                ? ConfigService.windowGrouping : "grouped"
             return JSON.stringify({
                 baseHeight: ConfigService.baseHeight,
                 theme: theme,
@@ -57,6 +54,7 @@ Item {
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
                 visibilityMode,
+                windowGrouping,
             })
         }
 
@@ -92,6 +90,11 @@ Item {
 
         function updateVisibilityMode(mode: string): string {
             ConfigService.updateVisibilityMode(mode)
+            return snapshot()
+        }
+
+        function updateWindowGrouping(mode: string): string {
+            ConfigService.updateWindowGrouping(mode)
             return snapshot()
         }
 
@@ -265,9 +268,6 @@ Item {
     Dock {
         clockInInfoCarousel: shell.barIntegratedWithDock
             && ConfigService.position === "bottom"
-        leadingAccessory: shell.barIntegratedWithDock
-            && ConfigService.position !== "bottom"
-            ? integratedSideClock : null
         trailingAccessory: shell.barIntegratedWithDock
             ? integratedBarStatus : null
     }

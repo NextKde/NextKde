@@ -28,6 +28,23 @@ Item {
     // KWin's real internal UUID, kept separate from WindowService's synthetic
     // windowId used by Dock actions and previews.
     property string animationWindowId: ""
+    // The icon provider URL deliberately stays stable across KDE theme
+    // changes (for example, `image://icon/kate`). Recreate only the image
+    // renderer after a theme revision so that stable URL is requested again;
+    // the Dock's task Repeater and window model remain intact.
+    property bool _iconRendererActive: true
+    property Timer _iconRendererReloadTimer: Timer {
+        interval: 0
+        repeat: false
+        onTriggered: icon._iconRendererActive = true
+    }
+    property Connections _iconThemeConnections: Connections {
+        target: IconThemeReloadService
+        function onRevisionChanged() {
+            icon._iconRendererActive = false
+            icon._iconRendererReloadTimer.restart()
+        }
+    }
     // The owning DockWindow supplies its real layer-surface origin. QWindow's
     // mapToGlobal is not reliable for layer-shell surfaces on Wayland,
     // especially when the Dock lives on a non-primary output.
@@ -157,7 +174,7 @@ Item {
     }
 
     // KWin's private KOS Effect consumes compositor-global icon rectangles.
-    // The target uses the stable slot centre rather than iconImage's hover
+    // The target uses the stable slot centre rather than the renderer's hover
     // scale/lift. Ancestor transforms still preserve the Dock's live hide and
     // surface scale, while minimize/restore now share one exact centre.
     function windowAnimationTarget() {
@@ -169,11 +186,11 @@ Item {
         const topLeft = slotParent
             ? slotParent.mapToItem(null, centerX - icon.iconSize / 2,
                                    centerY - icon.iconSize / 2)
-            : iconImage.mapToItem(null, 0, 0)
+            : iconRenderer.mapToItem(null, 0, 0)
         const bottomRight = slotParent
             ? slotParent.mapToItem(null, centerX + icon.iconSize / 2,
                                    centerY + icon.iconSize / 2)
-            : iconImage.mapToItem(null, iconImage.width, iconImage.height)
+            : iconRenderer.mapToItem(null, iconRenderer.width, iconRenderer.height)
         const left = icon.surfaceOriginX
             + Math.min(topLeft.x, bottomRight.x)
         const top = icon.surfaceOriginY
@@ -238,7 +255,7 @@ Item {
     property real _attentionLift: 0
     property real _attentionGlow: 0
     scale: _targetScale * _attentionScale
-    // The icon artwork is cached in `iconImage`/`GlassText` below instead of
+    // The icon artwork is cached in `iconRenderer`/`GlassText` below instead of
     // on this whole item: an offscreen texture is sized to the item's bounds
     // and clips overflow, which would hide the running/status indicators
     // that deliberately extend past the icon edge.
@@ -286,7 +303,6 @@ Item {
     }
     readonly property bool _hasWindows: _appWindows.length > 0
     readonly property string _previewWindowId: _hasWindows ? _appWindows[0].windowId : (icon.windowId || "")
-    readonly property int _effectiveWindowCount: _hasWindows ? _appWindows.length : (icon.isRunning ? 1 : 0)
 
     Behavior on scale {
         NumberAnimation {
@@ -452,34 +468,31 @@ Item {
         easing.type: DockAnimation.elementExitEasing
     }
 
-    AppIcon {
-        id: iconImage
+    Loader {
+        id: iconRenderer
         width: icon.iconSize
         height: icon.iconSize
         anchors.centerIn: parent
-        source: icon.iconSource || ""
-        // A newly opened window has no previous Dock texture to retain. Decode
-        // this small themed icon before its first frame instead of exposing an
-        // empty Image/ShaderEffect while several windows arrive together.
-        asynchronous: false
+        active: icon._iconRendererActive
         visible: !icon.glyph
-        rotation: icon.vertical ? -90 : 0
-        transformOrigin: Item.Center
-        // Cache the icon bitmap so scale animations (hover, attention pulse)
-        // transform a cached texture instead of re-rasterizing the image on
-        // the main thread (measured 100% CPU under the heaviest scale
-        // animation; 4.8% with the layer enabled). Only the artwork itself
-        // is layered: the texture is sized to this item's bounds, so caching
-        // the whole DockIcon would clip the indicators past its edges.
-        layer.enabled: true
-        layer.smooth: true
-
-        // Icon appearance style from ConfigService
-        opacityMultiplier: ConfigService.iconMode === "color"
-            ? 1.0 : ConfigService.iconOpacity
-        saturation: ConfigService.iconSaturation
-        tintEnabled: ConfigService.iconTintEnabled
-        tintColor: ConfigService.iconTintColor
+        sourceComponent: Component {
+            AppIcon {
+                width: icon.iconSize
+                height: icon.iconSize
+                source: icon.iconSource || ""
+                // A newly opened window has no previous Dock texture to retain.
+                asynchronous: false
+                rotation: icon.vertical ? -90 : 0
+                transformOrigin: Item.Center
+                layer.enabled: true
+                layer.smooth: true
+                opacityMultiplier: ConfigService.iconMode === "color"
+                    ? 1.0 : ConfigService.iconOpacity
+                saturation: ConfigService.iconSaturation
+                tintEnabled: ConfigService.iconTintEnabled
+                tintColor: ConfigService.iconTintColor
+            }
+        }
     }
 
     Rectangle {
@@ -497,52 +510,29 @@ Item {
         }
     }
 
-    // Style-driven running indicator: macOS uses dots (single dot for 1 window,
-    // multi-dot for multiple windows), Windows a longer underline, and Material a shorter tonal pill.
-    Item {
+    // Keep the fixed-size indicator used by the previous main branch. A row
+    // of per-window dots expands after the side Dock rotates its content and
+    // can visibly escape the icon slot on left/right edges.
+    Rectangle {
         id: runningIndicator
-        width: indicatorRow.implicitWidth
+        width: icon.runningIndicatorWidth
         height: icon.runningIndicatorHeight
+        radius: width / 2
+        color: icon.dotIndicator ? Qt.rgba(1, 1, 1, 0.95)
+            : ThemeService.accentColor
         opacity: icon.isRunning ? 1 : 0
         visible: opacity > 0.01
         z: 2
-        anchors.horizontalCenter: iconImage.horizontalCenter
+        anchors.horizontalCenter: iconRenderer.horizontalCenter
         anchors.top: icon.vertical && icon.dockEdge === "right"
-            ? undefined : iconImage.bottom
+            ? undefined : iconRenderer.bottom
         anchors.bottom: icon.vertical && icon.dockEdge === "right"
-            ? iconImage.top : undefined
+            ? iconRenderer.top : undefined
         anchors.topMargin: icon.runningIndicatorGap
         anchors.bottomMargin: icon.runningIndicatorGap
 
         Behavior on opacity {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-        }
-
-        Row {
-            id: indicatorRow
-            anchors.centerIn: parent
-            spacing: icon._effectiveWindowCount >= 3 ? 2 : 2.5
-
-            Repeater {
-                model: icon.dotIndicator
-                    ? Math.min(3, Math.max(1, icon._effectiveWindowCount))
-                    : 1
-                delegate: Rectangle {
-                    required property int index
-                    readonly property real dotSize: icon._effectiveWindowCount >= 3
-                        ? Math.max(3, icon.runningIndicatorWidth * 0.82)
-                        : icon.runningIndicatorWidth
-                    width: icon.dotIndicator ? dotSize : icon.runningIndicatorWidth
-                    height: icon.dotIndicator ? dotSize : icon.runningIndicatorHeight
-                    radius: width / 2
-                    color: icon.dotIndicator ? Qt.rgba(1, 1, 1, 0.95)
-                        : ThemeService.accentColor
-                    border {
-                        width: 0
-                        color: Qt.rgba(0, 0, 0, 0.40)
-                    }
-                }
-            }
         }
     }
 

@@ -58,11 +58,88 @@ logging, and IPC code while preserving host boundaries that cannot be merged.
 ## State and installation
 
 `./tools/kosctl install` installs user-owned products under `~/.local`, copies
-the shell to `~/.config/quickshell/kos`, and enables the two systemd user units.
-The data service keeps its existing state root under
+the shell to `~/.config/quickshell/kos`, and enables the systemd user units for
+the next session without disturbing the running one. It never touches the
+running session: no service restart, no KWin effect hot-load, and kwinrc is
+written with `--notify false` so the running compositor is not signalled. The
+install prompt tells the user to log out/in (or reboot) to apply, with
+`./tools/kosctl start` as the opt-in way to apply immediately. `./tools/kosctl
+start` restarts the units (KWin effects are only persisted to kwinrc and load
+on the next KWin/session start, and manually launched shell instances are
+adopted). `./tools/kosctl sync` copies QML-only edits into the installed config
+without hot-reloading (the installed shell runs with its file watcher disabled
+so a copy in progress can never trigger a half-written reload), and
+`./tools/kosctl dev` runs platform, data service, and shell from the source
+tree on dedicated sockets beside the installed services. Every launch mode
+shares one pinned state directory (`$XDG_STATE_HOME/quickshell/kos`), so user
+data such as dock pins and launcher icons is independent of how the shell was
+started. The data service keeps its existing state root under
 `$XDG_STATE_HOME/quickshell/shell-data-service` so an architecture migration
 does not erase preferences or history. `kosctl uninstall` removes binaries,
-units, and shell files but leaves that state directory intact.
+units, and shell files but leaves those state directories intact.
+
+### systemd user units
+
+Installation registers three `systemd --user` units, generated from
+`packaging/systemd/` into `~/.config/systemd/user/`. All three are
+`PartOf=graphical-session.target` (so logout stops them cleanly) and
+`WantedBy=graphical-session.target` (so each login starts them again —
+`default.target` would only start them once at boot).
+
+| Unit | Description | ExecStart |
+| --- | --- | --- |
+| `kos-shell.service` | Quickshell desktop shell: the dock, launcher, bar, notifications, and every visual surface. `--no-duplicate` exits if an instance is already running; `-c kos` loads `~/.config/quickshell/kos`. `KillMode=mixed` stops only the main `qs` process so desktop apps it launched via `QProcess::startDetached()` survive a restart, and `QS_DISABLE_FILE_WATCHER=1` disables hot-reload of the installed config. | `/usr/bin/qs --no-duplicate -c kos` |
+| `kos-platform.service` | C++ platform daemon: KWin bridge, live window events, thumbnails, and privileged host adapters. Loads the bridge QtScript from `~/.local/share/kos/platform/kwin/window-bridge.js`. | `~/.local/libexec/kos-platform daemon` |
+| `kos-data.service` | Go data daemon: telemetry, activity ledger, and desktop-directory snapshots served on `$XDG_RUNTIME_DIR/kos-data.sock`. | `~/.local/libexec/kos-data-service` |
+
+The shell requires the platform daemon (`Requires=kos-platform.service`) and
+wants the data daemon (`Wants=kos-data.service`). All three wait on
+`plasma-kwin_wayland.service` because Plasma marks `graphical-session.target`
+active before the Wayland socket is ready; starting earlier aborts with
+`could not connect to display`. Inspect them with
+`systemctl --user status kos-shell kos-platform kos-data` and
+`journalctl --user -u kos-shell.service -f`.
+
+### Optional application contract
+
+Applications are optional companions, not dependencies of the Quickshell
+desktop path. When an application platform has a top-level CMake build, every
+application option must default to `OFF`; its documented build preset or
+command enables only the requested application and its direct dependencies.
+Building, installing, or running the Shell must neither build nor install an
+optional application.
+
+An application-owned service must be activated on demand by that application
+or through D-Bus activation. It must not install a session autostart entry by
+default. This keeps calendar, todo, music, and similar future applications from
+creating resident processes for Shell-only users.
+
+Optional services are enhancements, never a single point of failure for an
+existing Shell feature. If a Shell surface consumes optional service data, it
+must retain a local, documented fallback. In particular, weather surfaces must
+continue to use the existing keyless Open-Meteo request/cache path whenever the
+shared weather service is not installed, unavailable, or returns an invalid
+snapshot.
+
+`apps/settings/` is the first application. The desktop top-bar gear only
+starts its process through `DesktopAppLauncher`; it never loads Settings UI
+into the Quickshell process.
+
+## Code-review rules
+
+Shell QML and Settings must not directly execute desktop-integration or
+system-control commands, or access desktop integration APIs. Reject changes
+that invoke `qdbus6`, `kwriteconfig6`, `nmcli`, `wpctl`, `bluetoothctl`,
+`systemctl`, `gio`, or similar host commands from QML. Add a bounded, versioned operation to
+`shared/contracts/platform.v1.md` and implement it in `kos-platform`; use
+`PlatformClient.qml` from Shell QML and an `IpcHandler` endpoint from Settings.
+The review must also cover the unavailable-daemon path and document the user
+visible fallback or retry behavior.
+
+Existing atomic writes of a module's own configuration under
+`Quickshell.stateDir` are a narrow legacy exception, not a pattern for new
+desktop integration. Keep them local to configuration persistence and plan
+their service-owned replacement separately.
 
 ## Change strategy
 

@@ -229,6 +229,15 @@ QtObject {
         return true
     }
 
+    function updateWindowGrouping(rawMode) {
+        const nextMode = String(rawMode)
+        if (!isValidWindowGrouping(nextMode) || windowGrouping === nextMode)
+            return false
+        windowGrouping = nextMode
+        scheduleSave()
+        return true
+    }
+
 
     // ═══════════════════════════════════════════════════════════
     // Dock item model — Phase 1 persistence API

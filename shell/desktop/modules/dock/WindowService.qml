@@ -268,13 +268,15 @@ QtObject {
             } : source;
             const old = _findOldRecord(toplevel, provider, handleId);
             const identity = AppIdentityService.resolve(toplevel.appId);
-            // Presentation owns every icon lookup so Dock, QuickSearch,
-            // notifications and AppLauncher render the exact same source,
-            // and the icon engine picks a size-appropriate asset. The KWin
-            // bridge's themed path is only a fallback for icon names that
-            // Quickshell's own theme lookup cannot resolve.
-            const iconSource = useKwin && !identity.iconSource && source.iconPath
-                ? "file://" + source.iconPath : identity.iconSource;
+            // A user-selected icon is part of the app presentation contract
+            // and must win over every provider-derived value. Otherwise use
+            // KWin's absolute icon file for live tasks: resolving a themed
+            // image://icon URL in a Dock Repeater can enter KF6's icon engine
+            // during delegate creation and crash on some theme/Qt versions.
+            const iconSource = identity.hasIconOverride
+                ? identity.iconSource
+                : (useKwin && source.iconPath
+                   ? "file://" + source.iconPath : identity.iconSource);
             // zwlr-foreign-toplevel does not require an urgency field, so
             // read it defensively. KWin's bridge always provides `urgent`.
             let foreignUrgent = false;

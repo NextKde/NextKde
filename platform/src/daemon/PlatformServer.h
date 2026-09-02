@@ -37,6 +37,7 @@ private:
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {});
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
+    void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
     QString operation(const QJsonObject &request) const;
@@ -56,6 +57,10 @@ private:
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;
     QSet<QLocalSocket *> m_windowSubscribers;
+    // A Shell can reconnect after Quickshell reloads while KWin has no new
+    // window event to broadcast. Retain the authoritative last snapshot so a
+    // new subscriber never has to wait for unrelated window activity.
+    QJsonObject m_latestWindowSnapshot;
     QProcess *m_textHistoryWatcher = nullptr;
     QProcess *m_imageHistoryWatcher = nullptr;
     bool m_watchImages = true;

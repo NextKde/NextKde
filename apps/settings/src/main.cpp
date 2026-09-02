@@ -47,6 +47,10 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updateVisibilityMode"), mode}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockWindowGrouping(const QString &mode) {
+        return snapshotFromReply(callDock({QStringLiteral("updateWindowGrouping"), mode}));
+    }
+
     Q_INVOKABLE QVariantMap appearanceSnapshot() {
         return appearanceSnapshotFromReply(callAppearance({QStringLiteral("snapshot")}));
     }
@@ -168,7 +172,8 @@ private:
         }
 
         const QJsonObject object = document.object();
-        if (!object.contains(QStringLiteral("baseHeight"))) {
+        if (!object.contains(QStringLiteral("baseHeight"))
+                || !object.contains(QStringLiteral("windowGrouping"))) {
             setLastError(QStringLiteral("桌面环境返回的 Dock 配置不完整"));
             return {};
         }
@@ -180,7 +185,9 @@ private:
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
-            {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},};
+            {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},
+            {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
+        };
     }
 
     QVariantMap appearanceSnapshotFromReply(const QString &payload) {
