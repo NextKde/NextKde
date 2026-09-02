@@ -147,14 +147,14 @@ qs -p "$PWD/shell"
 QSG_RENDER_LOOP=basic ./tools/kosctl dev
 ```
 
-若还要调试设置中心，在第二个终端用同一个源码 Shell 启动它：
+从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
 
 ```sh
 KOS_SHELL_DIR="$PWD/shell" kos-settings
 ```
 
-不要把 `-c` 与 `-p` 一起传给 `qs`；两者互斥。直接用 `qs -p` 启动时，
-菜单里的设置中心仍会连接已安装的 Shell，因而不会反映当前源码会话。
+不要把 `-c` 与 `-p` 一起传给 `qs`；两者互斥。应用菜单单独打开的设置中心仍会连接安装版
+Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令。
 
 修改 QML 后应用到已安装版本：
 

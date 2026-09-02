@@ -151,16 +151,16 @@ one terminal and leave it running; press `Ctrl+C` to stop it:
 QSG_RENDER_LOOP=basic ./tools/kosctl dev
 ```
 
-To debug the Settings app too, launch it from a second terminal against that
-same source Shell:
+Settings opened from the source Shell's gear automatically targets that same
+source session. You can also launch it manually from a second terminal:
 
 ```sh
 KOS_SHELL_DIR="$PWD/shell" kos-settings
 ```
 
 Do not combine `qs -c` and `qs -p`: they are mutually exclusive. A Settings
-app opened from the desktop menu still targets the installed Shell, not the
-source-tree session.
+app opened separately from the desktop menu still targets the installed Shell;
+use the source Shell's gear or the command above while debugging.
 
 Apply QML-only changes to an installed copy:
 
