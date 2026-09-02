@@ -18,7 +18,7 @@
       in {
         inherit kos-desktop;
         inherit (kos-desktop.passthru)
-          shell-data-service kwin-window-bridge kos-settings kos-platform
+          shell-data-service kos-settings kos-platform
           kwin-dock-window-animation kwin-context-menu-input kwin-effects-glass;
         default = kos-desktop;
       };
@@ -32,6 +32,7 @@
         config = lib.mkIf config.services.kos.enable {
           environment.systemPackages = [
             self.packages.${system}.kos-desktop
+            self.packages.${system}.kos-settings
           ];
 
           # KWin plugins go to system-level path
