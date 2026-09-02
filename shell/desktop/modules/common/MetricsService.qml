@@ -63,7 +63,8 @@ QtObject {
                 sensors = Array.isArray(metrics.sensors) ? metrics.sensors : []
                 memoryHistory = normalized(metrics.history, sample => sample.memory)
                 cpuHistory = normalized(metrics.history, sample => sample.cpu)
-                frequencyHistory = normalized(metrics.history, sample => sample.frequency)
+                frequencyHistory = normalized(metrics.history, sample => sample.frequencyMhz,
+                                              0, Number.POSITIVE_INFINITY)
                 ready = true
             } else {
                 // The service has not been installed or written its first
@@ -73,17 +74,21 @@ QtObject {
         })
     }
 
-    // History samples older than one hour or outside 0..1 are dropped; the
-    // trend charts only need the recent window the service retains.
-    function normalized(history, pick) {
+    // History samples older than one hour or outside the requested range are
+    // dropped; ratio charts use the default 0..1 range and frequency passes
+    // its native MHz range explicitly.
+    function normalized(history, pick, minimum, maximum) {
         const cutoff = Date.now() - 60 * 60 * 1000
         const result = []
         const samples = Array.isArray(history) ? history : []
+        const lowerBound = minimum ?? 0
+        const upperBound = maximum ?? 1
         for (let i = 0; i < samples.length; i++) {
             const sample = samples[i]
             const at = Number(sample?.at ?? 0)
             const value = Number(sample ? pick(sample) : 0)
-            if (at >= cutoff && Number.isFinite(value) && value >= 0 && value <= 1)
+            if (at >= cutoff && Number.isFinite(value)
+                    && value >= lowerBound && value <= upperBound)
                 result.push({ time: at, value: value })
         }
         return result
