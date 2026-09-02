@@ -14,7 +14,6 @@
       packages.${system} = let
         kos-desktop = pkgs.callPackage ./nix/package.nix {
           src = ./.;
-          quickshell = pkgs.kdePackages.quickshell;
         };
       in {
         inherit kos-desktop;
