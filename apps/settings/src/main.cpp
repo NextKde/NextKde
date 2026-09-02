@@ -7,6 +7,7 @@
 #include <QQmlContext>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QThread>
 #include <QVariantMap>
 
 class SettingsBridge final : public QObject {
@@ -306,28 +307,38 @@ private:
 
     QString callShell(const QString &target, const QStringList &arguments,
                       const QString &fallbackError) {
-        QProcess process;
-        QStringList command{QStringLiteral("--path"), shellDirectory(),
-                            QStringLiteral("ipc"), QStringLiteral("call"),
-                            target};
-        command.append(arguments);
-        process.start(QStringLiteral("quickshell"), command);
-        if (!process.waitForStarted(1500)) {
-            setLastError(QStringLiteral("无法连接桌面环境"));
-            return {};
+        const QString shellPath = shellDirectory();
+        QString failure;
+        // The Shell can still be registering IPC targets during the first
+        // moments of a development launch. Retry once instead of turning that
+        // brief race into a permanent, opaque Settings error.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            QProcess process;
+            QStringList command{QStringLiteral("--path"), shellPath,
+                                QStringLiteral("ipc"), QStringLiteral("call"),
+                                target};
+            command.append(arguments);
+            process.start(QStringLiteral("quickshell"), command);
+            if (!process.waitForStarted(1500)) {
+                failure = QStringLiteral("无法启动 Quickshell IPC");
+            } else if (!process.waitForFinished(5000)) {
+                process.kill();
+                process.waitForFinished();
+                failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+            } else if (process.exitStatus() == QProcess::NormalExit
+                       && process.exitCode() == 0) {
+                return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+            } else {
+                failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
+                if (failure.isEmpty())
+                    failure = fallbackError;
+            }
+            if (attempt == 0)
+                QThread::msleep(120);
         }
-        if (!process.waitForFinished(2500)) {
-            process.kill();
-            process.waitForFinished();
-            setLastError(QStringLiteral("桌面环境没有响应"));
-            return {};
-        }
-        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-            const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty() ? fallbackError : error);
-            return {};
-        }
-        return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+        setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
+                         .arg(failure, target, shellPath));
+        return {};
     }
 
     void setLastError(const QString &error) {
