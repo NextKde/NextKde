@@ -13,16 +13,17 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.weather
 
-// iPadOS-inspired desktop widgets. This is a Background layer: normal and
-// maximised application windows are always painted and interacted with above
-// it, and it reserves no usable desktop area.
+// iPadOS-inspired desktop widgets. Keep this in the Bottom layer so Plasma's
+// desktop surface cannot cover it when plasmashell starts after KOS. Normal and
+// maximised application windows remain above it, and it reserves no usable
+// desktop area.
 PanelWindow {
     id: root
 
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
-    WlrLayershell.layer: WlrLayer.Background
+    WlrLayershell.layer: WlrLayer.Bottom
     // A desktop needs shortcuts only after the user explicitly clicks it.
     // OnDemand keeps active applications' Ctrl+C/V untouched otherwise.
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
