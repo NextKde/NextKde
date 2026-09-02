@@ -134,11 +134,28 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 
 ## 开发与调试
 
-只想预览界面、不安装到系统：
+只想预览界面、不安装到系统（复用已安装的服务）：
 
 ```sh
 qs -p "$PWD/shell"
 ```
+
+调试源码 QML（保持运行，`Ctrl+C` 结束）：
+
+```sh
+./tools/kosctl dev
+```
+
+它只启动源码 QML，直接复用 systemd 的 `kos-platform.service` 和 `kos-data.service`；不会编译、部署、重启服务，也不会创建第二套 socket。
+
+从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
+
+```sh
+KOS_SHELL_DIR="$PWD/shell" kos-settings
+```
+
+不要把 `-c` 与 `-p` 一起传给 `qs`；两者互斥。应用菜单单独打开的设置中心仍会连接安装版
+Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令。
 
 修改 QML 后应用到已安装版本：
 

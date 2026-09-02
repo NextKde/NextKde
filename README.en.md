@@ -138,11 +138,33 @@ See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
 
 ## Development and debugging
 
-Preview the UI without installing it:
+Preview the UI without installing it (reuses installed services):
 
 ```sh
 qs -p "$PWD/shell"
 ```
+
+To debug source QML, run this in one terminal and leave it running; press
+`Ctrl+C` to stop it:
+
+```sh
+./tools/kosctl dev
+```
+
+It starts only the source QML and reuses systemd's `kos-platform.service` and
+`kos-data.service`. It does not build, deploy, restart services, or create a
+second socket pair.
+
+Settings opened from the source Shell's gear automatically targets that same
+source session. You can also launch it manually from a second terminal:
+
+```sh
+KOS_SHELL_DIR="$PWD/shell" kos-settings
+```
+
+Do not combine `qs -c` and `qs -p`: they are mutually exclusive. A Settings
+app opened separately from the desktop menu still targets the installed Shell;
+use the source Shell's gear or the command above while debugging.
 
 Apply QML-only changes to an installed copy:
 

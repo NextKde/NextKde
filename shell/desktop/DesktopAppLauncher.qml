@@ -15,7 +15,12 @@ QtObject {
     function openSettings() {
         Quickshell.execDetached([
             "sh", "-c",
-            "if [ -x \"$1\" ]; then exec \"$1\"; fi; "
+            // Settings talks back to its Shell over Quickshell IPC. Preserve
+            // the active Shell directory so a source-tree session opens a
+            // Settings window connected to that same session rather than the
+            // installed `kos` configuration.
+            "export KOS_SHELL_DIR=\"$4\"; "
+            + "if [ -x \"$1\" ]; then exec \"$1\"; fi; "
             + "if [ -x \"$2\" ]; then exec \"$2\"; fi; "
             + "if command -v kos-settings >/dev/null 2>&1; then exec kos-settings; fi; "
             + "if [ -x \"$HOME/.local/bin/kos-settings\" ]; then exec \"$HOME/.local/bin/kos-settings\"; fi; "
@@ -23,7 +28,8 @@ QtObject {
             "kos-settings-launch",
             launcher.settingsBinary,
             Quickshell.shellDir + "/../.build/apps/settings/kos-settings",
-            launcher.settingsEntrypoint
+            launcher.settingsEntrypoint,
+            Quickshell.shellDir
         ])
     }
 }

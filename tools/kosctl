@@ -319,65 +319,26 @@ sync_qml() {
     printf 'Synced shell QML to %s; run ./tools/kosctl start to apply it.\n' "$shell_config"
 }
 
-# dev — run the whole stack (platform, data service, shell) straight from the
-# source tree and build outputs, next to the installed session. The dev
-# daemons listen on dedicated sockets so they never touch the installed ones;
-# the dev shell only sees those sockets via environment variables. The KWin
-# bridge script is a single global registration, so the dev platform takes it
-# over and the installed shell stops receiving window events until the dev
-# stack exits and the installed services restart.
+# dev — run the source Shell against the normal systemd platform and data
+# services. It deliberately does not build, install, stop, or replace them;
+# all clients use the single standard runtime socket pair.
 dev_all() {
-    local dev_runtime="$build_dir/dev-runtime"
-    mkdir -p "$dev_runtime"
-    local -a env_overrides=(
-        KOS_PLATFORM_SOCKET="$dev_runtime/kos-platform.sock"
-        KOS_DATA_SOCKET="$dev_runtime/kos-data.sock"
-    )
-    if [[ ! -x "$build_dir/platform/kos-platform" ]]; then
-        echo "kos-platform is not built; run ./tools/kosctl build first" >&2
+    if [[ -z "$qs_bin" ]]; then
+        echo "Quickshell (qs) is required for dev mode" >&2
         return 1
     fi
-    if [[ ! -x "$build_dir/bin/kos-data-service" ]]; then
-        echo "kos-data-service is not built; run ./tools/kosctl build first" >&2
+    local runtime_dir=${XDG_RUNTIME_DIR:-/tmp}
+    local -a missing_sockets=()
+    [[ -S "$runtime_dir/kos-platform.sock" ]] || missing_sockets+=(kos-platform.service)
+    [[ -S "$runtime_dir/kos-data.sock" ]] || missing_sockets+=(kos-data.service)
+    if (( ${#missing_sockets[@]} > 0 )); then
+        printf 'Missing system service socket(s): %s\n' "${missing_sockets[*]}" >&2
+        printf 'Start them first: ./tools/kosctl start\n' >&2
         return 1
     fi
-
-    if [[ -n "$qs_bin" ]]; then
-        # A manual dev shell from a previous `dev` run would fight this one
-        # for the dev sockets and windows.
-        "$qs_bin" -c kos-dev kill >/dev/null 2>&1 || true
-    fi
-
-    printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
-    env "${env_overrides[@]}" \
-        KOS_PLATFORM_KWIN_SCRIPT="$project_dir/platform/kwin/window-bridge.js" \
-        "$build_dir/platform/kos-platform" daemon &
-    local platform_pid=$!
-
-    printf 'Starting dev data service (%s)\n' "$dev_runtime/kos-data.sock"
-    env "${env_overrides[@]}" \
-        "$build_dir/bin/kos-data-service" &
-    local data_pid=$!
-
-    cleanup_dev() {
-        kill "$platform_pid" "$data_pid" 2>/dev/null || true
-    }
-    trap cleanup_dev EXIT INT TERM
-
-    if [[ -n "$qs_bin" ]]; then
-        env "${env_overrides[@]}" \
-            "$qs_bin" -n -c kos-dev -p "$project_dir/shell"
-    else
-        printf 'warn Quickshell is unavailable; dev daemons are running without a shell\n' >&2
-        printf 'press Ctrl+C to stop the dev daemons\n'
-        while kill -0 "$platform_pid" 2>/dev/null \
-                && kill -0 "$data_pid" 2>/dev/null; do
-            sleep 1
-        done
-    fi
-    cleanup_dev
-    trap - EXIT INT TERM
-    printf 'Dev stack stopped. Run ./tools/kosctl start to hand the KWin bridge back to the installed services.\n'
+    "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
+    printf 'Starting source Shell with system platform and data services\n'
+    exec "$qs_bin" -p "$project_dir/shell"
 }
 
 remember_blur_state() {
