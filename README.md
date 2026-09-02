@@ -147,6 +147,8 @@ qs -p "$PWD/shell"
 QSG_RENDER_LOOP=basic ./tools/kosctl dev
 ```
 
+该命令会暂时暂停安装版 platform，让源码版接收 KWin 窗口事件；退出时会自动恢复。
+
 从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
 
 ```sh

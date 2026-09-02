@@ -320,14 +320,16 @@ sync_qml() {
 }
 
 # dev — run the whole stack (platform, data service, shell) straight from the
-# source tree and build outputs, next to the installed session. The dev
-# daemons listen on dedicated sockets so they never touch the installed ones;
-# the dev shell only sees those sockets via environment variables. The KWin
-# bridge script is a single global registration, so the dev platform takes it
-# over and the installed shell stops receiving window events until the dev
-# stack exits and the installed services restart.
+# source tree and build outputs. The dev daemons listen on dedicated sockets;
+# the dev shell only sees those sockets via environment variables. KWin has
+# one global window-event bridge, so the installed platform service is paused
+# while the development platform owns that bridge, then restored on exit.
 dev_all() {
     local dev_runtime="$build_dir/dev-runtime"
+    local resume_installed_platform=0
+    local platform_pid=""
+    local data_pid=""
+    local cleaned_up=0
     mkdir -p "$dev_runtime"
     local -a env_overrides=(
         KOS_PLATFORM_SOCKET="$dev_runtime/kos-platform.sock"
@@ -349,19 +351,36 @@ dev_all() {
         "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     fi
 
+    if command -v systemctl >/dev/null 2>&1 \
+            && systemctl --user is-active --quiet kos-platform.service; then
+        printf 'Pausing installed platform so dev receives KWin window events\n'
+        systemctl --user stop kos-platform.service
+        resume_installed_platform=1
+    fi
+
     printf 'Starting dev platform (%s)\n' "$dev_runtime/kos-platform.sock"
     env "${env_overrides[@]}" \
         KOS_PLATFORM_KWIN_SCRIPT="$project_dir/platform/kwin/window-bridge.js" \
         "$build_dir/platform/kos-platform" daemon &
-    local platform_pid=$!
+    platform_pid=$!
 
     printf 'Starting dev data service (%s)\n' "$dev_runtime/kos-data.sock"
     env "${env_overrides[@]}" \
         "$build_dir/bin/kos-data-service" &
-    local data_pid=$!
+    data_pid=$!
 
     cleanup_dev() {
-        kill "$platform_pid" "$data_pid" 2>/dev/null || true
+        (( cleaned_up )) && return
+        cleaned_up=1
+        [[ -n "$platform_pid" ]] && kill "$platform_pid" 2>/dev/null || true
+        [[ -n "$data_pid" ]] && kill "$data_pid" 2>/dev/null || true
+        [[ -n "$platform_pid" ]] && wait "$platform_pid" 2>/dev/null || true
+        [[ -n "$data_pid" ]] && wait "$data_pid" 2>/dev/null || true
+        if (( resume_installed_platform )); then
+            printf 'Restoring installed platform service\n'
+            systemctl --user start kos-platform.service || \
+                printf 'warn could not restore kos-platform.service; run ./tools/kosctl start\n' >&2
+        fi
     }
     trap cleanup_dev EXIT INT TERM
 
