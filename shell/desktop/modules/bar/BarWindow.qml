@@ -64,11 +64,11 @@ PanelWindow {
         RoundedBlurRegion {
             id: barBlurRegion
             item: barWrapper
-            // The floating Bar keeps a soft capsule corner equal to 40% of
+            // The floating Bar keeps a full capsule corner equal to 50% of
             // its height, so the curvature remains proportional when users
             // choose a different Bar size.
             radius: (AppearanceConfigService.barLayoutMode === "floating")
-                ? barWrapper.height * 0.4 : 0
+                ? barWrapper.height * 0.5 : 0
         }
     }
 
