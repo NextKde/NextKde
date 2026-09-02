@@ -25,7 +25,7 @@ Install equivalent packages on other distributions. See the
 ### 2. Clone the repository
 
 ```sh
-git clone git@gitee.com:xiaoyintx_ciallo/test.git
+git clone git@https://github.com/SuceV587/NextKde.git
 cd NextKde
 ```
 
@@ -102,15 +102,15 @@ and appearance preferences remains available for a later reinstall.
 
 ## Main features
 
-| Area | What it does |
-| --- | --- |
-| Desktop widgets | Shows a clock, weather forecast, calendar, CPU/memory/temperature, uptime, app usage, and media playback information. |
+| Area                      | What it does                                                                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop widgets           | Shows a clock, weather forecast, calendar, CPU/memory/temperature, uptime, app usage, and media playback information.                                                                       |
 | Floating dock and top bar | Shows pinned and running apps with window previews, launch animation, auto-hide, system tray, network, battery, and temperature status. The top-bar status can be integrated into the dock. |
-| Launcher and search | Provides a fullscreen app grid, application search, window search, and quick access to frequent apps. |
-| Control center | Manages Wi-Fi, Bluetooth, brightness, volume, media playback, dark mode, Do Not Disturb, screenshots, lock, suspend, logout, restart, and power off. |
-| Desktop files | Shows desktop files and folders with open, rename, delete, copy, cut, and Open With actions. |
-| Appearance and motion | Offers liquid glass, background blur, theme colors, dock position, icon style, and display mode. KWin plugins power dock and window animation. |
-| Settings and shortcuts | A standalone settings center configures appearance, the dock, bar, and launcher; global shortcuts can be installed and changed in KDE System Settings. |
+| Launcher and search       | Provides a fullscreen app grid, application search, window search, and quick access to frequent apps.                                                                                       |
+| Control center            | Manages Wi-Fi, Bluetooth, brightness, volume, media playback, dark mode, Do Not Disturb, screenshots, lock, suspend, logout, restart, and power off.                                        |
+| Desktop files             | Shows desktop files and folders with open, rename, delete, copy, cut, and Open With actions.                                                                                                |
+| Appearance and motion     | Offers liquid glass, background blur, theme colors, dock position, icon style, and display mode. KWin plugins power dock and window animation.                                              |
+| Settings and shortcuts    | A standalone settings center configures appearance, the dock, bar, and launcher; global shortcuts can be installed and changed in KDE System Settings.                                      |
 
 KOS does not replace KDE Plasma. It reuses KWin, NetworkManager, PipeWire,
 BlueZ, and systemd, then presents those system capabilities in its own UI.

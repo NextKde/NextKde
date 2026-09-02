@@ -24,7 +24,7 @@ sudo pacman -S git quickshell cmake ninja gcc qt6-base go
 ### 2. 下载代码
 
 ```sh
-git clone git@gitee.com:xiaoyintx_ciallo/test.git
+git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
 ```
 
@@ -96,17 +96,49 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 
 这会停止并移除 KOS 文件与服务；你的 Dock 固定项、外观等个人状态会保留。
 
+#### 对于NixOS，我们更推荐使用基于 Flake 的安装方法
+
+以下是针对 NixOS 的安装步骤：
+
+1. 在当前系统配置的 Flake.nix 下添加 kos 的输入源
+
+```Nix
+nextkde = {
+         # Gitee 源：KOS Desktop Shell
+         url = "git+https://github.com/SuceV587/NextKde.git"
+         inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+2. 更新 kos 的 Flake 输入
+
+```Nix
+nix flake update nextkde
+```
+
+3. 重新构建
+
+```Nix
+sudo nixos-rebuild switch --flake .#hosts
+```
+
+##### 目前基于 NixOS 打包已知问题（已在修复 todo list，预计周六上线）
+
+- 无法开机自启动
+- 脚本诊断功能未打包进入
+- kos-settings无法正常启动
+
 ## 主要功能
 
-| 模块 | 能做什么 |
-| --- | --- |
-| 桌面组件 | 显示时钟、天气预报、日历、CPU/内存/温度、开机时长、应用使用情况和媒体播放信息。 |
+| 模块               | 能做什么                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| 桌面组件           | 显示时钟、天气预报、日历、CPU/内存/温度、开机时长、应用使用情况和媒体播放信息。                                           |
 | 悬浮 Dock 与顶部栏 | 显示已固定和正在运行的应用，支持窗口预览、启动动画、自动隐藏、系统托盘、网络、电池与温度状态；可将顶部栏状态整合到 Dock。 |
-| 启动器与搜索 | 提供全屏应用网格、应用搜索、窗口搜索和常用应用入口。 |
-| 控制中心 | 管理 Wi‑Fi、蓝牙、亮度、音量、媒体播放、深色模式、勿扰、截图、锁屏、睡眠、注销、重启和关机。 |
-| 桌面文件 | 在桌面展示文件和文件夹，并提供打开、重命名、删除、复制、剪切和“打开方式”等常用操作。 |
-| 外观与动效 | 提供液态玻璃、背景模糊、主题色、Dock 位置、图标风格和显示方式；Dock 与窗口动画由 KWin 插件提供。 |
-| 设置与快捷键 | 独立设置中心可调整外观、Dock、Bar 和启动台；可安装并在 KDE 系统设置中修改全局快捷键。 |
+| 启动器与搜索       | 提供全屏应用网格、应用搜索、窗口搜索和常用应用入口。                                                                      |
+| 控制中心           | 管理 Wi‑Fi、蓝牙、亮度、音量、媒体播放、深色模式、勿扰、截图、锁屏、睡眠、注销、重启和关机。                              |
+| 桌面文件           | 在桌面展示文件和文件夹，并提供打开、重命名、删除、复制、剪切和“打开方式”等常用操作。                                      |
+| 外观与动效         | 提供液态玻璃、背景模糊、主题色、Dock 位置、图标风格和显示方式；Dock 与窗口动画由 KWin 插件提供。                          |
+| 设置与快捷键       | 独立设置中心可调整外观、Dock、Bar 和启动台；可安装并在 KDE 系统设置中修改全局快捷键。                                     |
 
 KOS 不替代 KDE Plasma：它复用 KWin、NetworkManager、PipeWire、BlueZ 和 systemd，
 只把这些系统能力整合到自己的界面中。
