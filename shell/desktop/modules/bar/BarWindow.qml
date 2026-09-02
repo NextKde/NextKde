@@ -17,6 +17,13 @@ PanelWindow {
     exclusionMode: ExclusionMode.Normal
     WlrLayershell.layer: WlrLayer.Top
     implicitHeight: ConfigService.barHeight
+    readonly property bool transparentMode:
+        AppearanceConfigService.barLayoutMode === "transparent"
+    // Only the floating capsule needs wallpaper between it and maximised
+    // windows. Full-width and transparent Bars intentionally remain flush,
+    // matching the contiguous macOS menu-bar layout.
+    readonly property int workspaceBreathingGap:
+        AppearanceConfigService.barLayoutMode === "floating" ? 8 : 0
 
     // ── Auto-hide controller ──
     BarAutoHideController {
@@ -36,7 +43,7 @@ PanelWindow {
     // In "smart" or "persistent" modes, exclusiveZone stays at 0 so
     // maximised windows extend to the top of the screen.
     exclusiveZone: (AppearanceConfigService.barVisibilityMode === "always" && root.barEnabled)
-        ? implicitHeight : 0
+        ? implicitHeight + workspaceBreathingGap : 0
     visible: root.barEnabled
 
     anchors {
@@ -52,9 +59,10 @@ PanelWindow {
         right: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
     }
 
-    // KWin's glass effect uses this region for both blur and liquid
-    // refraction, so a liquid-only Bar must keep publishing it.
-    BackgroundEffect.blurRegion: (root.visible
+    // The transparent layout deliberately leaves only the content: it must not
+    // register a backdrop region, otherwise KWin adds blur/refraction behind
+    // it. Other Bar layouts still use the regular compositor glass pipeline.
+    BackgroundEffect.blurRegion: (!root.transparentMode && root.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? barBlurRegionHolder : null

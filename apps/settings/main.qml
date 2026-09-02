@@ -1740,7 +1740,7 @@ ApplicationWindow {
         property int barVisibilityModeIndex: 0
         readonly property var barVisibilityModes: ["always", "smart", "persistent"]
         property int barLayoutModeIndex: 0
-        readonly property var barLayoutModes: ["full", "floating"]
+        readonly property var barLayoutModes: ["full", "floating", "transparent"]
         property bool barBlurInherit: true
         property real barBlurStrength: 0.42
         property real barLiquidStrength: 1.0
@@ -1923,7 +1923,8 @@ ApplicationWindow {
                             id: barLayoutNavBar
                             model: [
                                 { id: "full", label: "全宽贴边" },
-                                { id: "floating", label: "悬浮胶囊" }
+                                { id: "floating", label: "悬浮胶囊" },
+                                { id: "transparent", label: "全透明" }
                             ]
                             itemWidthOverride: 76
                             currentIndex: barPage.barLayoutModeIndex

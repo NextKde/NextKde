@@ -1,5 +1,4 @@
 import QtQuick
-import Qt.labs.platform as Platform
 import Quickshell
 import "./AdaptiveMath.mjs" as AdaptiveMath
 import qs.desktop
@@ -316,62 +315,104 @@ Item {
         }
     }
 
-    Platform.Menu {
+    // The trash is a shell control too, so its menu uses the same self-drawn
+    // liquid-glass ContextMenu as Dock apps and the launcher. A native
+    // Platform.Menu rendered with the system Qt/KDE style and broke away
+    // from the rest of the shell.
+    ContextMenu {
         id: trashContextMenu
-        function setDockPopupVisible(shouldOpen) {
-            if (shouldOpen)
-                open()
-            else
-                close()
-        }
-        function dismissDockPopupImmediately() { close() }
-        Platform.MenuItem {
-            icon.name: "user-trash"
-            text: "清空回收站"
-            onTriggered: DockModelService.openDockPopup(trashConfirmPopup)
-        }
+        anchorItem: trashIcon
+        position: ConfigService.position
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
+        property bool hasBeenVisible: false
+
+        Component.onCompleted: setItems([
+            { icon: "", label: "打开回收站", cmd: "open" },
+            { icon: "", label: "清空回收站", cmd: "empty" }
+        ])
+
+        onAboutToShow: hasBeenVisible = true
         onAboutToHide: {
-            if (DockModelService.activeDockPopup === trashContextMenu)
-                DockModelService.releaseDockPopup(trashContextMenu)
+            if (hasBeenVisible) {
+                hasBeenVisible = false
+                if (DockModelService.activeDockPopup === trashContextMenu)
+                    DockModelService.releaseDockPopup(trashContextMenu)
+            }
+        }
+
+        onAction: function(cmd) {
+            if (cmd === "open")
+                DockTrashService.open()
+            else if (cmd === "empty")
+                DockModelService.openDockPopup(trashConfirmPopup)
         }
     }
 
-    Platform.Menu {
+    // The launcher is a shell control, so its mode picker must use the same
+    // self-drawn liquid-glass menu as Dock apps and desktop icons. Keeping it
+    // as a native Qt/KDE menu made this one right-click entry visually break
+    // away from the rest of the shell.
+    ContextMenu {
         id: appLauncherContextMenu
-        function setDockPopupVisible(shouldOpen) {
-            if (shouldOpen)
-                open()
-            else
-                close()
-        }
-        function dismissDockPopupImmediately() { close() }
+        anchorItem: appLauncherIcon
+        position: ConfigService.position
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
+        property bool hasBeenVisible: false
 
-        Platform.MenuItem {
-            text: "底部吸附"
-            checkable: true
-            checked: AppLauncherConfigService.displayMode === "bottom"
-            onTriggered: AppLauncherConfigService.updateDisplayMode("bottom")
+        function rebuildItems() {
+            setItems([
+                {
+                    icon: "",
+                    label: "底部吸附",
+                    cmd: "bottom",
+                    checkable: true,
+                    checked: AppLauncherConfigService.displayMode === "bottom"
+                },
+                {
+                    icon: "",
+                    label: "屏幕居中",
+                    cmd: "center",
+                    checkable: true,
+                    checked: AppLauncherConfigService.displayMode === "center"
+                },
+                {
+                    icon: "",
+                    label: "全屏覆盖",
+                    cmd: "fullscreen",
+                    checkable: true,
+                    checked: AppLauncherConfigService.displayMode === "fullscreen"
+                },
+                { separator: true },
+                { icon: "", label: "启动台设置…", cmd: "settings" }
+            ])
         }
-        Platform.MenuItem {
-            text: "屏幕居中"
-            checkable: true
-            checked: AppLauncherConfigService.displayMode === "center"
-            onTriggered: AppLauncherConfigService.updateDisplayMode("center")
+
+        function setDockPopupVisible(shouldOpen) {
+            if (shouldOpen) {
+                rebuildItems()
+                show()
+            } else {
+                hide()
+            }
         }
-        Platform.MenuItem {
-            text: "全屏覆盖"
-            checkable: true
-            checked: AppLauncherConfigService.displayMode === "fullscreen"
-            onTriggered: AppLauncherConfigService.updateDisplayMode("fullscreen")
-        }
-        Platform.MenuSeparator {}
-        Platform.MenuItem {
-            text: "启动台设置…"
-            onTriggered: DesktopAppLauncher.openSettings()
-        }
+
+        onAboutToShow: hasBeenVisible = true
         onAboutToHide: {
-            if (DockModelService.activeDockPopup === appLauncherContextMenu)
-                DockModelService.releaseDockPopup(appLauncherContextMenu)
+            if (hasBeenVisible) {
+                hasBeenVisible = false
+                if (DockModelService.activeDockPopup === appLauncherContextMenu)
+                    DockModelService.releaseDockPopup(appLauncherContextMenu)
+            }
+        }
+
+        onAction: function(cmd) {
+            if (cmd === "settings") {
+                DesktopAppLauncher.openSettings()
+            } else if (cmd === "bottom" || cmd === "center" || cmd === "fullscreen") {
+                AppLauncherConfigService.updateDisplayMode(cmd)
+            }
         }
     }
 
