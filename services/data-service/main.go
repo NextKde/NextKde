@@ -207,6 +207,10 @@ func (s *Service) subscribeDesktop(conn net.Conn) {
 		"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
 	raw, _ := json.Marshal(event)
 	_, _ = conn.Write(append(raw, '\n'))
+	// Clear the absolute deadline: it must not leak into the long-lived request
+	// loop, or every response written after this 100ms window would time out
+	// (which is why the shell only ever received its first metrics snapshot).
+	_ = conn.SetWriteDeadline(time.Time{})
 }
 
 func (s *Service) unsubscribeDesktop(conn net.Conn) {
@@ -226,7 +230,11 @@ func (s *Service) publishDesktop() {
 		if _, err := conn.Write(append(raw, '\n')); err != nil {
 			delete(s.desktopSubscribers, conn)
 			_ = conn.Close()
+			continue
 		}
+		// Do not leave the 100ms broadcast deadline armed on the shared
+		// connection; the request loop would otherwise inherit it and time out.
+		_ = conn.SetWriteDeadline(time.Time{})
 	}
 }
 
@@ -918,11 +926,16 @@ func serve(s *Service, path string) error {
 				if json.Unmarshal(scanner.Bytes(), &request) != nil {
 					response := dataError(request, "invalid-json", "请求不是有效 JSON", false)
 					raw, _ := json.Marshal(response)
+					_ = c.SetWriteDeadline(time.Now().Add(2 * time.Second))
 					_, _ = c.Write(append(raw, '\n'))
 					continue
 				}
 				response := s.handleRequest(request)
 				raw, _ := json.Marshal(response)
+				// Re-arm a fresh deadline before every response: other write paths
+				// (desktop broadcasts) leave a stale 100ms deadline on the shared
+				// connection, and an absolute deadline never resets on its own.
+				_ = c.SetWriteDeadline(time.Now().Add(2 * time.Second))
 				_, _ = c.Write(append(raw, '\n'))
 			}
 		}()
