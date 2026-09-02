@@ -1,0 +1,22 @@
+module qs.desktop.modules.common
+GlassText 1.0 GlassText.qml
+GlassSlider 1.0 GlassSlider.qml
+GlassToggle 1.0 GlassToggle.qml
+RoundedBlurRegion 1.0 RoundedBlurRegion.qml
+LiquidGlassSurface 1.0 LiquidGlassSurface.qml
+LiquidGlassControl 1.0 LiquidGlassControl.qml
+EnhancedGlassSurface 1.0 EnhancedGlassSurface.qml
+ArtworkPalette 1.0 ArtworkPalette.qml
+AppIcon 1.0 AppIcon.qml
+SystemIcon 1.0 SystemIcon.qml
+ContextMenu 1.0 ContextMenu.qml
+MenuItemRow 1.0 MenuItemRow.qml
+singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
+singleton AppPresentationService 1.0 AppPresentationService.qml
+singleton AppActionService 1.0 AppActionService.qml
+singleton MetricsService 1.0 MetricsService.qml
+singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
+singleton SystemIconResolver 1.0 SystemIconResolver.qml
+singleton AppearanceConfigService 1.0 AppearanceConfigService.qml
+singleton AppearanceTokens 1.0 AppearanceTokens.qml
+singleton ScreenLifecycle 1.0 ScreenLifecycle.qml

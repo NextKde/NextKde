@@ -1,5 +1,10 @@
 # Resident services
 
-Long-running, non-UI processes live here. `shell-data-service` is currently
-owned by the desktop environment, but its socket protocol can later be shared
-through `shared/contracts/`.
+Long-running, non-UI processes live here. `data-service/` builds
+`kos-data-service`, the Go owner of durable metrics, activity history, and
+desktop snapshots. Live desktop integration belongs to the separate C++
+`platform/` service. Both services expose versioned JSONL sockets documented in
+`shared/contracts/`.
+
+The data service is started by `kos-data.service`; use `./tools/kosctl` from
+the repository root for build, install, status, and uninstall operations.

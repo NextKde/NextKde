@@ -1,0 +1,19 @@
+[Unit]
+Description=KOS platform integration service
+After=graphical-session.target
+# KDE marks graphical-session.target active before kwin_wayland has its
+# Wayland socket ready. Waiting on the compositor service prevents the
+# platform daemon from starting too early and aborting on
+# "could not connect to display" (SIGABRT, then a 2s restart loop).
+After=plasma-kwin_wayland.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/libexec/kos-platform daemon
+Environment=KOS_PLATFORM_KWIN_SCRIPT=%h/.local/share/kos/platform/kwin/window-bridge.js
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

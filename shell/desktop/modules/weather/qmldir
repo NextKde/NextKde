@@ -1,0 +1,6 @@
+module qs.desktop.modules.weather
+
+singleton WeatherService 1.0 WeatherService.qml
+singleton WeatherTheme 1.0 WeatherTheme.qml
+DockWeatherWidget 1.0 DockWeatherWidget.qml
+WeatherPopup 1.0 WeatherPopup.qml

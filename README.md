@@ -1,282 +1,244 @@
 # KOS Desktop Shell
 
-**[English](README.md) | [中文](README.zh-CN.md)**
+[English](README.en.md)
 
-An iPadOS-inspired desktop environment for **KDE Plasma 6 (Wayland)**, built on
-[Quickshell](https://quickshell.org). KOS is not a distribution or a fork of a
-desktop environment — it is a complete Quickshell configuration plus a small set
-of native helpers and KWin effects that together replace the Plasma shell
-experience: a top bar, a floating dock, desktop widgets, a launcher, a
-notification system, a workspace overview, and a standalone settings
-application.
+KOS 是运行在 KDE Plasma 6 Wayland 上的 Quickshell 桌面 Shell，提供顶部栏、
+悬浮 Dock、桌面组件和文件、启动器、搜索、通知、工作区概览及独立设置应用。
+它不会替换 Plasma、KWin、NetworkManager、PipeWire 或 systemd，只接管你选择
+隐藏的界面。
 
-> Status: personal daily-driver project under active development. Interfaces
-> and configuration schemas are versioned and migrated, but expect rapid
-> evolution.
+## 🚀 新手先看这里
 
----
+| 目标 | 命令 | 说明 |
+| --- | --- | --- |
+| ✏️ 改 QML 后应用 | `./tools/kosctl sync` | 只把 `shell/` QML 拷到已安装配置（秒级）。安装态的 shell 不热重载（已关闭文件监听），随后执行 `./tools/kosctl start` 生效。不编译。适用于纯 QML 改动。 |
+| ✅ 首次安装／更新 | `./tools/kosctl install` | 只安装文件并注册开机自启，**不打扰当前会话**：不会重启服务、不会热加载 KWin 特效。新版本在下次登录或执行 `./tools/kosctl start` 后生效。安装 KWin 插件时可能要求 `sudo`。 |
+| ⚡ 立即生效 | `./tools/kosctl start` | 重启三项用户服务以应用最新安装版本（界面会短暂切换）。KWin 特效只写入 kwinrc，在下次 KWin／会话启动时加载。会收编手动启动的 `qs -c kos` 实例，改由 systemd 管理。C++/Go/KWin 代码改动后用它应用。 |
+| 🔬 全栈源码调试 | `./tools/kosctl dev` | 从源码和构建产物直接运行 platform、data-service、shell 三件套，socket 与已安装服务隔离、互不干扰。注意：KWin bridge 是全局注册，调试期间已安装 shell 的窗口事件会暂停。 |
+| 🧪 修改后只预览工作区 UI | `./tools/kosctl run` | 通过当前检出目录启动独立预览，不会启动服务，也不会替换已安装的 `kos-shell`。依赖 IPC 的功能仍使用已运行服务所提供的数据。 |
+| 🏠 日常运行已安装 Shell | `qs -c kos` | 只适用于已完成 `kosctl install` 的环境；也可由 `kos-shell.service` 随用户会话启动。 |
 
-## Features
+所有启动方式共享同一个状态目录（`~/.local/state/quickshell/kos`，由
+`shell/shell.qml` 的 `StateDir` pragma 固定）：Dock 固定项、启动器自定义图标、
+外观、天气缓存等用户数据在安装版与源码预览/调试之间保持一致。改动配置格式时
+需要保持向后兼容或写迁移逻辑，避免破坏已安装实例的数据。
 
-### Shell surfaces
-
-- **Top Bar** — system tray, network status with live traffic rates, Bluetooth,
-  volume, battery, CPU temperature, clock, and the control-center entry. Can
-  either stay independent or be fused into the Dock.
-- **Dock** — iPadOS-style pinned apps + running windows, magnification,
-  drag-to-reorder, right-click context menus, live window previews, MPRIS music
-  player with cover-art palette, weather, and a trash applet with badge. Three
-  positions (bottom / left / right), three visibility modes (`always` /
-  `smart` window-collision auto-hide / `persistent`) with an iOS-style home
-  indicator, and icon appearance modes (`color` / `grayscale` / `tint`).
-- **Bar ⇄ Dock fusion** — optionally merge the bar into a bottom Dock: the
-  clock joins the music/weather/temperature info carousel and the status area
-  becomes a trailing accessory. Side docks get a counter-rotated, vertically
-  readable carousel instead.
-- **DeskCenter** — background-layer desktop widgets (clock, weather, calendar,
-  system monitors with history rings, activity ledger, now-playing) and a real
-  desktop file surface: sorting, box selection, rename, trash, hold-to-drop
-  folder insertion, multi-select drag, new file/folder, external URL drops, and
-  cut/copy semantics that interoperate with Dolphin.
-- **App Launcher** — iPadOS-style full-screen grid with drag-to-create folders,
-  custom names/icons, and hidden apps.
-- **Quick Search** — incremental app/file search, clipboard history (cliphist,
-  including images), and an MRU window switcher with live KWin thumbnails.
-- **Notifications** — per-app grouping with stacked/expanded cards, action
-  buttons, inline reply, critical-urgency styling, do-not-disturb, and a
-  grouped history center inside the control center.
-- **Workspace Overview** — Stage-Manager-style fullscreen overlay with a
-  virtual-desktop strip and live window thumbnails (`Meta+Tab`).
-- **Control Center** — Wi-Fi connect/disconnect/forget including 802.1X
-  (PEAP / TTLS), Bluetooth, volume, real backlight brightness via logind,
-  do-not-disturb, screenshot, logout, and notification history.
-
-### Appearance system
-
-- Three shell styles — **Windows 12**, **macOS**, **Material** — driven by a
-  versioned semantic-token layer (`AppearanceTokens`), hot-switchable without
-  rebuilding any surface.
-- Global **blur strength** and **liquid-glass strength** sliders that feed both
-  the QML glass materials and the KWin glass effect.
-- Standalone **Settings application** (`kos-settings`) running in its own
-  process; it talks to the shell exclusively through a versioned IPC contract
-  (`appearance-settings`).
-
-### Graphics & effects
-
-- **KWin glass effect** (`integrations/kwin-effects-glass`): a Plasma 6 blur
-  fork with Dual Kawase blur, Snell's-law refraction, per-surface highlight
-  direction, and bidirectional tint (dark backgrounds lift toward white, bright
-  backgrounds darken).
-- **Dock window animation effect** (`integrations/kwin-dock-window-animation`):
-  iPadOS-style `scale` / `genie` open-close animations; the shell publishes the
-  exact on-screen icon rectangles so windows land precisely on their icons.
-- **Context-menu input effect** (`integrations/kwin-context-menu-input`):
-  compositor-level outside-click dismissal for shell context menus.
-- Client-side SDF rounded-corner, refraction, noise and glow shaders compiled
-  with `qsb`.
-
-### Platform services
-
-- **`shell-data-service` (Go)** — the single owner of durable and historical
-  data: CPU/memory/disk/frequency/temperature sampling with history, boot and
-  per-app activity ledger, desktop-directory watching with atomic snapshots,
-  and a supervised Qt clipboard helper that publishes copy/cut in URI, KDE, and
-  GNOME formats simultaneously.
-- **KWin window bridge** (`helpers/kwin-window-bridge`) — a C++ D-Bus bridge
-  plus a KWin script that supplies window enumeration, geometry, activation,
-  minimization, thumbnails and virtual-desktop data, because KWin does not
-  implement `zwlr-foreign-toplevel-management-v1`.
-- **Global shortcuts** — registered as native KDE Command Shortcuts with
-  install-time conflict detection; rebindable in *System Settings → Shortcuts*.
-
----
-
-## Requirements
-
-| Component | Requirement |
-| --- | --- |
-| Session | KDE Plasma 6 on Wayland (developed on Plasma/KWin 6.7) |
-| Shell runtime | [Quickshell](https://quickshell.org) 0.3.0 (`qs`) |
-| Build tools | Go, CMake, a C++ compiler, Qt 6 Gui development files, `socat` |
-| Runtime integration | NetworkManager (`nmcli`), systemd user session, logind |
-| Optional | `cliphist` (clipboard history), `qdbus6`/`kwriteconfig6` (effect sync) |
-
-On Arch-based systems the build dependencies are typically
-`go cmake gcc qt6-base`; on Debian/Ubuntu `golang cmake g++ qt6-base-dev`.
-Building the KWin effects additionally needs the KWin development package
-(`kwin-dev` / `kwin-devel`) and KF6 development headers.
-
-## Installation
-
-Clone the repository, then install the components you need. Everything except
-the KWin effects installs into user or `/usr/local` locations and can be
-removed cleanly.
-
-### Optional application policy
-
-Standalone applications under `apps/` are optional companions to the desktop
-shell, not part of its required runtime. They may live in this repository and
-share its UI or data contracts, but the default shell path must not build,
-install, or start them (or their services). Each application must provide its
-own documented build and install entry point, with only that application's
-dependencies enabled. A user who only wants the Shell must never need calendar,
-music, or other optional-app dependencies.
-
-### 1. Run the shell
+如果日志出现 platform/data socket 错误，先检查服务状态：
 
 ```sh
-quickshell --path /path/to/quickshell
-# or, if `qs` is your quickshell binary:
-qs -p /path/to/quickshell
+systemctl --user status kos-platform.service kos-data.service kos-shell.service
 ```
 
-The entry point is `shell.qml`; it only instantiates
-`desktop/DesktopEnvironment.qml`.
+## 👀 仅预览界面
 
-### 2. Data service (recommended)
-
-Builds the Go service plus the Qt clipboard helper, installs them to
-`~/.local/lib/quickshell`, and enables the systemd user unit:
+预览不会安装任何文件，也不需要 root：
 
 ```sh
-./tools/install-shell-data-service.sh
+git clone <repository-url> NextKde
+cd NextKde
+./tools/kosctl doctor       # 检查 Quickshell、CMake、Go 和图形会话
+qs -p "$PWD/shell"          # 等价于 quickshell --path "$PWD/shell"
 ```
 
-Without it, system metrics, the activity ledger, desktop files, and
-cross-application file copy/cut are unavailable.
+按 `Ctrl+C` 退出。未安装两个常驻服务前，指标、窗口和桌面文件可能为空；
+Plasma 原有面板和通知仍会运行，出现重叠是正常的。
 
-### 3. KWin window bridge (required on Plasma)
+## 环境要求
+
+- KDE Plasma 6 Wayland 会话（KWin 负责窗口列表）。
+- Quickshell 0.3.x（`qs` 或 `quickshell`），安装方法见
+  [Quickshell 官方文档](https://quickshell.org/docs/)。
+- CMake 3.21+、Ninja、C++20 编译器、Qt 6 开发包和 Go。
+- 正常 Plasma 会话提供 NetworkManager（`nmcli`）、PipeWire/WirePlumber
+  （`wpctl`）、BlueZ（`bluetoothctl`）、`loginctl` 和 `systemctl --user`。
+- 可选剪贴板历史依赖：`wl-clipboard`（`wl-copy`/`wl-paste`）和 `cliphist`。
+  即使未安装它们，桌面文件复制/粘贴仍可使用。
+- 默认安装会编译 KOS 的两个 KWin 插件以及内置的 `kwin-effects-glass`
+  源码，因此需要与当前 KWin 匹配的 KWin/KF6 开发头文件。Arch/CachyOS
+  缺少的 KF6 构建依赖会由安装器通过 `sudo pacman` 补齐。
+
+`kosctl build` 默认通过 `https://goproxy.cn,direct` 下载 Go 模块。如果需要
+使用其他镜像或离线模块缓存，可以在构建前设置 `GOPROXY`，例如
+`GOPROXY=off ./tools/kosctl build`。
+
+Arch 常用基础包为 `quickshell cmake ninja gcc qt6-base go`；Debian/Ubuntu
+安装发行版对应的 `quickshell cmake ninja-build g++ qt6-base-dev golang`。
+
+## 完整安装
+
+`apps/settings` 当前是 Shell 的核心配套应用，会随 `kosctl` 一同安装，用于提供
+独立设置界面。未来 `apps/` 下的其他应用仍为可选能力：默认 Shell 路径不得构建、
+安装或启动它们；每个应用必须提供独立、可说明的入口。
+
+在仓库根目录执行唯一入口：
 
 ```sh
-cmake -S helpers/kwin-window-bridge -B .build/kwin-window-bridge
-cmake --build .build/kwin-window-bridge
-sudo install -m 0755 .build/kwin-window-bridge/quickshell-kwin-window-bridge \
-    /usr/local/libexec/quickshell-kwin-window-bridge
+./tools/kosctl doctor
+./tools/kosctl install
 ```
 
-`WindowService` starts the bridge and loads its KWin script automatically when
-the shell runs; on compositors that implement foreign-toplevel-management the
-bridge stays unused.
+该命令会构建并安装：
 
-### 4. KWin glass effect (recommended)
+- `kos-platform` → `~/.local/libexec/`（唯一的 C++/Qt 平台常驻进程）；
+- `kos-data-service` → `~/.local/libexec/`（Go 指标/历史数据常驻进程）；
+- `kos-settings` → `~/.local/bin/`；
+- Quickshell 配置 → `~/.config/quickshell/kos`；
+- `kos-platform.service`、`kos-data.service` 与 `kos-shell.service` → systemd
+  用户单元；Shell 强依赖 platform 服务，并在它之后启动。
+- KOS Dock 动画、Quickshell 右键输入插件和 Glass 特效 → 系统 KWin 插件目录。
 
-The vendored fork in `integrations/kwin-effects-glass` is the authoritative
-source; see its [README](integrations/kwin-effects-glass/README.md) for
-distribution packages or manual build instructions. After installing, enable
-the effect (plugin ID `blurplus`) in *System Settings → Desktop Effects*. Blur
-and refraction strength are then driven live by the shell's appearance
-settings.
+安装器只安装文件并 enable 三个用户服务（注册自启），不重启任何正在运行的
+东西；KWin 特效只写入 kwinrc 配置，不热加载。新版本在下次登录时生效，或
+立即执行 `./tools/kosctl start`（重启服务并热加载特效，界面会短暂切换）。
+用户文件仍安装到 `~/.local`；安装 KWin 插件及 Arch/CachyOS 缺失的构建依赖时
+会调用 `sudo`，密码由当前终端正常接管。Glass 与系统 Blur 冲突，因此安装时会
+保存 Blur 状态并停用它；`./tools/kosctl uninstall` 会卸载三项特效并恢复原状态。
 
-### 5. Optional internal KWin effects
+只需构建/安装用户态组件时可显式关闭 KWin 插件：
 
 ```sh
-for effect in kwin-dock-window-animation kwin-context-menu-input; do
-    cmake -S "integrations/$effect" -B ".build/$effect"
-    cmake --build ".build/$effect"
-    sudo cmake --install ".build/$effect"
-done
+KOS_BUILD_KWIN_PLUGINS=OFF ./tools/kosctl install
 ```
 
-Enable them in *System Settings → Desktop Effects*. The dock animation style
-(`scale` / `genie`) follows the shell's appearance configuration.
-
-### 6. Settings application
+查看或配置 Glass 时，可直接打开 KDE 的桌面特效页面：
 
 ```sh
-cmake -S apps/settings -B .build/apps/settings
-cmake --build .build/apps/settings
+./tools/kosctl glass-settings
 ```
 
-A desktop entry template is provided at
-`packaging/desktop/kos-settings.desktop.in`.
-
-### 7. Global shortcuts
+启动已安装的 Shell：
 
 ```sh
-python3 helpers/global-shortcuts/install.py
+qs -c kos
 ```
 
-This registers KDE Command Shortcuts with conflict detection and seeds the
-default bindings. Re-run it after editing
-`helpers/global-shortcuts/shortcuts.json`; change bindings afterwards in
-*System Settings → Shortcuts*.
+修改 QML 后使用 `./tools/kosctl run`，它通过 `qs -p shell` 加载当前检出目录。
+它是独立预览，不会启动或重启任何服务；需要将本次修改部署为日常 Shell 时，先执行
+`./tools/kosctl install`（不打扰当前会话），再执行 `./tools/kosctl start` 立即
+生效，或等待下次登录自动生效。
 
-### 8. Notification takeover
+### 首次 Plasma 设置
 
-Quickshell's notification server can only own the D-Bus name if Plasma's
-notification applet is out of the way: remove the notification widget from the
-system tray settings and restart plasmashell once
-(`systemctl --user restart plasma-plasmashell`).
+KOS 提供自己的通知服务。日常使用前请从 Plasma 面板/系统托盘移除通知组件，
+否则 Plasma 会占用通知 D-Bus 名称。恢复 Plasma 时再加回该组件。KOS 不会自动
+修改你的面板布局。
 
-### Default shortcuts
+### 全局快捷键
 
-| Shortcut | Action |
-| --- | --- |
-| `Meta+Space` | Toggle app launcher |
-| `Meta+Shift+Space` | Toggle window switcher (MRU) |
-| `Meta+B` | Toggle control center |
-| `Meta+Tab` | Toggle workspace overview |
+默认快捷键由原生平台程序安装，不再依赖 Python：
 
-## Project layout
+```sh
+./tools/kosctl shortcuts install
+```
+
+定义位于 `shared/contracts/shortcuts.v1.json`，之后可在「系统设置 → 快捷键」
+中修改。只删除 KOS 的绑定：
+
+```sh
+./tools/kosctl shortcuts uninstall
+```
+
+## 架构概览
 
 ```text
-shell.qml       stable Quickshell entry point
-desktop/        the desktop environment (bar, dock, deskcenter, launcher, …)
-apps/           independent Qt Quick applications (settings, …)
-shared/         pure, portable cross-process QML and contracts
-services/       resident background services (shell-data-service, Go)
-helpers/        on-demand native helpers (KWin bridge, shortcuts, clipboard)
-integrations/   KWin effects and other compositor integrations
-tools/          install, build, and diagnostic scripts
-docs/           architecture documentation
+qs -c kos ──► shell/shell.qml ──► shell/desktop/       Quickshell 进程
+                    │ JSONL Unix socket
+                    ├──────────────► kos-platform       C++/Qt 适配器
+                    └──────────────► kos-data.sock      Go 持久数据服务
+
+apps/settings/       独立 Qt Quick 进程，只通过 Shell IPC 通信
+integrations/kwin/   两个 KWin 插件 .so（KWin 加载模型要求）
+vendor/              第三方 kwin-effects-glass 源码
+shared/contracts/    带版本的 IPC 与快捷键契约
 ```
 
-## Documentation
+平台 socket 为 `$XDG_RUNTIME_DIR/kos-platform.sock`，数据 socket 为
+`$XDG_RUNTIME_DIR/kos-data.sock`，权限均为 `0600`。所有消息都是带版本和
+`requestId` 的 JSON Lines，并使用统一结果/错误模型，详见
+[PlatformArchitecture.md](docs/PlatformArchitecture.md) 与
+[platform.v1.md](shared/contracts/platform.v1.md)。
 
-- [Project architecture](docs/ProjectArchitecture.md) — runtime boundaries and
-  dependency direction
-- [Dock architecture](docs/DockArchitecture.md) — identity, window model,
-  persistence, and visibility modes
-- [Appearance architecture](docs/AppearanceArchitecture.md) — schema, IPC
-  contract, and semantic tokens
-- [Network architecture](docs/NetworkArchitecture.md) — NetworkManager adapter
-  boundary
-- [Shell data service](docs/ShellDataService.md) — Go data-layer ownership and
-  protocols
-- [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) — condensed engineering context and
-  key technical decisions
+`kos-platform` 负责 KWin 窗口命令、Wayland 文件剪贴板、文件操作/Open-With、
+网络/音频/蓝牙/亮度/会话/主题适配、截图选择和快捷键安装。
+`kos-data-service` 负责采样、历史、活动归属和桌面目录快照。两个 KWin 特效仍
+是独立共享库，因为 KWin 要求每个插件有独立 ID。
 
-## Roadmap
+## 后续开发计划
 
-Planned next, in rough priority order:
+按大致优先级排列：
 
-- **Per-monitor layouts** — persist DeskCenter widgets, desktop-icon layout,
-  Dock position/visibility, and wallpaper sampling per display.
-- **DeskCenter theming** — let desktop cards consume the appearance token layer
-  (the last surface not yet token-driven).
-- **Settings coverage** — keyboard-shortcut and DeskCenter pages in
-  `kos-settings`.
-- **Standalone apps** — fill in the `calendar`, `todo`, and `weather`
-  placeholders under `apps/`, while keeping every application independently
-  buildable and optional for Shell-only users.
-- **Accessibility & keyboard navigation** — focus order, reduced motion,
-  high contrast, full keyboard operation.
-- **Weather icon set** — a complete SVG icon set replacing the current mix of
-  Unicode glyphs, Canvas drawing, and partial SVGs.
+- **多显示器每屏布局**——DeskCenter 组件、桌面图标布局、Dock 位置/显示
+  规则与壁纸取色按显示器持久化。
+- **DeskCenter 主题接入**——让桌面卡片消费外观 Token 层（最后一个未
+  接入的 surface）。
+- **设置覆盖面**——`kos-settings` 增加快捷键与 DeskCenter 设置页。
+- **独立应用**——填充 `apps/` 下的 `calendar`、`todo`、`weather` 占位，并保持
+  每个应用可单独构建；只使用 Shell 的用户无需安装它们的依赖。
+- **可访问性与键盘导航**——焦点顺序、减少动画、高对比度与全键盘操作。
+- **天气图标集**——用完整 SVG 图标集替换目前 Unicode 字符、Canvas 绘制
+  与部分 SVG 混用的方案。
 
-Shelved: cross-file-manager drag-move beyond the clipboard bridge (Wayland DnD
-action negotiation limits).
+已搁置：跨文件管理器的拖拽移动（受 Wayland DnD action 协商限制），目前
+仅由剪贴板桥接覆盖复制/剪切。
 
-## Development
+## 常用命令
 
 ```sh
-qmllint <changed-qml-files>
-node desktop/modules/dock/test_adaptive.mjs
-node desktop/modules/dock/test_autohide.mjs
+./tools/kosctl doctor
+./tools/kosctl build
+./tools/kosctl sync
+./tools/kosctl run
+./tools/kosctl dev
+./tools/kosctl install
+./tools/kosctl start
+./tools/kosctl uninstall
+systemctl --user status kos-platform.service kos-data.service
+journalctl --user -u kos-platform.service -u kos-data.service -f
+```
+
+`install` 只安装文件并注册自启，不重启运行中的服务（不会黑屏、不会关闭已打开
+的应用）；`start` 才会重启服务并热加载 KWin 特效。`uninstall` 会停止服务并移除
+安装的二进制、单元和 Shell 配置，但保留 `$XDG_STATE_HOME/quickshell/...` 中的
+用户状态，方便恢复。
+
+## 开发与验证
+
+```sh
+cmake --preset debug
+cmake --build --preset debug
+python3 platform/tests/test_contract.py
+python3 tools/check-docs.py
+node shell/desktop/modules/dock/test_adaptive.mjs
+node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check
 ```
 
-Runtime verification launches a separate Quickshell instance and inspects its
-log; see `.agents/skills/verify/SKILL.md`. Commits follow
-`feat(scope): description`.
+请先用 `./tools/kosctl run` 启动独立 Quickshell 实例并检查日志，再替换日常
+Shell。安全运行流程见 [.agents/skills/verify/SKILL.md](.agents/skills/verify/SKILL.md)。
+如果 Go 依赖下载失败，`kosctl build` 会显示代理/网络错误，可以设置 `GOPROXY`
+切换到其他镜像后重试。
+
+## 仓库结构
+
+```text
+shell/                     唯一 Quickshell 配置根目录
+apps/settings/             独立设置应用
+shared/qml/                可移植控件
+shared/contracts/          JSONL 与快捷键契约
+services/data-service/     Go 数据服务
+platform/                  一个 kos-platform CMake 工程和可执行文件
+integrations/kwin/         两个本项目 KWin 插件
+vendor/kwin-effects-glass/ 第三方特效
+packaging/                 systemd 与 desktop 文件
+tools/kosctl               构建/安装/运行/检查/卸载入口
+docs/                      架构和运维文档
+```
+
+架构边界见 [ProjectArchitecture.md](docs/ProjectArchitecture.md)，数据层见
+[ShellDataService.md](docs/ShellDataService.md)，平台操作、权限和错误模型见
+[PlatformArchitecture.md](docs/PlatformArchitecture.md)。
+
+## 许可证
+
+KOS 使用 GPL-3.0-or-later，见 [LICENSE](LICENSE)。vendored 玻璃特效保留其
+兼容许可证：`vendor/kwin-effects-glass/LICENSE`。

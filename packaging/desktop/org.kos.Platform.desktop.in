@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=KOS Platform Service
+Comment=KOS integration service for KDE Plasma and KWin
+Exec=@KOS_PLATFORM_EXEC@ daemon
+Icon=preferences-system
+NoDisplay=true
+Terminal=false
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
