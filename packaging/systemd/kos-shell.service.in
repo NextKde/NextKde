@@ -13,13 +13,12 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-# `KillMode=mixed`: on stop, SIGTERM only the main qs process (which exits
-# promptly). Without this, systemd's default KillMode=control-group SIGTERMs
-# every process in the cgroup — including desktop apps the shell launched via
-# QProcess::startDetached() (which only fork+setsid and do NOT leave the
-# launching cgroup), so a restart would hang 90s waiting for Electron apps to
-# die and then SIGKILL them. mixed keeps launched apps alive across restarts.
-KillMode=mixed
+# Detached processes keep the launching cgroup even after fork+setsid. Use
+# process mode so restarting the Shell signals only the main qs process and
+# leaves applications launched from the Dock alive. mixed is insufficient: it
+# sends SIGTERM only to qs first, but then SIGKILLs every remaining cgroup
+# process as soon as qs exits.
+KillMode=process
 # The installed shell must be stable: `sync`/`install` overwrite the config
 # directory it watches. Disable the file watcher so a copy in progress can
 # never trigger a hot-reload of half-written QML (which crashes quickshell).
