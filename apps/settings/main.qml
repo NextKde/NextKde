@@ -78,6 +78,10 @@ ApplicationWindow {
         {
             subtitle: "启动台",
             groups: []
+        },
+        {
+            subtitle: "接入状态",
+            groups: []
         }
     ]
 
@@ -199,6 +203,209 @@ ApplicationWindow {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
         }
+    }
+
+    component IntegrationStatusPage: ColumnLayout {
+        id: integrationPage
+
+        Layout.fillWidth: true
+        spacing: 8
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property var snapshot: ({})
+        property string errorText: ""
+
+        function refresh() {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            snapshot = bridge.integrationSnapshot()
+            errorText = bridge.lastError || ""
+        }
+
+        function notificationState() {
+            const provider = snapshot.notificationProvider || "none"
+            if (provider === "kos")
+                return { label: "KOS 已接管", color: "#30d158",
+                    detail: "通知将显示在 KOS 通知中心" }
+            if (provider === "plasma")
+                return { label: "Plasma 接管", color: "#ff9f0a",
+                    detail: "KOS 正在等待 org.freedesktop.Notifications 所有权" }
+            if (provider === "other")
+                return { label: "其他程序接管", color: "#ff9f0a",
+                    detail: snapshot.notificationCommand || snapshot.notificationOwner || "未知通知服务" }
+            return { label: "未注册", color: "#ff453a",
+                detail: "当前没有可用的桌面通知服务" }
+        }
+
+        function statusRow(icon, tint, title, ready, readyLabel, detail) {
+            return { icon: icon, tint: tint, title: title,
+                label: ready ? readyLabel : "未连接",
+                color: ready ? "#30d158" : "#ff453a", detail: detail }
+        }
+
+        readonly property var notification: notificationState()
+        readonly property var rows: [
+            statusRow("K", "#0a84ff", "KOS Shell", !!snapshot.shellReady,
+                "运行中", "设置页与 Quickshell IPC 通道"),
+            statusRow("↔", "#5ac8fa", "平台桥接", !!snapshot.platformConnected,
+                "已连接", "窗口、网络、音频与系统操作"),
+            statusRow("D", "#34c759", "数据服务", !!snapshot.dataConnected,
+                "已连接", "系统指标、活动记录与桌面文件"),
+            statusRow("▦", "#af52de", "桌面组件", !!snapshot.desktopWidgetsVisible,
+                "已显示", snapshot.desktopFilesReady
+                    ? "时钟、天气、资源卡片与桌面文件已就绪"
+                    : "组件层已显示，桌面文件仍在同步"),
+            { icon: "N", tint: "#ff9500", title: "通知接管",
+                label: notification.label, color: notification.color,
+                detail: notification.detail },
+            statusRow("G", "#64d2ff", "Glass 特效", !!snapshot.glassLoaded,
+                "已加载", "KWin 模糊与液态玻璃效果"),
+            statusRow("A", "#ff375f", "Dock 窗口动画",
+                !!snapshot.dockAnimationLoaded, "已加载", "KWin Dock 缩放／Genie 动画"),
+            statusRow("I", "#bf5af2", "桌面输入桥接",
+                !!snapshot.contextMenuInputLoaded, "已加载", "全局点击与菜单收起事件")
+        ]
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+
+            Text {
+                Layout.fillWidth: true
+                text: snapshot.updatedAt
+                    ? "最后检查 " + snapshot.updatedAt : "正在读取实时状态…"
+                color: theme.secondaryText
+                font.pixelSize: 12
+            }
+
+            Rectangle {
+                implicitWidth: 72
+                implicitHeight: 30
+                radius: 15
+                color: refreshPointer.containsMouse
+                    ? theme.sidebarHover : theme.card
+                border.width: 1
+                border.color: theme.floatingBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "刷新"
+                    color: theme.primaryText
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    id: refreshPointer
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: integrationPage.refresh()
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: statusColumn.implicitHeight + 8
+            radius: 24
+            color: theme.card
+
+            Column {
+                id: statusColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 4
+
+                Repeater {
+                    model: integrationPage.rows
+
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        width: statusColumn.width
+                        height: 62
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 12
+                            spacing: 11
+
+                            SettingIcon {
+                                symbol: modelData.icon
+                                tint: modelData.tint
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: modelData.title
+                                    color: theme.primaryText
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: modelData.detail
+                                    color: theme.secondaryText
+                                    font.pixelSize: 11
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            Rectangle {
+                                implicitWidth: statusLabel.implicitWidth + 18
+                                implicitHeight: 24
+                                radius: 12
+                                color: theme.dark
+                                    ? Qt.rgba(1, 1, 1, 0.09)
+                                    : Qt.rgba(0, 0, 0, 0.055)
+                                Text {
+                                    id: statusLabel
+                                    anchors.centerIn: parent
+                                    text: modelData.label
+                                    color: modelData.color
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 49
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: theme.separator
+                            visible: index < integrationPage.rows.length - 1
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: errorText.length > 0
+            text: errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+
+        Timer {
+            interval: 5000
+            repeat: true
+            running: integrationPage.visible
+            onTriggered: integrationPage.refresh()
+        }
+        Component.onCompleted: refresh()
     }
 
     component DockSettingsPage: ColumnLayout {
@@ -2872,6 +3079,15 @@ ApplicationWindow {
                     navTint: "#ff9500"
                 }
 
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 5
+                    label: "接入状态"
+                    navSymbol: "✓"
+                    navTint: "#30d158"
+                }
+
                 Item {
                     Layout.fillHeight: true
                 }
@@ -2914,7 +3130,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 4)
+                        model: (window.currentPage >= 0 && window.currentPage <= 5)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -2947,6 +3163,10 @@ ApplicationWindow {
 
                     LauncherSettingsPage {
                         visible: window.currentPage === 4
+                    }
+
+                    IntegrationStatusPage {
+                        visible: window.currentPage === 5
                     }
 
                     DockSettingsPage {

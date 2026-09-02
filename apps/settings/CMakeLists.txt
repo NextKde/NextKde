@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 
 qt_add_executable(kos-settings
     src/main.cpp
@@ -13,6 +13,7 @@ qt_add_executable(kos-settings
 
 target_link_libraries(kos-settings PRIVATE
     Qt6::Core
+    Qt6::DBus
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick

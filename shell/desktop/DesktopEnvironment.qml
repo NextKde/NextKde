@@ -234,6 +234,25 @@ Item {
         }
     }
 
+    // Read-only health snapshot for the standalone Settings app. Keep these
+    // values sourced from the live Shell connections so the UI reports what
+    // is actually connected, not merely which units were installed.
+    IpcHandler {
+        target: "integration-status"
+
+        function snapshot(): string {
+            return JSON.stringify({
+                shellReady: true,
+                platformConnected: PlatformClient.socket.connected,
+                dataConnected: DataClient.socket.connected,
+                outputAvailable: ScreenLifecycle.outputAvailable,
+                desktopWidgetsVisible: ScreenLifecycle.outputAvailable
+                    && ScreenLifecycle.activeScreen !== null,
+                desktopFilesReady: DesktopFilesService.ready,
+            })
+        }
+    }
+
     // The KWin effect observes pointer presses at compositor scope and routes
     // them through WindowService's existing local bridge. Keep the policy here
     // so individual desktop, Dock, and tray surfaces need no outside-click
