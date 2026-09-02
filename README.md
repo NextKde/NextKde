@@ -140,15 +140,13 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 qs -p "$PWD/shell"
 ```
 
-需要连同 Platform 和数据服务一起调试时，在第一个终端运行（保持运行，`Ctrl+C`
-结束）：
+调试源码 QML（保持运行，`Ctrl+C` 结束）：
 
 ```sh
-QSG_RENDER_LOOP=basic ./tools/kosctl dev
+./tools/kosctl dev
 ```
 
-默认复用安装版 platform，因此 Dock 的窗口事件和缩略图预览可正常工作；终端保留 QML 输出。
-只有调试 platform C++ 时才使用 `KOS_DEV_PLATFORM=1 ./tools/kosctl dev`；KWin 会拒绝该开发二进制的截图请求，预览图片不可用。
+它只启动源码 QML，直接复用 systemd 的 `kos-platform.service` 和 `kos-data.service`；不会编译、部署、重启服务，也不会创建第二套 socket。
 
 从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
 

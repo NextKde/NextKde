@@ -144,17 +144,16 @@ Preview the UI without installing it (reuses installed services):
 qs -p "$PWD/shell"
 ```
 
-To debug the Shell together with its Platform and data services, run this in
-one terminal and leave it running; press `Ctrl+C` to stop it:
+To debug source QML, run this in one terminal and leave it running; press
+`Ctrl+C` to stop it:
 
 ```sh
-QSG_RENDER_LOOP=basic ./tools/kosctl dev
+./tools/kosctl dev
 ```
 
-By default this reuses the installed platform, so Dock window events and
-thumbnail previews keep working while QML output stays in the terminal. Use
-`KOS_DEV_PLATFORM=1 ./tools/kosctl dev` only for platform C++ work; KWin will
-reject screenshot requests from that development binary, so previews are unavailable.
+It starts only the source QML and reuses systemd's `kos-platform.service` and
+`kos-data.service`. It does not build, deploy, restart services, or create a
+second socket pair.
 
 Settings opened from the source Shell's gear automatically targets that same
 source session. You can also launch it manually from a second terminal:
