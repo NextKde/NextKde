@@ -10,6 +10,9 @@ glass_build_dir="$build_dir/kwin-effects-glass"
 kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
+kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
+kwin_plugin_api_version=""
+kwin_plugin_rebuild_required=0
 
 qs_bin=$(command -v qs || command -v quickshell || true)
 qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
@@ -19,6 +22,35 @@ kwin_plugins_enabled() {
         0|OFF|off|FALSE|false|NO|no) return 1 ;;
         *) return 0 ;;
     esac
+}
+
+# KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
+# includes KWIN_PLUGIN_VERSION_STRING. Distribution upgrades can retain the
+# timestamps of installed headers, which means Ninja may incorrectly reuse
+# effect objects compiled for the previous KWin patch release. Detect that
+# case explicitly and do one clean rebuild of both effect build trees.
+detect_kwin_plugin_api_version() {
+    kwin_plugins_enabled || return 0
+
+    local config_header=/usr/include/kwin/config-kwin.h
+    [[ -r "$config_header" ]] || return 0
+    kwin_plugin_api_version=$(sed -n \
+        's/^#define KWIN_PLUGIN_VERSION_STRING "\([^"]*\)"$/\1/p' \
+        "$config_header" | head -n 1)
+    [[ -n "$kwin_plugin_api_version" ]] || return 0
+
+    if [[ ! -f "$kwin_plugin_api_stamp" ]] \
+            || [[ $(<"$kwin_plugin_api_stamp") != "$kwin_plugin_api_version" ]]; then
+        kwin_plugin_rebuild_required=1
+        printf 'KWin plugin API is %s; rebuilding KWin effects for this ABI.\n' \
+            "$kwin_plugin_api_version"
+    fi
+}
+
+record_kwin_plugin_api_version() {
+    [[ -n "$kwin_plugin_api_version" ]] || return 0
+    mkdir -p "$(dirname "$kwin_plugin_api_stamp")"
+    printf '%s\n' "$kwin_plugin_api_version" > "$kwin_plugin_api_stamp"
 }
 
 usage() {
@@ -147,15 +179,23 @@ build_kwin_glass() {
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
         -DGLASS_WAYLAND=ON \
         -DGLASS_X11=OFF
+    if (( kwin_plugin_rebuild_required )); then
+        cmake --build "$glass_build_dir" --target clean
+    fi
     cmake --build "$glass_build_dir" \
         --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
 }
 
 build() {
+    detect_kwin_plugin_api_version
     configure_build
+    if (( kwin_plugin_rebuild_required )); then
+        cmake --build "$build_dir" --target clean
+    fi
     cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
     if kwin_plugins_enabled; then
         build_kwin_glass
+        record_kwin_plugin_api_version
     fi
     mkdir -p "$build_dir/bin"
     (

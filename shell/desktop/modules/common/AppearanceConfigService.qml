@@ -36,7 +36,7 @@ QtObject {
     property string shellStyle: "macos"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
-    property string barLayoutMode: "full" // "full" | "floating"
+    property string barLayoutMode: "full" // "full" | "floating" | "transparent"
     property string dockWindowAnimationStyle: "scale"
     property bool ready: false
 
@@ -51,7 +51,7 @@ QtObject {
     }
 
     function isValidBarLayoutMode(value) {
-        return value === "full" || value === "floating"
+        return value === "full" || value === "floating" || value === "transparent"
     }
 
     function isValidDockWindowAnimationStyle(value) {
@@ -208,7 +208,7 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 8,
+            version: 9,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             blurStrength: service.globalBlurStrength,
@@ -315,7 +315,7 @@ QtObject {
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
 
-                    if (Number(object.version) !== 8
+                    if (Number(object.version) !== 9
                             || !service.isValidShellStyle(style)
                             || !hasBarIntegration
                             || !service.isValidBarVisibilityMode(barVisibility)
