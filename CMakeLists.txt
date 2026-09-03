@@ -17,12 +17,14 @@ include(GNUInstallDirs)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS
     Core
+    DBus
     Gui
     Network
     Qml
     Quick
     QuickControls2
 )
+find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
 endif()
@@ -44,7 +46,6 @@ option(KOS_BUILD_WEATHER "Build the Weather application" ON)
 option(KOS_BUILD_MUSIC "Build the Music application" ON)
 
 if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS DBus)
     find_package(KF6CalendarCore 6.0 REQUIRED)
 endif()
 

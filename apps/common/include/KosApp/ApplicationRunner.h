@@ -8,6 +8,7 @@ struct Metadata {
     QString applicationName;
     QString displayName;
     QString desktopFileName;
+    QString dbusServiceName;
     QString qmlUri;
     QString version;
 };

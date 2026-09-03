@@ -6,6 +6,7 @@ int main(int argc, char *argv[])
         QStringLiteral("kos-music"),
         QStringLiteral("KOS Music"),
         QStringLiteral("kos-music"),
+        QStringLiteral("org.nextkde.Kos.Music"),
         QStringLiteral("Kos.Apps.Music"),
         QStringLiteral(KOS_APP_VERSION),
     });

@@ -6,6 +6,7 @@ int main(int argc, char *argv[])
         QStringLiteral("kos-calendar"),
         QStringLiteral("KOS Calendar"),
         QStringLiteral("kos-calendar"),
+        QStringLiteral("org.nextkde.Kos.Calendar"),
         QStringLiteral("Kos.Apps.Calendar"),
         QStringLiteral(KOS_APP_VERSION),
     });
