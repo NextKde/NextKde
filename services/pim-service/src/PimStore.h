@@ -37,6 +37,7 @@ signals:
 private slots:
     void scheduleNextReminder();
     void deliverDueReminders();
+    void writeWidgetSnapshot();
 
 private:
     class Private;

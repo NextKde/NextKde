@@ -14,6 +14,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDir>
+#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -543,7 +544,16 @@ PimStore::PimStore(const QString &storageDirectory, QObject *parent)
             this, &PimStore::deliverDueReminders);
     connect(this, &PimStore::changed,
             this, &PimStore::scheduleNextReminder);
+    connect(this, &PimStore::changed,
+            this, &PimStore::writeWidgetSnapshot);
     QTimer::singleShot(0, this, &PimStore::scheduleNextReminder);
+    QTimer::singleShot(0, this, &PimStore::writeWidgetSnapshot);
+
+    auto *widgetRefreshTimer = new QTimer(this);
+    widgetRefreshTimer->setInterval(5 * 60 * 1000);
+    connect(widgetRefreshTimer, &QTimer::timeout,
+            this, &PimStore::writeWidgetSnapshot);
+    widgetRefreshTimer->start();
 }
 
 PimStore::~PimStore() = default;
@@ -624,6 +634,58 @@ void PimStore::deliverDueReminders()
         QDBusConnection::sessionBus().asyncCall(notification, 5000);
     }
     scheduleNextReminder();
+}
+
+void PimStore::writeWidgetSnapshot()
+{
+    const QDate today = QDate::currentDate();
+    QJsonParseError parseError;
+    const QJsonObject full = QJsonDocument::fromJson(
+        snapshot().toUtf8(), &parseError).object();
+    if (parseError.error != QJsonParseError::NoError)
+        return;
+    const QJsonObject range = QJsonDocument::fromJson(
+        eventsForRange(today.toString(Qt::ISODate),
+                       today.addDays(7).toString(Qt::ISODate)).toUtf8(),
+        &parseError).object();
+    if (parseError.error != QJsonParseError::NoError)
+        return;
+
+    QJsonArray events;
+    const QJsonArray occurrences = range.value(QStringLiteral("occurrences")).toArray();
+    for (qsizetype index = 0; index < occurrences.size() && index < 16; ++index)
+        events.append(occurrences.at(index));
+
+    QJsonArray todos;
+    const QJsonArray allTodos = full.value(QStringLiteral("todos")).toArray();
+    for (const QJsonValue &value : allTodos) {
+        const QJsonObject todo = value.toObject();
+        if (todo.value(QStringLiteral("completed")).toBool())
+            continue;
+        todos.append(todo);
+        if (todos.size() >= 16)
+            break;
+    }
+
+    const QJsonObject widgetSnapshot{
+        {QStringLiteral("schemaVersion"), 1},
+        {QStringLiteral("revision"), static_cast<double>(d->revision)},
+        {QStringLiteral("generatedAt"), static_cast<double>(
+             QDateTime::currentMSecsSinceEpoch())},
+        {QStringLiteral("today"), today.toString(Qt::ISODate)},
+        {QStringLiteral("events"), events},
+        {QStringLiteral("todos"), todos},
+    };
+    if (!QDir().mkpath(d->storageDirectory))
+        return;
+    QString message;
+    const QString path = QDir(d->storageDirectory).filePath(
+        QStringLiteral("widget-snapshot.json"));
+    if (!writeAtomic(path,
+                     QJsonDocument(widgetSnapshot).toJson(QJsonDocument::Compact),
+                     &message)) {
+        qWarning() << "Unable to update PIM widget snapshot:" << message;
+    }
 }
 
 QString PimStore::snapshot() const

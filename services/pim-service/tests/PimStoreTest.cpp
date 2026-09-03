@@ -1,6 +1,8 @@
 #include "PimStore.h"
 
 #include <QFileInfo>
+#include <QFile>
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -38,6 +40,7 @@ private slots:
     void removingLinkedItemPreservesCounterpart();
     void invalidUpdatesDoNotMutateItems();
     void exportsAndImportsIcalendar();
+    void widgetSnapshotRefreshesAfterMutation();
 };
 
 void PimStoreTest::eventPersistsAcrossRestart()
@@ -72,6 +75,28 @@ void PimStoreTest::eventPersistsAcrossRestart()
     QCOMPARE(events.size(), 1);
     QCOMPARE(events.first().toObject().value(QStringLiteral("id")).toString(), uid);
     QCOMPARE(events.first().toObject().value(QStringLiteral("reminderMinutes")).toInt(), 15);
+}
+
+void PimStoreTest::widgetSnapshotRefreshesAfterMutation()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    PimStore store(directory.path());
+    const QJsonObject created = parseObject(store.createTodo(encode({
+        {QStringLiteral("title"), QStringLiteral("Visible on the desktop")},
+        {QStringLiteral("due"), QDateTime::currentDateTime().addSecs(3600)
+             .toString(Qt::ISODate)},
+    })));
+    QVERIFY(created.value(QStringLiteral("ok")).toBool());
+
+    QFile snapshotFile(directory.filePath(QStringLiteral("widget-snapshot.json")));
+    QVERIFY(snapshotFile.open(QIODevice::ReadOnly));
+    const QJsonObject widget = QJsonDocument::fromJson(snapshotFile.readAll()).object();
+    QCOMPARE(widget.value(QStringLiteral("schemaVersion")).toInt(), 1);
+    QCOMPARE(widget.value(QStringLiteral("todos")).toArray().size(), 1);
+    QCOMPARE(widget.value(QStringLiteral("todos")).toArray().first().toObject()
+                 .value(QStringLiteral("title")).toString(),
+             QStringLiteral("Visible on the desktop"));
 }
 
 void PimStoreTest::recurringEventExpandsForRange()
