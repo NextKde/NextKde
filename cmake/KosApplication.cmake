@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 function(kos_add_application target)
-    set(oneValueArgs URI DISPLAY_NAME DESKTOP_FILE)
+    set(oneValueArgs URI DISPLAY_NAME DESKTOP_FILE ICON_FILE METAINFO_FILE)
     set(multiValueArgs SOURCES QML_SOURCES QML_FILES LINK_LIBRARIES)
     cmake_parse_arguments(KOS_APP "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -50,9 +50,27 @@ function(kos_add_application target)
     install(TARGETS ${target}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
-    install(FILES ${KOS_APP_DESKTOP_FILE}
+    get_filename_component(kos_desktop_name "${KOS_APP_DESKTOP_FILE}" NAME)
+    string(REGEX REPLACE "\\.in$" "" kos_desktop_name "${kos_desktop_name}")
+    set(KOS_APP_EXECUTABLE "${CMAKE_INSTALL_FULL_BINDIR}/${target}")
+    configure_file(
+        "${KOS_APP_DESKTOP_FILE}"
+        "${CMAKE_CURRENT_BINARY_DIR}/${kos_desktop_name}"
+        @ONLY
+    )
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/${kos_desktop_name}"
         DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
     )
+    if(KOS_APP_ICON_FILE)
+        install(FILES "${KOS_APP_ICON_FILE}"
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps
+        )
+    endif()
+    if(KOS_APP_METAINFO_FILE)
+        install(FILES "${KOS_APP_METAINFO_FILE}"
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo
+        )
+    endif()
 
     if(BUILD_TESTING)
         add_test(NAME ${target}.version COMMAND ${target} --version)

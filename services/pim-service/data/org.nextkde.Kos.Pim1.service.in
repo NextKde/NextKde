@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.nextkde.Kos.Pim1
 Exec=@CMAKE_INSTALL_FULL_BINDIR@/kos-pim-service
+SystemdService=kos-pim-service.service

@@ -26,6 +26,11 @@ configure_file(
     ${CMAKE_CURRENT_BINARY_DIR}/org.nextkde.Kos.Pim1.service
     @ONLY
 )
+configure_file(
+    data/kos-pim-service.service.in
+    ${CMAKE_CURRENT_BINARY_DIR}/kos-pim-service.service
+    @ONLY
+)
 
 install(TARGETS kos-pim-service
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -35,8 +40,8 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_DATADIR}/dbus-1/services
 )
 install(FILES
-    data/kos-pim-service.desktop
-    DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR}/xdg/autostart
+    ${CMAKE_CURRENT_BINARY_DIR}/kos-pim-service.service
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/systemd/user
 )
 
 if(BUILD_TESTING)

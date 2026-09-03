@@ -24,7 +24,9 @@ set(KOS_MUSIC_CORE_SOURCES
 kos_add_application(kos-music
     URI Kos.Apps.Music
     DISPLAY_NAME "KOS Music"
-    DESKTOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-music.desktop
+    DESKTOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-music.desktop.in
+    ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-music.svg
+    METAINFO_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/org.nextkde.Kos.Music.metainfo.xml
     SOURCES
         src/main.cpp
         ${KOS_MUSIC_CORE_SOURCES}

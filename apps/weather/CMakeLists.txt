@@ -1,7 +1,9 @@
 kos_add_application(kos-weather
     URI Kos.Apps.Weather
     DISPLAY_NAME "KOS Weather"
-    DESKTOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-weather.desktop
+    DESKTOP_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-weather.desktop.in
+    ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/kos-weather.svg
+    METAINFO_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/org.nextkde.Kos.Weather.metainfo.xml
     SOURCES
         src/main.cpp
     QML_SOURCES

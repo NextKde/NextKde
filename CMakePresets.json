@@ -23,6 +23,17 @@
       "binaryDir": "${sourceDir}/.build/apps-dev"
     },
     {
+      "name": "apps-release",
+      "displayName": "All standalone apps (release install)",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/apps-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
       "name": "calendar-dev",
       "displayName": "Calendar only",
       "inherits": "apps-base",
@@ -73,6 +84,7 @@
   ],
   "buildPresets": [
     { "name": "apps-dev", "configurePreset": "apps-dev" },
+    { "name": "apps-release", "configurePreset": "apps-release" },
     { "name": "calendar-dev", "configurePreset": "calendar-dev" },
     { "name": "todo-dev", "configurePreset": "todo-dev" },
     { "name": "weather-dev", "configurePreset": "weather-dev" },
@@ -82,6 +94,11 @@
     {
       "name": "apps-dev",
       "configurePreset": "apps-dev",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "apps-release",
+      "configurePreset": "apps-release",
       "output": { "outputOnFailure": true }
     }
   ]

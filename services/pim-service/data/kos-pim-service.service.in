@@ -1,0 +1,15 @@
+[Unit]
+Description=KOS calendar, task, and reminder service
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.nextkde.Kos.Pim1
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/kos-pim-service
+Restart=on-failure
+RestartSec=2
+Slice=background.slice
+
+[Install]
+WantedBy=graphical-session.target
