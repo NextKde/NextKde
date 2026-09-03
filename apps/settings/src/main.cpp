@@ -1,5 +1,11 @@
 #include <QGuiApplication>
+#include <QDateTime>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusInterface>
+#include <QDBusReply>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -157,6 +163,62 @@ public:
         return accepted;
     }
 
+    Q_INVOKABLE QVariantMap integrationSnapshot() {
+        QVariantMap result = integrationSnapshotFromReply(
+            callIntegration({QStringLiteral("snapshot")}));
+
+        const QDBusConnection sessionBus = QDBusConnection::sessionBus();
+        auto *busInterface = sessionBus.interface();
+        QString notificationProvider = QStringLiteral("none");
+        QString notificationOwner;
+        uint notificationPid = 0;
+        if (busInterface) {
+            const QDBusReply<QString> ownerReply = busInterface->serviceOwner(
+                QStringLiteral("org.freedesktop.Notifications"));
+            if (ownerReply.isValid() && !ownerReply.value().isEmpty()) {
+                notificationOwner = ownerReply.value();
+                const QDBusReply<uint> pidReply = busInterface->servicePid(notificationOwner);
+                if (pidReply.isValid())
+                    notificationPid = pidReply.value();
+
+                QFile commandLine(QStringLiteral("/proc/%1/cmdline").arg(notificationPid));
+                QString command;
+                if (commandLine.open(QIODevice::ReadOnly)) {
+                    QByteArray raw = commandLine.readAll();
+                    raw.replace('\0', ' ');
+                    command = QString::fromLocal8Bit(raw).trimmed();
+                }
+                if (command.contains(QStringLiteral("plasmashell"))) {
+                    notificationProvider = QStringLiteral("plasma");
+                } else if (command.contains(QStringLiteral("/qs"))
+                           || command.contains(QStringLiteral("quickshell"))) {
+                    notificationProvider = QStringLiteral("kos");
+                } else {
+                    notificationProvider = QStringLiteral("other");
+                }
+                result.insert(QStringLiteral("notificationCommand"), command);
+            }
+        }
+        result.insert(QStringLiteral("notificationProvider"), notificationProvider);
+        result.insert(QStringLiteral("notificationOwner"), notificationOwner);
+        result.insert(QStringLiteral("notificationPid"), notificationPid);
+
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                               QStringLiteral("org.kde.kwin.Effects"), sessionBus);
+        const QStringList loadedEffects = effects.isValid()
+            ? effects.property("loadedEffects").toStringList() : QStringList{};
+        result.insert(QStringLiteral("kwinAvailable"), effects.isValid());
+        result.insert(QStringLiteral("glassLoaded"),
+                      loadedEffects.contains(QStringLiteral("glass")));
+        result.insert(QStringLiteral("dockAnimationLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
+        result.insert(QStringLiteral("contextMenuInputLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+        result.insert(QStringLiteral("updatedAt"),
+                      QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
+        return result;
+    }
+
 signals:
     void lastErrorChanged();
 
@@ -279,6 +341,20 @@ private:
         };
     }
 
+    QVariantMap integrationSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {{QStringLiteral("shellReady"), false}};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的接入状态"));
+            return {{QStringLiteral("shellReady"), false}};
+        }
+        setLastError({});
+        return document.object().toVariantMap();
+    }
+
     QString callDock(const QStringList &arguments) {
         return callShell(QStringLiteral("dock-settings"), arguments,
                          QStringLiteral("Dock 设置请求失败"));
@@ -292,6 +368,11 @@ private:
     QString callLauncher(const QStringList &arguments) {
         return callShell(QStringLiteral("applauncher-settings"), arguments,
                          QStringLiteral("启动台设置请求失败"));
+    }
+
+    QString callIntegration(const QStringList &arguments) {
+        return callShell(QStringLiteral("integration-status"), arguments,
+                         QStringLiteral("接入状态请求失败"));
     }
 
     static QString shellDirectory() {
