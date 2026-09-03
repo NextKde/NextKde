@@ -1,9 +1,11 @@
 {
   description = "KOS Desktop Shell - iPadOS-style desktop for KDE Plasma 6";
 
-  inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  };
+inputs = {
+    nixpkgs = {
+        url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
+    };
+};
 
   outputs = { self, nixpkgs }:
     let
