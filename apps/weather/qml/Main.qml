@@ -551,7 +551,7 @@ KosApplicationWindow {
                                 ? qsTr("Loading the forecast") : qsTr("No forecast available")
                             description: backend.connected
                                 ? qsTr("Refresh or choose another saved location.")
-                                : qsTr("Start shell-data-service to fetch weather data.")
+                                : qsTr("Start kos-data-service to fetch weather data.")
                             actionText: backend.connected ? qsTr("Refresh") : ""
                             actionEnabled: !backend.loading
                             onActionTriggered: backend.refresh()

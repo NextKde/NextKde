@@ -20,9 +20,9 @@ kos_add_application(kos-weather
 target_include_directories(kos-weather PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-add_dependencies(kos-weather kos-shell-data-service-build)
+add_dependencies(kos-weather kos-data-service-build)
 target_compile_definitions(kos-weather PRIVATE
-    KOS_WEATHER_SERVICE_BUILD_PATH="${KOS_SHELL_DATA_SERVICE_EXECUTABLE}"
+    KOS_DATA_SERVICE_BUILD_PATH="${KOS_DATA_SERVICE_EXECUTABLE}"
 )
 
 if(BUILD_TESTING)

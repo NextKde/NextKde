@@ -137,7 +137,7 @@ void WeatherClientTest::reconnectsWhenServiceAppearsAfterInitialFailure()
     QVERIFY(!client.connected());
 
     const QString socketPath = QDir(runtimeDirectory.path()).filePath(
-        QStringLiteral("shell-data-service.sock"));
+        QStringLiteral("kos-data.sock"));
     QLocalServer::removeServer(socketPath);
     QVERIFY2(service.listen(socketPath), qPrintable(service.errorString()));
 

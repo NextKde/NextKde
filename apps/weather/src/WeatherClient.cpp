@@ -41,18 +41,18 @@ QVariantList arrayToList(const QJsonValue &value)
 QString serviceExecutable()
 {
     QStringList candidates;
-    const QString configured = qEnvironmentVariable("KOS_SHELL_DATA_SERVICE");
+    const QString configured = qEnvironmentVariable("KOS_DATA_SERVICE");
     if (!configured.isEmpty())
         candidates.append(configured);
     candidates.append(QDir(QCoreApplication::applicationDirPath())
-                          .filePath(QStringLiteral("kos-shell-data-service")));
-#ifdef KOS_WEATHER_SERVICE_BUILD_PATH
-    candidates.append(QStringLiteral(KOS_WEATHER_SERVICE_BUILD_PATH));
+                          .filePath(QStringLiteral("kos-data-service")));
+    candidates.append(QDir(QCoreApplication::applicationDirPath())
+                          .filePath(QStringLiteral("../libexec/kos-data-service")));
+#ifdef KOS_DATA_SERVICE_BUILD_PATH
+    candidates.append(QStringLiteral(KOS_DATA_SERVICE_BUILD_PATH));
 #endif
     candidates.append(QStandardPaths::findExecutable(
-        QStringLiteral("kos-shell-data-service")));
-    candidates.append(QStandardPaths::findExecutable(
-        QStringLiteral("shell-data-service")));
+        QStringLiteral("kos-data-service")));
 
     for (const QString &candidate : std::as_const(candidates)) {
         if (!candidate.isEmpty() && QFileInfo(candidate).isExecutable())
@@ -68,7 +68,9 @@ WeatherClient::WeatherClient(QObject *parent)
     , m_snapshotDirectory(QDir(stateRoot()).filePath(
           QStringLiteral("quickshell/shell-data-service")))
     , m_snapshotPath(QDir(m_snapshotDirectory).filePath(QStringLiteral("snapshot.json")))
-    , m_socketPath(QDir(runtimeRoot()).filePath(QStringLiteral("shell-data-service.sock")))
+    , m_socketPath(qEnvironmentVariable(
+          "KOS_DATA_SOCKET",
+          QDir(runtimeRoot()).filePath(QStringLiteral("kos-data.sock"))))
 {
     m_reconnectTimer.setInterval(1000);
     m_reconnectTimer.setSingleShot(true);
@@ -176,7 +178,7 @@ qint64 WeatherClient::staleAt() const
 
 void WeatherClient::refresh()
 {
-    sendRequest({{QStringLiteral("type"), QStringLiteral("weather_refresh")}});
+    sendRequest(QStringLiteral("weather.refresh"));
 }
 
 void WeatherClient::searchLocations(const QString &query)
@@ -191,8 +193,7 @@ void WeatherClient::searchLocations(const QString &query)
         emit searchingChanged();
     }
     const QString language = QLocale().name().section(QLatin1Char('_'), 0, 0);
-    sendRequest({
-        {QStringLiteral("type"), QStringLiteral("weather_search")},
+    sendRequest(QStringLiteral("weather.search"), {
         {QStringLiteral("query"), normalized},
         {QStringLiteral("language"), language},
         {QStringLiteral("limit"), 8},
@@ -203,8 +204,7 @@ void WeatherClient::selectLocation(const QVariantMap &location)
 {
     if (location.isEmpty())
         return;
-    sendRequest({
-        {QStringLiteral("type"), QStringLiteral("weather_set_location")},
+    sendRequest(QStringLiteral("weather.set-location"), {
         {QStringLiteral("location"), location},
     });
     clearSearch();
@@ -214,8 +214,7 @@ void WeatherClient::setUnits(const QString &units)
 {
     if (units != QLatin1String("metric") && units != QLatin1String("imperial"))
         return;
-    sendRequest({
-        {QStringLiteral("type"), QStringLiteral("weather_set_units")},
+    sendRequest(QStringLiteral("weather.set-units"), {
         {QStringLiteral("units"), units},
     });
 }
@@ -268,10 +267,7 @@ void WeatherClient::onSocketConnected()
 {
     m_serviceStartAttempted = false;
     emit connectedChanged();
-    const QByteArray subscription = QJsonDocument(QJsonObject{
-        {QStringLiteral("type"), QStringLiteral("subscribe_weather")},
-    }).toJson(QJsonDocument::Compact) + '\n';
-    m_socket.write(subscription);
+    sendRequest(QStringLiteral("weather.snapshot"));
     flushRequests();
 }
 
@@ -308,10 +304,6 @@ void WeatherClient::readSocketLines()
 
 void WeatherClient::processSocketLine(const QByteArray &line)
 {
-    if (line == QByteArrayLiteral("weather_changed")) {
-        reloadSnapshot();
-        return;
-    }
     if (!line.startsWith('{'))
         return;
 
@@ -320,33 +312,53 @@ void WeatherClient::processSocketLine(const QByteArray &line)
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
         return;
     const QJsonObject response = document.object();
-    const QString type = response.value(QStringLiteral("type")).toString();
+    if (response.value(QStringLiteral("event")).toString()
+        == QLatin1String("weather.changed")) {
+        sendRequest(QStringLiteral("weather.snapshot"));
+        return;
+    }
+
+    const QString requestId = response.value(QStringLiteral("requestId")).toString();
+    const QString operation = m_requestOperations.take(requestId);
     const bool ok = response.value(QStringLiteral("ok")).toBool();
-    if (type == QLatin1String("weather_search")) {
+    const QJsonObject result = response.value(QStringLiteral("result")).toObject();
+    if (operation == QLatin1String("weather.search")) {
         m_searching = false;
         emit searchingChanged();
         m_searchResults = ok
-            ? response.value(QStringLiteral("locations")).toArray().toVariantList()
+            ? result.value(QStringLiteral("locations")).toArray().toVariantList()
             : QVariantList{};
         emit searchResultsChanged();
     }
+    if (ok && operation == QLatin1String("weather.snapshot"))
+        applyWeather(result.value(QStringLiteral("weather")).toObject());
     if (!ok) {
-        setTransportError(response.value(QStringLiteral("error")).toString(
-            tr("Weather request failed")));
+        const QString message = response.value(QStringLiteral("error")).toObject()
+                                    .value(QStringLiteral("message")).toString();
+        setTransportError(message.isEmpty() ? tr("Weather request failed") : message);
     }
 }
 
-void WeatherClient::sendRequest(const QVariantMap &request)
+void WeatherClient::sendRequest(const QString &operation, const QVariantMap &payload)
 {
-    const QByteArray payload = QJsonDocument(QJsonObject::fromVariantMap(request))
-                                   .toJson(QJsonDocument::Compact) + '\n';
+    const QString requestId = QStringLiteral("weather-%1").arg(++m_requestSerial);
+    const QJsonObject request{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("requestId"), requestId},
+        {QStringLiteral("operation"), operation},
+        {QStringLiteral("payload"), QJsonObject::fromVariantMap(payload)},
+    };
+    const QByteArray encoded = QJsonDocument(request).toJson(QJsonDocument::Compact) + '\n';
+    m_requestOperations.insert(requestId, operation);
     if (connected()) {
-        m_socket.write(payload);
+        m_socket.write(encoded);
         return;
     }
-    if (m_pendingRequests.size() >= 16)
-        m_pendingRequests.dequeue();
-    m_pendingRequests.enqueue(payload);
+    if (m_pendingRequests.size() >= 16) {
+        const QJsonObject dropped = QJsonDocument::fromJson(m_pendingRequests.dequeue()).object();
+        m_requestOperations.remove(dropped.value(QStringLiteral("requestId")).toString());
+    }
+    m_pendingRequests.enqueue(encoded);
     connectSocket();
 }
 
@@ -367,7 +379,12 @@ void WeatherClient::reloadSnapshot()
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
         return;
-    const QJsonObject weather = document.object().value(QStringLiteral("weather")).toObject();
+    applyWeather(document.object().value(QStringLiteral("weather")).toObject());
+    ensureSnapshotWatch();
+}
+
+void WeatherClient::applyWeather(const QJsonObject &weather)
+{
     if (weather.value(QStringLiteral("schemaVersion")).toInt() != 1)
         return;
 
@@ -384,7 +401,6 @@ void WeatherClient::reloadSnapshot()
     m_loading = m_status == QLatin1String("loading");
     m_ready = !m_current.isEmpty();
     emit snapshotChanged();
-    ensureSnapshotWatch();
 }
 
 void WeatherClient::ensureSnapshotWatch()

@@ -1,0 +1,625 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+build_dir=${KOS_BUILD_DIR:-"$project_dir/.build/kosctl"}
+prefix=${KOS_PREFIX:-"$HOME/.local"}
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
+runtime_unit_dir="$config_dir/systemd/user"
+glass_build_dir="$build_dir/kwin-effects-glass"
+kwin_system_prefix=/usr
+kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
+kwin_effect_state="$prefix/share/kos/kwin-effect-state"
+kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
+kwin_plugin_api_version=""
+kwin_plugin_rebuild_required=0
+
+qs_bin=$(command -v qs || command -v quickshell || true)
+qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
+
+kwin_plugins_enabled() {
+    case "${KOS_BUILD_KWIN_PLUGINS:-ON}" in
+        0|OFF|off|FALSE|false|NO|no) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+# KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
+# includes KWIN_PLUGIN_VERSION_STRING. Distribution upgrades can retain the
+# timestamps of installed headers, which means Ninja may incorrectly reuse
+# effect objects compiled for the previous KWin patch release. Detect that
+# case explicitly and do one clean rebuild of both effect build trees.
+detect_kwin_plugin_api_version() {
+    kwin_plugins_enabled || return 0
+
+    local config_header=/usr/include/kwin/config-kwin.h
+    [[ -r "$config_header" ]] || return 0
+    kwin_plugin_api_version=$(sed -n \
+        's/^#define KWIN_PLUGIN_VERSION_STRING "\([^"]*\)"$/\1/p' \
+        "$config_header" | head -n 1)
+    [[ -n "$kwin_plugin_api_version" ]] || return 0
+
+    if [[ ! -f "$kwin_plugin_api_stamp" ]] \
+            || [[ $(<"$kwin_plugin_api_stamp") != "$kwin_plugin_api_version" ]]; then
+        kwin_plugin_rebuild_required=1
+        printf 'KWin plugin API is %s; rebuilding KWin effects for this ABI.\n' \
+            "$kwin_plugin_api_version"
+    fi
+}
+
+record_kwin_plugin_api_version() {
+    [[ -n "$kwin_plugin_api_version" ]] || return 0
+    mkdir -p "$(dirname "$kwin_plugin_api_stamp")"
+    printf '%s\n' "$kwin_plugin_api_version" > "$kwin_plugin_api_stamp"
+}
+
+usage() {
+    cat <<'EOF'
+Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|shortcuts install|shortcuts uninstall>
+
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
+EOF
+}
+
+doctor() {
+    local failed=0
+    for command_name in cmake ninja c++ go; do
+        if command -v "$command_name" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$command_name" "$(command -v "$command_name")"
+        else
+            printf 'miss %-12s\n' "$command_name"
+            failed=1
+        fi
+    done
+    if [[ -n "$qs_bin" ]]; then
+        local qs_version
+        qs_version=$("$qs_bin" --version 2>&1 | head -n 1 || true)
+        if [[ "$qs_version" =~ Quickshell\ 0\.3\. ]]; then
+            printf 'ok   %-12s %s (%s)\n' quickshell "$qs_bin" "$qs_version"
+        else
+            printf 'warn %-12s %s (expected Quickshell 0.3.x)\n' quickshell "$qs_version"
+        fi
+    else
+        printf 'miss %-12s install Quickshell 0.3.x\n' quickshell
+        failed=1
+    fi
+    for runtime_command in nmcli wpctl bluetoothctl systemctl; do
+        if command -v "$runtime_command" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$runtime_command" "$(command -v "$runtime_command")"
+        else
+            printf 'warn %-12s runtime integration unavailable\n' "$runtime_command"
+        fi
+    done
+    for runtime_command in wl-copy wl-paste cliphist; do
+        if command -v "$runtime_command" >/dev/null 2>&1; then
+            printf 'ok   %-12s %s\n' "$runtime_command" "$(command -v "$runtime_command")"
+        else
+            printf 'warn %-12s clipboard history unavailable\n' "$runtime_command"
+        fi
+    done
+    if kwin_plugins_enabled; then
+        for plugin_command in sudo kwriteconfig6; do
+            if command -v "$plugin_command" >/dev/null 2>&1; then
+                printf 'ok   %-12s %s\n' "$plugin_command" "$(command -v "$plugin_command")"
+            else
+                printf 'miss %-12s required for KWin plugin installation\n' "$plugin_command"
+                failed=1
+            fi
+        done
+        if [[ -n "$qdbus_bin" ]]; then
+            printf 'ok   %-12s %s\n' qdbus "$qdbus_bin"
+        else
+            printf 'warn %-12s effects will load after the next KWin restart\n' qdbus
+        fi
+    fi
+    if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        printf 'ok   %-12s graphical session detected\n' session
+    else
+        printf 'warn %-12s no graphical session (builds still work)\n' session
+    fi
+    return "$failed"
+}
+
+configure_build() {
+    local build_type=${KOS_BUILD_TYPE:-Debug}
+    local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
+    prepare_cmake_build_dir "$build_dir" "$project_dir"
+    cmake -S "$project_dir" -B "$build_dir" -G Ninja \
+        -DCMAKE_BUILD_TYPE="$build_type" \
+        -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
+        -DKOS_BUILD_KWIN_PLUGINS="$plugins"
+}
+
+prepare_cmake_build_dir() {
+    local target_dir=$1
+    local source_dir=$2
+    local cache_file="$target_dir/CMakeCache.txt"
+    [[ -f "$cache_file" ]] || return 0
+
+    local cached_source
+    cached_source=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache_file" \
+        | head -n 1)
+    if [[ -n "$cached_source" && "$cached_source" != "$source_dir" ]]; then
+        printf 'Resetting moved CMake build cache (%s -> %s)\n' \
+            "$cached_source" "$source_dir"
+        rm -f -- "$cache_file"
+        rm -rf -- "$target_dir/CMakeFiles"
+    fi
+}
+
+ensure_kwin_build_dependencies() {
+    kwin_plugins_enabled || return 0
+    if command -v pacman >/dev/null 2>&1; then
+        local package
+        local -a missing_packages=()
+        local -a arch_packages=(
+            extra-cmake-modules kconfig ki18n kguiaddons kcmutils
+            kdecoration gettext libxcb
+        )
+        for package in "${arch_packages[@]}"; do
+            if ! pacman -Q "$package" >/dev/null 2>&1; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KWin/Glass build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo pacman -S --needed -- "${missing_packages[@]}"
+        fi
+    fi
+}
+
+build_kwin_glass() {
+    local build_type=${KOS_BUILD_TYPE:-Debug}
+    prepare_cmake_build_dir "$glass_build_dir" \
+        "$project_dir/vendor/kwin-effects-glass"
+    cmake -S "$project_dir/vendor/kwin-effects-glass" \
+        -B "$glass_build_dir" -G Ninja \
+        -DCMAKE_BUILD_TYPE="$build_type" \
+        -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
+        -DGLASS_WAYLAND=ON \
+        -DGLASS_X11=OFF
+    if (( kwin_plugin_rebuild_required )); then
+        cmake --build "$glass_build_dir" --target clean
+    fi
+    cmake --build "$glass_build_dir" \
+        --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+}
+
+build() {
+    detect_kwin_plugin_api_version
+    configure_build
+    if (( kwin_plugin_rebuild_required )); then
+        cmake --build "$build_dir" --target clean
+    fi
+    cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+    if kwin_plugins_enabled; then
+        build_kwin_glass
+        record_kwin_plugin_api_version
+    fi
+    mkdir -p "$build_dir/bin"
+    (
+        cd "$project_dir/services/data-service"
+        # Use a reachable default mirror while preserving the standard
+        # GOPROXY override for CI, downstream packagers, and offline caches.
+        GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
+            go build -trimpath -o "$build_dir/bin/kos-data-service" .
+    )
+}
+
+install_files() {
+    if [[ -z "$qs_bin" ]]; then
+        echo "Quickshell (qs) is required to install kos-shell.service" >&2
+        return 1
+    fi
+    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin" \
+        "$prefix/share/kos/settings" "$prefix/share/shared/qml"
+    # Unlink before installing so a currently running binary is never written
+    # in place: the running process keeps its old inode (and a fresh exec gets
+    # the new one), while overwriting an executing file can fail with
+    # ETXTBSY ("Text file busy") or crash the process using it.
+    rm -f "$prefix/libexec/kos-platform" \
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+    install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
+    install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
+    install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+    install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
+        "$prefix/share/kos/platform/kwin/window-bridge.js"
+    install -m 0644 "$project_dir/apps/settings/main.qml" \
+        "$prefix/share/kos/settings/main.qml"
+    rm -rf "$prefix/share/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$prefix/share/shared/qml/"
+
+    local shell_config="$config_dir/quickshell/kos"
+    mkdir -p "$shell_config"
+    # shell/shared/qml/controls is a repository symlink, while earlier
+    # installations created it as a real directory. Remove that single
+    # generated target before copying so reinstalling is idempotent.
+    rm -rf "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shell/." "$shell_config/"
+    mkdir -p "$shell_config/shared/qml"
+    rm -rf "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+
+    mkdir -p "$runtime_unit_dir"
+    sed "s|%h/.local|$prefix|g" \
+        "$project_dir/packaging/systemd/kos-platform.service" \
+        > "$runtime_unit_dir/kos-platform.service"
+    sed "s|%h/.local|$prefix|g" \
+        "$project_dir/packaging/systemd/kos-data.service" \
+        > "$runtime_unit_dir/kos-data.service"
+    sed "s|@QS_EXEC@|$qs_bin|g" \
+        "$project_dir/packaging/systemd/kos-shell.service.in" \
+        > "$runtime_unit_dir/kos-shell.service"
+    chmod 0644 "$runtime_unit_dir/kos-platform.service" \
+        "$runtime_unit_dir/kos-data.service" \
+        "$runtime_unit_dir/kos-shell.service"
+    mkdir -p "$prefix/share/applications"
+    sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
+        "$project_dir/packaging/desktop/kos-settings.desktop.in" \
+        > "$prefix/share/applications/kos-settings.desktop"
+    # QGuiApplication::desktopFileName is org.kos.Platform. Portals resolve
+    # that application ID by desktop-file basename, so these must match.
+    rm -f "$prefix/share/applications/kos-platform.desktop"
+    sed "s|@KOS_PLATFORM_EXEC@|$prefix/libexec/kos-platform|g" \
+        "$project_dir/packaging/desktop/org.kos.Platform.desktop.in" \
+        > "$prefix/share/applications/org.kos.Platform.desktop"
+    if command -v kbuildsycoca6 >/dev/null 2>&1; then
+        kbuildsycoca6 --noincremental >/dev/null
+    fi
+    if [[ "${KOS_SKIP_SYSTEMD:-0}" != "1" ]] && command -v systemctl >/dev/null 2>&1; then
+        local -a kos_units=(
+            kos-platform.service kos-data.service kos-shell.service
+        )
+        # install is non-disruptive: it registers the units for the next
+        # session (and login autostart) but leaves the running session alone.
+        # In-place updates of executables and QML only take effect after the
+        # services restart — either at next login/relogin or via `kosctl start`.
+        systemctl --user daemon-reload
+        systemctl --user enable "${kos_units[@]}"
+    fi
+}
+
+# The final, bilingual summary is the last thing `install` prints, so the user
+# always sees it as the takeaway — after all build/stage/kwin output above it.
+print_install_summary() {
+    local shell_config="$config_dir/quickshell/kos"
+    printf '\n'
+    printf '  ✅ KOS 已安装（未打断当前会话）\n'
+    printf '     KOS installed — your running session was left untouched.\n'
+    printf '\n'
+    printf '  🔄 要生效：注销并重新登录，或重启系统\n'
+    printf '     To apply: log out and back in, or reboot.\n'
+    printf '\n'
+    printf '  ⚡ 不想注销、立即生效：./tools/kosctl start\n'
+    printf '     Apply now without logging out: ./tools/kosctl start\n'
+    printf '  ⚠️  注意：KWin 特效可能要到下次会话才会生效\n'
+    printf '     Note: KWin effects may not apply until the next session.\n'
+    printf '\n'
+    printf '  📦 安装位置：%s\n' "$prefix"
+    printf '     (shell 配置：%s)\n' "$shell_config"
+    printf '\n'
+}
+
+# start — make the latest installed revision take effect immediately.
+# Restarts the KOS user services. The KWin effects are only persisted to
+# kwinrc here; they load on the next KWin/session start, because hot-loading
+# effect binaries into a running compositor is the operation that has crashed
+# kwin_wayland before.
+start_all() {
+    if ! command -v systemctl >/dev/null 2>&1; then
+        echo "systemctl is unavailable; cannot start KOS services" >&2
+        return 1
+    fi
+    if [[ ! -x "$prefix/libexec/kos-platform" ]]; then
+        echo "kos-platform is not installed; run ./tools/kosctl install first" >&2
+        return 1
+    fi
+    if [[ ! -e "$runtime_unit_dir/kos-shell.service" ]]; then
+        echo "KOS systemd units are not installed; run ./tools/kosctl install first" >&2
+        return 1
+    fi
+    local -a kos_units=(
+        kos-platform.service kos-data.service kos-shell.service
+    )
+    # Replace a manually launched `kos` instance so systemd becomes its sole
+    # supervisor; the unit's --no-duplicate would otherwise exit repeatedly
+    # while that instance is alive.
+    if [[ -n "$qs_bin" ]]; then
+        "$qs_bin" -c kos kill >/dev/null 2>&1 || true
+    fi
+    systemctl --user daemon-reload
+    systemctl --user enable --now "${kos_units[@]}"
+    systemctl --user restart "${kos_units[@]}"
+    enable_kwin_effects
+    printf '\n'
+    printf '  🚀 KOS 已启动（platform / data / shell）\n'
+    printf '     KOS started — platform, data, and shell are running.\n'
+    printf '\n'
+    printf '  ⚠️  KWin 特效可能要到下次 KWin／会话启动（或重启）后才生效\n'
+    printf '     KWin effects may not apply until the next KWin/session start (or reboot).\n'
+    printf '\n'
+}
+
+# sync — copy shell QML (and shared controls) to the installed config without
+# rebuilding. The installed shell does not hot-reload (its file watcher is
+# disabled), so run `./tools/kosctl start` to apply the copied QML. Cheapest
+# edit loop for QML-only changes; use `install` when C++/Go/KWin code changed.
+sync_qml() {
+    local shell_config="$config_dir/quickshell/kos"
+    if [[ ! -d "$shell_config" ]]; then
+        echo "kos is not installed; run ./tools/kosctl install first" >&2
+        return 1
+    fi
+    rm -rf "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shell/." "$shell_config/"
+    mkdir -p "$shell_config/shared/qml"
+    rm -rf "$shell_config/shared/qml/controls"
+    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+    printf 'Synced shell QML to %s; run ./tools/kosctl start to apply it.\n' "$shell_config"
+}
+
+# dev — run the source Shell against the normal systemd platform and data
+# services. It deliberately does not build, install, stop, or replace them;
+# all clients use the single standard runtime socket pair.
+dev_all() {
+    if [[ -z "$qs_bin" ]]; then
+        echo "Quickshell (qs) is required for dev mode" >&2
+        return 1
+    fi
+    local runtime_dir=${XDG_RUNTIME_DIR:-/tmp}
+    local -a missing_sockets=()
+    [[ -S "$runtime_dir/kos-platform.sock" ]] || missing_sockets+=(kos-platform.service)
+    [[ -S "$runtime_dir/kos-data.sock" ]] || missing_sockets+=(kos-data.service)
+    if (( ${#missing_sockets[@]} > 0 )); then
+        printf 'Missing system service socket(s): %s\n' "${missing_sockets[*]}" >&2
+        printf 'Start them first: ./tools/kosctl start\n' >&2
+        return 1
+    fi
+    "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
+    printf 'Starting source Shell with system platform and data services\n'
+    exec "$qs_bin" -p "$project_dir/shell"
+}
+
+remember_blur_state() {
+    [[ -e "$kwin_effect_state" ]] && return 0
+    local blur_enabled=true
+    if [[ -n "$qdbus_bin" ]] \
+            && "$qdbus_bin" org.kde.KWin /Effects \
+                org.kde.kwin.Effects.isEffectLoaded blur >/dev/null 2>&1; then
+        blur_enabled=$("$qdbus_bin" org.kde.KWin /Effects \
+            org.kde.kwin.Effects.isEffectLoaded blur 2>/dev/null || printf 'true')
+    elif command -v kreadconfig6 >/dev/null 2>&1; then
+        blur_enabled=$(kreadconfig6 --file kwinrc --group Plugins \
+            --key blurEnabled --default true --type bool)
+    fi
+    printf 'blurEnabled=%s\n' "$blur_enabled" > "$kwin_effect_state"
+}
+
+# Persist the KOS effect selection to kwinrc only. Never touches the running
+# compositor: reloading effects in-place after the plugin files were replaced
+# has crashed kwin_wayland, killing every Wayland client with it.
+enable_kwin_effects() {
+    remember_blur_state
+    # Glass is a fork of KWin Blur and cannot be active alongside it.
+    # kwriteconfig6 writes "false" when a bool key is given no value, so every
+    # key must carry an explicit value or install would silently disable the
+    # user's existing effect selections.
+    kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
+        false --type bool --notify false
+    local effect
+    for effect in kos_dock_window_animation kos_context_menu_input glass; do
+        # --notify false: only write kwinrc. --notify true would send a D-Bus
+        # signal asking the RUNNING compositor to re-read the config, which is
+        # exactly the disruption install must avoid.
+        kwriteconfig6 --file kwinrc --group Plugins --key "${effect}Enabled" \
+            true --type bool --notify false
+    done
+    printf 'KWin effects enabled in kwinrc; they load on the next KWin/session start.\n'
+}
+
+# Applies the just-installed effect binaries to the RUNNING compositor.
+# Hot-loading freshly replaced plugin .so files is the operation that has
+# crashed KWin before (it takes every Wayland client down with it), so this
+# is deliberately not called by any command. Keep it available for manual,
+# well-understood use only.
+reload_kwin_effects() {
+    if [[ -z "$qdbus_bin" ]]; then
+        printf 'warn qdbus is unavailable; KWin effects will load after the next session restart\n' >&2
+        return 0
+    fi
+    "$qdbus_bin" org.kde.KWin /Effects \
+        org.kde.kwin.Effects.unloadEffect blur >/dev/null 2>&1 || true
+    local effect
+    for effect in kos_dock_window_animation kos_context_menu_input glass; do
+        "$qdbus_bin" org.kde.KWin /Effects \
+            org.kde.kwin.Effects.loadEffect "$effect" >/dev/null 2>&1 || true
+    done
+    printf 'KWin effects reloaded on the running compositor.\n'
+}
+
+install_kwin_plugins() {
+    kwin_plugins_enabled || return 0
+
+    local stage_dir="$build_dir/system-install-stage"
+    if [[ "$stage_dir" != "$build_dir/"* ]]; then
+        printf 'Refusing unsafe staging path: %s\n' "$stage_dir" >&2
+        return 1
+    fi
+    rm -rf -- "$stage_dir"
+    mkdir -p "$stage_dir" "$(dirname "$kwin_manifest")"
+
+    DESTDIR="$stage_dir" cmake --install "$build_dir" \
+        --prefix "$kwin_system_prefix" --component kwin_plugins
+    DESTDIR="$stage_dir" cmake --install "$glass_build_dir" \
+        --prefix "$kwin_system_prefix"
+
+    find "$stage_dir" \( -type f -o -type l \) -printf '/%P\n' \
+        | sort -u > "$kwin_manifest"
+    if [[ ! -s "$kwin_manifest" ]]; then
+        printf 'KWin plugin staging produced no files\n' >&2
+        return 1
+    fi
+
+    printf 'Installing KWin effects to %s requires administrator permission.\n' \
+        "$kwin_system_prefix"
+    # Replace each file via rm-then-cp (new inode), never by copying over the
+    # existing file in place: the running compositor keeps its mapping of the
+    # old plugin, while overwriting in place has crashed kwin_wayland.
+    local manifest_entry
+    local -a system_entries=()
+    while IFS= read -r manifest_entry; do
+        [[ -z "$manifest_entry" ]] && continue
+        case "$manifest_entry" in
+            "$kwin_system_prefix"/*) system_entries+=("$manifest_entry") ;;
+            *)
+                printf 'Refusing unsafe manifest entry: %s\n' "$manifest_entry" >&2
+                return 1
+                ;;
+        esac
+    done < "$kwin_manifest"
+    if (( ${#system_entries[@]} > 0 )); then
+        sudo rm -f -- "${system_entries[@]}"
+    fi
+    sudo cp -a "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    enable_kwin_effects
+    printf 'Installed and enabled KOS Dock Animation, Context Menu Input, and Glass.\n'
+}
+
+install_all() {
+    ensure_kwin_build_dependencies
+    build
+    install_files
+    install_kwin_plugins
+    print_install_summary
+}
+
+run_shell() {
+    if [[ -z "$qs_bin" ]]; then
+        echo "Quickshell (qs) is not installed" >&2
+        return 1
+    fi
+    if [[ "${1:-}" == "installed" ]]; then
+        exec "$qs_bin" -c kos
+    fi
+    exec "$qs_bin" -p "$project_dir/shell"
+}
+
+open_glass_settings() {
+    if command -v systemsettings >/dev/null 2>&1; then
+        exec systemsettings kcm_kwin_effects
+    fi
+    if command -v kcmshell6 >/dev/null 2>&1; then
+        exec kcmshell6 kcm_kwin_effects
+    fi
+    echo "KDE Desktop Effects settings are unavailable" >&2
+    return 1
+}
+
+restore_blur_state() {
+    local blur_enabled=true
+    if [[ -r "$kwin_effect_state" ]]; then
+        blur_enabled=$(sed -n 's/^blurEnabled=//p' "$kwin_effect_state" | head -n 1)
+    fi
+    if [[ "$blur_enabled" == "true" ]]; then
+        kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
+            true --type bool --notify true
+        if [[ -n "$qdbus_bin" ]]; then
+            "$qdbus_bin" org.kde.KWin /Effects \
+                org.kde.kwin.Effects.loadEffect blur >/dev/null 2>&1 || true
+        fi
+    else
+        kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
+            false --type bool --notify false
+    fi
+}
+
+uninstall_kwin_plugins() {
+    # A user-only installation (KOS_BUILD_KWIN_PLUGINS=OFF) must not change
+    # the user's existing KWin effect configuration during uninstall.
+    if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" ]]; then
+        return 0
+    fi
+
+    local effect
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        for effect in kos_dock_window_animation kos_context_menu_input glass; do
+            if [[ -n "$qdbus_bin" ]]; then
+                "$qdbus_bin" org.kde.KWin /Effects \
+                    org.kde.kwin.Effects.unloadEffect "$effect" >/dev/null 2>&1 || true
+            fi
+            kwriteconfig6 --file kwinrc --group Plugins \
+                --key "${effect}Enabled" --delete --notify || true
+        done
+        restore_blur_state
+    fi
+
+    if [[ -s "$kwin_manifest" ]]; then
+        local system_file
+        local -a system_files=()
+        while IFS= read -r system_file; do
+            [[ -z "$system_file" ]] && continue
+            case "$system_file" in
+                "$kwin_system_prefix"/*) system_files+=("$system_file") ;;
+                *)
+                    printf 'Refusing unsafe manifest entry: %s\n' "$system_file" >&2
+                    return 1
+                    ;;
+            esac
+        done < "$kwin_manifest"
+        if (( ${#system_files[@]} > 0 )); then
+            printf 'Removing KWin effects from %s requires administrator permission.\n' \
+                "$kwin_system_prefix"
+            sudo rm -f -- "${system_files[@]}"
+        fi
+    fi
+    rm -f "$kwin_manifest" "$kwin_effect_state"
+}
+
+uninstall() {
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user disable --now kos-shell.service \
+            kos-platform.service kos-data.service 2>/dev/null || true
+    fi
+    uninstall_kwin_plugins
+    rm -f "$runtime_unit_dir/kos-shell.service" \
+        "$runtime_unit_dir/kos-platform.service" \
+        "$runtime_unit_dir/kos-data.service"
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl --user daemon-reload || true
+    fi
+    rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+    rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" \
+        "$prefix/share/kos/settings/main.qml" \
+        "$prefix/share/applications/kos-settings.desktop" \
+        "$prefix/share/applications/org.kos.Platform.desktop" \
+        "$prefix/share/applications/kos-platform.desktop"
+    rm -rf "$prefix/share/shared/qml/controls"
+    rm -rf "$config_dir/quickshell/kos"
+    echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
+}
+
+shortcuts() {
+    if [[ ! -x "$prefix/libexec/kos-platform" ]]; then
+        echo "kos-platform is not installed; run ./tools/kosctl install first" >&2
+        return 1
+    fi
+    KOS_SHORTCUTS_FILE="$project_dir/shared/contracts/shortcuts.v1.json" \
+        "$prefix/libexec/kos-platform" shortcuts "$1"
+}
+
+case "${1:-}" in
+    doctor) doctor ;;
+    build) build ;;
+    install) install_all ;;
+    start) start_all ;;
+    sync) sync_qml ;;
+    dev) dev_all ;;
+    run) run_shell "${2:-}" ;;
+    uninstall) uninstall ;;
+    glass-settings) open_glass_settings ;;
+    shortcuts)
+        [[ "${2:-}" == install || "${2:-}" == uninstall ]] || { usage >&2; exit 2; }
+        shortcuts "$2" ;;
+    *) usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,13 @@
+[Unit]
+Description=KOS persistent data service
+After=graphical-session.target plasma-kwin_wayland.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=@CMAKE_INSTALL_FULL_LIBEXECDIR@/kos-data-service
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,17 +1,25 @@
 # Shared code
 
-Only pure Qt Quick / JavaScript code belongs here. This directory must not
-import Quickshell, KWin, Wayland-only APIs, or a desktop module.
+Only portable Qt Quick / JavaScript code and cross-process contracts belong
+here. This directory must not import Quickshell, KWin, Wayland-only APIs, or a
+shell desktop module.
 
 - `qml/foundation/`: portable design tokens and application surfaces, built
-  together with the controls as the static `Kos.Ui` QML module.
+  with the controls as the static `Kos.Ui` QML module for standalone apps.
 - `qml/controls/`: genuinely reusable controls.
 - `qml/glass/`: portable liquid-glass visuals. KWin blur adapters remain in
-  `desktop/`.
+  `shell/desktop/`.
 - `assets/`: assets used by more than one independent application.
-- `contracts/`: versioned IPC and persisted-data schemas.
+- `contracts/`: versioned IPC and persisted-data schemas. These files are the
+  source of truth for socket envelopes, error codes, and shortcut defaults.
 
-Standalone applications link `Kos::Ui` and `Kos::UiPlugin` statically. This
-keeps each executable independently deployable while preserving a single
-source of truth for portable controls. Shell QML may continue using direct
-directory imports and is not coupled to the application build.
+Because this tree must stay portable (no Quickshell-only APIs), QML consumers
+import controls through a relative filesystem path, never the Quickshell
+`qs.*` module alias. `shell/desktop/` and `apps/*` both sit below the
+repository root alongside `shared/`, so an import looks like
+`import "../../shared/qml/controls"` (adjust the `../` count to the importing
+file's depth).
+
+Standalone applications link `Kos::Ui` and `Kos::UiPlugin` statically. The
+`pim/` module similarly provides the portable D-Bus client shared by Calendar
+and Todo; shell consumers remain decoupled from application processes.

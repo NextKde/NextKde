@@ -2,6 +2,8 @@
 
 #include <QByteArray>
 #include <QFileSystemWatcher>
+#include <QHash>
+#include <QJsonObject>
 #include <QLocalSocket>
 #include <QObject>
 #include <QQueue>
@@ -71,8 +73,9 @@ private:
     void onSocketError(QLocalSocket::LocalSocketError error);
     void readSocketLines();
     void processSocketLine(const QByteArray &line);
-    void sendRequest(const QVariantMap &request);
+    void sendRequest(const QString &operation, const QVariantMap &payload = {});
     void flushRequests();
+    void applyWeather(const QJsonObject &weather);
     void reloadSnapshot();
     void ensureSnapshotWatch();
     void setTransportError(const QString &message);
@@ -86,6 +89,8 @@ private:
     QTimer m_snapshotFallbackTimer;
     QByteArray m_readBuffer;
     QQueue<QByteArray> m_pendingRequests;
+    QHash<QString, QString> m_requestOperations;
+    quint64 m_requestSerial = 0;
 
     bool m_ready = false;
     bool m_loading = false;

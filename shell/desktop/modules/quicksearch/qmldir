@@ -1,0 +1,5 @@
+module qs.desktop.modules.quicksearch
+
+singleton ClipboardService 1.0 ClipboardService.qml
+QuickSearch 1.0 QuickSearch.qml
+QuickSearchWindow 1.0 QuickSearchWindow.qml

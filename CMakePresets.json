@@ -1,11 +1,30 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": {
-    "major": 3,
-    "minor": 21,
-    "patch": 0
-  },
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
   "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "KOS Debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/.build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "KOS_BUILD_KWIN_PLUGINS": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "KOS Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/.build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
+        "KOS_BUILD_KWIN_PLUGINS": "ON"
+      }
+    },
     {
       "name": "apps-base",
       "hidden": true,
@@ -13,7 +32,13 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "BUILD_TESTING": "ON"
+        "BUILD_TESTING": "ON",
+        "KOS_BUILD_PLATFORM": "OFF",
+        "KOS_BUILD_KWIN_PLUGINS": "OFF",
+        "KOS_BUILD_CALENDAR": "ON",
+        "KOS_BUILD_TODO": "ON",
+        "KOS_BUILD_WEATHER": "ON",
+        "KOS_BUILD_MUSIC": "ON"
       }
     },
     {
@@ -29,8 +54,7 @@
       "binaryDir": "${sourceDir}/.build/apps-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local",
-        "BUILD_TESTING": "ON"
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local"
       }
     },
     {
@@ -83,6 +107,8 @@
     }
   ],
   "buildPresets": [
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
     { "name": "apps-dev", "configurePreset": "apps-dev" },
     { "name": "apps-release", "configurePreset": "apps-release" },
     { "name": "calendar-dev", "configurePreset": "calendar-dev" },
@@ -91,15 +117,9 @@
     { "name": "music-dev", "configurePreset": "music-dev" }
   ],
   "testPresets": [
-    {
-      "name": "apps-dev",
-      "configurePreset": "apps-dev",
-      "output": { "outputOnFailure": true }
-    },
-    {
-      "name": "apps-release",
-      "configurePreset": "apps-release",
-      "output": { "outputOnFailure": true }
-    }
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "apps-dev", "configurePreset": "apps-dev", "output": { "outputOnFailure": true } },
+    { "name": "apps-release", "configurePreset": "apps-release", "output": { "outputOnFailure": true } }
   ]
 }

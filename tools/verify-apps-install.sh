@@ -26,13 +26,13 @@ for metadata in "$prefix"/share/metainfo/org.nextkde.Kos.*.metainfo.xml; do
     fi
 done
 
-for unit in shell-data-service.service kos-pim-service.service; do
-    systemctl --user is-enabled "$unit" >/dev/null || failed=1
-    systemctl --user is-active "$unit" >/dev/null || failed=1
-done
+systemctl --user is-enabled kos-data.service >/dev/null || failed=1
+systemctl --user is-active kos-data.service >/dev/null || failed=1
+test -f "$prefix/share/dbus-1/services/org.nextkde.Kos.Pim1.service" || failed=1
+test -f "$prefix/share/systemd/user/kos-pim-service.service" || failed=1
 
 if test "$failed" -ne 0; then
     echo "KOS application registration verification failed." >&2
     exit 1
 fi
-echo "Verified four desktop entries, icons, metadata, binaries, and user services."
+echo "Verified four desktop entries, icons, metadata, binaries, and service registration."

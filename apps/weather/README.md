@@ -13,9 +13,10 @@ search and save locations, switch metric/imperial units, refresh on demand,
 and show current, hourly, and seven-day forecasts. The last complete forecast
 remains visible offline and is explicitly marked when stale.
 
-`shell-data-service` is the only network and persistence owner. The Qt client
-reads its atomic snapshot and uses a local Unix socket for commands and change
-notifications; the Quickshell widget consumes the same contract.
+`kos-data-service` is the only network and persistence owner. The Qt client
+uses the versioned `kos-data.sock` JSONL API for commands and change events,
+with the atomic snapshot retained as an offline fallback. The Quickshell widget
+consumes the same contract.
 
 ## Build
 
@@ -34,17 +35,15 @@ to Qt 6.
 - Current, hourly, and seven-day forecasts.
 - Metric/imperial units and explicit refresh.
 - Atomic offline cache with generated/stale timestamps.
-- Shared state with the desktop widget through `shell-data-service`.
+- Shared state with the desktop widget through `kos-data-service`.
 
 Radar, severe-weather push, automatic geolocation, and provider-account sync
 are outside version 1.
 
 ## Runtime service
 
-CMake installs `kos-shell-data-service` beside the application. KOS Weather
-reuses an already-running desktop service when present and otherwise starts
-the installed service on demand. A previously cached forecast remains visible
-if the service or network is temporarily unavailable.
-
-The repository's existing `shell-data-service.service` remains available for
-shell-wide login startup; it is optional for a standalone Weather install.
+CMake installs `kos-data-service` under the selected prefix's `libexec`. KOS
+Weather reuses an already-running core service and can start the installed
+binary on demand for a Weather-only development install. The complete app
+installer enables `kos-data.service`. A previously cached forecast remains
+visible if the service or network is temporarily unavailable.

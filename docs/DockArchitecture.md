@@ -29,7 +29,7 @@ AppActionService ──→ launch / pin / unpin / hide / edit requests
 
 ### AppPresentationService
 
-File: `desktop/modules/common/AppPresentationService.qml`
+File: `shell/desktop/modules/common/AppPresentationService.qml`
 
 This is the shared presentation boundary for Dock, QuickSearch and AppLauncher.
 Use `catalog()` to enumerate installed visible applications and
@@ -62,7 +62,7 @@ reintroduce per-surface `IconImage` behaviour.
 
 ### AppActionService
 
-File: `desktop/modules/common/AppActionService.qml`
+File: `shell/desktop/modules/common/AppActionService.qml`
 
 Use this service for every cross-surface application action:
 
@@ -83,7 +83,7 @@ or configuration mutations.
 
 ### AppIdentityService
 
-File: `desktop/modules/dock/AppIdentityService.qml`
+File: `shell/desktop/modules/dock/AppIdentityService.qml`
 
 This is the only service that resolves *runtime window identity*. It currently
 uses Quickshell `DesktopEntries` and the Wayland `appId` supplied by a
@@ -140,7 +140,7 @@ implementation in Dock or WindowService.
 
 ### WindowService
 
-File: `desktop/modules/dock/WindowService.qml`
+File: `shell/desktop/modules/dock/WindowService.qml`
 
 This is the runtime window source. It currently consumes
 `Quickshell.Wayland._ToplevelManagement/ToplevelManager`; it does not call
@@ -186,7 +186,7 @@ change without changing the identity of an existing Toplevel.
 
 ### AppGroupService
 
-File: `desktop/modules/dock/AppGroupService.qml`
+File: `shell/desktop/modules/dock/AppGroupService.qml`
 
 This derives app groups from the top-level `app` entries in
 `ConfigService.dockItems` (currently exposed as the compatibility projection
@@ -235,9 +235,9 @@ to `DockModelService`.
 
 ## Application launcher module boundary
 
-Files: `desktop/modules/applauncher/AppLauncher.qml`,
-`desktop/modules/applauncher/AppLauncherWindow.qml`, and
-`desktop/modules/applauncher/AppLauncherService.qml`.
+Files: `shell/desktop/modules/applauncher/AppLauncher.qml`,
+`shell/desktop/modules/applauncher/AppLauncherWindow.qml`, and
+`shell/desktop/modules/applauncher/AppLauncherService.qml`.
 
 The application launcher is a shell module, not a Dock popup. `shell.qml`
 instantiates it independently, which allows a global shortcut, IPC, search,
@@ -255,7 +255,7 @@ Dock has one strictly presentation-only responsibility: it calls
 `setDockPresentation(width, height, background, primary, secondary)` whenever
 its adaptive layout or material changes. The launcher independently selects
 the same preferred output policy as Dock. Passing material values through this
-API is intentional: `desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
+API is intentional: `shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
 because Dock already imports the launcher control service.
 The launcher uses that published geometry to remain exactly Dock-width and
 half-screen-height without reimplementing adaptive layout math. For an

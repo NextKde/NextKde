@@ -21,22 +21,22 @@ ctest --test-dir "$build_dir" --output-on-failure
 cmake --install "$build_dir"
 
 # ~/.local/share/systemd/user is a standard user-unit search path. Keep a
-# config-level copy as an intentional upgrade for older NextKde installs that
-# already shipped shell-data-service.service in ~/.config/systemd/user.
+# config-level copy as an intentional upgrade for older NextKde installs.
 mkdir -p "$unit_dir"
-install -m 0644 "$prefix/share/systemd/user/shell-data-service.service" \
-    "$unit_dir/shell-data-service.service"
+install -m 0644 "$prefix/share/systemd/user/kos-data.service" \
+    "$unit_dir/kos-data.service"
 install -m 0644 "$prefix/share/systemd/user/kos-pim-service.service" \
     "$unit_dir/kos-pim-service.service"
 
 systemctl --user daemon-reload
-systemctl --user enable --now shell-data-service.service
-systemctl --user restart shell-data-service.service
+systemctl --user disable --now shell-data-service.service >/dev/null 2>&1 || true
+systemctl --user enable --now kos-data.service
+systemctl --user restart kos-data.service
 
-# Older builds were started directly by D-Bus before a systemd unit existed.
-# Migrate only the verified executable installed by this prefix; never signal
-# an unrelated process that happens to have a similar name.
-systemctl --user stop kos-pim-service.service >/dev/null 2>&1 || true
+# Calendar and Todo activate the PIM owner through D-Bus. Stop and disable a
+# unit left enabled by older app bundles so Shell-only logins do not create an
+# unnecessary resident application service.
+systemctl --user disable --now kos-pim-service.service >/dev/null 2>&1 || true
 pim_pid=$(busctl --user status org.nextkde.Kos.Pim1 2>/dev/null \
     | sed -n 's/^PID=//p' | head -n 1 || true)
 case "$pim_pid" in
@@ -60,8 +60,6 @@ esac
 # of creating a detached legacy process.
 busctl --user call org.freedesktop.DBus /org/freedesktop/DBus \
     org.freedesktop.DBus ReloadConfig >/dev/null
-systemctl --user enable kos-pim-service.service
-systemctl --user start kos-pim-service.service
 
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database "$prefix/share/applications"

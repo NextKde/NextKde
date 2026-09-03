@@ -4,7 +4,7 @@
 
 Every direct child is a standalone Qt Quick application and a separate
 process. Applications may import `shared/`, communicate with `services/`
-through documented contracts, and must never import `desktop/`.
+through documented contracts, and must never import `shell/desktop/`.
 
 The application workspace is configured from the repository root. Four build
 options and matching CMake presets keep the new applications independently
@@ -31,8 +31,8 @@ For a persistent per-user installation on Plasma, run:
 
 This performs a Release build and test pass, installs the binaries under
 `~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
-enables the PIM and shared-data user services, and refreshes Plasma's
-application cache. The desktop entries contain absolute executable paths, so
+enables the core `kos-data.service`, registers the D-Bus-activated PIM service,
+and refreshes Plasma's application cache. The desktop entries contain absolute executable paths, so
 the applications remain available after login without a source-tree build.
 Re-run the same command to perform an in-place upgrade.
 

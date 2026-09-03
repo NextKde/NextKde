@@ -1,0 +1,8 @@
+module kos.shared.controls
+ColorRampSlider 1.0 ColorRampSlider.qml
+LiquidGlassButton 1.0 LiquidGlassButton.qml
+LiquidGlassSwitch 1.0 LiquidGlassSwitch.qml
+LiquidNavBar 1.0 LiquidNavBar.qml
+LiquidSegmentedControl 1.0 LiquidSegmentedControl.qml
+LiquidSlider 1.0 LiquidSlider.qml
+LiquidTextField 1.0 LiquidTextField.qml

@@ -1,9 +1,19 @@
 #include <QGuiApplication>
+#include <QDateTime>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QProcess>
+#include <QStandardPaths>
+#include <QThread>
 #include <QVariantMap>
 
 class SettingsBridge final : public QObject {
@@ -42,6 +52,10 @@ public:
 
     Q_INVOKABLE QVariantMap updateDockVisibilityMode(const QString &mode) {
         return snapshotFromReply(callDock({QStringLiteral("updateVisibilityMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockWindowGrouping(const QString &mode) {
+        return snapshotFromReply(callDock({QStringLiteral("updateWindowGrouping"), mode}));
     }
 
     Q_INVOKABLE QVariantMap appearanceSnapshot() {
@@ -134,213 +148,75 @@ public:
             QStringLiteral("updateFontWeight"), weight}));
     }
 
-    static QString readKdeConfig(const QString &file, const QString &group, const QString &key) {
-        QProcess proc;
-        proc.start(QStringLiteral("kreadconfig6"), {
-            QStringLiteral("--file"), file,
-            QStringLiteral("--group"), group,
-            QStringLiteral("--key"), key
-        });
-        if (proc.waitForStarted(1000) && proc.waitForFinished(2000) && proc.exitCode() == 0) {
-            return QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
-        }
-        return {};
-    }
-
-    static QStringList listInstalledLookAndFeels() {
-        QProcess proc;
-        proc.start(QStringLiteral("plasma-apply-lookandfeel"), {QStringLiteral("-l")});
-        if (proc.waitForStarted(1000) && proc.waitForFinished(3000) && proc.exitCode() == 0) {
-            const QString output = QString::fromUtf8(proc.readAllStandardOutput());
-            QStringList list;
-            const auto lines = output.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-            for (const QString &line : lines) {
-                const QString trimmed = line.trimmed();
-                if (!trimmed.isEmpty()) {
-                    list.append(trimmed);
-                }
-            }
-            return list;
-        }
-        return {};
-    }
-
-    static QString resolveThemePartner(const QString &currentTheme, bool targetDark, const QStringList &installed) {
-        if (currentTheme.isEmpty())
-            return {};
-        QStringList candidates;
-
-        if (targetDark) {
-            if (currentTheme.endsWith(QStringLiteral("-w")))
-                candidates.append(currentTheme.chopped(2) + QStringLiteral("-d"));
-            if (currentTheme.endsWith(QStringLiteral("_w")))
-                candidates.append(currentTheme.chopped(2) + QStringLiteral("_d"));
-            if (currentTheme.endsWith(QStringLiteral("Light")))
-                candidates.append(currentTheme.chopped(5) + QStringLiteral("Dark"));
-            if (currentTheme.endsWith(QStringLiteral("-Light")))
-                candidates.append(currentTheme.chopped(6) + QStringLiteral("-Dark"));
-            if (currentTheme.endsWith(QStringLiteral("_Light")))
-                candidates.append(currentTheme.chopped(6) + QStringLiteral("_Dark"));
-            if (currentTheme.contains(QStringLiteral("light"), Qt::CaseInsensitive)) {
-                QString c = currentTheme;
-                candidates.append(c.replace(QStringLiteral("light"), QStringLiteral("dark"), Qt::CaseInsensitive));
-            }
-            if (currentTheme.endsWith(QStringLiteral(".desktop"))) {
-                const QString base = currentTheme.chopped(8);
-                candidates.append(base + QStringLiteral("dark.desktop"));
-                candidates.append(base + QStringLiteral("-dark.desktop"));
-                candidates.append(base + QStringLiteral("Dark.desktop"));
-            }
-            candidates.append(currentTheme + QStringLiteral("-Dark"));
-            candidates.append(currentTheme + QStringLiteral("Dark"));
-            candidates.append(currentTheme + QStringLiteral("-d"));
-        } else {
-            if (currentTheme.endsWith(QStringLiteral("-d")))
-                candidates.append(currentTheme.chopped(2) + QStringLiteral("-w"));
-            if (currentTheme.endsWith(QStringLiteral("_d")))
-                candidates.append(currentTheme.chopped(2) + QStringLiteral("_w"));
-            if (currentTheme.endsWith(QStringLiteral("Dark"))) {
-                candidates.append(currentTheme.chopped(4) + QStringLiteral("Light"));
-                candidates.append(currentTheme.chopped(4));
-            }
-            if (currentTheme.endsWith(QStringLiteral("-Dark"))) {
-                candidates.append(currentTheme.chopped(5) + QStringLiteral("-Light"));
-                candidates.append(currentTheme.chopped(5));
-            }
-            if (currentTheme.endsWith(QStringLiteral("_Dark"))) {
-                candidates.append(currentTheme.chopped(5) + QStringLiteral("_Light"));
-                candidates.append(currentTheme.chopped(5));
-            }
-            if (currentTheme.contains(QStringLiteral("dark"), Qt::CaseInsensitive)) {
-                QString c = currentTheme;
-                candidates.append(c.replace(QStringLiteral("dark"), QStringLiteral("light"), Qt::CaseInsensitive));
-                QString c2 = currentTheme;
-                candidates.append(c2.remove(QStringLiteral("dark"), Qt::CaseInsensitive));
-            }
-            if (currentTheme.endsWith(QStringLiteral("dark.desktop"), Qt::CaseInsensitive)) {
-                candidates.append(currentTheme.chopped(12) + QStringLiteral(".desktop"));
-                candidates.append(currentTheme.chopped(12) + QStringLiteral("light.desktop"));
-            }
-        }
-
-        for (const QString &cand : candidates) {
-            for (const QString &inst : installed) {
-                if (inst.compare(cand, Qt::CaseInsensitive) == 0)
-                    return inst;
-            }
-        }
-        return {};
-    }
-
     Q_INVOKABLE bool applySystemAppearance(bool dark) {
-        const QString currentLnF = readKdeConfig(
-            QStringLiteral("kdeglobals"), QStringLiteral("KDE"), QStringLiteral("LookAndFeelPackage"));
-        const QString currentScheme = readKdeConfig(
-            QStringLiteral("kdeglobals"), QStringLiteral("General"), QStringLiteral("ColorScheme"));
-
-        const QStringList installedLnF = listInstalledLookAndFeels();
-        QString targetLnF = resolveThemePartner(currentLnF, dark, installedLnF);
-
-        // If current LookAndFeel didn't find a direct partner, look for standard KDE/Fedora defaults
-        if (targetLnF.isEmpty()) {
-            const QStringList standardFallbacks = dark
-                ? QStringList{QStringLiteral("org.kde.breezedark.desktop"),
-                              QStringLiteral("org.fedoraproject.fedoradark.desktop")}
-                : QStringList{QStringLiteral("org.kde.breeze.desktop"),
-                              QStringLiteral("org.fedoraproject.fedoralight.desktop"),
-                              QStringLiteral("org.fedoraproject.fedora.desktop")};
-            for (const QString &fb : standardFallbacks) {
-                if (installedLnF.contains(fb, Qt::CaseInsensitive)) {
-                    targetLnF = fb;
-                    break;
-                }
-            }
-            // If still empty, search any installed theme matching dark keyword
-            if (targetLnF.isEmpty()) {
-                for (const QString &inst : installedLnF) {
-                    const bool isDarkName = inst.contains(QStringLiteral("dark"), Qt::CaseInsensitive)
-                        || inst.endsWith(QStringLiteral("-d"));
-                    if (isDarkName == dark) {
-                        targetLnF = inst;
-                        break;
-                    }
-                }
-            }
-        }
-
-        bool applied = false;
-        QString lastErrorOutput;
-
-        if (!targetLnF.isEmpty()) {
-            QProcess process;
-            process.start(QStringLiteral("plasma-apply-lookandfeel"), {QStringLiteral("-a"), targetLnF});
-            if (process.waitForStarted(1500) && process.waitForFinished(5000)) {
-                if (process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0) {
-                    applied = true;
-                } else {
-                    lastErrorOutput = QString::fromUtf8(process.readAllStandardError()).trimmed();
-                }
-            }
-        }
-
-        // Also resolve and apply matching color scheme if needed
-        if (!currentScheme.isEmpty()) {
-            QString targetScheme;
-            if (dark) {
-                if (currentScheme.endsWith(QStringLiteral("Light")))
-                    targetScheme = currentScheme.chopped(5) + QStringLiteral("Dark");
-                else if (!currentScheme.contains(QStringLiteral("Dark"), Qt::CaseInsensitive))
-                    targetScheme = currentScheme + QStringLiteral("Dark");
-            } else {
-                if (currentScheme.endsWith(QStringLiteral("Dark")))
-                    targetScheme = currentScheme.chopped(4) + QStringLiteral("Light");
-                else if (currentScheme.contains(QStringLiteral("Dark"), Qt::CaseInsensitive)) {
-                    QString c = currentScheme;
-                    targetScheme = c.replace(QStringLiteral("Dark"), QStringLiteral("Light"), Qt::CaseInsensitive);
-                }
-            }
-            if (!targetScheme.isEmpty()) {
-                QProcess schemeProc;
-                schemeProc.start(QStringLiteral("plasma-apply-colorscheme"), {targetScheme});
-                if (schemeProc.waitForStarted(1500) && schemeProc.waitForFinished(5000)) {
-                    if (schemeProc.exitStatus() == QProcess::NormalExit && schemeProc.exitCode() == 0) {
-                        applied = true;
-                    }
-                }
-            }
-        }
-
-        // Final fallback if nothing worked: standard Breeze color schemes
-        if (!applied) {
-            const QString fallbackScheme = dark ? QStringLiteral("BreezeDark") : QStringLiteral("BreezeLight");
-            QProcess schemeProc;
-            schemeProc.start(QStringLiteral("plasma-apply-colorscheme"), {fallbackScheme});
-            if (schemeProc.waitForStarted(1500) && schemeProc.waitForFinished(5000)) {
-                if (schemeProc.exitStatus() == QProcess::NormalExit && schemeProc.exitCode() == 0) {
-                    applied = true;
-                }
-            }
-        }
-
-        if (!applied) {
-            setLastError(lastErrorOutput.isEmpty()
-                ? QStringLiteral("未找到与当前主题匹配的明/暗配色方案")
-                : lastErrorOutput);
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(
+            callAppearance({QStringLiteral("applySystemAppearance"),
+                            dark ? QStringLiteral("true") : QStringLiteral("false")})
+                .toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject())
             return false;
-        }
+        const QJsonObject response = document.object();
+        const bool accepted = response.value(QStringLiteral("accepted")).toBool();
+        if (!accepted && m_lastError.isEmpty())
+            setLastError(QStringLiteral("桌面环境拒绝了主题切换请求"));
+        return accepted;
+    }
 
-        // Notify KWin to reconfigure window decoration and compositing
-        QProcess kwin;
-        kwin.start(QStringLiteral("qdbus6"), {
-            QStringLiteral("org.kde.KWin"),
-            QStringLiteral("/KWin"),
-            QStringLiteral("reconfigure")});
-        if (kwin.waitForStarted(1500) && kwin.waitForFinished(3000)) {
-            // Reconfigured
-        }
+    Q_INVOKABLE QVariantMap integrationSnapshot() {
+        QVariantMap result = integrationSnapshotFromReply(
+            callIntegration({QStringLiteral("snapshot")}));
 
-        setLastError({});
-        return true;
+        const QDBusConnection sessionBus = QDBusConnection::sessionBus();
+        auto *busInterface = sessionBus.interface();
+        QString notificationProvider = QStringLiteral("none");
+        QString notificationOwner;
+        uint notificationPid = 0;
+        if (busInterface) {
+            const QDBusReply<QString> ownerReply = busInterface->serviceOwner(
+                QStringLiteral("org.freedesktop.Notifications"));
+            if (ownerReply.isValid() && !ownerReply.value().isEmpty()) {
+                notificationOwner = ownerReply.value();
+                const QDBusReply<uint> pidReply = busInterface->servicePid(notificationOwner);
+                if (pidReply.isValid())
+                    notificationPid = pidReply.value();
+
+                QFile commandLine(QStringLiteral("/proc/%1/cmdline").arg(notificationPid));
+                QString command;
+                if (commandLine.open(QIODevice::ReadOnly)) {
+                    QByteArray raw = commandLine.readAll();
+                    raw.replace('\0', ' ');
+                    command = QString::fromLocal8Bit(raw).trimmed();
+                }
+                if (command.contains(QStringLiteral("plasmashell"))) {
+                    notificationProvider = QStringLiteral("plasma");
+                } else if (command.contains(QStringLiteral("/qs"))
+                           || command.contains(QStringLiteral("quickshell"))) {
+                    notificationProvider = QStringLiteral("kos");
+                } else {
+                    notificationProvider = QStringLiteral("other");
+                }
+                result.insert(QStringLiteral("notificationCommand"), command);
+            }
+        }
+        result.insert(QStringLiteral("notificationProvider"), notificationProvider);
+        result.insert(QStringLiteral("notificationOwner"), notificationOwner);
+        result.insert(QStringLiteral("notificationPid"), notificationPid);
+
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                               QStringLiteral("org.kde.kwin.Effects"), sessionBus);
+        const QStringList loadedEffects = effects.isValid()
+            ? effects.property("loadedEffects").toStringList() : QStringList{};
+        result.insert(QStringLiteral("kwinAvailable"), effects.isValid());
+        result.insert(QStringLiteral("glassLoaded"),
+                      loadedEffects.contains(QStringLiteral("glass")));
+        result.insert(QStringLiteral("dockAnimationLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
+        result.insert(QStringLiteral("contextMenuInputLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+        result.insert(QStringLiteral("updatedAt"),
+                      QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
+        return result;
     }
 
 signals:
@@ -359,7 +235,8 @@ private:
         }
 
         const QJsonObject object = document.object();
-        if (!object.contains(QStringLiteral("baseHeight"))) {
+        if (!object.contains(QStringLiteral("baseHeight"))
+                || !object.contains(QStringLiteral("windowGrouping"))) {
             setLastError(QStringLiteral("桌面环境返回的 Dock 配置不完整"));
             return {};
         }
@@ -371,7 +248,9 @@ private:
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
-            {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},};
+            {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},
+            {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
+        };
     }
 
     QVariantMap appearanceSnapshotFromReply(const QString &payload) {
@@ -462,6 +341,20 @@ private:
         };
     }
 
+    QVariantMap integrationSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {{QStringLiteral("shellReady"), false}};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的接入状态"));
+            return {{QStringLiteral("shellReady"), false}};
+        }
+        setLastError({});
+        return document.object().toVariantMap();
+    }
+
     QString callDock(const QStringList &arguments) {
         return callShell(QStringLiteral("dock-settings"), arguments,
                          QStringLiteral("Dock 设置请求失败"));
@@ -477,30 +370,56 @@ private:
                          QStringLiteral("启动台设置请求失败"));
     }
 
+    QString callIntegration(const QStringList &arguments) {
+        return callShell(QStringLiteral("integration-status"), arguments,
+                         QStringLiteral("接入状态请求失败"));
+    }
+
+    static QString shellDirectory() {
+        const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
+        if (!configured.isEmpty())
+            return configured;
+        const QString installed = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
+        if (QFileInfo::exists(QDir(installed).filePath(QStringLiteral("shell.qml"))))
+            return installed;
+        return QStringLiteral(SETTINGS_SHELL_DIR);
+    }
+
     QString callShell(const QString &target, const QStringList &arguments,
                       const QString &fallbackError) {
-        QProcess process;
-        QStringList command{QStringLiteral("--path"), QStringLiteral(SETTINGS_SHELL_DIR),
-                            QStringLiteral("ipc"), QStringLiteral("call"),
-                            target};
-        command.append(arguments);
-        process.start(QStringLiteral("quickshell"), command);
-        if (!process.waitForStarted(1500)) {
-            setLastError(QStringLiteral("无法连接桌面环境"));
-            return {};
+        const QString shellPath = shellDirectory();
+        QString failure;
+        // The Shell can still be registering IPC targets during the first
+        // moments of a development launch. Retry once instead of turning that
+        // brief race into a permanent, opaque Settings error.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            QProcess process;
+            QStringList command{QStringLiteral("--path"), shellPath,
+                                QStringLiteral("ipc"), QStringLiteral("call"),
+                                target};
+            command.append(arguments);
+            process.start(QStringLiteral("quickshell"), command);
+            if (!process.waitForStarted(1500)) {
+                failure = QStringLiteral("无法启动 Quickshell IPC");
+            } else if (!process.waitForFinished(5000)) {
+                process.kill();
+                process.waitForFinished();
+                failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+            } else if (process.exitStatus() == QProcess::NormalExit
+                       && process.exitCode() == 0) {
+                return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+            } else {
+                failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
+                if (failure.isEmpty())
+                    failure = fallbackError;
+            }
+            if (attempt == 0)
+                QThread::msleep(120);
         }
-        if (!process.waitForFinished(2500)) {
-            process.kill();
-            process.waitForFinished();
-            setLastError(QStringLiteral("桌面环境没有响应"));
-            return {};
-        }
-        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-            const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty() ? fallbackError : error);
-            return {};
-        }
-        return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+        setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
+                         .arg(failure, target, shellPath));
+        return {};
     }
 
     void setLastError(const QString &error) {
@@ -525,8 +444,12 @@ int main(int argc, char *argv[]) {
     SettingsBridge bridge;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
-    const QUrl entrypoint = QUrl::fromLocalFile(
-        QStringLiteral(SETTINGS_QML_DIR "/main.qml"));
+    QString settingsQml = QDir(QCoreApplication::applicationDirPath()).filePath(
+        QStringLiteral("../share/kos/settings/main.qml"));
+    if (!QFileInfo::exists(settingsQml))
+        settingsQml = QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
+            QStringLiteral("main.qml"));
+    const QUrl entrypoint = QUrl::fromLocalFile(settingsQml);
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;

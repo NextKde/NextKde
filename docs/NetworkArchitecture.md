@@ -1,9 +1,9 @@
 # Network status architecture
 
-`desktop/modules/bar/NetworkService.qml` is the only adapter between shell UI and
-NetworkManager in this project. It polls `nmcli` asynchronously every three
-seconds and performs only explicit user-requested writes. No Bar component may invoke
-`nmcli` or parse its output directly.
+`shell/desktop/modules/bar/NetworkService.qml` is the presentation adapter between
+shell UI and the `network.*` operations exposed by `kos-platform`. The C++
+platform module polls/updates NetworkManager through `nmcli` and returns a
+normalized JSON object. No QML component invokes `nmcli` or parses its output.
 
 ## Public state contract
 
@@ -53,6 +53,7 @@ profile. `forgetWifiProfile(ssid, profileUuid)` deletes only the UUID resolved
 from the selected scan row, after the panel's explicit confirmation.
 
 `refreshWifiNetworks()` returns de-duplicated nearby SSIDs (the strongest AP per
-name) only when the user opens the panel. Each candidate also carries the UUID
-of a matching saved Wi-Fi profile, resolved from NetworkManager; reconnect uses
-that UUID rather than assuming the editable profile name equals the SSID.
+name) only when the user opens the panel. When NetworkManager's saved profile
+name matches the SSID (its default), the candidate also carries that profile's
+UUID for reconnect/forget actions. Saved-profile metadata is best-effort and
+must never prevent the nearby-network list from loading.

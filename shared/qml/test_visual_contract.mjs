@@ -177,7 +177,7 @@ assert.match(activation, /XDG_ACTIVATION_TOKEN[\s\S]*setCurrentXdgActivationToke
 assert.match(activation, /AcquireResult::Error/,
     "a failed single-instance hand-off is not reported as a successful launch");
 
-const glassEffect = read("../../integrations/kwin-effects-glass/src/blur.cpp");
+const glassEffect = read("../../vendor/kwin-effects-glass/src/blur.cpp");
 assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
     "explicit application and decoration blur bypass force-blur filtering");
 assert.match(glassEffect,
@@ -186,11 +186,11 @@ assert.match(glassEffect,
 assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBlurRegion/,
     "reconfiguration refreshes existing windows from a stable snapshot");
 
-const deskCenter = read("../../desktop/modules/deskcenter/DeskCenterWindow.qml");
+const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
 
-const appActions = read("../../desktop/modules/common/AppActionService.qml");
+const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,
     /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
     "desktop deep links do not shadow JavaScript's implicit arguments object");
