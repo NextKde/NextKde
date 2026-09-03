@@ -805,9 +805,26 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
 void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
 {
     const QPointer<QLocalSocket> guardedSocket(socket);
+
+    // bluetoothctl waits for BlueZ activation when no controller exists. On
+    // controller-less desktops that means every periodic status refresh leaves
+    // another process and three pipe descriptors behind indefinitely. Avoid
+    // spawning it at all in the common no-hardware case; --timeout below is a
+    // second guard for unavailable or wedged BlueZ daemons.
+    const QDir bluetoothClass(QStringLiteral("/sys/class/bluetooth"));
+    if (!bluetoothClass.exists()
+        || bluetoothClass.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty()) {
+        respond(guardedSocket.data(), request, true,
+                QJsonObject{{QStringLiteral("available"), false},
+                            {QStringLiteral("powered"), false},
+                            {QStringLiteral("devices"), QJsonArray{}}});
+        return;
+    }
+
     auto *show = new QProcess(this);
     show->setProgram(QStringLiteral("bluetoothctl"));
-    show->setArguments({QStringLiteral("show")});
+    show->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
+                        QStringLiteral("show")});
     connect(show, &QProcess::finished, this,
             [this, guardedSocket, request, show](int showExit, QProcess::ExitStatus) {
         const QByteArray controller = show->readAllStandardOutput();
@@ -819,7 +836,8 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         }
         auto *devices = new QProcess(this);
         devices->setProgram(QStringLiteral("bluetoothctl"));
-        devices->setArguments({QStringLiteral("devices")});
+        devices->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
+                               QStringLiteral("devices")});
         connect(devices, &QProcess::finished, this,
                 [this, guardedSocket, request, controller, devices](int devicesExit,
                                                                        QProcess::ExitStatus) {
