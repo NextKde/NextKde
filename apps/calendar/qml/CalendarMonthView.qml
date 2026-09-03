@@ -10,6 +10,8 @@ KosCard {
 
     required property date visibleDate
     required property date selectedDate
+    required property date currentTime
+    required property int firstDayOfWeek
     property var itemsForDate: function(date) { return [] }
     property var itemTitle: function(item) { return "" }
     property var itemColor: function(item) { return AppTheme.accent }
@@ -21,15 +23,21 @@ KosCard {
 
     function dateForCell(index) {
         const first = new Date(visibleDate.getFullYear(), visibleDate.getMonth(), 1)
-        const mondayOffset = (first.getDay() + 6) % 7
+        const offset = (first.getDay() - firstDayOfWeek + 7) % 7
         return new Date(visibleDate.getFullYear(), visibleDate.getMonth(),
-                        index - mondayOffset + 1)
+                        index - offset + 1)
     }
 
     function sameDay(left, right) {
         return left.getFullYear() === right.getFullYear()
             && left.getMonth() === right.getMonth()
             && left.getDate() === right.getDate()
+    }
+
+    function weekdayName(column) {
+        const jsDay = (firstDayOfWeek + column) % 7
+        return Qt.locale().dayName(jsDay === 0 ? 7 : jsDay,
+                                   Locale.ShortFormat)
     }
 
     contentItem: GridLayout {
@@ -44,7 +52,7 @@ KosCard {
                 required property int index
                 Layout.fillWidth: true
                 Layout.preferredHeight: 30
-                text: Qt.locale().dayName(index + 1, Locale.ShortFormat)
+                text: root.weekdayName(index)
                 color: AppTheme.mutedText
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
@@ -56,7 +64,7 @@ KosCard {
         Repeater {
             model: 42
 
-            delegate: Button {
+            delegate: AbstractButton {
                 id: dayButton
 
                 required property int index
@@ -64,7 +72,7 @@ KosCard {
                 readonly property bool inVisibleMonth:
                     cellDate.getMonth() === root.visibleDate.getMonth()
                 readonly property bool selected: root.sameDay(cellDate, root.selectedDate)
-                readonly property bool today: root.sameDay(cellDate, new Date())
+                readonly property bool today: root.sameDay(cellDate, root.currentTime)
                 readonly property var dayItems: root.itemsForDate(cellDate)
 
                 Layout.fillWidth: true
@@ -103,7 +111,7 @@ KosCard {
 
                         Item { Layout.fillWidth: true }
 
-                        ToolButton {
+                        KosToolButton {
                             text: "+"
                             flat: true
                             visible: dayButton.hovered && dayButton.inVisibleMonth
@@ -145,8 +153,7 @@ KosCard {
                                 anchors.fill: parent
                                 anchors.leftMargin: 7
                                 anchors.rightMargin: 4
-                                text: (root.itemCompleted(itemChip.modelData) ? "✓ " : "")
-                                    + root.itemTitle(itemChip.modelData)
+                                text: root.itemTitle(itemChip.modelData)
                                 color: AppTheme.text
                                 font.pixelSize: 9
                                 font.strikeout: root.itemCompleted(itemChip.modelData)

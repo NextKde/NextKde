@@ -48,14 +48,33 @@ Item {
 
             width: grid.cellWidth
             height: grid.cellHeight
+            activeFocusOnTab: true
+            Accessible.role: Accessible.Button
+            Accessible.name: groupName
+            Accessible.focusable: true
+            Accessible.focused: activeFocus
+            Accessible.onPressAction: root.openRequested(
+                groupDelegate.groupName, groupDelegate.subtitle,
+                groupDelegate.filterValue)
+
+            Keys.onSpacePressed: root.openRequested(
+                groupDelegate.groupName, groupDelegate.subtitle,
+                groupDelegate.filterValue)
+            Keys.onEnterPressed: root.openRequested(
+                groupDelegate.groupName, groupDelegate.subtitle,
+                groupDelegate.filterValue)
+            Keys.onReturnPressed: root.openRequested(
+                groupDelegate.groupName, groupDelegate.subtitle,
+                groupDelegate.filterValue)
 
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 6
                 radius: AppTheme.mediumRadius
-                color: groupHover.hovered ? AppTheme.cardHover : AppTheme.card
-                border.width: 1
-                border.color: AppTheme.border
+                color: groupHover.hovered ? AppTheme.cardHover : AppTheme.cardSurface
+                border.width: groupDelegate.activeFocus ? 2 : 1
+                border.color: groupDelegate.activeFocus
+                    ? AppTheme.accent : AppTheme.border
 
                 HoverHandler { id: groupHover }
                 TapHandler {
@@ -81,7 +100,7 @@ Item {
                                 ? Math.round(width / 2) : AppTheme.smallRadius
                         }
 
-                        RoundButton {
+                        KosRoundButton {
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
                             anchors.margins: 8
@@ -89,7 +108,7 @@ Item {
                             height: 42
                             text: "▶"
                             highlighted: true
-                            visible: groupHover.hovered
+                            visible: groupHover.hovered || groupDelegate.activeFocus
                             Accessible.name: qsTr("Play %1").arg(groupDelegate.groupName)
                             onClicked: root.playRequested(groupDelegate.filterValue)
                         }

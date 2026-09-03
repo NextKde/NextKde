@@ -100,6 +100,7 @@ Item {
 
             width: trackList.width
             height: 66
+            activeFocusOnTab: true
             radius: AppTheme.smallRadius
             color: isCurrent
                 ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.18 : 0.12)
@@ -109,6 +110,17 @@ Item {
             Accessible.name: qsTr("%1 by %2").arg(title).arg(
                 artist.length > 0 ? artist : qsTr("unknown artist"))
             Accessible.role: Accessible.ListItem
+            Accessible.focusable: true
+            Accessible.focused: activeFocus
+            Accessible.onPressAction: root.playRow(trackDelegate.index,
+                                                    trackDelegate.trackId)
+
+            Keys.onSpacePressed: root.playRow(trackDelegate.index,
+                                              trackDelegate.trackId)
+            Keys.onEnterPressed: root.playRow(trackDelegate.index,
+                                              trackDelegate.trackId)
+            Keys.onReturnPressed: root.playRow(trackDelegate.index,
+                                               trackDelegate.trackId)
 
             TapHandler {
                 acceptedButtons: Qt.LeftButton
@@ -198,7 +210,7 @@ Item {
                     font.pixelSize: 12
                 }
 
-                ToolButton {
+                KosToolButton {
                     Layout.preferredWidth: 34
                     text: "⋮"
                     flat: true

@@ -14,6 +14,37 @@ KosApplicationWindow {
     readonly property string temperatureUnit: backend.units === "imperial" ? "°F" : "°C"
     readonly property string speedUnit: backend.units === "imperial" ? qsTr("mph") : qsTr("km/h")
     readonly property var upcomingHours: upcomingForecast()
+    property string pendingLocationId: ""
+
+    function activationOption(activationArgs, name) {
+        const prefix = name + "="
+        for (let index = 0; index < activationArgs.length; index++) {
+            const argument = String(activationArgs[index])
+            if (argument === name && index + 1 < activationArgs.length)
+                return String(activationArgs[index + 1])
+            if (argument.startsWith(prefix))
+                return argument.slice(prefix.length)
+        }
+        return ""
+    }
+
+    function selectPendingLocation() {
+        if (!pendingLocationId)
+            return
+        const source = backend.locations ?? []
+        for (let index = 0; index < source.length; index++) {
+            if (String(value(source[index], "id", "")) === pendingLocationId) {
+                backend.selectLocation(source[index])
+                pendingLocationId = ""
+                return
+            }
+        }
+    }
+
+    function handleActivation(activationArgs, workingDirectory) {
+        pendingLocationId = activationOption(activationArgs, "--location")
+        selectPendingLocation()
+    }
 
     function value(record, key, fallback) {
         if (record === null || record === undefined)
@@ -57,14 +88,14 @@ KosApplicationWindow {
 
     function conditionSymbol(code, isDay) {
         const weatherCode = Number(code)
-        if (weatherCode === 0) return isDay ? "☀" : "☾"
-        if (weatherCode === 1 || weatherCode === 2) return isDay ? "⛅" : "☁"
-        if (weatherCode === 3) return "☁"
+        if (weatherCode === 0) return isDay ? "☀︎" : "☾"
+        if (weatherCode === 1 || weatherCode === 2) return isDay ? "☀︎·☁︎" : "☁︎"
+        if (weatherCode === 3) return "☁︎"
         if (weatherCode === 45 || weatherCode === 48) return "≋"
         if ((weatherCode >= 51 && weatherCode <= 67)
-                || (weatherCode >= 80 && weatherCode <= 82)) return "☔"
+                || (weatherCode >= 80 && weatherCode <= 82)) return "☂︎"
         if ((weatherCode >= 71 && weatherCode <= 77)
-                || (weatherCode >= 85 && weatherCode <= 86)) return "❄"
+                || (weatherCode >= 85 && weatherCode <= 86)) return "❄︎"
         if (weatherCode >= 95) return "ϟ"
         return "?"
     }
@@ -106,7 +137,77 @@ KosApplicationWindow {
             new Date(backend.fetchedAt), Locale.ShortFormat))
     }
 
-    WeatherClient { id: backend }
+    component WeatherMetric: Rectangle {
+        id: metric
+
+        required property string symbol
+        required property string labelText
+        required property string valueText
+
+        implicitHeight: 66
+        radius: AppTheme.smallRadius
+        color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.10 : 0.045)
+        border.width: 1
+        border.color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.18 : 0.10)
+        Accessible.role: Accessible.StaticText
+        Accessible.name: metric.labelText + ": " + metric.valueText
+
+        HoverHandler { id: metricHover }
+        ToolTip.visible: metricHover.hovered
+        ToolTip.text: metric.labelText
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 9
+
+            Rectangle {
+                Layout.preferredWidth: 32
+                Layout.preferredHeight: 32
+                radius: 10
+                color: AppTheme.withAlpha(AppTheme.accent,
+                                          AppTheme.dark ? 0.17 : 0.09)
+
+                Label {
+                    anchors.centerIn: parent
+                    text: metric.symbol
+                    color: AppTheme.accent
+                    font.pixelSize: 17
+                    font.weight: Font.DemiBold
+                    Accessible.ignored: true
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 1
+
+                Label {
+                    Layout.fillWidth: true
+                    text: metric.labelText
+                    color: AppTheme.mutedText
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                    Accessible.ignored: true
+                }
+
+                Label {
+                    Layout.fillWidth: true
+                    text: metric.valueText
+                    color: AppTheme.text
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    Accessible.ignored: true
+                }
+            }
+        }
+    }
+
+    WeatherClient {
+        id: backend
+        onSnapshotChanged: root.selectPendingLocation()
+    }
 
     Timer {
         id: searchDebounce
@@ -114,8 +215,14 @@ KosApplicationWindow {
         onTriggered: backend.searchLocations(locationField.text)
     }
 
+    KosSettingsDialog {
+        id: settingsDialog
+        settings: root.applicationSettings
+        applicationName: qsTr("Weather")
+    }
+
     Shortcut {
-        sequence: StandardKey.Refresh
+        sequences: [StandardKey.Refresh]
         onActivated: backend.refresh()
     }
 
@@ -125,8 +232,8 @@ KosApplicationWindow {
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: 258
-            color: AppTheme.withAlpha(AppTheme.sidebar, 0.92)
+            Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            color: AppTheme.sidebarSurface
             border.width: 1
             border.color: AppTheme.border
 
@@ -209,12 +316,23 @@ KosApplicationWindow {
                     }
                 }
 
-                Label {
+                RowLayout {
                     Layout.topMargin: 8
-                    text: qsTr("SAVED LOCATIONS")
-                    color: AppTheme.mutedText
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
+                    Accessible.name: qsTr("Saved locations")
+
+                    Label {
+                        text: "●"
+                        color: AppTheme.accent
+                        font.pixelSize: 8
+                        Accessible.ignored: true
+                    }
+                    Label {
+                        text: qsTr("Locations")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 11
+                        font.weight: Font.DemiBold
+                        Accessible.ignored: true
+                    }
                 }
 
                 ListView {
@@ -273,25 +391,35 @@ KosApplicationWindow {
                 RowLayout {
                     Layout.fillWidth: true
 
+                    ButtonGroup { id: unitsGroup }
+
                     Label {
-                        text: qsTr("Units")
+                        text: "°"
                         color: AppTheme.mutedText
+                        font.pixelSize: 17
+                        Accessible.name: qsTr("Units")
                     }
 
                     Item { Layout.fillWidth: true }
 
-                    Button {
+                    KosButton {
                         text: "°C"
                         checkable: true
+                        ButtonGroup.group: unitsGroup
                         checked: backend.units === "metric"
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.checked: checked
                         Accessible.name: qsTr("Use metric units")
                         onClicked: backend.setUnits("metric")
                     }
 
-                    Button {
+                    KosButton {
                         text: "°F"
                         checkable: true
+                        ButtonGroup.group: unitsGroup
                         checked: backend.units === "imperial"
+                        Accessible.role: Accessible.RadioButton
+                        Accessible.checked: checked
                         Accessible.name: qsTr("Use imperial units")
                         onClicked: backend.setUnits("imperial")
                     }
@@ -300,11 +428,14 @@ KosApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     text: backend.connected
-                        ? qsTr("Service connected · Open-Meteo")
-                        : qsTr("Offline cache · service disconnected")
+                        ? "●  Open-Meteo"
+                        : "○  " + qsTr("Offline cache")
                     color: backend.connected ? AppTheme.positive : AppTheme.warning
                     wrapMode: Text.WordWrap
                     font.pixelSize: 11
+                    Accessible.name: backend.connected
+                        ? qsTr("Weather service connected")
+                        : qsTr("Weather service disconnected; showing offline cache")
                 }
             }
         }
@@ -329,27 +460,33 @@ KosApplicationWindow {
                     Layout.fillWidth: true
 
                     ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 120
                         spacing: 2
 
                         Label {
+                            Layout.fillWidth: true
                             text: root.locationName(backend.location)
                             color: AppTheme.text
                             font.pixelSize: 28
                             font.weight: Font.DemiBold
+                            elide: Text.ElideRight
                         }
 
                         Label {
+                            Layout.fillWidth: true
                             text: root.locationDetail(backend.location)
                             color: AppTheme.mutedText
                             visible: text.length > 0
+                            elide: Text.ElideRight
                         }
                     }
 
-                    Item { Layout.fillWidth: true }
-
                     Label {
+                        Layout.maximumWidth: 180
                         text: backend.stale ? qsTr("Cached") : root.updatedText()
                         color: backend.stale ? AppTheme.warning : AppTheme.mutedText
+                        elide: Text.ElideRight
                     }
 
                     BusyIndicator {
@@ -359,10 +496,22 @@ KosApplicationWindow {
                         visible: running
                     }
 
-                    Button {
-                        text: qsTr("Refresh")
+                    KosToolButton {
+                        text: "⚙"
+                        font.pixelSize: 16
+                        Accessible.name: qsTr("Weather settings")
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name
+                        onClicked: settingsDialog.open()
+                    }
+
+                    KosToolButton {
+                        text: "↻"
+                        font.pixelSize: 18
                         enabled: backend.connected && !backend.loading
                         Accessible.name: qsTr("Refresh weather forecast")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Refresh weather forecast")
                         onClicked: backend.refresh()
                     }
                 }
@@ -388,13 +537,14 @@ KosApplicationWindow {
 
                 KosCard {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 250
+                    Layout.preferredHeight: root.compact ? 292 : 250
 
-                    contentItem: Item {
+                    contentItem: ColumnLayout {
+                        spacing: 12
+
                         KosEmptyState {
-                            anchors.centerIn: parent
-                            width: Math.min(parent.width, implicitWidth)
-                            height: implicitHeight
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
                             visible: !backend.ready
                             symbol: backend.loading ? "↻" : "☁"
                             title: backend.loading
@@ -407,100 +557,106 @@ KosApplicationWindow {
                             onActionTriggered: backend.refresh()
                         }
 
-                        RowLayout {
-                            anchors.fill: parent
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
                             visible: backend.ready
-                            spacing: 24
+                            spacing: 12
 
-                            ColumnLayout {
-                                Layout.alignment: Qt.AlignVCenter
-                                Layout.preferredWidth: 180
-                                spacing: 2
-
-                                Label {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    text: root.conditionSymbol(
-                                        root.number(backend.current, "weatherCode", -1),
-                                        Boolean(root.value(backend.current, "isDay", true)))
-                                    color: AppTheme.accent
-                                    font.pixelSize: 72
-                                    Accessible.name: root.conditionText(
-                                        root.number(backend.current, "weatherCode", -1))
-                                }
-
-                                Label {
-                                    Layout.alignment: Qt.AlignHCenter
-                                    text: root.conditionText(
-                                        root.number(backend.current, "weatherCode", -1))
-                                    color: AppTheme.text
-                                    font.pixelSize: 18
-                                    font.weight: Font.DemiBold
-                                }
-                            }
-
-                            ColumnLayout {
-                                Layout.alignment: Qt.AlignVCenter
-                                spacing: 4
-
-                                Label {
-                                    text: Math.round(root.number(
-                                        backend.current, "temperature", 0)) + root.temperatureUnit
-                                    color: AppTheme.text
-                                    font.pixelSize: 54
-                                    font.weight: Font.Light
-                                }
-
-                                Label {
-                                    text: qsTr("Feels like %1%2").arg(Math.round(root.number(
-                                        backend.current, "apparentTemperature", 0))).arg(root.temperatureUnit)
-                                    color: AppTheme.mutedText
-                                }
-                            }
-
-                            Rectangle {
+                            RowLayout {
+                                Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.preferredWidth: 1
-                                Layout.topMargin: 22
-                                Layout.bottomMargin: 22
-                                color: AppTheme.border
+                                spacing: 22
+
+                                ColumnLayout {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Layout.preferredWidth: root.compact ? 145 : 180
+                                    spacing: 0
+
+                                    Label {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: root.conditionSymbol(
+                                            root.number(backend.current, "weatherCode", -1),
+                                            Boolean(root.value(backend.current, "isDay", true)))
+                                        color: AppTheme.accent
+                                        font.pixelSize: root.compact ? 54 : 64
+                                        Accessible.name: root.conditionText(
+                                            root.number(backend.current, "weatherCode", -1))
+                                    }
+
+                                    Label {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        text: root.conditionText(
+                                            root.number(backend.current, "weatherCode", -1))
+                                        color: AppTheme.text
+                                        font.pixelSize: 17
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    spacing: 2
+
+                                    Label {
+                                        text: Math.round(root.number(
+                                            backend.current, "temperature", 0)) + root.temperatureUnit
+                                        color: AppTheme.accent
+                                        font.pixelSize: root.compact ? 46 : 54
+                                        font.weight: Font.Light
+                                    }
+
+                                    Label {
+                                        text: "≈ " + Math.round(root.number(
+                                            backend.current, "apparentTemperature", 0))
+                                            + root.temperatureUnit
+                                        color: AppTheme.mutedText
+                                        Accessible.name: qsTr("Feels like %1%2").arg(
+                                            Math.round(root.number(backend.current,
+                                                                   "apparentTemperature", 0)))
+                                            .arg(root.temperatureUnit)
+                                    }
+                                }
+
+                                Item { Layout.fillWidth: true }
                             }
 
                             GridLayout {
                                 Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                columns: 2
-                                columnSpacing: 22
-                                rowSpacing: 16
+                                columns: root.compact ? 2 : 4
+                                columnSpacing: 8
+                                rowSpacing: 8
 
-                                Label { text: qsTr("Humidity"); color: AppTheme.mutedText }
-                                Label {
-                                    text: Math.round(root.number(
+                                WeatherMetric {
+                                    Layout.fillWidth: true
+                                    symbol: "%"
+                                    labelText: qsTr("Humidity")
+                                    valueText: Math.round(root.number(
                                         backend.current, "relativeHumidity", 0)) + "%"
-                                    color: AppTheme.text
-                                    font.weight: Font.DemiBold
                                 }
 
-                                Label { text: qsTr("Wind"); color: AppTheme.mutedText }
-                                Label {
-                                    text: Math.round(root.number(
+                                WeatherMetric {
+                                    Layout.fillWidth: true
+                                    symbol: "≋"
+                                    labelText: qsTr("Wind")
+                                    valueText: Math.round(root.number(
                                         backend.current, "windSpeed", 0)) + " " + root.speedUnit
-                                    color: AppTheme.text
-                                    font.weight: Font.DemiBold
                                 }
 
-                                Label { text: qsTr("Direction"); color: AppTheme.mutedText }
-                                Label {
-                                    text: Math.round(root.number(
+                                WeatherMetric {
+                                    Layout.fillWidth: true
+                                    symbol: "↗"
+                                    labelText: qsTr("Direction")
+                                    valueText: Math.round(root.number(
                                         backend.current, "windDirection", 0)) + "°"
-                                    color: AppTheme.text
-                                    font.weight: Font.DemiBold
                                 }
 
-                                Label { text: qsTr("Observed"); color: AppTheme.mutedText }
-                                Label {
-                                    text: root.localTime(root.value(backend.current, "time", ""))
-                                    color: AppTheme.text
-                                    font.weight: Font.DemiBold
+                                WeatherMetric {
+                                    Layout.fillWidth: true
+                                    symbol: "◷"
+                                    labelText: qsTr("Observed")
+                                    valueText: root.localTime(root.value(
+                                        backend.current, "time", ""))
                                 }
                             }
                         }
@@ -508,10 +664,11 @@ KosApplicationWindow {
                 }
 
                 Label {
-                    text: qsTr("Hourly forecast")
+                    text: "◷  " + qsTr("Hourly")
                     color: AppTheme.text
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
+                    Accessible.name: qsTr("Hourly forecast")
                 }
 
                 Flickable {
@@ -555,8 +712,9 @@ KosApplicationWindow {
                                         text: root.conditionSymbol(
                                             root.number(hourlyCard.modelData, "weatherCode", -1),
                                             Boolean(root.value(hourlyCard.modelData, "isDay", true)))
-                                        color: AppTheme.text
+                                        color: AppTheme.accent
                                         font.pixelSize: 25
+                                        Accessible.ignored: true
                                     }
 
                                     Label {
@@ -569,10 +727,14 @@ KosApplicationWindow {
 
                                     Label {
                                         Layout.alignment: Qt.AlignHCenter
-                                        text: qsTr("%1% rain").arg(Math.round(root.number(
-                                            hourlyCard.modelData, "precipitationProbability", 0)))
+                                        text: "☂︎  " + Math.round(root.number(
+                                            hourlyCard.modelData,
+                                            "precipitationProbability", 0)) + "%"
                                         color: AppTheme.mutedText
                                         font.pixelSize: 10
+                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                            Math.round(root.number(hourlyCard.modelData,
+                                                                   "precipitationProbability", 0)))
                                     }
                                 }
                             }
@@ -581,10 +743,11 @@ KosApplicationWindow {
                 }
 
                 Label {
-                    text: qsTr("Seven-day forecast")
+                    text: "▦  " + qsTr("7 days")
                     color: AppTheme.text
                     font.pixelSize: 18
                     font.weight: Font.DemiBold
+                    Accessible.name: qsTr("Seven-day forecast")
                 }
 
                 KosCard {
@@ -630,8 +793,9 @@ KosApplicationWindow {
                                     Label {
                                         text: root.conditionSymbol(root.number(
                                             dailyRow.modelData, "weatherCode", -1), true)
-                                        color: AppTheme.text
+                                        color: AppTheme.accent
                                         font.pixelSize: 22
+                                        Accessible.ignored: true
                                     }
 
                                     Label {
@@ -643,9 +807,13 @@ KosApplicationWindow {
                                     }
 
                                     Label {
-                                        text: qsTr("%1% precipitation").arg(Math.round(root.number(
-                                            dailyRow.modelData, "precipitationProbability", 0)))
+                                        text: "☂︎  " + Math.round(root.number(
+                                            dailyRow.modelData,
+                                            "precipitationProbability", 0)) + "%"
                                         color: AppTheme.mutedText
+                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                            Math.round(root.number(dailyRow.modelData,
+                                                                   "precipitationProbability", 0)))
                                     }
 
                                     Label {

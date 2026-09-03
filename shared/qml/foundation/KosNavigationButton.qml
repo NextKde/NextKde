@@ -10,7 +10,7 @@ Button {
     flat: true
     leftPadding: 14
     rightPadding: 14
-    implicitHeight: 42
+    implicitHeight: Math.round(42 * AppTheme.densityScale)
 
     contentItem: Row {
         spacing: 10
@@ -36,8 +36,9 @@ Button {
         radius: AppTheme.smallRadius
         color: root.checked
             ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.18 : 0.13)
-            : (root.hovered ? AppTheme.card : "transparent")
+            : (root.hovered ? AppTheme.cardSurface : "transparent")
         border.width: root.activeFocus ? 1 : 0
         border.color: AppTheme.withAlpha(AppTheme.accent, 0.58)
+        Behavior on color { ColorAnimation { duration: AppTheme.motionFast } }
     }
 }

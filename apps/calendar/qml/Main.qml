@@ -12,9 +12,10 @@ KosApplicationWindow {
 
     visible: true
     title: qsTr("Calendar")
-    minimumWidth: 900
-    minimumHeight: 620
+    minimumWidth: 760
+    minimumHeight: 540
 
+    property date now: new Date()
     property date visibleMonth: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
     property date selectedDate: new Date()
     property int viewIndex: 0
@@ -25,8 +26,140 @@ KosApplicationWindow {
     property string statusMessage: ""
 
     readonly property string activeView: ["month", "week", "day"][viewIndex]
+    readonly property int localeFirstDayOfWeek:
+        Number(Qt.locale().firstDayOfWeek) % 7
     readonly property date weekStart: startOfWeek(selectedDate)
     readonly property var selectedItems: itemsForDate(selectedDate)
+
+    Timer {
+        interval: 60000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root.now = new Date()
+    }
+
+    component SidebarToggle: AbstractButton {
+        id: control
+
+        property color markerColor: AppTheme.accent
+        property bool nested: false
+
+        checkable: true
+        hoverEnabled: true
+        implicitHeight: nested ? 28 : 32
+        leftPadding: nested ? 26 : 10
+        rightPadding: 8
+        Accessible.role: Accessible.CheckBox
+
+        contentItem: RowLayout {
+            spacing: 9
+
+            Rectangle {
+                Layout.preferredWidth: 11
+                Layout.preferredHeight: 11
+                radius: width / 2
+                color: control.checked ? control.markerColor : "transparent"
+                border.width: control.checked ? 0 : 1
+                border.color: AppTheme.withAlpha(control.markerColor, 0.72)
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 3
+                    height: 3
+                    radius: width / 2
+                    color: AppTheme.accentText
+                    visible: control.checked
+                }
+            }
+
+            Label {
+                Layout.fillWidth: true
+                text: control.text
+                color: control.enabled ? AppTheme.text : AppTheme.mutedText
+                font.pixelSize: control.nested ? 10 : 11
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Rectangle {
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 18
+                radius: height / 2
+                color: control.checked
+                    ? AppTheme.withAlpha(control.markerColor,
+                        AppTheme.dark ? 0.42 : 0.24)
+                    : AppTheme.withAlpha(AppTheme.text,
+                        AppTheme.dark ? 0.18 : 0.10)
+                border.width: 1
+                border.color: control.checked
+                    ? AppTheme.withAlpha(control.markerColor, 0.48)
+                    : AppTheme.border
+
+                Rectangle {
+                    y: 2
+                    x: control.checked ? parent.width - width - 2 : 2
+                    width: 14
+                    height: 14
+                    radius: 7
+                    color: control.checked ? control.markerColor : AppTheme.mutedText
+
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: AppTheme.motionFast
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+            }
+        }
+
+        background: Rectangle {
+            radius: AppTheme.smallRadius
+            color: control.down
+                ? AppTheme.buttonPressed
+                : (control.hovered ? AppTheme.cardHover : "transparent")
+            border.width: control.activeFocus ? 1 : 0
+            border.color: AppTheme.withAlpha(AppTheme.accent, 0.56)
+        }
+    }
+
+    function activationOption(activationArgs, name) {
+        const prefix = name + "="
+        for (let index = 0; index < activationArgs.length; index++) {
+            const argument = String(activationArgs[index])
+            if (argument === name && index + 1 < activationArgs.length)
+                return String(activationArgs[index + 1])
+            if (argument.startsWith(prefix))
+                return argument.slice(prefix.length)
+        }
+        return ""
+    }
+
+    function handleActivation(activationArgs, workingDirectory) {
+        const requestedView = activationOption(activationArgs, "--view")
+        const requestedViewIndex = ["month", "week", "day"].indexOf(requestedView)
+        if (requestedViewIndex >= 0)
+            viewIndex = requestedViewIndex
+
+        const requested = activationOption(activationArgs, "--date")
+        if (requested === "today") {
+            showToday()
+            return
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(requested))
+            return
+        const parts = requested.split("-").map(Number)
+        const date = new Date(parts[0], parts[1] - 1, parts[2], 12)
+        if (Number.isNaN(date.getTime())
+                || date.getFullYear() !== parts[0]
+                || date.getMonth() !== parts[1] - 1
+                || date.getDate() !== parts[2])
+            return
+        selectedDate = date
+        visibleMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+        Qt.callLater(updateEventRange)
+    }
 
     function value(record, key, fallback) {
         if (record === null || record === undefined)
@@ -46,8 +179,8 @@ KosApplicationWindow {
     }
 
     function startOfWeek(date) {
-        const mondayOffset = (date.getDay() + 6) % 7
-        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - mondayOffset)
+        const offset = (date.getDay() - localeFirstDayOfWeek + 7) % 7
+        return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset)
     }
 
     function monthDate(offset) {
@@ -56,8 +189,14 @@ KosApplicationWindow {
 
     function dateForMonthCell(index) {
         const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1)
-        const mondayOffset = (first.getDay() + 6) % 7
-        return new Date(first.getFullYear(), first.getMonth(), index - mondayOffset + 1)
+        const offset = (first.getDay() - localeFirstDayOfWeek + 7) % 7
+        return new Date(first.getFullYear(), first.getMonth(), index - offset + 1)
+    }
+
+    function weekdayName(column, format) {
+        const jsDay = (localeFirstDayOfWeek + column) % 7
+        const qtDay = jsDay === 0 ? 7 : jsDay
+        return Qt.locale().dayName(qtDay, format)
     }
 
     function eventContainsDate(event, key) {
@@ -226,7 +365,8 @@ KosApplicationWindow {
     }
 
     function showToday() {
-        const today = new Date()
+        now = new Date()
+        const today = new Date(now.getTime())
         selectedDate = today
         visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1)
         Qt.callLater(updateEventRange)
@@ -346,171 +486,361 @@ KosApplicationWindow {
         onDeleteRequested: uid => pim.removeTodo(uid)
     }
 
-    Shortcut { sequence: StandardKey.New; onActivated: eventEditor.openForDate(root.selectedDate) }
+    KosSettingsDialog {
+        id: settingsDialog
+        settings: root.applicationSettings
+        applicationName: qsTr("Calendar")
+    }
+
+    Shortcut { sequences: [StandardKey.New]; onActivated: eventEditor.openForDate(root.selectedDate) }
     Shortcut { sequence: "Ctrl+T"; onActivated: root.showToday() }
     Shortcut { sequence: "Ctrl+1"; onActivated: root.viewIndex = 0 }
     Shortcut { sequence: "Ctrl+2"; onActivated: root.viewIndex = 1 }
     Shortcut { sequence: "Ctrl+3"; onActivated: root.viewIndex = 2 }
-    Shortcut { sequence: StandardKey.Find; onActivated: searchField.forceActiveFocus() }
+    Shortcut { sequences: [StandardKey.Find]; onActivated: searchField.forceActiveFocus() }
 
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
         Rectangle {
+            id: sidebar
+
             Layout.fillHeight: true
-            Layout.preferredWidth: 244
-            color: AppTheme.withAlpha(AppTheme.sidebar, 0.94)
+            Layout.preferredWidth: root.compact
+                ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            color: AppTheme.sidebarSurface
             border.width: 1
             border.color: AppTheme.border
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 8
+                anchors.margins: 12
+                spacing: 4
 
-                Label {
-                    text: qsTr("KOS Calendar")
-                    color: AppTheme.text
-                    font.pixelSize: 20
-                    font.weight: Font.DemiBold
-                    Layout.bottomMargin: 6
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("Calendar")
+                        color: AppTheme.text
+                        font.pixelSize: 20
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
+
+                    KosToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 30
+                        text: "+"
+                        flat: true
+                        enabled: pim.connected && pim.writable
+                        Accessible.name: qsTr("New event")
+                        onClicked: eventEditor.openForDate(root.selectedDate)
+                    }
+                }
+
+                AbstractButton {
+                    id: todayNavigation
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 32
+                    hoverEnabled: true
+                    Accessible.name: qsTr("Go to today")
+                    onClicked: root.showToday()
+
+                    contentItem: RowLayout {
+                        spacing: 9
+
+                        Rectangle {
+                            Layout.preferredWidth: 24
+                            Layout.preferredHeight: 24
+                            radius: 7
+                            color: AppTheme.accent
+
+                            Label {
+                                anchors.centerIn: parent
+                                text: String(root.now.getDate())
+                                color: AppTheme.accentText
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: qsTr("Today")
+                            color: AppTheme.text
+                            font.pixelSize: 11
+                            font.weight: Font.Medium
+                        }
+
+                        Label {
+                            text: Qt.formatDate(root.now, "ddd")
+                            color: AppTheme.mutedText
+                            font.pixelSize: 10
+                        }
+                    }
+
+                    background: Rectangle {
+                        radius: AppTheme.smallRadius
+                        color: todayNavigation.down
+                            ? AppTheme.buttonPressed
+                            : (todayNavigation.hovered
+                                ? AppTheme.cardHover : "transparent")
+                        border.width: todayNavigation.activeFocus ? 1 : 0
+                        border.color: AppTheme.withAlpha(AppTheme.accent, 0.56)
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    Layout.topMargin: 3
+                    Layout.bottomMargin: 3
+                    color: AppTheme.border
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 26
+                    spacing: 2
 
-                    ToolButton {
+                    KosToolButton {
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
                         text: "‹"
                         flat: true
+                        Accessible.name: qsTr("Previous month")
                         onClicked: root.visibleMonth = root.monthDate(-1)
                     }
+
                     Label {
                         Layout.fillWidth: true
                         text: Qt.formatDate(root.visibleMonth, "MMMM yyyy")
                         color: AppTheme.text
                         horizontalAlignment: Text.AlignHCenter
                         font.weight: Font.DemiBold
-                        font.pixelSize: 12
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
                     }
-                    ToolButton {
+
+                    KosToolButton {
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
                         text: "›"
                         flat: true
+                        Accessible.name: qsTr("Next month")
                         onClicked: root.visibleMonth = root.monthDate(1)
                     }
                 }
 
-                GridLayout {
+                Item {
+                    id: miniCalendar
+
                     Layout.fillWidth: true
-                    columns: 7
-                    columnSpacing: 1
-                    rowSpacing: 1
+                    Layout.preferredHeight: 144
+                    readonly property real cellWidth: width / 7
+                    readonly property real headingHeight: 18
+                    readonly property real cellHeight: 21
 
                     Repeater {
                         model: 7
+
                         delegate: Label {
                             required property int index
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 18
-                            text: Qt.locale().dayName(index + 1, Locale.NarrowFormat)
+                            x: index * miniCalendar.cellWidth
+                            y: 0
+                            width: miniCalendar.cellWidth
+                            height: miniCalendar.headingHeight
+                            text: root.weekdayName(index, Locale.NarrowFormat)
                             color: AppTheme.mutedText
                             horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                             font.pixelSize: 9
+                            font.weight: Font.Medium
                         }
                     }
 
                     Repeater {
                         model: 42
-                        delegate: Button {
+
+                        delegate: AbstractButton {
                             id: miniDay
+
                             required property int index
                             readonly property date cellDate: root.dateForMonthCell(index)
-                            readonly property bool selected: root.sameDay(cellDate, root.selectedDate)
-                            readonly property bool today: root.sameDay(cellDate, new Date())
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 24
-                            text: String(cellDate.getDate())
-                            flat: true
-                            opacity: cellDate.getMonth() === root.visibleMonth.getMonth() ? 1 : 0.38
-                            font.pixelSize: 9
+                            readonly property bool inVisibleMonth:
+                                cellDate.getMonth() === root.visibleMonth.getMonth()
+                            readonly property bool selected:
+                                root.sameDay(cellDate, root.selectedDate)
+                            readonly property bool today:
+                                root.sameDay(cellDate, root.now)
+
+                            x: (index % 7) * miniCalendar.cellWidth
+                            y: miniCalendar.headingHeight
+                                + Math.floor(index / 7) * miniCalendar.cellHeight
+                            width: miniCalendar.cellWidth
+                            height: miniCalendar.cellHeight
+                            hoverEnabled: true
+                            opacity: inVisibleMonth ? 1 : 0.42
+                            Accessible.name: Qt.formatDate(cellDate, Locale.LongFormat)
                             onClicked: {
                                 root.selectedDate = cellDate
-                                if (root.activeView === "month"
-                                        && cellDate.getMonth() !== root.visibleMonth.getMonth()) {
-                                    root.visibleMonth = new Date(cellDate.getFullYear(),
-                                                                 cellDate.getMonth(), 1)
+                                if (cellDate.getMonth()
+                                    !== root.visibleMonth.getMonth()) {
+                                    root.visibleMonth = new Date(
+                                        cellDate.getFullYear(),
+                                        cellDate.getMonth(), 1)
                                 }
                             }
-                            background: Rectangle {
-                                radius: 12
-                                color: miniDay.today ? AppTheme.accent
+
+                            contentItem: Rectangle {
+                                width: 20
+                                height: 20
+                                anchors.centerIn: parent
+                                radius: width / 2
+                                color: miniDay.today
+                                    ? AppTheme.accent
                                     : (miniDay.selected
-                                        ? AppTheme.withAlpha(AppTheme.accent, 0.16)
-                                        : (miniDay.hovered ? AppTheme.cardHover : "transparent"))
+                                        ? AppTheme.withAlpha(AppTheme.accent,
+                                            AppTheme.dark ? 0.28 : 0.14)
+                                        : (miniDay.hovered
+                                            ? AppTheme.cardHover : "transparent"))
+                                border.width: miniDay.selected && !miniDay.today ? 1 : 0
+                                border.color: AppTheme.withAlpha(AppTheme.accent, 0.52)
+
+                                Label {
+                                    anchors.centerIn: parent
+                                    text: String(miniDay.cellDate.getDate())
+                                    color: miniDay.today
+                                        ? AppTheme.accentText
+                                        : (miniDay.selected
+                                            ? AppTheme.accent : AppTheme.text)
+                                    font.pixelSize: 9
+                                    font.weight: miniDay.today || miniDay.selected
+                                        ? Font.DemiBold : Font.Normal
+                                }
                             }
-                            palette.buttonText: today ? "white" : AppTheme.text
+
+                            background: null
                         }
                     }
                 }
 
-                Label {
-                    Layout.topMargin: 12
-                    text: qsTr("CALENDARS")
-                    color: AppTheme.mutedText
-                    font.pixelSize: 10
-                    font.weight: Font.DemiBold
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("CALENDARS")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 9
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0.6
+                    }
+
+                    Label {
+                        text: "2"
+                        color: AppTheme.mutedText
+                        font.pixelSize: 9
+                    }
                 }
 
-                CheckBox {
+                SidebarToggle {
+                    Layout.fillWidth: true
                     text: qsTr("Events")
+                    markerColor: AppTheme.accent
                     checked: root.showEvents
                     onToggled: root.showEvents = checked
                 }
 
-                CheckBox {
+                SidebarToggle {
+                    Layout.fillWidth: true
                     text: qsTr("Scheduled tasks")
+                    markerColor: AppTheme.positive
                     checked: root.showTasks
                     onToggled: root.showTasks = checked
                 }
 
-                CheckBox {
-                    leftPadding: 28
-                    text: qsTr("Show completed tasks")
+                SidebarToggle {
+                    Layout.fillWidth: true
+                    text: qsTr("Show completed")
+                    markerColor: AppTheme.warning
+                    nested: true
                     checked: root.showCompletedTasks
                     enabled: root.showTasks
+                    opacity: enabled ? 1 : 0.48
                     onToggled: root.showCompletedTasks = checked
-                    font.pixelSize: 10
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 4
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: qsTr("TASK LISTS")
+                        color: AppTheme.mutedText
+                        font.pixelSize: 9
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 0.6
+                    }
+
+                    Label {
+                        text: String(pim.lists.length)
+                        color: AppTheme.mutedText
+                        font.pixelSize: 9
+                    }
                 }
 
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 118)
+                    Layout.preferredHeight: Math.min(contentHeight, 72)
+                    Layout.maximumHeight: 72
                     clip: true
                     model: pim.lists
-                    spacing: 2
+                    spacing: 1
 
-                    delegate: Item {
+                    delegate: Rectangle {
                         id: listLegend
+
                         required property var modelData
                         width: ListView.view.width
-                        height: 24
+                        height: 27
+                        radius: AppTheme.smallRadius
+                        color: "transparent"
 
-                        Row {
-                            anchors.verticalCenter: parent.verticalCenter
-                            leftPadding: 8
-                            spacing: 8
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 8
+                            spacing: 9
+
                             Rectangle {
-                                width: 8
-                                height: 8
-                                radius: 4
+                                Layout.preferredWidth: 10
+                                Layout.preferredHeight: 10
+                                radius: width / 2
                                 color: String(root.value(listLegend.modelData,
                                     "color", AppTheme.accent))
                             }
+
                             Label {
+                                Layout.fillWidth: true
                                 text: String(root.value(listLegend.modelData,
                                     "name", qsTr("List")))
-                                color: AppTheme.mutedText
+                                color: AppTheme.text
                                 font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
+
+                            Label {
+                                text: qsTr("Tasks")
+                                color: AppTheme.mutedText
+                                font.pixelSize: 9
                             }
                         }
                     }
@@ -518,14 +848,37 @@ KosApplicationWindow {
 
                 Item { Layout.fillHeight: true }
 
-                Label {
+                Rectangle {
                     Layout.fillWidth: true
-                    text: pim.connected
-                        ? qsTr("Calendar and Todo are synchronized")
-                        : qsTr("Waiting for the local PIM service")
-                    color: pim.connected ? AppTheme.positive : AppTheme.warning
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 10
+                    Layout.preferredHeight: 32
+                    radius: AppTheme.smallRadius
+                    color: AppTheme.withAlpha(
+                        pim.connected ? AppTheme.positive : AppTheme.warning,
+                        AppTheme.dark ? 0.13 : 0.08)
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 9
+                        anchors.rightMargin: 9
+                        spacing: 7
+
+                        Rectangle {
+                            Layout.preferredWidth: 7
+                            Layout.preferredHeight: 7
+                            radius: width / 2
+                            color: pim.connected ? AppTheme.positive : AppTheme.warning
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: pim.connected
+                                ? qsTr("Calendar and Todo are synchronized")
+                                : qsTr("Waiting for the local PIM service")
+                            color: pim.connected ? AppTheme.positive : AppTheme.warning
+                            elide: Text.ElideRight
+                            font.pixelSize: 9
+                        }
+                    }
                 }
             }
         }
@@ -536,94 +889,116 @@ KosApplicationWindow {
             Layout.margins: 18
             spacing: 12
 
-            RowLayout {
+            ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 8
 
-                ToolButton {
-                    Layout.preferredWidth: 36
-                    text: "‹"
-                    Accessible.name: qsTr("Previous period")
-                    onClicked: root.shiftView(-1)
-                }
-                ToolButton {
-                    Layout.preferredWidth: 36
-                    text: "›"
-                    Accessible.name: qsTr("Next period")
-                    onClicked: root.shiftView(1)
-                }
-                Button {
-                    Layout.preferredWidth: 74
-                    text: qsTr("Today")
-                    onClicked: root.showToday()
-                }
-
-                Label {
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.minimumWidth: 142
-                    text: root.headerTitle()
-                    color: AppTheme.text
-                    font.pixelSize: 22
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                }
+                    spacing: 8
 
-                BusyIndicator {
-                    Layout.preferredWidth: 26
-                    Layout.preferredHeight: 26
-                    running: pim.busy
-                    visible: running
-                }
+                    KosToolButton {
+                        Layout.preferredWidth: 36
+                        text: "‹"
+                        Accessible.name: qsTr("Previous period")
+                        onClicked: root.shiftView(-1)
+                    }
+                    KosToolButton {
+                        Layout.preferredWidth: 36
+                        text: "›"
+                        Accessible.name: qsTr("Next period")
+                        onClicked: root.shiftView(1)
+                    }
+                    KosButton {
+                        Layout.preferredWidth: 74
+                        text: qsTr("Today")
+                        onClicked: root.showToday()
+                    }
 
-                LiquidTextField {
-                    id: searchField
-                    Layout.preferredWidth: 150
-                    placeholderText: qsTr("Search events and tasks")
-                    text: root.searchQuery
-                    onTextEdited: root.searchQuery = text
-                    Accessible.name: qsTr("Search calendar")
-                }
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 142
+                        text: root.headerTitle()
+                        color: AppTheme.text
+                        font.pixelSize: 22
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
 
-                LiquidSegmentedControl {
-                    Layout.preferredWidth: 174
-                    labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
-                    currentIndex: root.viewIndex
-                    backgroundColor: AppTheme.withAlpha(AppTheme.text,
-                        AppTheme.dark ? 0.10 : 0.06)
-                    selectionColor: AppTheme.dark ? AppTheme.cardHover : AppTheme.windowRaised
-                    textColor: AppTheme.text
-                    mutedTextColor: AppTheme.mutedText
-                    onSelectionRequested: index => root.viewIndex = index
-                }
+                    BusyIndicator {
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                        running: pim.busy
+                        visible: running
+                    }
 
-                Button {
-                    Layout.preferredWidth: 96
-                    text: qsTr("New event")
-                    highlighted: true
-                    enabled: pim.connected && pim.writable
-                    onClicked: eventEditor.openForDate(root.selectedDate)
-                }
+                    KosToolButton {
+                        text: "⚙"
+                        font.pixelSize: 16
+                        Accessible.name: qsTr("Calendar settings")
+                        ToolTip.visible: hovered
+                        ToolTip.text: Accessible.name
+                        onClicked: settingsDialog.open()
+                    }
 
-                Button {
-                    id: actionsButton
-                    Layout.preferredWidth: 42
-                    text: "⋯"
-                    Accessible.name: qsTr("Calendar actions")
-                    onClicked: actionsMenu.open()
+                    KosButton {
+                        id: actionsButton
+                        Layout.preferredWidth: 42
+                        text: "⋯"
+                        Accessible.name: qsTr("Calendar actions")
+                        onClicked: actionsMenu.open()
 
-                    Menu {
-                        id: actionsMenu
-                        y: actionsButton.height
-                        MenuItem {
-                            text: qsTr("Import iCalendar…")
-                            enabled: pim.connected && pim.writable
-                            onTriggered: importDialog.open()
+                        Menu {
+                            id: actionsMenu
+                            y: actionsButton.height
+                            MenuItem {
+                                text: qsTr("Import iCalendar…")
+                                enabled: pim.connected && pim.writable
+                                onTriggered: importDialog.open()
+                            }
+                            MenuItem {
+                                text: qsTr("Export iCalendar…")
+                                enabled: pim.connected && pim.ready
+                                onTriggered: exportDialog.open()
+                            }
                         }
-                        MenuItem {
-                            text: qsTr("Export iCalendar…")
-                            enabled: pim.connected && pim.ready
-                            onTriggered: exportDialog.open()
-                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    LiquidTextField {
+                        id: searchField
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 120
+                        Layout.maximumWidth: 340
+                        placeholderText: qsTr("Search events and tasks")
+                        text: root.searchQuery
+                        onTextEdited: root.searchQuery = text
+                        Accessible.name: qsTr("Search calendar")
+                    }
+
+                    LiquidSegmentedControl {
+                        Layout.preferredWidth: 174
+                        labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
+                        currentIndex: root.viewIndex
+                        backgroundColor: AppTheme.withAlpha(AppTheme.text,
+                            AppTheme.dark ? 0.10 : 0.06)
+                        selectionColor: AppTheme.dark
+                            ? AppTheme.cardHover : AppTheme.windowRaised
+                        textColor: AppTheme.text
+                        mutedTextColor: AppTheme.mutedText
+                        onSelectionRequested: index => root.viewIndex = index
+                    }
+
+                    KosButton {
+                        Layout.preferredWidth: 96
+                        text: qsTr("New event")
+                        highlighted: true
+                        enabled: pim.connected && pim.writable
+                        onClicked: eventEditor.openForDate(root.selectedDate)
                     }
                 }
             }
@@ -653,6 +1028,8 @@ KosApplicationWindow {
                         Layout.fillHeight: true
                         visibleDate: root.visibleMonth
                         selectedDate: root.selectedDate
+                        currentTime: root.now
+                        firstDayOfWeek: root.localeFirstDayOfWeek
                         itemsForDate: root.itemsForDate
                         itemTitle: root.itemTitle
                         itemColor: root.itemColor
@@ -683,7 +1060,7 @@ KosApplicationWindow {
                                     font.pixelSize: 11
                                 }
                                 Item { Layout.fillWidth: true }
-                                Button {
+                                KosButton {
                                     text: qsTr("Add")
                                     flat: true
                                     enabled: pim.connected && pim.writable
@@ -719,12 +1096,44 @@ KosApplicationWindow {
 
                                     contentItem: RowLayout {
                                         spacing: 9
-                                        CheckBox {
+                                        AbstractButton {
+                                            id: completionButton
+
                                             visible: root.itemTodoId(agendaItem.modelData).length > 0
+                                            implicitWidth: 24
+                                            implicitHeight: 24
+                                            checkable: true
                                             checked: root.itemCompleted(agendaItem.modelData)
                                             Accessible.name: checked
                                                 ? qsTr("Mark task open") : qsTr("Mark task complete")
                                             onClicked: root.toggleItem(agendaItem.modelData, checked)
+
+                                            contentItem: Rectangle {
+                                                anchors.centerIn: parent
+                                                width: 17
+                                                height: 17
+                                                radius: width / 2
+                                                color: completionButton.checked
+                                                    ? root.itemColor(agendaItem.modelData)
+                                                    : "transparent"
+                                                border.width: 1
+                                                border.color: root.itemColor(agendaItem.modelData)
+
+                                                Rectangle {
+                                                    anchors.centerIn: parent
+                                                    width: 5
+                                                    height: 5
+                                                    radius: width / 2
+                                                    color: AppTheme.accentText
+                                                    visible: completionButton.checked
+                                                }
+                                            }
+
+                                            background: Rectangle {
+                                                radius: AppTheme.smallRadius
+                                                color: completionButton.hovered
+                                                    ? AppTheme.cardHover : "transparent"
+                                            }
                                         }
                                         Rectangle {
                                             Layout.preferredWidth: 4
@@ -773,6 +1182,7 @@ KosApplicationWindow {
 
                 CalendarScheduleView {
                     firstDate: root.weekStart
+                    currentTime: root.now
                     dayCount: 7
                     itemsForDate: root.itemsForDate
                     itemTitle: root.itemTitle
@@ -789,6 +1199,7 @@ KosApplicationWindow {
 
                 CalendarScheduleView {
                     firstDate: root.selectedDate
+                    currentTime: root.now
                     dayCount: 1
                     itemsForDate: root.itemsForDate
                     itemTitle: root.itemTitle
@@ -806,12 +1217,5 @@ KosApplicationWindow {
         }
     }
 
-    Component.onCompleted: {
-        const argumentsList = Qt.application.arguments
-        if (argumentsList.indexOf("week") >= 0)
-            viewIndex = 1
-        else if (argumentsList.indexOf("day") >= 0)
-            viewIndex = 2
-        updateEventRange()
-    }
+    Component.onCompleted: updateEventRange()
 }

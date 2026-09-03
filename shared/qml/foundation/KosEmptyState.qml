@@ -50,7 +50,7 @@ Item {
             visible: text.length > 0
         }
 
-        Button {
+        KosButton {
             Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: 8
             text: root.actionText

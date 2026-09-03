@@ -11,8 +11,8 @@ KosApplicationWindow {
 
     visible: true
     title: qsTr("Music")
-    minimumWidth: 860
-    minimumHeight: 580
+    minimumWidth: 760
+    minimumHeight: 540
 
     property string page: "recent"
     property string detailName: ""
@@ -63,6 +63,35 @@ KosApplicationWindow {
             return detailSubtitle.length > 0 ? detailSubtitle
                 : qsTr("%n track(s)", "", music.libraryModel.count)
         return qsTr("%n track(s)", "", music.libraryModel.count)
+    }
+
+    function activationUri(argument, workingDirectory) {
+        const value = String(argument)
+        const directory = String(workingDirectory ?? "")
+        if (value.startsWith("/")
+                || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)
+                || directory.length === 0)
+            return value
+        return directory.replace(/\/+$/, "") + "/" + value
+    }
+
+    function handleActivation(activationArgs, workingDirectory) {
+        const optionsWithValues = ["--view", "--date", "--item", "--location"]
+        let positionalOnly = false
+        for (let index = 0; index < activationArgs.length; index++) {
+            const argument = String(activationArgs[index])
+            if (!positionalOnly && argument === "--") {
+                positionalOnly = true
+                continue
+            }
+            if (!positionalOnly && argument.startsWith("-")) {
+                if (optionsWithValues.indexOf(argument) >= 0)
+                    index++
+                continue
+            }
+            if (argument.length > 0)
+                music.openUri(activationUri(argument, workingDirectory))
+        }
     }
 
     function formatTime(milliseconds) {
@@ -148,11 +177,11 @@ KosApplicationWindow {
     }
 
     Shortcut {
-        sequence: StandardKey.Open
+        sequences: [StandardKey.Open]
         onActivated: openFileDialog.open()
     }
     Shortcut {
-        sequence: StandardKey.Refresh
+        sequences: [StandardKey.Refresh]
         onActivated: music.rescanLibrary()
     }
     Shortcut {
@@ -226,6 +255,7 @@ KosApplicationWindow {
     Dialog {
         id: removePlaylistDialog
         anchors.centerIn: parent
+        width: 380
         title: qsTr("Remove playlist?")
         modal: true
         standardButtons: Dialog.Yes | Dialog.Cancel
@@ -236,7 +266,6 @@ KosApplicationWindow {
             root.selectedPlaylistName = ""
         }
         contentItem: Label {
-            width: 340
             text: qsTr("The playlist will be removed. Your audio files will not be deleted.")
             color: AppTheme.text
             wrapMode: Text.WordWrap
@@ -324,14 +353,20 @@ KosApplicationWindow {
                                           root.pendingFormatId, true)
     }
 
+    KosSettingsDialog {
+        id: settingsDialog
+        settings: root.applicationSettings
+        applicationName: qsTr("Music")
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: root.width < 960 ? 212 : 238
-            color: AppTheme.withAlpha(AppTheme.sidebar, 0.94)
+            Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            color: AppTheme.sidebarSurface
             border.width: 1
             border.color: AppTheme.border
 
@@ -348,18 +383,22 @@ KosApplicationWindow {
                     Layout.bottomMargin: 12
                 }
 
+                ButtonGroup { id: navigationGroup }
+
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Recently added")
                     symbol: "◷"
                     checked: root.page === "recent"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.openLibraryPage("recent")
                 }
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Songs")
-                    symbol: "♫"
+                    symbol: "♪"
                     checked: root.page === "songs"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.openLibraryPage("songs")
                 }
                 KosNavigationButton {
@@ -367,13 +406,15 @@ KosApplicationWindow {
                     text: qsTr("Albums")
                     symbol: "▦"
                     checked: root.page === "albums" || root.page === "album"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.page = "albums"
                 }
                 KosNavigationButton {
                     Layout.fillWidth: true
                     text: qsTr("Artists")
-                    symbol: "♙"
+                    symbol: "◎"
                     checked: root.page === "artists" || root.page === "artist"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.page = "artists"
                 }
                 KosNavigationButton {
@@ -381,6 +422,7 @@ KosApplicationWindow {
                     text: qsTr("Queue")
                     symbol: "≡"
                     checked: root.page === "queue"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.page = "queue"
                 }
                 KosNavigationButton {
@@ -388,6 +430,7 @@ KosApplicationWindow {
                     text: qsTr("Folders")
                     symbol: "▱"
                     checked: root.page === "folders"
+                    ButtonGroup.group: navigationGroup
                     onClicked: root.page = "folders"
                 }
 
@@ -397,15 +440,18 @@ KosApplicationWindow {
 
                     Label {
                         Layout.fillWidth: true
-                        text: qsTr("PLAYLISTS")
+                        text: "♪  " + qsTr("Playlists")
                         color: AppTheme.mutedText
                         font.pixelSize: 10
                         font.weight: Font.DemiBold
+                        Accessible.name: qsTr("Playlists")
                     }
-                    ToolButton {
+                    KosToolButton {
                         text: "+"
                         flat: true
                         Accessible.name: qsTr("Create playlist")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Create playlist")
                         onClicked: {
                             root.renamePlaylistMode = false
                             playlistEditor.open()
@@ -432,6 +478,7 @@ KosApplicationWindow {
                         symbol: "♬"
                         checked: root.page === "playlist"
                             && Number(root.selectedPlaylistId) === Number(modelData.id)
+                        ButtonGroup.group: navigationGroup
                         onClicked: root.openPlaylist(Number(modelData.id),
                                                      String(modelData.name))
                     }
@@ -458,20 +505,36 @@ KosApplicationWindow {
                 Label {
                     Layout.fillWidth: true
                     text: music.engineAvailable
-                        ? qsTr("Engine: %1").arg(music.engineBackend)
-                        : qsTr("Playback engine unavailable")
+                        ? "●  " + music.engineBackend
+                        : "○  " + qsTr("Audio")
                     color: music.engineAvailable ? AppTheme.positive : AppTheme.destructive
                     wrapMode: Text.WordWrap
                     font.pixelSize: 10
+                    Accessible.name: music.engineAvailable
+                        ? qsTr("Playback engine connected: %1").arg(music.engineBackend)
+                        : qsTr("Playback engine unavailable")
+                    ToolTip.visible: engineHover.hovered
+                    ToolTip.text: music.engineAvailable
+                        ? qsTr("Playback engine connected: %1").arg(music.engineBackend)
+                        : qsTr("Playback engine unavailable")
+                    HoverHandler { id: engineHover }
                 }
                 Label {
                     Layout.fillWidth: true
                     text: music.mprisRegistered
-                        ? qsTr("MPRIS controls connected")
-                        : qsTr("MPRIS needs a session bus")
+                        ? "●  " + qsTr("Media keys")
+                        : "○  " + qsTr("Media keys")
                     color: music.mprisRegistered ? AppTheme.positive : AppTheme.mutedText
                     wrapMode: Text.WordWrap
                     font.pixelSize: 10
+                    Accessible.name: music.mprisRegistered
+                        ? qsTr("System media controls connected")
+                        : qsTr("System media controls need a session bus")
+                    ToolTip.visible: mprisHover.hovered
+                    ToolTip.text: music.mprisRegistered
+                        ? qsTr("System media controls connected")
+                        : qsTr("System media controls need a session bus")
+                    HoverHandler { id: mprisHover }
                 }
             }
         }
@@ -515,15 +578,31 @@ KosApplicationWindow {
                     onTextChanged: music.setSearch(text)
                 }
 
-                Button {
-                    text: qsTr("Add folder")
+                KosRoundButton {
+                    Layout.preferredWidth: 38
+                    Layout.preferredHeight: 38
+                    text: "+"
                     highlighted: music.libraryFolders.length === 0
+                    Accessible.name: qsTr("Add music folder")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Add music folder")
                     onClicked: folderDialog.open()
                 }
 
-                ToolButton {
+                KosToolButton {
+                    text: "⚙"
+                    font.pixelSize: 16
+                    Accessible.name: qsTr("Music settings")
+                    ToolTip.visible: hovered
+                    ToolTip.text: Accessible.name
+                    onClicked: settingsDialog.open()
+                }
+
+                KosToolButton {
                     text: "⋮"
                     Accessible.name: qsTr("Library actions")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Library actions")
                     onClicked: libraryMenu.popup()
 
                     Menu {
@@ -592,10 +671,13 @@ KosApplicationWindow {
                         color: AppTheme.text
                         wrapMode: Text.WordWrap
                     }
-                    ToolButton {
+                    KosToolButton {
+                        destructive: true
                         text: "×"
                         flat: true
                         Accessible.name: qsTr("Dismiss error")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Dismiss error")
                         onClicked: music.clearError()
                     }
                 }
@@ -649,8 +731,11 @@ KosApplicationWindow {
                         text: Math.round(music.transcodeProgress * 100) + "%"
                         color: AppTheme.mutedText
                     }
-                    Button {
-                        text: qsTr("Cancel")
+                    KosToolButton {
+                        text: "×"
+                        Accessible.name: qsTr("Cancel conversion")
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Cancel conversion")
                         onClicked: music.cancelTranscode()
                     }
                 }
@@ -735,14 +820,22 @@ KosApplicationWindow {
                                     font.pixelSize: 17
                                     font.weight: Font.DemiBold
                                 }
-                                Button {
-                                    text: qsTr("Add folder")
+                                KosRoundButton {
+                                    Layout.preferredWidth: 36
+                                    Layout.preferredHeight: 36
+                                    text: "+"
                                     highlighted: true
+                                    Accessible.name: qsTr("Add music folder")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Add music folder")
                                     onClicked: folderDialog.open()
                                 }
-                                Button {
-                                    text: qsTr("Rescan")
+                                KosToolButton {
+                                    text: "↻"
                                     enabled: !music.scanning
+                                    Accessible.name: qsTr("Rescan music library")
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Rescan music library")
                                     onClicked: music.rescanLibrary()
                                 }
                             }
@@ -775,7 +868,7 @@ KosApplicationWindow {
                                     width: folderList.width
                                     height: 64
                                     radius: AppTheme.smallRadius
-                                    color: AppTheme.card
+                                    color: AppTheme.cardSurface
                                     border.width: 1
                                     border.color: AppTheme.border
 
@@ -805,8 +898,12 @@ KosApplicationWindow {
                                                 elide: Text.ElideMiddle
                                             }
                                         }
-                                        Button {
-                                            text: qsTr("Remove")
+                                        KosToolButton {
+                                            destructive: true
+                                            text: "−"
+                                            Accessible.name: qsTr("Remove music folder")
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: qsTr("Remove music folder")
                                             onClicked: music.removeLibraryFolder(
                                                            folderDelegate.modelData)
                                         }
@@ -871,8 +968,8 @@ KosApplicationWindow {
                             }
                         }
 
-                        ToolButton {
-                            text: "⌘"
+                        KosToolButton {
+                            text: "⇄"
                             checkable: true
                             checked: music.shuffle
                             enabled: music.queueModel.count > 1
@@ -881,13 +978,15 @@ KosApplicationWindow {
                             ToolTip.text: qsTr("Shuffle")
                             onClicked: music.shuffle = checked
                         }
-                        ToolButton {
-                            text: "│‹"
+                        KosToolButton {
+                            text: "│◀"
                             enabled: music.canGoPrevious
                             Accessible.name: qsTr("Previous track")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Previous track")
                             onClicked: music.previous()
                         }
-                        RoundButton {
+                        KosRoundButton {
                             Layout.preferredWidth: 46
                             Layout.preferredHeight: 46
                             text: music.playbackState === "Playing" ? "Ⅱ" : "▶"
@@ -895,20 +994,28 @@ KosApplicationWindow {
                             enabled: music.currentTrackId >= 0
                             Accessible.name: music.playbackState === "Playing"
                                 ? qsTr("Pause") : qsTr("Play")
+                            ToolTip.visible: hovered
+                            ToolTip.text: music.playbackState === "Playing"
+                                ? qsTr("Pause") : qsTr("Play")
                             onClicked: music.togglePlayPause()
                         }
-                        ToolButton {
-                            text: "›│"
+                        KosToolButton {
+                            text: "▶│"
                             enabled: music.canGoNext
                             Accessible.name: qsTr("Next track")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Next track")
                             onClicked: music.next()
                         }
-                        ToolButton {
+                        KosToolButton {
                             text: music.repeatMode === "track" ? "↻¹"
-                                : (music.repeatMode === "playlist" ? "↻" : "↪")
+                                : "↻"
                             checkable: true
                             checked: music.repeatMode !== "none"
-                            Accessible.name: qsTr("Repeat mode")
+                            Accessible.name: music.repeatMode === "track"
+                                ? qsTr("Repeat track on")
+                                : (music.repeatMode === "playlist"
+                                   ? qsTr("Repeat queue on") : qsTr("Repeat off"))
                             ToolTip.visible: hovered
                             ToolTip.text: music.repeatMode === "track"
                                 ? qsTr("Repeat track")
@@ -919,8 +1026,9 @@ KosApplicationWindow {
                                                 ? "track" : "none")
                         }
                         Label {
-                            text: "♩"
+                            text: music.volume <= 0.01 ? "◖" : "◖))"
                             color: AppTheme.mutedText
+                            font.pixelSize: 11
                             Accessible.name: qsTr("Volume")
                         }
                         Slider {

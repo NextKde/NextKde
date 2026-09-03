@@ -126,16 +126,6 @@ MusicController::MusicController(QObject *parent)
     QTimer::singleShot(0, this, [this] {
         emit readyChanged();
         rescanLibrary();
-        const QStringList arguments = QCoreApplication::arguments().mid(1);
-        for (const QString &argument : arguments) {
-            if (argument.startsWith(QLatin1Char('-')))
-                continue;
-            const QUrl candidate(argument);
-            const QString local = candidate.isLocalFile()
-                ? candidate.toLocalFile() : argument;
-            if (QFileInfo::exists(local))
-                openUri(argument);
-        }
     });
 }
 

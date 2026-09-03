@@ -9,6 +9,7 @@ KosCard {
     id: root
 
     required property date firstDate
+    required property date currentTime
     property int dayCount: 7
     property var itemsForDate: function(date) { return [] }
     property var itemTitle: function(item) { return "" }
@@ -61,15 +62,14 @@ KosCard {
                     earliest = Math.min(earliest, itemHour(source[index]))
             }
         }
-        const now = new Date()
         let includesToday = false
         for (let day = 0; day < dayCount; day++) {
-            if (sameDay(dateForColumn(day), now)) {
+            if (sameDay(dateForColumn(day), currentTime)) {
                 includesToday = true
                 break
             }
         }
-        const currentHour = includesToday ? now.getHours() : 24
+        const currentHour = includesToday ? currentTime.getHours() : 24
         if (currentHour >= 6 && currentHour <= 21)
             return Math.max(0, currentHour - 2)
         if (earliest < 24)
@@ -113,7 +113,7 @@ KosCard {
                     readonly property date headerDate: root.dateForColumn(index)
                     Layout.fillWidth: true
                     Layout.preferredHeight: 48
-                    color: root.sameDay(headerDate, new Date())
+                    color: root.sameDay(headerDate, root.currentTime)
                         ? AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.14 : 0.08)
                         : "transparent"
 
@@ -131,7 +131,7 @@ KosCard {
                         Label {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: String(dayHeader.headerDate.getDate())
-                            color: root.sameDay(dayHeader.headerDate, new Date())
+                            color: root.sameDay(dayHeader.headerDate, root.currentTime)
                                 ? AppTheme.accent : AppTheme.text
                             font.pixelSize: 17
                             font.weight: Font.DemiBold
@@ -263,7 +263,7 @@ KosCard {
                         Rectangle {
                             anchors.fill: parent
                             visible: hourCell.columnIndex > 0
-                            color: root.sameDay(hourCell.columnDate, new Date())
+                            color: root.sameDay(hourCell.columnDate, root.currentTime)
                                 ? AppTheme.withAlpha(AppTheme.accent,
                                     AppTheme.dark ? 0.035 : 0.022)
                                 : "transparent"
@@ -323,11 +323,13 @@ KosCard {
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
-                                y: parent.height * new Date().getMinutes() / 60
+                                y: parent.height * root.currentTime.getMinutes() / 60
                                 height: 1
                                 color: AppTheme.destructive
-                                visible: root.sameDay(hourCell.columnDate, new Date())
-                                    && hourCell.rowIndex === new Date().getHours()
+                                visible: root.sameDay(hourCell.columnDate,
+                                                      root.currentTime)
+                                    && hourCell.rowIndex
+                                        === root.currentTime.getHours()
                             }
                         }
                     }

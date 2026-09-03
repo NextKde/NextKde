@@ -12,9 +12,56 @@ KosApplicationWindow {
     visible: true
     title: qsTr("Todo")
 
+    property date now: new Date()
     property string activeFilter: "inbox"
     property string activeListId: "inbox"
+    property string pendingItemId: ""
     readonly property var visibleTodos: filteredTodos()
+
+    Timer {
+        interval: 60000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root.now = new Date()
+    }
+
+    function activationOption(activationArgs, name) {
+        const prefix = name + "="
+        for (let index = 0; index < activationArgs.length; index++) {
+            const argument = String(activationArgs[index])
+            if (argument === name && index + 1 < activationArgs.length)
+                return String(activationArgs[index + 1])
+            if (argument.startsWith(prefix))
+                return argument.slice(prefix.length)
+        }
+        return ""
+    }
+
+    function handleActivation(activationArgs, workingDirectory) {
+        const view = activationOption(activationArgs, "--view")
+        if (["inbox", "today", "planned", "calendar", "completed"].indexOf(view) >= 0)
+            selectFilter(view)
+        pendingItemId = activationOption(activationArgs, "--item")
+        openPendingItem()
+    }
+
+    function openPendingItem() {
+        if (!pendingItemId)
+            return
+        const source = pim.todos ?? []
+        for (let index = 0; index < source.length; index++) {
+            const todo = source[index]
+            if (String(value(todo, "id", value(todo, "seriesId", "")))
+                    === pendingItemId) {
+                pendingItemId = ""
+                todoEditor.openForTodo(todo)
+                return
+            }
+        }
+        if (pim.ready)
+            pendingItemId = ""
+    }
 
     function value(record, key, fallback) {
         if (record === null || record === undefined)
@@ -28,7 +75,7 @@ KosApplicationWindow {
     }
 
     function todayKey() {
-        return Qt.formatDate(new Date(), "yyyy-MM-dd")
+        return Qt.formatDate(now, "yyyy-MM-dd")
     }
 
     function filteredTodos() {
@@ -123,7 +170,10 @@ KosApplicationWindow {
             activeListId = listId
     }
 
-    PimClient { id: pim }
+    PimClient {
+        id: pim
+        onSnapshotChanged: root.openPendingItem()
+    }
 
     TodoEditorDialog {
         id: todoEditor
@@ -171,8 +221,14 @@ KosApplicationWindow {
         }
     }
 
+    KosSettingsDialog {
+        id: settingsDialog
+        settings: root.applicationSettings
+        applicationName: qsTr("Todo")
+    }
+
     Shortcut {
-        sequence: StandardKey.New
+        sequences: [StandardKey.New]
         onActivated: taskField.forceActiveFocus()
     }
 
@@ -182,8 +238,8 @@ KosApplicationWindow {
 
         Rectangle {
             Layout.fillHeight: true
-            Layout.preferredWidth: 238
-            color: AppTheme.withAlpha(AppTheme.sidebar, 0.92)
+            Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            color: AppTheme.sidebarSurface
             border.width: 1
             border.color: AppTheme.border
 
@@ -260,7 +316,7 @@ KosApplicationWindow {
 
                     Item { Layout.fillWidth: true }
 
-                    Button {
+                    KosToolButton {
                         text: "+"
                         flat: true
                         enabled: pim.connected && pim.writable
@@ -338,7 +394,16 @@ KosApplicationWindow {
                     visible: running
                 }
 
-                Button {
+                KosToolButton {
+                    text: "⚙"
+                    font.pixelSize: 16
+                    Accessible.name: qsTr("Todo settings")
+                    ToolTip.visible: hovered
+                    ToolTip.text: Accessible.name
+                    onClicked: settingsDialog.open()
+                }
+
+                KosButton {
                     text: qsTr("New task")
                     highlighted: true
                     enabled: pim.connected && pim.writable
@@ -363,7 +428,7 @@ KosApplicationWindow {
                         onAccepted: root.addTask()
                     }
 
-                    Button {
+                    KosButton {
                         text: qsTr("Add")
                         highlighted: true
                         enabled: taskField.enabled && taskField.text.trim().length > 0
@@ -508,14 +573,15 @@ KosApplicationWindow {
                                     }
                                 }
 
-                                Button {
+                                KosToolButton {
                                     text: "⋯"
                                     flat: true
                                     Accessible.name: qsTr("Edit task")
                                     onClicked: todoEditor.openForTodo(taskDelegate.modelData)
                                 }
 
-                                Button {
+                                KosToolButton {
+                                    destructive: true
                                     text: "×"
                                     flat: true
                                     Accessible.name: qsTr("Delete task")

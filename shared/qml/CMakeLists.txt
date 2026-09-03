@@ -12,9 +12,15 @@ qt_add_qml_module(kos_ui
     QML_FILES
         foundation/AppTheme.qml
         foundation/KosApplicationWindow.qml
+        foundation/KosButton.qml
         foundation/KosCard.qml
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
+        foundation/KosRoundButton.qml
+        foundation/KosSettingsDialog.qml
+        foundation/KosSlider.qml
+        foundation/KosSwitch.qml
+        foundation/KosToolButton.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
 )
