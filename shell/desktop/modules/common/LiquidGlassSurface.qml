@@ -6,10 +6,17 @@ Rectangle {
     id: root
 
     property color baseColor: Qt.rgba(0, 0, 0, 0.1)
+    // Semantic material roles mirror the system vocabulary. They describe
+    // readability intent, never a fixed light/dark paint colour.
+    property string material: "regular" // "clear", "regular", "thick"
     property real surfaceOpacity: 1.0
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
+    // Opt in for text-dense popups. Unlike the base material, this is a
+    // continuous dark scrim that becomes stronger only near white/black
+    // wallpaper, keeping ordinary imagery visibly behind the glass.
+    property bool adaptiveDarkScrim: false
     // Some lightweight surfaces (for example notification cards) should keep
     // the upper reflection without the heavier bottom inset edge.
     property bool bottomEdgeVisible: true
@@ -31,6 +38,53 @@ Rectangle {
     property real liquidStrength: AppearanceConfigService.effectiveDockLiquid
     readonly property real normalizedLiquidStrength: Math.max(
         0.0, Math.min(1.0, liquidStrength))
+    readonly property real materialOpacityScale: material === "clear" ? 0.58
+        : (material === "thick" ? 1.28 : 1.0)
+    readonly property real materialReflectionScale: material === "clear" ? 0.62
+        : (material === "thick" ? 0.86 : 1.0)
+    // QML is drawn after KWin's backdrop pass, so it cannot sample the exact
+    // pixels below itself. Wallpaper pigments plus the base layer are a stable
+    // local estimate for foreground selection; hysteresis prevents black/white
+    // text flickering when an ambient palette animates.
+    readonly property color estimatedMaterialColor: Qt.rgba(
+        baseColor.r * 0.72 + _displayAmbientPrimary.r * 0.28,
+        baseColor.g * 0.72 + _displayAmbientPrimary.g * 0.28,
+        baseColor.b * 0.72 + _displayAmbientPrimary.b * 0.28,
+        1.0)
+    readonly property real estimatedMaterialLuminance:
+        estimatedMaterialColor.r * 0.2126 + estimatedMaterialColor.g * 0.7152
+        + estimatedMaterialColor.b * 0.0722
+    readonly property real ambientLuminance: _displayAmbientPrimary.r * 0.2126
+        + _displayAmbientPrimary.g * 0.7152 + _displayAmbientPrimary.b * 0.0722
+    readonly property real ambientExtremeDistance: Math.min(
+        ambientLuminance, 1.0 - ambientLuminance)
+    readonly property real ambientExtremeProtection: {
+        const t = Math.max(0.0, Math.min(1.0,
+            (ambientExtremeDistance - 0.08) / 0.30))
+        return 1.0 - t * t * (3.0 - 2.0 * t)
+    }
+    readonly property real adaptiveScrimOpacity: {
+        if (!adaptiveDarkScrim)
+            return 0.0
+        const lightMix = Math.max(0.0, Math.min(1.0,
+            (ambientLuminance - 0.30) / 0.40))
+        const base = 0.07 + 0.06 * lightMix
+        const protection = (0.07 + 0.12 * lightMix)
+            * ambientExtremeProtection
+        return Math.min(0.32, (base + protection)
+            * (material === "thick" ? 1.18 : 1.0))
+    }
+    property bool _useDarkForeground: estimatedMaterialLuminance >= 0.58
+    readonly property color foregroundColor: _useDarkForeground
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.94) : Qt.rgba(1, 1, 1, 0.94)
+    readonly property color secondaryForegroundColor: _useDarkForeground
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.64)
+    onEstimatedMaterialLuminanceChanged: {
+        if (_useDarkForeground && estimatedMaterialLuminance < 0.42)
+            _useDarkForeground = false
+        else if (!_useDarkForeground && estimatedMaterialLuminance > 0.58)
+            _useDarkForeground = true
+    }
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
     // Bright surfaces need less white overlay to remain translucent; darker
@@ -96,8 +150,22 @@ Rectangle {
         baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
         baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
         baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
-        baseColor.a * surfaceOpacity * root.normalizedBlurStrength
+        Math.min(1.0, baseColor.a * root.materialOpacityScale)
+            * surfaceOpacity * root.normalizedBlurStrength
     )
+
+    // This layer intentionally stays neutral and dark. Using a white lift on
+    // black backdrops creates the grey-plastic look that dense glass panels
+    // should avoid.
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: root.adaptiveScrimOpacity > 0.001
+        color: Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
+        Behavior on color {
+            ColorAnimation { duration: root.ambientTransitionDuration; easing.type: Easing.InOutSine }
+        }
+    }
 
     // A soft top reflection gives the surface depth without a hard border.
     Rectangle {
@@ -106,10 +174,10 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.45 * root.materialHighlightFactor) }
-            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.22 * root.materialHighlightFactor) }
-            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.10 * root.materialHighlightFactor) }
-            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.035 * root.materialHighlightFactor) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.45 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.22 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.10 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.035 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop {
                 position: 1.0
                 color: Qt.rgba(0, 0, 0, root.bottomShadeVisible

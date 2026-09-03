@@ -29,6 +29,9 @@ PopupWindow {
     // Visual card fill (above the blur).
     property color cardColor: ThemeService.backgroundColor
     property color cardBorderColor: Qt.rgba(1, 1, 1, 0.20)
+    // Available to card content that needs locally adaptive foreground ink.
+    readonly property color materialForegroundColor: cardGlass.foregroundColor
+    readonly property color materialSecondaryForegroundColor: cardGlass.secondaryForegroundColor
     // PanelWindow has no opacity; this applies to the card body instead.
     property real cardOpacity: 1.0
     // PanelWindow has no scale; this applies to the card content.
@@ -125,6 +128,7 @@ PopupWindow {
         ambientPrimary: WallpaperPaletteService.primary
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+        material: "regular"
         border.width: 1
         border.color: root.cardBorderColor
 

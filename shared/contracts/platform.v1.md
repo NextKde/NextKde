@@ -32,6 +32,9 @@ Current operation groups are:
 - `kwin.subscribe`, `kwin.command`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)
+- `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
+  shortcuts; the Shell composes each Exec line, the daemon validates,
+  persists, and registers)
 - `network.*` (including `network.traffic` for read-only interface counters),
   `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
@@ -46,9 +49,12 @@ system action. Existing paths are canonicalized and new targets are resolved
 through a canonical existing parent. Passwords and raw command output
 containing secrets must never be logged.
 
-`kos-platform shortcuts install` refuses to overwrite a shortcut owned by a
-different desktop service. Uninstall removes only the IDs declared in
-`shortcuts.v1.json`, then asks `kglobalaccel` to unregister those actions.
+`kos-platform shortcuts install` (CLI fallback reading
+`shortcuts.v1.json`) refuses to overwrite a shortcut owned by a different
+desktop service; so does `shortcuts.apply`, which reports the conflict as an
+error instead of applying a partial set. Both paths also remove superseded
+`net.local.quickshell-*` entries from earlier generations. Uninstall removes
+only the declared IDs, then asks `kglobalaccel` to unregister those actions.
 
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,

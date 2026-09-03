@@ -243,12 +243,12 @@ PanelWindow {
         ShaderEffect {
             anchors.fill: parent
             property variant source: sourceImage.backer
-            property real opacityMult: ConfigService.iconMode === "color"
-                ? 1.0 : ConfigService.iconOpacity
-            property real sat: ConfigService.iconMode === "color"
-                ? 1.0 : ConfigService.iconSaturation
-            property real iconTintEnabled: ConfigService.iconTintEnabled
-            property color iconTintColor: ConfigService.iconTintColor
+            property real opacityMult: IconAppearanceService.mode === "color"
+                ? 1.0 : IconAppearanceService.opacity
+            property real sat: IconAppearanceService.mode === "color"
+                ? 1.0 : IconAppearanceService.saturation
+            property real iconTintEnabled: IconAppearanceService.tintEnabled
+            property color iconTintColor: IconAppearanceService.tintColor
             fragmentShader: Qt.resolvedUrl("../../shaders/icon_effect.frag.qsb")
         }
     }

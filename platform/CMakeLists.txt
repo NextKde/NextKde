@@ -15,6 +15,8 @@ qt_add_executable(kos-platform
     src/daemon/main.cpp
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformServer.h
+    src/daemon/Shortcuts.cpp
+    src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
     src/kwin/KWinBridge.h
 )

@@ -1,4 +1,5 @@
 #include "PlatformServer.h"
+#include "Shortcuts.h"
 #include "../kwin/KWinBridge.h"
 
 #include <QClipboard>
@@ -1597,6 +1598,50 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
         runCommand(socket, request, systemsettings, {module});
+        return true;
+    }
+    if (op == QStringLiteral("shortcuts.apply")) {
+        // The Shell owns shortcut semantics: it composes each Exec line to
+        // match how that Shell instance was launched. The daemon only
+        // validates, persists, and registers.
+        const QJsonArray shortcuts = payload.value(QStringLiteral("shortcuts")).toArray();
+        if (shortcuts.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-shortcut-payload"),
+                    QStringLiteral("快捷键请求无效"), false);
+            return true;
+        }
+        QJsonArray normalized;
+        for (const QJsonValue &value : shortcuts) {
+            QJsonObject item = value.toObject();
+            item.insert(QStringLiteral("combo"),
+                        normalizedShortcutCombo(item.value(QStringLiteral("combo")).toString()));
+            normalized.append(item);
+        }
+        QString error;
+        if (!installShortcutSet(normalized, legacyKosShortcutIds(), &error)) {
+            respond(socket, request, false, {},
+                    QStringLiteral("shortcuts-apply-failed"),
+                    error.isEmpty() ? QStringLiteral("无法应用快捷键") : error, false);
+            return true;
+        }
+        QJsonArray applied;
+        for (const QJsonValue &value : normalized)
+            applied.append(value.toObject().value(QStringLiteral("id")).toString());
+        respond(socket, request, true, QJsonObject{{QStringLiteral("applied"), applied}});
+        return true;
+    }
+    if (op == QStringLiteral("shortcuts.uninstall")) {
+        QStringList ids;
+        for (const QJsonValue &value : payload.value(QStringLiteral("ids")).toArray())
+            ids.append(value.toString());
+        QString error;
+        if (!uninstallShortcutIds(ids, legacyKosShortcutIds(), &error)) {
+            respond(socket, request, false, {},
+                    QStringLiteral("shortcuts-uninstall-failed"),
+                    error.isEmpty() ? QStringLiteral("无法卸载快捷键") : error, false);
+            return true;
+        }
+        respond(socket, request, true, QJsonObject{{QStringLiteral("uninstalled"), true}});
         return true;
     }
     if (op == QStringLiteral("audio.get")) {

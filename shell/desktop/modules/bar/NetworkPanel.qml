@@ -220,6 +220,8 @@ PopupWindow {
         ambientPrimary: WallpaperPaletteService.primary
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+        material: "thick"
+        adaptiveDarkScrim: true
         border.width: 1
         border.color: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
     }
@@ -401,7 +403,7 @@ PopupWindow {
                 GlassText {
                     anchors.centerIn: parent
                     text: NetworkService.wifiDisconnectInProgress ? "…" : "断开"
-                    color: ThemeService.foregroundColor
+                    color: panelSurface.foregroundColor
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
                 MouseArea {
@@ -457,7 +459,7 @@ PopupWindow {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                     text: "✓"
-                    color: ThemeService.foregroundColor
+                    color: panelSurface.foregroundColor
                     style: Text.Outline
                     styleColor: Qt.rgba(0, 0, 0, 0.50)
                     font { pixelSize: 19; weight: Font.DemiBold }
@@ -470,8 +472,8 @@ PopupWindow {
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.reset()
-                        ctx.strokeStyle = ThemeService.foregroundColor
-                        ctx.fillStyle = ThemeService.foregroundColor
+                        ctx.strokeStyle = panelSurface.foregroundColor
+                        ctx.fillStyle = panelSurface.foregroundColor
                         ctx.globalAlpha = 0.92
                         ctx.lineWidth = 1.9
                         ctx.lineCap = "round"
@@ -503,8 +505,8 @@ PopupWindow {
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.reset()
-                        ctx.strokeStyle = ThemeService.foregroundColor
-                        ctx.fillStyle = ThemeService.foregroundColor
+                        ctx.strokeStyle = panelSurface.foregroundColor
+                        ctx.fillStyle = panelSurface.foregroundColor
                         ctx.globalAlpha = 0.82
                         ctx.lineWidth = 1.2
                         ctx.lineCap = "round"
@@ -529,7 +531,7 @@ PopupWindow {
                         verticalCenter: parent.verticalCenter
                     }
                     text: modelData.ssid
-                    color: ThemeService.foregroundColor
+                    color: panelSurface.foregroundColor
                     style: Text.Outline
                     styleColor: Qt.rgba(0, 0, 0, 0.50)
                     elide: Text.ElideRight
@@ -548,7 +550,7 @@ PopupWindow {
                 visible: NetworkService.wifiEnabled && !NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
                 text: "未发现可用 Wi‑Fi"
-                color: ThemeService.foregroundColor
+                color: panelSurface.secondaryForegroundColor
                 opacity: 0.5
                 font.pixelSize: 12
             }
@@ -569,7 +571,7 @@ PopupWindow {
             Text {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 text: "无线局域网设置…"
-                color: ThemeService.foregroundColor
+                color: panelSurface.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 14; weight: Font.DemiBold }

@@ -17,7 +17,7 @@ PopupWindow {
         return player?.trackArtUrl ? player.trackArtUrl : Qt.resolvedUrl("../../assets/defaultCover.png")
     }
     property bool pointerInside: popupMouse.containsMouse
-    readonly property bool monochrome: ConfigService.iconMode !== "color"
+    readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     readonly property real safeLength: player?.lengthSupported
         && player.length > 0 ? player.length : 0
@@ -89,6 +89,7 @@ PopupWindow {
         ambientSecondary: popup.artworkTint(artworkPalette.secondary, 1.0)
         ambientStrength: 0.42
         materialDepth: 1.3
+        material: "regular"
 
         // LiquidGlassSurface deliberately caps ambient pigment, which is too
         // subtle for music artwork. This is the same direct cover-gradient

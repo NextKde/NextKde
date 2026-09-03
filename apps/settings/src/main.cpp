@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQmlApplicationEngine>
@@ -86,6 +87,22 @@ public:
             QString::number(strength, 'f', 3)}));
     }
 
+    Q_INVOKABLE QVariantMap updateGlobalIconMode(const QString &mode) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalIconOpacity(double opacity) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconOpacity"),
+            QString::number(opacity, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalIconTintColor(const QString &color) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconTintColor"), color}));
+    }
+
     Q_INVOKABLE QVariantMap updateShellStyle(const QString &style) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateShellStyle"), style}));
@@ -120,32 +137,45 @@ public:
         return launcherSnapshotFromReply(callLauncher({QStringLiteral("snapshot")}));
     }
 
+    Q_INVOKABLE QVariantMap shortcutsSnapshot() {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("snapshot")}));
+    }
+
+    Q_INVOKABLE QVariantMap updateShortcut(const QString &id, const QString &combo) {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("updateShortcut"),
+                                                         id, combo}));
+    }
+
+    Q_INVOKABLE QVariantMap resetShortcut(const QString &id) {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("resetShortcut"), id}));
+    }
+
     Q_INVOKABLE QVariantMap updateLauncherDisplayMode(const QString &mode) {
         return launcherSnapshotFromReply(callLauncher({
             QStringLiteral("updateDisplayMode"), mode}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherIconSize(double size) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileIconSize(const QString &mode,
+                                                           const QString &size) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateIconSize"),
-            QString::number(size, 'f', 1)}));
+            QStringLiteral("updateProfileIconSize"), mode, size}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherIconSpacing(double spacing) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileDensity(const QString &mode,
+                                                          const QString &density) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateIconSpacing"),
-            QString::number(spacing, 'f', 1)}));
+            QStringLiteral("updateProfileDensity"), mode, density}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherFontSize(double size) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileFontWeight(const QString &mode,
+                                                             const QString &weight) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateFontSize"),
-            QString::number(size, 'f', 1)}));
+            QStringLiteral("updateProfileFontWeight"), mode, weight}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherFontWeight(const QString &weight) {
+    Q_INVOKABLE QVariantMap resetLauncherLayoutProfile(const QString &mode) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateFontWeight"), weight}));
+            QStringLiteral("resetProfile"), mode}));
     }
 
     Q_INVOKABLE bool applySystemAppearance(bool dark) {
@@ -303,6 +333,9 @@ private:
             {QStringLiteral("effectiveLauncherLiquid"), globalLiquid},
             {QStringLiteral("blurStrength"), globalBlur},
             {QStringLiteral("liquidStrength"), globalLiquid},
+            {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString(QStringLiteral("color"))},
+            {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble(0.5)},
+            {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString(QStringLiteral("#a855f7"))},
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
             {QStringLiteral("barIntegratedWithDock"),
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
@@ -336,8 +369,8 @@ private:
         setLastError({});
         return {
             {QStringLiteral("displayMode"), object.value(QStringLiteral("displayMode")).toString()},
-            {QStringLiteral("iconSize"), object.value(QStringLiteral("iconSize")).toDouble()},
-            {QStringLiteral("iconSpacing"), object.value(QStringLiteral("iconSpacing")).toDouble()},
+            {QStringLiteral("layoutProfiles"),
+                object.value(QStringLiteral("layoutProfiles")).toObject().toVariantMap()},
         };
     }
 
@@ -355,6 +388,46 @@ private:
         return document.object().toVariantMap();
     }
 
+    QVariantMap shortcutsSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的快捷键配置"));
+            return {};
+        }
+
+        const QJsonObject object = document.object();
+        if (!object.contains(QStringLiteral("shortcuts"))) {
+            setLastError(QStringLiteral("桌面环境返回的快捷键配置不完整"));
+            return {};
+        }
+
+        QVariantList shortcuts;
+        for (const QJsonValue &value : object.value(QStringLiteral("shortcuts")).toArray()) {
+            const QJsonObject item = value.toObject();
+            shortcuts.append(QVariantMap{
+                {QStringLiteral("id"), item.value(QStringLiteral("id")).toString()},
+                {QStringLiteral("description"), item.value(QStringLiteral("description")).toString()},
+                {QStringLiteral("defaultCombo"), item.value(QStringLiteral("defaultCombo")).toString()},
+                {QStringLiteral("combo"), item.value(QStringLiteral("combo")).toString()},
+                {QStringLiteral("custom"), item.value(QStringLiteral("custom")).toBool()},
+            });
+        }
+
+        // The Shell validates rebinding requests and reports rejections
+        // (unknown id, malformed combo, duplicate binding) inline instead of
+        // failing the IPC call, so surface it the same way as transport errors.
+        const QString error = object.value(QStringLiteral("error")).toString();
+        setLastError(error);
+        return {
+            {QStringLiteral("shortcuts"), shortcuts},
+            {QStringLiteral("error"), error},
+        };
+    }
+
     QString callDock(const QStringList &arguments) {
         return callShell(QStringLiteral("dock-settings"), arguments,
                          QStringLiteral("Dock 设置请求失败"));
@@ -370,6 +443,11 @@ private:
                          QStringLiteral("启动台设置请求失败"));
     }
 
+    QString callShortcuts(const QStringList &arguments) {
+        return callShell(QStringLiteral("shortcuts-settings"), arguments,
+                         QStringLiteral("快捷键设置请求失败"));
+    }
+
     QString callIntegration(const QStringList &arguments) {
         return callShell(QStringLiteral("integration-status"), arguments,
                          QStringLiteral("接入状态请求失败"));
@@ -379,11 +457,17 @@ private:
         const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
         if (!configured.isEmpty())
             return configured;
+
+        // Development desktop entries do not inherit the Shell environment.
+        // Prefer the compile-time source tree when it still exists; this is
+        // the same tree a locally built settings binary was compiled for.
+        const QString source = QStringLiteral(SETTINGS_SHELL_DIR);
+        if (QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
+            return source;
+
         const QString installed = QStandardPaths::writableLocation(
             QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
-        if (QFileInfo::exists(QDir(installed).filePath(QStringLiteral("shell.qml"))))
-            return installed;
-        return QStringLiteral(SETTINGS_SHELL_DIR);
+        return installed;
     }
 
     QString callShell(const QString &target, const QStringList &arguments,
@@ -396,8 +480,7 @@ private:
         for (int attempt = 0; attempt < 2; ++attempt) {
             QProcess process;
             QStringList command{QStringLiteral("--path"), shellPath,
-                                QStringLiteral("ipc"), QStringLiteral("call"),
-                                target};
+                                QStringLiteral("ipc"), QStringLiteral("call"), target};
             command.append(arguments);
             process.start(QStringLiteral("quickshell"), command);
             if (!process.waitForStarted(1500)) {

@@ -153,6 +153,7 @@ Item {
             ambientSecondary: handle.ambientSecondary
             ambientStrength: handle.ambientStrength
             materialDepth: handle.materialDepth
+            material: "clear"
             ambientTransitionDuration: 600
             bottomEdgeVisible: true
         }

@@ -119,8 +119,8 @@ Item {
         (iconSize * AppearanceTokens.dock.verticalPaddingRatio
             - runningIndicatorHeight) / 2)
     readonly property real activeBackgroundAlpha: {
-        const configuredAlpha = ConfigService.iconMode === "color"
-            ? 0.5 : Math.max(0.1, ConfigService.iconOpacity)
+        const configuredAlpha = IconAppearanceService.mode === "color"
+            ? 0.5 : Math.max(0.1, IconAppearanceService.opacity)
         if (AppearanceTokens.dock.activeBackgroundMode === "tonal")
             return Math.min(0.34, configuredAlpha)
         if (AppearanceTokens.dock.activeBackgroundMode === "subtle")
@@ -486,11 +486,11 @@ Item {
                 transformOrigin: Item.Center
                 layer.enabled: true
                 layer.smooth: true
-                opacityMultiplier: ConfigService.iconMode === "color"
-                    ? 1.0 : ConfigService.iconOpacity
-                saturation: ConfigService.iconSaturation
-                tintEnabled: ConfigService.iconTintEnabled
-                tintColor: ConfigService.iconTintColor
+                opacityMultiplier: IconAppearanceService.mode === "color"
+                    ? 1.0 : IconAppearanceService.opacity
+                saturation: IconAppearanceService.saturation
+                tintEnabled: IconAppearanceService.tintEnabled
+                tintColor: IconAppearanceService.tintColor
             }
         }
     }

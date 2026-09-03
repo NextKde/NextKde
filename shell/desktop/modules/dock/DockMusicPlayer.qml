@@ -27,7 +27,7 @@ Item {
     readonly property bool isCompact: iconSize < 36
     readonly property real backgroundGap: iconSize * 0.1
     readonly property real contentWidth: iconSize * widthUnits
-    readonly property bool monochrome: ConfigService.iconMode !== "color"
+    readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     // ── Player reference ──
     readonly property var player: DockMprisService.activePlayer

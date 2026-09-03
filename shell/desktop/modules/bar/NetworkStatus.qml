@@ -40,7 +40,6 @@ Item {
         source: Qt.resolvedUrl(NetworkService.connectionType === "ethernet"
             ? "../../assets/status-ethernet.svg"
             : "../../assets/status-wifi.svg")
-        useDockTint: root.dockHosted
         opacity: root.connected ? 0.96 : 0.68
     }
 
