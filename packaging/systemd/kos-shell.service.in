@@ -9,6 +9,10 @@ After=kos-data.service
 # platform daemon and shell from starting too early and aborting on
 # "could not connect to display" (SIGABRT, then a 2s restart loop).
 After=plasma-kwin_wayland.service
+# DeskCenter shares the desktop with Plasma's wallpaper/file surface. Starting
+# after plasmashell keeps their initial stacking deterministic; DeskCenter also
+# uses the Bottom layer so later Plasma restarts cannot hide it again.
+After=plasma-plasmashell.service
 PartOf=graphical-session.target
 
 [Service]
