@@ -2274,9 +2274,14 @@ PanelWindow {
                                         color: AppLauncherService.dockForegroundColor
                                         selectionColor: Qt.rgba(1, 1, 1, 0.30)
                                         selectedTextColor: AppLauncherService.dockForegroundColor
+                                        selectByMouse: true
                                         text: root.editorName
                                         onTextEdited: root.editorName = text
                                         Keys.onReturnPressed: root.saveApplicationEditor()
+
+                                        HoverHandler {
+                                            cursorShape: Qt.IBeamCursor
+                                        }
                                     }
                                 }
 
@@ -2303,8 +2308,13 @@ PanelWindow {
                                         color: AppLauncherService.dockForegroundColor
                                         selectionColor: Qt.rgba(1, 1, 1, 0.30)
                                         selectedTextColor: AppLauncherService.dockForegroundColor
+                                        selectByMouse: true
                                         text: root.editorIcon
                                         onTextEdited: root.editorIcon = text
+
+                                        HoverHandler {
+                                            cursorShape: Qt.IBeamCursor
+                                        }
                                     }
                                 }
 
