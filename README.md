@@ -198,14 +198,17 @@ A desktop entry template is provided at
 
 ### 7. Calendar, Todo, Weather, and Music
 
-Build all four independent applications and their services/tests together:
+Register all four independent applications as persistent user applications:
 
 ```sh
-cmake --preset apps-dev -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build --preset apps-dev
-ctest --preset apps-dev
-cmake --install .build/apps-dev
+./tools/install-apps.sh
 ```
+
+The installer performs the Release build and test pass, installs desktop
+entries, hicolor icons and AppStream metadata below `~/.local`, enables the
+PIM and shared-data user services, and refreshes Plasma's application cache.
+It is idempotent and is also the supported upgrade path for development
+machines.
 
 Use `calendar-dev`, `todo-dev`, `weather-dev`, or `music-dev` instead when only
 one dependency set is available. Calendar/Todo install a D-Bus-activated local
@@ -215,11 +218,10 @@ directory contains English and Chinese usage notes. Set the prefix while
 configuring (as above), because the generated D-Bus activation file records the
 final service executable path.
 
-For a user-prefix install, copy
-`~/.local/etc/xdg/autostart/kos-pim-service.desktop` to
-`~/.config/autostart/` if reminders must start at login before either PIM app
-has been opened. System packages should configure `CMAKE_INSTALL_SYSCONFDIR`
-to the distribution's XDG configuration directory (normally `/etc`).
+PIM reminders and the shared weather/metrics service are attached to the
+graphical user session through systemd units. D-Bus activation remains
+available as a fallback when Calendar or Todo is opened before the unit has
+started.
 
 ### 8. Global shortcuts
 

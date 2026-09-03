@@ -173,25 +173,23 @@ cmake --build .build/apps/settings
 
 ### 7. 日历、待办、天气与音乐
 
-一次构建、测试并安装四个独立应用及其服务：
+将四个独立应用注册为持久的用户应用：
 
 ```sh
-cmake --preset apps-dev -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build --preset apps-dev
-ctest --preset apps-dev
-cmake --install .build/apps-dev
+./tools/install-apps.sh
 ```
+
+安装器会完成 Release 构建和测试，把桌面入口、hicolor 图标与 AppStream
+元数据安装到 `~/.local`，启用 PIM 和共享数据用户服务，并刷新 Plasma 应用
+缓存。脚本可重复执行，也是开发机的升级入口。
 
 如果只具备一组依赖，可改用 `calendar-dev`、`todo-dev`、`weather-dev` 或
 `music-dev`。日历/待办会安装可由 D-Bus 激活的本地 PIM 服务；天气会构建、
 安装共享 Go 数据服务并在需要时自动启动；音乐使用系统 GStreamer 插件并发布
 MPRIS。每个应用目录内都有中英文使用说明。请像上例一样在配置阶段指定安装
-前缀，因为生成的 D-Bus 激活文件会记录服务可执行文件的最终路径。
-
-使用用户前缀安装时，若希望尚未打开日历/待办也能在登录后收到提醒，请把
-`~/.local/etc/xdg/autostart/kos-pim-service.desktop` 复制到
-`~/.config/autostart/`。发行版系统包应把 `CMAKE_INSTALL_SYSCONFDIR` 配置为
-系统 XDG 配置目录（通常是 `/etc`）。
+前缀，因为生成的 D-Bus 激活文件会记录服务可执行文件的最终路径。PIM 提醒和
+共享天气/指标服务通过 systemd 用户单元绑定到图形会话；若日历或待办在服务
+启动前打开，D-Bus 激活仍会作为后备路径启动 PIM 服务。
 
 ### 8. 全局快捷键
 
