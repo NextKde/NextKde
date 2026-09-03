@@ -15,6 +15,22 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 include(CTest)
 include(GNUInstallDirs)
 
+if(BUILD_TESTING)
+    find_program(KOS_NODE_EXECUTABLE NAMES node)
+    if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-deskcenter.widget-layout
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/desktop/modules/deskcenter/test_widget_layout.mjs
+        )
+        set_tests_properties(kos-deskcenter.widget-layout PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-ui.visual-contract
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
+        )
+        set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+    endif()
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS
     Core
     DBus
