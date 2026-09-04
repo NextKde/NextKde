@@ -68,10 +68,10 @@ Rectangle {
             return 0.0
         const lightMix = Math.max(0.0, Math.min(1.0,
             (ambientLuminance - 0.30) / 0.40))
-        const base = 0.07 + 0.06 * lightMix
-        const protection = (0.07 + 0.12 * lightMix)
+        const base = 0.04 + 0.035 * lightMix
+        const protection = (0.035 + 0.07 * lightMix)
             * ambientExtremeProtection
-        return Math.min(0.32, (base + protection)
+        return Math.min(0.20, (base + protection)
             * (material === "thick" ? 1.18 : 1.0))
     }
     property bool _useDarkForeground: estimatedMaterialLuminance >= 0.58
@@ -178,14 +178,14 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.45 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.22 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.10 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.035 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.32 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.14 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.06 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.018 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop {
                 position: 1.0
                 color: Qt.rgba(0, 0, 0, root.bottomShadeVisible
-                    ? (0.16 + Math.max(0.0, root.materialDepth) * 0.04)
+                    ? (0.08 + Math.max(0.0, root.materialDepth) * 0.025)
                         * root.normalizedLiquidStrength : 0.0)
             }
         }
@@ -203,14 +203,14 @@ Rectangle {
                 position: 0.0
                 color: Qt.rgba(
                     root._displayAmbientPrimary.r, root._displayAmbientPrimary.g, root._displayAmbientPrimary.b,
-                    root.ambientStrength * 0.38 * root.normalizedLiquidStrength
+                    root.ambientStrength * 0.26 * root.normalizedLiquidStrength
                 )
             }
             GradientStop {
                 position: 0.55
                 color: Qt.rgba(
                     root._displayAmbientSecondary.r, root._displayAmbientSecondary.g, root._displayAmbientSecondary.b,
-                    root.ambientStrength * 0.22 * root.normalizedLiquidStrength
+                    root.ambientStrength * 0.14 * root.normalizedLiquidStrength
                 )
             }
             GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
@@ -226,9 +226,9 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.08 * root.materialHighlightFactor) }
+            GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.045 * root.materialHighlightFactor) }
             GradientStop { position: 0.46; color: Qt.rgba(1, 1, 1, 0.0) }
-            GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.06 * root.materialHighlightFactor) }
+            GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.035 * root.materialHighlightFactor) }
         }
     }
 
