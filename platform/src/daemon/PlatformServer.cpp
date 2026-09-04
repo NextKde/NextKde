@@ -1080,9 +1080,9 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
     show->setProgram(QStringLiteral("bluetoothctl"));
     show->setArguments({QStringLiteral("show")});
     const auto showReplied = std::make_shared<bool>(false);
-    QTimer::singleShot(3000, this, [show]() {
-        if (show->state() != QProcess::NotRunning)
-            show->kill();
+    QTimer::singleShot(3000, this, [showGuard = QPointer<QProcess>(show)]() {
+        if (showGuard && showGuard->state() != QProcess::NotRunning)
+            showGuard->kill();
     });
     connect(show, &QProcess::finished, this,
             [this, guardedSocket, request, show, showReplied](int showExit, QProcess::ExitStatus) {
@@ -1100,9 +1100,9 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         devices->setProgram(QStringLiteral("bluetoothctl"));
         devices->setArguments({QStringLiteral("devices")});
         const auto devicesReplied = std::make_shared<bool>(false);
-        QTimer::singleShot(3000, this, [devices]() {
-            if (devices->state() != QProcess::NotRunning)
-                devices->kill();
+        QTimer::singleShot(3000, this, [devicesGuard = QPointer<QProcess>(devices)]() {
+            if (devicesGuard && devicesGuard->state() != QProcess::NotRunning)
+                devicesGuard->kill();
         });
         connect(devices, &QProcess::finished, this,
                 [this, guardedSocket, request, controller, devices, devicesReplied](int devicesExit,
