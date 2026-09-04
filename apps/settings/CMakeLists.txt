@@ -11,6 +11,13 @@ qt_add_executable(kos-settings
     src/main.cpp
 )
 
+# kos-settings is an independent app whose canonical artifact lives in-tree:
+# DesktopAppLauncher execs it from here in development sessions, so every
+# build configuration (top-level kosctl build or a standalone configure of
+# this directory) writes the one and only binary to apps/settings/build.
+set_target_properties(kos-settings PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
+
 target_link_libraries(kos-settings PRIVATE
     Qt6::Core
     Qt6::DBus

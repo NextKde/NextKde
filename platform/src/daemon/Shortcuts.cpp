@@ -1,13 +1,15 @@
 #include "Shortcuts.h"
 
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusMessage>
+#include <KGlobalAccel>
+
+#include <QAction>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QHash>
+#include <QGuiApplication>
 #include <QJsonObject>
+#include <QKeySequence>
+#include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
@@ -17,6 +19,23 @@
 namespace KosPlatform {
 
 namespace {
+
+// Desktop files written by superseded shortcut layouts: one-file-per-shortcut
+// generations and the single-Action-file experiment. User created entries
+// (net.local.qs*) are left alone.
+const QStringList kLegacyDesktopIds = {
+    QStringLiteral("net.local.kos"),
+    QStringLiteral("net.local.kos-launcher"),
+    QStringLiteral("net.local.kos-window-switcher"),
+    QStringLiteral("net.local.kos-control-center"),
+    QStringLiteral("net.local.kos-overview"),
+    QStringLiteral("net.local.kos-clipboard"),
+    QStringLiteral("net.local.kos-show-desktop"),
+    QStringLiteral("net.local.quickshell-search"),
+    QStringLiteral("net.local.quickshell-launcher"),
+    QStringLiteral("net.local.quickshell-control-center"),
+    QStringLiteral("net.local.quickshell-overview"),
+};
 
 QString normalizedShortcut(QString value)
 {
@@ -39,24 +58,6 @@ QString shortcutIdFromHeader(const QString &line)
         ? desktop.left(desktop.size() - 8) : QString{};
 }
 
-QStringList removeShortcutSections(const QStringList &lines,
-                                   const QSet<QString> &ids)
-{
-    QStringList kept;
-    bool dropping = false;
-    for (const QString &line : lines) {
-        const QString id = shortcutIdFromHeader(line);
-        if (!id.isEmpty()) {
-            dropping = ids.contains(id);
-            if (dropping)
-                continue;
-        }
-        if (!dropping)
-            kept.append(line);
-    }
-    return kept;
-}
-
 QString kglobalAccelerRcPath()
 {
     return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
@@ -68,39 +69,6 @@ QString applicationsPath()
     return QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation);
 }
 
-// Ask the running kglobalaccel to pick up (or drop) the service actions.
-// Config-file edits alone only take effect after kglobalaccel restarts.
-void refreshGlobalAccel(const QStringList &ids, bool install)
-{
-    QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
-                         QStringLiteral("/kglobalaccel"),
-                         QStringLiteral("org.kde.KGlobalAccel"),
-                         QDBusConnection::sessionBus());
-    if (!accel.isValid())
-        return;
-    const QString method = install ? QStringLiteral("doRegister")
-                                   : QStringLiteral("unRegister");
-    for (const QString &id : ids) {
-        if (id.isEmpty())
-            continue;
-        const QDBusMessage reply = accel.call(method,
-            QStringList{id + QStringLiteral(".desktop"), QStringLiteral("_launch")});
-        if (reply.type() == QDBusMessage::ErrorMessage) {
-            QTextStream(stderr) << "Unable to refresh global shortcut " << id
-                                << ": " << reply.errorMessage() << Qt::endl;
-        }
-    }
-}
-
-void removeDesktopEntries(const QStringList &ids)
-{
-    const QString dir = applicationsPath();
-    for (const QString &id : ids) {
-        if (!id.isEmpty())
-            QFile::remove(QDir(dir).filePath(id + QStringLiteral(".desktop")));
-    }
-}
-
 } // namespace
 
 QString normalizedShortcutCombo(QString value)
@@ -108,166 +76,126 @@ QString normalizedShortcutCombo(QString value)
     return normalizedShortcut(std::move(value));
 }
 
-QStringList legacyKosShortcutIds()
+void cleanShortcutLayouts()
 {
-    return {
-        QStringLiteral("net.local.quickshell-search"),
-        QStringLiteral("net.local.quickshell-launcher"),
-        QStringLiteral("net.local.quickshell-control-center"),
-        QStringLiteral("net.local.quickshell-overview"),
-    };
-}
-
-bool uninstallShortcutIds(const QStringList &ids,
-                          const QStringList &legacyIds,
-                          QString *error)
-{
-    QStringList all = ids;
-    all.append(legacyIds);
-    all.removeAll(QString());
-    removeDesktopEntries(all);
+    const QString appDir = applicationsPath();
+    for (const QString &id : kLegacyDesktopIds)
+        QFile::remove(QDir(appDir).filePath(id + QStringLiteral(".desktop")));
 
     QFile rc(kglobalAccelerRcPath());
-    if (!rc.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        refreshGlobalAccel(all, false);
-        return true;
-    }
+    if (!rc.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
     const QStringList lines = QString::fromUtf8(rc.readAll()).split(QChar('\n'));
     rc.close();
-    const QStringList kept = removeShortcutSections(lines, QSet<QString>(all.cbegin(), all.cend()));
+
+    QSet<QString> legacy(kLegacyDesktopIds.cbegin(), kLegacyDesktopIds.cend());
+    QStringList kept;
+    bool dropping = false;
+    for (const QString &line : lines) {
+        const QString id = shortcutIdFromHeader(line);
+        if (!id.isEmpty()) {
+            dropping = legacy.contains(id);
+            if (dropping)
+                continue;
+        }
+        if (!dropping)
+            kept.append(line);
+    }
+    if (kept.size() == lines.size())
+        return;
     QSaveFile output(kglobalAccelerRcPath());
-    if (!output.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        if (error)
-            *error = QStringLiteral("无法写入 kglobalshortcutsrc");
-        return false;
-    }
+    if (!output.open(QIODevice::WriteOnly | QIODevice::Text))
+        return;
     output.write(kept.join(QChar('\n')).toUtf8());
-    if (!output.commit()) {
-        if (error)
-            *error = QStringLiteral("无法提交 kglobalshortcutsrc");
-        return false;
-    }
-    refreshGlobalAccel(all, false);
-    return true;
+    output.commit();
 }
 
-bool installShortcutSet(const QJsonArray &shortcuts,
-                        const QStringList &legacyIds,
-                        QString *error)
+void removeShortcuts()
 {
-    // Validate and normalize the requested set before touching any file so
-    // a malformed or conflicting request never leaves a half-applied state.
+    cleanShortcutLayouts();
+    KGlobalAccel *accel = KGlobalAccel::self();
+    const auto actions = QGuiApplication::instance()->findChildren<QAction *>();
+    for (QAction *action : actions) {
+        if (!action->property("kosShortcut").toBool())
+            continue;
+        accel->setShortcut(action, {});
+        action->deleteLater();
+    }
+}
+
+bool applyShortcutSet(const QJsonArray &shortcuts, QString *error)
+{
+    // Validate before touching any QAction so a malformed request never
+    // leaves a half-registered state.
+    struct Request {
+        QString id;
+        QString description;
+        QString combo;
+        QString exec;
+    };
+    QList<Request> requests;
     QSet<QString> ids;
-    QHash<QString, QString> requested;
+    QSet<QString> combos;
     for (const QJsonValue &value : shortcuts) {
         const QJsonObject item = value.toObject();
-        const QString id = item.value(QStringLiteral("id")).toString().trimmed();
-        const QString combo = normalizedShortcut(item.value(QStringLiteral("combo")).toString());
-        const QString exec = item.value(QStringLiteral("exec")).toString().trimmed();
-        if (id.isEmpty() || combo.isEmpty() || exec.isEmpty()) {
+        Request request;
+        request.id = item.value(QStringLiteral("id")).toString().trimmed();
+        request.description = item.value(QStringLiteral("description")).toString();
+        request.combo = normalizedShortcut(item.value(QStringLiteral("combo")).toString());
+        request.exec = item.value(QStringLiteral("exec")).toString().trimmed();
+        if (request.id.isEmpty() || request.combo.isEmpty() || request.exec.isEmpty()) {
             if (error)
-                *error = QStringLiteral("快捷键定义不完整：%1").arg(id);
+                *error = QStringLiteral("快捷键定义不完整：%1").arg(request.id);
             return false;
         }
-        if (ids.contains(id) || requested.values().contains(combo)) {
+        if (ids.contains(request.id) || combos.contains(request.combo)) {
             if (error)
-                *error = QStringLiteral("重复的 KOS 快捷键定义：%1 / %2").arg(id, combo);
+                *error = QStringLiteral("重复的 KOS 快捷键定义：%1 / %2")
+                             .arg(request.id, request.combo);
             return false;
         }
-        ids.insert(id);
-        requested.insert(id, combo);
-    }
-
-    const QString rcPath = kglobalAccelerRcPath();
-    QDir().mkpath(QFileInfo(rcPath).absolutePath());
-    const QString appPath = applicationsPath();
-    QDir().mkpath(appPath);
-
-    QFile rc(rcPath);
-    QString existing;
-    if (rc.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        existing = QString::fromUtf8(rc.readAll());
-        rc.close();
-    }
-    const QStringList existingLines = existing.split(QChar('\n'));
-
-    // A requested combo may not collide with a binding owned by another
-    // desktop service. KOS-owned sections are replaced wholesale below, so
-    // only foreign sections matter here.
-    QString currentId;
-    for (const QString &line : existingLines) {
-        const QString headerId = shortcutIdFromHeader(line);
-        if (!headerId.isEmpty()) {
-            currentId = headerId;
-            continue;
-        }
-        if (line.trimmed().startsWith(QChar('['))) {
-            currentId.clear();
-            continue;
-        }
-        const QString trimmedLine = line.trimmed();
-        if (currentId.isEmpty() || !trimmedLine.startsWith(QStringLiteral("_launch=")))
-            continue;
-        if (ids.contains(currentId) || legacyIds.contains(currentId))
-            continue;
-        const QString combo = normalizedShortcut(trimmedLine.mid(8));
-        if (combo.isEmpty())
-            continue;
-        for (auto it = requested.cbegin(); it != requested.cend(); ++it) {
-            if (it.value() == combo) {
-                if (error)
-                    *error = QStringLiteral("快捷键 %1 已被 %2 占用")
-                                 .arg(combo, currentId);
-                return false;
-            }
-        }
-    }
-
-    // Replace KOS sections (current ids plus superseded legacy entries) and
-    // rewrite the service desktop entries with the caller-provided Exec.
-    QSet<QString> removal = ids;
-    for (const QString &legacy : legacyIds)
-        removal.insert(legacy);
-    QStringList rcLines = removeShortcutSections(existingLines, removal);
-    for (const QString &legacy : legacyIds)
-        QFile::remove(QDir(appPath).filePath(legacy + QStringLiteral(".desktop")));
-
-    for (const QJsonValue &value : shortcuts) {
-        const QJsonObject item = value.toObject();
-        const QString id = item.value(QStringLiteral("id")).toString().trimmed();
-        if (!ids.contains(id))
-            continue;
-        const QString description = item.value(QStringLiteral("description")).toString();
-        const QString combo = requested.value(id);
-        const QString exec = item.value(QStringLiteral("exec")).toString().trimmed();
-        QSaveFile desktop(QDir(appPath).filePath(id + QStringLiteral(".desktop")));
-        if (!desktop.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        const QKeySequence sequence(request.combo);
+        if (sequence.isEmpty()) {
             if (error)
-                *error = QStringLiteral("无法写入快捷键启动项 %1").arg(id);
+                *error = QStringLiteral("无效的快捷键组合：%1").arg(request.combo);
             return false;
         }
-        desktop.write(QStringLiteral("[Desktop Entry]\nType=Application\nName=%1\nExec=%2\nNoDisplay=true\nX-KDE-GlobalAccel-CommandShortcut=true\n").arg(description, exec).toUtf8());
-        if (!desktop.commit()) {
-            if (error)
-                *error = QStringLiteral("无法提交快捷键启动项 %1").arg(id);
-            return false;
+        ids.insert(request.id);
+        combos.insert(request.combo);
+        requests.append(request);
+    }
+
+    // Superseded layouts would keep dead service entries in the Shortcuts
+    // KCM alongside the real component.
+    cleanShortcutLayouts();
+
+    KGlobalAccel *accel = KGlobalAccel::self();
+    for (const Request &request : requests) {
+        QAction *action = QGuiApplication::instance()->findChild<QAction *>(
+            request.id);
+        const bool created = action == nullptr;
+        if (created) {
+            action = new QAction(QGuiApplication::instance());
+            action->setObjectName(request.id);
+            action->setProperty("kosShortcut", true);
+            // Read the Exec from the property at trigger time so a later
+            // apply (dev shell -> installed shell switch) takes effect.
+            QObject::connect(action, &QAction::triggered, action, [action]() {
+                const QString exec = action->property("kosExec").toString();
+                if (!exec.isEmpty())
+                    QProcess::startDetached(QStringLiteral("/bin/sh"),
+                                            {QStringLiteral("-c"), exec});
+            });
         }
-        rcLines << QStringLiteral("[services][%1.desktop]").arg(id)
-                << QStringLiteral("_launch=%1").arg(combo);
+        action->setText(request.description);
+        action->setProperty("kosExec", request.exec);
+        const QKeySequence sequence(request.combo);
+        // NoAutoloading: kos-settings is the authoritative source; without
+        // it a first registration could silently pick up a stale saved value.
+        if (created)
+            accel->setDefaultShortcut(action, {sequence});
+        accel->setShortcut(action, {sequence}, KGlobalAccel::NoAutoloading);
     }
-    QSaveFile output(rcPath);
-    if (!output.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        if (error)
-            *error = QStringLiteral("无法写入 kglobalshortcutsrc");
-        return false;
-    }
-    output.write(rcLines.join(QChar('\n')).toUtf8());
-    if (!output.commit()) {
-        if (error)
-            *error = QStringLiteral("无法提交 kglobalshortcutsrc");
-        return false;
-    }
-    refreshGlobalAccel(requested.keys(), true);
     return true;
 }
 

@@ -5,10 +5,14 @@
 #include <QClipboard>
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusArgument>
 #include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
+#include <QDBusVariant>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -18,6 +22,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QMimeData>
+#include <QMetaType>
 #include <QMimeDatabase>
 #include <QProcess>
 #include <QRegularExpression>
@@ -56,6 +61,62 @@ QJsonObject errorObject(const QString &code, const QString &message, bool retrya
     return QJsonObject{{QStringLiteral("code"), code},
                        {QStringLiteral("message"), message},
                        {QStringLiteral("retryable"), retryable}};
+}
+
+QVariant unwrapDbusValue(const QVariant &value)
+{
+    return value.metaType() == QMetaType::fromType<QDBusVariant>()
+        ? qvariant_cast<QDBusVariant>(value).variant() : value;
+}
+
+QVariantMap variantMapFromDbusValue(const QVariant &value)
+{
+    const QVariant unwrapped = unwrapDbusValue(value);
+    if (unwrapped.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        QVariantMap map;
+        QDBusArgument argument = qvariant_cast<QDBusArgument>(unwrapped);
+        argument >> map;
+        return map;
+    }
+    return unwrapped.toMap();
+}
+
+QJsonObject menuItemFromArgument(const QDBusArgument &argument)
+{
+    qint32 id = 0;
+    QVariantMap properties;
+    argument.beginStructure();
+    argument >> id >> properties;
+    const QVariant type = unwrapDbusValue(properties.value(QStringLiteral("type")));
+    const QVariant label = unwrapDbusValue(properties.value(QStringLiteral("label")));
+    const QVariant visible = unwrapDbusValue(properties.value(QStringLiteral("visible")));
+    const QVariant enabled = unwrapDbusValue(properties.value(QStringLiteral("enabled")));
+    QJsonArray children;
+    argument.beginArray();
+    while (!argument.atEnd()) {
+        // DBusMenuLayoutItem encodes children as `av`: each child structure is
+        // wrapped in a D-Bus variant. Reading it as a structure directly
+        // corrupts QDBusArgument's iterator and aborts the daemon.
+        QVariant child;
+        argument >> child;
+        const QDBusArgument childArgument = qvariant_cast<QDBusArgument>(unwrapDbusValue(child));
+        children.append(menuItemFromArgument(childArgument));
+    }
+    argument.endArray();
+    argument.endStructure();
+    return QJsonObject{{QStringLiteral("id"), id},
+                       {QStringLiteral("label"), label.toString().remove(QLatin1Char('_'))},
+                       {QStringLiteral("separator"), type.toString() == QStringLiteral("separator")},
+                       {QStringLiteral("visible"), !visible.isValid() || visible.toBool()},
+                       {QStringLiteral("enabled"), !enabled.isValid() || enabled.toBool()},
+                       {QStringLiteral("hasChildren"), !children.isEmpty()},
+                       {QStringLiteral("children"), children}};
+}
+
+bool validAppMenuAddress(const QString &service, const QString &path)
+{
+    return !service.isEmpty() && service.size() <= 255
+        && !path.isEmpty() && path.startsWith(QLatin1Char('/')) && path.size() <= 1024;
 }
 
 QString cleanPath(const QString &path)
@@ -546,6 +607,13 @@ QStringList localClipboardPaths(const QMimeData *mime)
 PlatformServer::PlatformServer(QObject *parent)
     : QObject(parent), m_socketPath(runtimeSocketPath())
 {
+    // KDED starts the AppMenu registrar only while a menu view exists. Plasma's
+    // applet normally owns this queueable marker service; own it here so the
+    // Bar can receive menus without running a separate Plasma panel applet.
+    QDBusConnection::sessionBus().interface()->registerService(
+        QStringLiteral("org.kde.kappmenuview"),
+        QDBusConnectionInterface::QueueService,
+        QDBusConnectionInterface::DontAllowReplacement);
     connect(&m_server, &QLocalServer::newConnection,
             this, &PlatformServer::acceptConnections);
     const QString wlPaste = QStandardPaths::findExecutable(QStringLiteral("wl-paste"));
@@ -1575,6 +1643,93 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
     return false;
 }
 
+bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &request)
+{
+    const QString op = operation(request);
+    if (!op.startsWith(QStringLiteral("appmenu.")))
+        return false;
+
+    if (op == QStringLiteral("appmenu.active")) {
+        QDBusInterface bridge(QStringLiteral("org.kde.KWin"),
+                              QStringLiteral("/KOSContextMenuInput"),
+                              QStringLiteral("org.kos.KWin.ContextMenuInput"));
+        if (!bridge.isValid()) {
+            respond(socket, request, false, {}, QStringLiteral("appmenu-bridge-unavailable"),
+                    QStringLiteral("全局菜单桥接尚未加载"), true);
+            return true;
+        }
+        const QDBusMessage reply = bridge.call(QStringLiteral("activeApplicationMenu"));
+        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("appmenu-bridge-failed"),
+                    QStringLiteral("无法读取活动窗口菜单"), true);
+            return true;
+        }
+        const QVariantMap address = variantMapFromDbusValue(reply.arguments().first());
+        respond(socket, request, true, QJsonObject{{QStringLiteral("available"),
+                                                    address.value(QStringLiteral("available")).toBool()},
+                                                   {QStringLiteral("service"),
+                                                    address.value(QStringLiteral("service")).toString()},
+                                                   {QStringLiteral("path"),
+                                                    address.value(QStringLiteral("path")).toString()}});
+        return true;
+    }
+
+    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    const QString service = payload.value(QStringLiteral("service")).toString();
+    const QString path = payload.value(QStringLiteral("path")).toString();
+    if (!validAppMenuAddress(service, path)) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-appmenu-address"),
+                QStringLiteral("应用菜单地址无效"), false);
+        return true;
+    }
+
+    QDBusInterface menu(service, path, QStringLiteral("com.canonical.dbusmenu"));
+    if (!menu.isValid()) {
+        respond(socket, request, false, {}, QStringLiteral("appmenu-unavailable"),
+                QStringLiteral("应用未提供全局菜单"), true);
+        return true;
+    }
+    const int id = payload.value(QStringLiteral("id")).toInt();
+    if (op == QStringLiteral("appmenu.layout")) {
+        // The root needs one additional level so top-level labels such as
+        // File and Edit are identified as submenus rather than actions.
+        const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 2);
+        const QDBusMessage reply = menu.call(QStringLiteral("GetLayout"), id, depth,
+            QStringList{QStringLiteral("label"), QStringLiteral("visible"),
+                        QStringLiteral("enabled"), QStringLiteral("type")});
+        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().size() < 2) {
+            respond(socket, request, false, {}, QStringLiteral("appmenu-layout-failed"),
+                    QStringLiteral("无法读取应用菜单"), true);
+            return true;
+        }
+        const QDBusArgument root = qvariant_cast<QDBusArgument>(reply.arguments().at(1));
+        const QJsonObject parent = menuItemFromArgument(root);
+        const QJsonArray items = parent.value(QStringLiteral("children")).toArray();
+        respond(socket, request, true, QJsonObject{{QStringLiteral("parent"), parent},
+                                                     {QStringLiteral("items"), items}});
+        return true;
+    }
+    if (op == QStringLiteral("appmenu.open") || op == QStringLiteral("appmenu.close")
+        || op == QStringLiteral("appmenu.trigger")) {
+        const QString event = op == QStringLiteral("appmenu.open") ? QStringLiteral("opened")
+            : op == QStringLiteral("appmenu.close") ? QStringLiteral("closed")
+            : QStringLiteral("clicked");
+        const quint32 timestamp = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch());
+        const QDBusMessage reply = menu.call(QStringLiteral("Event"), id, event,
+            QVariantMap{{QStringLiteral("timestamp"), timestamp}}, timestamp);
+        if (reply.type() == QDBusMessage::ErrorMessage) {
+            respond(socket, request, false, {}, QStringLiteral("appmenu-event-failed"),
+                    QStringLiteral("应用菜单操作失败"), true);
+            return true;
+        }
+        respond(socket, request, true);
+        return true;
+    }
+    respond(socket, request, false, {}, QStringLiteral("unknown-appmenu-operation"),
+            QStringLiteral("未知的应用菜单操作"), false);
+    return true;
+}
+
 bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObject &request)
 {
     const QString op = operation(request);
@@ -1602,8 +1757,8 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("shortcuts.apply")) {
         // The Shell owns shortcut semantics: it composes each Exec line to
-        // match how that Shell instance was launched. The daemon only
-        // validates, persists, and registers.
+        // match how that Shell instance was launched. The daemon registers
+        // the set with KGlobalAccel and runs the Exec lines on activation.
         const QJsonArray shortcuts = payload.value(QStringLiteral("shortcuts")).toArray();
         if (shortcuts.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-shortcut-payload"),
@@ -1618,7 +1773,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             normalized.append(item);
         }
         QString error;
-        if (!installShortcutSet(normalized, legacyKosShortcutIds(), &error)) {
+        if (!applyShortcutSet(normalized, &error)) {
             respond(socket, request, false, {},
                     QStringLiteral("shortcuts-apply-failed"),
                     error.isEmpty() ? QStringLiteral("无法应用快捷键") : error, false);
@@ -1631,16 +1786,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("shortcuts.uninstall")) {
-        QStringList ids;
-        for (const QJsonValue &value : payload.value(QStringLiteral("ids")).toArray())
-            ids.append(value.toString());
-        QString error;
-        if (!uninstallShortcutIds(ids, legacyKosShortcutIds(), &error)) {
-            respond(socket, request, false, {},
-                    QStringLiteral("shortcuts-uninstall-failed"),
-                    error.isEmpty() ? QStringLiteral("无法卸载快捷键") : error, false);
-            return true;
-        }
+        removeShortcuts();
         respond(socket, request, true, QJsonObject{{QStringLiteral("uninstalled"), true}});
         return true;
     }
@@ -2120,7 +2266,8 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         return;
     }
     if (handleClipboard(socket, request) || handleFileOperation(socket, request)
-        || handleKWin(socket, request) || handleSystemOperation(socket, request))
+        || handleKWin(socket, request) || handleAppMenu(socket, request)
+        || handleSystemOperation(socket, request))
         return;
     respond(socket, request, false, {}, QStringLiteral("unknown-operation"),
             QStringLiteral("未知的平台操作"), false);

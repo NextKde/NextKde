@@ -49,12 +49,15 @@ system action. Existing paths are canonicalized and new targets are resolved
 through a canonical existing parent. Passwords and raw command output
 containing secrets must never be logged.
 
-`kos-platform shortcuts install` (CLI fallback reading
-`shortcuts.v1.json`) refuses to overwrite a shortcut owned by a different
-desktop service; so does `shortcuts.apply`, which reports the conflict as an
-error instead of applying a partial set. Both paths also remove superseded
-`net.local.quickshell-*` entries from earlier generations. Uninstall removes
-only the declared IDs, then asks `kglobalaccel` to unregister those actions.
+Global shortcuts are registered by the platform daemon through the
+KGlobalAccel client library (the plasma powerdevil mechanism): every KOS
+shortcut is a QAction under the single `org.kos.Platform` component, so the
+Shortcuts KCM shows ONE "KOS" entry and no service desktop files exist at
+all. `shortcuts.apply` carries `{shortcuts:[{id,description,combo,exec}]}`;
+on activation the daemon runs the Exec line the Shell supplied, so it always
+addresses the live Shell instance (dev `-p` or installed `-c kos`).
+`shortcuts.uninstall` unregisters the actions and removes leftover files
+from superseded layouts.
 
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,

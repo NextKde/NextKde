@@ -11,13 +11,12 @@ validated independently.
   socket-delivered shared weather object.
 - [`pim-v1.schema.json`](pim-v1.schema.json) defines Calendar/Todo objects and
   their D-Bus payload boundary.
-- [`shortcuts.v1.json`](shortcuts.v1.json) is the source for the global
-  shortcut IDs, default key bindings, and Shell IPC targets used by
-  `kos-platform shortcuts`. At runtime the Shell's ShortcutsService
-  (shell/desktop/modules/shortcuts/) is the authority: it composes the Exec
-  lines for the live Shell instance and applies the set through the
-  `shortcuts.apply` platform operation. A shortcut added to the contract must
-  also be added to that service's defaults.
+- Global shortcut IDs, default key bindings, and Shell IPC targets live in
+  the Shell's ShortcutsService (shell/desktop/modules/shortcuts/), which is
+  the single source of truth: it composes the Exec lines for the live Shell
+  instance and applies the set through the `shortcuts.apply` platform
+  operation. The contract test in `platform/tests/test_contract.py` keeps
+  the service's default table in check.
 
 When adding a field, keep existing fields backward-compatible within the same
 major contract version. A breaking change requires a new version and updates

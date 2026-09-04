@@ -7,8 +7,6 @@ import Quickshell
 QtObject {
     id: launcher
 
-    readonly property string settingsEntrypoint:
-        Quickshell.shellDir + "/../apps/settings/main.qml"
     readonly property string settingsBinary:
         Quickshell.shellDir + "/../apps/settings/build/kos-settings"
 
@@ -18,17 +16,17 @@ QtObject {
             // Settings talks back to its Shell over Quickshell IPC. Preserve
             // the active Shell directory so a source-tree session opens a
             // Settings window connected to that same session rather than the
-            // installed `kos` configuration.
-            "export KOS_SHELL_DIR=\"$4\"; "
+            // installed `kos` configuration. Candidates are deliberately
+            // limited to the one canonical in-tree artifact plus the
+            // installed copy: a second build tree would drift and open a
+            // Settings build that does not match the running Shell.
+            "export KOS_SHELL_DIR=\"$2\"; "
             + "if [ -x \"$1\" ]; then exec \"$1\"; fi; "
-            + "if [ -x \"$2\" ]; then exec \"$2\"; fi; "
             + "if command -v kos-settings >/dev/null 2>&1; then exec kos-settings; fi; "
             + "if [ -x \"$HOME/.local/bin/kos-settings\" ]; then exec \"$HOME/.local/bin/kos-settings\"; fi; "
-            + "if command -v qml6 >/dev/null 2>&1; then exec qml6 \"$3\"; fi",
+            + "echo 'kos-settings is not built; run ./tools/kosctl build' >&2; exit 1",
             "kos-settings-launch",
             launcher.settingsBinary,
-            Quickshell.shellDir + "/../.build/apps/settings/kos-settings",
-            launcher.settingsEntrypoint,
             Quickshell.shellDir
         ])
     }

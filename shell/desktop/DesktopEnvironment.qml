@@ -29,7 +29,15 @@ Item {
 
     // Theme watching is non-visual and only loads a tiny FileView. The
     // AppLauncher and its icon grid remain lazy.
-    Component.onCompleted: IconThemeReloadService.initialize()
+    //
+    // ShortcutsService is a QML singleton, so it only instantiates on first
+    // access — and nothing else touches it during startup. Touch it here so
+    // the global shortcuts are registered on every Shell start (self-heal);
+    // the request queues until the platform daemon connects.
+    Component.onCompleted: {
+        IconThemeReloadService.initialize()
+        ShortcutsService.applyToPlatform()
+    }
 
     // The standalone Settings app is intentionally not allowed to import a
     // desktop module. This narrow IPC endpoint is its only Dock write path.

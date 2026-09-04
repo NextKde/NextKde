@@ -5,13 +5,14 @@ import Quickshell.Io
 import qs.desktop.modules.platform
 
 // KOS global shortcuts — one owner for defaults, user rebindings, and the
-// kglobalaccel handoff. Defaults mirror shared/contracts/shortcuts.v1.json
-// (the CLI fallback source); a new shortcut must be added in both places.
+// kglobalaccel handoff. The service publishes the effective set to
+// kos-platform (`shortcuts.apply`); the daemon registers each entry as a
+// QAction under the single KGlobalAccel component and runs the Exec line on
+// activation. No desktop files are involved.
 //
-// The Shell, not the daemon, composes each Exec line so the desktop entry
-// always matches how this Shell instance was launched: installed shells run
-// as `qs -c kos` while development shells run as `qs -p <repo>/shell`, and
-// `ipc call` only reaches the instance with the matching config path.
+// The Shell composes each Exec line so activation always addresses the live
+// instance: installed shells run as `qs -c kos` while development shells run
+// as `qs -p <repo>/shell`, and `ipc call` only reaches the matching one.
 QtObject {
     id: service
 
@@ -22,7 +23,6 @@ QtObject {
     // keeps its default binding.
     property var overrides: ({})
     property bool ready: false
-    property string lastError: ""
 
     readonly property var defaults: [
         { id: "net.local.kos-launcher", description: "应用启动器",
@@ -45,11 +45,6 @@ QtObject {
             return false
         // kglobalaccel PortableText: modifiers and the key joined by "+".
         return value.split("+").every(part => part.length > 0)
-    }
-
-    function defaultFor(id) {
-        const found = defaults.find(item => item.id === id)
-        return found ? found.combo : ""
     }
 
     // Defaults merged with user overrides; the effective binding set.

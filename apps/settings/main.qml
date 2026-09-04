@@ -209,63 +209,6 @@ ApplicationWindow {
         }
     }
 
-    // Qt Quick Controls has no built-in key-sequence editor. Keep this small
-    // local control so the Settings window does not depend on a Kirigami-only
-    // type, while preserving the existing click-to-record shortcut workflow.
-    component KeySequenceItem: Control {
-        id: recorder
-
-        property string keySequence: ""
-        signal canceled()
-
-        implicitWidth: 112
-        implicitHeight: 28
-        focusPolicy: Qt.StrongFocus
-
-        function keyName(event) {
-            if (event.key === Qt.Key_Space)
-                return "Space"
-            if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
-                return String.fromCharCode(event.key)
-            if (event.key >= Qt.Key_0 && event.key <= Qt.Key_9)
-                return String.fromCharCode(event.key)
-            if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F35)
-                return "F" + (event.key - Qt.Key_F1 + 1)
-            const text = String(event.text || "").toUpperCase()
-            return text.length === 1 ? text : ""
-        }
-
-        TapHandler {
-            onTapped: recorder.forceActiveFocus()
-        }
-
-        Keys.onPressed: function(event) {
-            if (event.key === Qt.Key_Escape) {
-                recorder.canceled()
-                recorder.focus = false
-                event.accepted = true
-                return
-            }
-
-            const key = recorder.keyName(event)
-            if (!key)
-                return
-            const parts = []
-            if (event.modifiers & Qt.ControlModifier)
-                parts.push("Ctrl")
-            if (event.modifiers & Qt.AltModifier)
-                parts.push("Alt")
-            if (event.modifiers & Qt.ShiftModifier)
-                parts.push("Shift")
-            if (event.modifiers & Qt.MetaModifier)
-                parts.push("Meta")
-            parts.push(key)
-            recorder.keySequence = parts.join("+")
-            recorder.focus = false
-            event.accepted = true
-        }
-    }
-
     component IntegrationStatusPage: ColumnLayout {
         id: integrationPage
 
@@ -2678,7 +2621,14 @@ ApplicationWindow {
 
         function applyState(state) {
             if (!state) return
-            shortcuts = Array.isArray(state.shortcuts) ? state.shortcuts : []
+            // A QVariantList nested in the bridge's QVariantMap arrives as an
+            // array-LIKE object (has .length) but Array.isArray() is false,
+            // so the list must be copied into a real JS array here or the
+            // Repeater silently renders nothing.
+            const raw = state.shortcuts
+            shortcuts = Array.isArray(raw) ? raw
+                : (raw && raw.length !== undefined
+                    ? Array.prototype.slice.call(raw) : [])
             errorText = state.error || ""
         }
 
@@ -2706,6 +2656,44 @@ ApplicationWindow {
             applyState(bridge.resetShortcut(id))
             if (bridge.lastError)
                 errorText = bridge.lastError
+        }
+
+        // Maps a raw key event to its kglobalaccel PortableText name.
+        // Returns "" for lone modifier presses so recording keeps waiting.
+        function keyDisplayName(event) {
+            if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
+                return String.fromCharCode(event.key)
+            if (event.key >= Qt.Key_0 && event.key <= Qt.Key_9)
+                return String.fromCharCode(event.key)
+            if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F24)
+                return "F" + (event.key - Qt.Key_F1 + 1)
+            switch (event.key) {
+                case Qt.Key_Space: return "Space"
+                case Qt.Key_Tab: return "Tab"
+                case Qt.Key_Backspace: return "Backspace"
+                case Qt.Key_Return: return "Return"
+                case Qt.Key_Enter: return "Enter"
+                case Qt.Key_Insert: return "Ins"
+                case Qt.Key_Delete: return "Del"
+                case Qt.Key_Home: return "Home"
+                case Qt.Key_End: return "End"
+                case Qt.Key_Left: return "Left"
+                case Qt.Key_Up: return "Up"
+                case Qt.Key_Right: return "Right"
+                case Qt.Key_Down: return "Down"
+                case Qt.Key_PageUp: return "PgUp"
+                case Qt.Key_PageDown: return "PgDown"
+                case Qt.Key_Print: return "Print"
+                case Qt.Key_Pause: return "Pause"
+            }
+            const text = String(event.text || "")
+            if (text.length === 1) {
+                const upper = text.toUpperCase()
+                const code = upper.charCodeAt(0)
+                if (code >= 0x21 && code <= 0x7e)
+                    return upper
+            }
+            return ""
         }
 
         Component.onCompleted: refresh()
@@ -2748,88 +2736,127 @@ ApplicationWindow {
                         width: shortcutsColumn.width
                         height: 54
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 16
-                            anchors.rightMargin: 16
-                            spacing: 12
+                        // Explicit anchoring: icon + title group left-aligned,
+                        // combo pill right-aligned, everything vertically
+                        // centered — no layout-engine ambiguity between rows.
+                        SettingIcon {
+                            id: rowIcon
+                            x: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            symbol: shortcutRow.iconInfo.symbol
+                            tint: shortcutRow.iconInfo.tint
+                        }
 
-                            SettingIcon {
-                                symbol: shortcutRow.iconInfo.symbol
-                                tint: shortcutRow.iconInfo.tint
+                        ColumnLayout {
+                            id: rowText
+                            anchors.left: rowIcon.right
+                            anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 2
+                            Text {
+                                text: shortcutRow.modelData.description
+                                color: theme.primaryText
+                                font.pixelSize: 14
                             }
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                Text {
-                                    text: shortcutRow.modelData.description
-                                    color: theme.primaryText
-                                    font.pixelSize: 14
-                                }
-                                Text {
-                                    text: shortcutRow.modelData.custom
-                                        ? "自定义快捷键" : "默认快捷键"
-                                    color: theme.secondaryText
-                                    font.pixelSize: 11
-                                }
+                            Text {
+                                text: shortcutRow.modelData.custom
+                                    ? "自定义快捷键" : "默认快捷键"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
                             }
+                        }
+
+                        Text {
+                            id: resetLabel
+                            anchors.right: comboPill.left
+                            anchors.rightMargin: 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: shortcutRow.modelData.custom
+                            text: "恢复默认"
+                            color: theme.dark ? "#64b5ff" : "#0066cc"
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -8
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: shortcutsPage.resetBinding(shortcutRow.modelData.id)
+                            }
+                        }
+
+                        // Click to record: the pill grabs keyboard focus
+                        // and shows a hint; the next full combo commits.
+                        Rectangle {
+                            id: comboPill
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: 16
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 158
+                            height: 30
+                            radius: 15
+                            property bool recording: false
+                            color: recording
+                                ? Qt.rgba(0.04, 0.52, 1.0, 0.18)
+                                : (theme.dark
+                                    ? Qt.rgba(1, 1, 1, 0.09)
+                                    : Qt.rgba(0, 0, 0, 0.055))
+                            border.width: recording ? 2 : 1
+                            border.color: recording
+                                ? "#0a84ff" : theme.floatingBorder
 
                             Text {
-                                visible: shortcutRow.modelData.custom
-                                text: "恢复默认"
-                                color: theme.dark ? "#64b5ff" : "#0066cc"
-                                font.pixelSize: 11
+                                anchors.centerIn: parent
+                                text: comboPill.recording
+                                    ? "按下新的组合键…"
+                                    : (shortcutRow.rowCombo || "点击设置")
+                                color: comboPill.recording
+                                    ? (theme.dark ? "#64b5ff" : "#0066cc")
+                                    : theme.primaryText
+                                font.pixelSize: 12
                                 font.weight: Font.DemiBold
+                            }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.margins: -8
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: shortcutsPage.resetBinding(shortcutRow.modelData.id)
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    comboPill.forceActiveFocus()
+                                    comboPill.recording = true
                                 }
                             }
 
-                            KeySequenceItem {
-                                id: comboRecorder
-
-                                keySequence: shortcutRow.rowCombo
-
-                                background: Rectangle {
-                                    implicitWidth: comboLabel.implicitWidth + 24
-                                    implicitHeight: 28
-                                    radius: 14
-                                    color: comboRecorder.visualFocus
-                                        ? Qt.rgba(0.04, 0.52, 1.0, 0.18)
-                                        : (theme.dark
-                                            ? Qt.rgba(1, 1, 1, 0.09)
-                                            : Qt.rgba(0, 0, 0, 0.055))
-                                    border.width: 1
-                                    border.color: theme.floatingBorder
+                            Keys.onPressed: function(event) {
+                                if (!comboPill.recording)
+                                    return
+                                event.accepted = true
+                                if (event.key === Qt.Key_Escape) {
+                                    comboPill.recording = false
+                                    comboPill.focus = false
+                                    return
                                 }
-                                contentItem: Text {
-                                    id: comboLabel
-                                    text: comboRecorder.keySequence
-                                        ? comboRecorder.keySequence : "点击录制"
-                                    color: theme.primaryText
-                                    font.pixelSize: 12
-                                    font.weight: Font.DemiBold
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-
-                                onKeySequenceChanged: {
-                                    const combo = String(comboRecorder.keySequence)
-                                    if (combo.length === 0 || combo === shortcutRow.rowCombo)
-                                        return
-                                    shortcutsPage.saveBinding(shortcutRow.modelData.id, combo)
-                                }
-                                onCanceled: {
-                                    // Recording dismissed with Esc: restore the
-                                    // committed binding in the recorder.
-                                    comboRecorder.keySequence = shortcutRow.rowCombo
-                                }
+                                const name = shortcutsPage.keyDisplayName(event)
+                                if (name === "")
+                                    return
+                                const parts = []
+                                if (event.modifiers & Qt.MetaModifier)
+                                    parts.push("Meta")
+                                if (event.modifiers & Qt.ControlModifier)
+                                    parts.push("Ctrl")
+                                if (event.modifiers & Qt.AltModifier)
+                                    parts.push("Alt")
+                                if (event.modifiers & Qt.ShiftModifier)
+                                    parts.push("Shift")
+                                parts.push(name)
+                                comboPill.recording = false
+                                comboPill.focus = false
+                                shortcutsPage.saveBinding(
+                                    shortcutRow.modelData.id, parts.join("+"))
                             }
+
+                            onActiveFocusChanged: if (!activeFocus) recording = false
                         }
 
                         Rectangle {

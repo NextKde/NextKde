@@ -293,12 +293,11 @@ PanelWindow {
             Item {
                 id: widgetContentLayer
                 anchors.fill: parent
-	                // Tint is applied by each widget to its semantic content.
-	                // A single post-process layer flattened that tonal styling
-	                // back into raw tint on some renderers.
-	                layer.enabled: IconAppearanceService.mode === "grayscale"
+                // Both monochrome modes use white/gray content. Tint belongs
+                // to the card material, never to the widget foreground.
+                layer.enabled: IconAppearanceService.mode !== "color"
 	                layer.effect: MultiEffect {
-	                    saturation: 0.0
+	                    saturation: -1.0
 	                    colorization: 0.0
                 }
 
@@ -676,9 +675,8 @@ PanelWindow {
 	                            smooth: true
 	                            layer.enabled: IconAppearanceService.mode !== "color"
 	                            layer.effect: MultiEffect {
-	                                saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
-	                                colorization: IconAppearanceService.mode === "tint" ? 1 : 0
-	                                colorizationColor: IconAppearanceService.styledSymbolicColor()
+                                saturation: -1.0
+                                colorization: 0
 	                            }
                         }
                         Image {
@@ -692,9 +690,8 @@ PanelWindow {
 	                            smooth: true
 	                            layer.enabled: IconAppearanceService.mode !== "color"
 	                            layer.effect: MultiEffect {
-	                                saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
-	                                colorization: IconAppearanceService.mode === "tint" ? 1 : 0
-	                                colorizationColor: IconAppearanceService.styledSymbolicColor()
+                                saturation: -1.0
+                                colorization: 0
 	                            }
                         }
                     }
@@ -1483,32 +1480,35 @@ PanelWindow {
                             height: width
                             radius: width * 0.1
                             color: Qt.rgba(1, 1, 1, 0.10)
+                            // Follow the Dock player's proven path: the
+                            // visible Image owns both the mask and grayscale
+                            // effect. Applying an effect to an OpacityMask
+                            // leaves its hidden source artwork in colour on
+                            // some scene-graph backends.
                             Image {
                                 id: musicArtworkSource
                                 anchors.fill: parent
-                                visible: false
+	                                visible: musicContent.hasPlayer
                                 source: musicContent.artworkSource
                                 fillMode: Image.PreserveAspectCrop
                                 sourceSize.width: Math.max(1, Math.ceil(width * 2))
                                 sourceSize.height: Math.max(1, Math.ceil(height * 2))
                                 asynchronous: true
                                 cache: false
-                            }
-	                            OpacityMask {
-	                                anchors.fill: parent
-	                                visible: musicContent.hasPlayer
-	                                source: musicArtworkSource
-	                                layer.enabled: musicContent.glassMode
-	                                layer.effect: MultiEffect {
-	                                    saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
-	                                    colorization: IconAppearanceService.mode === "tint" ? 1 : 0
-	                                    colorizationColor: IconAppearanceService.styledSymbolicColor()
-	                                }
-                                maskSource: Rectangle {
-                                    width: musicArtwork.width
-                                    height: musicArtwork.height
-                                    radius: musicArtwork.width * 0.1
+                                smooth: true
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    maskEnabled: true
+                                    maskSource: musicArtworkMask
+                                    saturation: musicContent.glassMode ? -1.0 : 0.0
                                 }
+                            }
+                            Rectangle {
+                                id: musicArtworkMask
+                                anchors.fill: parent
+                                radius: musicArtwork.width * 0.1
+                                visible: false
+                                layer.enabled: true
                             }
                             Text {
                                 anchors.centerIn: parent
