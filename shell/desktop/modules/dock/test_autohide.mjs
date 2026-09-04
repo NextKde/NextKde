@@ -78,6 +78,8 @@ function win(overrides) {
         geometry: { x: 800, y: 700, width: 300, height: 200 },
         isMinimized: false,
         isFullscreen: false,
+        isMaximized: false,
+        isVisible: true,
         onAllDesktops: false,
         desktopIds: ["d1"],
         screenName: "DP-1"
@@ -88,6 +90,11 @@ function win(overrides) {
 ok(!windowEligible(win({ isMinimized: true }), S, "d1"), "minimized filtered");
 // A window on another desktop is filtered.
 ok(!windowEligible(win({ desktopIds: ["d2"] }), S, "d1"), "other-desktop filtered");
+// Before the first desktop snapshot, KWin visibility is the safe fallback.
+ok(windowEligible(win({ desktopIds: ["d2"], isVisible: true }), S, ""),
+    "unknown desktop keeps visible window");
+ok(!windowEligible(win({ desktopIds: ["d1"], isVisible: false }), S, ""),
+    "unknown desktop filters invisible window");
 // onAllDesktops bypasses the desktop check.
 ok(windowEligible(win({ onAllDesktops: true }), S, "d1"), "onAllDesktops eligible");
 // A window on another screen name but overlapping the target screen stays.
@@ -112,10 +119,20 @@ const rel = releaseRect(base);
     const over = win({ geometry: { x: base.x + 5, y: base.y + 5, width: 50, height: 50 } });
     ok(hasConflict([over], S, av, rel, false, "d1"), "window over dock conflicts");
 }
-// Window 1px into the avoidance ring but not touching the visual dock also conflicts.
+// The math helper can still support an expanded entry ring for Bar policy.
 {
     const touch = win({ geometry: { x: base.x + 6, y: base.y - 9, width: 50, height: 50 } });
     ok(hasConflict([touch], S, av, rel, false, "d1"), "entry into 8px ring conflicts");
+}
+// Dock policy passes the full-reveal rectangle itself as the entry boundary:
+// proximity alone is not a conflict until the window actually overlaps it.
+{
+    const near = win({ geometry: { x: base.x + 6, y: base.y - 9, width: 50, height: 8 } });
+    ok(!hasConflict([near], S, base, rel, false, "d1"),
+        "dock proximity without overlap is not a conflict");
+    const overlap = win({ geometry: { x: base.x + 6, y: base.y - 1, width: 50, height: 2 } });
+    ok(hasConflict([overlap], S, base, rel, false, "d1"),
+        "dock actual overlap starts conflict");
 }
 // Window parked in the 8–16px release ring: no fresh conflict, but an active
 // conflict is retained (hysteresis). A 1px-tall window at y=1003 sits above the
@@ -164,6 +181,21 @@ const rel = releaseRect(base);
 {
     const fs = win({ isFullscreen: true, geometry: { x: 0, y: 0, width: 1920, height: 1080 } });
     ok(hasConflict([fs], S, av, rel, false, "d1"), "fullscreen forces conflict");
+}
+// A maximized window is only unconditional for the top Bar policy. The Dock
+// still relies on actual overlap with its full-reveal rectangle.
+{
+    const max = win({
+        isMaximized: true,
+        geometry: { x: 0, y: 100, width: 1920, height: 800 }
+    });
+    const topBase = visibleDockRect(S, "top", 1890, 35, 15);
+    const topAv = avoidanceRect(topBase);
+    const topRel = releaseRect(topBase);
+    ok(!hasConflict([max], S, topAv, topRel, false, "d1"),
+        "reserved maximized window does not geometrically overlap bar");
+    ok(hasConflict([max], S, topAv, topRel, false, "d1", true),
+        "bar treats maximized window as conflict");
 }
 
 // ── Policy: shouldBeVisible / policyWantsHidden ──

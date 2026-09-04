@@ -31,6 +31,7 @@ QtObject {
     // only when the standard Wayland provider has no windows.
     property var _kwinWindows: []
     property bool _kwinReceivedInitialSnapshot: false
+    property bool _kwinReceivedDesktopSnapshot: false
     // Serialized form of the last applied KWin snapshot. Redundant snapshots
     // (same content re-published) are dropped without scheduling a rebuild.
     property string _lastSnapshotJson: ""
@@ -58,7 +59,7 @@ QtObject {
     // proof the desktop is empty. On a future non-KWin build (bridge disabled)
     // the foreign provider is authoritative after its first collection.
     readonly property bool providerReady:
-        svc._kwinReceivedInitialSnapshot
+        (svc._kwinReceivedInitialSnapshot && svc._kwinReceivedDesktopSnapshot)
             || (!svc._kwinBridgeEnabled && svc._foreignRebuiltOnce)
     property Connections _platformEvents: Connections {
         target: PlatformClient
@@ -79,8 +80,11 @@ QtObject {
                 // delivered after reconnection.
                 svc._kwinSubscribePending = false
                 svc._kwinReceivedInitialSnapshot = false
+                svc._kwinReceivedDesktopSnapshot = false
                 svc._lastSnapshotJson = ""
                 svc._kwinWindows = []
+                svc.desktops = []
+                svc.currentDesktopId = ""
                 svc._rebuild()
             }
         }
@@ -552,9 +556,13 @@ QtObject {
                                 + event.id + " error=" + event.error);
                         }
                 } else if (event.type === "desktops") {
-                        if (Array.isArray(event.desktops)) {
-                            svc.desktops = event.desktops;
-                            svc.currentDesktopId = event.current ?? "";
+                        svc.desktops = Array.isArray(event.desktops)
+                            ? event.desktops : [];
+                        svc.currentDesktopId = event.current ?? "";
+                        if (!svc._kwinReceivedDesktopSnapshot) {
+                            svc._kwinReceivedDesktopSnapshot = true;
+                            console.info("[WindowService] initial desktop snapshot desktops="
+                                + svc.desktops.length + " current=" + svc.currentDesktopId)
                         }
                 } else if (event.type === "global-pointer-press") {
                         svc.globalPointerPressed(Number(event.x), Number(event.y),
@@ -592,6 +600,8 @@ QtObject {
             if (!response?.ok)
                 console.warn("[WindowService] KWin subscription failed: "
                     + (response?.error?.message || "platform unavailable"))
+            else
+                svc._sendKwinCommand({ action: "desktops" })
         })
     }
 

@@ -37,6 +37,13 @@ Item {
     Component.onCompleted: {
         IconThemeReloadService.initialize()
         ShortcutsService.applyToPlatform()
+        if (shell.barIntegratedWithDock)
+            WorkspaceLayoutService.clearBar(ScreenLifecycle.activeScreen)
+    }
+
+    onBarIntegratedWithDockChanged: {
+        if (shell.barIntegratedWithDock)
+            WorkspaceLayoutService.clearBar(ScreenLifecycle.activeScreen)
     }
 
     // The standalone Settings app is intentionally not allowed to import a

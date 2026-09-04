@@ -4,6 +4,7 @@ import QtQuick
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
+import qs.desktop.modules.platform
 
 // One concrete top Bar surface. Its content is shared with the optional
 // unified Dock host; this file owns layer-shell geometry and auto-hide.
@@ -45,11 +46,10 @@ PanelWindow {
         launcherOpen: AppLauncherService.open
     }
 
-    // Only "always" mode reserves a permanent top workspace strip.
-    // In "smart" or "persistent" modes, exclusiveZone stays at 0 so
-    // maximised windows extend to the top of the screen.
-    exclusiveZone: (AppearanceConfigService.barVisibilityMode === "always" && root.barEnabled)
-        ? implicitHeight + workspaceBreathingGap : 0
+    readonly property int reservedWorkspaceHeight: (root.barEnabled
+        && hide.workspaceReserved)
+        ? Math.round(implicitHeight + margins.top + workspaceBreathingGap) : 0
+    exclusiveZone: root.reservedWorkspaceHeight
     visible: root.barEnabled
 
     anchors {
@@ -64,6 +64,16 @@ PanelWindow {
         left: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
         right: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
     }
+
+    function publishWorkspaceReservation() {
+        if (root.screen)
+            WorkspaceLayoutService.updateBar(root.screen,
+                root.reservedWorkspaceHeight)
+    }
+
+    onScreenChanged: publishWorkspaceReservation()
+    onReservedWorkspaceHeightChanged: publishWorkspaceReservation()
+    Component.onCompleted: publishWorkspaceReservation()
 
     // The transparent layout deliberately leaves only the content: it must not
     // register a backdrop region, otherwise KWin adds blur/refraction behind

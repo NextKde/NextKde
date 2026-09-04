@@ -82,10 +82,18 @@ export function windowEligible(window, targetScreen, currentDesktopId) {
     if (window.isMinimized)
         return false;
     if (!window.onAllDesktops) {
-        const onCurrent = Array.isArray(window.desktopIds)
-            && window.desktopIds.indexOf(String(currentDesktopId || "")) >= 0;
-        if (!onCurrent)
+        const current = String(currentDesktopId || "");
+        if (current) {
+            const onCurrent = Array.isArray(window.desktopIds)
+                && window.desktopIds.indexOf(current) >= 0;
+            if (!onCurrent)
+                return false;
+        } else if (window.isVisible === false) {
+            // During daemon upgrades an older platform may not have cached a
+            // desktop event yet. KWin's visibility is the safe membership
+            // fallback; do not accidentally filter every visible window.
             return false;
+        }
     }
     const onScreen = (window.screenName && window.screenName === targetScreen?.name)
         || intersects(window.geometry, targetScreen);
@@ -94,7 +102,9 @@ export function windowEligible(window, targetScreen, currentDesktopId) {
 
 // §7.3/§7.6 Returns true when any eligible window overlaps the dock's space.
 // Fullscreen windows on the target screen always force a conflict.
-export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect, previousConflict, currentDesktopId) {
+export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect,
+                            previousConflict, currentDesktopId,
+                            maximizedConflicts = false) {
     if (!Array.isArray(windows))
         return false;
     // Hysteresis: while already conflicting, require the window to leave the
@@ -109,6 +119,9 @@ export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect, p
             return true;
         if (window.isFullscreen)
             continue;
+        if (maximizedConflicts && window.isMaximized
+                && intersects(window.geometry, targetScreen))
+            return true;
         if (intersects(window.geometry, activeRect))
             return true;
     }
