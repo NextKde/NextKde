@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 3,
   "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
   "configurePresets": [
     {
@@ -9,6 +9,8 @@
       "binaryDir": "${sourceDir}/.build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
         "KOS_BUILD_KWIN_PLUGINS": "OFF"
       }
     },
@@ -19,12 +21,105 @@
       "binaryDir": "${sourceDir}/.build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_TESTING": "ON",
         "KOS_BUILD_KWIN_PLUGINS": "ON"
+      }
+    },
+    {
+      "name": "apps-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "KOS_BUILD_PLATFORM": "OFF",
+        "KOS_BUILD_KWIN_PLUGINS": "OFF",
+        "KOS_BUILD_CALENDAR": "ON",
+        "KOS_BUILD_TODO": "ON",
+        "KOS_BUILD_WEATHER": "ON",
+        "KOS_BUILD_MUSIC": "ON"
+      }
+    },
+    {
+      "name": "apps-dev",
+      "displayName": "All standalone apps (development)",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/apps-dev"
+    },
+    {
+      "name": "apps-release",
+      "displayName": "All standalone apps (release install)",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/apps-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/.local"
+      }
+    },
+    {
+      "name": "calendar-dev",
+      "displayName": "Calendar only",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/calendar-dev",
+      "cacheVariables": {
+        "KOS_BUILD_CALENDAR": "ON",
+        "KOS_BUILD_TODO": "OFF",
+        "KOS_BUILD_WEATHER": "OFF",
+        "KOS_BUILD_MUSIC": "OFF"
+      }
+    },
+    {
+      "name": "todo-dev",
+      "displayName": "Todo only",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/todo-dev",
+      "cacheVariables": {
+        "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_TODO": "ON",
+        "KOS_BUILD_WEATHER": "OFF",
+        "KOS_BUILD_MUSIC": "OFF"
+      }
+    },
+    {
+      "name": "weather-dev",
+      "displayName": "Weather only",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/weather-dev",
+      "cacheVariables": {
+        "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_TODO": "OFF",
+        "KOS_BUILD_WEATHER": "ON",
+        "KOS_BUILD_MUSIC": "OFF"
+      }
+    },
+    {
+      "name": "music-dev",
+      "displayName": "Music only",
+      "inherits": "apps-base",
+      "binaryDir": "${sourceDir}/.build/music-dev",
+      "cacheVariables": {
+        "KOS_BUILD_CALENDAR": "OFF",
+        "KOS_BUILD_TODO": "OFF",
+        "KOS_BUILD_WEATHER": "OFF",
+        "KOS_BUILD_MUSIC": "ON"
       }
     }
   ],
   "buildPresets": [
     { "name": "debug", "configurePreset": "debug" },
-    { "name": "release", "configurePreset": "release" }
+    { "name": "release", "configurePreset": "release" },
+    { "name": "apps-dev", "configurePreset": "apps-dev" },
+    { "name": "apps-release", "configurePreset": "apps-release" },
+    { "name": "calendar-dev", "configurePreset": "calendar-dev" },
+    { "name": "todo-dev", "configurePreset": "todo-dev" },
+    { "name": "weather-dev", "configurePreset": "weather-dev" },
+    { "name": "music-dev", "configurePreset": "music-dev" }
+  ],
+  "testPresets": [
+    { "name": "debug", "configurePreset": "debug", "output": { "outputOnFailure": true } },
+    { "name": "release", "configurePreset": "release", "output": { "outputOnFailure": true } },
+    { "name": "apps-dev", "configurePreset": "apps-dev", "output": { "outputOnFailure": true } },
+    { "name": "apps-release", "configurePreset": "apps-release", "output": { "outputOnFailure": true } }
   ]
 }

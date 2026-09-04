@@ -4,7 +4,8 @@ Only portable Qt Quick / JavaScript code and cross-process contracts belong
 here. This directory must not import Quickshell, KWin, Wayland-only APIs, or a
 shell desktop module.
 
-- `qml/foundation/`: design tokens and small non-visual utilities.
+- `qml/foundation/`: portable design tokens and application surfaces, built
+  with the controls as the static `Kos.Ui` QML module for standalone apps.
 - `qml/controls/`: genuinely reusable controls.
 - `qml/glass/`: portable liquid-glass visuals. KWin blur adapters remain in
   `shell/desktop/`.
@@ -18,3 +19,7 @@ import controls through a relative filesystem path, never the Quickshell
 repository root alongside `shared/`, so an import looks like
 `import "../../shared/qml/controls"` (adjust the `../` count to the importing
 file's depth).
+
+Standalone applications link `Kos::Ui` and `Kos::UiPlugin` statically. The
+`pim/` module similarly provides the portable D-Bus client shared by Calendar
+and Todo; shell consumers remain decoupled from application processes.

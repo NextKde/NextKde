@@ -1,69 +1,68 @@
 pragma Singleton
-import QtQuick
-import Quickshell
-import Quickshell.Io
 
-// Open-Meteo-backed current conditions for the Dock. This is deliberately a
-// keyless provider: no credentials are present in QML, process arguments, or
-// the persisted cache.
+import QtQuick
+import qs.desktop.modules.platform
+
+// Weather network, location, unit and cache state is owned by
+// kos-data-service. This adapter keeps the established shell-facing API while
+// consuming the shared versioned JSONL protocol.
 QtObject {
     id: service
 
-    readonly property string cityName: "长沙"
-    readonly property real latitude: 28.2282
-    readonly property real longitude: 112.9388
-    readonly property int refreshIntervalMs: 60 * 60 * 1000
-    readonly property string cacheDir: Quickshell.stateDir + "/weather"
-    readonly property string cachePath: cacheDir + "/current.json"
-
-    property bool loading: false
+    property var location: ({})
+    property var locations: []
+    property var current: null
+    property var hourly: []
+    property var daily: []
+    property string units: "metric"
+    property string status: "idle"
     property string errorMessage: ""
     property date fetchedAt: new Date(0)
-    property var current: null
-    property var daily: null
+    property real staleAt: 0
+    property real nextRefreshAt: 0
+    property real clockNow: Date.now()
+    property bool ready: false
 
+    readonly property string cityName: String(location?.name ?? "--")
+    readonly property real latitude: Number(location?.latitude ?? 0)
+    readonly property real longitude: Number(location?.longitude ?? 0)
+    readonly property bool loading: status === "loading"
     readonly property bool available: current !== null
-    readonly property bool stale: available
-        && (Date.now() - fetchedAt.getTime() > refreshIntervalMs * 2)
+    readonly property bool stale: available && staleAt > 0 && clockNow >= staleAt
     readonly property string temperature: available
-        ? Math.round(Number(current.temperature_2m)) + "°" : "--°"
+        ? Math.round(Number(current.temperature)) + "°" : "--°"
     readonly property string apparentTemperature: available
-        ? Math.round(Number(current.apparent_temperature)) + "°" : "--°"
-    readonly property int weatherCode: available ? Number(current.weather_code) : -1
-    readonly property bool isDay: available ? Number(current.is_day) === 1 : true
+        ? Math.round(Number(current.apparentTemperature)) + "°" : "--°"
+    readonly property int weatherCode: available ? Number(current.weatherCode) : -1
+    readonly property bool isDay: available ? Boolean(current.isDay) : true
     readonly property string humidity: available
-        ? Math.round(Number(current.relative_humidity_2m)) + "%" : "--"
+        ? Math.round(Number(current.relativeHumidity)) + "%" : "--"
     readonly property string windSpeed: available
-        ? Math.round(Number(current.wind_speed_10m)) + " km/h" : "--"
+        ? Math.round(Number(current.windSpeed)) + (units === "imperial" ? " mph" : " km/h")
+        : "--"
     readonly property string windDirection: available
-        ? Math.round(Number(current.wind_direction_10m)) + "°" : "--"
+        ? Math.round(Number(current.windDirection)) + "°" : "--"
     readonly property string sunriseTime: dailyTime("sunrise")
     readonly property string sunsetTime: dailyTime("sunset")
     readonly property var forecastDays: {
-        if (!daily || !daily.time || !daily.weather_code
-                || !daily.temperature_2m_max || !daily.temperature_2m_min)
-            return []
         const days = []
-        const count = Math.min(7, daily.time.length)
-        for (let index = 0; index < count; index++) {
+        const source = Array.isArray(daily) ? daily : []
+        for (let index = 0; index < Math.min(7, source.length); index++) {
+            const day = source[index]
             days.push({
-                date: daily.time[index],
-                code: Number(daily.weather_code[index]),
-                high: Math.round(Number(daily.temperature_2m_max[index])),
-                low: Math.round(Number(daily.temperature_2m_min[index]))
+                date: String(day?.date ?? ""),
+                code: Number(day?.weatherCode ?? -1),
+                high: Math.round(Number(day?.temperatureMaximum ?? 0)),
+                low: Math.round(Number(day?.temperatureMinimum ?? 0))
             })
         }
         return days
     }
 
     function dailyTime(field) {
-        const values = service.daily?.[field]
-        if (!values || values.length === 0)
+        if (!Array.isArray(daily) || daily.length === 0)
             return "--:--"
-        // With timezone=auto Open-Meteo returns local ISO values such as
-        // 2026-08-24T06:03. Keep the local clock portion without reparsing it
-        // through JavaScript's system timezone.
-        const match = String(values[0]).match(/T(\d{2}:\d{2})/)
+        const match = String(daily[0]?.[field] ?? "").match(/T(\d{2}:\d{2})/)
         return match ? match[1] : "--:--"
     }
 
@@ -100,96 +99,71 @@ QtObject {
         if (index === 1)
             return "明天"
         const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-        return weekdays[new Date(isoDate + "T12:00:00").getDay()]
+        const parsed = new Date(String(isoDate) + "T12:00:00")
+        return Number.isNaN(parsed.getTime()) ? String(isoDate) : weekdays[parsed.getDay()]
+    }
+
+    function reload() {
+        DataClient.request("weather.snapshot", {}, function(response) {
+            if (!response.ok) {
+                if (!available)
+                    errorMessage = String(response.error?.message ?? "天气数据服务尚未就绪")
+                return
+            }
+            applyWeather(response.result?.weather ?? {})
+        })
+    }
+
+    function applyWeather(weather) {
+        if (Number(weather.schemaVersion) !== 1)
+            return
+        location = weather.location ?? ({})
+        locations = Array.isArray(weather.locations) ? weather.locations : []
+        current = weather.current ?? null
+        hourly = Array.isArray(weather.hourly) ? weather.hourly : []
+        daily = Array.isArray(weather.daily) ? weather.daily : []
+        units = weather.units === "imperial" ? "imperial" : "metric"
+        status = String(weather.status ?? "idle")
+        errorMessage = String(weather.error ?? "")
+        fetchedAt = new Date(Number(weather.fetchedAt ?? 0))
+        staleAt = Number(weather.staleAt ?? 0)
+        nextRefreshAt = Number(weather.nextRefreshAt ?? 0)
+        ready = true
     }
 
     function refresh() {
-        if (loading)
-            return
-        loading = true
-        errorMessage = ""
-        const url = "https://api.open-meteo.com/v1/forecast?latitude="
-            + latitude + "&longitude=" + longitude
-            + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m"
-            + "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset"
-            + "&timezone=auto&forecast_days=7"
-        const proc = processFactory.createObject(service, {
-            command: ["curl", "--compressed", "--fail", "--silent", "--show-error",
-                      "--max-time", "15", url]
+        DataClient.request("weather.refresh", {}, function(response) {
+            if (!response.ok)
+                errorMessage = String(response.error?.message ?? "天气刷新失败")
         })
-        proc.exited.connect(function(code) {
-            const output = proc.stdout?.text ?? ""
-            const stderr = proc.stderr?.text ?? ""
-            loading = false
-            if (code === 0) {
-                try {
-                    const payload = JSON.parse(output)
-                    if (!payload.current)
-                        throw new Error("响应缺少 current")
-                    current = payload.current
-                    daily = payload.daily ?? null
-                    fetchedAt = new Date()
-                    saveCache()
-                } catch (e) {
-                    errorMessage = "天气数据格式无效"
-                    console.warn("[Weather] parse failed: " + e)
-                }
-            } else {
-                errorMessage = "天气更新失败"
-                console.warn("[Weather] request failed code=" + code + " stderr=" + stderr)
-            }
-            proc.destroy()
-        })
-        proc.running = true
     }
 
-    function saveCache() {
-        const json = JSON.stringify({ fetchedAt: fetchedAt.toISOString(), current: current, daily: daily })
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c",
-                      "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/current.json.tmp\" && mv \"$1/current.json.tmp\" \"$1/current.json\"",
-                      "weather-cache-save", cacheDir, json]
-        })
-        proc.exited.connect(function() { proc.destroy() })
-        proc.running = true
-    }
-
-    function loadCache() {
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c", "cat \"$1\"", "weather-cache-load", cachePath]
-        })
-        proc.exited.connect(function(code) {
-            if (code === 0) {
-                try {
-                    const cached = JSON.parse(proc.stdout?.text ?? "")
-                    if (cached.current && cached.fetchedAt) {
-                        current = cached.current
-                        daily = cached.daily ?? null
-                        fetchedAt = new Date(cached.fetchedAt)
-                    }
-                } catch (e) {
-                    console.warn("[Weather] cache parse failed: " + e)
-                }
-            }
-            proc.destroy()
-            refresh()
-        })
-        proc.running = true
-    }
-
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
+    property Connections dataEvents: Connections {
+        target: DataClient
+        function onEventReceived(eventName, payload) {
+            if (eventName === "weather.changed")
+                service.reload()
+        }
+        function onTransportChanged(connected) {
+            if (connected)
+                service.reload()
         }
     }
 
-    property Timer refreshTimer: Timer {
-        interval: service.refreshIntervalMs
-        running: true
+    property Timer fallbackReload: Timer {
+        interval: 10000
         repeat: true
-        onTriggered: service.refresh()
+        running: true
+        triggeredOnStart: true
+        onTriggered: service.reload()
     }
 
-    Component.onCompleted: loadCache()
+    property Timer freshnessClock: Timer {
+        interval: 30000
+        repeat: true
+        running: true
+        onTriggered: service.clockNow = Date.now()
+    }
+
+    Component.onCompleted: reload()
 }

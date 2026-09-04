@@ -11,9 +11,13 @@ This repository is a KDE Plasma 6 Wayland desktop shell built with Quickshell
   themes, screenshots, and global shortcut installation.
 - `kos-data-service` (`services/data-service/`): one Go user daemon. It samples
   CPU/memory/disk/frequency/temperature, stores history and activity attribution,
-  watches the desktop directory, and serves `$XDG_RUNTIME_DIR/kos-data.sock`.
+  watches the desktop directory, owns shared weather state, and serves
+  `$XDG_RUNTIME_DIR/kos-data.sock`.
 - `kos-settings` (`apps/settings/`): independent Qt Quick settings process;
   it talks to Shell `IpcHandler` endpoints and never imports Shell modules.
+- `kos-calendar`, `kos-todo`, `kos-weather`, and `kos-music`: optional,
+  independently built Qt Quick applications. Calendar/Todo share the
+  D-Bus-activated PIM service; Weather uses `kos-data-service`.
 - `integrations/kwin/`: the two project-owned KWin plugin libraries.
 - `vendor/kwin-effects-glass/`: third-party glass effect source with its own
   license.
@@ -84,7 +88,9 @@ the full stack from the source tree on dedicated sockets (`KOS_PLATFORM_SOCKET`,
 `KOS_DATA_SOCKET`) beside the installed services. All launch modes share one
 pinned state directory via the `StateDir` pragma in `shell/shell.qml`.
 
-`CMakePresets.json` provides Debug/Release configurations. Go dependencies are
+`CMakePresets.json` provides core Debug/Release configurations plus all-app and
+per-app presets. Optional application switches default to `OFF`, so a core
+Shell build does not pull application dependencies. Go dependencies are
 resolved by the configured Go module proxy. KWin plugin builds may be disabled
 with `KOS_BUILD_KWIN_PLUGINS=OFF` when development headers are unavailable.
 
@@ -94,3 +100,19 @@ The one-time migration is intentionally split into independently reviewable
 commits: repository layout, platform daemon/contracts, Shell socket clients,
 data-service protocol, build/install tooling, and documentation. Preserve
 unrelated worktree changes and validate each stage before committing.
+
+## Known integration gaps
+
+Tracked follow-ups from the apps-platform merge, not merge defects:
+
+- Appearance has two sources of truth: the Shell stores its settings in
+  `Quickshell.stateDir/appearance/config.json` while Kos applications read
+  `QSettings("NextKde", "KosApplications")` through `Kos::App::ApplicationPreferences`.
+  The two are not bridged, so Shell appearance changes do not reach
+  applications. The designed bridge point is the `KOS_APPEARANCE`,
+  `KOS_MATERIAL`, `KOS_ACCENT`, ... environment overrides honored by
+  `ApplicationPreferences`, which `AppActionService.launchById` could inject.
+- Standalone applications use `LiquidTextField` with its fixed light-glass
+  palette, which is unreadable on light `AppTheme` surfaces. Applications
+  should receive a theme-aware wrapper (a `KosTextField` in `Kos.Ui` that
+  injects `AppTheme` colors) instead of editing the shared control.

@@ -1,0 +1,34 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KOS Todo
+Name[zh_CN]=KOS 待办事项
+GenericName=Task Manager
+GenericName[zh_CN]=任务管理器
+Comment=Organize tasks, lists, due dates, and calendar links
+Comment[zh_CN]=管理任务、清单、截止时间与日历联动
+TryExec=@KOS_APP_EXECUTABLE@
+Exec=@KOS_APP_EXECUTABLE@
+Icon=kos-todo
+Terminal=false
+Categories=Office;ProjectManagement;Qt;
+Keywords=todo;task;reminder;list;
+StartupNotify=true
+StartupWMClass=kos-todo
+X-GNOME-SingleWindow=true
+Actions=Today;Planned;Settings;
+
+[Desktop Action Today]
+Name=Today
+Name[zh_CN]=今天
+Exec=@KOS_APP_EXECUTABLE@ --view today
+
+[Desktop Action Planned]
+Name=Planned
+Name[zh_CN]=计划
+Exec=@KOS_APP_EXECUTABLE@ --view planned
+
+[Desktop Action Settings]
+Name=Settings
+Name[zh_CN]=设置
+Exec=@KOS_APP_EXECUTABLE@ --settings
