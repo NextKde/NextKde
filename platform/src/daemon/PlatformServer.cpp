@@ -1065,26 +1065,51 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         return;
     }
 
+    // `show`/`devices` are synchronous queries that print immediately and
+    // exit (a few milliseconds under a healthy BlueZ). `--timeout N` does
+    // not cap their wait -- it makes bluetoothctl unconditionally block for
+    // the full N seconds regardless of how quickly the answer was actually
+    // available. Chaining two `--timeout 2` calls made every bluetooth.list
+    // request take ~4s, long enough to still be in flight for the next 3s
+    // periodic refresh; the two would then resolve out of order and race a
+    // user's own toggle, flipping Control Center's Bluetooth disc back and
+    // forth. Drop the flag and use a Qt-side watchdog kill instead, which
+    // preserves the original defense against a wedged BlueZ daemon without
+    // taxing every normal call.
     auto *show = new QProcess(this);
     show->setProgram(QStringLiteral("bluetoothctl"));
-    show->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
-                        QStringLiteral("show")});
+    show->setArguments({QStringLiteral("show")});
+    const auto showReplied = std::make_shared<bool>(false);
+    QTimer::singleShot(3000, this, [show]() {
+        if (show->state() != QProcess::NotRunning)
+            show->kill();
+    });
     connect(show, &QProcess::finished, this,
-            [this, guardedSocket, request, show](int showExit, QProcess::ExitStatus) {
+            [this, guardedSocket, request, show, showReplied](int showExit, QProcess::ExitStatus) {
+        if (*showReplied)
+            return;
         const QByteArray controller = show->readAllStandardOutput();
         show->deleteLater();
         if (showExit != 0) {
+            *showReplied = true;
             respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
                     QStringLiteral("无法读取蓝牙状态"), true);
             return;
         }
         auto *devices = new QProcess(this);
         devices->setProgram(QStringLiteral("bluetoothctl"));
-        devices->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
-                               QStringLiteral("devices")});
+        devices->setArguments({QStringLiteral("devices")});
+        const auto devicesReplied = std::make_shared<bool>(false);
+        QTimer::singleShot(3000, this, [devices]() {
+            if (devices->state() != QProcess::NotRunning)
+                devices->kill();
+        });
         connect(devices, &QProcess::finished, this,
-                [this, guardedSocket, request, controller, devices](int devicesExit,
+                [this, guardedSocket, request, controller, devices, devicesReplied](int devicesExit,
                                                                        QProcess::ExitStatus) {
+            if (*devicesReplied)
+                return;
+            *devicesReplied = true;
             const QByteArray deviceList = devices->readAllStandardOutput();
             devices->deleteLater();
             if (devicesExit != 0) {
@@ -1098,7 +1123,10 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
             respond(guardedSocket.data(), request, true, parseBluetooth(output, 0));
         });
         connect(devices, &QProcess::errorOccurred, this,
-                [this, guardedSocket, request, devices](QProcess::ProcessError) {
+                [this, guardedSocket, request, devices, devicesReplied](QProcess::ProcessError) {
+            if (*devicesReplied)
+                return;
+            *devicesReplied = true;
             respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
                     QStringLiteral("蓝牙服务不可用"), true);
             devices->deleteLater();
@@ -1106,7 +1134,10 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         devices->start();
     });
     connect(show, &QProcess::errorOccurred, this,
-            [this, guardedSocket, request, show](QProcess::ProcessError) {
+            [this, guardedSocket, request, show, showReplied](QProcess::ProcessError) {
+        if (*showReplied)
+            return;
+        *showReplied = true;
         respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
                 QStringLiteral("蓝牙服务不可用"), true);
         show->deleteLater();
