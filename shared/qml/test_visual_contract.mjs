@@ -240,6 +240,15 @@ for (const component of ["NetworkStatus", "Battery", "SettingsButton",
 assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
+const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
+assert.match(controlCenterCard, /opacity:\s*root\.motionProgress\s*\n\s*enabled:/,
+    "modal dimming keeps primary Control Center glass surfaces mapped");
+assert.match(controlCenterCard,
+    /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
+    "modal dimming uses a visual veil instead of fading the parent surface");
+assert.match(controlCenterPanel,
+    /if\s*\(!coordinator\.open\)\s*\n\s*coordinator\.openAll\(\)/,
+    "opening the power sheet preserves the primary Control Center layer");
 for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"]) {
     const start = controlCenterPanel.indexOf(marker);
     const section = controlCenterPanel.slice(start, start + 1800);

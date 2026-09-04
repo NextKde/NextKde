@@ -123,8 +123,14 @@ Item {
 
     onSessionModalVisibleChanged: {
         _triggerTransitionGuard()
-        if (panel.sessionModalVisible)
+        if (panel.sessionModalVisible) {
+            // The session sheet is a second layer of the Control Center. Keep
+            // every primary card mapped behind it even if an external caller
+            // requests the sheet while the opening transition is still live.
+            if (!coordinator.open)
+                coordinator.openAll()
             coordinator.modalActive = true
+        }
         if (!panel.sessionModalVisible) {
             panel.pendingConfirmAction = ""
         }
@@ -147,6 +153,11 @@ Item {
         sessionModalVisible = false
         pendingConfirmAction = ""
         coordinator.closeAll()
+    }
+
+    function openSessionPanel() {
+        pendingConfirmAction = ""
+        sessionModalVisible = true
     }
 
     // Fullscreen transparent click-catcher window mapped ONLY while the control center is open.
@@ -588,10 +599,7 @@ Item {
             hoverEnabled: true
             enabled: !ControlCenterService.sessionActionInProgress
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                panel.pendingConfirmAction = ""
-                panel.sessionModalVisible = true
-            }
+            onClicked: panel.openSessionPanel()
         }
     }
 

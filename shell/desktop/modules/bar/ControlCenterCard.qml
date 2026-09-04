@@ -142,7 +142,11 @@ PopupWindow {
         border.color: root.cardBorderColor
         scale: root.popupScale
         transformOrigin: Item.TopRight
-        opacity: root.motionProgress * (root.visuallySuppressed ? 0.55 : 1.0)
+        // Keep the glass surface fully mapped behind a modal. Fading the
+        // entire semi-transparent card to 55% makes it visually disappear
+        // into the desktop; the neutral veil below preserves its silhouette,
+        // material and spatial relationship to the foreground sheet.
+        opacity: root.motionProgress
         enabled: root.motionInteractive && !root.visuallySuppressed
         transform: Translate {
             y: (1 - root.motionProgress) * AppearanceTokens.motion.popupAnchorOffset
@@ -154,6 +158,18 @@ PopupWindow {
             id: contentHost
             anchors.fill: parent
             scale: root.cardScale
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: root.blurRadius
+            visible: opacity > 0
+            color: ThemeService.isDark
+                ? Qt.rgba(0, 0, 0, 0.34) : Qt.rgba(0, 0, 0, 0.16)
+            opacity: root.visuallySuppressed ? 1 : 0
+            Behavior on opacity {
+                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
         }
     }
 
