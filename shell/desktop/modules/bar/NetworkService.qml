@@ -45,10 +45,20 @@ QtObject {
         deviceName = result.deviceName || ""
         connectionName = result.connectionName || ""
         ssid = result.ssid || ""
-        signalStrength = Number(result.signalStrength ?? -1)
-        ipv4 = result.ipv4 || ""
-        if (deviceState === "connected")
+        // network.refresh never carries real ipv4/signalStrength (nmcli's
+        // device table has neither); network.details fills them in a moment
+        // later via _refreshDetails(). Leaving them alone here avoids
+        // clobbering the last known-good value to a placeholder every
+        // refreshTimer tick, which made the tooltip/icon flicker empty and
+        // resize every few seconds.
+        if (deviceState === "connected") {
+            if (connectionType !== "wifi")
+                signalStrength = -1
             _refreshDetails()
+        } else {
+            ipv4 = ""
+            signalStrength = -1
+        }
     }
 
     function _refreshDetails() {
