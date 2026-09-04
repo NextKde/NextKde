@@ -90,15 +90,12 @@ QtObject {
             if (response?.ok) {
                 const value = response.result || ({})
                 bluetoothAvailable = !!value.available
-                // BlueZ can still report the pre-toggle Powered state for a
-                // moment after setBluetoothEnabled()'s own request already
-                // resolved — including on the refresh() that request's own
-                // callback triggers immediately afterwards, once
-                // bluetoothChangeInProgress is already back to false.
-                // Applying a stale read here raced the toggle and flipped it
-                // back and forth (off -> briefly on -> off again). Trust
-                // only the toggle's own response for a short settle window.
-                if (!bluetoothChangeInProgress && !bluetoothPoweredSettling)
+                // setBluetoothEnabled() owns bluetoothPowered while a toggle
+                // is in flight (it polls bluetooth.list itself until the
+                // adapter actually confirms the desired state); applying a
+                // periodic refresh's read here too could still catch BlueZ
+                // mid-transition and flip the disc back and forth.
+                if (!bluetoothChangeInProgress)
                     bluetoothPowered = !!value.powered
                 bluetoothDevices = Array.isArray(value.devices) ? value.devices : []
             } else {
@@ -160,16 +157,46 @@ QtObject {
         return true
     }
 
-    // BlueZ's Powered property can lag a few hundred ms behind bluetoothctl
-    // returning, since power-on/off is a separate process invocation from
-    // the one that later re-reads it. Ignore refresh() reads of bluetoothPowered
-    // for a short window after our own toggle so that lag cannot flip the
-    // disc back and forth before the adapter truly settles.
-    property bool bluetoothPoweredSettling: false
-    property Timer bluetoothPoweredSettleTimer: Timer {
-        interval: 1500
+    // bluetoothctl's own "power on/off succeeded" is not proof BlueZ has
+    // actually settled: it is a separate process invocation from the one
+    // that later re-reads Powered, and can return before the adapter's
+    // property has propagated. Rather than guess a timeout, keep
+    // bluetoothChangeInProgress set (toggle disabled, busy arc showing) and
+    // re-poll bluetooth.list until it actually reports the desired state,
+    // then apply it and release the toggle. A capped retry count is only a
+    // safety net against a genuinely stuck adapter, not the normal path.
+    property int _bluetoothPollAttempt: 0
+    property bool _bluetoothPollDesired: false
+    readonly property int _bluetoothPollMaxAttempts: 15
+    property Timer _bluetoothPollTimer: Timer {
+        interval: 200
         repeat: false
-        onTriggered: service.bluetoothPoweredSettling = false
+        onTriggered: service._pollBluetoothPower()
+    }
+
+    function _pollBluetoothPower() {
+        PlatformClient.request("bluetooth.list", {}, function(response) {
+            const value = response?.result || ({})
+            const observedPowered = !!value.powered
+            // The attempt cap must terminate the loop even if bluetooth.list
+            // itself keeps failing, not only once it reports the desired
+            // state — otherwise a failing request retries forever.
+            const settled = service._bluetoothPollAttempt >= service._bluetoothPollMaxAttempts
+                || (response?.ok && observedPowered === service._bluetoothPollDesired)
+            if (!settled) {
+                service._bluetoothPollAttempt++
+                service._bluetoothPollTimer.restart()
+                return
+            }
+            if (response?.ok) {
+                bluetoothAvailable = !!value.available
+                bluetoothPowered = observedPowered
+                bluetoothDevices = Array.isArray(value.devices) ? value.devices : bluetoothDevices
+            } else {
+                bluetoothAvailable = false
+            }
+            bluetoothChangeInProgress = false
+        })
     }
 
     function setBluetoothEnabled(enabled) {
@@ -178,13 +205,14 @@ QtObject {
             return false
         bluetoothChangeInProgress = true
         PlatformClient.request("bluetooth.power", { enabled: desired }, function(response) {
-            bluetoothChangeInProgress = false
-            if (response?.ok) {
-                bluetoothPowered = desired
-                bluetoothPoweredSettling = true
-                bluetoothPoweredSettleTimer.restart()
+            if (!response?.ok) {
+                bluetoothChangeInProgress = false
+                refresh()
+                return
             }
-            refresh()
+            _bluetoothPollDesired = desired
+            _bluetoothPollAttempt = 0
+            _pollBluetoothPower()
         })
         return true
     }
