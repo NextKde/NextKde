@@ -30,7 +30,7 @@ Current operation groups are:
   `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
   `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
   `file.open-kde`
-- `kwin.subscribe`, `kwin.command`
+- `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)
 - `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
@@ -44,6 +44,19 @@ KWin events are sent to subscribers as `window.snapshot`, `desktops`,
 `thumbnail`, `animation.started`, and related event names. KWin's internal script-to-daemon channel
 continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
 clients must not call that private interface directly.
+
+`kwin.layout.update` is an internal Shell-to-compositor layout update. Its
+payload is
+`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap}`.
+Rectangles use global logical coordinates; `dockPosition` is one of `bottom`,
+`left`, or `right`. The daemon bounds and validates every field before
+forwarding an `update-layout` command to the KWin script. A new normal main
+window may use the latest layout for its one-time initial placement; existing,
+maximized, fullscreen, dialog, transient, and special windows are not moved.
+
+On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
+latest `desktops` event when available. Consumers may explicitly request a
+fresh desktop event with `kwin.command {action: "desktops"}` during startup.
 
 Platform adapters validate all paths and operation names before executing a
 system action. Existing paths are canonicalized and new targets are resolved

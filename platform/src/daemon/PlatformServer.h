@@ -62,6 +62,7 @@ private:
     // window event to broadcast. Retain the authoritative last snapshot so a
     // new subscriber never has to wait for unrelated window activity.
     QJsonObject m_latestWindowSnapshot;
+    QJsonObject m_latestDesktopSnapshot;
     QProcess *m_textHistoryWatcher = nullptr;
     QProcess *m_imageHistoryWatcher = nullptr;
     bool m_watchImages = true;

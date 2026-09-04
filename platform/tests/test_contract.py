@@ -27,6 +27,9 @@ def test_platform_contract_mentions_socket_and_errors() -> None:
     assert "kos-platform.sock" in text
     assert "requestId" in text
     assert "retryable" in text
+    assert "kwin.layout.update" in text
+    for field in ("outputName", "outputRect", "barReservedHeight", "dockRect"):
+        assert field in text
 
 
 if __name__ == "__main__":

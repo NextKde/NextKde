@@ -32,6 +32,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 
@@ -41,6 +42,39 @@ namespace {
 constexpr int kProtocolVersion = 1;
 constexpr auto kClipboardCutMime = "application/x-kde-cutselection";
 constexpr auto kGnomeFilesMime = "x-special/gnome-copied-files";
+
+bool finiteNumber(const QJsonValue &value, double minimum, double maximum)
+{
+    if (!value.isDouble())
+        return false;
+    const double number = value.toDouble();
+    return std::isfinite(number) && number >= minimum && number <= maximum;
+}
+
+bool validRect(const QJsonValue &value)
+{
+    if (!value.isObject())
+        return false;
+    const QJsonObject rect = value.toObject();
+    return finiteNumber(rect.value(QStringLiteral("x")), -1000000.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("y")), -1000000.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("width")), 1.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("height")), 1.0, 1000000.0);
+}
+
+bool validLayoutPayload(const QJsonObject &payload)
+{
+    const QString outputName = payload.value(QStringLiteral("outputName")).toString();
+    const QString dockPosition = payload.value(QStringLiteral("dockPosition")).toString();
+    return !outputName.isEmpty() && outputName.size() <= 255
+        && validRect(payload.value(QStringLiteral("outputRect")))
+        && validRect(payload.value(QStringLiteral("dockRect")))
+        && finiteNumber(payload.value(QStringLiteral("barReservedHeight")), 0.0, 4096.0)
+        && finiteNumber(payload.value(QStringLiteral("workspaceGap")), 0.0, 512.0)
+        && (dockPosition == QStringLiteral("bottom")
+            || dockPosition == QStringLiteral("left")
+            || dockPosition == QStringLiteral("right"));
+}
 
 QString runtimeSocketPath()
 {
@@ -748,8 +782,11 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 {
-    if (event.value(QStringLiteral("type")).toString() == QStringLiteral("snapshot"))
+    const QString type = event.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("snapshot"))
         m_latestWindowSnapshot = event;
+    else if (type == QStringLiteral("desktops"))
+        m_latestDesktopSnapshot = event;
     for (auto *socket : std::as_const(m_windowSubscribers))
         sendEvent(socket, event);
 }
@@ -1601,6 +1638,25 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
         // state now instead of leaving the Dock empty until the next change.
         if (!m_latestWindowSnapshot.isEmpty())
             sendEvent(socket, m_latestWindowSnapshot);
+        if (!m_latestDesktopSnapshot.isEmpty())
+            sendEvent(socket, m_latestDesktopSnapshot);
+        return true;
+    }
+    if (op == QStringLiteral("kwin.layout.update")) {
+        const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+        if (!validLayoutPayload(payload)) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"),
+                    QStringLiteral("窗口布局参数无效"), false);
+            return true;
+        }
+        QJsonObject command = payload;
+        command.insert(QStringLiteral("action"), QStringLiteral("update-layout"));
+        if (!enqueueKWinCommand(command)) {
+            respond(socket, request, false, {}, QStringLiteral("kwin-unavailable"),
+                    QStringLiteral("KWin 平台桥不可用"), true);
+            return true;
+        }
+        respond(socket, request, true);
         return true;
     }
     if (op == QStringLiteral("kwin.command")) {
