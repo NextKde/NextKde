@@ -891,6 +891,11 @@ Item {
     // carries the app icon/name, and every row has its own close button.
     ControlCenterCard {
         coordinator: coordinator
+        // An empty history is not worth a permanently visible, permanently
+        // empty card taking up the bottom of the panel; only occupy that
+        // window/blur-region/hit-test space once there is something to show.
+        visible: coordinator.cardAnchor !== null
+            && ControlCenterService.historyGroups.length > 0
         offsetTop: 347
         offsetRight: 20
         cardRadius: 19
