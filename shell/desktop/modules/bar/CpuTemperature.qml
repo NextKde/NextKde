@@ -159,6 +159,7 @@ Item {
                 : Qt.rgba(0.94, 0.95, 0.98, 0.68)
             surfaceOpacity: 0.96
             materialDepth: 1.8
+            material: "thick"
 
             Column {
                 anchors.fill: parent

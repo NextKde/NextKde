@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../shared/qml/controls" as LiquidControls
 
 // Output-bound application-launcher surface. The panel itself spans the
 // output only to make centering reliable. The visible glass card follows Dock
@@ -15,6 +16,14 @@ PanelWindow {
     // Distinguish this surface from other quickshell panels so the glass
     // plugin can give it its own highlight direction.
     WlrLayershell.namespace: "quickshell-applauncher"
+    // The Dock and Bar are Top-layer surfaces. In card presentations the
+    // launcher rides Overlay so it sits above the Dock rather than compete
+    // with its icon hit region. The fullscreen presentation covers the whole
+    // output, and the user wants the Bar and Dock visible above it there —
+    // so fullscreen demotes this surface to Top while Dock/Bar promote
+    // themselves to Overlay in lockstep (all three rebind live; layer-shell
+    // supports runtime layer changes).
+    WlrLayershell.layer: isFullscreenMode ? WlrLayer.Top : WlrLayer.Overlay
 
     // The module root passes this state explicitly (as QuickSearch does) so
     // every output-bound variant shares one reliable visibility binding.
@@ -31,11 +40,12 @@ PanelWindow {
     readonly property bool panelVisible: open && (AppLauncherService.dockWidth > 0 || isFullscreenMode || isCenterMode)
 
     readonly property string displayMode: AppLauncherConfigService.displayMode
-    readonly property real configIconSize: AppLauncherConfigService.iconSize
-    readonly property real configIconSpacing: AppLauncherConfigService.iconSpacing
-    readonly property real configFontSize: AppLauncherConfigService.fontSize
+    readonly property var layoutProfile: AppLauncherConfigService.profileForMode(displayMode)
+    readonly property real configIconSize: AppLauncherConfigService.iconPixelSize(displayMode)
+    readonly property real configFontSize: AppLauncherConfigService.fontPixelSize(displayMode)
+    readonly property real gridGap: AppLauncherConfigService.gridGap(displayMode)
     readonly property int resolvedFontWeight: {
-        const w = AppLauncherConfigService.fontWeight
+        const w = layoutProfile.fontWeight
         if (w === "bold") return Font.Bold
         if (w === "medium") return Font.Medium
         return Font.Normal
@@ -53,17 +63,48 @@ PanelWindow {
         Math.ceil(filteredApplications.length / fullscreenPageSize))
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
-    readonly property var displayedGridItems: {
-        if (!isFullscreenMode)
-            return filteredApplications
-        const start = fullscreenPageOffset
-        return filteredApplications.slice(start, start + fullscreenPageSize)
-    }
-    readonly property real gridIconSize: isFullscreenMode
-        ? Math.max(72, configIconSize) : configIconSize
+    readonly property real gridIconSize: configIconSize
     readonly property color launcherForegroundColor: isFullscreenMode
         ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
-    onFilteredApplicationsChanged: _clampFullscreenPage()
+    // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
+    // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
+    // ordinary imagery translucent, and only protect against the low-contrast
+    // ends of the range (near white or black).
+    readonly property real wallpaperLuminance: WallpaperPaletteService.primary.r * 0.2126
+        + WallpaperPaletteService.primary.g * 0.7152
+        + WallpaperPaletteService.primary.b * 0.0722
+    readonly property real launcherBackdropDistance: Math.min(
+        wallpaperLuminance, 1.0 - wallpaperLuminance)
+    // 1 at the two extremes, easing down to 0 for normal mid-tone imagery.
+    readonly property real launcherBackdropProtection: {
+        const t = Math.min(1.0, Math.max(0.0,
+            (launcherBackdropDistance - 0.08) / 0.30))
+        return 1.0 - t * t * (3.0 - 2.0 * t)
+    }
+    readonly property color launcherScrimColor: {
+        const lightMix = Math.min(1.0, Math.max(0.0,
+            (wallpaperLuminance - 0.30) / 0.40))
+        // A Launchpad is a large dark material in every environment. Bright
+        // backgrounds need more of this tint, but dark backgrounds must never
+        // flip to a white veil: that reads as grey plastic rather than glass.
+        const baseAlpha = 0.13 + 0.08 * lightMix
+        const extremeAlpha = (0.09 + 0.12 * lightMix)
+            * launcherBackdropProtection
+        const modeScale = isFullscreenMode ? 1.0 : 0.72
+        return Qt.rgba(0.018, 0.028, 0.052,
+            (baseAlpha + extremeAlpha) * modeScale)
+    }
+    onFilteredApplicationsChanged: {
+        root.cancelFullscreenPageTransition();
+        _clampFullscreenPage();
+    }
+    // Synchronous page moves (keyboard paging, search reset, clamping) go
+    // through a full pager resync; animated transitions rotate slots inside
+    // commitFullscreenPageTransition while the state guard keeps this off.
+    onFullscreenPageChanged: {
+        if (fullscreenSwipeState === 0)
+            syncPagerSlots();
+    }
 
     // Automatically determine whether dark or light mode is active based on foreground color
     readonly property bool isDark: {
@@ -82,6 +123,8 @@ PanelWindow {
     onOpenChanged: {
         console.log("[AppLauncherWindow] received open=" + open);
         if (open) {
+            root.cancelFullscreenPageTransition();
+            root.syncPagerSlots();
             contentRevealProgress = 0.0;
             openForeground.restart();
         } else {
@@ -207,6 +250,55 @@ PanelWindow {
     // not the app-launch operation. The app starts immediately; this keeps
     // the UI responsive while still letting the user see what was activated.
     property var launchFeedbackItem: null
+
+    // ===== Fullscreen Launchpad drag paging =====
+    // Pages slide 1:1 with the pointer like the macOS Launchpad: the live
+    // grid moves together with a real neighbor-page copy, and release snaps
+    // by travel distance plus release velocity. 0 = idle, 1 = finger is
+    // dragging, 2 = settling toward fullscreenSettleTarget.
+    property int fullscreenSwipeState: 0
+    property real fullscreenPageDragOffset: 0
+    property int fullscreenSettleTarget: 0
+    property real fullscreenSwipeVelocity: 0
+    // A drag past the system threshold must never also register as a click
+    // on a tile or the dismiss catcher. Cleared one loop turn after release.
+    property bool fullscreenSwipeSuppressClick: false
+    readonly property real fullscreenPageSlideWidth: Math.max(1, launcherContentArea.width)
+    readonly property real fullscreenPageTrackOffset: isFullscreenMode
+        ? fullscreenPageDragOffset : 0
+    // Float page position drives the page dots so they interpolate while a
+    // drag or settle animation is in flight instead of snapping on commit.
+    readonly property real fullscreenPageProgress: isFullscreenMode
+        ? fullscreenPage - fullscreenPageDragOffset / fullscreenPageSlideWidth
+        : fullscreenPage
+    // +1 = travelling toward the next page, -1 = previous, 0 = resting.
+    readonly property int fullscreenSwipeDirection: {
+        if (fullscreenSwipeState === 1) {
+            if (fullscreenPageDragOffset < -1)
+                return 1;
+            if (fullscreenPageDragOffset > 1)
+                return -1;
+        } else if (fullscreenSwipeState === 2) {
+            if (fullscreenSettleTarget > fullscreenPage)
+                return 1;
+            if (fullscreenSettleTarget < fullscreenPage)
+                return -1;
+        }
+        return 0;
+    }
+    NumberAnimation {
+        id: fullscreenSettleAnimation
+        target: root
+        property: "fullscreenPageDragOffset"
+        easing.type: Easing.OutCubic
+        onFinished: root.commitFullscreenPageTransition()
+    }
+    Timer {
+        id: fullscreenSwipeClickReset
+        interval: 1
+        repeat: false
+        onTriggered: root.fullscreenSwipeSuppressClick = false
+    }
 
     function searchScore(app, needle) {
         const name = String(app.name || "").toLowerCase();
@@ -392,6 +484,7 @@ PanelWindow {
     }
 
     function moveSelection(delta) {
+        root.cancelFullscreenPageTransition();
         const count = filteredApplications.length;
         if (count === 0)
             return;
@@ -400,17 +493,18 @@ PanelWindow {
         // result to the final row is fast but surprising in an app launcher.
         selectedIndex = Math.max(0, Math.min(count - 1, selectedIndex + delta));
         if (isFullscreenMode) {
+            // onFullscreenPageChanged resyncs the pager slots.
             fullscreenPage = Math.floor(selectedIndex / fullscreenPageSize)
-            fullscreenSelectionPositionTimer.restart()
         } else {
             appGrid.positionViewAtIndex(selectedIndex, GridView.Contain);
         }
     }
 
     function clearSearch() {
+        root.cancelFullscreenPageTransition();
         if (!query.length)
             return false;
-        searchBar.inputItem.text = "";
+        searchBar.text = "";
         query = "";
         selectedIndex = 0;
         fullscreenPage = 0;
@@ -418,20 +512,143 @@ PanelWindow {
         return true;
     }
 
-    function setFullscreenPage(page) {
-        fullscreenPage = Math.max(0, Math.min(fullscreenPageCount - 1,
-            Math.round(page)))
-        selectedIndex = fullscreenPage * fullscreenPageSize
-        keyboardSelectionActive = false
+    function fullscreenPageSlice(page) {
+        const start = Math.max(0, page) * fullscreenPageSize
+        return filteredApplications.slice(start, start + fullscreenPageSize)
     }
 
     function stepFullscreenPage(delta) {
-        const nextPage = Math.max(0, Math.min(fullscreenPageCount - 1,
-            fullscreenPage + delta))
-        if (nextPage === fullscreenPage)
+        return gotoFullscreenPage(fullscreenPage + delta)
+    }
+
+    // Animated page switch shared by the wheel, the dots and drag release.
+    // Returns false when the pager is busy or the target equals the current
+    // page, so callers can decide whether to swallow the input.
+    function gotoFullscreenPage(page) {
+        if (!isFullscreenMode || fullscreenSwipeState !== 0)
             return false
-        setFullscreenPage(nextPage)
+        const target = Math.max(0, Math.min(fullscreenPageCount - 1,
+            Math.round(page)))
+        if (target === fullscreenPage)
+            return false
+        if (Math.abs(target - fullscreenPage) > 1) {
+            // Multi-slot dot jumps have no rendered neighbor to slide in;
+            // fall back to the synchronous path. The pager resyncs through
+            // onFullscreenPageChanged.
+            fullscreenPage = target
+            selectedIndex = target * fullscreenPageSize
+            keyboardSelectionActive = false
+            return true
+        }
+        startFullscreenPageTransition(target)
         return true
+    }
+
+    function updateFullscreenSwipeTranslation(dx) {
+        let offset = dx
+        // Edge pages resist with rubber-band friction instead of exposing
+        // an empty neighbor slot.
+        if (offset > 0 && fullscreenPage <= 0)
+            offset *= 0.35
+        else if (offset < 0 && fullscreenPage >= fullscreenPageCount - 1)
+            offset *= 0.35
+        fullscreenPageDragOffset = offset
+    }
+
+    function settleFullscreenSwipe() {
+        const dx = fullscreenPageDragOffset
+        const v = fullscreenSwipeVelocity
+        let target = fullscreenPage
+        if (dx < -fullscreenPageSlideWidth * 0.32 || v < -700)
+            target = fullscreenPage + 1
+        else if (dx > fullscreenPageSlideWidth * 0.32 || v > 700)
+            target = fullscreenPage - 1
+        startFullscreenPageTransition(target)
+    }
+
+    function startFullscreenPageTransition(target) {
+        const clamped = Math.max(0, Math.min(fullscreenPageCount - 1,
+            Math.round(target)))
+        const w = fullscreenPageSlideWidth
+        const to = clamped > fullscreenPage ? -w : (clamped < fullscreenPage ? w : 0)
+        if (clamped === fullscreenPage && Math.abs(to - fullscreenPageDragOffset) < 1) {
+            fullscreenPageDragOffset = 0
+            return
+        }
+        fullscreenSettleTarget = clamped
+        fullscreenSwipeState = 2
+        // Duration scales with the remaining travel so a late flick settles
+        // quickly while a full page turn keeps the Launchpad's unhurried glide.
+        const dist = Math.abs(to - fullscreenPageDragOffset)
+        fullscreenSettleAnimation.duration = Math.max(180,
+            Math.min(420, Math.round(dist / w * 480)))
+        fullscreenSettleAnimation.to = to
+        fullscreenSettleAnimation.restart()
+    }
+
+    function commitFullscreenPageTransition() {
+        const dir = fullscreenSettleTarget > fullscreenPage ? 1
+            : (fullscreenSettleTarget < fullscreenPage ? -1 : 0)
+        // Slot rotation happens while the state is still "settling" so the
+        // fullscreenPage assignment below cannot trigger a pager resync.
+        if (dir !== 0)
+            rotatePagerSlots(dir);
+        fullscreenPage = fullscreenSettleTarget;
+        if (dir !== 0) {
+            selectedIndex = fullscreenSettleTarget * fullscreenPageSize;
+            keyboardSelectionActive = false;
+        }
+        fullscreenSwipeState = 0;
+        fullscreenPageDragOffset = 0;
+    }
+
+    // The fullscreen pager keeps three persistent page grids (previous,
+    // current, next). Committing a page turn only re-labels which grid owns
+    // which slot: the page that just slid into place already rendered for
+    // the whole gesture, so its delegates are never recreated and the
+    // landing cannot flash. Only the vacated far slot reloads — offscreen
+    // and invisible.
+    function pagerGridAtSlot(slot) {
+        if (pagerA.slot === slot)
+            return pagerA;
+        if (pagerB.slot === slot)
+            return pagerB;
+        return pagerC;
+    }
+
+    function rotatePagerSlots(dir) {
+        const current = pagerGridAtSlot(0);
+        const incoming = pagerGridAtSlot(dir);
+        const outgoing = pagerGridAtSlot(-dir);
+        incoming.slot = 0;
+        current.slot = -dir;
+        outgoing.slot = dir;
+        outgoing.assignedPage = Math.max(0, Math.min(fullscreenPageCount - 1,
+            fullscreenPage + 2 * dir));
+    }
+
+    // Full resync for paths that move the page synchronously (open, search,
+    // keyboard paging): visible recreation is fine there because those
+    // transitions are instant today anyway.
+    function syncPagerSlots() {
+        if (!isFullscreenMode)
+            return;
+        const count = fullscreenPageCount;
+        pagerA.assignedPage = Math.max(0, Math.min(count - 1, fullscreenPage));
+        pagerB.assignedPage = Math.max(0, Math.min(count - 1, fullscreenPage + 1));
+        pagerC.assignedPage = Math.max(0, Math.min(count - 1, fullscreenPage - 1));
+        pagerA.slot = 0;
+        pagerB.slot = 1;
+        pagerC.slot = -1;
+    }
+
+    // Input that reassigns the page synchronously (keyboard paging, search
+    // edits, model changes) must tear down any in-flight swipe first, or a
+    // stale settle target would yank the page back afterwards.
+    function cancelFullscreenPageTransition() {
+        fullscreenSettleAnimation.stop()
+        fullscreenPageDragOffset = 0
+        fullscreenSwipeState = 0
     }
 
     function _clampFullscreenPage() {
@@ -651,128 +868,6 @@ PanelWindow {
         }
     }
 
-    // KWin owns the complete launcher glass region. This header deliberately
-    // adds no client-side capture, blur, tint, or refraction.
-    component LiquidSearchBar: Item {
-        id: searchBar
-        // Exposed so the launcher can drive focus and read the query.
-        property alias inputItem: searchInput
-        // The band spans the header's full width; only its height is fixed.
-        height: 49
-
-        // A transparent input hit area with a focus outline. KWin supplies
-        // the visual glass behind it.
-        Item {
-            id: fieldPill
-            anchors {
-                horizontalCenter: parent.horizontalCenter
-                verticalCenter: parent.verticalCenter
-            }
-            width: Math.min(460, Math.max(300, searchBar.width * 0.46))
-            height: 35
-            property real radius: height / 2
-
-            Rectangle {
-                anchors.fill: parent
-                radius: fieldPill.radius
-                color: "transparent"
-                border.width: searchInput.activeFocus ? 1 : 0
-                border.color: root.isDark ? Qt.rgba(1, 1, 1, 0.4) : Qt.rgba(0, 0, 0, 0.25)
-            }
-        }
-
-        GlassText {
-            anchors {
-                left: fieldPill.left
-                leftMargin: 11
-                verticalCenter: fieldPill.verticalCenter
-            }
-            text: "⌕"
-            color: root.launcherForegroundColor
-            opacity: 0.65
-            font.pixelSize: 17
-        }
-
-        TextInput {
-            id: searchInput
-            anchors {
-                left: fieldPill.left
-                right: fieldPill.right
-                verticalCenter: fieldPill.verticalCenter
-                leftMargin: 32
-                rightMargin: text.length > 0 ? 32 : 10
-            }
-            color: root.launcherForegroundColor
-            selectionColor: Qt.rgba(1, 1, 1, 0.30)
-            selectedTextColor: AppLauncherService.dockForegroundColor
-            font.pixelSize: 12
-            clip: true
-            enabled: !root.editMode && !root.openFolder
-            onTextEdited: {
-                root.query = text;
-                root.selectedIndex = 0;
-                root.fullscreenPage = 0;
-                root.keyboardSelectionActive = text.length > 0;
-            }
-            Keys.onPressed: function (event) {
-                const columns = appGrid.columnCount;
-                if (event.key === Qt.Key_Left) {
-                    root.moveSelection(-1);
-                } else if (event.key === Qt.Key_Right) {
-                    root.moveSelection(1);
-                } else if (event.key === Qt.Key_Up) {
-                    root.moveSelection(-columns);
-                } else if (event.key === Qt.Key_Down) {
-                    root.moveSelection(columns);
-                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                    root.activateSelected();
-                } else if (event.key === Qt.Key_Escape) {
-                    if (!root.clearSearch())
-                        AppLauncherService.hide();
-                } else {
-                    return;
-                }
-                event.accepted = true;
-            }
-        }
-
-        GlassText {
-            anchors {
-                right: fieldPill.right
-                rightMargin: 10
-                verticalCenter: fieldPill.verticalCenter
-            }
-            visible: searchInput.text.length > 0
-            text: "×"
-            color: root.launcherForegroundColor
-            opacity: searchClearMouse.containsMouse ? 0.95 : 0.58
-            font {
-                pixelSize: 17
-                weight: Font.DemiBold
-            }
-            MouseArea {
-                id: searchClearMouse
-                anchors.fill: parent
-                anchors.margins: -4
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.clearSearch()
-            }
-        }
-
-        GlassText {
-            anchors {
-                left: searchInput.left
-                verticalCenter: fieldPill.verticalCenter
-            }
-            visible: searchInput.text.length === 0
-            text: "搜索应用"
-            color: root.launcherForegroundColor
-            opacity: 0.45
-            font.pixelSize: 12
-        }
-    }
-
     visible: root.panelVisible
     onVisibleChanged: {
         console.log("[AppLauncherWindow] visible=" + visible + " card=" + launcherWidth + "x" + launcherHeight);
@@ -802,7 +897,7 @@ PanelWindow {
         id: searchFocusTimer
         interval: 1
         repeat: false
-        onTriggered: searchBar.inputItem.forceActiveFocus()
+        onTriggered: searchBar.forceActiveFocus()
     }
 
     Timer {
@@ -816,17 +911,6 @@ PanelWindow {
             appGrid.contentY = Math.max(0, Math.min(maxContentY, root.pendingGridContentY));
             root.pendingGridContentY = -1;
         }
-    }
-
-    // A page switch recreates the GridView delegates. Position the selected
-    // item after that pass so keyboard navigation never points to an item on a
-    // page that is no longer mapped.
-    Timer {
-        id: fullscreenSelectionPositionTimer
-        interval: 1
-        repeat: false
-        onTriggered: appGrid.positionViewAtIndex(
-            root.selectedIndex - root.fullscreenPageOffset, GridView.Contain)
     }
 
     // A physical wheel emits several events for one gesture. Keep page turns
@@ -994,6 +1078,8 @@ PanelWindow {
         enabled: root.open && !root.externalDialogOpen
         acceptedButtons: Qt.LeftButton
         onClicked: function (mouse) {
+            if (root.fullscreenSwipeSuppressClick)
+                return;
             if (root.isFullscreenMode) {
                 AppLauncherService.hide();
                 return;
@@ -1063,11 +1149,13 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: background.radius
-                    // A Launchpad backdrop is deliberately quieter than a
-                    // card: KWin keeps the wallpaper blurred underneath while
-                    // this veil removes the hard, refractive glass-sheet look.
-                    color: root.isFullscreenMode
-                        ? Qt.rgba(0.025, 0.035, 0.060, 0.34) : "transparent"
+                    // A launcher is a text-dense regular material. The scrim
+                    // stays light through ordinary imagery, then gradually
+                    // increases only near pure white or black backdrops.
+                    color: root.launcherScrimColor
+                    Behavior on color {
+                        ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
+                    }
                     border.width: root.isFullscreenMode ? 0 : 1
                     border.color: root.isDark
                         ? Qt.rgba(1, 1, 1, 0.16)
@@ -1129,7 +1217,45 @@ PanelWindow {
                         z: 0
                         enabled: root.isFullscreenMode && root.open && !root.externalDialogOpen
                         acceptedButtons: Qt.LeftButton
-                        onClicked: AppLauncherService.hide()
+                        onClicked: {
+                            if (root.fullscreenSwipeSuppressClick)
+                                return;
+                            AppLauncherService.hide()
+                        }
+                    }
+
+                    // Launchpad-style drag paging. The handler grabs presses
+                    // passively, so tile MouseAreas keep their exclusive grab
+                    // and ordinary taps still launch; only a horizontal drag
+                    // past the system threshold activates paging. While it is
+                    // active the release click is suppressed everywhere.
+                    DragHandler {
+                        id: fullscreenPageDrag
+                        enabled: root.isFullscreenMode && root.open && !root.externalDialogOpen
+                            && !root.openFolder && root.editingApplication === null
+                            && root.fullscreenPageCount > 1
+                            && root.fullscreenSwipeState <= 1
+                        target: null
+                        // Horizontal-only: disabling the y axis keeps vertical
+                        // gestures from activating pager translation.
+                        yAxis.enabled: false
+                        acceptedButtons: Qt.LeftButton
+                        onActiveChanged: {
+                            if (active) {
+                                root.fullscreenSwipeState = 1;
+                                root.fullscreenSwipeVelocity = 0;
+                                root.fullscreenSwipeSuppressClick = true;
+                            } else if (root.fullscreenSwipeState === 1) {
+                                root.settleFullscreenSwipe();
+                                fullscreenSwipeClickReset.restart();
+                            }
+                        }
+                        onTranslationChanged: {
+                            if (!active || root.fullscreenSwipeState !== 1)
+                                return;
+                            root.fullscreenSwipeVelocity = centroid.velocity.x;
+                            root.updateFullscreenSwipeTranslation(translation.x);
+                        }
                     }
 
                     Item {
@@ -1137,8 +1263,13 @@ PanelWindow {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
+                        // Fullscreen content follows the output at a fixed
+                        // 95% share; the centered/floating presentations keep
+                        // the full card width. The inner 96px inset of the old
+                        // Math.min(1280, ...) cap silently throttled the grid
+                        // no matter what width the grid itself requested.
                         width: root.isFullscreenMode
-                            ? Math.min(1280, Math.max(680, parent.width - 96))
+                            ? Math.round(parent.width * 0.95)
                             : parent.width
 
                         Item {
@@ -1150,18 +1281,130 @@ PanelWindow {
                                 left: parent.left
                                 right: parent.right
                                 topMargin: root.isFullscreenMode
-                                    ? Math.round(parent.height * 0.13) : 14
+                                    // Launchpad content should sit near the
+                                    // top of the screen rather than start at
+                                    // an oversized 13% inset on tall outputs.
+                                    ? Math.round(Math.max(48,
+                                        Math.min(76, parent.height * 0.07))) : 14
                                 leftMargin: 22
                                 rightMargin: 22
                             }
                             height: 49
 
-                            LiquidSearchBar {
+                            LiquidControls.LiquidTextField {
                                 id: searchBar
                                 anchors {
-                                    left: parent.left
-                                    right: parent.right
+                                    horizontalCenter: parent.horizontalCenter
                                     verticalCenter: parent.verticalCenter
+                                }
+                                // The pill stays centered in the header band;
+                                // only its width follows the band.
+                                width: Math.min(460, Math.max(300, parent.width * 0.46))
+                                height: 35
+
+                                placeholderText: "搜索应用"
+                                liquidFinish: true
+                                liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
+                                ambientPrimary: WallpaperPaletteService.primary
+                                ambientSecondary: WallpaperPaletteService.secondary
+                                ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                                textColor: root.launcherForegroundColor
+                                mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
+                                    root.launcherForegroundColor.g,
+                                    root.launcherForegroundColor.b, 0.45)
+                                font.pixelSize: 12
+                                leftPadding: 32
+                                rightPadding: text.length > 0 ? 32 : 12
+                                selectionColor: Qt.rgba(1, 1, 1, 0.30)
+                                selectedTextColor: AppLauncherService.dockForegroundColor
+                                enabled: !root.editMode && !root.openFolder
+
+                                onTextEdited: {
+                                    root.cancelFullscreenPageTransition();
+                                    root.query = text;
+                                    root.selectedIndex = 0;
+                                    root.fullscreenPage = 0;
+                                    root.keyboardSelectionActive = text.length > 0;
+                                }
+                                Keys.onPressed: function (event) {
+                                    const columns = appGrid.columnCount;
+                                    if (event.key === Qt.Key_Left) {
+                                        root.moveSelection(-1);
+                                    } else if (event.key === Qt.Key_Right) {
+                                        root.moveSelection(1);
+                                    } else if (event.key === Qt.Key_Up) {
+                                        root.moveSelection(-columns);
+                                    } else if (event.key === Qt.Key_Down) {
+                                        root.moveSelection(columns);
+                                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                        root.activateSelected();
+                                    } else if (event.key === Qt.Key_Escape) {
+                                        if (!root.clearSearch())
+                                            AppLauncherService.hide();
+                                    } else {
+                                        return;
+                                    }
+                                    event.accepted = true;
+                                }
+
+                                GlassText {
+                                    anchors {
+                                        left: parent.left
+                                        leftMargin: 11
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    text: "⌕"
+                                    color: root.launcherForegroundColor
+                                    // The icon lights up while the field is
+                                    // expanded (focused or holding a query).
+                                    opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
+                                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                                    font.pixelSize: 17
+                                }
+
+                                GlassText {
+                                    anchors {
+                                        right: parent.right
+                                        rightMargin: 10
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    // Liquid orb pop-in/out, after the reference's
+                                    // spring cubic-bezier(0.34, 1.56, 0.64, 1):
+                                    // scale 0.5 -> 1 with overshoot, rotate -90 -> 0.
+                                    visible: opacity > 0.01
+                                    opacity: searchBar.text.length > 0
+                                        ? (searchClearMouse.containsMouse ? 0.95 : 0.58) : 0.0
+                                    scale: searchBar.text.length > 0 ? 1.0 : 0.5
+                                    rotation: searchBar.text.length > 0 ? 0 : -90
+                                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                                    Behavior on scale {
+                                        NumberAnimation {
+                                            duration: 450
+                                            easing.type: Easing.Bezier
+                                            easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
+                                        }
+                                    }
+                                    Behavior on rotation {
+                                        NumberAnimation {
+                                            duration: 450
+                                            easing.type: Easing.Bezier
+                                            easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
+                                        }
+                                    }
+                                    text: "×"
+                                    color: root.launcherForegroundColor
+                                    font {
+                                        pixelSize: 17
+                                        weight: Font.DemiBold
+                                    }
+                                    MouseArea {
+                                        id: searchClearMouse
+                                        anchors.fill: parent
+                                        anchors.margins: -4
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.clearSearch()
+                                    }
                                 }
                             }
 
@@ -1218,33 +1461,93 @@ PanelWindow {
                             // input region unreliable after returning from
                             // fullscreen. Explicit geometry is stable in every
                             // presentation.
+                            // Fullscreen grid width follows the output: a
+                            // fixed 95% share keeps side breathing room
+                            // proportional across resolutions instead of a
+                            // hard 1280px cap that strands huge margins on
+                            // wide outputs.
                             width: root.isFullscreenMode
-                                ? Math.min(parent.width - 72, 1280)
+                                ? Math.round(parent.width * 0.95)
                                 : parent.width - 36
+                            // Fullscreen's search header occupies real space
+                            // above the Launchpad grid. Derive rows from the
+                            // remaining area instead of forcing four rows into
+                            // a short output, which pushed the first row into
+                            // the input field at larger icon sizes.
+                            readonly property real fullscreenTopClearance:
+                                header.y + header.height + 12
+                            // The Bar and Dock float above the fullscreen
+                            // launcher, so the grid must clear them exactly:
+                            // the Bar's reserved height (0 when fused with the
+                            // Dock), the Dock's glass height, plus the same
+                            // 15px standoff the card presentations use.
+                            readonly property real fullscreenBottomClearance:
+                                Math.max(Math.round(parent.height * 0.06),
+                                    AppLauncherService.barHeight
+                                    + (root.dockAtBottom
+                                        ? AppLauncherService.dockHeight + 15 : 0))
+                            readonly property real fullscreenAvailableHeight:
+                                Math.max(0, parent.height - fullscreenTopClearance
+                                    - fullscreenBottomClearance)
                             readonly property int fullscreenRowCount: root.isFullscreenMode
-                                ? Math.max(4, Math.min(5,
-                                    Math.floor((parent.height - 260) / cellHeight))) : 0
+                                ? Math.max(1, Math.min(5,
+                                    Math.floor(fullscreenAvailableHeight / cellHeight))) : 0
                             height: root.isFullscreenMode
                                 ? fullscreenRowCount * cellHeight : parent.height - 32
                             x: Math.round((parent.width - width) / 2)
                             y: root.isFullscreenMode
-                                ? Math.round((parent.height - height) / 2) : 14
+                                // Keep Launchpad content visually connected to
+                                // its search header. A small capped breathing
+                                // gap is more balanced here than centering a
+                                // short grid in all remaining vertical space.
+                                ? fullscreenTopClearance + Math.round(Math.min(24,
+                                    Math.max(0, fullscreenAvailableHeight - height) * 0.20))
+                                : 14
                             clip: true
                             interactive: !root.isFullscreenMode
                             boundsBehavior: Flickable.StopAtBounds
-                            readonly property real targetCellWidth: root.isFullscreenMode
-                                ? Math.max(118, root.gridIconSize + 40)
-                                : root.configIconSize + root.configIconSpacing * 2
+                            // Reserve the search header in the resting
+                            // layout without moving the viewport itself. The
+                            // first row therefore never crowds the input, but
+                            // scrolling tiles can still travel behind the
+                            // header and emerge naturally below it.
+                            topMargin: root.isFullscreenMode ? 0
+                                : header.height + 8
+                            // The visible card and grid cell share one source
+                            // of truth. Density supplies the desired gap; cell
+                            // width is then evenly divided across the usable
+                            // width, so changing icon size never leaves a
+                            // stranded right-side strip.
+                            readonly property real tileWidth: root.gridIconSize + 30
+                            readonly property real tileHeight: Math.max(88,
+                                Math.round(root.gridIconSize + root.configFontSize * 2 + 24))
+                            readonly property real targetCellWidth: tileWidth + root.gridGap
                             readonly property int columnCount: root.isFullscreenMode
                                 ? Math.max(6, Math.min(10, Math.floor(width / targetCellWidth)))
-                                : Math.max(4, Math.floor(width / Math.max(68, targetCellWidth)))
+                                : Math.max(4, Math.floor((width + root.gridGap)
+                                    / Math.max(68, targetCellWidth)))
                             readonly property int fullscreenPageSize: root.isFullscreenMode
                                 ? Math.max(1, columnCount * fullscreenRowCount) : 1
                             cellWidth: width > 0 ? width / columnCount : targetCellWidth
                             cellHeight: root.isFullscreenMode
-                                ? Math.max(122, Math.round(root.gridIconSize + 50))
-                                : Math.max(88, Math.round(root.configIconSize + root.configFontSize * 2 + 24))
-                            model: root.open ? root.displayedGridItems : []
+                                ? Math.max(122, tileHeight + root.gridGap)
+                                : tileHeight + root.gridGap
+                            model: root.open && !root.isFullscreenMode
+                                ? root.filteredApplications : []
+                            // Card presentations only. In fullscreen the
+                            // persistent slot pager takes over entirely, so
+                            // this grid neither renders nor recreates
+                            // delegates during page turns.
+                            visible: !root.isFullscreenMode
+                            // Delegate selection highlight resolves against the
+                            // page the delegate lives on (this grid or a ghost).
+                            property int pageBaseIndex: root.fullscreenPageOffset
+                            // Fullscreen drag paging slides the whole page —
+                            // this grid and both ghost neighbors share one
+                            // horizontal offset so they travel in lockstep.
+                            transform: Translate {
+                                x: root.fullscreenPageTrackOffset
+                            }
 
                         delegate: Item {
                             id: appDelegate
@@ -1325,9 +1628,10 @@ PanelWindow {
                                 id: appCard
                                 anchors.centerIn: parent
                                 width: Math.round(root.gridIconSize + 30)
-                                height: Math.round(root.gridIconSize + 44)
+                                height: Math.round(root.gridIconSize
+                                    + root.configFontSize * 2 + 20)
                                 radius: Math.max(10, Math.round(root.gridIconSize * 0.25))
-                                color: root.folderMergeArmed && root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.30) : (root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.14) : (root.keyboardSelectionActive && (index + root.fullscreenPageOffset) === root.selectedIndex ? Qt.rgba(1, 1, 1, 0.18) : (appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")))
+                                color: root.folderMergeArmed && root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.30) : (root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.14) : (root.keyboardSelectionActive && (index + appDelegate.GridView.view.pageBaseIndex) === root.selectedIndex ? Qt.rgba(1, 1, 1, 0.18) : (appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")))
                                 border.width: root.folderMergeTargetKey === root._itemKey(modelData) ? 1 : 0
                                 border.color: Qt.rgba(0.36, 0.68, 1, root.folderMergeTargetKey === root._itemKey(modelData) ? 0.20 + root.folderMergeProgress * 0.42 : 0)
                                 rotation: 0
@@ -1385,10 +1689,10 @@ PanelWindow {
                                         topMargin: 8
                                     }
                                     source: modelData.type === "app" ? modelData.app.icon : ""
-                                    opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
-                                    saturation: ConfigService.iconSaturation
-                                    tintEnabled: ConfigService.iconTintEnabled
-                                    tintColor: ConfigService.iconTintColor
+                                    opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                    saturation: IconAppearanceService.saturation
+                                    tintEnabled: IconAppearanceService.tintEnabled
+                                    tintColor: IconAppearanceService.tintColor
                                 }
 
                                 // Folder artwork is a compact 3×3 preview of its first
@@ -1426,17 +1730,18 @@ PanelWindow {
                                                 width: Math.max(8, Math.round(root.gridIconSize * 0.23))
                                                 height: width
                                                 source: modelData.icon
-                                                opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
-                                                saturation: ConfigService.iconSaturation
-                                                tintEnabled: ConfigService.iconTintEnabled
-                                                tintColor: ConfigService.iconTintColor
+                                                opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                                saturation: IconAppearanceService.saturation
+                                                tintEnabled: IconAppearanceService.tintEnabled
+                                                tintColor: IconAppearanceService.tintColor
                                             }
                                         }
                                     }
                                 }
 
-                                // Clean, crisp typography without muddy outlines.
-                                Text {
+                                // A restrained outline keeps labels readable over the
+                                // translucent launcher material and changing wallpaper.
+                                GlassText {
                                     id: appName
                                     anchors {
                                         top: parent.top
@@ -1446,7 +1751,6 @@ PanelWindow {
                                     width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                     text: modelData.type === "folder" ? modelData.name : modelData.app.name
                                     color: root.launcherForegroundColor
-                                    style: Text.Normal
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -1483,6 +1787,8 @@ PanelWindow {
                                         root.editMode = true;
                                     }
                                     onClicked: function (mouse) {
+                                        if (root.fullscreenSwipeSuppressClick)
+                                            return;
                                         if (appDelegate.heldForEdit)
                                             return;
                                         // Edit mode is spatial manipulation. Root apps
@@ -1580,6 +1886,103 @@ PanelWindow {
                         }
                     }
 
+                    // Fullscreen pager: three persistent page grids that own
+                    // one page each (previous / current / next). Committing a
+                    // page turn only re-labels slots, so the page that just
+                    // slid into place keeps its already-rendered delegates
+                    // and the landing cannot flash; only the vacated far
+                    // slot reloads, offscreen and invisible. All three share
+                    // the app grid's delegate and mirror its geometry.
+                    GridView {
+                        id: pagerA
+                        property int slot: 0
+                        property int assignedPage: 0
+                        readonly property int clampedPage: Math.max(0,
+                            Math.min(root.fullscreenPageCount - 1, assignedPage))
+                        visible: root.open && root.isFullscreenMode
+                            && (slot === 0
+                                || (slot > 0 && root.fullscreenSwipeDirection === 1
+                                    && root.fullscreenPage < root.fullscreenPageCount - 1)
+                                || (slot < 0 && root.fullscreenSwipeDirection === -1
+                                    && root.fullscreenPage > 0))
+                        enabled: slot === 0
+                        interactive: false
+                        clip: true
+                        x: appGrid.x + slot * root.fullscreenPageSlideWidth
+                        y: appGrid.y
+                        width: appGrid.width
+                        height: appGrid.height
+                        cellWidth: appGrid.cellWidth
+                        cellHeight: appGrid.cellHeight
+                        property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
+                        model: root.open && root.isFullscreenMode
+                            ? root.fullscreenPageSlice(clampedPage) : []
+                        delegate: appGrid.delegate
+                        transform: Translate {
+                            x: root.fullscreenPageTrackOffset
+                        }
+                    }
+
+                    GridView {
+                        id: pagerB
+                        property int slot: 1
+                        property int assignedPage: 0
+                        readonly property int clampedPage: Math.max(0,
+                            Math.min(root.fullscreenPageCount - 1, assignedPage))
+                        visible: root.open && root.isFullscreenMode
+                            && (slot === 0
+                                || (slot > 0 && root.fullscreenSwipeDirection === 1
+                                    && root.fullscreenPage < root.fullscreenPageCount - 1)
+                                || (slot < 0 && root.fullscreenSwipeDirection === -1
+                                    && root.fullscreenPage > 0))
+                        enabled: slot === 0
+                        interactive: false
+                        clip: true
+                        x: appGrid.x + slot * root.fullscreenPageSlideWidth
+                        y: appGrid.y
+                        width: appGrid.width
+                        height: appGrid.height
+                        cellWidth: appGrid.cellWidth
+                        cellHeight: appGrid.cellHeight
+                        property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
+                        model: root.open && root.isFullscreenMode
+                            ? root.fullscreenPageSlice(clampedPage) : []
+                        delegate: appGrid.delegate
+                        transform: Translate {
+                            x: root.fullscreenPageTrackOffset
+                        }
+                    }
+
+                    GridView {
+                        id: pagerC
+                        property int slot: -1
+                        property int assignedPage: 0
+                        readonly property int clampedPage: Math.max(0,
+                            Math.min(root.fullscreenPageCount - 1, assignedPage))
+                        visible: root.open && root.isFullscreenMode
+                            && (slot === 0
+                                || (slot > 0 && root.fullscreenSwipeDirection === 1
+                                    && root.fullscreenPage < root.fullscreenPageCount - 1)
+                                || (slot < 0 && root.fullscreenSwipeDirection === -1
+                                    && root.fullscreenPage > 0))
+                        enabled: slot === 0
+                        interactive: false
+                        clip: true
+                        x: appGrid.x + slot * root.fullscreenPageSlideWidth
+                        y: appGrid.y
+                        width: appGrid.width
+                        height: appGrid.height
+                        cellWidth: appGrid.cellWidth
+                        cellHeight: appGrid.cellHeight
+                        property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
+                        model: root.open && root.isFullscreenMode
+                            ? root.fullscreenPageSlice(clampedPage) : []
+                        delegate: appGrid.delegate
+                        transform: Translate {
+                            x: root.fullscreenPageTrackOffset
+                        }
+                    }
+
                     GlassText {
                         anchors.centerIn: parent
                         visible: !root.openFolder && root.filteredApplications.length === 0
@@ -1592,34 +1995,70 @@ PanelWindow {
                     // Launchpad-style page dots replace the long scrolling
                     // application sheet in fullscreen mode. They are kept
                     // outside the GridView, so changing pages never affects
-                    // persisted application order or folder data.
-                    Row {
+                    // persisted application order or folder data. The dots
+                    // sit in a horizontal translucent capsule whose radius is
+                    // a true half-circle of its thickness.
+                    Rectangle {
                         id: fullscreenPageDots
                         anchors {
                             horizontalCenter: parent.horizontalCenter
                             bottom: parent.bottom
-                            bottomMargin: Math.max(26, Math.round(parent.height * 0.055))
+                            // Sit just above the Bar/Dock strip the grid also
+                            // clears: at least the 6% aesthetic margin, but
+                            // pushed up under the floating Dock when present.
+                            bottomMargin: Math.max(
+                                Math.max(26, Math.round(parent.height * 0.055)),
+                                appGrid.fullscreenBottomClearance - 8)
                         }
-                        spacing: 8
                         visible: root.isFullscreenMode && !root.openFolder
                             && root.fullscreenPageCount > 1
-                        Repeater {
-                            model: root.fullscreenPageCount
-                            delegate: Rectangle {
-                                required property int index
-                                width: index === root.fullscreenPage ? 8 : 6
-                                height: width
-                                radius: width / 2
-                                color: Qt.rgba(1, 1, 1,
-                                    index === root.fullscreenPage ? 0.88 : 0.38)
-                                Behavior on width {
-                                    NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    anchors.margins: -5
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.setFullscreenPage(index)
+
+                        readonly property int dotSize: 6
+                        readonly property int activeDotSize: 8
+                        readonly property int dotSpacing: 7
+                        readonly property int pad: 9
+                        // Height fits the fat active dot; width grows with the
+                        // page count. radius = thickness / 2 gives the
+                        // half-circle endcaps.
+                        height: pad * 2 + activeDotSize
+                        width: pad * 2 + fullscreenPageCount * dotSize
+                            + (fullscreenPageCount - 1) * dotSpacing
+                        radius: height / 2
+                        color: Qt.rgba(0.05, 0.06, 0.09, 0.34)
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.12)
+                        Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: fullscreenPageDots.dotSpacing
+                            Repeater {
+                                model: root.fullscreenPageCount
+                                delegate: Rectangle {
+                                    required property int index
+                                    // The active state interpolates from the
+                                    // float page position, so the dots track a
+                                    // drag or settle animation continuously
+                                    // instead of snapping when a page commits.
+                                    readonly property real dotDistance: Math.abs(index - root.fullscreenPageProgress)
+                                    readonly property real dotActiveShare: Math.max(0, Math.min(1, 1 - dotDistance))
+                                    // Active dot swells to 8px while idle dots
+                                    // stay 6px; verticalCenter alignment keeps
+                                    // every dot on one shared midline instead
+                                    // of the Row's default top edge, which made
+                                    // the fat dot sag below the others.
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: fullscreenPageDots.dotSize
+                                        + dotActiveShare * (fullscreenPageDots.activeDotSize - fullscreenPageDots.dotSize)
+                                    height: width
+                                    radius: width / 2
+                                    color: Qt.rgba(1, 1, 1, 0.38 + 0.50 * dotActiveShare)
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -5
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.gotoFullscreenPage(index)
+                                    }
                                 }
                             }
                         }
@@ -1832,10 +2271,14 @@ PanelWindow {
                                     margins: 18
                                 }
                                 clip: true
-                                readonly property real folderTargetCellWidth: root.configIconSize + root.configIconSpacing * 2
-                                readonly property int columnCount: Math.max(3, Math.floor(width / Math.max(68, folderTargetCellWidth)))
+                                readonly property real folderTileWidth: root.configIconSize + 30
+                                readonly property real folderTargetCellWidth: folderTileWidth + root.gridGap
+                                readonly property int columnCount: Math.max(3,
+                                    Math.floor((width + root.gridGap)
+                                        / Math.max(68, folderTargetCellWidth)))
                                 cellWidth: width > 0 ? width / columnCount : folderTargetCellWidth
-                                cellHeight: Math.max(88, Math.round(root.configIconSize + root.configFontSize * 2 + 24))
+                                cellHeight: Math.max(88, Math.round(root.configIconSize
+                                    + root.configFontSize * 2 + 24)) + root.gridGap
                                 model: root.displayedFolder ? root.displayedFolder.apps : []
 
                                 delegate: Item {
@@ -1897,7 +2340,8 @@ PanelWindow {
                                         id: folderAppCard
                                         anchors.centerIn: parent
                                         width: Math.round(root.configIconSize + 30)
-                                        height: Math.round(root.configIconSize + root.configFontSize * 2 + 14)
+                                        height: Math.round(root.configIconSize
+                                            + root.configFontSize * 2 + 20)
                                         // Keep the remove button above the delegate's
                                         // full-card MouseArea, otherwise that area
                                         // consumes its click before the button sees it.
@@ -1937,13 +2381,13 @@ PanelWindow {
                                                 topMargin: 8
                                             }
                                             source: modelData.icon
-                                            opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
-                                            saturation: ConfigService.iconSaturation
-                                            tintEnabled: ConfigService.iconTintEnabled
-                                            tintColor: ConfigService.iconTintColor
+                                            opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                            saturation: IconAppearanceService.saturation
+                                            tintEnabled: IconAppearanceService.tintEnabled
+                                            tintColor: IconAppearanceService.tintColor
                                         }
 
-                                        Text {
+                                        GlassText {
                                             anchors {
                                                 top: parent.top
                                                 topMargin: root.configIconSize + 13
@@ -1952,7 +2396,6 @@ PanelWindow {
                                             width: Math.min(Math.round(root.configIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                             text: modelData.name
                                             color: AppLauncherService.dockForegroundColor
-                                            style: Text.Normal
                                             horizontalAlignment: Text.AlignHCenter
                                             elide: Text.ElideRight
                                             wrapMode: Text.NoWrap
@@ -2168,10 +2611,10 @@ PanelWindow {
                                         height: 52
                                         source: AppPresentationService.iconSource(root.editorIcon)
                                             || AppPresentationService.genericIconSource()
-                                        opacityMultiplier: ConfigService.iconMode === "color" ? 1.0 : ConfigService.iconOpacity
-                                        saturation: ConfigService.iconSaturation
-                                        tintEnabled: ConfigService.iconTintEnabled
-                                        tintColor: ConfigService.iconTintColor
+                                        opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                        saturation: IconAppearanceService.saturation
+                                        tintEnabled: IconAppearanceService.tintEnabled
+                                        tintColor: IconAppearanceService.tintColor
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
@@ -2393,7 +2836,8 @@ PanelWindow {
     // PanelWindow root. The blur region is fixed at full card size. It never
     // scales or fades — only the foreground content animates on open.
     BackgroundEffect.blurRegion: (root.visible
-        && (AppearanceConfigService.effectiveLauncherBlur > 0.005
+        && (root.isFullscreenMode
+            || AppearanceConfigService.effectiveLauncherBlur > 0.005
             || AppearanceConfigService.effectiveLauncherLiquid > 0.005))
         ? launcherBlurRegion
         : null

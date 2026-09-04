@@ -103,16 +103,13 @@ Item {
                     height: root.iconSize
                     anchors.centerIn: parent
                     source: trayItem.modelData.icon
-                    opacityMultiplier: root.dockHosted
-                        && ConfigService.iconMode !== "color"
-                        ? ConfigService.iconOpacity : 1.0
-                    saturation: root.dockHosted
-                        ? ConfigService.iconSaturation : 1.0
-                    tintEnabled: root.dockHosted
-                        ? ConfigService.iconTintEnabled : 0.0
-                    tintColor: ConfigService.iconTintColor
+                    opacityMultiplier: IconAppearanceService.mode !== "color"
+                        ? IconAppearanceService.opacity : 1.0
+                    saturation: IconAppearanceService.saturation
+                    tintEnabled: IconAppearanceService.tintEnabled
+                    tintColor: IconAppearanceService.tintColor
                     rotation: root.verticalDock ? -90 : 0
-                    layer.enabled: trayItem.isSymbolicMask && (!root.dockHosted || ConfigService.iconMode === "color")
+                    layer.enabled: trayItem.isSymbolicMask && IconAppearanceService.mode === "color"
                     layer.effect: MultiEffect {
                         colorization: 1.0
                         colorizationColor: ThemeService.foregroundColor

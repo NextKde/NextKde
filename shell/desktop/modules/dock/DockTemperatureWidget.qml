@@ -35,7 +35,7 @@ Item {
     function thermalColor(cool, warm, alpha) {
         const value = available ? Math.max(0, Math.min(1,
             (currentC - 35) / 55)) : 0.25
-        return ConfigService.styledDockColor(Qt.rgba(
+        return IconAppearanceService.styledColor(Qt.rgba(
             cool.r + (warm.r - cool.r) * value,
             cool.g + (warm.g - cool.g) * value,
             cool.b + (warm.b - cool.b) * value,

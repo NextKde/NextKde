@@ -197,6 +197,7 @@ Item {
     // ── Card 1: Wi-Fi ────────────────────────────────────────────────
     // Opens the Wi-Fi picker. Power toggle lives inside that picker.
     ControlCenterCard {
+        id: wifiCard
         coordinator: coordinator
         offsetTop: 20
         offsetRight: 179
@@ -255,7 +256,7 @@ Item {
             Text {
                 width: parent.width
                 text: "Wi‑Fi"
-                color: ThemeService.foregroundColor
+                color: wifiCard.materialForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
@@ -264,7 +265,7 @@ Item {
                 width: parent.width
                 text: NetworkService.wifiEnabled ? (NetworkService.ssid || "未连接") : "已关闭"
                 elide: Text.ElideRight
-                color: ThemeService.foregroundColor
+                color: wifiCard.materialSecondaryForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.72
@@ -277,6 +278,7 @@ Item {
     // ── Card 2: Bluetooth ────────────────────────────────────────────
     // Disc toggles power; tapping the pill opens the device list.
     ControlCenterCard {
+        id: bluetoothCard
         coordinator: coordinator
         offsetTop: 87
         offsetRight: 179
@@ -340,7 +342,7 @@ Item {
             Text {
                 width: parent.width
                 text: "Bluetooth"
-                color: ThemeService.foregroundColor
+                color: bluetoothCard.materialForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
@@ -348,7 +350,7 @@ Item {
             Text {
                 width: parent.width
                 text: ControlCenterService.bluetoothPowered ? "已开启" : "已关闭"
-                color: ThemeService.foregroundColor
+                color: bluetoothCard.materialSecondaryForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.72

@@ -30,7 +30,6 @@ Item {
         width: 16
         height: 16
         source: Qt.resolvedUrl("../../assets/status-settings.svg")
-        useDockTint: root.dockHosted
     }
 
     MouseArea {

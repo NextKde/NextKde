@@ -13,6 +13,7 @@ PopupWindow {
     property bool placeBelow: false
     property color baseColor: Qt.rgba(0, 0, 0, 0.55)
     property color foregroundColor: "#ffffff"
+    property bool adaptiveForeground: true
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
@@ -168,6 +169,8 @@ PopupWindow {
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
         materialDepth: 0.6
+        material: "thick"
+        adaptiveDarkScrim: true
 
         Rectangle {
             anchors.fill: parent
@@ -191,7 +194,7 @@ PopupWindow {
                 visible: root.page.parents.length > 0
                 icon: "←"
                 label: "返回"
-                foregroundColor: root.foregroundColor
+                foregroundColor: root.adaptiveForeground ? glass.foregroundColor : root.foregroundColor
                 onClicked: root.back()
             }
 
@@ -202,7 +205,7 @@ PopupWindow {
                     required property var modelData
                     readonly property var submenuItems: root.childrenFor(modelData)
                     width: parent.width
-                    foregroundColor: root.foregroundColor
+                    foregroundColor: root.adaptiveForeground ? glass.foregroundColor : root.foregroundColor
                     icon: modelData.icon || ""
                     label: modelData.label || ""
                     separator: !!modelData.separator

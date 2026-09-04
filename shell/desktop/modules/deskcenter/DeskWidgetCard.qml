@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // iPadOS widgets rely on distinct, calm colour fields instead of a common
 // translucent panel. The colours stay dark enough for white text to remain
@@ -10,15 +11,32 @@ Rectangle {
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
+    readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: 26
     color: "transparent"
     clip: true
 
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: root.usesColorArtwork
+        gradient: Gradient {
+            GradientStop { position: 0; color: root.startColor }
+            GradientStop { position: 1; color: root.endColor }
+        }
+    }
+
+    WidgetGlassMaterial {
+        anchors.fill: parent
+        cornerRadius: root.radius
+        visible: !root.usesColorArtwork
+    }
+
     // A broad, low-contrast bloom makes colour cards feel like widgets rather
     // than rectangular panels, while never running beneath the text itself.
     Rectangle {
-        visible: root.showSurface
+        visible: root.showSurface && root.usesColorArtwork
         width: parent.width * 0.78
         height: width
         radius: width / 2
@@ -42,19 +60,6 @@ Rectangle {
         font {
             pixelSize: 12
             weight: Font.DemiBold
-        }
-
-    }
-
-    gradient: Gradient {
-        GradientStop {
-            position: 0
-            color: root.startColor
-        }
-
-        GradientStop {
-            position: 1
-            color: root.endColor
         }
 
     }

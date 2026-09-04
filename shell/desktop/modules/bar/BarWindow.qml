@@ -15,7 +15,13 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-bar"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
-    WlrLayershell.layer: WlrLayer.Top
+    // The Bar lives on Top, but the fullscreen launcher (a Top surface
+    // covering the whole output) must render beneath the Bar. While that
+    // launcher is open, the Bar promotes to Overlay; the launcher demotes
+    // itself to Top in the same frame.
+    WlrLayershell.layer: (AppLauncherService.open
+        && AppLauncherConfigService.displayMode === "fullscreen")
+        ? WlrLayer.Overlay : WlrLayer.Top
     implicitHeight: ConfigService.barHeight
     readonly property bool transparentMode:
         AppearanceConfigService.barLayoutMode === "transparent"

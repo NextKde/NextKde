@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
 Item {
@@ -10,7 +11,7 @@ Item {
     readonly property real contentWidth: iconSize * widthUnits
     readonly property bool compact: iconSize < 32
     function tone(color) {
-        return ConfigService.styledDockColor(color)
+        return IconAppearanceService.styledColor(color)
     }
 
     function backgroundStart(code, day) {

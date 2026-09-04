@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQml.Models
 import QtCore
 import Qt.labs.platform as Platform
@@ -288,12 +289,25 @@ PanelWindow {
             // Instantiate only this card's content. `visible: false` keeps a
             // QML tree alive, so the old delegate built every widget for every
             // card even though only one could be shown.
+            Item {
+                id: widgetContentLayer
+                anchors.fill: parent
+	                // Tint is applied by each widget to its semantic content.
+	                // A single post-process layer flattened that tonal styling
+	                // back into raw tint on some renderers.
+	                layer.enabled: IconAppearanceService.mode === "grayscale"
+	                layer.effect: MultiEffect {
+	                    saturation: 0.0
+	                    colorization: 0.0
+                }
+
             Loader {
                 anchors.fill: parent
                 active: card.modelData.id === "clock"
                 sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
+	                    Item {
+	                anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
                 clip: true
 
                 Item {
@@ -315,13 +329,20 @@ PanelWindow {
                         if (radius <= 0)
                             return
                         const date = clock.date
+                        const glassMode = IconAppearanceService.mode !== "color"
                         ctx.reset()
                         ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
-                        ctx.fillStyle = "#fafafa"
-                        ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
-                        ctx.strokeStyle = "#dedede"; ctx.lineWidth = 1
+                        // In the shared glass modes the card material is the
+                        // face: do not paint a second opaque white disc.
+                        if (!glassMode) {
+                            ctx.fillStyle = "#fafafa"
+                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
+                        }
+	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor(0.42).toString() : "#dedede"
+                        ctx.lineWidth = 1
                         ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
-                        ctx.strokeStyle = "#171717"; ctx.lineCap = "round"
+	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#171717"
+                        ctx.lineCap = "round"
                         for (let mark = 0; mark < 12; mark++) {
                             const angle = mark * Math.PI / 6
                             ctx.lineWidth = mark % 3 === 0 ? 1.8 : 0.8
@@ -334,7 +355,7 @@ PanelWindow {
                         // readable at a glance, rather than relying on ticks
                         // alone. Their radius leaves a clear channel for the
                         // hands in this one-cell tile.
-                        ctx.fillStyle = "#242126"
+	                        ctx.fillStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#242126"
                         ctx.font = "bold " + Math.max(7, Math.round(radius * 0.18)) + "px sans-serif"
                         ctx.textAlign = "center"
                         ctx.textBaseline = "middle"
@@ -350,19 +371,24 @@ PanelWindow {
                         const second = date.getSeconds() * Math.PI / 30
                         ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
                         ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-                        ctx.strokeStyle = "#ee7659"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-                        ctx.fillStyle = "#ee7659"; ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
+	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
+	                        ctx.fillStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
                     }
                     Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
+	                    Connections {
+	                        target: IconAppearanceService
+	                        function onModeChanged() { analogClock.requestPaint() }
+	                        function onTintColorChanged() { analogClock.requestPaint() }
+                    }
                 }
 
-                Rectangle {
+	                Rectangle {
                     id: timerButton
                     width: 21
                     height: 21
                     radius: width / 2
                     anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 12 }
-                    color: "transparent"
+	                    color: "transparent"
                     border.width: 0
                     Image {
                         anchors.centerIn: parent
@@ -413,16 +439,21 @@ PanelWindow {
                                 ctx.strokeStyle = "rgba(255, 255, 255, 0.10)"
                                 ctx.beginPath(); ctx.arc(center, center, radius, -Math.PI / 2, Math.PI * 1.5); ctx.stroke()
                                 if (amount > 0) {
-                                    ctx.strokeStyle = "#ffa515"
+	                                ctx.strokeStyle = timerPage.parent.glassMode ? "#ffffff" : "#ffa515"
                                     ctx.beginPath(); ctx.arc(center, center, radius, -Math.PI / 2,
                                         -Math.PI / 2 + Math.PI * 2 * amount); ctx.stroke()
                                 }
                             }
-                            Connections {
-                                target: root
+	                            Connections {
+	                                target: root
                                 function onTimerSecondsChanged() { timerProgress.requestPaint() }
                                 function onTimerDurationChanged() { timerProgress.requestPaint() }
-                            }
+	                            }
+	                            Connections {
+	                                target: IconAppearanceService
+	                                function onModeChanged() { timerProgress.requestPaint() }
+	                                function onTintColorChanged() { timerProgress.requestPaint() }
+	                            }
                             Component.onCompleted: requestPaint()
                         }
                         Text {
@@ -443,7 +474,7 @@ PanelWindow {
                             height: 16
                             onPaint: {
                                 const ctx = getContext("2d")
-                                ctx.reset(); ctx.strokeStyle = "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
+	                                ctx.reset(); ctx.strokeStyle = timerPage.parent.glassMode ? "#ffffff" : "#ffb028"; ctx.lineWidth = 1.3; ctx.lineCap = "round"
                                 ctx.beginPath(); ctx.moveTo(3, 10); ctx.quadraticCurveTo(4, 8.7, 4, 6.4)
                                 ctx.quadraticCurveTo(4, 3.8, 7, 3.8); ctx.quadraticCurveTo(10, 3.8, 10, 6.4)
                                 ctx.quadraticCurveTo(10, 8.7, 11, 10); ctx.lineTo(3, 10); ctx.stroke()
@@ -467,13 +498,15 @@ PanelWindow {
                                 width: modelData === 15 ? 30 : 25
                                 height: 17
                                 radius: height / 2
-                                color: Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.16)
+	                                color: parent.parent.parent.glassMode
+	                                    ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.16)
                                 border.width: 1
-                                border.color: Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.72)
+	                                border.color: parent.parent.parent.glassMode
+	                                    ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.72)
                                 Text {
                                     anchors.centerIn: parent
                                     text: modelData + "分"
-                                    color: "#ffb028"
+	                                    color: parent.parent.parent.parent.parent.glassMode ? "white" : "#ffb028"
                                     font { pixelSize: 8; weight: Font.DemiBold }
                                 }
                                 MouseArea {
@@ -495,16 +528,17 @@ PanelWindow {
                                 width: 38
                                 height: 21
                                 radius: height / 2
-                                color: modelData !== "取消"
-                                    ? Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.24)
+	                                color: modelData !== "取消"
+	                                    ? (parent.parent.parent.glassMode ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.24))
                                     : Qt.rgba(1, 1, 1, 0.13)
                                 border.width: 1
-                                border.color: modelData !== "取消"
-                                    ? "#ffa515" : Qt.rgba(1, 1, 1, 0.22)
+	                                border.color: modelData !== "取消"
+	                                    ? (parent.parent.parent.glassMode ? "white" : "#ffa515") : Qt.rgba(1, 1, 1, 0.22)
                                 Text {
                                     anchors.centerIn: parent
                                     text: modelData
-                                    color: modelData !== "取消" ? "#ffb028" : "white"
+	                                    color: modelData !== "取消"
+	                                        ? (parent.parent.parent.parent.glassMode ? "white" : "#ffb028") : "white"
                                     font { pixelSize: 9; weight: Font.DemiBold }
                                 }
                                 MouseArea {
@@ -538,15 +572,16 @@ PanelWindow {
                     }
                 }
             }
+            }
                 }
             }
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "date"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
+	                active: card.modelData.id === "date"
+	                sourceComponent: Component {
+	                    Item {
+	                anchors.fill: parent
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.top }
                     height: 27
@@ -571,10 +606,11 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "weather"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
+	                active: card.modelData.id === "weather"
+	                sourceComponent: Component {
+	                    Item {
+	                anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
 
                 // The card-level gradient establishes the theme, while this
                 // explicit content-layer wash keeps that transition visible
@@ -582,8 +618,9 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 26
-                    color: "transparent"
-                    gradient: Gradient {
+	                    color: "transparent"
+	                    visible: !parent.glassMode
+	                    gradient: Gradient {
                         orientation: Gradient.Horizontal
                         GradientStop { position: 0; color: root.weatherTheme.primary }
                         GradientStop { position: 0.58; color: root.weatherTheme.secondary }
@@ -613,13 +650,13 @@ PanelWindow {
                                 width: 2
                                 height: 12
                                 radius: 1
-                                color: "#ffe36a"
+	                                color: deskWeatherMotion.parent.glassMode ? IconAppearanceService.glassContentColor() : "#ffe36a"
                                 x: deskSunLayer.width / 2 - width / 2
                                 y: 2
                                 transform: Rotation { origin.x: 1; origin.y: 33; angle: index * 45 }
                             }
                         }
-                        Rectangle { anchors.centerIn: parent; width: 28; height: 28; radius: 14; color: "#ffe36a" }
+	                        Rectangle { anchors.centerIn: parent; width: 28; height: 28; radius: 14; color: deskWeatherMotion.parent.glassMode ? IconAppearanceService.glassContentColor() : "#ffe36a" }
                     }
 
                     Item {
@@ -635,7 +672,13 @@ PanelWindow {
                             x: -width
                             source: "../../assets/weather-cloud.svg"
                             fillMode: Image.PreserveAspectFit
-                            smooth: true
+	                            smooth: true
+	                            layer.enabled: IconAppearanceService.mode !== "color"
+	                            layer.effect: MultiEffect {
+	                                saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
+	                                colorization: IconAppearanceService.mode === "tint" ? 1 : 0
+	                                colorizationColor: IconAppearanceService.styledSymbolicColor()
+	                            }
                         }
                         Image {
                             id: deskCloudFront
@@ -645,7 +688,13 @@ PanelWindow {
                             x: parent.width
                             source: "../../assets/weather-cloud-wide.svg"
                             fillMode: Image.PreserveAspectFit
-                            smooth: true
+	                            smooth: true
+	                            layer.enabled: IconAppearanceService.mode !== "color"
+	                            layer.effect: MultiEffect {
+	                                saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
+	                                colorization: IconAppearanceService.mode === "tint" ? 1 : 0
+	                                colorizationColor: IconAppearanceService.styledSymbolicColor()
+	                            }
                         }
                     }
 
@@ -661,7 +710,7 @@ PanelWindow {
                                 width: 1
                                 height: 12
                                 radius: 1
-                                color: "#d9f1ff"
+	                                color: deskWeatherMotion.parent.glassMode ? IconAppearanceService.glassContentColor() : "#d9f1ff"
                                 x: deskRainLayer.width * (index + 0.4) / 9
                                 rotation: -13
                             }
@@ -708,7 +757,7 @@ PanelWindow {
                         anchors { right: parent.right; top: parent.top; rightMargin: 26; topMargin: 8 }
                         visible: WeatherTheme.isStorm(WeatherService.weatherCode)
                         text: "ϟ"
-                        color: "#e0ccff"
+	                        color: parent.glassMode ? IconAppearanceService.glassContentColor(0.68) : "#e0ccff"
                         opacity: 0.68
                         font { family: "SF Pro Display"; pixelSize: 42; weight: Font.DemiBold }
                     }
@@ -716,25 +765,25 @@ PanelWindow {
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: 12 }
                     text: WeatherService.cityName
-                    color: "white"
+	                    color: parent.glassMode ? IconAppearanceService.glassContentColor() : "white"
                     font { pixelSize: 15; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: 29 }
                     text: WeatherService.temperature
-                    color: "white"
+	                    color: parent.glassMode ? IconAppearanceService.glassContentColor() : "white"
                     font { family: "SF Pro Display"; pixelSize: Math.min(42, parent.height * 0.32); weight: Font.Normal }
                 }
                 Text {
                     anchors { right: parent.right; top: parent.top; rightMargin: 18; topMargin: 14 }
                     text: WeatherService.conditionSymbol(WeatherService.weatherCode, WeatherService.isDay)
-                    color: root.weatherTheme.accent
+	                    color: parent.glassMode ? IconAppearanceService.glassContentColor() : root.weatherTheme.accent
                     font.pixelSize: Math.min(34, parent.height * 0.26)
                 }
                 Text {
                     anchors { right: parent.right; top: parent.top; rightMargin: 16; topMargin: 48 }
                     text: WeatherService.conditionText(WeatherService.weatherCode)
-                    color: "white"
+	                    color: parent.glassMode ? IconAppearanceService.glassContentColor() : "white"
                     font { pixelSize: 15; weight: Font.DemiBold }
                 }
                 Text {
@@ -742,7 +791,7 @@ PanelWindow {
                     text: WeatherService.forecastDays.length > 0
                         ? "最高 " + WeatherService.forecastDays[0].high + "°  最低 "
                             + WeatherService.forecastDays[0].low + "°" : "正在更新预报"
-                    color: Qt.rgba(1, 1, 1, 0.74)
+	                    color: parent.glassMode ? IconAppearanceService.glassContentColor(0.74) : Qt.rgba(1, 1, 1, 0.74)
                     font.pixelSize: 11
                 }
                 Item {
@@ -760,19 +809,19 @@ PanelWindow {
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
                                 text: WeatherService.forecastLabel(modelData.date, index)
-                                color: Qt.rgba(1, 1, 1, 0.72)
+	                                color: weeklyForecast.parent.glassMode ? IconAppearanceService.glassContentColor(0.72) : Qt.rgba(1, 1, 1, 0.72)
                                 font { pixelSize: 10; weight: Font.DemiBold }
                             }
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter }
                                 text: WeatherService.conditionSymbol(modelData.code, true)
-                                color: root.weatherTheme.accent
+	                                color: weeklyForecast.parent.glassMode ? IconAppearanceService.glassContentColor() : root.weatherTheme.accent
                                 font.pixelSize: 22
                             }
                             Text {
                                 anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom }
                                 text: modelData.high + "°/" + modelData.low + "°"
-                                color: "white"
+	                                color: weeklyForecast.parent.glassMode ? IconAppearanceService.glassContentColor() : "white"
                                 font { pixelSize: 10; weight: Font.DemiBold }
                             }
                         }
@@ -781,7 +830,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         visible: WeatherService.forecastDays.length === 0
                         text: WeatherService.loading ? "正在获取 7 日预报…" : "暂无 7 日预报"
-                        color: Qt.rgba(1, 1, 1, 0.65)
+	                        color: parent.glassMode ? IconAppearanceService.glassContentColor(0.65) : Qt.rgba(1, 1, 1, 0.65)
                         font.pixelSize: 11
                     }
                 }
@@ -866,8 +915,9 @@ PanelWindow {
                 active: card.modelData.id === "system"
                 sourceComponent: Component {
                     Item {
-                id: systemContent
-                anchors.fill: parent
+	                id: systemContent
+	                anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
                 // The kos-data-service snapshot drives this card through
                 // the shared MetricsService, so the rings and trends read the
                 // exact values the Bar's thermal indicator shows.
@@ -894,7 +944,11 @@ PanelWindow {
                     readonly property var labels: ["CPU", "内存", "存储"]
                     readonly property var icons: ["", "󰍛", "󰋊"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
-                    readonly property var colors: ["#ff375f", "#30d158", "#64d2ff"]
+	                    readonly property var colors: systemContent.glassMode
+	                        ? [IconAppearanceService.glassContentColor().toString(),
+	                           IconAppearanceService.glassContentColor().toString(),
+	                           IconAppearanceService.glassContentColor().toString()]
+	                        : ["#ff375f", "#30d158", "#64d2ff"]
 
                     function detailFor(metric) {
                         if (metric === 0)
@@ -916,7 +970,9 @@ PanelWindow {
                             const start = -Math.PI / 2
                             ctx.lineWidth = Math.max(5, width * 0.065)
                             ctx.lineCap = "round"
-                            ctx.strokeStyle = Qt.rgba(0.19, 0.17, 0.2, 0.12)
+	                            ctx.strokeStyle = systemContent.glassMode
+	                                ? IconAppearanceService.glassContentColor(0.25).toString()
+	                                : Qt.rgba(0.19, 0.17, 0.2, 0.12)
                             ctx.beginPath()
                             ctx.arc(center, center, radius, 0, Math.PI * 2)
                             ctx.stroke()
@@ -934,12 +990,17 @@ PanelWindow {
                             drawRing(ctx, width * 0.18, activityRings.storageValue, activityRings.colors[2])
                         }
                         Component.onCompleted: requestPaint()
-                        Connections {
-                            target: activityRings
+	                        Connections {
+	                            target: activityRings
                             function onCpuValueChanged() { activityCanvas.requestPaint() }
                             function onMemoryValueChanged() { activityCanvas.requestPaint() }
                             function onStorageValueChanged() { activityCanvas.requestPaint() }
-                        }
+	                        }
+	                        Connections {
+	                            target: IconAppearanceService
+	                            function onModeChanged() { activityCanvas.requestPaint() }
+	                            function onTintColorChanged() { activityCanvas.requestPaint() }
+	                        }
                     }
 
                     Column {
@@ -951,14 +1012,14 @@ PanelWindow {
                             text: activityRings.hoveredMetric >= 0
                                 ? (activityRings.icons[activityRings.hoveredMetric] ?? "")
                                 : ""
-                            color: "#7d7782"
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
                             font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: Math.max(10, activityRings.width * 0.1) }
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: activityRings.labels[activityRings.hoveredMetric] + " "
                                 + Math.round(activityRings.values[activityRings.hoveredMetric] * 100) + "%"
-                            color: "#7d7782"
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
                             font { family: "SF Pro Display"; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
                         }
                     }
@@ -1001,7 +1062,7 @@ PanelWindow {
                         spacing: Math.max(4, temperatureSummary.width * 0.04)
                         Text {
                             text: ""
-                            color: "#7d7782"
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
                             font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: Math.max(12, temperatureSummary.height * 0.54) }
                             anchors.verticalCenter: parent.verticalCenter
                         }
@@ -1010,19 +1071,19 @@ PanelWindow {
                             Text {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.currentC) + "°" : "--"
-                                color: "#7d7782"
+	                                color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
                                 font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
                                 text: "当前"
-                                color: Qt.rgba(0.49, 0.47, 0.51, 0.76)
+	                                color: systemContent.glassMode ? IconAppearanceService.glassContentColor(0.72) : Qt.rgba(0.49, 0.47, 0.51, 0.76)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
                         }
                         Rectangle {
                             width: 1
                             height: temperatureSummary.height * 0.56
-                            color: Qt.rgba(0.19, 0.17, 0.2, 0.12)
+	                            color: systemContent.glassMode ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0.19, 0.17, 0.2, 0.12)
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Column {
@@ -1030,12 +1091,12 @@ PanelWindow {
                             Text {
                                 text: temperatureSummary.available
                                     ? Math.round(temperatureSummary.maximum5MinuteC) + "°" : "--"
-                                color: "#7d7782"
+	                                color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
                                 font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
                                 text: "最高"
-                                color: Qt.rgba(0.49, 0.47, 0.51, 0.76)
+	                                color: systemContent.glassMode ? IconAppearanceService.glassContentColor(0.72) : Qt.rgba(0.49, 0.47, 0.51, 0.76)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
                         }
@@ -1054,14 +1115,14 @@ PanelWindow {
                             id: memoryTrendLabel
                             anchors { left: parent.left; top: parent.top }
                             text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
-                            color: activityRings.hoveredMetric === 1
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : activityRings.hoveredMetric === 1
                                 ? Qt.rgba(0.12, 0.50, 0.31, 0.84) : Qt.rgba(0.30, 0.29, 0.33, 0.78)
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
                             anchors { left: parent.left; right: parent.right; top: memoryTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
                             values: systemContent.historyValues("memory")
-                            lineColor: "#30d158"
+	                            lineColor: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#30d158"
                             adaptiveRange: true
                             maxPoints: 36
                             smoothingWindow: 5
@@ -1075,14 +1136,14 @@ PanelWindow {
                             id: cpuTrendLabel
                             anchors { left: parent.left; top: parent.top }
                             text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
-                            color: activityRings.hoveredMetric === 0
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : activityRings.hoveredMetric === 0
                                 ? Qt.rgba(0.76, 0.14, 0.23, 0.84) : Qt.rgba(0.30, 0.29, 0.33, 0.78)
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
                             anchors { left: parent.left; right: parent.right; top: cpuTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
                             values: systemContent.historyValues("cpu")
-                            lineColor: "#ff375f"
+	                            lineColor: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#ff375f"
                             maxPoints: 36
                             smoothingWindow: 5
                         }
@@ -1095,13 +1156,13 @@ PanelWindow {
                             id: frequencyTrendLabel
                             anchors { left: parent.left; top: parent.top }
                             text: "平均频率  " + Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0) + " MHz"
-                            color: Qt.rgba(0.30, 0.29, 0.33, 0.78)
+	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : Qt.rgba(0.30, 0.29, 0.33, 0.78)
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
                             anchors { left: parent.left; right: parent.right; top: frequencyTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
                             values: systemContent.historyValues("frequency")
-                            lineColor: "#64d2ff"
+	                            lineColor: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#64d2ff"
                             adaptiveRange: true
                             maxPoints: 36
                             smoothingWindow: 5
@@ -1119,6 +1180,7 @@ PanelWindow {
                     Item {
                 id: activityContent
                 anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
 
                 Item {
                     id: activityBody
@@ -1146,7 +1208,7 @@ PanelWindow {
                                         + root.formatDuration(uptimeHeatmap.hoveredDay.seconds)
                                     : "已开机：" + root.formatDuration(
                                         root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0)
-                                color: Qt.rgba(1, 1, 1, 0.86)
+	                                        color: activityContent.glassMode ? IconAppearanceService.glassContentColor(0.86) : Qt.rgba(1, 1, 1, 0.86)
                                 font { family: "SF Pro Display"; pixelSize: 14; weight: Font.DemiBold }
                             }
                         }
@@ -1172,7 +1234,10 @@ PanelWindow {
                                         height: width
                                         radius: 2
                                         readonly property real level: Math.min(1, modelData.seconds / (8 * 3600))
-                                        color: level <= 0 ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0.33, 0.84, 0.58, 0.22 + level * 0.72)
+	                                        color: level <= 0 ? Qt.rgba(1, 1, 1, 0.08)
+	                                            : (activityContent.glassMode
+	                                                ? Qt.rgba(1, 1, 1, 0.22 + level * 0.72)
+	                                                : Qt.rgba(0.33, 0.84, 0.58, 0.22 + level * 0.72))
                                         MouseArea {
                                             anchors.fill: parent
                                             hoverEnabled: true
@@ -1211,21 +1276,27 @@ PanelWindow {
                                         height: 12
                                         source: modelData.icon || ""
                                         smooth: true
-                                        asynchronous: true
-                                        anchors { left: appUsageRow.left; verticalCenter: appUsageRow.verticalCenter }
+	                                        asynchronous: true
+	                                        anchors { left: appUsageRow.left; verticalCenter: appUsageRow.verticalCenter }
+	                                        layer.enabled: IconAppearanceService.mode !== "color"
+	                                        layer.effect: MultiEffect {
+	                                            saturation: 0
+	                                            colorization: 1
+	                                            colorizationColor: IconAppearanceService.glassContentColor()
+	                                        }
                                     }
                                     Text {
                                         id: appDurationText
                                         anchors { right: appUsageRow.right; verticalCenter: appUsageRow.verticalCenter }
                                         text: root.formatDuration(modelData.seconds)
-                                        color: Qt.rgba(1, 1, 1, 0.46)
+	                                        color: activityContent.glassMode ? IconAppearanceService.glassContentColor(0.46) : Qt.rgba(1, 1, 1, 0.46)
                                         font { family: "SF Pro Display"; pixelSize: 9 }
                                     }
                                     Text {
                                         anchors { left: appUsageIcon.right; right: appDurationText.left; verticalCenter: appUsageRow.verticalCenter; leftMargin: 6; rightMargin: 6 }
                                         text: modelData.name || modelData.id
                                         elide: Text.ElideRight
-                                        color: Qt.rgba(1, 1, 1, 0.78)
+	                                        color: activityContent.glassMode ? IconAppearanceService.glassContentColor(0.78) : Qt.rgba(1, 1, 1, 0.78)
                                         font.pixelSize: 10
                                     }
                                 }
@@ -1294,6 +1365,7 @@ PanelWindow {
                     Item {
                 id: musicContent
                 anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
                 readonly property var player: DockMprisService.activePlayer
                 readonly property bool hasPlayer: player !== null
                 readonly property url artworkSource: {
@@ -1329,7 +1401,7 @@ PanelWindow {
                 }
                 Rectangle {
                     anchors.fill: parent
-                    visible: musicContent.hasPlayer
+	                    visible: musicContent.hasPlayer && !musicContent.glassMode
                     radius: 26
                     clip: true
                     color: "transparent"
@@ -1407,10 +1479,16 @@ PanelWindow {
                                 asynchronous: true
                                 cache: false
                             }
-                            OpacityMask {
-                                anchors.fill: parent
-                                visible: musicContent.hasPlayer
-                                source: musicArtworkSource
+	                            OpacityMask {
+	                                anchors.fill: parent
+	                                visible: musicContent.hasPlayer
+	                                source: musicArtworkSource
+	                                layer.enabled: musicContent.glassMode
+	                                layer.effect: MultiEffect {
+	                                    saturation: IconAppearanceService.mode === "grayscale" ? 0 : 1
+	                                    colorization: IconAppearanceService.mode === "tint" ? 1 : 0
+	                                    colorizationColor: IconAppearanceService.styledSymbolicColor()
+	                                }
                                 maskSource: Rectangle {
                                     width: musicArtwork.width
                                     height: musicArtwork.height
@@ -1419,7 +1497,7 @@ PanelWindow {
                             }
                             Text {
                                 anchors.centerIn: parent
-                                visible: !musicContent.hasPlayer
+	                                visible: !musicContent.hasPlayer
                                 text: "♫"
                                 color: Qt.rgba(1, 1, 1, 0.46)
                                 font { family: "SF Pro Display"; pixelSize: musicArtwork.width * 0.42 }
@@ -1439,7 +1517,7 @@ PanelWindow {
                             text: musicContent.player?.trackTitle || "暂无播放内容"
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
-                            color: "white"
+	                            color: musicContent.glassMode ? IconAppearanceService.glassContentColor() : "white"
                             font { pixelSize: 14; weight: Font.DemiBold }
                         }
                         Text {
@@ -1448,7 +1526,7 @@ PanelWindow {
                             text: musicContent.player?.trackArtist || ""
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
-                            color: Qt.rgba(1, 1, 1, 0.68)
+	                            color: musicContent.glassMode ? IconAppearanceService.glassContentColor(0.68) : Qt.rgba(1, 1, 1, 0.68)
                             font.pixelSize: 10
                         }
                         Item {
@@ -1476,13 +1554,13 @@ PanelWindow {
                             Text {
                                 anchors.left: parent.left
                                 text: musicContent.formatPlaybackTime(musicContent.player?.position ?? 0)
-                                color: Qt.rgba(1, 1, 1, 0.60)
+	                                color: musicContent.glassMode ? IconAppearanceService.glassContentColor(0.60) : Qt.rgba(1, 1, 1, 0.60)
                                 font.pixelSize: 8
                             }
                             Text {
                                 anchors.right: parent.right
                                 text: musicContent.formatPlaybackTime(musicContent.safeLength)
-                                color: Qt.rgba(1, 1, 1, 0.60)
+	                                color: musicContent.glassMode ? IconAppearanceService.glassContentColor(0.60) : Qt.rgba(1, 1, 1, 0.60)
                                 font.pixelSize: 8
                             }
                         }
@@ -1514,7 +1592,9 @@ PanelWindow {
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData
-                                color: Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.88 : 0.28)
+	                                color: musicContent.glassMode
+	                                    ? IconAppearanceService.glassContentColor(parent.controlEnabled ? 0.88 : 0.28)
+	                                    : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.88 : 0.28)
                                 font {
                                     family: "SF Pro Display"
                                     pixelSize: index === 1 ? 15 : 11
@@ -1584,8 +1664,9 @@ PanelWindow {
                 active: card.modelData.id === "calendar"
                 sourceComponent: Component {
                     Item {
-                id: calendarContent
-                anchors.fill: parent
+	                id: calendarContent
+	                anchors.fill: parent
+	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
                 readonly property int year: clock.date.getFullYear()
                 readonly property int month: clock.date.getMonth()
                 // Monday-first month layout: 星期一 is the first column and
@@ -1602,8 +1683,9 @@ PanelWindow {
                     // rounded lower corner keeps it from covering the card
                     // outline even though QML clipping is rectangular.
                     anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left; leftMargin: parent.width * 0.42 }
-                    radius: card.radius
-                    color: "#fafafa"
+	                    radius: card.radius
+	                    color: "#fafafa"
+	                    visible: !calendarContent.glassMode
                 }
                 Canvas {
                     id: calendarHeader
@@ -1612,7 +1694,9 @@ PanelWindow {
                     onPaint: {
                         const ctx = getContext("2d")
                         const corner = Math.min(card.radius, height)
-                        ctx.reset()
+	                        ctx.reset()
+	                        if (calendarContent.glassMode)
+	                            return
                         ctx.fillStyle = "#ff5d66"
                         ctx.beginPath()
                         ctx.moveTo(0, height)
@@ -1623,12 +1707,16 @@ PanelWindow {
                         ctx.lineTo(width, height)
                         ctx.closePath()
                         ctx.fill()
-                    }
+	                }
+	                Connections {
+	                    target: IconAppearanceService
+	                    function onModeChanged() { calendarHeader.requestPaint() }
+	                }
                 }
                 Rectangle {
                     anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42; topMargin: calendarContent.headerHeight; bottomMargin: 8 }
                     width: 1
-                    color: Qt.rgba(0, 0, 0, 0.10)
+	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.28) : Qt.rgba(0, 0, 0, 0.10)
                 }
 
                 Text {
@@ -1641,13 +1729,13 @@ PanelWindow {
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
                     text: Qt.formatDateTime(clock.date, "d日")
-                    color: "#15151a"
+	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor() : "#15151a"
                     font { family: "SF Pro Display"; pixelSize: 32; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
                     text: Qt.formatDateTime(clock.date, "ddd") + " · " + root.lunarDate(clock.date)
-                    color: "#4d4d55"
+	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.74) : "#4d4d55"
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
                 Item {
@@ -1664,7 +1752,7 @@ PanelWindow {
                                 width: parent.width / 7
                                 text: modelData
                                 horizontalAlignment: Text.AlignHCenter
-                                color: index >= 5 ? "#e95a63" : "#5d5d65"
+	                                color: calendarContent.glassMode ? IconAppearanceService.glassContentColor() : (index >= 5 ? "#e95a63" : "#5d5d65")
                                 font { pixelSize: 10; weight: Font.Bold }
                             }
                         }
@@ -1686,13 +1774,15 @@ PanelWindow {
                                     width: 16
                                     height: 16
                                     radius: 8
-                                    color: parent.today ? "#ef5661" : "transparent"
+	                                    color: parent.today
+	                                        ? (calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.22) : "#ef5661")
+	                                        : "transparent"
                                 }
                                 Text {
                                     anchors.centerIn: parent
                                     visible: parent.day > 0 && parent.day <= calendarContent.daysInMonth
                                     text: parent.day
-                                    color: parent.today ? "white" : "#29292f"
+	                                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor() : (parent.today ? "white" : "#29292f")
                                     font { pixelSize: 10; weight: parent.today ? Font.Bold : Font.DemiBold }
                                 }
                             }

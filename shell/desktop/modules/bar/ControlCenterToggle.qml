@@ -24,7 +24,6 @@ Item {
         width: 18
         height: 18
         source: Qt.resolvedUrl("../../assets/control-center.svg")
-        useDockTint: root.dockHosted
         opacity: root.panelOpen ? 1.0 : 0.88
     }
     MouseArea {

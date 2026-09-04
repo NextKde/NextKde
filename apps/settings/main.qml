@@ -80,6 +80,10 @@ ApplicationWindow {
             groups: []
         },
         {
+            subtitle: "快捷键",
+            groups: []
+        },
+        {
             subtitle: "接入状态",
             groups: []
         }
@@ -202,6 +206,63 @@ ApplicationWindow {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+        }
+    }
+
+    // Qt Quick Controls has no built-in key-sequence editor. Keep this small
+    // local control so the Settings window does not depend on a Kirigami-only
+    // type, while preserving the existing click-to-record shortcut workflow.
+    component KeySequenceItem: Control {
+        id: recorder
+
+        property string keySequence: ""
+        signal canceled()
+
+        implicitWidth: 112
+        implicitHeight: 28
+        focusPolicy: Qt.StrongFocus
+
+        function keyName(event) {
+            if (event.key === Qt.Key_Space)
+                return "Space"
+            if (event.key >= Qt.Key_A && event.key <= Qt.Key_Z)
+                return String.fromCharCode(event.key)
+            if (event.key >= Qt.Key_0 && event.key <= Qt.Key_9)
+                return String.fromCharCode(event.key)
+            if (event.key >= Qt.Key_F1 && event.key <= Qt.Key_F35)
+                return "F" + (event.key - Qt.Key_F1 + 1)
+            const text = String(event.text || "").toUpperCase()
+            return text.length === 1 ? text : ""
+        }
+
+        TapHandler {
+            onTapped: recorder.forceActiveFocus()
+        }
+
+        Keys.onPressed: function(event) {
+            if (event.key === Qt.Key_Escape) {
+                recorder.canceled()
+                recorder.focus = false
+                event.accepted = true
+                return
+            }
+
+            const key = recorder.keyName(event)
+            if (!key)
+                return
+            const parts = []
+            if (event.modifiers & Qt.ControlModifier)
+                parts.push("Ctrl")
+            if (event.modifiers & Qt.AltModifier)
+                parts.push("Alt")
+            if (event.modifiers & Qt.ShiftModifier)
+                parts.push("Shift")
+            if (event.modifiers & Qt.MetaModifier)
+                parts.push("Meta")
+            parts.push(key)
+            recorder.keySequence = parts.join("+")
+            recorder.focus = false
+            event.accepted = true
         }
     }
 
@@ -947,6 +1008,7 @@ ApplicationWindow {
 
         Text {
             text: "图标风格".toUpperCase()
+            visible: false
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -956,6 +1018,7 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
+            visible: false
             color: theme.card
             radius: 18
             implicitHeight: iconOpacityColumn.implicitHeight
@@ -1600,6 +1663,10 @@ ApplicationWindow {
             }
         }
 
+        IconAppearanceSection {
+            bridge: displayPage.bridge
+        }
+
         Text {
             Layout.fillWidth: true
             Layout.leftMargin: 13
@@ -1609,6 +1676,201 @@ ApplicationWindow {
             color: "#ff453a"
             font.pixelSize: 12
             wrapMode: Text.Wrap
+        }
+    }
+
+    component IconAppearanceSection: ColumnLayout {
+        id: iconAppearance
+
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property int modeIndex: 0
+        readonly property var modes: ["color", "grayscale", "tint"]
+        property real iconOpacity: 0.5
+        property string tintColor: "#a855f7"
+        property real huePosition: 0.75
+        property real tonePosition: 0.5
+        property bool opacityDirty: false
+        readonly property color pureHue: Qt.hsva(huePosition, 1, 1, 1)
+        readonly property color selectedColor: toneColor(tonePosition)
+        readonly property var presets: [
+            { label: "紫色", color: "#a855f7" },
+            { label: "红色", color: "#ef4444" },
+            { label: "蓝色", color: "#3b82f6" },
+            { label: "橙色", color: "#f97316" }
+        ]
+        readonly property var hueRamp: [
+            Qt.hsva(0 / 6, 1, 1, 1), Qt.hsva(1 / 6, 1, 1, 1),
+            Qt.hsva(2 / 6, 1, 1, 1), Qt.hsva(3 / 6, 1, 1, 1),
+            Qt.hsva(4 / 6, 1, 1, 1), Qt.hsva(5 / 6, 1, 1, 1),
+            Qt.hsva(6 / 6, 1, 1, 1)
+        ]
+        readonly property var toneRamp: [
+            Qt.rgba(1, 1, 1, 1), blend(Qt.rgba(1, 1, 1, 1), pureHue, 1 / 3),
+            blend(Qt.rgba(1, 1, 1, 1), pureHue, 2 / 3), pureHue,
+            blend(pureHue, Qt.rgba(0, 0, 0, 1), 1 / 3),
+            blend(pureHue, Qt.rgba(0, 0, 0, 1), 2 / 3), Qt.rgba(0, 0, 0, 1)
+        ]
+
+        function blend(first, second, amount) {
+            return Qt.rgba(first.r + (second.r - first.r) * amount,
+                first.g + (second.g - first.g) * amount,
+                first.b + (second.b - first.b) * amount, 1)
+        }
+        function toneColor(position) {
+            return position <= 0.5
+                ? blend(Qt.rgba(1, 1, 1, 1), pureHue, position * 2)
+                : blend(pureHue, Qt.rgba(0, 0, 0, 1), (position - 0.5) * 2)
+        }
+        function colorHex(color) {
+            function channel(value) { return Math.round(value * 255).toString(16).padStart(2, "0") }
+            return "#" + channel(color.r) + channel(color.g) + channel(color.b)
+        }
+        function colorFromHex(value) {
+            const hex = String(value).replace("#", "")
+            return hex.length === 6 ? Qt.rgba(parseInt(hex.slice(0, 2), 16) / 255,
+                parseInt(hex.slice(2, 4), 16) / 255, parseInt(hex.slice(4, 6), 16) / 255, 1)
+                : Qt.rgba(0.66, 0.33, 0.97, 1)
+        }
+        function hueFor(color) {
+            const max = Math.max(color.r, color.g, color.b)
+            const min = Math.min(color.r, color.g, color.b)
+            const delta = max - min
+            if (delta < 0.0001) return huePosition
+            let hue = max === color.r ? (color.g - color.b) / delta
+                : (max === color.g ? (color.b - color.r) / delta + 2
+                    : (color.r - color.g) / delta + 4)
+            return ((hue / 6) + 1) % 1
+        }
+        function nearestTone(color) {
+            let best = 0.5
+            let distance = Number.MAX_VALUE
+            for (let step = 0; step <= 100; ++step) {
+                const candidate = toneColor(step / 100)
+                const delta = Math.pow(candidate.r - color.r, 2)
+                    + Math.pow(candidate.g - color.g, 2) + Math.pow(candidate.b - color.b, 2)
+                if (delta < distance) { distance = delta; best = step / 100 }
+            }
+            return best
+        }
+        function applyState(state) {
+            if (!state) return
+            const index = modes.indexOf(state.iconMode)
+            modeIndex = index >= 0 ? index : 0
+            iconOpacity = Number.isFinite(Number(state.iconOpacity)) ? Number(state.iconOpacity) : 0.5
+            tintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
+            const color = colorFromHex(tintColor)
+            huePosition = hueFor(color)
+            tonePosition = nearestTone(color)
+            opacityDirty = false
+        }
+        function refresh() { if (bridge) applyState(bridge.appearanceSnapshot()) }
+        function saveMode(index) { if (bridge) applyState(bridge.updateGlobalIconMode(modes[index])) }
+        function saveTint(color) { if (bridge) applyState(bridge.updateGlobalIconTintColor(color)) }
+        function commitOpacity() {
+            if (!opacityDirty || !bridge) return
+            opacityDirty = false
+            applyState(bridge.updateGlobalIconOpacity(iconOpacity))
+        }
+        Component.onCompleted: refresh()
+
+        Text {
+            text: "图标外观".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 10
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: appearanceRows.implicitHeight
+            radius: 18
+            color: theme.card
+            Column {
+                id: appearanceRows
+                anchors.left: parent.left
+                anchors.right: parent.right
+                Item {
+                    width: parent.width; height: 52
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "◐"; tint: "#af52de" }
+                        Text { text: "图标颜色"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            model: [{ id: "color", label: "彩色" }, { id: "grayscale", label: "黑白" }, { id: "tint", label: "染色" }]
+                            currentIndex: iconAppearance.modeIndex
+                            onSelectionChanged: function(index) { iconAppearance.saveMode(index) }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width - 53; x: 53; height: 1; color: theme.separator; visible: iconAppearance.modeIndex > 0 }
+                Item {
+                    width: parent.width; height: iconAppearance.modeIndex > 0 ? 48 : 0; visible: height > 0
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "◔"; tint: "#5ac8fa" }
+                        Text { text: "不透明度"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        Text { text: Math.round(iconAppearance.iconOpacity * 100) + "%"; color: theme.secondaryText; font.pixelSize: 12 }
+                        LiquidControls.LiquidSlider {
+                            Layout.preferredWidth: 190; value: iconAppearance.iconOpacity; trackColor: theme.divider
+                            onPreviewChanged: function(position) { iconAppearance.iconOpacity = Math.max(0.1, position); iconAppearance.opacityDirty = true }
+                            onCommitRequested: iconAppearance.commitOpacity()
+                        }
+                    }
+                }
+                Rectangle { width: parent.width - 53; x: 53; height: 1; color: theme.separator; visible: iconAppearance.modeIndex === 2 }
+                Item {
+                    width: parent.width; height: iconAppearance.modeIndex === 2 ? 55 : 0; visible: height > 0
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 10
+                        SettingIcon { symbol: "●"; tint: iconAppearance.tintColor }
+                        Text { text: "颜色"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            model: iconAppearance.presets
+                            currentIndex: 0
+                            onSelectionChanged: function(index) { iconAppearance.saveTint(iconAppearance.presets[index].color) }
+                        }
+                    }
+                }
+                Item {
+                    width: parent.width; height: iconAppearance.modeIndex === 2 ? 48 : 0; visible: height > 0
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                        Text { text: "自定义"; color: theme.secondaryText; font.pixelSize: 13 }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.ColorRampSlider {
+                            Layout.preferredWidth: 190; value: iconAppearance.huePosition; rampColors: iconAppearance.hueRamp; thumbColor: iconAppearance.pureHue
+                            onPreviewChanged: function(position) { iconAppearance.huePosition = position }
+                            onCommitRequested: function(position) {
+                                iconAppearance.huePosition = position
+                                iconAppearance.saveTint(iconAppearance.colorHex(iconAppearance.selectedColor))
+                            }
+                        }
+                    }
+                }
+                Item {
+                    width: parent.width; height: iconAppearance.modeIndex === 2 ? 48 : 0; visible: height > 0
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                        Text { text: "明暗"; color: theme.secondaryText; font.pixelSize: 13 }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.ColorRampSlider {
+                            Layout.preferredWidth: 190; value: iconAppearance.tonePosition; rampColors: iconAppearance.toneRamp; thumbColor: iconAppearance.selectedColor
+                            onPreviewChanged: function(position) { iconAppearance.tonePosition = position }
+                            onCommitRequested: function(position) {
+                                iconAppearance.tonePosition = position
+                                iconAppearance.saveTint(iconAppearance.colorHex(iconAppearance.selectedColor))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -2397,6 +2659,205 @@ ApplicationWindow {
         }
     }
 
+    component ShortcutsSettingsPage: ColumnLayout {
+        id: shortcutsPage
+
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
+        property var shortcuts: []
+        property string errorText: ""
+        readonly property var rowIcons: ({
+            "net.local.kos-launcher": { symbol: "❖", tint: "#ff9500" },
+            "net.local.kos-window-switcher": { symbol: "⌕", tint: "#0a84ff" },
+            "net.local.kos-control-center": { symbol: "≋", tint: "#5ac8fa" },
+            "net.local.kos-overview": { symbol: "▦", tint: "#af52de" },
+            "net.local.kos-clipboard": { symbol: "⧉", tint: "#34c759" },
+            "net.local.kos-show-desktop": { symbol: "⌂", tint: "#ff375f" },
+        })
+
+        function applyState(state) {
+            if (!state) return
+            shortcuts = Array.isArray(state.shortcuts) ? state.shortcuts : []
+            errorText = state.error || ""
+        }
+
+        function refresh() {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.shortcutsSnapshot())
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveBinding(id, combo) {
+            if (!bridge)
+                return
+            applyState(bridge.updateShortcut(id, combo))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function resetBinding(id) {
+            if (!bridge)
+                return
+            applyState(bridge.resetShortcut(id))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        Component.onCompleted: refresh()
+
+        Text {
+            text: "点击任一键位胶囊后按下新的组合键即可更换；Esc 取消。"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+        }
+
+        Rectangle {
+            id: shortcutsCard
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: shortcutsColumn.implicitHeight
+
+            Column {
+                id: shortcutsColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Repeater {
+                    model: shortcutsPage.shortcuts
+
+                    delegate: Item {
+                        id: shortcutRow
+
+                        required property var modelData
+                        required property int index
+                        readonly property var iconInfo:
+                            shortcutsPage.rowIcons[modelData.id]
+                            || { symbol: "⌘", tint: "#8e8e93" }
+                        readonly property string rowCombo: modelData.combo || ""
+
+                        width: shortcutsColumn.width
+                        height: 54
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+                            spacing: 12
+
+                            SettingIcon {
+                                symbol: shortcutRow.iconInfo.symbol
+                                tint: shortcutRow.iconInfo.tint
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: shortcutRow.modelData.description
+                                    color: theme.primaryText
+                                    font.pixelSize: 14
+                                }
+                                Text {
+                                    text: shortcutRow.modelData.custom
+                                        ? "自定义快捷键" : "默认快捷键"
+                                    color: theme.secondaryText
+                                    font.pixelSize: 11
+                                }
+                            }
+
+                            Text {
+                                visible: shortcutRow.modelData.custom
+                                text: "恢复默认"
+                                color: theme.dark ? "#64b5ff" : "#0066cc"
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    anchors.margins: -8
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: shortcutsPage.resetBinding(shortcutRow.modelData.id)
+                                }
+                            }
+
+                            KeySequenceItem {
+                                id: comboRecorder
+
+                                keySequence: shortcutRow.rowCombo
+
+                                background: Rectangle {
+                                    implicitWidth: comboLabel.implicitWidth + 24
+                                    implicitHeight: 28
+                                    radius: 14
+                                    color: comboRecorder.visualFocus
+                                        ? Qt.rgba(0.04, 0.52, 1.0, 0.18)
+                                        : (theme.dark
+                                            ? Qt.rgba(1, 1, 1, 0.09)
+                                            : Qt.rgba(0, 0, 0, 0.055))
+                                    border.width: 1
+                                    border.color: theme.floatingBorder
+                                }
+                                contentItem: Text {
+                                    id: comboLabel
+                                    text: comboRecorder.keySequence
+                                        ? comboRecorder.keySequence : "点击录制"
+                                    color: theme.primaryText
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                onKeySequenceChanged: {
+                                    const combo = String(comboRecorder.keySequence)
+                                    if (combo.length === 0 || combo === shortcutRow.rowCombo)
+                                        return
+                                    shortcutsPage.saveBinding(shortcutRow.modelData.id, combo)
+                                }
+                                onCanceled: {
+                                    // Recording dismissed with Esc: restore the
+                                    // committed binding in the recorder.
+                                    comboRecorder.keySequence = shortcutRow.rowCombo
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 53
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: theme.separator
+                            visible: index < shortcutsPage.shortcuts.length - 1
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            visible: shortcutsPage.errorText.length > 0
+            text: shortcutsPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+        }
+    }
+
     component LauncherSettingsPage: ColumnLayout {
         id: launcherPage
 
@@ -2406,36 +2867,16 @@ ApplicationWindow {
         property string displayMode: "bottom"
         readonly property var displayModes: ["bottom", "center", "fullscreen"]
         property int displayModeIndex: 0
-        property real iconSize: 52
-        property real iconSpacing: 24
-        property real fontSize: 11
+        property string iconSize: "medium"
+        property string density: "balanced"
         property string fontWeight: "normal"
+        readonly property var iconSizes: ["small", "medium", "large"]
+        readonly property var densities: ["compact", "balanced", "spacious"]
+        property int iconSizeIndex: 1
+        property int densityIndex: 1
         readonly property var fontWeights: ["normal", "medium", "bold"]
         property int fontWeightIndex: 0
         property string errorText: ""
-
-        property bool launcherBlurInherit: true
-        property real launcherBlurStrength: 0.42
-        property real launcherLiquidStrength: 1.0
-        property bool launcherBlurDirty: false
-        property bool launcherLiquidDirty: false
-
-        function percentage(value) {
-            return Math.round(value * 100) + "%"
-        }
-
-        function applyAppearanceSnapshot(snapshot) {
-            if (!snapshot) return
-            launcherBlurInherit = snapshot.launcherBlurInherit !== undefined
-                ? Boolean(snapshot.launcherBlurInherit)
-                : (snapshot.launcherBlurInheritDock !== undefined ? Boolean(snapshot.launcherBlurInheritDock) : true)
-            launcherBlurStrength = Number.isFinite(Number(snapshot.launcherBlurStrength))
-                ? Number(snapshot.launcherBlurStrength) : 0.42
-            launcherLiquidStrength = Number.isFinite(Number(snapshot.launcherLiquidStrength))
-                ? Number(snapshot.launcherLiquidStrength) : 1.0
-            launcherBlurDirty = false
-            launcherLiquidDirty = false
-        }
 
         function applySnapshot(snapshot) {
             if (!snapshot) return
@@ -2444,98 +2885,22 @@ ApplicationWindow {
                 const idx = displayModes.indexOf(displayMode)
                 displayModeIndex = idx >= 0 ? idx : 0
             }
-            if (snapshot.iconSize !== undefined) {
-                iconSize = snapshot.iconSize
-            }
-            if (snapshot.iconSpacing !== undefined) {
-                iconSpacing = snapshot.iconSpacing
-            }
-            if (snapshot.fontSize !== undefined) {
-                fontSize = snapshot.fontSize
-            }
-            if (snapshot.fontWeight !== undefined) {
-                fontWeight = snapshot.fontWeight
-                const idx = fontWeights.indexOf(fontWeight)
-                fontWeightIndex = idx >= 0 ? idx : 0
-            }
+            const profiles = snapshot.layoutProfiles
+            const profile = profiles && profiles[displayMode] ? profiles[displayMode] : null
+            if (!profile)
+                return
+            iconSize = iconSizes.indexOf(profile.iconSize) >= 0 ? profile.iconSize : "medium"
+            density = densities.indexOf(profile.density) >= 0 ? profile.density : "balanced"
+            fontWeight = fontWeights.indexOf(profile.fontWeight) >= 0 ? profile.fontWeight : "normal"
+            iconSizeIndex = iconSizes.indexOf(iconSize)
+            densityIndex = densities.indexOf(density)
+            fontWeightIndex = fontWeights.indexOf(fontWeight)
         }
 
         function reloadFromBridge() {
             if (!bridge) return
             const snap = bridge.launcherSnapshot()
             applySnapshot(snap)
-            const appSnap = bridge.appearanceSnapshot()
-            applyAppearanceSnapshot(appSnap)
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
-
-        function setLauncherBlurInherit(enabled) {
-            if (!bridge) return
-            const snap = bridge.updateLauncherBlurInherit(enabled)
-            applyAppearanceSnapshot(snap)
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
-
-        Timer {
-            id: liveLauncherBlurDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (launcherPage.bridge && launcherPage.launcherBlurDirty) {
-                    launcherPage.bridge.updateLauncherBlurStrength(launcherPage.launcherBlurStrength)
-                }
-            }
-        }
-
-        Timer {
-            id: liveLauncherLiquidDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (launcherPage.bridge && launcherPage.launcherLiquidDirty) {
-                    launcherPage.bridge.updateLauncherLiquidStrength(launcherPage.launcherLiquidStrength)
-                }
-            }
-        }
-
-        function previewLauncherBlur(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(launcherBlurStrength - clamped) < 0.005)
-                return
-            launcherBlurStrength = clamped
-            launcherBlurDirty = true
-            liveLauncherBlurDebounce.restart()
-        }
-
-        function commitLauncherBlur() {
-            liveLauncherBlurDebounce.stop()
-            if (!launcherBlurDirty || !bridge)
-                return
-            launcherBlurDirty = false
-            const snap = bridge.updateLauncherBlurStrength(launcherBlurStrength)
-            applyAppearanceSnapshot(snap)
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
-
-        function previewLauncherLiquid(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(launcherLiquidStrength - clamped) < 0.005)
-                return
-            launcherLiquidStrength = clamped
-            launcherLiquidDirty = true
-            liveLauncherLiquidDebounce.restart()
-        }
-
-        function commitLauncherLiquid() {
-            liveLauncherLiquidDebounce.stop()
-            if (!launcherLiquidDirty || !bridge)
-                return
-            launcherLiquidDirty = false
-            const snap = bridge.updateLauncherLiquidStrength(launcherLiquidStrength)
-            applyAppearanceSnapshot(snap)
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -2555,50 +2920,42 @@ ApplicationWindow {
             fontWeightIndex = index
             fontWeight = fontWeights[index] || "normal"
             if (bridge) {
-                const snap = bridge.updateLauncherFontWeight(fontWeight)
+                const snap = bridge.updateLauncherProfileFontWeight(displayMode, fontWeight)
                 applySnapshot(snap)
                 if (bridge.lastError)
                     errorText = bridge.lastError
             }
         }
 
-        function previewIconSize(position) {
-            iconSize = Math.round(40 + position * 40)
-        }
-
-        function commitIconSize() {
+        function saveIconSize(index) {
+            iconSizeIndex = index
+            iconSize = iconSizes[index] || "medium"
             if (bridge) {
-                const snap = bridge.updateLauncherIconSize(iconSize)
+                const snap = bridge.updateLauncherProfileIconSize(displayMode, iconSize)
                 applySnapshot(snap)
                 if (bridge.lastError)
                     errorText = bridge.lastError
             }
         }
 
-        function previewIconSpacing(position) {
-            iconSpacing = Math.round(10 + position * 38)
-        }
-
-        function commitIconSpacing() {
+        function saveDensity(index) {
+            densityIndex = index
+            density = densities[index] || "balanced"
             if (bridge) {
-                const snap = bridge.updateLauncherIconSpacing(iconSpacing)
+                const snap = bridge.updateLauncherProfileDensity(displayMode, density)
                 applySnapshot(snap)
                 if (bridge.lastError)
                     errorText = bridge.lastError
             }
         }
 
-        function previewFontSize(position) {
-            fontSize = Math.round(9 + position * 9)
-        }
-
-        function commitFontSize() {
-            if (bridge) {
-                const snap = bridge.updateLauncherFontSize(fontSize)
-                applySnapshot(snap)
-                if (bridge.lastError)
-                    errorText = bridge.lastError
-            }
+        function resetCurrentProfile() {
+            if (!bridge)
+                return
+            const snap = bridge.resetLauncherLayoutProfile(displayMode)
+            applySnapshot(snap)
+            if (bridge.lastError)
+                errorText = bridge.lastError
         }
 
         Component.onCompleted: reloadFromBridge()
@@ -2676,24 +3033,22 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◉"; tint: "#ff9500" }
                         Text {
-                            text: "图标尺寸"
+                            text: "图标大小"
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
-                        Text {
-                            text: Math.round(launcherPage.iconSize) + " px"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                        }
-                        LiquidControls.LiquidSlider {
-                            Layout.preferredWidth: 190
-                            value: (launcherPage.iconSize - 40) / 40
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                launcherPage.previewIconSize(position)
+                        SettingsNavBar {
+                            model: [
+                                { id: "small", label: "小" },
+                                { id: "medium", label: "中" },
+                                { id: "large", label: "大" }
+                            ]
+                            itemWidthOverride: 56
+                            currentIndex: launcherPage.iconSizeIndex
+                            onSelectionChanged: function(index) {
+                                launcherPage.saveIconSize(index)
                             }
-                            onCommitRequested: launcherPage.commitIconSize()
                         }
                     }
                 }
@@ -2714,66 +3069,24 @@ ApplicationWindow {
                         anchors.leftMargin: 16
                         anchors.rightMargin: 16
                         spacing: 12
-                        SettingIcon { symbol: "↔"; tint: "#ff9500" }
+                        SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
                         Text {
-                            text: "图标间距"
+                            text: "网格密度"
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
-                        Text {
-                            text: Math.round(launcherPage.iconSpacing) + " px"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                        }
-                        LiquidControls.LiquidSlider {
-                            Layout.preferredWidth: 190
-                            value: (launcherPage.iconSpacing - 10) / 38
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                launcherPage.previewIconSpacing(position)
+                        SettingsNavBar {
+                            model: [
+                                { id: "compact", label: "紧凑" },
+                                { id: "balanced", label: "标准" },
+                                { id: "spacious", label: "宽松" }
+                            ]
+                            itemWidthOverride: 56
+                            currentIndex: launcherPage.densityIndex
+                            onSelectionChanged: function(index) {
+                                launcherPage.saveDensity(index)
                             }
-                            onCommitRequested: launcherPage.commitIconSpacing()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    width: parent.width
-                    height: 54
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "T"; tint: "#ff9500" }
-                        Text {
-                            text: "字体大小"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: Math.round(launcherPage.fontSize) + " px"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                        }
-                        LiquidControls.LiquidSlider {
-                            Layout.preferredWidth: 190
-                            value: (launcherPage.fontSize - 9) / 9
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                launcherPage.previewFontSize(position)
-                            }
-                            onCommitRequested: launcherPage.commitFontSize()
                         }
                     }
                 }
@@ -2816,30 +3129,14 @@ ApplicationWindow {
                         }
                     }
                 }
-            }
-        }
 
-        Text {
-            text: "外观与模糊效果".toUpperCase()
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 14
-            visible: false
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: launcherBlurCol.implicitHeight
-            visible: false
-            radius: 18
-            color: theme.card
-
-            Column {
-                id: launcherBlurCol
-                anchors.left: parent.left
-                anchors.right: parent.right
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
 
                 Item {
                     width: parent.width
@@ -2849,117 +3146,39 @@ ApplicationWindow {
                         anchors.leftMargin: 16
                         anchors.rightMargin: 16
                         spacing: 12
-                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
+                        SettingIcon { symbol: "↺"; tint: "#8e8e93" }
+                        Text {
+                            text: "恢复推荐布局"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "仅当前形态"
+                            color: theme.secondaryText
+                            font.pixelSize: 11
+                        }
+                        Rectangle {
+                            width: 52
+                            height: 26
+                            radius: 13
+                            color: resetProfileMouse.containsMouse
+                                ? Qt.rgba(0.04, 0.52, 1.0, 0.20)
+                                : Qt.rgba(0.04, 0.52, 1.0, 0.12)
                             Text {
-                                text: "跟随显示设置"
-                                color: theme.primaryText
-                                font.pixelSize: 14
+                                anchors.centerIn: parent
+                                text: "恢复"
+                                color: theme.dark ? "#64b5ff" : "#0066cc"
+                                font.pixelSize: 11
                                 font.weight: Font.DemiBold
                             }
-                            Text {
-                                text: "关闭后可为启动台单独自定义背景模糊与液态强度"
-                                color: theme.secondaryText
-                                font.pixelSize: 11
+                            MouseArea {
+                                id: resetProfileMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: launcherPage.resetCurrentProfile()
                             }
-                        }
-                        LiquidControls.LiquidGlassSwitch {
-                            checked: launcherPage.launcherBlurInherit
-                            accentColor: "#30d158"
-                            trackColor: theme.divider
-                            onToggled: function(checked) {
-                                launcherPage.setLauncherBlurInherit(checked)
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !launcherPage.launcherBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !launcherPage.launcherBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
-                        Text {
-                            text: "启动台模糊强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: launcherPage.percentage(launcherPage.launcherBlurStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            Layout.preferredWidth: 190
-                            value: launcherPage.launcherBlurStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                launcherPage.previewLauncherBlur(position)
-                            }
-                            onCommitRequested: launcherPage.commitLauncherBlur()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !launcherPage.launcherBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !launcherPage.launcherBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "≈"; tint: "#af52de" }
-                        Text {
-                            text: "启动台液态强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: launcherPage.percentage(launcherPage.launcherLiquidStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            Layout.preferredWidth: 190
-                            value: launcherPage.launcherLiquidStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                launcherPage.previewLauncherLiquid(position)
-                            }
-                            onCommitRequested: launcherPage.commitLauncherLiquid()
                         }
                     }
                 }
@@ -3018,7 +3237,6 @@ ApplicationWindow {
                         rightPadding: 10
                         placeholderText: "搜索"
                         glassColor: theme.searchField
-                        focusColor: "#0a84ff"
                         textColor: theme.primaryText
                         mutedTextColor: theme.secondaryText
                         font.pixelSize: 13
@@ -3084,6 +3302,15 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
                     pageIndex: 5
+                    label: "快捷键"
+                    navSymbol: "⌘"
+                    navTint: "#5856d6"
+                }
+
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 6
                     label: "接入状态"
                     navSymbol: "✓"
                     navTint: "#30d158"
@@ -3131,7 +3358,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 5)
+                        model: (window.currentPage >= 0 && window.currentPage <= 6)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -3166,8 +3393,12 @@ ApplicationWindow {
                         visible: window.currentPage === 4
                     }
 
-                    IntegrationStatusPage {
+                    ShortcutsSettingsPage {
                         visible: window.currentPage === 5
+                    }
+
+                    IntegrationStatusPage {
+                        visible: window.currentPage === 6
                     }
 
                     DockSettingsPage {

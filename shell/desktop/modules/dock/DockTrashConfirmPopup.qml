@@ -26,6 +26,7 @@ PopupWindow {
     }
 
     LiquidGlassSurface {
+        id: surface
         anchors.fill: parent
         radius: 22
         baseColor: ThemeService.backgroundColor
@@ -33,6 +34,8 @@ PopupWindow {
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.32
         materialDepth: 1.35
+        material: "thick"
+        adaptiveDarkScrim: true
 
         Column {
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
@@ -53,7 +56,7 @@ PopupWindow {
                 width: parent.width
                 text: "清空回收站？"
                 horizontalAlignment: Text.AlignHCenter
-                color: ThemeService.foregroundColor
+                color: surface.foregroundColor
                 font { pixelSize: 16; weight: Font.Bold }
             }
             Text {
@@ -62,8 +65,7 @@ PopupWindow {
                 text: "所有项目将被永久删除，且无法恢复。"
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
-                color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g,
-                    ThemeService.foregroundColor.b, 0.68)
+                color: surface.secondaryForegroundColor
                 font.pixelSize: 11
             }
         }
@@ -90,7 +92,7 @@ PopupWindow {
             Rectangle {
                 width: parent.width; height: 32; radius: 11
                 color: Qt.rgba(1, 1, 1, 0.10)
-                Text { anchors.centerIn: parent; text: "取消"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.DemiBold } }
+                Text { anchors.centerIn: parent; text: "取消"; color: surface.foregroundColor; font { pixelSize: 12; weight: Font.DemiBold } }
                 MouseArea { anchors.fill: parent; onClicked: DockModelService.setDockPopupVisible(popup, false) }
             }
         }

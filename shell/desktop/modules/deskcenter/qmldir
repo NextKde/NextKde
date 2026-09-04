@@ -3,6 +3,7 @@ module qs.desktop.modules.deskcenter
 DeskCenter 1.0 DeskCenter.qml
 DeskCenterWindow 1.0 DeskCenterWindow.qml
 DeskWidgetCard 1.0 DeskWidgetCard.qml
+WidgetGlassMaterial 1.0 WidgetGlassMaterial.qml
 OfficialDragReorderDemo 1.0 OfficialDragReorderDemo.qml
 FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
 

@@ -13,12 +13,11 @@ Item {
     property string dockEdge: "bottom"
     property bool verticalDock: false
     rotation: verticalDock ? -90 : 0
-    readonly property bool tintActive: dockHosted
-        && ConfigService.iconMode === "tint"
+    readonly property bool tintActive: IconAppearanceService.mode === "tint"
     readonly property color dockTintColor: tintActive
-        ? ConfigService.styledDockIconColor()
+        ? IconAppearanceService.styledSymbolicColor()
         : ThemeService.foregroundColor
-    opacity: tintActive ? ConfigService.iconOpacity : 1.0
+    opacity: tintActive ? IconAppearanceService.opacity : 1.0
     layer.enabled: tintActive
     layer.effect: MultiEffect {
         shadowEnabled: true

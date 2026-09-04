@@ -107,6 +107,8 @@ PopupWindow {
         ambientPrimary: WallpaperPaletteService.primary
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+        material: "thick"
+        adaptiveDarkScrim: true
         border.width: 1
         border.color: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
 
@@ -128,7 +130,7 @@ PopupWindow {
                     anchors { left: parent.left; leftMargin: 31; verticalCenter: parent.verticalCenter }
                     onPaint: {
                         const ctx = getContext("2d")
-                        ctx.reset(); ctx.strokeStyle = ThemeService.foregroundColor; ctx.lineWidth = 1.8
+                        ctx.reset(); ctx.strokeStyle = surface.foregroundColor; ctx.lineWidth = 1.8
                         ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.scale(0.67, 0.67)
                         ctx.beginPath(); ctx.moveTo(13.5, 2.5); ctx.lineTo(20, 9); ctx.lineTo(13.5, 15); ctx.lineTo(20, 21); ctx.lineTo(13.5, 26.5); ctx.lineTo(13.5, 2.5); ctx.moveTo(7, 8.5); ctx.lineTo(13.5, 15); ctx.lineTo(7, 21.5); ctx.stroke()
                     }
@@ -137,7 +139,7 @@ PopupWindow {
                     visible: modelData.connected
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                     text: "✓"
-                    color: ThemeService.foregroundColor
+                    color: surface.foregroundColor
                     style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.50)
                     font { pixelSize: 18; weight: Font.DemiBold }
                 }
@@ -145,7 +147,7 @@ PopupWindow {
                     anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 12; verticalCenter: parent.verticalCenter }
                     text: modelData.name
                     elide: Text.ElideRight
-                    color: ThemeService.foregroundColor
+                    color: surface.foregroundColor
                     style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.50)
                     font { pixelSize: 12; weight: Font.DemiBold }
                 }
@@ -164,7 +166,7 @@ PopupWindow {
                     && !ControlCenterService.bluetoothDevicesRefreshInProgress
                     && ControlCenterService.bluetoothDevices.length === 0
                 text: "未发现已配对设备"
-                color: ThemeService.foregroundColor
+                color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
             }
@@ -172,7 +174,7 @@ PopupWindow {
                 anchors.centerIn: parent
                 visible: ControlCenterService.bluetoothDevicesRefreshInProgress
                 text: "正在刷新…"
-                color: ThemeService.foregroundColor
+                color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
             }
@@ -180,7 +182,7 @@ PopupWindow {
                 anchors.centerIn: parent
                 visible: !ControlCenterService.bluetoothPowered
                 text: "蓝牙已关闭"
-                color: ThemeService.foregroundColor
+                color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
             }
@@ -198,7 +200,7 @@ PopupWindow {
             Text {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 text: "蓝牙设置…"
-                color: ThemeService.foregroundColor
+                color: surface.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 14; weight: Font.DemiBold }

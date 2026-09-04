@@ -16,10 +16,14 @@ QtObject {
     readonly property string configDir: Quickshell.stateDir + "/applauncher"
     readonly property string configPath: configDir + "/config.json"
     property string displayMode: "bottom"
-    property real iconSize: 52
-    property real iconSpacing: 24
-    property real fontSize: 11
-    property string fontWeight: "normal" // "normal" | "medium" | "bold"
+    // Each presentation has its own intentionally semantic layout profile.
+    // Pixels remain an implementation detail so a profile can be tuned per
+    // presentation without exposing fragile spacing math in Settings.
+    property var layoutProfiles: ({
+        bottom: { iconSize: "medium", density: "compact", fontWeight: "normal" },
+        center: { iconSize: "medium", density: "balanced", fontWeight: "normal" },
+        fullscreen: { iconSize: "large", density: "balanced", fontWeight: "medium" },
+    })
     property var rootItems: []
     property var hiddenAppIds: []
     property var appOverrides: ({})
@@ -33,45 +37,118 @@ QtObject {
         return weight === "normal" || weight === "medium" || weight === "bold"
     }
 
+    function isValidIconSize(size) {
+        return size === "small" || size === "medium" || size === "large"
+    }
+
+    function isValidDensity(density) {
+        return density === "compact" || density === "balanced" || density === "spacious"
+    }
+
+    function _defaultProfile(mode) {
+        if (mode === "fullscreen")
+            return { iconSize: "large", density: "balanced", fontWeight: "medium" }
+        if (mode === "bottom")
+            return { iconSize: "medium", density: "compact", fontWeight: "normal" }
+        return { iconSize: "medium", density: "balanced", fontWeight: "normal" }
+    }
+
+    function _normalizedProfile(raw, mode) {
+        const fallback = _defaultProfile(mode)
+        const candidate = raw && typeof raw === "object" ? raw : ({})
+        return {
+            iconSize: isValidIconSize(candidate.iconSize) ? candidate.iconSize : fallback.iconSize,
+            density: isValidDensity(candidate.density) ? candidate.density : fallback.density,
+            fontWeight: isValidFontWeight(candidate.fontWeight) ? candidate.fontWeight : fallback.fontWeight,
+        }
+    }
+
+    function _normalizedProfiles(raw) {
+        const candidate = raw && typeof raw === "object" ? raw : ({})
+        return {
+            bottom: _normalizedProfile(candidate.bottom, "bottom"),
+            center: _normalizedProfile(candidate.center, "center"),
+            fullscreen: _normalizedProfile(candidate.fullscreen, "fullscreen"),
+        }
+    }
+
+    function profileForMode(mode) {
+        const resolvedMode = isValidDisplayMode(mode) ? mode : "bottom"
+        return _normalizedProfile(layoutProfiles[resolvedMode], resolvedMode)
+    }
+
+    // Semantic profiles deliberately map to different physical values in each
+    // presentation: a "large" full-screen Launchpad icon should be larger
+    // than a "large" bottom-sheet icon, while their visual hierarchy remains
+    // equivalent.
+    function iconPixelSize(mode) {
+        const profile = profileForMode(mode)
+        const values = mode === "fullscreen"
+            ? ({ small: 72, medium: 88, large: 104 })
+            : (mode === "center"
+                ? ({ small: 48, medium: 58, large: 68 })
+                : ({ small: 44, medium: 52, large: 62 }))
+        return values[profile.iconSize]
+    }
+
+    function fontPixelSize(mode) {
+        const size = profileForMode(mode).iconSize
+        const values = mode === "fullscreen"
+            ? ({ small: 12, medium: 13, large: 14 })
+            : ({ small: 10, medium: 11, large: 12 })
+        return values[size]
+    }
+
+    function gridGap(mode) {
+        const density = profileForMode(mode).density
+        const values = mode === "fullscreen"
+            ? ({ compact: 16, balanced: 26, spacious: 38 })
+            : ({ compact: 10, balanced: 22, spacious: 36 })
+        return values[density]
+    }
+
+    function _updateProfile(mode, field, value) {
+        if (!isValidDisplayMode(mode))
+            return false
+        const current = profileForMode(mode)
+        if (current[field] === value)
+            return false
+        const next = _normalizedProfiles(layoutProfiles)
+        next[mode][field] = value
+        layoutProfiles = next
+        scheduleSave()
+        return true
+    }
+
+    function updateProfileIconSize(mode, size) {
+        return isValidIconSize(size) && _updateProfile(mode, "iconSize", size)
+    }
+
+    function updateProfileDensity(mode, density) {
+        return isValidDensity(density) && _updateProfile(mode, "density", density)
+    }
+
+    function updateProfileFontWeight(mode, weight) {
+        return isValidFontWeight(weight) && _updateProfile(mode, "fontWeight", weight)
+    }
+
+    function resetProfile(mode) {
+        if (!isValidDisplayMode(mode))
+            return false
+        const next = _normalizedProfiles(layoutProfiles)
+        const profile = _defaultProfile(mode)
+        if (JSON.stringify(next[mode]) === JSON.stringify(profile))
+            return false
+        next[mode] = profile
+        layoutProfiles = next
+        scheduleSave()
+        return true
+    }
+
     function updateDisplayMode(mode) {
         if (!isValidDisplayMode(mode) || displayMode === mode)
             return false
         displayMode = mode
-        scheduleSave()
-        return true
-    }
-
-    function updateIconSize(size) {
-        const clamped = Math.max(40, Math.min(80, Math.round(size)))
-        if (iconSize === clamped)
-            return false
-        iconSize = clamped
-        scheduleSave()
-        return true
-    }
-
-    function updateIconSpacing(spacing) {
-        const clamped = Math.max(10, Math.min(48, Math.round(spacing)))
-        if (iconSpacing === clamped)
-            return false
-        iconSpacing = clamped
-        scheduleSave()
-        return true
-    }
-
-    function updateFontSize(size) {
-        const clamped = Math.max(9, Math.min(18, Math.round(size)))
-        if (fontSize === clamped)
-            return false
-        fontSize = clamped
-        scheduleSave()
-        return true
-    }
-
-    function updateFontWeight(weight) {
-        if (!isValidFontWeight(weight) || fontWeight === weight)
-            return false
-        fontWeight = weight
         scheduleSave()
         return true
     }
@@ -505,12 +582,9 @@ QtObject {
 
     function _save() {
         const json = JSON.stringify({
-            version: 2,
+            version: 3,
             displayMode: displayMode,
-            iconSize: iconSize,
-            iconSpacing: iconSpacing,
-            fontSize: fontSize,
-            fontWeight: fontWeight,
+            layoutProfiles: layoutProfiles,
             rootItems: rootItems,
             hiddenAppIds: hiddenAppIds,
             appOverrides: appOverrides,
@@ -543,14 +617,27 @@ QtObject {
                     const saved = JSON.parse(output)
                     if (service.isValidDisplayMode(saved.displayMode))
                         displayMode = saved.displayMode
-                    if (typeof saved.iconSize === "number" && saved.iconSize >= 40 && saved.iconSize <= 80)
-                        iconSize = saved.iconSize
-                    if (typeof saved.iconSpacing === "number" && saved.iconSpacing >= 10 && saved.iconSpacing <= 48)
-                        iconSpacing = saved.iconSpacing
-                    if (typeof saved.fontSize === "number" && saved.fontSize >= 9 && saved.fontSize <= 18)
-                        fontSize = saved.fontSize
-                    if (service.isValidFontWeight(saved.fontWeight))
-                        fontWeight = saved.fontWeight
+                    if (saved.layoutProfiles) {
+                        layoutProfiles = _normalizedProfiles(saved.layoutProfiles)
+                    } else {
+                        // Migrate the previous single shared layout once. Old
+                        // numeric spacing was not a real visual gap, so map it
+                        // only to the closest semantic density.
+                        const oldSize = Number(saved.iconSize)
+                        const oldSpacing = Number(saved.iconSpacing)
+                        const oldIconSize = oldSize >= 64 ? "large"
+                            : (oldSize <= 48 ? "small" : "medium")
+                        const oldDensity = oldSpacing >= 34 ? "spacious"
+                            : (oldSpacing <= 18 ? "compact" : "balanced")
+                        const oldWeight = service.isValidFontWeight(saved.fontWeight)
+                            ? saved.fontWeight : "normal"
+                        layoutProfiles = {
+                            bottom: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
+                            center: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
+                            fullscreen: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
+                        }
+                        scheduleSave()
+                    }
                     rootItems = _normalizeRootItems(saved.rootItems)
                     hiddenAppIds = Array.isArray(saved.hiddenAppIds)
                         ? saved.hiddenAppIds : []
