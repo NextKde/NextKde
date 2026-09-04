@@ -90,7 +90,14 @@ QtObject {
             if (response?.ok) {
                 const value = response.result || ({})
                 bluetoothAvailable = !!value.available
-                bluetoothPowered = !!value.powered
+                // BlueZ can still report the pre-toggle Powered state for a
+                // moment after setBluetoothEnabled()'s own request already
+                // resolved. Applying this periodic refresh's stale read here
+                // raced that resolution and flipped the toggle back and
+                // forth (off -> briefly on -> off again). Trust only the
+                // toggle's own response while one is in flight.
+                if (!bluetoothChangeInProgress)
+                    bluetoothPowered = !!value.powered
                 bluetoothDevices = Array.isArray(value.devices) ? value.devices : []
             } else {
                 bluetoothAvailable = false
