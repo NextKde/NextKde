@@ -181,6 +181,8 @@ Item {
     ContextMenu {
         id: menuPopup
         anchorItem: root.popupAnchorItem
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
         position: "bottom"
         centerBelowAnchor: true
         centerBelowOffset: root.popupAnchorItem

@@ -63,6 +63,15 @@ Rectangle {
             (ambientExtremeDistance - 0.08) / 0.30))
         return 1.0 - t * t * (3.0 - 2.0 * t)
     }
+    // Apple-style regular/thick materials retain an opacity floor. Blur is a
+    // backdrop treatment, not an opacity control: weakening blur must never
+    // make a text-bearing surface disappear into the content below it.
+    readonly property real minimumFillOpacity: material === "clear" ? 0.22
+        : (material === "thick" ? 0.68 : 0.52)
+    readonly property real requestedFillOpacity: Math.min(1.0,
+        baseColor.a * materialOpacityScale)
+    readonly property real effectiveFillOpacity: Math.max(
+        minimumFillOpacity, requestedFillOpacity) * surfaceOpacity
     readonly property real adaptiveScrimOpacity: {
         if (!adaptiveDarkScrim)
             return 0.0
@@ -76,9 +85,11 @@ Rectangle {
     }
     property bool _useDarkForeground: estimatedMaterialLuminance >= 0.58
     readonly property color foregroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.94) : Qt.rgba(1, 1, 1, 0.94)
+        ? Qt.rgba(0.02, 0.025, 0.035, 1.0) : Qt.rgba(1, 1, 1, 1.0)
     readonly property color secondaryForegroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.64)
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.76) : Qt.rgba(1, 1, 1, 0.82)
+    readonly property color tertiaryForegroundColor: _useDarkForeground
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.66)
     onEstimatedMaterialLuminanceChanged: {
         if (_useDarkForeground && estimatedMaterialLuminance < 0.42)
             _useDarkForeground = false
@@ -150,18 +161,19 @@ Rectangle {
         baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
         baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
         baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
-        Math.min(1.0, baseColor.a * root.materialOpacityScale)
-            * surfaceOpacity * root.normalizedBlurStrength
+        root.effectiveFillOpacity
     )
 
-    // This layer intentionally stays neutral and dark. Using a white lift on
-    // black backdrops creates the grey-plastic look that dense glass panels
-    // should avoid.
+    // Reinforce the side of the material opposite its foreground ink. A light
+    // lift supports dark labels; a dark scrim supports white labels. This is
+    // the static QML counterpart of Liquid Glass's dynamic-range adaptation.
     Rectangle {
         anchors.fill: parent
         radius: root.radius
         visible: root.adaptiveScrimOpacity > 0.001
-        color: Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
+        color: root._useDarkForeground
+            ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
+            : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
         Behavior on color {
             ColorAnimation { duration: root.ambientTransitionDuration; easing.type: Easing.InOutSine }
         }

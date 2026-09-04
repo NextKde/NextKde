@@ -282,7 +282,7 @@ Item {
                 color: wifiCard.materialSecondaryForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
-                opacity: 0.72
+                opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
         }
@@ -367,7 +367,7 @@ Item {
                 color: bluetoothCard.materialSecondaryForegroundColor
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.50)
-                opacity: 0.72
+                opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
         }

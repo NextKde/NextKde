@@ -32,6 +32,7 @@ PopupWindow {
     // Available to card content that needs locally adaptive foreground ink.
     readonly property color materialForegroundColor: cardGlass.foregroundColor
     readonly property color materialSecondaryForegroundColor: cardGlass.secondaryForegroundColor
+    readonly property color materialTertiaryForegroundColor: cardGlass.tertiaryForegroundColor
     // PanelWindow has no opacity; this applies to the card body instead.
     property real cardOpacity: 1.0
     // PanelWindow has no scale; this applies to the card content.
@@ -139,6 +140,7 @@ PopupWindow {
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
+        adaptiveDarkScrim: true
         border.width: 1
         border.color: root.cardBorderColor
         scale: root.popupScale

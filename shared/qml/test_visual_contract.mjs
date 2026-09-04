@@ -28,6 +28,21 @@ function contrast(first, second) {
     return (light + 0.05) / (dark + 0.05);
 }
 
+function rgbaProperty(source, name) {
+    const match = source.match(new RegExp(
+        `readonly property color ${name}: Qt\\.rgba\\(([^)]*)\\)`));
+    assert.ok(match, `${name} is an explicit RGBA role`);
+    const values = match[1].split(",").map(value => Number(value.trim()));
+    assert.equal(values.length, 4, `${name} has four RGBA channels`);
+    assert.ok(values.every(Number.isFinite), `${name} uses numeric RGBA channels`);
+    return values;
+}
+
+function composite(foreground, background) {
+    return foreground.slice(0, 3).map((channelValue, index) =>
+        channelValue * foreground[3] + background[index] * (1 - foreground[3]));
+}
+
 for (const accent of ["#3478f6", "#8b5cf6", "#16875f", "#d66a20"]) {
     const background = rgb(accent);
     assert.ok(Math.max(contrast(background, [0, 0, 0]),
@@ -55,6 +70,33 @@ assert.match(themeSource, /appearanceMode === "dark"/,
     "the shared theme supports a forced dark appearance");
 assert.match(themeSource, /contrastRatio\(accent, blackSeed\)[\s\S]*contrastRatio\(accent, whiteSeed\)/,
     "accent foreground chooses the stronger black-or-white contrast");
+
+const shellThemeSource = read("../../shell/desktop/modules/dock/DockThemeService.qml");
+for (const mode of ["dark", "light"]) {
+    const background = rgbaProperty(shellThemeSource, `${mode}Bg`);
+    const primary = rgbaProperty(shellThemeSource, `${mode}Fg`);
+    const secondary = rgbaProperty(shellThemeSource, `${mode}SecondaryFg`);
+    const tertiary = rgbaProperty(shellThemeSource, `${mode}TertiaryFg`);
+    assert.ok(background[3] >= 0.70,
+        `${mode} regular glass keeps a stable contrast base`);
+    assert.ok(contrast(primary, background) >= 7,
+        `${mode} primary shell text reaches enhanced contrast`);
+    assert.ok(contrast(composite(secondary, background), background) >= 4.5,
+        `${mode} secondary shell text reaches AA contrast`);
+    assert.ok(contrast(composite(tertiary, background), background) >= 4.5,
+        `${mode} tertiary shell text remains readable at small sizes`);
+}
+
+const liquidGlassSurface = read("../../shell/desktop/modules/common/LiquidGlassSurface.qml");
+assert.match(liquidGlassSurface,
+    /minimumFillOpacity:[\s\S]{0,160}"clear"[\s\S]{0,160}"thick"/,
+    "liquid materials define clear, regular, and thick opacity floors");
+assert.match(liquidGlassSurface,
+    /effectiveFillOpacity:[\s\S]{0,160}minimumFillOpacity/,
+    "glass fill retains its legibility floor when blur strength changes");
+assert.doesNotMatch(liquidGlassSurface,
+    /root\.effectiveFillOpacity\s*\*\s*root\.normalizedBlurStrength/,
+    "backdrop blur strength cannot erase the readable material body");
 
 for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
                       "KosSwitch", "KosSlider"]) {
@@ -228,7 +270,14 @@ assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
     "application menus keep a four-pixel Bar gap");
 
 const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
+const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+assert.match(barWindow,
+    /LiquidGlassSurface\s*\{[\s\S]{0,600}material:\s*"regular"[\s\S]{0,180}adaptiveDarkScrim:\s*true/,
+    "the visible Bar puts labels on a contrast-adaptive regular material");
+assert.match(globalMenuSource,
+    /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,
+    "application menus follow the stable light/dark material palette");
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
@@ -241,6 +290,9 @@ assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
+assert.match(controlCenterCard,
+    /material:\s*"regular"[\s\S]{0,120}adaptiveDarkScrim:\s*true/,
+    "control-center cards reinforce contrast over extreme wallpaper colours");
 assert.match(controlCenterCard,
     /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
     "the power sheet moves primary Control Center cards out of view");
@@ -256,5 +308,4 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
-
 console.log("KOS UI visual contract: all checks passed");

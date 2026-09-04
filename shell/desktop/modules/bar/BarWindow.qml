@@ -104,6 +104,26 @@ PanelWindow {
             id: contentHoverHandler
         }
 
+        // Controls and labels sit on a regular material instead of directly
+        // on arbitrary wallpaper pixels. Transparent mode remains deliberately
+        // bare; the two glass modes gain a stable light/dark contrast base.
+        LiquidGlassSurface {
+            anchors.fill: parent
+            visible: !root.transparentMode
+            radius: AppearanceConfigService.barLayoutMode === "floating"
+                ? height / 2 : 0
+            baseColor: ThemeService.backgroundColor
+            blurStrength: AppearanceConfigService.effectiveBarBlur
+            liquidStrength: AppearanceConfigService.effectiveBarLiquid
+            ambientPrimary: WallpaperPaletteService.primary
+            ambientSecondary: WallpaperPaletteService.secondary
+            ambientStrength: 0.18 * AppearanceTokens.glass.ambientMultiplier
+            material: "regular"
+            adaptiveDarkScrim: true
+            bottomEdgeVisible: AppearanceConfigService.barLayoutMode !== "full"
+            bottomShadeVisible: false
+        }
+
         Loader {
             id: barContentLoader
             anchors.fill: parent
