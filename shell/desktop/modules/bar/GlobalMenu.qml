@@ -88,6 +88,33 @@ Item {
             done(itemsToHydrate)
     }
 
+    // Switching to a different anchor (a different top-level item, or the
+    // overflow button) while the popup is already visible reuses the same
+    // mapped surface for a new anchor and a different item count, i.e. a
+    // live resize+reposition of an already-mapped popup. That is the same
+    // class of bug the Column/PopupWindow sizing comment above already
+    // documents for submenu paging; here it leaves the surface at the
+    // previous menu's size with the new, differently sized menu rendered
+    // inside it. Force a clean unmap/remap whenever the anchor actually
+    // changes instead of mutating the live popup in place.
+    function presentMenu(rootId, anchorItem, result) {
+        const anchorChanging = menuPopup.visible && root.popupAnchorItem !== anchorItem
+        const openNew = function() {
+            popupRootId = rootId
+            popupAnchorItem = anchorItem
+            menuPopup.setItems(result)
+            console.info("[GlobalMenu] popup items=" + result.length)
+            menuPopup.show()
+            Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
+        }
+        if (anchorChanging) {
+            menuPopup.visible = false
+            Qt.callLater(openNew)
+        } else {
+            openNew()
+        }
+    }
+
     function openItem(item, clickedItem) {
         if (!item || !item.enabled)
             return
@@ -99,12 +126,7 @@ Item {
         PlatformClient.request("appmenu.open", { service, path, id: item.id })
         AppMenuService.requestLayout(item.id, function(children) {
             hydrate(children, 0, function(result) {
-                popupRootId = item.id
-                popupAnchorItem = clickedItem
-                menuPopup.setItems(result)
-                console.info("[GlobalMenu] popup items=" + result.length)
-                menuPopup.show()
-                Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
+                root.presentMenu(item.id, clickedItem, result)
             })
         })
     }
@@ -167,11 +189,7 @@ Item {
                 hoverEnabled: true
                 onClicked: {
                     root.hydrate(root.overflowItems, 0, function(result) {
-                        root.popupRootId = 0
-                        root.popupAnchorItem = overflowButton
-                        menuPopup.setItems(result)
-                        menuPopup.show()
-                        Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
+                        root.presentMenu(0, overflowButton, result)
                     })
                 }
             }
