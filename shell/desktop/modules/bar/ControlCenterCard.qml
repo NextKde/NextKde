@@ -140,7 +140,6 @@ PopupWindow {
         ambientSecondary: WallpaperPaletteService.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
-        adaptiveDarkScrim: true
         border.width: 1
         border.color: root.cardBorderColor
         scale: root.popupScale

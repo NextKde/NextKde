@@ -28,7 +28,7 @@ QtObject {
     // Liquid Glass keeps a neutral, theme-stable body behind its adaptive
     // reflections.  The material may borrow colour from the wallpaper, but
     // it must not borrow so much luminance that label contrast collapses.
-    readonly property color darkBg: Qt.rgba(0.055, 0.065, 0.090, 0.72)
+    readonly property color darkBg: Qt.rgba(0, 0, 0, 0.10)
     readonly property color darkFg: Qt.rgba(0.985, 0.990, 1.000, 1.0)
     readonly property color darkSecondaryFg: Qt.rgba(0.985, 0.990, 1.000, 0.82)
     readonly property color darkTertiaryFg: Qt.rgba(0.985, 0.990, 1.000, 0.62)
@@ -42,7 +42,7 @@ QtObject {
     // ═══════════════════════════════════════════════════
     // Light palette
     // ═══════════════════════════════════════════════════
-    readonly property color lightBg: Qt.rgba(0.940, 0.950, 0.975, 0.78)
+    readonly property color lightBg: Qt.rgba(0.95, 0.95, 0.97, 0.35)
     readonly property color lightFg: Qt.rgba(0.055, 0.065, 0.085, 1.0)
     readonly property color lightSecondaryFg: Qt.rgba(0.055, 0.065, 0.085, 0.72)
     readonly property color lightTertiaryFg: Qt.rgba(0.055, 0.065, 0.085, 0.62)

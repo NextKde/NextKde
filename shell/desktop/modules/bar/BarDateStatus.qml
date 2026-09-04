@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
 // Reusable date/time cluster shared by the standalone top Bar and the
@@ -20,13 +21,11 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 7
 
-        Text {
+        GlassText {
             id: timeText
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(clock.date, "h:mm")
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.40)
             font {
                 family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
                 pixelSize: 14
@@ -34,12 +33,10 @@ Item {
             }
         }
 
-        Text {
+        GlassText {
             anchors.verticalCenter: parent.verticalCenter
             text: Qt.formatDateTime(clock.date, "M月d日 dddd")
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.40)
             font {
                 family: "Noto Sans CJK SC, sans-serif"
                 pixelSize: 14

@@ -77,8 +77,6 @@ for (const mode of ["dark", "light"]) {
     const primary = rgbaProperty(shellThemeSource, `${mode}Fg`);
     const secondary = rgbaProperty(shellThemeSource, `${mode}SecondaryFg`);
     const tertiary = rgbaProperty(shellThemeSource, `${mode}TertiaryFg`);
-    assert.ok(background[3] >= 0.70,
-        `${mode} regular glass keeps a stable contrast base`);
     assert.ok(contrast(primary, background) >= 7,
         `${mode} primary shell text reaches enhanced contrast`);
     assert.ok(contrast(composite(secondary, background), background) >= 4.5,
@@ -86,17 +84,10 @@ for (const mode of ["dark", "light"]) {
     assert.ok(contrast(composite(tertiary, background), background) >= 4.5,
         `${mode} tertiary shell text remains readable at small sizes`);
 }
-
-const liquidGlassSurface = read("../../shell/desktop/modules/common/LiquidGlassSurface.qml");
-assert.match(liquidGlassSurface,
-    /minimumFillOpacity:[\s\S]{0,160}"clear"[\s\S]{0,160}"thick"/,
-    "liquid materials define clear, regular, and thick opacity floors");
-assert.match(liquidGlassSurface,
-    /effectiveFillOpacity:[\s\S]{0,160}minimumFillOpacity/,
-    "glass fill retains its legibility floor when blur strength changes");
-assert.doesNotMatch(liquidGlassSurface,
-    /root\.effectiveFillOpacity\s*\*\s*root\.normalizedBlurStrength/,
-    "backdrop blur strength cannot erase the readable material body");
+const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
+assert.match(glassTextSource,
+    /inkLuminance[\s\S]*styleColor:[\s\S]*inkLuminance\s*>=\s*0\.55/,
+    "glass text chooses an opposite-luminance outline without thickening the material");
 
 for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
                       "KosSwitch", "KosSlider"]) {
@@ -271,10 +262,14 @@ assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
 
 const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
+const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
-assert.match(barWindow,
-    /LiquidGlassSurface\s*\{[\s\S]{0,600}material:\s*"regular"[\s\S]{0,180}adaptiveDarkScrim:\s*true/,
-    "the visible Bar puts labels on a contrast-adaptive regular material");
+assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
+    "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
+assert.match(barDateStatus, /GlassText\s*\{/,
+    "top-bar labels protect their glyph edges over changing wallpaper");
+assert.doesNotMatch(controlCenterPanel, /^\s*Text\s*\{/m,
+    "control-center labels use bidirectional glass readability outlines");
 assert.match(globalMenuSource,
     /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,
     "application menus follow the stable light/dark material palette");
@@ -290,9 +285,6 @@ assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
-assert.match(controlCenterCard,
-    /material:\s*"regular"[\s\S]{0,120}adaptiveDarkScrim:\s*true/,
-    "control-center cards reinforce contrast over extreme wallpaper colours");
 assert.match(controlCenterCard,
     /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
     "the power sheet moves primary Control Center cards out of view");

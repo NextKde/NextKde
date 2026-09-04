@@ -131,7 +131,7 @@ Item {
                     color: pointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
                         ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
                 }
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     text: modelData.label || ""
                     color: ThemeService.foregroundColor
@@ -160,7 +160,7 @@ Item {
                 color: morePointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
                     ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
             }
-            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16 }
+            GlassText { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16 }
             MouseArea {
                 id: morePointer
                 anchors.fill: parent

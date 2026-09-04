@@ -63,15 +63,6 @@ Rectangle {
             (ambientExtremeDistance - 0.08) / 0.30))
         return 1.0 - t * t * (3.0 - 2.0 * t)
     }
-    // Apple-style regular/thick materials retain an opacity floor. Blur is a
-    // backdrop treatment, not an opacity control: weakening blur must never
-    // make a text-bearing surface disappear into the content below it.
-    readonly property real minimumFillOpacity: material === "clear" ? 0.22
-        : (material === "thick" ? 0.68 : 0.52)
-    readonly property real requestedFillOpacity: Math.min(1.0,
-        baseColor.a * materialOpacityScale)
-    readonly property real effectiveFillOpacity: Math.max(
-        minimumFillOpacity, requestedFillOpacity) * surfaceOpacity
     readonly property real adaptiveScrimOpacity: {
         if (!adaptiveDarkScrim)
             return 0.0
@@ -161,7 +152,8 @@ Rectangle {
         baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
         baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
         baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
-        root.effectiveFillOpacity
+        Math.min(1.0, baseColor.a * root.materialOpacityScale)
+            * surfaceOpacity * root.normalizedBlurStrength
     )
 
     // Reinforce the side of the material opposite its foreground ink. A light

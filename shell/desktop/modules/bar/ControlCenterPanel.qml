@@ -267,21 +267,17 @@ Item {
         Column {
             anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 1
-            Text {
+            GlassText {
                 width: parent.width
                 text: "Wi‑Fi"
                 color: wifiCard.materialForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: NetworkService.wifiEnabled ? (NetworkService.ssid || "未连接") : "已关闭"
                 elide: Text.ElideRight
                 color: wifiCard.materialSecondaryForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
@@ -353,20 +349,16 @@ Item {
         Column {
             anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 1
-            Text {
+            GlassText {
                 width: parent.width
                 text: "Bluetooth"
                 color: bluetoothCard.materialForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: ControlCenterService.bluetoothPowered ? "已开启" : "已关闭"
                 color: bluetoothCard.materialSecondaryForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
@@ -415,12 +407,10 @@ Item {
             width: 43; height: 43; radius: 13
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 13 }
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
-            Text {
+            GlassText {
                 anchors.centerIn: parent
                 text: "♫"
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.86
                 font.pixelSize: 21
             }
@@ -448,22 +438,18 @@ Item {
         Column {
             anchors { left: artwork.right; right: parent.right; top: artwork.top; leftMargin: 8; rightMargin: 10 }
             spacing: 2
-            Text {
+            GlassText {
                 width: parent.width
                 text: panel.player?.trackTitle || "未在播放"
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: panel.player?.trackArtist || "媒体控制"
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.70
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
@@ -542,7 +528,7 @@ Item {
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-        Text {
+        GlassText {
             anchors.centerIn: parent
             width: 24
             height: 24
@@ -550,8 +536,6 @@ Item {
             verticalAlignment: Text.AlignVCenter
             text: ThemeService.isDark ? "☾" : "☼"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             font.pixelSize: 24
             font.weight: Font.Bold
         }
@@ -635,12 +619,10 @@ Item {
                     ? "#0a84ff" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
             }
         }
-        Text {
+        GlassText {
             anchors { left: parent.left; leftMargin: 42; verticalCenter: parent.verticalCenter }
             text: "勿扰"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
         }
         MouseArea { id: dndPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ControlCenterService.toggleDoNotDisturb() }
@@ -658,21 +640,17 @@ Item {
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        Text {
+        GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             text: "显示亮度"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.70
             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
         }
-        Text {
+        GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
             text: ControlCenterService.brightnessAvailable ? Math.round(panel.brightnessPreview) + "%" : "无亮度设备"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.50
             font { pixelSize: 9; family: "Noto Sans CJK SC" }
         }
@@ -695,12 +673,10 @@ Item {
                 ControlCenterService.setBrightness(Math.round(v * 100))
             }
         }
-        Text {
+        GlassText {
             anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
             text: "☀"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.65
             font.pixelSize: 13
         }
@@ -718,20 +694,16 @@ Item {
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        Text {
+        GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             text: "声音"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
         }
-        Text {
+        GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
             text: Math.round(panel.volumePreview) + "%"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.72
             font { pixelSize: 10; family: "Noto Sans CJK SC" }
         }
@@ -801,14 +773,14 @@ Item {
         Item {
             anchors { fill: parent; margins: 10 }
 
-            Text {
+            GlassText {
                 id: historyTitle
                 text: "通知历史"
                 color: ThemeService.foregroundColor
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                 anchors { left: parent.left; top: parent.top }
             }
-            Text {
+            GlassText {
                 text: "清空"
                 color: clearMouse.containsMouse ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.45))
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
@@ -851,7 +823,7 @@ Item {
                             asynchronous: true
                             anchors.verticalCenter: parent.verticalCenter
                         }
-                        Text {
+                        GlassText {
                             text: modelData.appName
                             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.62) : Qt.rgba(0, 0, 0, 0.62)
                             font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
@@ -869,7 +841,7 @@ Item {
                                 width: historyList.width
                                 height: rowSummary.implicitHeight + (rowBody.visible ? rowBody.implicitHeight + 1 : 0)
 
-                                Text {
+                                GlassText {
                                     id: rowSummary
                                     width: parent.width - removeButton.width - 6
                                     text: modelData.summary.length > 0 ? modelData.summary : "通知"
@@ -878,7 +850,7 @@ Item {
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
-                                Text {
+                                GlassText {
                                     id: rowBody
                                     anchors.top: rowSummary.bottom
                                     anchors.topMargin: 1
@@ -890,7 +862,7 @@ Item {
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
-                                Text {
+                                GlassText {
                                     id: removeButton
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
@@ -910,7 +882,7 @@ Item {
                         }
                     }
                 }
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     visible: historyList.count === 0
                     text: "暂无历史通知"
@@ -987,19 +959,15 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 0
 
-                        Text {
+                        GlassText {
                             text: ControlCenterService.currentUserName
                             color: ThemeService.foregroundColor
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: Qt.rgba(0, 0, 0, 0.50)
                             font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                         }
-                        Text {
+                        GlassText {
                             text: "电源与会话管理"
                             color: ThemeService.foregroundColor
                             opacity: 0.60
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: Qt.rgba(0, 0, 0, 0.40)
                             font { pixelSize: 9; family: "Noto Sans CJK SC" }
                         }
                     }
@@ -1020,7 +988,7 @@ Item {
                     border.width: 1
                     border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "×"
                         color: ThemeService.foregroundColor
@@ -1082,8 +1050,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "锁屏"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "锁定屏幕"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "锁屏"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "锁定屏幕"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1115,8 +1083,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "睡眠"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "挂起系统"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "睡眠"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "挂起系统"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1148,8 +1116,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "切换用户"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "保留会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "切换用户"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "保留会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1181,8 +1149,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "注销"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "注销"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1211,8 +1179,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "重启"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "重启"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1243,8 +1211,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "关机"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "关机"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1255,7 +1223,7 @@ Item {
             }
 
             // Error / Status bar
-            Text {
+            GlassText {
                 anchors {
                     bottom: parent.bottom
                     bottomMargin: 6
@@ -1281,23 +1249,19 @@ Item {
                     : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout")
             }
 
-            Text {
+            GlassText {
                 anchors { top: parent.top; topMargin: 50; horizontalCenter: parent.horizontalCenter }
                 text: panel.pendingConfirmAction === "poweroff" ? "确定要关机吗？"
                     : (panel.pendingConfirmAction === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
 
-            Text {
+            GlassText {
                 anchors { top: parent.top; topMargin: 72; horizontalCenter: parent.horizontalCenter }
                 text: "未保存的工作可能会丢失"
                 color: ThemeService.foregroundColor
                 opacity: 0.66
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
 
@@ -1314,7 +1278,7 @@ Item {
                         : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.05))
                     border.width: 1
                     border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "取消"
                         color: ThemeService.foregroundColor
@@ -1336,7 +1300,7 @@ Item {
                     color: executeConfirmMouse.containsMouse ? Qt.rgba(255, 69, 58, 0.35) : Qt.rgba(255, 69, 58, 0.20)
                     border.width: 1
                     border.color: "#ff453a"
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: panel.pendingConfirmAction === "poweroff" ? "关机"
                             : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
