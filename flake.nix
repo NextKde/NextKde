@@ -61,11 +61,10 @@
                   set -e
                   shell_config="$HOME/.config/quickshell/kos"
                   mkdir -p "$shell_config/shared/qml"
-                  rm -rf "$shell_config/shared/qml/controls"
-                  # Copy shell QML (follow symlinks to get real files)
-                  cp -rL ${kos}/share/kos-desktop/. "$shell_config/"
-                  # Copy shared QML controls
-                  cp -rL ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
+                  # Overwrite shell QML (follow symlinks, force overwrite)
+                  cp -rfL ${kos}/share/kos-desktop/. "$shell_config/"
+                  # Overwrite shared QML controls
+                  cp -rfL ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
                 '';
               };
             };
