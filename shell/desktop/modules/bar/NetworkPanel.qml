@@ -276,42 +276,16 @@ PopupWindow {
                 Behavior on color { ColorAnimation { duration: 140 } }
                 border.width: 1
                 border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0, 0, 0, 0.10)
-                Canvas {
-                    id: networkPanelWifiGlyph
+                WifiSignalIcon {
                     anchors.centerIn: parent
                     width: 20
                     height: 20
-                    property bool active: NetworkService.wifiEnabled
-                    property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
-                    onActiveChanged: requestPaint()
-                    onGlyphColorChanged: requestPaint()
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        ctx.reset()
-                        ctx.strokeStyle = glyphColor
-                        ctx.fillStyle = glyphColor
-                        ctx.lineWidth = 1.55
-                        ctx.lineCap = "round"
-                        ctx.lineJoin = "round"
-                        ctx.scale(1.08, 1.08)
-                        ctx.translate(0, -1.8)
-                        const rings = NetworkService.signalStrength < 25 ? 1
-                            : (NetworkService.signalStrength < 50 ? 2 : 3)
-                        for (let ring = 0; ring < rings; ring++) {
-                            const ringRadius = 3.1 + ring * 2.45
-                            ctx.beginPath()
-                            ctx.arc(8, 14.2, ringRadius,
-                                Math.PI * 1.22, Math.PI * 1.78)
-                            ctx.stroke()
-                        }
-                        ctx.beginPath()
-                        ctx.arc(8, 13.8, 1.15, 0, Math.PI * 2)
-                        ctx.fill()
-                    }
-                    Connections {
-                        target: NetworkService
-                        function onSignalStrengthChanged() { networkPanelWifiGlyph.requestPaint() }
-                    }
+                    wifiEnabled: NetworkService.wifiEnabled
+                    connected: NetworkService.deviceState === "connected"
+                        && NetworkService.connectionType === "wifi"
+                    signalStrength: NetworkService.signalStrength
+                    glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
+                        : (ThemeService.isDark ? "white" : "#000000")
                 }
                 MouseArea {
                     anchors.fill: parent

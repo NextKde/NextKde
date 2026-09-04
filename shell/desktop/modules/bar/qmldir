@@ -11,6 +11,7 @@ DockStatusSvgIcon 1.0 DockStatusSvgIcon.qml
 Battery 1.0 Battery.qml
 CpuTemperature 1.0 CpuTemperature.qml
 NetworkStatus 1.0 NetworkStatus.qml
+WifiSignalIcon 1.0 WifiSignalIcon.qml
 NetworkTraffic 1.0 NetworkTraffic.qml
 NetworkPanel 1.0 NetworkPanel.qml
 BluetoothPanel 1.0 BluetoothPanel.qml

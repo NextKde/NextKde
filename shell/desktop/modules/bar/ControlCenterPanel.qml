@@ -209,7 +209,7 @@ Item {
     }
 
     // ── Card 1: Wi-Fi ────────────────────────────────────────────────
-    // Opens the Wi-Fi picker. Power toggle lives inside that picker.
+    // Disc toggles power; tapping the rest of the pill opens the network list.
     ControlCenterCard {
         id: wifiCard
         coordinator: coordinator
@@ -223,45 +223,36 @@ Item {
         liquidStrength: panel.effectiveLiquid
 
         Rectangle {
+            id: wifiToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
                 ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
-            Canvas {
-                id: controlWifiGlyph
+            opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
+            scale: wifiTogglePointer.pressed ? 0.92
+                : (wifiTogglePointer.containsMouse ? 1.04 : 1.0)
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+            WifiSignalIcon {
                 anchors.centerIn: parent
                 width: 20; height: 20
-                property bool active: NetworkService.wifiEnabled
-                property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
-                onActiveChanged: requestPaint()
-                onGlyphColorChanged: requestPaint()
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = glyphColor
-                    ctx.fillStyle = glyphColor
-                    ctx.lineWidth = 1.55
-                    ctx.lineCap = "round"
-                    ctx.lineJoin = "round"
-                    ctx.scale(1.08, 1.08)
-                    ctx.translate(0, -1.8)
-                    const rings = NetworkService.signalStrength < 25 ? 1
-                        : (NetworkService.signalStrength < 50 ? 2 : 3)
-                    for (let ring = 0; ring < rings; ring++) {
-                        const radius = 3.1 + ring * 2.45
-                        ctx.beginPath()
-                        ctx.arc(8, 14.2, radius, Math.PI * 1.22, Math.PI * 1.78)
-                        ctx.stroke()
-                    }
-                    ctx.beginPath()
-                    ctx.arc(8, 13.8, 1.15, 0, Math.PI * 2)
-                    ctx.fill()
-                }
-                Connections {
-                    target: NetworkService
-                    function onSignalStrengthChanged() { controlWifiGlyph.requestPaint() }
-                }
+                wifiEnabled: NetworkService.wifiEnabled
+                connected: NetworkService.deviceState === "connected"
+                    && NetworkService.connectionType === "wifi"
+                signalStrength: NetworkService.signalStrength
+                glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
+                    : (ThemeService.isDark ? "white" : "#000000")
+            }
+            MouseArea {
+                id: wifiTogglePointer
+                anchors.fill: parent
+                enabled: NetworkService.available
+                    && !NetworkService.wifiToggleInProgress
+                hoverEnabled: true
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: NetworkService.setWifiEnabled(
+                    !NetworkService.wifiEnabled)
             }
         }
         Column {
@@ -282,7 +273,18 @@ Item {
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
         }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.networkRequested() }
+        MouseArea {
+            anchors {
+                top: parent.top
+                right: parent.right
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: 49
+            }
+            enabled: NetworkService.available
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: panel.networkRequested()
+        }
     }
 
     // ── Card 2: Bluetooth ────────────────────────────────────────────
@@ -301,11 +303,17 @@ Item {
         liquidStrength: panel.effectiveLiquid
 
         Rectangle {
+            id: bluetoothToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
                 ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
+            scale: bluetoothTogglePointer.pressed ? 0.92
+                : (bluetoothTogglePointer.containsMouse ? 1.04 : 1.0)
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
             Canvas {
                 id: controlBtGlyph
                 anchors.centerIn: parent
@@ -340,8 +348,10 @@ Item {
                 }
             }
             MouseArea {
+                id: bluetoothTogglePointer
                 anchors.fill: parent
                 enabled: ControlCenterService.bluetoothAvailable && !ControlCenterService.bluetoothChangeInProgress
+                hoverEnabled: true
                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: ControlCenterService.setBluetoothEnabled(!ControlCenterService.bluetoothPowered)
             }
@@ -364,8 +374,14 @@ Item {
             }
         }
         MouseArea {
-            anchors.fill: parent
-            enabled: ControlCenterService.bluetoothAvailable && !ControlCenterService.bluetoothChangeInProgress
+            anchors {
+                top: parent.top
+                right: parent.right
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: 49
+            }
+            enabled: ControlCenterService.bluetoothAvailable
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: panel.bluetoothRequested()
         }

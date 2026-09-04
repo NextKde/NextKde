@@ -264,6 +264,9 @@ const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
 const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
+const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
+const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
 assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
     "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
 assert.match(barDateStatus, /GlassText\s*\{/,
@@ -275,6 +278,25 @@ assert.match(globalMenuSource,
     "application menus follow the stable light/dark material palette");
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
+assert.match(wifiSignalIcon,
+    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*\(signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3\)/,
+    "the shared Wi-Fi glyph exposes three live signal-quality levels");
+assert.match(networkStatus,
+    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    "the top-bar Wi-Fi icon renders NetworkManager signal quality");
+assert.match(networkPanel,
+    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    "the network panel reuses the live Wi-Fi signal glyph");
+for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
+    const start = controlCenterPanel.indexOf(marker);
+    const section = controlCenterPanel.slice(start, start + 5200);
+    assert.match(section,
+        /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
+        `${marker} round disc owns its power toggle`);
+    assert.match(section,
+        /leftMargin:\s*49[\s\S]{0,220}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
+        `${marker} card body opens details without covering the toggle`);
+}
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
