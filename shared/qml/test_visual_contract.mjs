@@ -153,9 +153,15 @@ const weather = read("../../apps/weather/qml/Main.qml");
 assert.match(weather, /ButtonGroup \{ id: unitsGroup \}[\s\S]*ButtonGroup\.group: unitsGroup[\s\S]*ButtonGroup\.group: unitsGroup/,
     "Weather unit choices form one exclusive accessible group");
 
-const textField = read("./controls/LiquidTextField.qml");
-assert.doesNotMatch(textField, /duration:\s*(?:130|150)/,
-    "shared text fields honor the reduce-motion duration tokens");
+// LiquidTextField is shell-owned: it is directory-imported by the Quickshell
+// surfaces where the AppTheme singleton is not in scope, so it keeps the
+// shell's own fixed motion policy. The AppTheme-backed foundation controls
+// are the ones that must honor the reduce-motion duration tokens.
+for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"]) {
+    const source = read(`./foundation/${control}.qml`);
+    assert.doesNotMatch(source, /duration:\s*(?:130|150)/,
+        `${control} honors the reduce-motion duration tokens`);
+}
 
 const preferences = read("../../apps/common/src/ApplicationPreferences.cpp");
 assert.match(preferences, /KosApplications/,

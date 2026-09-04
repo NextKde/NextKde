@@ -90,9 +90,10 @@ QtObject {
         onFileChanged: settle.restart()
     }
 
+    // NOTE: Quickshell.Io's Timer (which shadows QtQuick.Timer here) has no
+    // singleShot; it fires once unless repeat is set.
     property Timer _availabilityGrace: Timer {
         interval: service.availabilityGraceMs
-        singleShot: true
         running: true
         onTriggered: {
             if (service.state !== service.stateReady)
