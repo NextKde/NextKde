@@ -170,6 +170,7 @@ Item {
                 availableHeight: root.height
                 trailingComponents: [networkQuickControl, batteryQuickControl,
                     settingsQuickControl, controlCenterQuickControl]
+                trailingKeys: ["network", "battery", "settings", "controlcenter"]
             }
         }
     }
