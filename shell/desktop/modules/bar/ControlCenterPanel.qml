@@ -597,6 +597,13 @@ Item {
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors.centerIn: parent
             width: 24
@@ -630,6 +637,13 @@ Item {
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: themePointer.containsMouse && !themePointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         GlassText {
             anchors.centerIn: parent
             width: 24
@@ -665,6 +679,13 @@ Item {
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors.centerIn: parent
             width: 24
@@ -705,6 +726,13 @@ Item {
 
         cardScale: dndPointer.pressed ? 0.97 : (dndPointer.containsMouse ? 1.025 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: dndPointer.containsMouse && !dndPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
             width: 21
