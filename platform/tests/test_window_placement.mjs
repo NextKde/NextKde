@@ -6,7 +6,18 @@ import { fileURLToPath } from "node:url";
 const bridgePath = fileURLToPath(new URL("../kwin/window-bridge.js", import.meta.url));
 const source = fs.readFileSync(bridgePath, "utf8");
 const helpers = source.slice(0, source.indexOf("// Runtime-dependent bridge helpers"));
-const context = vm.createContext({ Math, Number, String, JSON });
+const timers = [];
+class FakeTimer {
+    constructor() {
+        this.interval = -1;
+        this.singleShot = false;
+        this.timeout = { connect: callback => { this.callback = callback; } };
+        timers.push(this);
+    }
+    start() { this.started = true; }
+}
+const context = vm.createContext({ Math, Number, String, JSON,
+    QTimer: FakeTimer, print: () => {} });
 vm.runInContext(helpers, context, { filename: bridgePath });
 
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -56,5 +67,18 @@ assert.deepEqual(place(
     { width: 1800, height: 1000 },
     { x: 0, y: 35, width: 1600, height: 857 }
 ), { x: 0, y: 35, width: 1800, height: 1000 });
+
+// KWin exposes QObject QTimer, whose one-shot property is `singleShot` (not
+// QML Timer's `repeat`). Scheduling the same window twice must still create
+// only one one-shot placement callback.
+const scheduledWindow = { internalId: "placement-once" };
+context.scheduleInitialPlacement(scheduledWindow);
+context.scheduleInitialPlacement(scheduledWindow);
+assert.equal(timers.length, 1);
+assert.equal(timers[0].singleShot, true);
+assert.equal(timers[0].started, true);
+
+assert.doesNotMatch(source, /\.repeat\s*=/,
+    "KWin script must use QTimer.singleShot instead of QML Timer.repeat");
 
 console.log("window placement: ok");
