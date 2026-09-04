@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/sys/unix"
 )
 
 // MetricSample keeps one fixed-interval telemetry point. Ratios are 0..1 and
@@ -90,15 +91,18 @@ type Desktop struct {
 	UpdatedAt int64          `json:"updatedAt"`
 }
 type Snapshot struct {
-	GeneratedAt int64    `json:"generatedAt"`
-	Metrics     Metrics  `json:"metrics"`
-	Activity    Activity `json:"activity"`
-	Desktop     Desktop  `json:"desktop"`
+	SchemaVersion int          `json:"schemaVersion"`
+	GeneratedAt   int64        `json:"generatedAt"`
+	Metrics       Metrics      `json:"metrics"`
+	Activity      Activity     `json:"activity"`
+	Desktop       Desktop      `json:"desktop"`
+	Weather       WeatherState `json:"weather"`
 }
 type State struct {
-	Metrics  Metrics  `json:"metrics"`
-	Activity Activity `json:"activity"`
-	Desktop  Desktop  `json:"desktop"`
+	Metrics  Metrics      `json:"metrics"`
+	Activity Activity     `json:"activity"`
+	Desktop  Desktop      `json:"desktop"`
+	Weather  WeatherState `json:"weather"`
 }
 type DataRequest struct {
 	Version   int                    `json:"version"`
@@ -128,6 +132,8 @@ type Service struct {
 	state                     State
 	statePath, snapshotPath   string
 	desktopDirectory          string
+	weatherProvider           WeatherProvider
+	weatherRequestSerial      uint64
 	last                      time.Time
 	prevCPUTotal, prevCPUIdle float64
 }
@@ -149,6 +155,7 @@ func newService() *Service {
 		snapshotPath:       filepath.Join(root, "snapshot.json"),
 		desktopDirectory:   desktopDirectory(),
 		desktopSubscribers: map[net.Conn]struct{}{},
+		weatherProvider:    newOpenMeteoProvider(),
 		last:               time.Now(),
 	}
 	s.state.Activity.TodayApps = map[string]AppUsage{}
@@ -162,6 +169,7 @@ func newService() *Service {
 	if s.state.Activity.UptimeByDay == nil {
 		s.state.Activity.UptimeByDay = map[string]float64{}
 	}
+	normalizeWeatherState(&s.state.Weather)
 	return s
 }
 
@@ -183,7 +191,14 @@ func (s *Service) persist() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.settle(time.Now())
-	snapshot := Snapshot{GeneratedAt: time.Now().UnixMilli(), Metrics: s.state.Metrics, Activity: s.state.Activity, Desktop: s.state.Desktop}
+	snapshot := Snapshot{
+		SchemaVersion: 1,
+		GeneratedAt:   time.Now().UnixMilli(),
+		Metrics:       s.state.Metrics,
+		Activity:      s.state.Activity,
+		Desktop:       s.state.Desktop,
+		Weather:       s.state.Weather,
+	}
 	_ = writeJSON(s.statePath, s.state)
 	_ = writeJSON(s.snapshotPath, snapshot)
 }
@@ -234,6 +249,26 @@ func (s *Service) publishDesktop() {
 		}
 		// Do not leave the 100ms broadcast deadline armed on the shared
 		// connection; the request loop would otherwise inherit it and time out.
+		_ = conn.SetWriteDeadline(time.Time{})
+	}
+}
+
+// Weather shares the connection registry with desktop events. Holding the
+// same write mutex prevents two asynchronous broadcasts from interleaving on
+// a JSONL connection.
+func (s *Service) publishWeather() {
+	s.desktopSubscribersMu.Lock()
+	defer s.desktopSubscribersMu.Unlock()
+	for conn := range s.desktopSubscribers {
+		_ = conn.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
+		event := map[string]interface{}{"version": 1, "event": "weather.changed",
+			"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
+		raw, _ := json.Marshal(event)
+		if _, err := conn.Write(append(raw, '\n')); err != nil {
+			delete(s.desktopSubscribers, conn)
+			_ = conn.Close()
+			continue
+		}
 		_ = conn.SetWriteDeadline(time.Time{})
 	}
 }
@@ -768,6 +803,14 @@ func (s *Service) addInterval(start, end float64, appID string) {
 	if end <= start {
 		return
 	}
+	// State written by early versions and focused test fixtures may omit these
+	// maps. Recreate them before settling time so persistence cannot panic.
+	if s.state.Activity.UptimeByDay == nil {
+		s.state.Activity.UptimeByDay = map[string]float64{}
+	}
+	if s.state.Activity.TodayApps == nil {
+		s.state.Activity.TodayApps = map[string]AppUsage{}
+	}
 	for cursor := start; cursor < end; {
 		date := time.UnixMilli(int64(cursor))
 		tomorrow := time.Date(date.Year(), date.Month(), date.Day()+1, 0, 0, 0, 0, time.Local)
@@ -880,6 +923,48 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 		}
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
 			Result: map[string]interface{}{"refreshed": true}}
+	case "weather.snapshot":
+		s.mu.Lock()
+		weather := s.state.Weather
+		s.mu.Unlock()
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{"weather": weather}}
+	case "weather.search":
+		query, _ := request.Payload["query"].(string)
+		language, _ := request.Payload["language"].(string)
+		limit := 8
+		if value, ok := request.Payload["limit"].(float64); ok {
+			limit = int(value)
+		}
+		locations, err := s.searchWeather(query, language, limit)
+		if err != nil {
+			return dataError(request, "weather-search-failed", weatherErrorMessage(err), true)
+		}
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{"locations": locations}}
+	case "weather.refresh":
+		accepted := s.startWeatherRefresh(true)
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+			Result: map[string]interface{}{"accepted": accepted}}
+	case "weather.set-location":
+		raw, err := json.Marshal(request.Payload["location"])
+		if err != nil {
+			return dataError(request, "invalid-location", "天气位置格式无效", false)
+		}
+		var location WeatherLocation
+		if err = json.Unmarshal(raw, &location); err != nil {
+			return dataError(request, "invalid-location", "天气位置格式无效", false)
+		}
+		if err = s.setWeatherLocation(location); err != nil {
+			return dataError(request, "invalid-location", weatherErrorMessage(err), false)
+		}
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true}
+	case "weather.set-units":
+		units, _ := request.Payload["units"].(string)
+		if err := s.setWeatherUnits(units); err != nil {
+			return dataError(request, "invalid-units", weatherErrorMessage(err), false)
+		}
+		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true}
 	case "activity.active-app":
 		appID, _ := request.Payload["appID"].(string)
 		name, _ := request.Payload["name"].(string)
@@ -942,6 +1027,19 @@ func serve(s *Service, path string) error {
 	}
 }
 
+func acquireInstanceLock(socketPath string) (*os.File, error) {
+	lockPath := socketPath + ".lock"
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("open service lock: %w", err)
+	}
+	if err = unix.Flock(int(lock.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		_ = lock.Close()
+		return nil, fmt.Errorf("another kos-data-service instance is active: %w", err)
+	}
+	return lock, nil
+}
+
 func main() {
 	s := newService()
 	// KOS_DATA_SOCKET lets a development service listen beside the installed
@@ -950,12 +1048,19 @@ func main() {
 	if socket == "" {
 		socket = filepath.Join(homePath("XDG_RUNTIME_DIR", "/tmp"), "kos-data.sock")
 	}
+	instanceLock, err := acquireInstanceLock(socket)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	defer instanceLock.Close()
 	// Publish the initial full directory snapshot before accepting subscribers.
 	// This removes the startup race where QML connected while snapshot.json was
 	// still stale and then waited indefinitely for a second filesystem event.
 	s.sample()
 	s.refreshDesktop()
 	s.persist()
+	s.startWeatherRefresh(false)
 	go func() {
 		if err := serve(s, socket); err != nil && !errors.Is(err, net.ErrClosed) {
 			fmt.Fprintln(os.Stderr, err)
@@ -978,6 +1083,7 @@ func main() {
 		select {
 		case <-tick.C:
 			s.sample()
+			s.startWeatherRefresh(false)
 		case <-settleTick.C:
 			s.mu.Lock()
 			s.settle(time.Now())

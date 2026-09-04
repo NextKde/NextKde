@@ -271,6 +271,12 @@ install_files() {
         local -a kos_units=(
             kos-platform.service kos-data.service kos-shell.service
         )
+        # Application services are optional: tools/install-apps.sh drops their
+        # units next to the core ones, but a core-only installation must not
+        # fail on `enable` because an optional unit is absent.
+        if [[ -e "$runtime_unit_dir/kos-pim-service.service" ]]; then
+            kos_units+=(kos-pim-service.service)
+        fi
         # install is non-disruptive: it registers the units for the next
         # session (and login autostart) but leaves the running session alone.
         # In-place updates of executables and QML only take effect after the
@@ -322,6 +328,11 @@ start_all() {
     local -a kos_units=(
         kos-platform.service kos-data.service kos-shell.service
     )
+    # Match the install step: optional application services join the core set
+    # only when their unit has actually been installed.
+    if [[ -e "$runtime_unit_dir/kos-pim-service.service" ]]; then
+        kos_units+=(kos-pim-service.service)
+    fi
     # Replace a manually launched `kos` instance so systemd becomes its sole
     # supervisor; the unit's --no-duplicate would otherwise exit repeatedly
     # while that instance is alive.

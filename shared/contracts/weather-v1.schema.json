@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SuceV587/NextKde/shared/contracts/weather-v1.schema.json",
+  "title": "NextKde weather snapshot v1",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "provider",
+    "status",
+    "units",
+    "location",
+    "locations",
+    "hourly",
+    "daily"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "provider": { "const": "open-meteo" },
+    "status": { "enum": ["idle", "loading", "ready", "error"] },
+    "units": { "enum": ["metric", "imperial"] },
+    "location": { "$ref": "#/$defs/location" },
+    "locations": {
+      "type": "array",
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/location" }
+    },
+    "fetchedAt": { "type": "integer", "minimum": 0 },
+    "nextRefreshAt": { "type": "integer", "minimum": 0 },
+    "staleAt": { "type": "integer", "minimum": 0 },
+    "lastAttemptAt": { "type": "integer", "minimum": 0 },
+    "error": { "type": "string", "maxLength": 240 },
+    "current": { "$ref": "#/$defs/current" },
+    "hourly": {
+      "type": "array",
+      "maxItems": 48,
+      "items": { "$ref": "#/$defs/hourlyPoint" }
+    },
+    "daily": {
+      "type": "array",
+      "maxItems": 7,
+      "items": { "$ref": "#/$defs/day" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["id", "name", "latitude", "longitude"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "admin1": { "type": "string" },
+        "country": { "type": "string" },
+        "countryCode": { "type": "string" },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "timezone": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "current": {
+      "type": "object",
+      "required": [
+        "time",
+        "temperature",
+        "apparentTemperature",
+        "relativeHumidity",
+        "isDay",
+        "weatherCode",
+        "windSpeed",
+        "windDirection"
+      ],
+      "properties": {
+        "time": { "type": "string" },
+        "temperature": { "type": "number" },
+        "apparentTemperature": { "type": "number" },
+        "relativeHumidity": { "type": "number", "minimum": 0, "maximum": 100 },
+        "isDay": { "type": "boolean" },
+        "weatherCode": { "type": "integer" },
+        "windSpeed": { "type": "number", "minimum": 0 },
+        "windDirection": { "type": "number", "minimum": 0, "maximum": 360 }
+      },
+      "additionalProperties": true
+    },
+    "hourlyPoint": {
+      "type": "object",
+      "required": [
+        "time",
+        "temperature",
+        "apparentTemperature",
+        "relativeHumidity",
+        "precipitationProbability",
+        "weatherCode",
+        "isDay",
+        "windSpeed"
+      ],
+      "properties": {
+        "time": { "type": "string" },
+        "temperature": { "type": "number" },
+        "apparentTemperature": { "type": "number" },
+        "relativeHumidity": { "type": "number" },
+        "precipitationProbability": { "type": "number" },
+        "weatherCode": { "type": "integer" },
+        "isDay": { "type": "boolean" },
+        "windSpeed": { "type": "number" }
+      },
+      "additionalProperties": true
+    },
+    "day": {
+      "type": "object",
+      "required": [
+        "date",
+        "weatherCode",
+        "temperatureMaximum",
+        "temperatureMinimum",
+        "precipitationProbability"
+      ],
+      "properties": {
+        "date": { "type": "string" },
+        "weatherCode": { "type": "integer" },
+        "temperatureMaximum": { "type": "number" },
+        "temperatureMinimum": { "type": "number" },
+        "precipitationProbability": { "type": "number" },
+        "sunrise": { "type": "string" },
+        "sunset": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

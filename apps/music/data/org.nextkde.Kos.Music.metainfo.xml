@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.nextkde.Kos.Music</id>
+  <name>KOS Music</name>
+  <summary>A local music library and player</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="org.nextkde"><name>NextKde Contributors</name></developer>
+  <description><p>Browse local music, manage playlists and the play queue, and control playback through standard MPRIS integrations.</p></description>
+  <launchable type="desktop-id">kos-music.desktop</launchable>
+  <provides><binary>kos-music</binary><mediatype>audio/mpeg</mediatype><mediatype>audio/flac</mediatype><mediatype>audio/ogg</mediatype></provides>
+  <categories><category>AudioVideo</category><category>Audio</category><category>Player</category></categories>
+  <url type="homepage">https://github.com/SuceV587/NextKde</url>
+  <content_rating type="oars-1.1"/>
+</component>

@@ -112,6 +112,24 @@ and appearance preferences remains available for a later reinstall.
 | Appearance and motion | Offers liquid glass, background blur, theme colors, dock position, icon style, and display mode. KWin plugins power dock and window animation. |
 | Settings and shortcuts | A standalone settings center configures appearance, the dock, bar, and launcher; global shortcuts can be installed and changed in KDE System Settings. |
 
+### Optional standalone applications
+
+The repository also includes independent Qt Quick applications for Calendar,
+Todo, Weather, and local Music. They are not built with the Shell by default.
+Use `apps-dev` or `apps-release` to build all four, or the `calendar-dev`,
+`todo-dev`, `weather-dev`, and `music-dev` presets for one application:
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+```
+
+Run `./tools/install-apps.sh` for a per-user install and service registration.
+See [apps/README.md](apps/README.md) for dependencies and module details. Weather
+shares the `kos-data-service` Open-Meteo cache with the Shell; Calendar and Todo
+share the on-demand PIM service.
+
 KOS does not replace KDE Plasma. It reuses KWin, NetworkManager, PipeWire,
 BlueZ, and systemd, then presents those system capabilities in its own UI.
 
@@ -124,7 +142,7 @@ Quickshell Shell ──► kos-platform ──► KWin / network / audio / Bluet
 
 - `shell/`: UI code.
 - `platform/`: system adapters for KWin, networking, audio, and brightness.
-- `services/data-service/`: system metrics, history, and desktop data.
+- `services/data-service/`: system metrics, history, desktop data, and weather cache.
 - `integrations/kwin/`: KWin plugins; `vendor/`: third-party Glass source.
 
 See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.

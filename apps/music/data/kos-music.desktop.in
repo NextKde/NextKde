@@ -1,0 +1,25 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KOS Music
+Name[zh_CN]=KOS 音乐
+GenericName=Music Player
+GenericName[zh_CN]=音乐播放器
+Comment=Browse, organize, and play your local music library
+Comment[zh_CN]=浏览、整理并播放本地音乐资料库
+TryExec=@KOS_APP_EXECUTABLE@
+Exec=@KOS_APP_EXECUTABLE@ %U
+Icon=kos-music
+Terminal=false
+Categories=AudioVideo;Audio;Player;Qt;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/x-wav;audio/mp4;audio/aac;audio/x-aiff;
+Keywords=music;audio;player;library;
+StartupNotify=true
+StartupWMClass=kos-music
+X-GNOME-SingleWindow=true
+Actions=Settings;
+
+[Desktop Action Settings]
+Name=Settings
+Name[zh_CN]=设置
+Exec=@KOS_APP_EXECUTABLE@ --settings
