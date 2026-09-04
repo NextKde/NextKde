@@ -1,6 +1,6 @@
 // Test harness for DockAutoHideMath.mjs — run with: node test_autohide.mjs
 import {
-    visibleDockRect, avoidanceRect, releaseRect, intersects,
+    visibleDockRect, avoidanceRect, releaseRect, intentionalOverlapRect, intersects,
     windowEligible, hasConflict, shouldBeVisible, policyWantsHidden,
     handleSizes, dockOpacity, dockScale, handleOpacity
 } from "./DockAutoHideMath.mjs";
@@ -113,6 +113,18 @@ ok(windowEligible(win({ geometry: { x: 5000, y: 5000, width: 10, height: 10 } })
 const base = visibleDockRect(S, "bottom", DIM, 60, 5);
 const av = avoidanceRect(base);
 const rel = releaseRect(base);
+const intentional = intentionalOverlapRect(base, "bottom");
+
+ok(intentional.y === base.y + 12 && intentional.height === base.height - 12,
+    "bottom smart hide requires 12px intentional overlap");
+ok(intentionalOverlapRect({ x: 5, y: 10, width: 60, height: 200 }, "left").width === 48,
+    "left smart hide trims its inner approach edge");
+{
+    const right = intentionalOverlapRect(
+        { x: 1855, y: 100, width: 60, height: 200 }, "right");
+    ok(right.x === 1867 && right.width === 48,
+        "right smart hide trims its inner approach edge");
+}
 
 // Window placed directly over the dock region triggers a conflict.
 {
@@ -125,7 +137,8 @@ const rel = releaseRect(base);
     ok(hasConflict([touch], S, av, rel, false, "d1"), "entry into 8px ring conflicts");
 }
 // Dock policy passes the full-reveal rectangle itself as the entry boundary:
-// proximity alone is not a conflict until the window actually overlaps it.
+// proximity and a shallow overlap are not conflicts until the overlap is
+// intentional. Once hidden, leaving the real rectangle clears the conflict.
 {
     const near = win({ geometry: { x: base.x + 6, y: base.y - 9, width: 50, height: 8 } });
     ok(!hasConflict([near], S, base, rel, false, "d1"),
@@ -133,6 +146,13 @@ const rel = releaseRect(base);
     const overlap = win({ geometry: { x: base.x + 6, y: base.y - 1, width: 50, height: 2 } });
     ok(hasConflict([overlap], S, base, rel, false, "d1"),
         "dock actual overlap starts conflict");
+    ok(!hasConflict([overlap], S, intentional, base, false, "d1"),
+        "shallow dock overlap stays visible");
+    const deep = win({ geometry: {
+        x: base.x + 6, y: base.y + 13, width: 50, height: 20
+    } });
+    ok(hasConflict([deep], S, intentional, base, false, "d1"),
+        "intentional dock overlap starts conflict");
 }
 // Window parked in the 8–16px release ring: no fresh conflict, but an active
 // conflict is retained (hysteresis). A 1px-tall window at y=1003 sits above the

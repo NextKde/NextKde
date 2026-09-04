@@ -114,7 +114,7 @@ Item {
             ctl.dockWidth, ctl.dockHeight, ctl.edgeMargin)
         const cands = ctl._windowCandidates()
         const next = DockMath.hasConflict(cands, target,
-            base, DockMath.releaseRect(base),
+            DockMath.intentionalOverlapRect(base, ctl.position), base,
             ctl.hasWindowConflict, WindowService.currentDesktopId)
         const changed = next !== ctl.hasWindowConflict
         if (changed)

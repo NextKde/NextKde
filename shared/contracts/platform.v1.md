@@ -53,6 +53,8 @@ Rectangles use global logical coordinates; `dockPosition` is one of `bottom`,
 forwarding an `update-layout` command to the KWin script. A new normal main
 window may use the latest layout for its one-time initial placement; existing,
 maximized, fullscreen, dialog, transient, and special windows are not moved.
+`workspaceGap` remains accepted for v1 compatibility, but initial placement
+meets the Bar/Dock safe edges directly and does not create an invisible gap.
 
 On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a

@@ -56,6 +56,30 @@ export function releaseRect(baseRect) {
     return expandRect(baseRect, 16);
 }
 
+// Smart hide should not fire on a one-pixel touch while a window is being
+// positioned. Require a small, directional overlap into the full-reveal Dock
+// body; once hidden, leaving the real Dock rectangle is enough to reveal it.
+export function intentionalOverlapRect(baseRect, position, depth = 12) {
+    const amount = Math.max(0, Math.min(Number(depth) || 0,
+        position === "bottom" ? baseRect.height - 1 : baseRect.width - 1));
+    if (position === "bottom") {
+        return {
+            x: baseRect.x, y: baseRect.y + amount,
+            width: baseRect.width, height: baseRect.height - amount
+        };
+    }
+    if (position === "left") {
+        return {
+            x: baseRect.x, y: baseRect.y,
+            width: baseRect.width - amount, height: baseRect.height
+        };
+    }
+    return {
+        x: baseRect.x + amount, y: baseRect.y,
+        width: baseRect.width - amount, height: baseRect.height
+    };
+}
+
 export function expandRect(rect, amount) {
     return {
         x: rect.x - amount,

@@ -26,12 +26,6 @@ PanelWindow {
     implicitHeight: ConfigService.barHeight
     readonly property bool transparentMode:
         AppearanceConfigService.barLayoutMode === "transparent"
-    // Only the floating capsule needs wallpaper between it and maximised
-    // windows. Full-width and transparent Bars intentionally remain flush,
-    // matching the contiguous macOS menu-bar layout.
-    readonly property int workspaceBreathingGap:
-        AppearanceConfigService.barLayoutMode === "floating" ? 8 : 0
-
     // ── Auto-hide controller ──
     BarAutoHideController {
         id: hide
@@ -48,7 +42,7 @@ PanelWindow {
 
     readonly property int reservedWorkspaceHeight: (root.barEnabled
         && hide.workspaceReserved)
-        ? Math.round(implicitHeight + margins.top + workspaceBreathingGap) : 0
+        ? Math.round(implicitHeight + margins.top) : 0
     exclusiveZone: root.reservedWorkspaceHeight
     visible: root.barEnabled
 

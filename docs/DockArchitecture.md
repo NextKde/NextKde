@@ -373,8 +373,10 @@ Non-negotiable invariants:
 1. Collision judgement always uses the **static rectangle the Dock would
    occupy at full reveal**, computed from screen geometry and configured
    sizes — never the animated transform position, `mapToItem`, or global
-   coordinate sampling. A fresh conflict requires actual overlap with that
-   rectangle; the wider release rectangle is retained only as exit hysteresis.
+   coordinate sampling. A fresh conflict requires a stable 200ms overlap at
+   least 12px into that rectangle, avoiding accidental hides during edge
+   placement. Once hidden, leaving the real Dock rectangle reveals it; there
+   is no invisible spatial release strip.
 2. Hiding never destroys the `PanelWindow`, toggles `visible`, changes
    anchors, or spawns a second layer-shell window for the handle; it only
    translates `dockWrapper` inside the permanently mapped surface.

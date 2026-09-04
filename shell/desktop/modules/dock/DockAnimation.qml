@@ -59,7 +59,7 @@ QtObject {
     // controller; nothing is scattered into UI components. See
     // docs/DockArchitecture.md, "Visibility modes and auto-hide".
     // ═══════════════════════════════════════════════════════════
-    readonly property int   smartHideConflictDelay:   120   // first window-overlap debounce
+    readonly property int   smartHideConflictDelay:   200   // GNOME-like stable-overlap debounce
     readonly property int   smartHideModeSwitchGrace: 700   // persistent switch confirmation period
     readonly property int   smartHideLeaveDelay:      900   // pointer/inhibitor-all-cleared leave
     readonly property int   smartHideHoverShowDelay:   90   // handle hover reveal threshold

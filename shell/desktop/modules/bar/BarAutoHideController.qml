@@ -99,7 +99,7 @@ Item {
             barWidth, ctl.barHeight, ctl.edgeMargin)
         const cands = ctl._windowCandidates()
         const next = DockMath.hasConflict(cands, target,
-            DockMath.avoidanceRect(base), DockMath.releaseRect(base),
+            base, base,
             ctl.hasWindowConflict, WindowService.currentDesktopId, true)
         const changed = next !== ctl.hasWindowConflict
         if (changed)

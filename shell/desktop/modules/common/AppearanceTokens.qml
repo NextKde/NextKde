@@ -29,11 +29,9 @@ QtObject {
             : tokens.isMaterial ? 0.18 : 0.20
         readonly property int edgeMargin: tokens.isWindows12 ? 0
             : tokens.isMaterial ? 8 : 5
-        // Reserve the same breathing room on both sides of the Dock: between
-        // the glass and the screen edge, and between the glass and maximised
-        // windows. Keep this as a separate semantic role so it can diverge in
-        // a future design without changing DockWindow's layout contract.
-        readonly property int workspaceGap: edgeMargin
+        // Windows meet the full-reveal Dock edge directly. A hidden spatial
+        // buffer made users move windows through an invisible dead strip.
+        readonly property int workspaceGap: 0
         readonly property string indicatorStyle: tokens.isWindows12 ? "underline"
             : tokens.isMaterial ? "tonal" : "dot"
         readonly property real indicatorLengthRatio: tokens.isWindows12 ? 0.42
