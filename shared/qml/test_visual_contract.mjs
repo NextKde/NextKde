@@ -300,4 +300,9 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
+const powerGlyph = read("../../shell/desktop/assets/logout.svg");
+assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
+    "the power glyph uses the same light outline weight as adjacent controls");
+assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
+    "the power glyph does not regress to an oversized solid silhouette");
 console.log("KOS UI visual contract: all checks passed");
