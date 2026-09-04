@@ -10,7 +10,7 @@ import qs.desktop.modules.dock
 Item {
     id: root
 
-    property int iconSize: 16
+    property int iconSize: 18
     property int iconSpacing: 6
     // Visual-only adjustment; transforms preserve the item's input region
     // and the menu anchor follows the transformed icon position.

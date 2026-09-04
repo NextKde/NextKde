@@ -216,4 +216,18 @@ assert.doesNotMatch(controlCenterCoordinator, /cascade|interval:\s*12/,
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
 
+const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
+const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+assert.match(barStatusArea, /iconSize:\s*18/,
+    "top-bar tray icons use the enlarged 18px optical size");
+assert.doesNotMatch(controlCenterPanel,
+    /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
+    "theme toggle does not use the blue active treatment");
+for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"]) {
+    const start = controlCenterPanel.indexOf(marker);
+    const section = controlCenterPanel.slice(start, start + 1800);
+    assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
+        `${marker} uses a 24x24 icon container`);
+}
+
 console.log("KOS UI visual contract: all checks passed");

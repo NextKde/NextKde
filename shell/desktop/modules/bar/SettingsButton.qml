@@ -27,8 +27,8 @@ Item {
 
     DockStatusSvgIcon {
         anchors.centerIn: parent
-        width: 16
-        height: 16
+        width: 18
+        height: 18
         source: Qt.resolvedUrl("../../assets/status-settings.svg")
     }
 

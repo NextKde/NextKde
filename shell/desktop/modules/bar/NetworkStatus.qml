@@ -19,8 +19,8 @@ Item {
 
     // Reserve the same visual footprint as the adjacent status glyphs while
     // allowing differently proportioned system-theme icons to stay centred.
-    implicitWidth: 21
-    implicitHeight: 18
+    implicitWidth: 23
+    implicitHeight: 20
     width: implicitWidth
     height: implicitHeight
     visible: NetworkService.available
@@ -35,8 +35,8 @@ Item {
     DockStatusSvgIcon {
         id: networkGlyph
         anchors.centerIn: parent
-        width: 20
-        height: 20
+        width: 22
+        height: 22
         source: Qt.resolvedUrl(NetworkService.connectionType === "ethernet"
             ? "../../assets/status-ethernet.svg"
             : "../../assets/status-wifi.svg")

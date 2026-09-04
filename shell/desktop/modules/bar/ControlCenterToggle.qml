@@ -21,8 +21,8 @@ Item {
 
     DockStatusSvgIcon {
         anchors.centerIn: parent
-        width: 18
-        height: 18
+        width: 20
+        height: 20
         source: Qt.resolvedUrl("../../assets/control-center.svg")
         opacity: root.panelOpen ? 1.0 : 0.88
     }

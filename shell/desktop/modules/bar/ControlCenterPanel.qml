@@ -496,8 +496,8 @@ Item {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Image {
             anchors.centerIn: parent
-            width: 25
-            height: 25
+            width: 24
+            height: 24
             source: "../../assets/screenshot.svg"
             sourceSize.width: 46
             sourceSize.height: 46
@@ -520,7 +520,8 @@ Item {
         cardRadius: 27
         cardWidth: 54
         cardHeight: 54
-        cardBorderColor: ThemeService.isDark ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
+        cardBorderColor: ThemeService.isDark
+            ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -528,11 +529,15 @@ Item {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Text {
             anchors.centerIn: parent
+            width: 24
+            height: 24
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: ThemeService.isDark ? "☾" : "☼"
-            color: ThemeService.isDark ? "#0a84ff" : ThemeService.foregroundColor
+            color: ThemeService.foregroundColor
             style: ThemeService.isDark ? Text.Outline : Text.Normal
             styleColor: Qt.rgba(0, 0, 0, 0.50)
-            font.pixelSize: 22
+            font.pixelSize: 24
             font.weight: Font.Bold
         }
         MouseArea {

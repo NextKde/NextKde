@@ -28,8 +28,8 @@ Item {
         shadowScale: 1.04
     }
 
-    implicitWidth: 22
-    implicitHeight: 12
+    implicitWidth: 24
+    implicitHeight: 14
     width: implicitWidth
     height: implicitHeight
 
@@ -39,8 +39,8 @@ Item {
             left: parent.left
             verticalCenter: parent.verticalCenter
         }
-        width: 18
-        height: 10
+        width: 20
+        height: 11
         radius: 3
         color: "transparent"
         border {
@@ -79,7 +79,7 @@ Item {
         visible: root.isCharging
         text: "⚡"
         color: root.boltColor
-        font.pixelSize: 8
+        font.pixelSize: 9
         font.bold: true
     }
 

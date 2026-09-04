@@ -154,7 +154,7 @@ Item {
             SysTray {
                 id: systemTray
                 anchors.centerIn: parent
-                iconSize: 16
+                iconSize: 18
                 visualYOffset: 0
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
