@@ -13,7 +13,7 @@ Rectangle {
     property bool showSurface: true
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
-    radius: 26
+    radius: AppearanceTokens.widget.radius
     color: "transparent"
     clip: true
 

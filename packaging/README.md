@@ -15,3 +15,9 @@ User services and shell files remain user-owned. The default installer stages
 the two KOS KWin effects and vendored Glass effect, then uses `sudo` to copy
 only the staged manifest into KWin's system plugin paths. The same manifest is
 used for exact removal by `kosctl uninstall`.
+
+Calendar, Todo, Weather, and Music keep their desktop entries, icons, AppStream
+metadata, and service templates beside their owning module. CMake therefore
+installs a one-application preset without pulling files from another app.
+`tools/install-apps.sh` installs all four for the current user, enables the core
+`kos-data.service`, and leaves the Calendar/Todo PIM service to D-Bus activation.

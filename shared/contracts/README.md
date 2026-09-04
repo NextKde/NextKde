@@ -7,6 +7,10 @@ validated independently.
 
 - [`platform.v1.md`](platform.v1.md) defines the Unix-socket JSON Lines
   request/response/event envelope, operation names, and stable error model.
+- [`weather-v1.schema.json`](weather-v1.schema.json) defines the persisted and
+  socket-delivered shared weather object.
+- [`pim-v1.schema.json`](pim-v1.schema.json) defines Calendar/Todo objects and
+  their D-Bus payload boundary.
 - Global shortcut IDs, default key bindings, and Shell IPC targets live in
   the Shell's ShortcutsService (shell/desktop/modules/shortcuts/), which is
   the single source of truth: it composes the Exec lines for the live Shell

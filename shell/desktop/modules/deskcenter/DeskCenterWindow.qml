@@ -13,6 +13,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.weather
+import "WidgetLayout.mjs" as WidgetLayout
 
 // iPadOS-inspired desktop widgets. Keep this in the Bottom layer so Plasma's
 // desktop surface cannot cover it when plasmashell starts after KOS. Normal and
@@ -37,6 +38,7 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
+    readonly property int widgetColumns: Math.min(4, columns)
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -64,7 +66,7 @@ PanelWindow {
     readonly property real rightInset: ConfigService.position === "right"
         && ConfigService.visibilityMode === "always"
         ? AppLauncherService.dockHeight + 24 : root.sideMargin
-    readonly property real gap: 12
+    readonly property real gap: AppearanceTokens.widget.gap
     readonly property real cellSize: Math.max(1,
         (width - layoutBaseSideMargin * 2
             - layoutBaseGap * (columns - 1)) / columns)
@@ -177,64 +179,32 @@ PanelWindow {
 
     // Higher priority widgets win when a short display cannot accommodate all
     // rows. The desktop never scrolls and cards never shrink their type.
-    readonly property var widgetDefinitions: [
-        { id: "clock", title: "", columns: 1, rows: 1, priority: 100,
-            startColor: "#21161e", endColor: "#170f14", surface: false },
-        { id: "weather", title: "", columns: 3, rows: 1, priority: 90,
-            startColor: "#404f86", endColor: "#30345e", surface: false },
-        { id: "calendar", title: "", columns: 2, rows: 1, priority: 80, row: 1, column: 2,
-            startColor: "#ffffff", endColor: "#f2f2f4", surface: false },
-        { id: "system", title: "", columns: 2, rows: 1, priority: 70, row: 1, column: 0,
-            startColor: "#f5f3f6", endColor: "#e9e6eb", surface: false },
-        { id: "activity", title: "", columns: 2, rows: 1, priority: 60, row: 2, column: 0,
-            startColor: "#29252f", endColor: "#17151c", surface: false },
-        { id: "music", title: "", columns: 2, rows: 1, priority: 50, row: 2, column: 2,
-            startColor: "#101010", endColor: "#101010", surface: false }
-    ]
+    function configuredWidget(id, priority, startColor, endColor) {
+        const span = DeskCenterConfigService.spanFor(id)
+        return { id: id, title: "", columns: span[0], rows: span[1],
+            priority: priority, startColor: startColor, endColor: endColor,
+            surface: false }
+    }
+    readonly property var widgetDefinitions: {
+        // Make the binding depend on persisted configuration changes.
+        const revision = DeskCenterConfigService.revision
+        return [
+            configuredWidget("clock", 100, "#536783", "#35465f"),
+            configuredWidget("weather", 90, "#536b94", "#394b70"),
+            configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
+            configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
+            configuredWidget("system", 70, "#f5f8fc", "#e6edf6"),
+            configuredWidget("activity", 60, "#40506a", "#29364e"),
+            configuredWidget("music", 50, "#51415d", "#332a3d")
+        ]
+    }
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
     function packWidgets(definitions, columnCount, rowCount) {
-        const sorted = definitions.slice().sort(function(a, b) {
-            return b.priority - a.priority
-        })
-        const occupied = []
-        const result = []
-        for (let row = 0; row < rowCount; row++)
-            occupied[row] = Array(columnCount).fill(false)
-
-        for (let i = 0; i < sorted.length; i++) {
-            const widget = sorted[i]
-            let placed = false
-            const firstRow = widget.row ?? 0
-            const lastRow = widget.row ?? (rowCount - widget.rows)
-            const firstColumn = widget.column ?? 0
-            const lastColumn = widget.column ?? (columnCount - widget.columns)
-            for (let row = firstRow; row <= lastRow && !placed; row++) {
-                for (let column = firstColumn; column <= lastColumn && !placed; column++) {
-                    let fits = true
-                    for (let y = row; y < row + widget.rows && fits; y++) {
-                        if (y < 0 || y >= rowCount) {
-                            fits = false
-                            break
-                        }
-                        for (let x = column; x < column + widget.columns; x++)
-                            if (occupied[y][x]) { fits = false; break }
-                    }
-                    if (!fits)
-                        continue
-                    for (let y = row; y < row + widget.rows; y++)
-                        for (let x = column; x < column + widget.columns; x++)
-                            occupied[y][x] = true
-                    result.push({ id: widget.id, column: column, row: row,
-                        columns: widget.columns, rows: widget.rows })
-                    placed = true
-                }
-            }
-        }
-        return result
+        return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
     }
 
-    readonly property var placements: packWidgets(widgetDefinitions, columns, usableRows)
+    readonly property var placements: packWidgets(widgetDefinitions, widgetColumns, usableRows)
     function placementFor(widgetId) {
         for (let i = 0; i < placements.length; i++)
             if (placements[i].id === widgetId)
@@ -284,7 +254,38 @@ PanelWindow {
             y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
             width: root.spanSize(placement?.columns ?? 1)
             height: root.spanSize(placement?.rows ?? 1)
-            Behavior on height { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+            }
+
+            HoverHandler { id: widgetHover }
+
+            Rectangle {
+                z: 50
+                visible: widgetHover.hovered
+                anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
+                width: sizeLabel.implicitWidth + 14
+                height: 24
+                radius: 12
+                color: Qt.rgba(0, 0, 0, 0.52)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.18)
+                Text {
+                    id: sizeLabel
+                    anchors.centerIn: parent
+                    text: ({ small: "小", medium: "中", large: "大" })[
+                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键切换"
+                    color: "white"
+                    font { pixelSize: 9; weight: Font.DemiBold }
+                }
+            }
 
             // Instantiate only this card's content. `visible: false` keeps a
             // QML tree alive, so the old delegate built every widget for every
@@ -831,7 +832,15 @@ PanelWindow {
                         font.pixelSize: 11
                     }
                 }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: WeatherService.refresh() }
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        const locationId = String(WeatherService.location?.id ?? "")
+                        AppActionService.launchById("kos-weather",
+                            locationId ? ["--location", locationId] : [])
+                    }
+                }
             }
                 }
             }
@@ -1374,6 +1383,12 @@ PanelWindow {
                 readonly property real progress: safeLength > 0
                     ? Math.max(0, Math.min(1, (player?.position ?? 0) / safeLength)) : 0
 
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: AppActionService.launchById("kos-music", [])
+                }
+
                 function artworkTint(color, alpha) {
                     return Qt.rgba(color.r, color.g, color.b, alpha)
                 }
@@ -1661,6 +1676,126 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
+                active: card.modelData.id === "todo"
+                sourceComponent: Component {
+                    Item {
+                        id: todoContent
+                        anchors.fill: parent
+                        readonly property string widgetSize:
+                            DeskCenterConfigService.sizeFor("todo")
+                        readonly property int itemLimit: widgetSize === "large" ? 6
+                            : widgetSize === "medium" ? 3 : 0
+                        readonly property var tasks:
+                            PimWidgetService.pendingTodos(itemLimit)
+                        // In the shared glass modes the card material is the
+                        // face: skip the opaque reminder-red band and pick
+                        // content colours from the appearance service, the
+                        // same way the clock and calendar widgets do.
+                        readonly property bool glassMode: IconAppearanceService.mode !== "color"
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: AppActionService.launchById(
+                                "kos-todo", ["--view", "today"])
+                        }
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right; top: parent.top }
+                            height: Math.min(42, parent.height * 0.28)
+                            color: "#ff5d66"
+                            visible: !todoContent.glassMode
+                        }
+                        Text {
+                            anchors { left: parent.left; top: parent.top; margins: 14 }
+                            text: "提醒事项"
+                            color: todoContent.glassMode ? IconAppearanceService.glassContentColor() : "white"
+                            font { pixelSize: 13; weight: Font.Bold }
+                        }
+                        Text {
+                            visible: todoContent.widgetSize === "small"
+                            anchors.centerIn: parent
+                            anchors.verticalCenterOffset: 12
+                            text: String(PimWidgetService.pendingTodos(99).length)
+                            color: todoContent.glassMode ? IconAppearanceService.glassContentColor() : "#33333a"
+                            font { pixelSize: 38; weight: Font.DemiBold }
+                        }
+                        Text {
+                            visible: todoContent.widgetSize === "small"
+                            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
+                            text: "项待办"
+                            color: todoContent.glassMode ? IconAppearanceService.glassContentColor(0.6) : "#686873"
+                            font.pixelSize: 10
+                        }
+                        Column {
+                            visible: todoContent.widgetSize !== "small"
+                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: 10 }
+                            spacing: 4
+                            Repeater {
+                                model: todoContent.tasks
+                                delegate: Item {
+                                    required property var modelData
+                                    width: parent.width
+                                    height: Math.max(24,
+                                        (parent.height - Math.max(0, todoContent.tasks.length - 1) * parent.spacing)
+                                        / Math.max(1, todoContent.tasks.length))
+                                    Rectangle {
+                                        width: 13; height: 13; radius: 7
+                                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                        color: "transparent"
+                                        border.width: 1.5
+                                        border.color: todoContent.glassMode ? IconAppearanceService.glassContentColor(0.7) : "#ff5d66"
+                                    }
+                                    Text {
+                                        anchors { left: parent.left; right: dueText.left; verticalCenter: parent.verticalCenter; leftMargin: 22; rightMargin: 8 }
+                                        text: String(PimWidgetService.value(parent.modelData, "title", "未命名任务"))
+                                        color: todoContent.glassMode ? IconAppearanceService.glassContentColor() : "#303038"
+                                        elide: Text.ElideRight
+                                        font { pixelSize: 11; weight: Font.Medium }
+                                    }
+                                    Text {
+                                        id: dueText
+                                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                                        text: String(PimWidgetService.value(parent.modelData, "due", "")).slice(0, 10)
+                                        color: todoContent.glassMode
+                                            ? (text && text < PimWidgetService.today
+                                                ? IconAppearanceService.glassContentColor()
+                                                : IconAppearanceService.glassContentColor(0.6))
+                                            : (text && text < PimWidgetService.today ? "#e23d52" : "#7b7b84")
+                                        font.pixelSize: 9
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: AppActionService.launchById("kos-todo", [
+                                            "--item", String(PimWidgetService.value(parent.modelData,
+                                                "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
+                                        ])
+                                    }
+                                }
+                            }
+                            Text {
+                                visible: todoContent.tasks.length === 0
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                // Distinguish a starting service from one
+                                // that never produced data (uninstalled or
+                                // not yet activated); tapping the card
+                                // launches the app, whose PIM client
+                                // activates the service on demand.
+                                text: PimWidgetService.ready
+                                    ? "今天已全部完成"
+                                    : (PimWidgetService.state === PimWidgetService.stateLoading
+                                       ? "正在载入待办…" : "未连接待办服务")
+                                color: todoContent.glassMode ? IconAppearanceService.glassContentColor(0.6) : "#6c6c75"
+                                font.pixelSize: 11
+                            }
+                        }
+                    }
+                }
+            }
+
+            Loader {
+                anchors.fill: parent
                 active: card.modelData.id === "calendar"
                 sourceComponent: Component {
                     Item {
@@ -1677,6 +1812,18 @@ PanelWindow {
                 // the whole panel height instead of ending with a blank band.
                 readonly property int weekCount: Math.ceil((firstWeekday + daysInMonth) / 7)
                 readonly property int headerHeight: 38
+                readonly property string widgetSize:
+                    DeskCenterConfigService.sizeFor("calendar")
+                readonly property var todayEvents: PimWidgetService.eventsForToday(
+                    widgetSize === "large" ? 3 : 1)
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: AppActionService.launchById("kos-calendar", [
+                        "--date", Qt.formatDate(clock.date, "yyyy-MM-dd")
+                    ])
+                }
 
                 Rectangle {
                     // Draw the pale right pane before the header. Its own
@@ -1737,6 +1884,31 @@ PanelWindow {
                     text: Qt.formatDateTime(clock.date, "ddd") + " · " + root.lunarDate(clock.date)
 	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.74) : "#4d4d55"
                     font { pixelSize: 10; weight: Font.DemiBold }
+                }
+                Column {
+                    visible: calendarContent.widgetSize !== "small"
+                        && calendarContent.todayEvents.length > 0
+                    anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
+                    spacing: 3
+                    Repeater {
+                        model: calendarContent.todayEvents
+                        delegate: Text {
+                            required property var modelData
+                            width: parent.width
+                            text: "• " + String(PimWidgetService.value(modelData, "title", "日程"))
+                            color: "#4d4d55"
+                            elide: Text.ElideRight
+                            font.pixelSize: 9
+                        }
+                    }
+                    Text {
+                        visible: calendarContent.todayEvents.length === 0
+                            && PimWidgetService.state === PimWidgetService.stateUnavailable
+                        text: "未连接日历服务"
+                        color: calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.55) : "#9a9aa2"
+                        elide: Text.ElideRight
+                        font.pixelSize: 9
+                    }
                 }
                 Item {
                     id: monthGrid

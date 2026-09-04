@@ -108,6 +108,22 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 | 外观与动效 | 提供液态玻璃、背景模糊、主题色、Dock 位置、图标风格和显示方式；Dock 与窗口动画由 KWin 插件提供。 |
 | 设置与快捷键 | 独立设置中心可调整外观、Dock、Bar 和启动台；可安装并在 KDE 系统设置中修改全局快捷键。 |
 
+### 可选独立应用
+
+仓库还提供日历、待办、天气和本地音乐四个独立 Qt Quick 应用。它们默认不随 Shell
+构建；使用 `apps-dev` / `apps-release` 预设可统一构建，也可使用
+`calendar-dev`、`todo-dev`、`weather-dev` 或 `music-dev` 单独构建：
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+```
+
+用户级安装与服务注册可运行 `./tools/install-apps.sh`。依赖和模块说明见
+[apps/README.md](apps/README.md)。天气应用与 Shell 共用 `kos-data-service` 的缓存和
+Open-Meteo 数据；日历与待办共用按需启动的 PIM 服务。
+
 KOS 不替代 KDE Plasma：它复用 KWin、NetworkManager、PipeWire、BlueZ 和 systemd，
 只把这些系统能力整合到自己的界面中。
 
@@ -120,7 +136,7 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 
 - `shell/`：界面代码。
 - `platform/`：KWin、网络、音频、亮度等系统接口。
-- `services/data-service/`：系统指标、历史和桌面数据。
+- `services/data-service/`：系统指标、历史、桌面数据与共享天气缓存。
 - `integrations/kwin/`：KWin 插件；`vendor/`：第三方 Glass 特效源码。
 
 更详细的说明见 [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md)。
