@@ -185,8 +185,8 @@ Item {
         centerBelowAnchor: true
         centerBelowOffset: root.popupAnchorItem
             ? root.popupAnchorItem.height
-                + Math.max(0, (root.parent?.height ?? root.height) - root.height) / 2 + 2
-            : root.height + 2
+                + Math.max(0, (root.parent?.height ?? root.height) - root.height) / 2 + 4
+            : root.height + 4
         macosPopupMotion: true
         globalDismissGraceMs: 250
         dismissOnGlobalPointerPress: false

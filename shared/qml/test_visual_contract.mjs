@@ -222,10 +222,10 @@ assert.match(appLauncherWindow,
     /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
     "Launchpad and anchored popups consume the same entrance tokens");
 assert.match(controlCenterPanelSource,
-    /cardOffsetY:\s*!panel\.dockHosted\s*\?\s*-20[\s\S]{0,1800}margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-2/,
-    "standalone Control Center starts two pixels below the Bar");
-assert.match(globalMenuSource, /root\.height\s*\+\s*2/,
-    "application menus keep a two-pixel Bar gap");
+    /cardOffsetY:\s*!panel\.dockHosted\s*\?\s*-18[\s\S]{0,1800}margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
+    "standalone Control Center starts four pixels below the Bar");
+assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
+    "application menus keep a four-pixel Bar gap");
 
 const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
