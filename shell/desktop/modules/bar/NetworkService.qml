@@ -38,7 +38,14 @@ QtObject {
     function _applySnapshot(result) {
         available = !!result.available
         networkingEnabled = result.networkingEnabled !== false
-        wifiEnabled = result.wifiEnabled !== false
+        // A radio power change is not instant: NetworkManager can still
+        // report the pre-toggle state for a moment after setWifiEnabled()'s
+        // own request already resolved. Applying a periodic refresh's stale
+        // read here raced that resolution and flipped the toggle back and
+        // forth (off -> briefly on -> off again). Trust only the toggle's
+        // own response while one is in flight.
+        if (!wifiToggleInProgress)
+            wifiEnabled = result.wifiEnabled !== false
         connectionType = result.connectionType || "none"
         deviceState = result.deviceState || "unknown"
         connectivity = result.connectivity || "unknown"
