@@ -79,4 +79,7 @@ from superseded layouts.
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,
 `theme.sync-glass`, and `theme.sync-dock-animation` accept bounded values and
 own the KDE configuration writes; Shell and Settings never invoke `qdbus6` or
-`kwriteconfig6`.
+`kwriteconfig6`. `theme.apply-system` and `theme.toggle` change only the KDE
+color scheme when that tool is available; applying a complete Look-and-Feel
+package is a compatibility fallback, because replacing icons and workspace
+defaults is outside the light/dark toggle contract.

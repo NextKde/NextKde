@@ -36,6 +36,8 @@ private:
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {});
+    void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
+                          bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);

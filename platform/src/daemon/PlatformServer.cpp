@@ -27,6 +27,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QTimer>
@@ -828,6 +829,48 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
         process->deleteLater();
     });
     process->start();
+}
+
+void PlatformServer::applySystemTheme(QLocalSocket *socket,
+                                      const QJsonObject &request, bool dark)
+{
+    const QString colorScheme = dark ? QStringLiteral("BreezeDark")
+                                     : QStringLiteral("BreezeLight");
+    const QString lookAndFeel = dark ? QStringLiteral("org.kde.breezedark.desktop")
+                                     : QStringLiteral("org.kde.breeze.desktop");
+    const QString applyColorScheme = QStandardPaths::findExecutable(
+        QStringLiteral("plasma-apply-colorscheme"));
+    const QString applyLookAndFeel = QStandardPaths::findExecutable(
+        QStringLiteral("plasma-apply-lookandfeel"));
+
+    QString program;
+    QStringList arguments;
+    QString method;
+    if (!applyColorScheme.isEmpty()) {
+        // A light/dark toggle only needs to change the palette. Applying a
+        // complete Look-and-Feel package also replaces icons, cursors and
+        // workspace defaults while Quickshell is rendering them, which can
+        // tear down the Shell's platform connection mid-request.
+        program = applyColorScheme;
+        arguments = {colorScheme};
+        method = QStringLiteral("colorScheme");
+    } else if (!applyLookAndFeel.isEmpty()) {
+        program = applyLookAndFeel;
+        arguments = {QStringLiteral("--apply"), lookAndFeel};
+        method = QStringLiteral("lookAndFeel");
+    } else {
+        respond(socket, request, false, {}, QStringLiteral("theme-apply-failed"),
+                QStringLiteral("未找到可用的 KDE 明暗主题"), true);
+        return;
+    }
+
+    runCommand(socket, request, program, arguments,
+               [dark, colorScheme, lookAndFeel, method](const QByteArray &, int) {
+        return QJsonObject{{QStringLiteral("dark"), dark},
+                           {QStringLiteral("colorScheme"), colorScheme},
+                           {QStringLiteral("lookAndFeel"), lookAndFeel},
+                           {QStringLiteral("method"), method}};
+    });
 }
 
 void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
@@ -2159,34 +2202,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("theme.apply-system")) {
         const bool dark = payload.value(QStringLiteral("dark")).toBool();
-        const QString lookAndFeel = dark ? QStringLiteral("org.kde.breezedark.desktop")
-                                         : QStringLiteral("org.kde.breeze.desktop");
-        const QString applyLookAndFeel = QStandardPaths::findExecutable(
-            QStringLiteral("plasma-apply-lookandfeel"));
-        const QString applyColorScheme = QStandardPaths::findExecutable(
-            QStringLiteral("plasma-apply-colorscheme"));
-        bool applied = false;
-        if (!applyLookAndFeel.isEmpty()) {
-            applied = QProcess::execute(applyLookAndFeel,
-                {QStringLiteral("--apply"), lookAndFeel}) == 0;
-        }
-        if (!applied && !applyColorScheme.isEmpty()) {
-            const QString scheme = dark ? QStringLiteral("BreezeDark")
-                                        : QStringLiteral("BreezeLight");
-            applied = QProcess::execute(applyColorScheme, {scheme}) == 0;
-        }
-        if (!applied) {
-            respond(socket, request, false, {}, QStringLiteral("theme-apply-failed"),
-                    QStringLiteral("未找到可用的 KDE 明暗主题"), true);
-            return true;
-        }
-        QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                            QStringLiteral("org.kde.KWin"));
-        if (kwin.isValid())
-            kwin.call(QStringLiteral("reconfigure"));
-        respond(socket, request, true,
-                QJsonObject{{QStringLiteral("dark"), dark},
-                            {QStringLiteral("lookAndFeel"), lookAndFeel}});
+        applySystemTheme(socket, request, dark);
         return true;
     }
     if (op == QStringLiteral("theme.sync-glass")) {
@@ -2263,21 +2279,14 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("theme.toggle")) {
-        auto *reader = new QProcess(this);
-        reader->setProgram(QStringLiteral("kreadconfig6"));
-        reader->setArguments({QStringLiteral("--file"), QStringLiteral("kdeglobals"),
-                              QStringLiteral("--group"), QStringLiteral("General"),
-                              QStringLiteral("--key"), QStringLiteral("ColorScheme")});
-        connect(reader, &QProcess::finished, this, [this, socket, request, reader](int, QProcess::ExitStatus) {
-            const QString scheme = QString::fromUtf8(reader->readAllStandardOutput()).trimmed();
-            reader->deleteLater();
-            const bool dark = scheme.contains(QStringLiteral("dark"), Qt::CaseInsensitive);
-            const QString package = dark ? QStringLiteral("org.kde.breeze.desktop")
-                                         : QStringLiteral("org.kde.breezedark.desktop");
-            runCommand(socket, request, QStringLiteral("plasma-apply-lookandfeel"),
-                       {QStringLiteral("--apply"), package});
-        });
-        reader->start();
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::GenericConfigLocation) + QStringLiteral("/kdeglobals");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const QString scheme = settings.value(
+            QStringLiteral("General/ColorScheme")).toString();
+        const bool currentlyDark = scheme.contains(
+            QStringLiteral("dark"), Qt::CaseInsensitive);
+        applySystemTheme(socket, request, !currentlyDark);
         return true;
     }
     if (op == QStringLiteral("screenshot.capture")) {
