@@ -460,10 +460,17 @@ QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
         return QJsonObject{{QStringLiteral("available"), false}};
     const QStringList rows = QString::fromUtf8(output).trimmed()
                                  .split(QChar('\n'), Qt::KeepEmptyParts);
-    QString connection = rows.value(0).trimmed();
+    // Unlike the flat `-f column,column` tables elsewhere in this file,
+    // `device show` always prefixes each line with its field name (e.g.
+    // "GENERAL.CONNECTION:foo"), even in terse mode. Drop that prefix.
+    const auto fieldValue = [](const QString &row) {
+        const QStringList fields = splitNmcli(row);
+        return fields.mid(1).join(QStringLiteral(":"));
+    };
+    QString connection = fieldValue(rows.value(0)).trimmed();
     if (connection == QStringLiteral("--"))
         connection.clear();
-    QString ipv4 = rows.value(1).trimmed();
+    QString ipv4 = fieldValue(rows.value(1)).trimmed();
     const qsizetype slash = ipv4.indexOf(QChar('/'));
     if (slash >= 0)
         ipv4.truncate(slash);
