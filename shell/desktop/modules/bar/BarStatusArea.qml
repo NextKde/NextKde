@@ -59,6 +59,7 @@ Item {
             NetworkStatus {
                 id: networkStatus
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
@@ -79,6 +80,7 @@ Item {
         Item {
             Battery {
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
@@ -91,6 +93,7 @@ Item {
         Item {
             SettingsButton {
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
                 verticalDock: root.verticalDock
             }
@@ -104,6 +107,7 @@ Item {
             ControlCenterToggle {
                 id: controlCenterToggle
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 panelOpen: root.controlCenterOpen
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge

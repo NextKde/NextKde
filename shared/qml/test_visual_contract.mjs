@@ -231,6 +231,12 @@ const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
 assert.match(barStatusArea, /iconSize:\s*18/,
     "top-bar tray icons use the enlarged 18px optical size");
+for (const component of ["NetworkStatus", "Battery", "SettingsButton",
+                         "ControlCenterToggle"]) {
+    assert.match(barStatusArea,
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,180}iconSize:\\s*systemTray\\.iconSize"),
+        component + " shares the native tray icon size");
+}
 assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");

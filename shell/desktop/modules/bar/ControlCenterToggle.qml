@@ -13,6 +13,7 @@ Item {
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
+    property real iconSize: 18
     rotation: verticalDock ? -90 : 0
     implicitWidth: 24
     implicitHeight: 24
@@ -21,8 +22,8 @@ Item {
 
     DockStatusSvgIcon {
         anchors.centerIn: parent
-        width: 20
-        height: 20
+        width: root.iconSize
+        height: root.iconSize
         source: Qt.resolvedUrl("../../assets/control-center.svg")
         opacity: root.panelOpen ? 1.0 : 0.88
     }

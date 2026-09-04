@@ -12,6 +12,7 @@ Item {
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
+    property real iconSize: 18
     rotation: verticalDock ? -90 : 0
     readonly property bool tintActive: IconAppearanceService.mode === "tint"
     readonly property color dockTintColor: tintActive
@@ -28,8 +29,8 @@ Item {
         shadowScale: 1.04
     }
 
-    implicitWidth: 24
-    implicitHeight: 14
+    implicitWidth: iconSize
+    implicitHeight: iconSize
     width: implicitWidth
     height: implicitHeight
 
@@ -39,8 +40,8 @@ Item {
             left: parent.left
             verticalCenter: parent.verticalCenter
         }
-        width: 20
-        height: 11
+        width: Math.max(12, root.iconSize - 2)
+        height: Math.max(8, Math.round(root.iconSize * 0.56))
         radius: 3
         color: "transparent"
         border {
@@ -54,8 +55,8 @@ Item {
             left: outline.right
             verticalCenter: outline.verticalCenter
         }
-        width: 2
-        height: 3.5
+        width: Math.max(1.5, root.iconSize - outline.width)
+        height: Math.max(3, root.iconSize * 0.20)
         radius: 1
         color: root.dockTintColor
     }
@@ -79,7 +80,7 @@ Item {
         visible: root.isCharging
         text: "⚡"
         color: root.boltColor
-        font.pixelSize: 9
+        font.pixelSize: Math.max(7, root.iconSize * 0.44)
         font.bold: true
     }
 

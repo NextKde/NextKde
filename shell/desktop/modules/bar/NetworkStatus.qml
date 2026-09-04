@@ -15,6 +15,7 @@ Item {
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
+    property real iconSize: 18
     rotation: verticalDock ? -90 : 0
 
     // Reserve the same visual footprint as the adjacent status glyphs while
@@ -35,8 +36,8 @@ Item {
     DockStatusSvgIcon {
         id: networkGlyph
         anchors.centerIn: parent
-        width: 22
-        height: 22
+        width: root.iconSize
+        height: root.iconSize
         source: Qt.resolvedUrl(NetworkService.connectionType === "ethernet"
             ? "../../assets/status-ethernet.svg"
             : "../../assets/status-wifi.svg")
