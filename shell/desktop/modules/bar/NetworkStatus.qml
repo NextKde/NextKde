@@ -52,6 +52,7 @@ Item {
 
     WifiSignalIcon {
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: 2
         visible: NetworkService.connectionType !== "ethernet"
         width: root.iconSize
         height: root.iconSize

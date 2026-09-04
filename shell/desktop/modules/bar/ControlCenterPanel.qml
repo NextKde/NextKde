@@ -237,12 +237,55 @@ Item {
             WifiSignalIcon {
                 anchors.centerIn: parent
                 width: 20; height: 20
+                opacity: NetworkService.wifiToggleInProgress ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 140 } }
                 wifiEnabled: NetworkService.wifiEnabled
                 connected: NetworkService.deviceState === "connected"
                     && NetworkService.connectionType === "wifi"
                 signalStrength: NetworkService.signalStrength
                 glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
                     : (ThemeService.isDark ? "white" : "#000000")
+            }
+            // Toggling NetworkManager's radio is not instant either; mirror
+            // the Bluetooth disc's busy arc so both read as "working", not
+            // "stuck", while the toggle is in flight.
+            Item {
+                id: wifiBusySpinner
+                anchors.centerIn: parent
+                width: 21; height: 21
+                opacity: NetworkService.wifiToggleInProgress ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                Canvas {
+                    id: wifiBusyArc
+                    anchors.fill: parent
+                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    onGlyphColorChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = glyphColor
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        const cx = width / 2, cy = height / 2, r = width / 2 - 1.5
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, 0, Math.PI * 1.5)
+                        ctx.stroke()
+                    }
+                    Connections {
+                        target: ThemeService
+                        function onIsDarkChanged() { wifiBusyArc.requestPaint() }
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                RotationAnimation on rotation {
+                    running: NetworkService.wifiToggleInProgress
+                    loops: Animation.Infinite
+                    from: 0; to: 360
+                    duration: 900
+                }
             }
             MouseArea {
                 id: wifiTogglePointer
