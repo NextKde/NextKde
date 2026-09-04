@@ -320,6 +320,8 @@ Item {
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
                 property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
+                opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
                 onGlyphColorChanged: requestPaint()
                 onPaint: {
@@ -345,6 +347,47 @@ Item {
                 Connections {
                     target: ThemeService
                     function onIsDarkChanged() { controlBtGlyph.requestPaint() }
+                }
+            }
+            // Powering BlueZ's adapter genuinely takes a second or more; a
+            // flat opacity dim alone reads as "stuck", not "working". Spin an
+            // indeterminate arc in its place, macOS Control Center style.
+            Item {
+                id: bluetoothBusySpinner
+                anchors.centerIn: parent
+                width: 21; height: 21
+                opacity: ControlCenterService.bluetoothChangeInProgress ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                Canvas {
+                    id: bluetoothBusyArc
+                    anchors.fill: parent
+                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    onGlyphColorChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = glyphColor
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        const cx = width / 2, cy = height / 2, r = width / 2 - 1.5
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, 0, Math.PI * 1.5)
+                        ctx.stroke()
+                    }
+                    Connections {
+                        target: ThemeService
+                        function onIsDarkChanged() { bluetoothBusyArc.requestPaint() }
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                RotationAnimation on rotation {
+                    running: ControlCenterService.bluetoothChangeInProgress
+                    loops: Animation.Infinite
+                    from: 0; to: 360
+                    duration: 900
                 }
             }
             MouseArea {
