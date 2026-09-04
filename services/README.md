@@ -7,4 +7,6 @@ snapshots, and the shared weather cache. Live desktop integration belongs to the
 `shared/contracts/`.
 
 The data service is started by `kos-data.service`; use `./tools/kosctl` from
-the repository root for build, install, status, and uninstall operations.
+the repository root for build, install, start, and uninstall operations. Check
+it with `systemctl --user status kos-data.service` and follow logs with
+`journalctl --user -u kos-data.service -f`.

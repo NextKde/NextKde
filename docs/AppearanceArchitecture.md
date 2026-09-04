@@ -1,18 +1,19 @@
 # 全局外观系统架构
 
-> 状态：阶段 1、Dock 形态、Bar 融合与 Dock 窗口动画已实现（2026-08-28）。本文是后续开发和 AI 接续工作的规范来源。
+> 状态：Dock 形态、Bar 布局/隐藏、全局图标外观、Glass 同步与 Dock 窗口动画已实现（更新至 2026-09-04）。本文是后续开发和 AI 接续工作的规范来源。
 
 ## 1. 当前能力与边界
 
-外观设置分为彼此正交的三个维度：
+外观设置分为彼此正交的维度：
 
-- **系统外观**：`kos-settings > 显示 > 色彩模式` 调用 KDE 的 `LayanLight / Layan` 色彩方案。目前不写入本项目配置。
+- **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
 - **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
-- **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入。Bar 不随形态分叉。
-- **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置。仅当 Dock 位于底部时生效；开启后顶部 Bar 将 `exclusiveZone`、启动器顶部边距和 DeskCenter 顶部安全区归零/收缩，再将时间与系统状态内容装入 Dock。
+- **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
+- **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入形态 Token。Bar 不随形态分叉。
+- **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置，适用于底部与侧边 Dock；`barLayoutMode` 提供 `full | floating | transparent`，`barVisibilityMode` 提供 `always | smart | persistent`。融合后顶部 Bar 收起，底部 Dock 托管时间与系统状态，侧边 Dock 使用纵向状态与信息布局。
 - **Dock 窗口动画**：`dockWindowAnimationStyle`，值为 `scale | genie`，默认 `scale`。由 `DockWindowAnimationTargetService` 向 KWin dock-window-animation effect 发布图标矩形，设置页可选择并持久化。
 
-主题选择会立即更新 Dock 的几何、间距、状态背景、运行指示器和动效。Bar 始终保持统一视觉；是否融入 Dock 完全由独立开关决定。后续只需继续接入 DeskCenter。
+主题选择会立即更新 Dock 的几何、间距、状态背景、运行指示器和动效。Bar 始终保持统一视觉；是否融入 Dock 完全由独立开关决定。DeskCenter 已接入全局图标外观，但形态 Token 仍是后续工作。
 
 ## 2. 所有权和依赖方向
 
@@ -24,6 +25,7 @@ DesktopEnvironment.qml / appearance-settings
         │
         ▼
 AppearanceConfigService ──────► state/appearance/config.json
+IconAppearanceService ────────► state/appearance/icon-appearance.json
         │                         custom KWin glass effect
         ▼
 AppearanceTokens
@@ -34,15 +36,15 @@ AppearanceTokens
    └── motion
         │
         ▼
-Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter（后续接入）
+Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter（图标外观已接入）
 ```
 
 职责约束：
 
-1. `AppearanceConfigService` 是校验、默认值、迁移和持久化的唯一所有者。
+1. `AppearanceConfigService` 是形态、Glass、Bar 与窗口动画配置的所有者；`IconAppearanceService` 单独拥有全局图标外观。
 2. `AppearanceTokens` 只把配置映射成语义值，不执行 IO，也不拥有业务数据。
 3. 消费组件读取 Token，不应散落 `shellStyle === ...` 分支。
-4. Dock 的固定项、尺寸、位置、图标模式和显示策略仍归 `DockConfigService` 所有；切换形态不得覆盖这些用户设置。
+4. Dock 的固定项、尺寸、位置、窗口分组和显示策略仍归 `DockConfigService` 所有；全局图标模式归 `IconAppearanceService`，切换形态不得覆盖这些用户设置。
 5. 独立进程 `apps/settings` 不允许 import `shell/desktop/`，只通过 IPC 读写。
 
 ## 3. 文件索引
@@ -51,12 +53,13 @@ Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter�
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
 | `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token |
+| `shell/desktop/modules/common/IconAppearanceService.qml` | 全局图标模式、不透明度、染色与旧 Dock 配置迁移 |
 | `shell/desktop/modules/common/qmldir` | 注册公共组件与 singleton |
 | `shell/desktop/modules/common/SystemIconResolver.qml` | 将语义角色、状态和回退候选解析为当前系统主题图标 |
 | `shell/desktop/modules/common/SystemIcon.qml` | 统一的小型状态/菜单图标渲染组件 |
 | `shell/desktop/DesktopEnvironment.qml` | `appearance-settings` IPC target |
 | `apps/settings/src/main.cpp` | Settings 到 Quickshell IPC 的进程桥 |
-| `apps/settings/main.qml` | “显示”和“主题”页面，包括 Bar 融合开关 |
+| `apps/settings/main.qml` | “显示”“主题”“顶栏”“Dock”“启动台”“快捷键”和“接入状态”页面 |
 | `shell/desktop/modules/bar/BarDateStatus.qml` | 独立顶部 Bar 的时间日期内容 |
 | `shell/desktop/modules/bar/BarStatusArea.qml` | 可复用的托盘、网络、电池与控制中心内容；向 Dock 提供稳定的单行最大宽度预算 |
 | `shell/desktop/modules/bar/SysTray.qml` | 系统托盘宿主；原生托盘项与 Wi‑Fi、电池、设置、控制中心共用连续 Grid，融合 Dock 高度达到 48px 时自动折为两行 |
@@ -96,13 +99,15 @@ SystemIcon { role: "controlCenter" }
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 8：
+schema 9：
 
 ```json
 {
-  "version": 8,
+  "version": 9,
   "globalBlurStrength": 0.42,
   "globalLiquidStrength": 1.0,
+  "blurStrength": 0.42,
+  "liquidStrength": 1.0,
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
@@ -112,11 +117,12 @@ schema 8：
 ```
 
 - 默认 `shellStyle` 为 `macos`，因为它最接近引入主题前的现有 Shell 形态，升级不会突然重排界面。
-- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
+- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数，schema 9 新增 `barVisibilityMode` 与 `barLayoutMode`。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
 - 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
 - `resetStrengths()` 只恢复 `0.42 / 1.0`，不重置主题形态或 Dock 数据。
+- `blurStrength` 与 `liquidStrength` 是随全局值写回的兼容字段。全局图标外观另存于同目录的 `icon-appearance.json`（schema 1），包含 `mode`、`opacity` 与 `tintColor`，并可从旧 Dock 配置迁移一次。
 
 ## 5. IPC 契约
 
@@ -125,10 +131,15 @@ target：`appearance-settings`。所有更新都返回完整 JSON snapshot。
 | 调用 | 参数 | 作用 |
 | --- | --- | --- |
 | `snapshot` | 无 | 读取完整外观状态 |
-| `updateBlurStrength` | real | 更新模糊强度 |
-| `updateLiquidStrength` | real | 更新液态强度 |
+| `updateGlobalBlurStrength` | real | 更新全局模糊强度；`updateBlurStrength` 为兼容别名 |
+| `updateGlobalLiquidStrength` | real | 更新全局液态强度；`updateLiquidStrength` 为兼容别名 |
+| `updateGlobalIconMode` | string | 更新全局图标模式（`color`/`grayscale`/`tint`） |
+| `updateGlobalIconOpacity` | real | 更新非彩色图标不透明度 |
+| `updateGlobalIconTintColor` | string | 更新全局染色颜色（`#rrggbb`） |
 | `updateShellStyle` | string | 更新 Shell 形态 |
 | `updateBarIntegratedWithDock` | bool | 更新 Bar/Dock 宿主策略 |
+| `updateBarVisibilityMode` | string | 更新 Bar 显示方式（`always`/`smart`/`persistent`） |
+| `updateBarLayoutMode` | string | 更新 Bar 布局（`full`/`floating`/`transparent`） |
 | `updateDockWindowAnimationStyle` | string | 更新 Dock 窗口动画风格（`scale`/`genie`） |
 | `resetStrengths` | 无 | 只重置两项玻璃强度 |
 
@@ -136,12 +147,25 @@ snapshot 示例：
 
 ```json
 {
+  "globalBlurStrength": 0.42,
+  "globalLiquidStrength": 1,
+  "effectiveDockBlur": 0.42,
+  "effectiveDockLiquid": 1,
+  "effectiveBarBlur": 0.42,
+  "effectiveBarLiquid": 1,
+  "effectiveLauncherBlur": 0.42,
+  "effectiveLauncherLiquid": 1,
   "blurStrength": 0.42,
   "liquidStrength": 1,
+  "iconMode": "color",
+  "iconOpacity": 0.5,
+  "iconTintColor": "#a855f7",
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
+  "barVisibilityMode": "always",
+  "barLayoutMode": "full",
   "dockWindowAnimationStyle": "scale",
-  "tokenVersion": 4
+  "tokenVersion": 5
 }
 ```
 
@@ -154,7 +178,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v3
+## 6. AppearanceTokens v5
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -208,7 +232,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | `motion.standardEasing` | OutCubic | OutCubic | OutQuart |
 | `motion.springEnabled` | false | true | false |
 
-Token schema 版本为 `AppearanceTokens.version === 4`。v2 新增 Dock 状态、边缘和指示器 Token；v3 将 Bar 统一为单一视觉契约，并把 `unifiedWithDock` 改为独立配置投影；v4 随 Bar/Dock 融合宿主实现提升版本号，Token 表语义未变。修改现有 Token 语义或删除字段时必须升版本。
+Token schema 当前为 `AppearanceTokens.version === 5`。现有 Dock、Bar、widget、glass 与 motion Token 表保持上表语义；修改现有 Token 语义或删除字段时必须升版本。
 
 ## 7. 消费规则
 
@@ -236,7 +260,7 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 - `bar.unifiedWithDock` 是独立布局要求，不是把两个 layer-shell 窗口简单叠在底部。开启后无论 Dock 位于底部、左侧还是右侧，顶部 Bar surface 都把排斥区设为零并隐藏。底部 Dock 把时间放入信息轮播、状态区作为右侧附件；左/右 Dock 使用 `DockSideInfoCarousel` 单行轮播（父 Row 旋转 90°、内容反向旋转保持文字正立，沿边占两个图标位），状态序列沿侧边排列。
 - 融合宿主必须按 Dock 边缘决定弹窗方向：底部向上、左侧向右、右侧向左，包括托盘菜单/提示、网络、蓝牙和电池；控制中心卡片组在左侧 Dock 时镜像到屏幕左侧。恢复独立顶部 Bar 后仍向下展开。
 - Bar 状态区的 CPU 等通用语义图标通过 `SystemIcon`/`SystemIconResolver` 消费当前系统图标主题。Wi‑Fi、设置、控制中心使用项目自绘 SVG：独立 Bar 与 Dock `color` 模式输出白色，`grayscale` 叠加与应用图标相同的 `iconOpacity`，`tint` 将 72% 基准亮度投影到 `iconTintColor` 后再叠加轻微暗影，避免纯色 SVG 比其他图标突兀。电池保留电量绘制，但在 Dock `tint` 模式下使用同一 tonal 色、透明度和阴影。快捷状态组只保留布局 padding，不绘制整组白色蒙层。
-- Dock 的 `iconMode` 同时约束 Dock 内的应用图标、原生 SystemTray 图标、自绘 Wi‑Fi/设置/控制中心图标，以及天气/时间/温度卡片背景。`color` 保留内容原色；`grayscale` 按亮度去色；`tint` 先保留亮度层级再投影到 `iconTintColor`。该规则只在状态区被 Dock 承载时作用于 Bar 组件，独立顶部 Bar 仍使用系统主题原色。电池是状态相关的专用绘制，明确排除在此投影之外。
+- `IconAppearanceService.mode` 同时约束 Dock 应用图标、启动台、快速搜索、原生 SystemTray、自绘 Wi‑Fi/设置/控制中心图标、DeskCenter 内容，以及天气/时间/温度卡片背景。`color` 保留内容原色；`grayscale` 按亮度去色；`tint` 先保留亮度层级再投影到 `tintColor`。该规则是 Shell 全局设置，独立顶部 Bar 与 Dock 承载的状态区都消费同一配置；电池继续使用能够表达电量与充电状态的专用绘制。
 - 融合模式的状态托盘把原生 SystemTray 项与 Wi‑Fi、电池、设置、控制中心组成一条连续序列，以 `48px` 可用高度为两行阈值：至少两个项目且达到阈值时按列连续填入两行，否则保持单行；独立顶部 Bar 永远单行。Dock 温度页在融合与非融合模式下都保留；融合后状态附件隐藏重复的 CPU 摘要，恢复独立 Bar 后摘要重新显示。Dock 高度求解使用 `BarStatusArea.layoutMaximumWidth` 的单行最大宽度，最终宽度才采用折行后的实际宽度，禁止让行数反向参与高度求解形成 binding loop。
 - Dock 温度页、独立 Bar 温度摘要和 DeskCenter 温度区必须只读取公共 `MetricsService`。该 singleton 从 `kos-data-service` 的原子快照取值；任何 surface 都不得另外读取 `/proc`、`/sys` 或启动新的采样进程。快照尚未就绪时 Dock 页仍占位并显示 `--`，不能从轮播中消失。
 - Material 的 `tonal` 需要从系统 palette/壁纸 palette 派生，不得在组件里硬编码紫色。设置页紫色仅用于预览识别。
@@ -244,17 +268,17 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 
 ## 8. 设置页行为
 
-- 侧栏顺序为：显示 → 主题 → Dock。
+- 侧栏顺序为：显示 → 主题 → 顶栏 → Dock → 启动台 → 快捷键 → 接入状态。
 - “显示”保留系统明暗与玻璃强度；“主题”只选择 Shell 形态，避免把配色与形态耦合。
 - 三张卡片展示 Bar、Dock 和桌面卡片的形态缩略图；点击后同步调用 IPC，成功响应决定最终选中态。
 - 桌面 Shell 未运行、IPC 超时或响应不完整时，页面显示 `SettingsBridge.lastError`，不得伪造保存成功。
-- 当前提示明确说明 Dock 和 Bar 已接入，DeskCenter 仍待后续阶段接入。
+- Dock、启动台、快速搜索、Bar 与 DeskCenter 已接入全局图标外观；DeskCenter 的形态 Token 仍待后续阶段接入。
 
 ## 9. 后续实施顺序
 
 1. **Dock（已完成第一轮）**：圆角、padding、spacing、indicator、状态背景和 motion 已接入；位置、尺寸、显示策略及模型保持用户所有。
 2. **Bar 融合（已实现）**：Bar 保持统一视觉；底部 Dock 将时间作为音乐/天气轮播的一页，并托管系统状态；侧边 Dock 自动回退顶部 Bar。
-3. **DeskCenter**：只替换卡片容器、gap、surface/elevation，不触碰天气、文件、活动等数据逻辑。
+3. **DeskCenter**：全局图标外观已接入；后续只替换形态相关的卡片容器、gap、surface/elevation，不触碰天气、文件、活动等数据逻辑。
 4. **Dock 收口**：完成三风格 × 独立/融合 Bar 的视觉回归。
 5. **全局收口**：搜索并移除已被 Token 取代的散落常量，增加三风格 × 明暗模式视觉回归。
 
@@ -266,7 +290,7 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 qmllint apps/settings/main.qml
 qmllint shell/desktop/modules/common/AppearanceConfigService.qml \
   shell/desktop/modules/common/AppearanceTokens.qml shell/desktop/DesktopEnvironment.qml
-cmake --build apps/settings/build
+cmake --build .build/apps/settings
 node shell/desktop/modules/dock/test_adaptive.mjs
 node shell/desktop/modules/dock/test_autohide.mjs
 git diff --check

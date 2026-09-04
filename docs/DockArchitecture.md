@@ -188,11 +188,12 @@ change without changing the identity of an existing Toplevel.
 
 File: `shell/desktop/modules/dock/AppGroupService.qml`
 
-This derives app groups from the top-level `app` entries in
+This derives reusable app groups from the top-level `app` entries in
 `ConfigService.dockItems` (currently exposed as the compatibility projection
 `ConfigService.pinnedAppIds`) and
-`WindowService.records`. It is the shared model for future grouped Dock,
-Alt+Tab, and Stage Manager views.
+`WindowService.records`. The current Dock compatibility facade derives its own
+grouped/separate presentation; `AppGroupService` remains available for future
+Alt+Tab and Stage Manager views.
 
 Group shape:
 
@@ -208,11 +209,13 @@ Group shape:
 }
 ```
 
-The current Dock uses an iPadOS-style policy: pinned apps always remain in
-their fixed position. A running pinned app displays a dot and active state;
-its windows are omitted only from the Dock's separate unpinned-window section.
-All windows remain in `WindowService`, so a future preview, Alt+Tab, or Stage
-Manager view can still access every individual window.
+The current Dock exposes two presentation policies through
+`DockConfigService.windowGrouping`. In the default `grouped` mode, pinned apps
+remain in their fixed position and show running/active state while unpinned
+windows are grouped by canonical desktop ID. In `separate` mode, a running
+pinned launcher moves into the per-window task section. All windows remain in
+`WindowService`, so previews and future Alt+Tab or Stage Manager views can
+access every individual window.
 
 ## Current Dock compatibility facade
 
@@ -224,9 +227,16 @@ pinnedCount
 windowModel
 windowCount
 activateApp(appId)
+launchNewWindow(appId)
 activateWindow(windowId)
+toggleWindow(windowId)
+minimizeWindow(windowId)
+closeWindow(windowId)
 pinApp(appId)
+isAppPinned(appId)
+isAppActivated(appId)
 unpinApp(appId)
+movePinnedItem(type, key, targetIndex)
 ```
 
 New UI components should prefer `AppIdentityService`, `WindowService`, and
@@ -252,22 +262,25 @@ AppLauncherService.toggle()
 ```
 
 Dock has one strictly presentation-only responsibility: it calls
-`setDockPresentation(width, height, background, primary, secondary)` whenever
-its adaptive layout or material changes. The launcher independently selects
-the same preferred output policy as Dock. Passing material values through this
-API is intentional: `shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
+`setDockPresentation(width, height, position, background, primary, secondary,
+foreground, barHeight)` whenever its adaptive layout or material changes. The
+launcher independently selects the same preferred output policy as Dock.
+Passing geometry and material values through this API is intentional:
+`shell/desktop/modules/applauncher` must not import `qs.desktop.modules.dock`,
 because Dock already imports the launcher control service.
-The launcher uses that published geometry to remain exactly Dock-width and
-half-screen-height without reimplementing adaptive layout math. For an
-initially narrow Dock it uses a minimum usable launcher size of `600×500px`;
-once the Dock reaches 600px it resumes the Dock-width / half-screen-height
-rule. Do not put application search, shortcut registration, or grid state back
-into `DockContainer.qml`.
+
+The launcher supports `bottom`, `center`, and `fullscreen` display modes.
+Bottom mode follows Dock geometry with a screen-relative minimum width and a
+500px minimum height; center mode uses a bounded floating-dialog size; fullscreen
+mode fills the selected output. Each mode owns a semantic icon-size, density,
+and font-weight profile. Do not put application search, shortcut registration,
+or grid state back into `DockContainer.qml`.
 
 Launcher persistence is separate at
-`Quickshell.stateDir + "/applauncher/config.json"`. Its versioned schema owns
-`rootItems` (`app` or future `folder`), `hiddenAppIds`, and per-app overrides.
-Do not store launcher folders or application-grid order in Dock configuration.
+`Quickshell.stateDir + "/applauncher/config.json"`. Schema version 3 owns
+`displayMode`, per-mode `layoutProfiles`, `rootItems` (`app` or `folder`),
+`hiddenAppIds`, and per-app overrides. Do not store launcher folders or
+application-grid order in Dock configuration.
 
 ## Persistence contract
 
@@ -293,23 +306,26 @@ Current user configuration fields (schema version 3):
   "iconMode": "grayscale",
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
-  "visibilityMode": "always"
+  "visibilityMode": "always",
+  "windowGrouping": "grouped"
 }
 ```
 
-Schema 3 added `visibilityMode` (see the next section), the icon appearance
-triplet (`iconMode`: `color | grayscale | tint`, `iconOpacity`,
-`iconTintColor`), and explicit `position`/`barHeight`. `pinnedAppIds` is still
-written for one compatibility release; new code reads `dockItems`. Legacy
-`smartHideEnabled: true` migrates to `"smart"`, legacy `autoHide: true` to
-`"persistent"`, with `"smart"` winning if both were set.
+Schema 3 contains `visibilityMode` (see the next section), `windowGrouping`,
+the legacy icon appearance triplet (`iconMode`: `color | grayscale | tint`,
+`iconOpacity`, `iconTintColor`), and explicit `position`/`barHeight`.
+`pinnedAppIds` and the icon appearance triplet remain written for compatibility;
+new presentation code reads `dockItems` and the shell-wide
+`IconAppearanceService`. Legacy `smartHideEnabled: true` migrates to `"smart"`,
+legacy `autoHide: true` to `"persistent"`, with `"smart"` winning if both were
+set.
 
 Persist:
 
 - ordered `dockItems`; app IDs are canonical desktop IDs
 - layout proportions and size preferences
-- theme, icon appearance, position, and visibility behavior preferences
-- canonical-ID keyed icon overrides
+- theme, position, visibility, and window-grouping preferences
+- legacy icon appearance and override fields for round-trip compatibility
 
 Do not persist:
 
@@ -380,30 +396,30 @@ try/caught). When a provider exposes no geometry, degrade to "hide only on
 same-screen fullscreen" — never substitute "an active window exists" for
 collision.
 
-## Planned feature contracts
+## Current and planned feature contracts
 
 ### Context menus
 
-The current implementation is `DockContextMenu.qml`, anchored with a
-Quickshell `PopupWindow` so the menu does not change the adaptive Dock height.
-Right-click is handled by `DockIcon`; left-click behavior is unchanged.
+The current implementation is `DockContextMenu.qml`, backed by the native
+`Qt.labs.platform` `Menu` so the window system owns pointer grabs and outside
+clicks. Right-click is handled by `DockIcon`; left-click behavior is unchanged.
 
 Current context menu actions call service methods:
 
 ```text
 Pinned App:  activateApp, unpinApp
-Window:      activateWindow, minimizeWindow, closeWindow, pinApp
+Window:      activateWindow, minimizeWindow, closeWindow, pinApp/unpinApp
 ```
 
 Do not mutate `pinnedItems` directly from a menu.
 
 ### Window previews
 
-Preview state is transient. A preview should be created only after a hover
-delay, keyed by `windowId`, and destroyed when the window disappears. The
-preview implementation must use a capture backend (Quickshell Screencopy or
-another Wayland-compatible provider); `Toplevel` metadata alone is not a
-thumbnail.
+Window previews are implemented by `DockWindowPreview.qml`. Preview state is
+transient, opens after the Dock icon hover delay, and is keyed by stable runtime
+`windowId` values. Cards request KWin thumbnails through `WindowService`, show
+loading/fallback states, activate the selected window, and can close an
+individual window. `Toplevel` metadata alone is not treated as a thumbnail.
 
 ### Alt+Tab
 

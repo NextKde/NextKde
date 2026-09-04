@@ -35,9 +35,10 @@ orange warning badge instead of an offline icon.
 
 ## Write API
 
-`connectWifi(ssid, password)` connects normal WPA/open networks. Enterprise
-networks use `connectEnterpriseWifi(ssid, identity, password, eapMethod,
-anonymousIdentity)`;
+`connectWifi(ssid, password, savedProfileUuid)` connects normal WPA/open
+networks and can reactivate a known profile without asking for its password
+again. Enterprise networks use `connectEnterpriseWifi(ssid, identity,
+password, eapMethod, anonymousIdentity)`;
 currently the explicit supported choices are PEAP/MSCHAPv2 and TTLS/PAP. The
 service exposes `wifiConnectInProgress`, `wifiConnectError`, and
 `wifiConnectionFinished` for all UI surfaces. Passwords are positional process

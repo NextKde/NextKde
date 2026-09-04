@@ -63,7 +63,8 @@ Control center for networking, Bluetooth, brightness, volume, and notifications.
 
 ![KOS control center](docs/images/control-center.png)
 
-Settings center for the dock, appearance, and display mode.
+Settings center for display, theme, bar, dock, launcher, shortcuts, and
+integration status.
 
 ![KOS settings center](docs/images/settings-center.png)
 
@@ -197,6 +198,10 @@ After changing C++, Go, or KWin plugins:
 ./tools/kosctl install
 ./tools/kosctl start
 ```
+
+`start` applies Shell, platform-service, and data-service updates immediately.
+Updated KWin effect binaries load after the next logout/login or reboot; this
+avoids hot-replacing plugins inside the running compositor.
 
 Useful commands:
 

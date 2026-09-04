@@ -83,10 +83,11 @@ effects are only persisted to kwinrc and load on the next KWin/session start.
 It also adopts manually launched `qs -c kos` instances under systemd
 supervision. `sync` copies QML-only changes into the installed config (no
 hot-reload — the installed shell runs with its file watcher disabled, so a
-copy in progress can never trigger a half-written hot-reload), and `dev` runs
-the full stack from the source tree on dedicated sockets (`KOS_PLATFORM_SOCKET`,
-`KOS_DATA_SOCKET`) beside the installed services. All launch modes share one
-pinned state directory via the `StateDir` pragma in `shell/shell.qml`.
+copy in progress can never trigger a half-written hot-reload), and `dev` starts
+only the Shell from the source tree while reusing the resident
+`kos-platform.service` and `kos-data.service` through the standard runtime
+sockets. All launch modes share one pinned state directory via the `StateDir`
+pragma in `shell/shell.qml`.
 
 `CMakePresets.json` provides core Debug/Release configurations plus all-app and
 per-app presets. Optional application switches default to `OFF`, so a core

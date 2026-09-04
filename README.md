@@ -60,7 +60,7 @@ KOS 自己处理通知。请从 Plasma 面板或系统托盘移除“通知”�
 
 ![KOS 控制中心](docs/images/control-center.png)
 
-设置中心：调整 Dock、外观与显示方式。
+设置中心：调整显示、主题、顶栏、Dock、启动台与快捷键，并查看接入状态。
 
 ![KOS 设置中心](docs/images/settings-center.png)
 
@@ -186,6 +186,9 @@ Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令�
 ./tools/kosctl install
 ./tools/kosctl start
 ```
+
+`start` 会立即应用 Shell、平台服务和数据服务更新；KWin 特效二进制会在下次注销并
+重新登录或重启后载入，避免在运行中的合成器里热替换插件。
 
 常用命令：
 
