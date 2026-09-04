@@ -201,4 +201,19 @@ assert.doesNotMatch(appActions,
     /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
     "desktop deep links do not shadow JavaScript's implicit arguments object");
 
+const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
+const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
+const controlCenterCoordinator = read("../../shell/desktop/modules/bar/ControlCenterCoordinator.qml");
+const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
+assert.match(appearanceTokens, /popupOpenDuration:\s*200[\s\S]*popupCloseDuration:\s*140/,
+    "shared popup motion keeps the 200ms/140ms timing contract");
+assert.match(appearanceTokens, /popupStartScale:\s*0\.94[\s\S]*popupAnchorOffset:\s*8/,
+    "shared popup motion starts at 0.94 scale with an 8px anchor offset");
+assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
+    "popup open and close use cubic easing without overshoot");
+assert.doesNotMatch(controlCenterCoordinator, /cascade|interval:\s*12/,
+    "control-center cards use one synchronized animation");
+assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
+    "centered application menus only slide at screen edges");
+
 console.log("KOS UI visual contract: all checks passed");

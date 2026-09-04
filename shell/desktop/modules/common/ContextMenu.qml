@@ -11,6 +11,11 @@ PopupWindow {
     property Item anchorItem: null
     property string position: "bottom"
     property bool placeBelow: false
+    // Global AppMenu uses the same macOS motion as Control Center and anchors
+    // the popup to the clicked item's horizontal centre.
+    property bool macosPopupMotion: false
+    property bool centerBelowAnchor: false
+    property real centerBelowOffset: 0
     property color baseColor: Qt.rgba(0, 0, 0, 0.55)
     property color foregroundColor: "#ffffff"
     property bool adaptiveForeground: true
@@ -84,13 +89,23 @@ PopupWindow {
             parents: parents.slice(0, -1)
         })
     }
-    function show() { ContextMenuCoordinator.open(root) }
-    function hide() { root.visible = false }
+    function show() {
+        ContextMenuCoordinator.open(root)
+        if (root.macosPopupMotion)
+            popupMotion.open()
+    }
+    function hide() {
+        if (root.macosPopupMotion && root.visible) {
+            popupMotion.close()
+            return
+        }
+        root.visible = false
+    }
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen)
             ContextMenuCoordinator.open(root)
         else
-            root.visible = false
+            root.hide()
     }
     function dismissDockPopupImmediately() { root.visible = false }
 
@@ -126,14 +141,23 @@ PopupWindow {
 
     anchor {
         item: root.anchorItem
-        edges: root.position === "bottom"
+        rect.x: root.centerBelowAnchor && root.anchorItem
+            ? root.anchorItem.width / 2 - root.implicitWidth / 2 : 0
+        rect.y: root.centerBelowAnchor ? root.centerBelowOffset : 0
+        rect.width: root.centerBelowAnchor ? root.implicitWidth : 0
+        rect.height: root.centerBelowAnchor ? 1 : 0
+        edges: root.centerBelowAnchor ? (Edges.Top | Edges.Left)
+            : root.position === "bottom"
             ? (root.placeBelow ? (Edges.Top | Edges.Left) : Edges.Top)
             : Edges.Right
-        gravity: root.position === "bottom"
+        gravity: root.centerBelowAnchor ? (Edges.Bottom | Edges.Right)
+            : root.position === "bottom"
             ? (root.placeBelow ? (Edges.Bottom | Edges.Right) : Edges.Top)
             : Edges.Right
-        adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
-        margins.top: root.position === "bottom" ? -8 : 0
+        adjustment: root.centerBelowAnchor ? PopupAdjustment.Slide
+            : (PopupAdjustment.Flip | PopupAdjustment.Slide)
+        margins.top: root.centerBelowAnchor ? 0
+            : (root.position === "bottom" ? -8 : 0)
         margins.right: root.position === "right" ? -8 : 8
         margins.left: root.position === "left" ? 8 : 0
     }
@@ -146,7 +170,11 @@ PopupWindow {
                 ContextMenuCoordinator.open(root)
             root.page = ({ items: root.rootItems, parents: [] })
             root.aboutToShow()
+            if (root.macosPopupMotion && !popupMotion.mapped)
+                popupMotion.open()
         } else {
+            if (root.macosPopupMotion)
+                popupMotion.reset()
             ContextMenuCoordinator.release(root)
             root.aboutToHide()
         }
@@ -154,6 +182,14 @@ PopupWindow {
 
     signal aboutToShow()
     signal aboutToHide()
+
+    PopupMotion {
+        id: popupMotion
+        onClosed: {
+            if (!popupMotion.requestedOpen)
+                root.visible = false
+        }
+    }
 
     BackgroundEffect.blurRegion: root.visible ? contextMenuBlurHolder : null
 
@@ -177,6 +213,18 @@ PopupWindow {
         materialDepth: 0.6
         material: "thick"
         adaptiveDarkScrim: true
+        scale: root.macosPopupMotion
+            ? AppearanceTokens.motion.popupStartScale
+                + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+            : 1
+        transformOrigin: Item.Top
+        opacity: root.macosPopupMotion ? popupMotion.progress : 1
+        enabled: !root.macosPopupMotion || popupMotion.interactive
+        transform: Translate {
+            y: root.macosPopupMotion
+                ? (1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset
+                : 0
+        }
 
         Rectangle {
             anchors.fill: parent

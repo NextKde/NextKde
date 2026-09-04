@@ -17,6 +17,7 @@ Item {
     readonly property var items: AppMenuService.items
     property int popupRootId: 0
     property int visibleCount: 0
+    property Item popupAnchorItem: null
 
     readonly property bool available: service.length > 0 && path.length > 0
     readonly property var shownItems: items.slice(0, visibleCount)
@@ -87,7 +88,7 @@ Item {
             done(itemsToHydrate)
     }
 
-    function openItem(item) {
+    function openItem(item, clickedItem) {
         if (!item || !item.enabled)
             return
         console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
@@ -99,9 +100,11 @@ Item {
         AppMenuService.requestLayout(item.id, function(children) {
             hydrate(children, 0, function(result) {
                 popupRootId = item.id
+                popupAnchorItem = clickedItem
                 menuPopup.setItems(result)
                 console.info("[GlobalMenu] popup items=" + result.length)
                 menuPopup.show()
+                Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
             })
         })
     }
@@ -118,6 +121,7 @@ Item {
         Repeater {
             model: root.shownItems
             delegate: Item {
+                id: menuItem
                 required property var modelData
                 width: root.itemWidth(modelData)
                 height: 28
@@ -141,11 +145,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: modelData.enabled !== false
-                    onClicked: root.openItem(modelData)
+                    onClicked: root.openItem(modelData, menuItem)
                 }
             }
         }
         Item {
+            id: overflowButton
             visible: root.overflowItems.length > 0
             width: visible ? 33 : 0
             height: 28
@@ -163,8 +168,10 @@ Item {
                 onClicked: {
                     root.hydrate(root.overflowItems, 0, function(result) {
                         root.popupRootId = 0
+                        root.popupAnchorItem = overflowButton
                         menuPopup.setItems(result)
                         menuPopup.show()
+                        Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
                     })
                 }
             }
@@ -173,9 +180,14 @@ Item {
 
     ContextMenu {
         id: menuPopup
-        anchorItem: root
+        anchorItem: root.popupAnchorItem
         position: "bottom"
-        placeBelow: true
+        centerBelowAnchor: true
+        centerBelowOffset: root.popupAnchorItem
+            ? root.popupAnchorItem.height
+                + Math.max(0, (root.parent?.height ?? root.height) - root.height) / 2 + 4
+            : root.height + 4
+        macosPopupMotion: true
         globalDismissGraceMs: 250
         dismissOnGlobalPointerPress: false
         onAction: function(cmd, item) {

@@ -7,7 +7,7 @@ import QtQuick
 QtObject {
     id: tokens
 
-    readonly property int version: 5
+    readonly property int version: 6
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -95,5 +95,9 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
+        readonly property int popupOpenDuration: 200
+        readonly property int popupCloseDuration: 140
+        readonly property real popupStartScale: 0.94
+        readonly property real popupAnchorOffset: 8
     }
 }

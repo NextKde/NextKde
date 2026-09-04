@@ -120,7 +120,8 @@ Item {
 
     onSessionModalVisibleChanged: {
         _triggerTransitionGuard()
-        coordinator.suspended = panel.sessionModalVisible
+        if (panel.sessionModalVisible)
+            coordinator.modalActive = true
         if (!panel.sessionModalVisible) {
             panel.pendingConfirmAction = ""
         }
@@ -134,7 +135,6 @@ Item {
         } else {
             panel.sessionModalVisible = false
             panel.pendingConfirmAction = ""
-            coordinator.suspended = false
             ControlCenterService.refresh()
             coordinator.openAll()
         }
@@ -143,7 +143,6 @@ Item {
         _triggerTransitionGuard()
         sessionModalVisible = false
         pendingConfirmAction = ""
-        coordinator.suspended = false
         coordinator.closeAll()
     }
 
@@ -906,8 +905,9 @@ Item {
     }
 
     // ── Card 10 (Sub-panel): Power & Session Management ──────────────
-    // Replaces the 9 main cards with a dedicated power & session sheet
-    // covering Lock, Suspend, Switch User, Logout, Reboot and Power Off.
+    // Overlays the 9 dimmed, non-interactive main cards with a dedicated power
+    // & session sheet covering Lock, Suspend, Switch User, Logout, Reboot and
+    // Power Off.
     ControlCenterCard {
         id: sessionCard
         coordinator: coordinator
@@ -921,6 +921,10 @@ Item {
         cardShown: panel.sessionModalVisible
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
+        onMotionClosed: {
+            if (!panel.sessionModalVisible)
+                coordinator.modalActive = false
+        }
 
         // ── VIEW 1: 6-action Grid ──
         Item {
@@ -1163,7 +1167,7 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "注销"; color: "#ff9f0a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            Text { text: "注销"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
                             Text { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
@@ -1193,7 +1197,7 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "重启"; color: "#ff9f0a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            Text { text: "重启"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
                             Text { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
@@ -1225,7 +1229,7 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "关机"; color: "#ff453a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            Text { text: "关机"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
                             Text { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
@@ -1322,7 +1326,7 @@ Item {
                         anchors.centerIn: parent
                         text: panel.pendingConfirmAction === "poweroff" ? "关机"
                             : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
-                        color: "#ff6961"
+                        color: ThemeService.foregroundColor
                         font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     MouseArea {

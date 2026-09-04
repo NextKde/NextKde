@@ -43,9 +43,18 @@ PopupWindow {
     // overlays that manage their own visibility (e.g. logout confirmation).
     property bool managedByCoordinator: true
     property bool cardShown: false
-    readonly property bool effectiveShown: root.managedByCoordinator
-        ? (root.cardShown && (!root.coordinator || !root.coordinator.suspended))
-        : root.cardShown
+    readonly property real motionProgress: root.managedByCoordinator
+        ? (root.coordinator?.motionProgress ?? 0) : ownMotion.progress
+    readonly property bool motionMapped: root.managedByCoordinator
+        ? (root.coordinator?.motionMapped ?? false) : ownMotion.mapped
+    readonly property bool motionInteractive: root.managedByCoordinator
+        ? (root.coordinator?.motionInteractive ?? false) : ownMotion.interactive
+    readonly property bool effectiveShown: root.cardShown && root.motionMapped
+    readonly property real popupScale: AppearanceTokens.motion.popupStartScale
+        + (1 - AppearanceTokens.motion.popupStartScale) * root.motionProgress
+    readonly property bool visuallySuppressed: root.managedByCoordinator
+        && (root.coordinator?.modalActive ?? false)
+    signal motionClosed()
 
     color: "transparent"
     grabFocus: false
@@ -131,6 +140,13 @@ PopupWindow {
         material: "regular"
         border.width: 1
         border.color: root.cardBorderColor
+        scale: root.popupScale
+        transformOrigin: Item.TopRight
+        opacity: root.motionProgress * (root.visuallySuppressed ? 0.55 : 1.0)
+        enabled: root.motionInteractive && !root.visuallySuppressed
+        transform: Translate {
+            y: (1 - root.motionProgress) * AppearanceTokens.motion.popupAnchorOffset
+        }
 
         // Concrete card content (declared by the card instance).
         default property alias content: contentHost.data
@@ -146,5 +162,18 @@ PopupWindow {
             if (root.coordinator)
                 root.coordinator.register(root)
         }
+    }
+
+    onCardShownChanged: {
+        if (!root.managedByCoordinator) {
+            if (root.cardShown)
+                ownMotion.open()
+            else
+                ownMotion.close()
+        }
+    }
+
+    property PopupMotion ownMotion: PopupMotion {
+        onClosed: root.motionClosed()
     }
 }
