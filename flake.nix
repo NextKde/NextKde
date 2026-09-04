@@ -1,11 +1,11 @@
 {
   description = "KOS Desktop Shell - iPadOS-style desktop for KDE Plasma 6";
 
-inputs = {
+  inputs = {
     nixpkgs = {
-        url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
+      url = "git+https://mirrors.nju.edu.cn/git/nixpkgs.git?ref=nixos-unstable&shallow=1";
     };
-};
+  };
 
   outputs = { self, nixpkgs }:
     let
@@ -25,19 +25,25 @@ inputs = {
         default = kos-desktop;
       };
 
-      # NixOS module: import this flake to get KOS system-wide
-      nixosModules.kos = { config, lib, pkgs, ... }: {
+      # NixOS module: declaratively install KOS system-wide
+      nixosModules.kos = { config, lib, pkgs, ... }:
+      let
+        cfg = config.services.kos;
+        kos = self.packages.${system}.kos-desktop;
+      in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
         };
 
-        config = lib.mkIf config.services.kos.enable {
+        config = lib.mkIf cfg.enable {
           environment.systemPackages = [
-            self.packages.${system}.kos-desktop
-            self.packages.${system}.kos-settings
+            kos
+            kos.passthru.kwin-dock-window-animation
+            kos.passthru.kwin-context-menu-input
+            kos.passthru.kwin-effects-glass
           ];
 
-          # KWin plugins go to system-level path
+          # KWin plugins live under lib/kwin/ in the Nix store
           environment.pathsToLink = [ "/lib/kwin" ];
         };
       };

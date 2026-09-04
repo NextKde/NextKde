@@ -217,74 +217,120 @@ build() {
     )
 }
 
-install_files() {
-    if [[ -z "$qs_bin" ]]; then
-        echo "Quickshell (qs) is required to install kos-shell.service" >&2
+# deploy_artifacts — deploy from a build output root to ~/.local.
+#   $1: artifact root directory (e.g. "$build_dir" or "$project_dir/result")
+#
+# On NixOS, binaries/libexec are symlinked into the Nix store; shell QML,
+# systemd units, and desktop files are copied so the user can edit them.
+# On other distros, everything is copied (real files).
+deploy_artifacts() {
+    local artifact_root="$1"
+    if [[ ! -d "$artifact_root" ]]; then
+        printf 'Artifact root not found: %s\n' "$artifact_root" >&2
         return 1
     fi
-    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/share/kos/platform/kwin" \
-        "$prefix/share/kos/settings" "$prefix/share/shared/qml"
-    # Unlink before installing so a currently running binary is never written
-    # in place: the running process keeps its old inode (and a fresh exec gets
-    # the new one), while overwriting an executing file can fail with
-    # ETXTBSY ("Text file busy") or crash the process using it.
+
+    mkdir -p "$prefix/libexec" "$prefix/bin" \
+        "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
+        "$prefix/share/shared/qml" "$prefix/share/applications"
+
+    # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
-    install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
-    install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
-    install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
-    install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
-        "$prefix/share/kos/platform/kwin/window-bridge.js"
-    install -m 0644 "$project_dir/apps/settings/main.qml" \
-        "$prefix/share/kos/settings/main.qml"
-    rm -rf "$prefix/share/shared/qml/controls"
-    cp -a "$project_dir/shared/qml/controls" "$prefix/share/shared/qml/"
+    if is_nixos; then
+        ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
+        ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
+        ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
+    else
+        install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
+        install -m 0755 "$artifact_root/bin/kos-data-service"     "$prefix/libexec/kos-data-service"
+        install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+    fi
 
+    # --- KWin bridge script ---
+    if is_nixos; then
+        ln -sf "$artifact_root/share/kos/platform/kwin/window-bridge.js" \
+            "$prefix/share/kos/platform/kwin/window-bridge.js"
+    else
+        install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
+            "$prefix/share/kos/platform/kwin/window-bridge.js"
+    fi
+
+    # --- Settings QML & shared controls ---
+    if is_nixos; then
+        cp "$artifact_root/share/kos/settings/main.qml" \
+            "$prefix/share/kos/settings/main.qml"
+    else
+        install -m 0644 "$project_dir/apps/settings/main.qml" \
+            "$prefix/share/kos/settings/main.qml"
+    fi
+    rm -rf "$prefix/share/shared/qml/controls"
+    if is_nixos; then
+        cp -a "$artifact_root/share/shared/qml/controls" "$prefix/share/shared/qml/"
+    else
+        cp -a "$project_dir/shared/qml/controls" "$prefix/share/shared/qml/"
+    fi
+
+    # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
     mkdir -p "$shell_config"
-    # shell/shared/qml/controls is a repository symlink, while earlier
-    # installations created it as a real directory. Remove that single
-    # generated target before copying so reinstalling is idempotent.
     rm -rf "$shell_config/shared/qml/controls"
-    cp -a "$project_dir/shell/." "$shell_config/"
+    if is_nixos; then
+        cp -a "$artifact_root/share/kos-desktop/." "$shell_config/"
+    else
+        cp -a "$project_dir/shell/." "$shell_config/"
+    fi
     mkdir -p "$shell_config/shared/qml"
     rm -rf "$shell_config/shared/qml/controls"
-    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+    if is_nixos; then
+        cp -a "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
+    else
+        cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+    fi
 
+    # --- Systemd user services ---
     mkdir -p "$runtime_unit_dir"
-    sed "s|%h/.local|$prefix|g" \
-        "$project_dir/packaging/systemd/kos-platform.service" \
-        > "$runtime_unit_dir/kos-platform.service"
-    sed "s|%h/.local|$prefix|g" \
-        "$project_dir/packaging/systemd/kos-data.service" \
-        > "$runtime_unit_dir/kos-data.service"
-    sed "s|@QS_EXEC@|$qs_bin|g" \
-        "$project_dir/packaging/systemd/kos-shell.service.in" \
-        > "$runtime_unit_dir/kos-shell.service"
+    if is_nixos; then
+        cp "$artifact_root/lib/systemd/user/kos-platform.service" "$runtime_unit_dir/"
+        cp "$artifact_root/lib/systemd/user/kos-data.service"     "$runtime_unit_dir/"
+        cp "$artifact_root/lib/systemd/user/kos-shell.service"    "$runtime_unit_dir/"
+    else
+        sed "s|%h/.local|$prefix|g" \
+            "$project_dir/packaging/systemd/kos-platform.service" \
+            > "$runtime_unit_dir/kos-platform.service"
+        sed "s|%h/.local|$prefix|g" \
+            "$project_dir/packaging/systemd/kos-data.service" \
+            > "$runtime_unit_dir/kos-data.service"
+        sed "s|@QS_EXEC@|$qs_bin|g" \
+            "$project_dir/packaging/systemd/kos-shell.service.in" \
+            > "$runtime_unit_dir/kos-shell.service"
+    fi
     chmod 0644 "$runtime_unit_dir/kos-platform.service" \
         "$runtime_unit_dir/kos-data.service" \
         "$runtime_unit_dir/kos-shell.service"
-    mkdir -p "$prefix/share/applications"
-    sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
-        "$project_dir/packaging/desktop/kos-settings.desktop.in" \
-        > "$prefix/share/applications/kos-settings.desktop"
-    # QGuiApplication::desktopFileName is org.kos.Platform. Portals resolve
-    # that application ID by desktop-file basename, so these must match.
-    rm -f "$prefix/share/applications/kos-platform.desktop"
-    sed "s|@KOS_PLATFORM_EXEC@|$prefix/libexec/kos-platform|g" \
-        "$project_dir/packaging/desktop/org.kos.Platform.desktop.in" \
-        > "$prefix/share/applications/org.kos.Platform.desktop"
+
+    # --- Desktop entries ---
+    if is_nixos; then
+        cp "$artifact_root/share/applications/kos-settings.desktop"   "$prefix/share/applications/"
+        cp "$artifact_root/share/applications/org.kos.Platform.desktop" "$prefix/share/applications/"
+    else
+        sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
+            "$project_dir/packaging/desktop/kos-settings.desktop.in" \
+            > "$prefix/share/applications/kos-settings.desktop"
+        rm -f "$prefix/share/applications/kos-platform.desktop"
+        sed "s|@KOS_PLATFORM_EXEC@|$prefix/libexec/kos-platform|g" \
+            "$project_dir/packaging/desktop/org.kos.Platform.desktop.in" \
+            > "$prefix/share/applications/org.kos.Platform.desktop"
+    fi
     if command -v kbuildsycoca6 >/dev/null 2>&1; then
         kbuildsycoca6 --noincremental >/dev/null
     fi
+
+    # --- Enable systemd units ---
     if [[ "${KOS_SKIP_SYSTEMD:-0}" != "1" ]] && command -v systemctl >/dev/null 2>&1; then
         local -a kos_units=(
             kos-platform.service kos-data.service kos-shell.service
         )
-        # install is non-disruptive: it registers the units for the next
-        # session (and login autostart) but leaves the running session alone.
-        # In-place updates of executables and QML only take effect after the
-        # services restart — either at next login/relogin or via `kosctl start`.
         systemctl --user daemon-reload
         systemctl --user enable "${kos_units[@]}"
     fi
@@ -491,14 +537,11 @@ install_kwin_plugins() {
     kwin_plugins_enabled || return 0
 
     if is_nixos; then
-        printf '\n'
-        printf '  NixOS detected: KWin plugins are managed by NixOS, not by manual install.\n'
-        printf '  Use ./tools/kosctl nix build to build the full package including KWin plugins,\n'
-        printf '  then add it to your NixOS configuration or install via:\n'
-        printf '    nix build --impure %s#packages.x86_64-linux.kos-desktop\n' "$project_dir"
-        printf '    sudo cp -a result/lib/kwin/* /run/current-system/sw/lib/kwin/ 2>/dev/null || true\n'
-        printf '  Or use ./tools/kosctl nix switch with NIXOS_SYSTEM=<hostname>.\n'
-        printf '\n'
+        printf 'KWin plugins on NixOS are managed declaratively by the NixOS module.\n'
+        printf 'Add to your configuration.nix:\n'
+        printf '  imports = [ inputs.kos.nixosModules.kos ];\n'
+        printf '  services.kos.enable = true;\n'
+        printf 'Then run: sudo nixos-rebuild switch\n'
         enable_kwin_effects
         return 0
     fi
@@ -551,17 +594,20 @@ install_kwin_plugins() {
 install_all() {
     if is_nixos; then
         printf '\n'
-        printf '  NixOS detected. For the best experience, use the flake-based install:\n'
-        printf '    ./tools/kosctl nix build        # Build the Nix package\n'
-        printf '    ./tools/kosctl nix switch       # Build and apply system-wide\n'
+        printf '  NixOS detected. Use the flake-based install for best results:\n'
+        printf '    ./tools/kosctl nix build   # Build the Nix package\n'
+        printf '    ./tools/kosctl nix install # Deploy user-space components\n'
         printf '\n'
-        printf '  Proceeding with manual install (components will be installed to %s)...\n' "$prefix"
+        printf '  Proceeding with manual install to %s...\n' "$prefix"
+        printf '  Note: KWin plugins will NOT be installed (use NixOS module).\n'
         printf '\n'
     fi
     ensure_kwin_build_dependencies
     build
-    install_files
-    install_kwin_plugins
+    deploy_artifacts "$build_dir"
+    if ! is_nixos; then
+        install_kwin_plugins
+    fi
     print_install_summary
 }
 
@@ -652,7 +698,9 @@ uninstall() {
         systemctl --user disable --now kos-shell.service \
             kos-platform.service kos-data.service 2>/dev/null || true
     fi
-    uninstall_kwin_plugins
+    if ! is_nixos; then
+        uninstall_kwin_plugins
+    fi
     rm -f "$runtime_unit_dir/kos-shell.service" \
         "$runtime_unit_dir/kos-platform.service" \
         "$runtime_unit_dir/kos-data.service"
@@ -668,6 +716,14 @@ uninstall() {
     rm -rf "$prefix/share/shared/qml/controls"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
+    if is_nixos; then
+        printf '\n'
+        printf '  On NixOS, system-level components (KWin plugins, binaries in PATH)\n'
+        printf '  are managed by your NixOS configuration. To remove them:\n'
+        printf '    1. Remove or disable: services.kos.enable = false;\n'
+        printf '    2. Run: sudo nixos-rebuild switch\n'
+        printf '\n'
+    fi
 }
 
 shortcuts() {
@@ -679,50 +735,13 @@ shortcuts() {
         "$prefix/libexec/kos-platform" shortcuts "$1"
 }
 
-nix_deploy() {
+nix_deploy_artifacts() {
     local result_dir="$project_dir/result"
     if [[ ! -L "$result_dir" ]] || [[ ! -d "$result_dir" ]]; then
         printf 'result symlink not found. Run ./tools/kosctl nix build first.\n' >&2
         return 1
     fi
-
-    # Deploy systemd user services
-    mkdir -p "$runtime_unit_dir"
-    cp "$result_dir/lib/systemd/user/kos-platform.service" "$runtime_unit_dir/"
-    cp "$result_dir/lib/systemd/user/kos-data.service" "$runtime_unit_dir/"
-    cp "$result_dir/lib/systemd/user/kos-shell.service" "$runtime_unit_dir/"
-
-    # Deploy shell config to quickshell config directory
-    local shell_config="$config_dir/quickshell/kos"
-    mkdir -p "$shell_config/shared/qml"
-    cp -a "$result_dir/share/kos-desktop/." "$shell_config/"
-    mkdir -p "$shell_config/shared/qml"
-    rm -rf "$shell_config/shared/qml/controls"
-    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
-
-    # Reload and enable services
-    systemctl --user daemon-reload
-    systemctl --user enable kos-platform.service kos-data.service kos-shell.service
-
-    # Enable KWin effects in kwinrc
-    if command -v kwriteconfig6 >/dev/null 2>&1; then
-        kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
-            false --type bool --notify false
-        local effect
-        for effect in kos_dock_window_animation kos_context_menu_input glass; do
-            kwriteconfig6 --file kwinrc --group Plugins --key "${effect}Enabled" \
-                true --type bool --notify false
-        done
-    fi
-
-    printf '\n'
-    printf '  KOS deployed from Nix store\n'
-    printf '    systemd services: %s\n' "$runtime_unit_dir"
-    printf '    shell config:     %s\n' "$shell_config"
-    printf '\n'
-    printf '  To apply: log out and back in, or reboot.\n'
-    printf '  Apply now without logging out: ./tools/kosctl start\n'
-    printf '\n'
+    deploy_artifacts "$result_dir"
 }
 
 nix_install() {
@@ -744,14 +763,25 @@ nix_install() {
             printf 'Build output: %s/result\n' "$project_dir"
             ;;
         install)
-            # Build if no result exists
             if [[ ! -L "$project_dir/result" ]]; then
                 printf '==> Building KOS via flake.nix...\n'
                 nix build --impure "$project_dir#packages.x86_64-linux.kos-desktop" \
                     --out-link "$project_dir/result"
             fi
-            printf '==> Deploying KOS from Nix store...\n'
-            nix_deploy
+            printf '==> Deploying KOS user-space components from Nix store...\n'
+            nix_deploy_artifacts
+            printf '\n'
+            if is_nixos; then
+                printf '  KWin plugins are managed declaratively by your NixOS configuration.\n'
+                printf '  Ensure the following is in your configuration.nix:\n'
+                printf '    imports = [ inputs.kos.nixosModules.kos ];\n'
+                printf '    services.kos.enable = true;\n'
+                printf '  Then run: sudo nixos-rebuild switch\n'
+                printf '  (or re-login for user-space changes to take effect)\n'
+            else
+                printf '  Run ./tools/kosctl start to apply changes.\n'
+            fi
+            printf '\n'
             ;;
         start)
             start_all
