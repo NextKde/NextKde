@@ -59,7 +59,11 @@ Item {
             NetworkStatus {
                 id: networkStatus
                 anchors.centerIn: parent
-                iconSize: systemTray.iconSize
+                // The Wi-Fi glyph is a thin arc fan and the battery glyph is
+                // a flat capsule; both read visually smaller than the filled
+                // control-center mark at the same nominal box size, so they
+                // get a bit more room within the shared tray slot.
+                iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
@@ -80,7 +84,7 @@ Item {
         Item {
             Battery {
                 anchors.centerIn: parent
-                iconSize: systemTray.iconSize
+                iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
