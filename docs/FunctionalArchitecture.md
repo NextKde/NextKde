@@ -57,6 +57,7 @@ stable error; the shell process and other features remain usable.
 
 The versioned JSONL envelope and error model are defined in
 [`shared/contracts/platform.v1.md`](../shared/contracts/platform.v1.md). The
-default shortcut table is `shared/contracts/shortcuts.v1.json`. Contract tests
+default shortcut table lives in the Shell's ShortcutsService
+(`shell/desktop/modules/shortcuts/ShortcutsService.qml`). Contract tests
 run with `python3 platform/tests/test_contract.py`; C++ builds use
 `cmake --preset debug && cmake --build --preset debug`.

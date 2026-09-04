@@ -474,13 +474,24 @@ private:
                       const QString &fallbackError) {
         const QString shellPath = shellDirectory();
         QString failure;
+        // Quickshell tracks instances by how they identify their config: a
+        // Shell launched as `-c kos` is NOT matched by `--path <same dir>`.
+        // The installed session runs as `-c kos`, so address it by name;
+        // development sessions (`-p <dir>`) take the explicit path.
+        const QString installed = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
+        QStringList connectArgs;
+        if (shellPath == installed)
+            connectArgs = {QStringLiteral("-c"), QStringLiteral("kos")};
+        else
+            connectArgs = {QStringLiteral("--path"), shellPath};
         // The Shell can still be registering IPC targets during the first
         // moments of a development launch. Retry once instead of turning that
         // brief race into a permanent, opaque Settings error.
         for (int attempt = 0; attempt < 2; ++attempt) {
             QProcess process;
-            QStringList command{QStringLiteral("--path"), shellPath,
-                                QStringLiteral("ipc"), QStringLiteral("call"), target};
+            QStringList command = connectArgs;
+            command << QStringLiteral("ipc") << QStringLiteral("call") << target;
             command.append(arguments);
             process.start(QStringLiteral("quickshell"), command);
             if (!process.waitForStarted(1500)) {

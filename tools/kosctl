@@ -55,7 +55,7 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings>
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
 EOF
@@ -222,7 +222,9 @@ install_files() {
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
     install -m 0755 "$build_dir/platform/kos-platform" "$prefix/libexec/kos-platform"
     install -m 0755 "$build_dir/bin/kos-data-service" "$prefix/libexec/kos-data-service"
-    install -m 0755 "$build_dir/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+    # kos-settings writes its artifact to the canonical in-tree location
+    # (apps/settings/build) that DesktopAppLauncher execs in dev sessions.
+    install -m 0755 "$project_dir/apps/settings/build/kos-settings" "$prefix/bin/kos-settings"
     install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
         "$prefix/share/kos/platform/kwin/window-bridge.js"
     install -m 0644 "$project_dir/apps/settings/main.qml" \
@@ -599,15 +601,6 @@ uninstall() {
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
 }
 
-shortcuts() {
-    if [[ ! -x "$prefix/libexec/kos-platform" ]]; then
-        echo "kos-platform is not installed; run ./tools/kosctl install first" >&2
-        return 1
-    fi
-    KOS_SHORTCUTS_FILE="$project_dir/shared/contracts/shortcuts.v1.json" \
-        "$prefix/libexec/kos-platform" shortcuts "$1"
-}
-
 case "${1:-}" in
     doctor) doctor ;;
     build) build ;;
@@ -618,8 +611,5 @@ case "${1:-}" in
     run) run_shell "${2:-}" ;;
     uninstall) uninstall ;;
     glass-settings) open_glass_settings ;;
-    shortcuts)
-        [[ "${2:-}" == install || "${2:-}" == uninstall ]] || { usage >&2; exit 2; }
-        shortcuts "$2" ;;
     *) usage >&2; exit 2 ;;
 esac

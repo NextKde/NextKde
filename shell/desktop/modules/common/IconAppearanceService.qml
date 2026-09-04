@@ -51,19 +51,12 @@ QtObject {
     function styledSymbolicColor() {
         return mode === "tint" ? styledColor(Qt.rgba(0.72, 0.72, 0.72, 1)) : Qt.rgba(1, 1, 1, 1)
     }
-    // Widget content starts as white in glass modes. Do not rely on an
-    // ancestor shader to recolour it: Canvas, images and QML text do not all
-    // enter that layer consistently on every renderer.
+    // Desktop widget content stays monochrome in both grayscale and tint
+    // modes. Tint is reserved for the WidgetGlassMaterial background; Canvas,
+    // images, and QML text do not all enter an ancestor shader consistently.
     function glassContentColor(alpha) {
         const opacity = alpha === undefined ? 1.0 : alpha
-        return mode === "tint"
-            // Use the same 0.72 neutral input as symbolic Dock icons. The
-            // icon shader retains a little black/white tonal information;
-            // using raw tint here made widget content look flatter and more
-            // saturated than the Dock.
-            ? Qt.rgba(styledSymbolicColor().r, styledSymbolicColor().g,
-                styledSymbolicColor().b, opacity)
-            : Qt.rgba(1, 1, 1, opacity)
+        return Qt.rgba(1, 1, 1, opacity)
     }
 
     property Timer saveTimer: Timer {

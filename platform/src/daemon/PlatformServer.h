@@ -45,6 +45,7 @@ private:
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
+    bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
     void startClipboardHistoryWatcher(QProcess *&watcher,
                                       const QStringList &arguments);

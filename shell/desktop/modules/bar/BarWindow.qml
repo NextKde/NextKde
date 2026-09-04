@@ -112,10 +112,22 @@ PanelWindow {
                     readonly property alias statusArea: barStatusArea
 
                     BarDateStatus {
+                        id: barDateStatus
                         anchors {
                             left: parent.left
                             verticalCenter: parent.verticalCenter
                         }
+                    }
+
+                    // This loader only exists in the standalone top Bar.
+                    // DesktopEnvironment disables Bar entirely when it is
+                    // integrated into the Dock, so the Dock never owns or
+                    // fetches an application menu.
+                    GlobalMenu {
+                        anchors.left: barDateStatus.right
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        maximumWidth: Math.max(0, barStatusArea.x - x - 18)
                     }
 
                     BarStatusArea {

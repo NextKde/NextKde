@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=KOS Platform Service
+Name=KOS
 Comment=KOS integration service for KDE Plasma and KWin
 Exec=@KOS_PLATFORM_EXEC@ daemon
 Icon=preferences-system

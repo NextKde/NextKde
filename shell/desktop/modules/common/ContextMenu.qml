@@ -23,6 +23,12 @@ PopupWindow {
     property real surfaceOpacity: 0.98
     property real darkOverlayOpacity: 0.27
     property real menuRadius: 16
+    // Some anchors receive their opening press through the compositor's
+    // global-pointer bridge slightly after this popup is mapped.
+    property int globalDismissGraceMs: 0
+    // Set by popup types whose compositor surface is not reported as a KWin
+    // popup window. Their own controls still close the menu after an action.
+    property bool dismissOnGlobalPointerPress: true
 
     signal action(string cmd, var item)
 

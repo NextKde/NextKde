@@ -2,43 +2,34 @@
 
 #include <QJsonArray>
 #include <QString>
-#include <QStringList>
 
 namespace KosPlatform {
 
-// Global-shortcut ownership for kglobalaccel.
+// KOS global shortcuts, registered through the KGlobalAccel client library —
+// the same mechanism the plasma powerdevil daemon uses. The daemon owns one
+// QAction per shortcut, all under the single "org.kos.Platform" component:
+// kglobalaccel persists the bindings, shows ONE entry in System Settings →
+// Shortcuts, and delivers activations back to this daemon, which runs the
+// Exec line the Shell supplied in the apply payload (so it always addresses
+// the live Shell instance, dev or installed).
 //
-// KOS owns its shortcuts through `<id>.desktop` service entries
-// (`X-KDE-GlobalAccel-CommandShortcut=true`) plus `[services]` sections in
-// `kglobalshortcutsrc`, and asks kglobalaccel over D-Bus to (un)register
-// them. Two callers share this module:
-//
-//   - the `kos-platform shortcuts install|uninstall` CLI, which reads
-//     shared/contracts/shortcuts.v1.json and composes `qs -c kos ...`
-//     Exec lines, and
-//   - PlatformServer's `shortcuts.apply` / `shortcuts.uninstall`
-//     operations, where the Shell composes the Exec line itself so it
-//     matches how that Shell instance was launched (dev `-p` vs installed
-//     `-c kos`).
-//
-// Every shortcut object carries `id`, `description`, `combo` (already in
-// kglobalaccel's PortableText form, e.g. "Meta+Shift+Space") and `exec`
-// (the full desktop Exec line). Installation is all-or-nothing: any combo
-// already bound to a different service aborts the whole set with a
-// human-readable conflict message.
+// No service desktop files are involved. Earlier generations wrote
+// per-shortcut *.desktop files plus [services] sections in
+// kglobalshortcutsrc; cleanShortcutLayouts() removes those leftovers.
 
-bool installShortcutSet(const QJsonArray &shortcuts,
-                        const QStringList &legacyIds,
-                        QString *error = nullptr);
+// Registers or updates the whole set. Every shortcut object carries `id`,
+// `description`, `combo` (kglobalaccel PortableText, e.g. "Meta+Shift+Space")
+// and `exec` (the command line to run on activation). All-or-nothing: a
+// malformed item aborts before any QAction is touched.
+bool applyShortcutSet(const QJsonArray &shortcuts, QString *error = nullptr);
 
-bool uninstallShortcutIds(const QStringList &ids,
-                          const QStringList &legacyIds,
-                          QString *error = nullptr);
+// Unregisters every KOS action (bindings become inactive) and drops the
+// leftover files from superseded layouts.
+void removeShortcuts();
 
-// Desktop entries produced by earlier KOS generations whose Exec lines no
-// longer match any launch mode. Removed on every install/uninstall. User
-// created entries (net.local.qs*) are deliberately left alone.
-QStringList legacyKosShortcutIds();
+// Removes desktop files and kglobalshortcutsrc sections written by
+// superseded shortcut layouts. Idempotent; safe to call on every apply.
+void cleanShortcutLayouts();
 
 // Trims display variants ("Meta+X,Meta+X") down to the primary binding.
 QString normalizedShortcutCombo(QString value);
