@@ -68,7 +68,10 @@ Item {
         cardOffsetX: !panel.dockHosted ? 0
             : panel.dockEdge === "left" ? -20
             : panel.dockEdge === "right" ? 20 : 0
-        cardOffsetY: panel.dockHosted && panel.dockEdge === "bottom" ? 20 : 0
+        // Card offsets include a historical 20px top inset. Cancel it for the
+        // standalone Bar so the visible cards begin 2px below the Bar.
+        cardOffsetY: !panel.dockHosted ? -20
+            : (panel.dockEdge === "bottom" ? 20 : 0)
     }
 
     // Geometry oracle: it is anchored to the clicked control, which makes
@@ -93,7 +96,7 @@ Item {
                 : panel.dockEdge === "right" ? Edges.Left : Edges.Top
             adjustment: PopupAdjustment.Slide
             margins.top: 0
-            margins.bottom: panel.dockHosted ? 0 : -8
+            margins.bottom: panel.dockHosted ? 0 : -2
             margins.left: 0
             margins.right: 0
         }

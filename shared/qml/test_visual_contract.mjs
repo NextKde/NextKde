@@ -205,16 +205,27 @@ const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
 const controlCenterCoordinator = read("../../shell/desktop/modules/bar/ControlCenterCoordinator.qml");
 const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
-assert.match(appearanceTokens, /popupOpenDuration:\s*200[\s\S]*popupCloseDuration:\s*140/,
-    "shared popup motion keeps the 200ms/140ms timing contract");
-assert.match(appearanceTokens, /popupStartScale:\s*0\.94[\s\S]*popupAnchorOffset:\s*8/,
-    "shared popup motion starts at 0.94 scale with an 8px anchor offset");
+assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
+    "shared popup motion uses Launchpad's 150ms entrance timing");
+assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
+    "shared popup motion uses Launchpad's 0.96 settle scale");
 assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
     "popup open and close use cubic easing without overshoot");
 assert.doesNotMatch(controlCenterCoordinator, /cascade|interval:\s*12/,
     "control-center cards use one synchronized animation");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
+const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
+const controlCenterPanelSource = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const globalMenuSource = read("../../shell/desktop/modules/bar/GlobalMenu.qml");
+assert.match(appLauncherWindow,
+    /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
+    "Launchpad and anchored popups consume the same entrance tokens");
+assert.match(controlCenterPanelSource,
+    /cardOffsetY:\s*!panel\.dockHosted\s*\?\s*-20[\s\S]{0,1800}margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-2/,
+    "standalone Control Center starts two pixels below the Bar");
+assert.match(globalMenuSource, /root\.height\s*\+\s*2/,
+    "application menus keep a two-pixel Bar gap");
 
 const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");

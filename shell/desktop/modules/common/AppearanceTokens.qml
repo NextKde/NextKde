@@ -93,9 +93,11 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
-        readonly property int popupOpenDuration: 200
+        // Anchored popups share Launchpad's entrance rhythm: a short cubic
+        // settle from 0.96 scale with a directional fade/translation.
+        readonly property int popupOpenDuration: 150
         readonly property int popupCloseDuration: 140
-        readonly property real popupStartScale: 0.94
-        readonly property real popupAnchorOffset: 8
+        readonly property real popupStartScale: 0.96
+        readonly property real popupAnchorOffset: 20
     }
 }
