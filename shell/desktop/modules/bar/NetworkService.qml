@@ -63,6 +63,8 @@ QtObject {
             ipv4 = String(result.ipv4 || "").replace(/\/\d+$/, "")
             if (connectionType === "wifi" && result.ssid)
                 ssid = String(result.ssid)
+            if (connectionType === "wifi" && result.signalStrength !== undefined)
+                signalStrength = Number(result.signalStrength)
         })
     }
 

@@ -39,6 +39,8 @@ private:
     void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
                           bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
+    void runNetworkDetails(QLocalSocket *socket, const QJsonObject &request,
+                           const QString &device);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;

@@ -473,6 +473,24 @@ QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
                        {QStringLiteral("ipv4"), ipv4}};
 }
 
+// `nmcli device show` carries no signal field for wifi devices; the value is
+// only exposed per-AP by `device wifi list`. Pick out the row NetworkManager
+// marks as the active connection (IN-USE == "*").
+int parseActiveWifiSignal(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return -1;
+    for (const QString &line : QString::fromUtf8(output).split(QChar('\n'), Qt::SkipEmptyParts)) {
+        const QStringList fields = splitNmcli(line);
+        if (fields.value(0).trimmed() != QStringLiteral("*"))
+            continue;
+        bool ok = false;
+        const int signal = fields.value(1).toInt(&ok);
+        return ok ? qBound(0, signal, 100) : -1;
+    }
+    return -1;
+}
+
 QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
 {
     const QString text = QString::fromUtf8(output);
@@ -949,6 +967,76 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
         devices->start();
     });
     general->start();
+}
+
+void PlatformServer::runNetworkDetails(QLocalSocket *socket,
+                                       const QJsonObject &request,
+                                       const QString &device)
+{
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    auto *info = new QProcess(this);
+    info->setProgram(QStringLiteral("nmcli"));
+    info->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                        QStringLiteral("GENERAL.CONNECTION,IP4.ADDRESS"),
+                        QStringLiteral("device"), QStringLiteral("show"), device});
+    const auto infoFinished = std::make_shared<bool>(false);
+    connect(info, &QProcess::errorOccurred, this,
+            [info, infoFinished, guardedSocket, request, this](QProcess::ProcessError) {
+        if (*infoFinished)
+            return;
+        *infoFinished = true;
+        respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
+                QStringLiteral("平台命令不可用"), true);
+        info->deleteLater();
+    });
+    connect(info, &QProcess::finished, this,
+            [this, guardedSocket, request, info, infoFinished, device](int infoExitCode,
+                                                                        QProcess::ExitStatus) {
+        if (*infoFinished)
+            return;
+        *infoFinished = true;
+        const QByteArray infoOutput = info->readAllStandardOutput();
+        info->deleteLater();
+        if (infoExitCode != 0) {
+            respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
+                    QStringLiteral("平台命令执行失败"), true);
+            return;
+        }
+        const QJsonObject baseResult = parseNetworkDetails(infoOutput, infoExitCode);
+
+        // Signal strength isn't part of `device show`; a wifi-only device
+        // never exposes it there. Query it separately and simply omit it for
+        // wired/absent devices rather than fail the whole details response.
+        auto *signal = new QProcess(this);
+        signal->setProgram(QStringLiteral("nmcli"));
+        signal->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                              QStringLiteral("IN-USE,SIGNAL"),
+                              QStringLiteral("device"), QStringLiteral("wifi"),
+                              QStringLiteral("list"), QStringLiteral("ifname"), device});
+        const auto signalFinished = std::make_shared<bool>(false);
+        connect(signal, &QProcess::errorOccurred, this,
+                [this, signal, signalFinished, guardedSocket, request, baseResult](QProcess::ProcessError) {
+            if (*signalFinished)
+                return;
+            *signalFinished = true;
+            respond(guardedSocket.data(), request, true, baseResult);
+            signal->deleteLater();
+        });
+        connect(signal, &QProcess::finished, this,
+                [this, guardedSocket, request, signal, signalFinished,
+                 baseResult](int signalExitCode, QProcess::ExitStatus) {
+            if (*signalFinished)
+                return;
+            *signalFinished = true;
+            const int strength = parseActiveWifiSignal(signal->readAllStandardOutput(), signalExitCode);
+            signal->deleteLater();
+            QJsonObject result = baseResult;
+            result.insert(QStringLiteral("signalStrength"), strength);
+            respond(guardedSocket.data(), request, true, result);
+        });
+        signal->start();
+    });
+    info->start();
 }
 
 void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
@@ -1918,11 +2006,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("网络设备无效"), false);
             return true;
         }
-        runCommand(socket, request, QStringLiteral("nmcli"),
-                   {QStringLiteral("-t"), QStringLiteral("-f"),
-                    QStringLiteral("GENERAL.CONNECTION,IP4.ADDRESS"),
-                    QStringLiteral("device"), QStringLiteral("show"), device},
-                   parseNetworkDetails);
+        runNetworkDetails(socket, request, device);
         return true;
     }
     if (op == QStringLiteral("network.scan")) {
