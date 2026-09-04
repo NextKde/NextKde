@@ -61,6 +61,8 @@
                   set -e
                   shell_config="$HOME/.config/quickshell/kos"
                   mkdir -p "$shell_config/shared/qml"
+                  # Ensure target is writable (Nix store files are read-only)
+                  chmod -R u+w "$shell_config" 2>/dev/null || true
                   # Overwrite shell QML (follow symlinks, force overwrite)
                   cp -rfL ${kos}/share/kos-desktop/. "$shell_config/"
                   # Overwrite shared QML controls
