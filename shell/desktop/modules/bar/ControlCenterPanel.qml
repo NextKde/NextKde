@@ -150,9 +150,10 @@ Item {
     }
     function close() {
         _triggerTransitionGuard()
+        const closingModal = sessionModalVisible
+        coordinator.closeAll(closingModal)
         sessionModalVisible = false
         pendingConfirmAction = ""
-        coordinator.closeAll()
     }
 
     function openSessionPanel() {
@@ -1088,7 +1089,6 @@ Item {
                     MouseArea {
                         id: lockArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.lockSession()
                         }
@@ -1122,7 +1122,6 @@ Item {
                     MouseArea {
                         id: sleepArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.suspendSystem()
                         }
@@ -1156,7 +1155,6 @@ Item {
                     MouseArea {
                         id: switchUserArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.switchUser()
                         }
@@ -1352,8 +1350,6 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             const action = panel.pendingConfirmAction
-                            panel.pendingConfirmAction = ""
-                            panel.sessionModalVisible = false
                             panel.close()
                             if (action === "poweroff") {
                                 ControlCenterService.powerOffSystem()

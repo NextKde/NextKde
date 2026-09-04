@@ -241,14 +241,15 @@ assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
-assert.match(controlCenterCard, /opacity:\s*root\.motionProgress\s*\n\s*enabled:/,
-    "modal dimming keeps primary Control Center glass surfaces mapped");
 assert.match(controlCenterCard,
+    /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
+    "the power sheet moves primary Control Center cards out of view");
+assert.doesNotMatch(controlCenterCard,
     /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
-    "modal dimming uses a visual veil instead of fading the parent surface");
+    "hidden primary cards do not leave a dimmed visual veil");
 assert.match(controlCenterPanel,
     /if\s*\(!coordinator\.open\)\s*\n\s*coordinator\.openAll\(\)/,
-    "opening the power sheet preserves the primary Control Center layer");
+    "closing the power sheet can restore the primary Control Center state");
 for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"]) {
     const start = controlCenterPanel.indexOf(marker);
     const section = controlCenterPanel.slice(start, start + 1800);
