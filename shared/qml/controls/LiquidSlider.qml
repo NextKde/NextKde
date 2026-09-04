@@ -311,8 +311,18 @@ Item {
         property real startX: 0
         property real startValue: 0
 
-        onEntered: root._hovered = true
-        onExited: root._hovered = false
+        // A light thumb lift on hover alone (before any press) matches
+        // macOS's slider feel; press still drives the full lens expansion.
+        onEntered: {
+            root._hovered = true
+            if (!root._pressed)
+                root._expansion = 0.35
+        }
+        onExited: {
+            root._hovered = false
+            if (!root._pressed)
+                root._expansion = 0.0
+        }
 
         onPressed: function(mouse) {
             root._pressed = true

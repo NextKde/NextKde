@@ -27,11 +27,13 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 
@@ -41,6 +43,39 @@ namespace {
 constexpr int kProtocolVersion = 1;
 constexpr auto kClipboardCutMime = "application/x-kde-cutselection";
 constexpr auto kGnomeFilesMime = "x-special/gnome-copied-files";
+
+bool finiteNumber(const QJsonValue &value, double minimum, double maximum)
+{
+    if (!value.isDouble())
+        return false;
+    const double number = value.toDouble();
+    return std::isfinite(number) && number >= minimum && number <= maximum;
+}
+
+bool validRect(const QJsonValue &value)
+{
+    if (!value.isObject())
+        return false;
+    const QJsonObject rect = value.toObject();
+    return finiteNumber(rect.value(QStringLiteral("x")), -1000000.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("y")), -1000000.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("width")), 1.0, 1000000.0)
+        && finiteNumber(rect.value(QStringLiteral("height")), 1.0, 1000000.0);
+}
+
+bool validLayoutPayload(const QJsonObject &payload)
+{
+    const QString outputName = payload.value(QStringLiteral("outputName")).toString();
+    const QString dockPosition = payload.value(QStringLiteral("dockPosition")).toString();
+    return !outputName.isEmpty() && outputName.size() <= 255
+        && validRect(payload.value(QStringLiteral("outputRect")))
+        && validRect(payload.value(QStringLiteral("dockRect")))
+        && finiteNumber(payload.value(QStringLiteral("barReservedHeight")), 0.0, 4096.0)
+        && finiteNumber(payload.value(QStringLiteral("workspaceGap")), 0.0, 512.0)
+        && (dockPosition == QStringLiteral("bottom")
+            || dockPosition == QStringLiteral("left")
+            || dockPosition == QStringLiteral("right"));
+}
 
 QString runtimeSocketPath()
 {
@@ -425,10 +460,17 @@ QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
         return QJsonObject{{QStringLiteral("available"), false}};
     const QStringList rows = QString::fromUtf8(output).trimmed()
                                  .split(QChar('\n'), Qt::KeepEmptyParts);
-    QString connection = rows.value(0).trimmed();
+    // Unlike the flat `-f column,column` tables elsewhere in this file,
+    // `device show` always prefixes each line with its field name (e.g.
+    // "GENERAL.CONNECTION:foo"), even in terse mode. Drop that prefix.
+    const auto fieldValue = [](const QString &row) {
+        const QStringList fields = splitNmcli(row);
+        return fields.mid(1).join(QStringLiteral(":"));
+    };
+    QString connection = fieldValue(rows.value(0)).trimmed();
     if (connection == QStringLiteral("--"))
         connection.clear();
-    QString ipv4 = rows.value(1).trimmed();
+    QString ipv4 = fieldValue(rows.value(1)).trimmed();
     const qsizetype slash = ipv4.indexOf(QChar('/'));
     if (slash >= 0)
         ipv4.truncate(slash);
@@ -436,6 +478,24 @@ QJsonObject parseNetworkDetails(const QByteArray &output, int exitCode)
                        {QStringLiteral("connectionName"), connection},
                        {QStringLiteral("ssid"), connection},
                        {QStringLiteral("ipv4"), ipv4}};
+}
+
+// `nmcli device show` carries no signal field for wifi devices; the value is
+// only exposed per-AP by `device wifi list`. Pick out the row NetworkManager
+// marks as the active connection (IN-USE == "*").
+int parseActiveWifiSignal(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return -1;
+    for (const QString &line : QString::fromUtf8(output).split(QChar('\n'), Qt::SkipEmptyParts)) {
+        const QStringList fields = splitNmcli(line);
+        if (fields.value(0).trimmed() != QStringLiteral("*"))
+            continue;
+        bool ok = false;
+        const int signal = fields.value(1).toInt(&ok);
+        return ok ? qBound(0, signal, 100) : -1;
+    }
+    return -1;
 }
 
 QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
@@ -748,8 +808,11 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
 {
-    if (event.value(QStringLiteral("type")).toString() == QStringLiteral("snapshot"))
+    const QString type = event.value(QStringLiteral("type")).toString();
+    if (type == QStringLiteral("snapshot"))
         m_latestWindowSnapshot = event;
+    else if (type == QStringLiteral("desktops"))
+        m_latestDesktopSnapshot = event;
     for (auto *socket : std::as_const(m_windowSubscribers))
         sendEvent(socket, event);
 }
@@ -791,6 +854,48 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
         process->deleteLater();
     });
     process->start();
+}
+
+void PlatformServer::applySystemTheme(QLocalSocket *socket,
+                                      const QJsonObject &request, bool dark)
+{
+    const QString colorScheme = dark ? QStringLiteral("BreezeDark")
+                                     : QStringLiteral("BreezeLight");
+    const QString lookAndFeel = dark ? QStringLiteral("org.kde.breezedark.desktop")
+                                     : QStringLiteral("org.kde.breeze.desktop");
+    const QString applyColorScheme = QStandardPaths::findExecutable(
+        QStringLiteral("plasma-apply-colorscheme"));
+    const QString applyLookAndFeel = QStandardPaths::findExecutable(
+        QStringLiteral("plasma-apply-lookandfeel"));
+
+    QString program;
+    QStringList arguments;
+    QString method;
+    if (!applyColorScheme.isEmpty()) {
+        // A light/dark toggle only needs to change the palette. Applying a
+        // complete Look-and-Feel package also replaces icons, cursors and
+        // workspace defaults while Quickshell is rendering them, which can
+        // tear down the Shell's platform connection mid-request.
+        program = applyColorScheme;
+        arguments = {colorScheme};
+        method = QStringLiteral("colorScheme");
+    } else if (!applyLookAndFeel.isEmpty()) {
+        program = applyLookAndFeel;
+        arguments = {QStringLiteral("--apply"), lookAndFeel};
+        method = QStringLiteral("lookAndFeel");
+    } else {
+        respond(socket, request, false, {}, QStringLiteral("theme-apply-failed"),
+                QStringLiteral("未找到可用的 KDE 明暗主题"), true);
+        return;
+    }
+
+    runCommand(socket, request, program, arguments,
+               [dark, colorScheme, lookAndFeel, method](const QByteArray &, int) {
+        return QJsonObject{{QStringLiteral("dark"), dark},
+                           {QStringLiteral("colorScheme"), colorScheme},
+                           {QStringLiteral("lookAndFeel"), lookAndFeel},
+                           {QStringLiteral("method"), method}};
+    });
 }
 
 void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
@@ -871,6 +976,76 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
     general->start();
 }
 
+void PlatformServer::runNetworkDetails(QLocalSocket *socket,
+                                       const QJsonObject &request,
+                                       const QString &device)
+{
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    auto *info = new QProcess(this);
+    info->setProgram(QStringLiteral("nmcli"));
+    info->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                        QStringLiteral("GENERAL.CONNECTION,IP4.ADDRESS"),
+                        QStringLiteral("device"), QStringLiteral("show"), device});
+    const auto infoFinished = std::make_shared<bool>(false);
+    connect(info, &QProcess::errorOccurred, this,
+            [info, infoFinished, guardedSocket, request, this](QProcess::ProcessError) {
+        if (*infoFinished)
+            return;
+        *infoFinished = true;
+        respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
+                QStringLiteral("平台命令不可用"), true);
+        info->deleteLater();
+    });
+    connect(info, &QProcess::finished, this,
+            [this, guardedSocket, request, info, infoFinished, device](int infoExitCode,
+                                                                        QProcess::ExitStatus) {
+        if (*infoFinished)
+            return;
+        *infoFinished = true;
+        const QByteArray infoOutput = info->readAllStandardOutput();
+        info->deleteLater();
+        if (infoExitCode != 0) {
+            respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
+                    QStringLiteral("平台命令执行失败"), true);
+            return;
+        }
+        const QJsonObject baseResult = parseNetworkDetails(infoOutput, infoExitCode);
+
+        // Signal strength isn't part of `device show`; a wifi-only device
+        // never exposes it there. Query it separately and simply omit it for
+        // wired/absent devices rather than fail the whole details response.
+        auto *signal = new QProcess(this);
+        signal->setProgram(QStringLiteral("nmcli"));
+        signal->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
+                              QStringLiteral("IN-USE,SIGNAL"),
+                              QStringLiteral("device"), QStringLiteral("wifi"),
+                              QStringLiteral("list"), QStringLiteral("ifname"), device});
+        const auto signalFinished = std::make_shared<bool>(false);
+        connect(signal, &QProcess::errorOccurred, this,
+                [this, signal, signalFinished, guardedSocket, request, baseResult](QProcess::ProcessError) {
+            if (*signalFinished)
+                return;
+            *signalFinished = true;
+            respond(guardedSocket.data(), request, true, baseResult);
+            signal->deleteLater();
+        });
+        connect(signal, &QProcess::finished, this,
+                [this, guardedSocket, request, signal, signalFinished,
+                 baseResult](int signalExitCode, QProcess::ExitStatus) {
+            if (*signalFinished)
+                return;
+            *signalFinished = true;
+            const int strength = parseActiveWifiSignal(signal->readAllStandardOutput(), signalExitCode);
+            signal->deleteLater();
+            QJsonObject result = baseResult;
+            result.insert(QStringLiteral("signalStrength"), strength);
+            respond(guardedSocket.data(), request, true, result);
+        });
+        signal->start();
+    });
+    info->start();
+}
+
 void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
 {
     const QPointer<QLocalSocket> guardedSocket(socket);
@@ -890,26 +1065,51 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         return;
     }
 
+    // `show`/`devices` are synchronous queries that print immediately and
+    // exit (a few milliseconds under a healthy BlueZ). `--timeout N` does
+    // not cap their wait -- it makes bluetoothctl unconditionally block for
+    // the full N seconds regardless of how quickly the answer was actually
+    // available. Chaining two `--timeout 2` calls made every bluetooth.list
+    // request take ~4s, long enough to still be in flight for the next 3s
+    // periodic refresh; the two would then resolve out of order and race a
+    // user's own toggle, flipping Control Center's Bluetooth disc back and
+    // forth. Drop the flag and use a Qt-side watchdog kill instead, which
+    // preserves the original defense against a wedged BlueZ daemon without
+    // taxing every normal call.
     auto *show = new QProcess(this);
     show->setProgram(QStringLiteral("bluetoothctl"));
-    show->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
-                        QStringLiteral("show")});
+    show->setArguments({QStringLiteral("show")});
+    const auto showReplied = std::make_shared<bool>(false);
+    QTimer::singleShot(3000, this, [showGuard = QPointer<QProcess>(show)]() {
+        if (showGuard && showGuard->state() != QProcess::NotRunning)
+            showGuard->kill();
+    });
     connect(show, &QProcess::finished, this,
-            [this, guardedSocket, request, show](int showExit, QProcess::ExitStatus) {
+            [this, guardedSocket, request, show, showReplied](int showExit, QProcess::ExitStatus) {
+        if (*showReplied)
+            return;
         const QByteArray controller = show->readAllStandardOutput();
         show->deleteLater();
         if (showExit != 0) {
+            *showReplied = true;
             respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-failed"),
                     QStringLiteral("无法读取蓝牙状态"), true);
             return;
         }
         auto *devices = new QProcess(this);
         devices->setProgram(QStringLiteral("bluetoothctl"));
-        devices->setArguments({QStringLiteral("--timeout"), QStringLiteral("2"),
-                               QStringLiteral("devices")});
+        devices->setArguments({QStringLiteral("devices")});
+        const auto devicesReplied = std::make_shared<bool>(false);
+        QTimer::singleShot(3000, this, [devicesGuard = QPointer<QProcess>(devices)]() {
+            if (devicesGuard && devicesGuard->state() != QProcess::NotRunning)
+                devicesGuard->kill();
+        });
         connect(devices, &QProcess::finished, this,
-                [this, guardedSocket, request, controller, devices](int devicesExit,
+                [this, guardedSocket, request, controller, devices, devicesReplied](int devicesExit,
                                                                        QProcess::ExitStatus) {
+            if (*devicesReplied)
+                return;
+            *devicesReplied = true;
             const QByteArray deviceList = devices->readAllStandardOutput();
             devices->deleteLater();
             if (devicesExit != 0) {
@@ -923,7 +1123,10 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
             respond(guardedSocket.data(), request, true, parseBluetooth(output, 0));
         });
         connect(devices, &QProcess::errorOccurred, this,
-                [this, guardedSocket, request, devices](QProcess::ProcessError) {
+                [this, guardedSocket, request, devices, devicesReplied](QProcess::ProcessError) {
+            if (*devicesReplied)
+                return;
+            *devicesReplied = true;
             respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
                     QStringLiteral("蓝牙服务不可用"), true);
             devices->deleteLater();
@@ -931,7 +1134,10 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         devices->start();
     });
     connect(show, &QProcess::errorOccurred, this,
-            [this, guardedSocket, request, show](QProcess::ProcessError) {
+            [this, guardedSocket, request, show, showReplied](QProcess::ProcessError) {
+        if (*showReplied)
+            return;
+        *showReplied = true;
         respond(guardedSocket.data(), request, false, {}, QStringLiteral("command-unavailable"),
                 QStringLiteral("蓝牙服务不可用"), true);
         show->deleteLater();
@@ -1601,6 +1807,25 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
         // state now instead of leaving the Dock empty until the next change.
         if (!m_latestWindowSnapshot.isEmpty())
             sendEvent(socket, m_latestWindowSnapshot);
+        if (!m_latestDesktopSnapshot.isEmpty())
+            sendEvent(socket, m_latestDesktopSnapshot);
+        return true;
+    }
+    if (op == QStringLiteral("kwin.layout.update")) {
+        const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+        if (!validLayoutPayload(payload)) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"),
+                    QStringLiteral("窗口布局参数无效"), false);
+            return true;
+        }
+        QJsonObject command = payload;
+        command.insert(QStringLiteral("action"), QStringLiteral("update-layout"));
+        if (!enqueueKWinCommand(command)) {
+            respond(socket, request, false, {}, QStringLiteral("kwin-unavailable"),
+                    QStringLiteral("KWin 平台桥不可用"), true);
+            return true;
+        }
+        respond(socket, request, true);
         return true;
     }
     if (op == QStringLiteral("kwin.command")) {
@@ -1819,11 +2044,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("网络设备无效"), false);
             return true;
         }
-        runCommand(socket, request, QStringLiteral("nmcli"),
-                   {QStringLiteral("-t"), QStringLiteral("-f"),
-                    QStringLiteral("GENERAL.CONNECTION,IP4.ADDRESS"),
-                    QStringLiteral("device"), QStringLiteral("show"), device},
-                   parseNetworkDetails);
+        runNetworkDetails(socket, request, device);
         return true;
     }
     if (op == QStringLiteral("network.scan")) {
@@ -2103,34 +2324,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("theme.apply-system")) {
         const bool dark = payload.value(QStringLiteral("dark")).toBool();
-        const QString lookAndFeel = dark ? QStringLiteral("org.kde.breezedark.desktop")
-                                         : QStringLiteral("org.kde.breeze.desktop");
-        const QString applyLookAndFeel = QStandardPaths::findExecutable(
-            QStringLiteral("plasma-apply-lookandfeel"));
-        const QString applyColorScheme = QStandardPaths::findExecutable(
-            QStringLiteral("plasma-apply-colorscheme"));
-        bool applied = false;
-        if (!applyLookAndFeel.isEmpty()) {
-            applied = QProcess::execute(applyLookAndFeel,
-                {QStringLiteral("--apply"), lookAndFeel}) == 0;
-        }
-        if (!applied && !applyColorScheme.isEmpty()) {
-            const QString scheme = dark ? QStringLiteral("BreezeDark")
-                                        : QStringLiteral("BreezeLight");
-            applied = QProcess::execute(applyColorScheme, {scheme}) == 0;
-        }
-        if (!applied) {
-            respond(socket, request, false, {}, QStringLiteral("theme-apply-failed"),
-                    QStringLiteral("未找到可用的 KDE 明暗主题"), true);
-            return true;
-        }
-        QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
-                            QStringLiteral("org.kde.KWin"));
-        if (kwin.isValid())
-            kwin.call(QStringLiteral("reconfigure"));
-        respond(socket, request, true,
-                QJsonObject{{QStringLiteral("dark"), dark},
-                            {QStringLiteral("lookAndFeel"), lookAndFeel}});
+        applySystemTheme(socket, request, dark);
         return true;
     }
     if (op == QStringLiteral("theme.sync-glass")) {
@@ -2207,21 +2401,14 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("theme.toggle")) {
-        auto *reader = new QProcess(this);
-        reader->setProgram(QStringLiteral("kreadconfig6"));
-        reader->setArguments({QStringLiteral("--file"), QStringLiteral("kdeglobals"),
-                              QStringLiteral("--group"), QStringLiteral("General"),
-                              QStringLiteral("--key"), QStringLiteral("ColorScheme")});
-        connect(reader, &QProcess::finished, this, [this, socket, request, reader](int, QProcess::ExitStatus) {
-            const QString scheme = QString::fromUtf8(reader->readAllStandardOutput()).trimmed();
-            reader->deleteLater();
-            const bool dark = scheme.contains(QStringLiteral("dark"), Qt::CaseInsensitive);
-            const QString package = dark ? QStringLiteral("org.kde.breeze.desktop")
-                                         : QStringLiteral("org.kde.breezedark.desktop");
-            runCommand(socket, request, QStringLiteral("plasma-apply-lookandfeel"),
-                       {QStringLiteral("--apply"), package});
-        });
-        reader->start();
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::GenericConfigLocation) + QStringLiteral("/kdeglobals");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const QString scheme = settings.value(
+            QStringLiteral("General/ColorScheme")).toString();
+        const bool currentlyDark = scheme.contains(
+            QStringLiteral("dark"), Qt::CaseInsensitive);
+        applySystemTheme(socket, request, !currentlyDark);
         return true;
     }
     if (op == QStringLiteral("screenshot.capture")) {

@@ -5,6 +5,12 @@ function normalize(value) {
     return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : NaN;
 }
 
+function compositorBlurLevel(strength) {
+    const value = normalize(strength);
+    return Number.isFinite(value)
+        ? Math.round(1 + Math.pow(value, 1.5) * 14) : 1;
+}
+
 // KWin owns one glass configuration. Surface names remain consumer aliases,
 // not independent compositor settings.
 function computeEffective(state) {
@@ -34,6 +40,14 @@ function migrate(previous = {}) {
         barLayoutMode: previous.barLayoutMode ?? "full",
         dockWindowAnimationStyle: previous.dockWindowAnimationStyle ?? "scale",
     };
+}
+
+{
+    assert.equal(compositorBlurLevel(0), 1);
+    assert.equal(compositorBlurLevel(0.42), 5);
+    assert.equal(compositorBlurLevel(0.454), 5);
+    assert.equal(compositorBlurLevel(1), 15);
+    console.log("ok: compositor blur uses a clear perceptual response");
 }
 
 {

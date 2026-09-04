@@ -17,6 +17,7 @@ Item {
     readonly property var items: AppMenuService.items
     property int popupRootId: 0
     property int visibleCount: 0
+    property Item popupAnchorItem: null
 
     readonly property bool available: service.length > 0 && path.length > 0
     readonly property var shownItems: items.slice(0, visibleCount)
@@ -87,7 +88,34 @@ Item {
             done(itemsToHydrate)
     }
 
-    function openItem(item) {
+    // Switching to a different anchor (a different top-level item, or the
+    // overflow button) while the popup is already visible reuses the same
+    // mapped surface for a new anchor and a different item count, i.e. a
+    // live resize+reposition of an already-mapped popup. That is the same
+    // class of bug the Column/PopupWindow sizing comment above already
+    // documents for submenu paging; here it leaves the surface at the
+    // previous menu's size with the new, differently sized menu rendered
+    // inside it. Force a clean unmap/remap whenever the anchor actually
+    // changes instead of mutating the live popup in place.
+    function presentMenu(rootId, anchorItem, result) {
+        const anchorChanging = menuPopup.visible && root.popupAnchorItem !== anchorItem
+        const openNew = function() {
+            popupRootId = rootId
+            popupAnchorItem = anchorItem
+            menuPopup.setItems(result)
+            console.info("[GlobalMenu] popup items=" + result.length)
+            menuPopup.show()
+            Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
+        }
+        if (anchorChanging) {
+            menuPopup.visible = false
+            Qt.callLater(openNew)
+        } else {
+            openNew()
+        }
+    }
+
+    function openItem(item, clickedItem) {
         if (!item || !item.enabled)
             return
         console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
@@ -98,10 +126,7 @@ Item {
         PlatformClient.request("appmenu.open", { service, path, id: item.id })
         AppMenuService.requestLayout(item.id, function(children) {
             hydrate(children, 0, function(result) {
-                popupRootId = item.id
-                menuPopup.setItems(result)
-                console.info("[GlobalMenu] popup items=" + result.length)
-                menuPopup.show()
+                root.presentMenu(item.id, clickedItem, result)
             })
         })
     }
@@ -118,6 +143,7 @@ Item {
         Repeater {
             model: root.shownItems
             delegate: Item {
+                id: menuItem
                 required property var modelData
                 width: root.itemWidth(modelData)
                 height: 28
@@ -127,7 +153,7 @@ Item {
                     color: pointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
                         ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
                 }
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     text: modelData.label || ""
                     color: ThemeService.foregroundColor
@@ -141,11 +167,12 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: modelData.enabled !== false
-                    onClicked: root.openItem(modelData)
+                    onClicked: root.openItem(modelData, menuItem)
                 }
             }
         }
         Item {
+            id: overflowButton
             visible: root.overflowItems.length > 0
             width: visible ? 33 : 0
             height: 28
@@ -155,16 +182,14 @@ Item {
                 color: morePointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
                     ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
             }
-            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16 }
+            GlassText { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16 }
             MouseArea {
                 id: morePointer
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: {
                     root.hydrate(root.overflowItems, 0, function(result) {
-                        root.popupRootId = 0
-                        menuPopup.setItems(result)
-                        menuPopup.show()
+                        root.presentMenu(0, overflowButton, result)
                     })
                 }
             }
@@ -173,9 +198,16 @@ Item {
 
     ContextMenu {
         id: menuPopup
-        anchorItem: root
+        anchorItem: root.popupAnchorItem
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
         position: "bottom"
-        placeBelow: true
+        centerBelowAnchor: true
+        centerBelowOffset: root.popupAnchorItem
+            ? root.popupAnchorItem.height
+                + Math.max(0, (root.parent?.height ?? root.height) - root.height) / 2 + 4
+            : root.height + 4
+        macosPopupMotion: true
         globalDismissGraceMs: 250
         dismissOnGlobalPointerPress: false
         onAction: function(cmd, item) {
