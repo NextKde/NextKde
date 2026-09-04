@@ -44,7 +44,8 @@ with a distinct lifecycle remains a service.
 - Metrics and activity cards consume `MetricsService` and
   `ActivityUsageService`, backed by `kos-data-service`.
 - Settings remains a separate Qt Quick process and uses the narrow Shell IPC
-  handlers (`dock-settings`, `appearance-settings`, and `applauncher-settings`).
+  handlers (`dock-settings`, `appearance-settings`, `applauncher-settings`,
+  `shortcuts-settings`, and the read-only `integration-status`).
 
 ## Startup and recovery
 

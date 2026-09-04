@@ -69,11 +69,12 @@ on the next KWin/session start, and manually launched shell instances are
 adopted). `./tools/kosctl sync` copies QML-only edits into the installed config
 without hot-reloading (the installed shell runs with its file watcher disabled
 so a copy in progress can never trigger a half-written reload), and
-`./tools/kosctl dev` runs platform, data service, and shell from the source
-tree on dedicated sockets beside the installed services. Every launch mode
-shares one pinned state directory (`$XDG_STATE_HOME/quickshell/kos`), so user
-data such as dock pins and launcher icons is independent of how the shell was
-started. The data service keeps its existing state root under
+`./tools/kosctl dev` runs only the Shell from the source tree and reuses the
+installed systemd platform and data services through their standard sockets.
+Every launch mode shares one pinned state directory
+(`$XDG_STATE_HOME/quickshell/kos`), so user data such as dock pins and launcher
+icons is independent of how the shell was started. The data service keeps its
+existing state root under
 `$XDG_STATE_HOME/quickshell/shell-data-service` so an architecture migration
 does not erase preferences or history. `kosctl uninstall` removes binaries,
 units, and shell files but leaves those state directories intact.
@@ -88,7 +89,7 @@ Installation registers three `systemd --user` units, generated from
 
 | Unit | Description | ExecStart |
 | --- | --- | --- |
-| `kos-shell.service` | Quickshell desktop shell: the dock, launcher, bar, notifications, and every visual surface. `--no-duplicate` exits if an instance is already running; `-c kos` loads `~/.config/quickshell/kos`. `KillMode=mixed` stops only the main `qs` process so desktop apps it launched via `QProcess::startDetached()` survive a restart, and `QS_DISABLE_FILE_WATCHER=1` disables hot-reload of the installed config. | `/usr/bin/qs --no-duplicate -c kos` |
+| `kos-shell.service` | Quickshell desktop shell: the dock, launcher, bar, notifications, and every visual surface. `--no-duplicate` exits if an instance is already running; `-c kos` loads `~/.config/quickshell/kos`. `KillMode=process` stops only the main `qs` process so desktop apps it launched via `QProcess::startDetached()` survive a restart, and `QS_DISABLE_FILE_WATCHER=1` disables hot-reload of the installed config. | `/usr/bin/qs --no-duplicate -c kos` |
 | `kos-platform.service` | C++ platform daemon: KWin bridge, live window events, thumbnails, and privileged host adapters. Loads the bridge QtScript from `~/.local/share/kos/platform/kwin/window-bridge.js`. | `~/.local/libexec/kos-platform daemon` |
 | `kos-data.service` | Go data daemon: telemetry, activity ledger, and desktop-directory snapshots served on `$XDG_RUNTIME_DIR/kos-data.sock`. | `~/.local/libexec/kos-data-service` |
 
@@ -121,9 +122,9 @@ continue to use the existing keyless Open-Meteo request/cache path whenever the
 shared weather service is not installed, unavailable, or returns an invalid
 snapshot.
 
-`apps/settings/` is the first application. The desktop top-bar gear only
-starts its process through `DesktopAppLauncher`; it never loads Settings UI
-into the Quickshell process.
+`apps/settings/` is the first application. The gear exposed by the top bar or
+Dock-hosted status area starts its process through `DesktopAppLauncher`; it
+never loads Settings UI into the Quickshell process.
 
 ## Code-review rules
 
