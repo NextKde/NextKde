@@ -109,17 +109,16 @@ QtObject {
                     name: identity.name || dockItem.appId,
                     icon: windows[0]?.iconSource ?? identity.iconSource,
                     isRunning: windows.length > 0,
-                    isActivated: windows.some(window => window.toplevel.activated),
                     windowCount: windows.length,
                 });
                 continue;
             }
 
         }
-        // Only replace the model when its content actually changed. The array
-        // is the Repeater's model; assigning a new array rebuilds every pinned
-        // delegate, and _refreshPinned runs on every window revision (every
-        // window open/close), so an unchanged list must not churn the Repeater.
+        // Activation changes whenever focus moves between the launcher and an
+        // application. It is intentionally not stored in this array: replacing
+        // the Repeater model for that transient state destroys every delegate
+        // and can briefly route a click to the last pinned application.
         const same = items.length === svc.pinnedItems.length
             && items.every((item, i) => {
                 const prev = svc.pinnedItems[i];
@@ -127,7 +126,6 @@ QtObject {
                     && item.name === prev.name
                     && item.icon === prev.icon
                     && item.isRunning === prev.isRunning
-                    && item.isActivated === prev.isActivated
                     && item.windowCount === prev.windowCount;
             });
         if (!same) {
@@ -427,6 +425,14 @@ QtObject {
                 return true;
         }
         return false;
+    }
+
+    function isAppActivated(appId) {
+        // Make callers reactive without putting activation into pinnedItems.
+        WindowService.revision;
+        const identity = AppIdentityService.resolve(appId);
+        return WindowService.windowsForApp(identity.desktopId)
+            .some(window => window.toplevel.activated);
     }
 
     function unpinApp(appId) {

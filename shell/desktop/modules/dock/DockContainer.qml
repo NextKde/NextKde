@@ -705,7 +705,8 @@ Item {
                                 iconSource: pinnedItemLoader.itemData.icon ?? ""
                                 displayName: pinnedItemLoader.itemData.name ?? ""
                                 isRunning: pinnedItemLoader.itemData.isRunning ?? false
-                                isActivated: pinnedItemLoader.itemData.isActivated ?? false
+                                isActivated: DockModelService.isAppActivated(
+                                    pinnedItemLoader.itemData.appId ?? "")
                                 appId: pinnedItemLoader.itemData.appId ?? ""
                                 isWindowItem: false
                                 isPinnedItem: true

@@ -290,7 +290,7 @@ Item {
     }
 
     // ── Hover animation ──
-    property bool _hovering: false
+    readonly property bool _hovering: _mouseArea.containsMouse
     readonly property var _appWindows: {
         WindowService.revision
         if (icon.windowId) {
@@ -645,13 +645,11 @@ Item {
             }
         }
         onEntered: {
-            icon._hovering = true
             if (icon._previewWindowId && !icon.editMode
                     && !DockModelService.activeContextMenu)
                 previewDelay.restart()
         }
         onExited: {
-            icon._hovering = false
             previewDelay.stop()
             previewCloseDelay.restart()
         }
