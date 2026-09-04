@@ -92,11 +92,13 @@ QtObject {
                 bluetoothAvailable = !!value.available
                 // BlueZ can still report the pre-toggle Powered state for a
                 // moment after setBluetoothEnabled()'s own request already
-                // resolved. Applying this periodic refresh's stale read here
-                // raced that resolution and flipped the toggle back and
-                // forth (off -> briefly on -> off again). Trust only the
-                // toggle's own response while one is in flight.
-                if (!bluetoothChangeInProgress)
+                // resolved — including on the refresh() that request's own
+                // callback triggers immediately afterwards, once
+                // bluetoothChangeInProgress is already back to false.
+                // Applying a stale read here raced the toggle and flipped it
+                // back and forth (off -> briefly on -> off again). Trust
+                // only the toggle's own response for a short settle window.
+                if (!bluetoothChangeInProgress && !bluetoothPoweredSettling)
                     bluetoothPowered = !!value.powered
                 bluetoothDevices = Array.isArray(value.devices) ? value.devices : []
             } else {
@@ -158,6 +160,18 @@ QtObject {
         return true
     }
 
+    // BlueZ's Powered property can lag a few hundred ms behind bluetoothctl
+    // returning, since power-on/off is a separate process invocation from
+    // the one that later re-reads it. Ignore refresh() reads of bluetoothPowered
+    // for a short window after our own toggle so that lag cannot flip the
+    // disc back and forth before the adapter truly settles.
+    property bool bluetoothPoweredSettling: false
+    property Timer bluetoothPoweredSettleTimer: Timer {
+        interval: 1500
+        repeat: false
+        onTriggered: service.bluetoothPoweredSettling = false
+    }
+
     function setBluetoothEnabled(enabled) {
         const desired = !!enabled
         if (!bluetoothAvailable || bluetoothChangeInProgress || desired === bluetoothPowered)
@@ -165,8 +179,11 @@ QtObject {
         bluetoothChangeInProgress = true
         PlatformClient.request("bluetooth.power", { enabled: desired }, function(response) {
             bluetoothChangeInProgress = false
-            if (response?.ok)
+            if (response?.ok) {
                 bluetoothPowered = desired
+                bluetoothPoweredSettling = true
+                bluetoothPoweredSettleTimer.restart()
+            }
             refresh()
         })
         return true
