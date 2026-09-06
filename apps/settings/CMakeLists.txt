@@ -16,7 +16,7 @@ qt_add_executable(kos-settings
 # build configuration (top-level kosctl build or a standalone configure of
 # this directory) writes the one and only binary to apps/settings/build.
 set_target_properties(kos-settings PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
 target_link_libraries(kos-settings PRIVATE
     Qt6::Core
