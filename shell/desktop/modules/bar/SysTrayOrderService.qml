@@ -18,9 +18,20 @@ QtObject {
     property var order: []
     property bool ready: false
 
-    // Returns `keys` arranged by the saved preference; any key not yet known
-    // to that preference is appended at the end in its natural order, so a
-    // newly appeared tray icon does not jump into the middle of the row.
+    // A native StatusNotifierItem slot, as opposed to one of the shell's own
+    // trailing cells (see the key scheme in SysTray.qml).
+    function isTrayKey(key) { return key.indexOf("tray:") === 0 }
+    // An item whose StatusNotifierItem id has not resolved yet is keyed by
+    // its Repeater index, which changes as soon as the real id arrives; such
+    // a key must never be written to the persisted order.
+    function isPlaceholderKey(key) { return key.indexOf("tray:#") === 0 }
+
+    // Returns `keys` arranged by the saved preference. Keys the preference
+    // has never seen are new arrivals: a native tray icon takes the leading
+    // slots, so an app launched now shows up at the left edge of the row
+    // rather than behind the shell's own cells, while an unrecognised shell
+    // cell stays at the tail where it is declared. On a first run nothing is
+    // known yet, so this reduces to the natural declaration order.
     function arrange(keys) {
         const known = []
         const seen = ({})
@@ -31,8 +42,39 @@ QtObject {
                 seen[key] = true
             }
         }
-        const rest = keys.filter(key => !seen[key])
-        return known.concat(rest)
+        const head = keys.filter(key => !seen[key] && svc.isTrayKey(key))
+        const tail = keys.filter(key => !seen[key] && !svc.isTrayKey(key))
+        return head.concat(known, tail)
+    }
+
+    // Folds keys the saved order has never seen into it — tray icons at the
+    // head, shell cells at the tail, matching arrange(). Recording a key on
+    // sight rather than only when it is dragged is what lets "new" mean
+    // "never seen before": without it every never-reordered icon stays
+    // unknown, and the one that just appeared would sort among them in
+    // SystemTray's own append order, i.e. last instead of first.
+    function register(keys) {
+        if (!svc.ready)
+            return
+        const existing = ({})
+        for (let i = 0; i < svc.order.length; i++)
+            existing[svc.order[i]] = true
+        const head = []
+        const tail = []
+        for (let i = 0; i < keys.length; i++) {
+            const key = keys[i]
+            if (existing[key] || svc.isPlaceholderKey(key))
+                continue
+            existing[key] = true
+            if (svc.isTrayKey(key))
+                head.push(key)
+            else
+                tail.push(key)
+        }
+        if (head.length === 0 && tail.length === 0)
+            return
+        svc.order = head.concat(svc.order, tail)
+        scheduleSave()
     }
 
     // `currentKeys` is the live key set (arrange() needs it to place unknown

@@ -72,6 +72,17 @@ Item {
     readonly property var allKeys: root.nativeKeys.concat(root.trailingCellKeys)
     readonly property var arrangedKeys: SysTrayOrderService.arrange(root.allKeys)
 
+    // Let the order service see every key as it appears, so an icon that
+    // shows up later is recognisably new and lands at the head of the row
+    // instead of sorting with the other never-reordered items.
+    onAllKeysChanged: SysTrayOrderService.register(root.allKeys)
+    Connections {
+        target: SysTrayOrderService
+        // The saved order arrives asynchronously; keys seen before it does
+        // are registered once it has loaded.
+        function onReadyChanged() { SysTrayOrderService.register(root.allKeys) }
+    }
+
     function targetIndexFor(key) {
         const arranged = root.arrangedKeys.indexOf(key)
         if (arranged >= 0)
@@ -179,9 +190,15 @@ Item {
                         return -1
                     return 0
                 }
-                readonly property point reorderOffset: isDraggedItem
-                    ? Qt.point(0, 0)
-                    : root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
+                // The drag translation is relative to where the item was
+                // actually sitting when it was grabbed — its arranged slot,
+                // not its declaration slot — so the resting offset stays
+                // applied while dragging (reorderSlots is already 0 here).
+                // Dropping it would teleport any item whose arranged slot
+                // differs from its natural one, leaving the icon trailing
+                // the cursor by exactly that gap.
+                readonly property point reorderOffset:
+                    root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
                 property real offsetX: reorderOffset.x + (isDraggedItem ? root.dragTranslationX : 0)
                 property real offsetY: reorderOffset.y + (isDraggedItem ? root.dragTranslationY : 0)
                 Behavior on offsetX {
@@ -392,9 +409,15 @@ Item {
                         return -1
                     return 0
                 }
-                readonly property point reorderOffset: isDraggedItem
-                    ? Qt.point(0, 0)
-                    : root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
+                // The drag translation is relative to where the item was
+                // actually sitting when it was grabbed — its arranged slot,
+                // not its declaration slot — so the resting offset stays
+                // applied while dragging (reorderSlots is already 0 here).
+                // Dropping it would teleport any item whose arranged slot
+                // differs from its natural one, leaving the icon trailing
+                // the cursor by exactly that gap.
+                readonly property point reorderOffset:
+                    root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
                 property real offsetX: reorderOffset.x + (isDraggedItem ? root.dragTranslationX : 0)
                 property real offsetY: reorderOffset.y + (isDraggedItem ? root.dragTranslationY : 0)
                 Behavior on offsetX {

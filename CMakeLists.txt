@@ -99,6 +99,7 @@ endif()
 if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/dock-window-animation)
     add_subdirectory(integrations/kwin/context-menu-input)
+    add_subdirectory(integrations/kwin/decoration-liquid-glass)
 endif()
 
 if(KOS_BUILD_PLATFORM)
