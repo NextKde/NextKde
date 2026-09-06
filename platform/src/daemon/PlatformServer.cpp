@@ -2359,6 +2359,14 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("DockBlurStrength"), QString::number(dockBlur)},
+            // Window glass runs through Glass's decoration pipeline, whose own
+            // strength defaults to 15 while the shell asks for 5. Left unset it
+            // would blur application windows three times as hard as the Dock
+            // and the Bar, so it tracks the content level rather than being a
+            // separate knob.
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("DecorationBlurStrength"), QString::number(contentBlur)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("RefractionStrength"), QString::number(refraction)},
