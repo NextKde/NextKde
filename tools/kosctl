@@ -10,6 +10,7 @@ glass_build_dir="$build_dir/kwin-effects-glass"
 kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
+kwin_decoration_state="$prefix/share/kos/kwin-decoration-state"
 kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
 kwin_plugin_api_version=""
 kwin_plugin_rebuild_required=0
@@ -345,6 +346,7 @@ start_all() {
     systemctl --user enable --now "${kos_units[@]}"
     systemctl --user restart "${kos_units[@]}"
     enable_kwin_effects
+    enable_kos_decoration
     printf '\n'
     printf '  🚀 KOS 已启动（platform / data / shell）\n'
     printf '     KOS started — platform, data, and shell are running.\n'
@@ -431,6 +433,69 @@ enable_kwin_effects() {
     printf 'KWin effects enabled in kwinrc; they load on the next KWin/session start.\n'
 }
 
+remember_decoration_state() {
+    [[ -e "$kwin_decoration_state" ]] && return 0
+    local prior_library="" prior_theme=""
+    if command -v kreadconfig6 >/dev/null 2>&1; then
+        prior_library=$(kreadconfig6 --file kwinrc \
+            --group org.kde.kdecoration3 --key library --default "")
+        prior_theme=$(kreadconfig6 --file kwinrc \
+            --group org.kde.kdecoration3 --key theme --default "")
+    fi
+    {
+        printf 'library=%s\n' "$prior_library"
+        printf 'theme=%s\n' "$prior_theme"
+    } > "$kwin_decoration_state"
+}
+
+# Selects the KOS Liquid Glass decoration in kwinrc only, mirroring
+# enable_kwin_effects: it never touches the running compositor, so window
+# decorations keep their current look until the next KWin/session start.
+enable_kos_decoration() {
+    command -v kwriteconfig6 >/dev/null 2>&1 || return 0
+    remember_decoration_state
+    # kos_liquid_glass is a compiled KDecoration3 plugin, so it is named by
+    # `library` alone. `theme` only applies to plugins that host several themes
+    # (org.kde.kwin.aurorae); leaving a stale theme key behind would make KWin
+    # look for an Aurorae package that no longer exists.
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        --key library kos_liquid_glass --notify false
+    kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        --key theme --delete --notify false
+    # Glass supplies the material behind the whole window, not just the title
+    # bar, so an application can leave its own background fully transparent and
+    # still sit on the same glass as the Dock and the Bar. In this build the
+    # option applies only to windows with a server-side decoration, which is
+    # what keeps it away from the layer-shell panels whose full-screen surface
+    # would otherwise blur the wallpaper away.
+    kwriteconfig6 --file kwinrc --group Effect-blurplus --key BlurDecorations \
+        true --type bool --notify false
+    printf 'KOS Liquid Glass decoration selected in kwinrc; it loads on the next KWin/session start.\n'
+}
+
+restore_decoration_state() {
+    command -v kwriteconfig6 >/dev/null 2>&1 || return 0
+    local prior_library="" prior_theme=""
+    if [[ -r "$kwin_decoration_state" ]]; then
+        prior_library=$(sed -n 's/^library=//p' "$kwin_decoration_state" | head -n 1)
+        prior_theme=$(sed -n 's/^theme=//p' "$kwin_decoration_state" | head -n 1)
+    fi
+    if [[ -n "$prior_library" ]]; then
+        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+            --key library "$prior_library" --notify true
+    else
+        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+            --key library --delete --notify true
+    fi
+    if [[ -n "$prior_theme" ]]; then
+        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+            --key theme "$prior_theme" --notify true
+    else
+        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+            --key theme --delete --notify true
+    fi
+}
+
 # Applies the just-installed effect binaries to the RUNNING compositor.
 # Hot-loading freshly replaced plugin .so files is the operation that has
 # crashed KWin before (it takes every Wayland client down with it), so this
@@ -496,7 +561,8 @@ install_kwin_plugins() {
     fi
     sudo cp -a "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     enable_kwin_effects
-    printf 'Installed and enabled KOS Dock Animation, Context Menu Input, and Glass.\n'
+    enable_kos_decoration
+    printf 'Installed and enabled KOS Dock Animation, Context Menu Input, Glass, and Liquid Glass decoration.\n'
 }
 
 install_all() {
@@ -550,7 +616,8 @@ restore_blur_state() {
 uninstall_kwin_plugins() {
     # A user-only installation (KOS_BUILD_KWIN_PLUGINS=OFF) must not change
     # the user's existing KWin effect configuration during uninstall.
-    if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" ]]; then
+    if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" \
+            && ! -e "$kwin_decoration_state" ]]; then
         return 0
     fi
 
@@ -565,6 +632,7 @@ uninstall_kwin_plugins() {
                 --key "${effect}Enabled" --delete --notify || true
         done
         restore_blur_state
+        restore_decoration_state
     fi
 
     if [[ -s "$kwin_manifest" ]]; then
@@ -586,7 +654,7 @@ uninstall_kwin_plugins() {
             sudo rm -f -- "${system_files[@]}"
         fi
     fi
-    rm -f "$kwin_manifest" "$kwin_effect_state"
+    rm -f "$kwin_manifest" "$kwin_effect_state" "$kwin_decoration_state"
 }
 
 uninstall() {
