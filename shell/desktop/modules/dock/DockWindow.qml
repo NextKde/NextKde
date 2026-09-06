@@ -21,7 +21,13 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-dock"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
-    WlrLayershell.layer: WlrLayer.Top
+    // The Dock lives on Top, but the fullscreen launcher (a Top surface
+    // covering the whole output) must render beneath the Dock. While that
+    // launcher is open, the Dock promotes to Overlay; the launcher demotes
+    // itself to Top in the same frame.
+    WlrLayershell.layer: (AppLauncherService.open
+        && AppLauncherConfigService.displayMode === "fullscreen")
+        ? WlrLayer.Overlay : WlrLayer.Top
 
     // ── Position-aware anchoring ──
     // The surface clings directly to the configured screen edge (margins = 0);

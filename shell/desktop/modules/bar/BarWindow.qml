@@ -15,8 +15,21 @@ PanelWindow {
     WlrLayershell.namespace: "quickshell-bar"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
-    WlrLayershell.layer: WlrLayer.Top
+    // The Bar lives on Top, but the fullscreen launcher (a Top surface
+    // covering the whole output) must render beneath the Bar. While that
+    // launcher is open, the Bar promotes to Overlay; the launcher demotes
+    // itself to Top in the same frame.
+    WlrLayershell.layer: (AppLauncherService.open
+        && AppLauncherConfigService.displayMode === "fullscreen")
+        ? WlrLayer.Overlay : WlrLayer.Top
     implicitHeight: ConfigService.barHeight
+    readonly property bool transparentMode:
+        AppearanceConfigService.barLayoutMode === "transparent"
+    // Only the floating capsule needs wallpaper between it and maximised
+    // windows. Full-width and transparent Bars intentionally remain flush,
+    // matching the contiguous macOS menu-bar layout.
+    readonly property int workspaceBreathingGap:
+        AppearanceConfigService.barLayoutMode === "floating" ? 8 : 0
 
     // ── Auto-hide controller ──
     BarAutoHideController {
@@ -36,7 +49,7 @@ PanelWindow {
     // In "smart" or "persistent" modes, exclusiveZone stays at 0 so
     // maximised windows extend to the top of the screen.
     exclusiveZone: (AppearanceConfigService.barVisibilityMode === "always" && root.barEnabled)
-        ? implicitHeight : 0
+        ? implicitHeight + workspaceBreathingGap : 0
     visible: root.barEnabled
 
     anchors {
@@ -52,9 +65,10 @@ PanelWindow {
         right: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
     }
 
-    // KWin's glass effect uses this region for both blur and liquid
-    // refraction, so a liquid-only Bar must keep publishing it.
-    BackgroundEffect.blurRegion: (root.visible
+    // The transparent layout deliberately leaves only the content: it must not
+    // register a backdrop region, otherwise KWin adds blur/refraction behind
+    // it. Other Bar layouts still use the regular compositor glass pipeline.
+    BackgroundEffect.blurRegion: (!root.transparentMode && root.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? barBlurRegionHolder : null
@@ -64,7 +78,11 @@ PanelWindow {
         RoundedBlurRegion {
             id: barBlurRegion
             item: barWrapper
-            radius: (AppearanceConfigService.barLayoutMode === "floating") ? 12 : 0
+            // The floating Bar keeps a full capsule corner equal to 50% of
+            // its height, so the curvature remains proportional when users
+            // choose a different Bar size.
+            radius: (AppearanceConfigService.barLayoutMode === "floating")
+                ? barWrapper.height * 0.5 : 0
         }
     }
 
@@ -94,10 +112,22 @@ PanelWindow {
                     readonly property alias statusArea: barStatusArea
 
                     BarDateStatus {
+                        id: barDateStatus
                         anchors {
                             left: parent.left
                             verticalCenter: parent.verticalCenter
                         }
+                    }
+
+                    // This loader only exists in the standalone top Bar.
+                    // DesktopEnvironment disables Bar entirely when it is
+                    // integrated into the Dock, so the Dock never owns or
+                    // fetches an application menu.
+                    GlobalMenu {
+                        anchors.left: barDateStatus.right
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        maximumWidth: Math.max(0, barStatusArea.x - x - 18)
                     }
 
                     BarStatusArea {

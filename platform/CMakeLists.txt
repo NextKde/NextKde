@@ -8,6 +8,7 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Concurrent DBus Gui Network)
 find_package(KF6IconThemes REQUIRED)
+find_package(KF6GlobalAccel REQUIRED)
 
 qt_standard_project_setup()
 
@@ -15,6 +16,8 @@ qt_add_executable(kos-platform
     src/daemon/main.cpp
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformServer.h
+    src/daemon/Shortcuts.cpp
+    src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
     src/kwin/KWinBridge.h
 )
@@ -26,6 +29,7 @@ target_link_libraries(kos-platform PRIVATE
     Qt6::Gui
     Qt6::Network
     KF6::IconThemes
+    KF6::GlobalAccel
 )
 
 install(TARGETS kos-platform

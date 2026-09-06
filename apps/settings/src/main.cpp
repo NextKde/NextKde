@@ -1,12 +1,20 @@
 #include <QGuiApplication>
+#include <QDateTime>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusInterface>
+#include <QDBusReply>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QThread>
 #include <QVariantMap>
 
 class SettingsBridge final : public QObject {
@@ -79,6 +87,22 @@ public:
             QString::number(strength, 'f', 3)}));
     }
 
+    Q_INVOKABLE QVariantMap updateGlobalIconMode(const QString &mode) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconMode"), mode}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalIconOpacity(double opacity) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconOpacity"),
+            QString::number(opacity, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlobalIconTintColor(const QString &color) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlobalIconTintColor"), color}));
+    }
+
     Q_INVOKABLE QVariantMap updateShellStyle(const QString &style) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateShellStyle"), style}));
@@ -113,32 +137,45 @@ public:
         return launcherSnapshotFromReply(callLauncher({QStringLiteral("snapshot")}));
     }
 
+    Q_INVOKABLE QVariantMap shortcutsSnapshot() {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("snapshot")}));
+    }
+
+    Q_INVOKABLE QVariantMap updateShortcut(const QString &id, const QString &combo) {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("updateShortcut"),
+                                                         id, combo}));
+    }
+
+    Q_INVOKABLE QVariantMap resetShortcut(const QString &id) {
+        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("resetShortcut"), id}));
+    }
+
     Q_INVOKABLE QVariantMap updateLauncherDisplayMode(const QString &mode) {
         return launcherSnapshotFromReply(callLauncher({
             QStringLiteral("updateDisplayMode"), mode}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherIconSize(double size) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileIconSize(const QString &mode,
+                                                           const QString &size) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateIconSize"),
-            QString::number(size, 'f', 1)}));
+            QStringLiteral("updateProfileIconSize"), mode, size}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherIconSpacing(double spacing) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileDensity(const QString &mode,
+                                                          const QString &density) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateIconSpacing"),
-            QString::number(spacing, 'f', 1)}));
+            QStringLiteral("updateProfileDensity"), mode, density}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherFontSize(double size) {
+    Q_INVOKABLE QVariantMap updateLauncherProfileFontWeight(const QString &mode,
+                                                             const QString &weight) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateFontSize"),
-            QString::number(size, 'f', 1)}));
+            QStringLiteral("updateProfileFontWeight"), mode, weight}));
     }
 
-    Q_INVOKABLE QVariantMap updateLauncherFontWeight(const QString &weight) {
+    Q_INVOKABLE QVariantMap resetLauncherLayoutProfile(const QString &mode) {
         return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateFontWeight"), weight}));
+            QStringLiteral("resetProfile"), mode}));
     }
 
     Q_INVOKABLE bool applySystemAppearance(bool dark) {
@@ -154,6 +191,62 @@ public:
         if (!accepted && m_lastError.isEmpty())
             setLastError(QStringLiteral("桌面环境拒绝了主题切换请求"));
         return accepted;
+    }
+
+    Q_INVOKABLE QVariantMap integrationSnapshot() {
+        QVariantMap result = integrationSnapshotFromReply(
+            callIntegration({QStringLiteral("snapshot")}));
+
+        const QDBusConnection sessionBus = QDBusConnection::sessionBus();
+        auto *busInterface = sessionBus.interface();
+        QString notificationProvider = QStringLiteral("none");
+        QString notificationOwner;
+        uint notificationPid = 0;
+        if (busInterface) {
+            const QDBusReply<QString> ownerReply = busInterface->serviceOwner(
+                QStringLiteral("org.freedesktop.Notifications"));
+            if (ownerReply.isValid() && !ownerReply.value().isEmpty()) {
+                notificationOwner = ownerReply.value();
+                const QDBusReply<uint> pidReply = busInterface->servicePid(notificationOwner);
+                if (pidReply.isValid())
+                    notificationPid = pidReply.value();
+
+                QFile commandLine(QStringLiteral("/proc/%1/cmdline").arg(notificationPid));
+                QString command;
+                if (commandLine.open(QIODevice::ReadOnly)) {
+                    QByteArray raw = commandLine.readAll();
+                    raw.replace('\0', ' ');
+                    command = QString::fromLocal8Bit(raw).trimmed();
+                }
+                if (command.contains(QStringLiteral("plasmashell"))) {
+                    notificationProvider = QStringLiteral("plasma");
+                } else if (command.contains(QStringLiteral("/qs"))
+                           || command.contains(QStringLiteral("quickshell"))) {
+                    notificationProvider = QStringLiteral("kos");
+                } else {
+                    notificationProvider = QStringLiteral("other");
+                }
+                result.insert(QStringLiteral("notificationCommand"), command);
+            }
+        }
+        result.insert(QStringLiteral("notificationProvider"), notificationProvider);
+        result.insert(QStringLiteral("notificationOwner"), notificationOwner);
+        result.insert(QStringLiteral("notificationPid"), notificationPid);
+
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                               QStringLiteral("org.kde.kwin.Effects"), sessionBus);
+        const QStringList loadedEffects = effects.isValid()
+            ? effects.property("loadedEffects").toStringList() : QStringList{};
+        result.insert(QStringLiteral("kwinAvailable"), effects.isValid());
+        result.insert(QStringLiteral("glassLoaded"),
+                      loadedEffects.contains(QStringLiteral("glass")));
+        result.insert(QStringLiteral("dockAnimationLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
+        result.insert(QStringLiteral("contextMenuInputLoaded"),
+                      loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+        result.insert(QStringLiteral("updatedAt"),
+                      QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
+        return result;
     }
 
 signals:
@@ -240,6 +333,9 @@ private:
             {QStringLiteral("effectiveLauncherLiquid"), globalLiquid},
             {QStringLiteral("blurStrength"), globalBlur},
             {QStringLiteral("liquidStrength"), globalLiquid},
+            {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString(QStringLiteral("color"))},
+            {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble(0.5)},
+            {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString(QStringLiteral("#a855f7"))},
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
             {QStringLiteral("barIntegratedWithDock"),
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
@@ -273,8 +369,62 @@ private:
         setLastError({});
         return {
             {QStringLiteral("displayMode"), object.value(QStringLiteral("displayMode")).toString()},
-            {QStringLiteral("iconSize"), object.value(QStringLiteral("iconSize")).toDouble()},
-            {QStringLiteral("iconSpacing"), object.value(QStringLiteral("iconSpacing")).toDouble()},
+            {QStringLiteral("layoutProfiles"),
+                object.value(QStringLiteral("layoutProfiles")).toObject().toVariantMap()},
+        };
+    }
+
+    QVariantMap integrationSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {{QStringLiteral("shellReady"), false}};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的接入状态"));
+            return {{QStringLiteral("shellReady"), false}};
+        }
+        setLastError({});
+        return document.object().toVariantMap();
+    }
+
+    QVariantMap shortcutsSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的快捷键配置"));
+            return {};
+        }
+
+        const QJsonObject object = document.object();
+        if (!object.contains(QStringLiteral("shortcuts"))) {
+            setLastError(QStringLiteral("桌面环境返回的快捷键配置不完整"));
+            return {};
+        }
+
+        QVariantList shortcuts;
+        for (const QJsonValue &value : object.value(QStringLiteral("shortcuts")).toArray()) {
+            const QJsonObject item = value.toObject();
+            shortcuts.append(QVariantMap{
+                {QStringLiteral("id"), item.value(QStringLiteral("id")).toString()},
+                {QStringLiteral("description"), item.value(QStringLiteral("description")).toString()},
+                {QStringLiteral("defaultCombo"), item.value(QStringLiteral("defaultCombo")).toString()},
+                {QStringLiteral("combo"), item.value(QStringLiteral("combo")).toString()},
+                {QStringLiteral("custom"), item.value(QStringLiteral("custom")).toBool()},
+            });
+        }
+
+        // The Shell validates rebinding requests and reports rejections
+        // (unknown id, malformed combo, duplicate binding) inline instead of
+        // failing the IPC call, so surface it the same way as transport errors.
+        const QString error = object.value(QStringLiteral("error")).toString();
+        setLastError(error);
+        return {
+            {QStringLiteral("shortcuts"), shortcuts},
+            {QStringLiteral("error"), error},
         };
     }
 
@@ -293,41 +443,77 @@ private:
                          QStringLiteral("启动台设置请求失败"));
     }
 
+    QString callShortcuts(const QStringList &arguments) {
+        return callShell(QStringLiteral("shortcuts-settings"), arguments,
+                         QStringLiteral("快捷键设置请求失败"));
+    }
+
+    QString callIntegration(const QStringList &arguments) {
+        return callShell(QStringLiteral("integration-status"), arguments,
+                         QStringLiteral("接入状态请求失败"));
+    }
+
     static QString shellDirectory() {
         const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
         if (!configured.isEmpty())
             return configured;
+
+        // Development desktop entries do not inherit the Shell environment.
+        // Prefer the compile-time source tree when it still exists; this is
+        // the same tree a locally built settings binary was compiled for.
+        const QString source = QStringLiteral(SETTINGS_SHELL_DIR);
+        if (QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
+            return source;
+
         const QString installed = QStandardPaths::writableLocation(
             QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
-        if (QFileInfo::exists(QDir(installed).filePath(QStringLiteral("shell.qml"))))
-            return installed;
-        return QStringLiteral(SETTINGS_SHELL_DIR);
+        return installed;
     }
 
     QString callShell(const QString &target, const QStringList &arguments,
                       const QString &fallbackError) {
-        QProcess process;
-        QStringList command{QStringLiteral("--path"), shellDirectory(),
-                            QStringLiteral("ipc"), QStringLiteral("call"),
-                            target};
-        command.append(arguments);
-        process.start(QStringLiteral("quickshell"), command);
-        if (!process.waitForStarted(1500)) {
-            setLastError(QStringLiteral("无法连接桌面环境"));
-            return {};
+        const QString shellPath = shellDirectory();
+        QString failure;
+        // Quickshell tracks instances by how they identify their config: a
+        // Shell launched as `-c kos` is NOT matched by `--path <same dir>`.
+        // The installed session runs as `-c kos`, so address it by name;
+        // development sessions (`-p <dir>`) take the explicit path.
+        const QString installed = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
+        QStringList connectArgs;
+        if (shellPath == installed)
+            connectArgs = {QStringLiteral("-c"), QStringLiteral("kos")};
+        else
+            connectArgs = {QStringLiteral("--path"), shellPath};
+        // The Shell can still be registering IPC targets during the first
+        // moments of a development launch. Retry once instead of turning that
+        // brief race into a permanent, opaque Settings error.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            QProcess process;
+            QStringList command = connectArgs;
+            command << QStringLiteral("ipc") << QStringLiteral("call") << target;
+            command.append(arguments);
+            process.start(QStringLiteral("quickshell"), command);
+            if (!process.waitForStarted(1500)) {
+                failure = QStringLiteral("无法启动 Quickshell IPC");
+            } else if (!process.waitForFinished(5000)) {
+                process.kill();
+                process.waitForFinished();
+                failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+            } else if (process.exitStatus() == QProcess::NormalExit
+                       && process.exitCode() == 0) {
+                return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+            } else {
+                failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
+                if (failure.isEmpty())
+                    failure = fallbackError;
+            }
+            if (attempt == 0)
+                QThread::msleep(120);
         }
-        if (!process.waitForFinished(2500)) {
-            process.kill();
-            process.waitForFinished();
-            setLastError(QStringLiteral("桌面环境没有响应"));
-            return {};
-        }
-        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-            const auto error = QString::fromUtf8(process.readAllStandardError()).trimmed();
-            setLastError(error.isEmpty() ? fallbackError : error);
-            return {};
-        }
-        return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+        setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
+                         .arg(failure, target, shellPath));
+        return {};
     }
 
     void setLastError(const QString &error) {

@@ -1,0 +1,29 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=KOS Calendar
+Name[zh_CN]=KOS 日历
+GenericName=Calendar
+GenericName[zh_CN]=日历
+Comment=Plan events and keep calendar-linked tasks in sync
+Comment[zh_CN]=安排日程并同步日历关联任务
+TryExec=@KOS_APP_EXECUTABLE@
+Exec=@KOS_APP_EXECUTABLE@
+Icon=kos-calendar
+Terminal=false
+Categories=Office;Calendar;Qt;
+Keywords=calendar;event;schedule;todo;
+StartupNotify=true
+StartupWMClass=kos-calendar
+X-GNOME-SingleWindow=true
+Actions=Today;Settings;
+
+[Desktop Action Today]
+Name=Today
+Name[zh_CN]=今天
+Exec=@KOS_APP_EXECUTABLE@ --date today
+
+[Desktop Action Settings]
+Name=Settings
+Name[zh_CN]=设置
+Exec=@KOS_APP_EXECUTABLE@ --settings

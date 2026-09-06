@@ -64,11 +64,17 @@ QtObject {
         const menu = activeMenu
         if (!menu || !menu.visible)
             return
+        if (!menu.dismissOnGlobalPointerPress)
+            return
 
         const eventTimestamp = Number(timestamp)
         if (Number.isFinite(eventTimestamp)
                 && eventTimestamp <= activeMenuOpenedAt)
             return
+        const grace = Number(menu.globalDismissGraceMs || 0)
+        if (Number.isFinite(grace) && Date.now() < activeMenuOpenedAt + grace)
+            return
+        console.info("[ContextMenu] dismissed by global press")
         closeActive()
     }
 }

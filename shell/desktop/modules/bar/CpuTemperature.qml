@@ -34,10 +34,13 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 3
 
-        SystemIcon {
+        // Reuse the Dock temperature page's dedicated glyph so the entry
+        // point and its Stack page always identify the feature the same way.
+        DockMetricGlyph {
             width: 17
             height: 17
-            role: "cpu"
+            kind: "temperature"
+            glyphColor: ThemeService.foregroundColor
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -156,6 +159,7 @@ Item {
                 : Qt.rgba(0.94, 0.95, 0.98, 0.68)
             surfaceOpacity: 0.96
             materialDepth: 1.8
+            material: "thick"
 
             Column {
                 anchors.fill: parent

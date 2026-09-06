@@ -27,11 +27,15 @@ Current operation groups are:
   `clipboard.history.list`, `clipboard.history.copy`,
   `clipboard.history.delete`, `clipboard.history.clear`
 - `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
-  `file.create-file`, `file.trash`, `file.trash-state`, `file.empty-trash`,
-  `file.open-trash`, `file.open-with`, `file.set-default`, `file.open-kde`
+  `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
+  `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
+  `file.open-kde`
 - `kwin.subscribe`, `kwin.command`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)
+- `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
+  shortcuts; the Shell composes each Exec line, the daemon validates,
+  persists, and registers)
 - `network.*` (including `network.traffic` for read-only interface counters),
   `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
@@ -46,9 +50,15 @@ system action. Existing paths are canonicalized and new targets are resolved
 through a canonical existing parent. Passwords and raw command output
 containing secrets must never be logged.
 
-`kos-platform shortcuts install` refuses to overwrite a shortcut owned by a
-different desktop service. Uninstall removes only the IDs declared in
-`shortcuts.v1.json`, then asks `kglobalaccel` to unregister those actions.
+Global shortcuts are registered by the platform daemon through the
+KGlobalAccel client library (the plasma powerdevil mechanism): every KOS
+shortcut is a QAction under the single `org.kos.Platform` component, so the
+Shortcuts KCM shows ONE "KOS" entry and no service desktop files exist at
+all. `shortcuts.apply` carries `{shortcuts:[{id,description,combo,exec}]}`;
+on activation the daemon runs the Exec line the Shell supplied, so it always
+addresses the live Shell instance (dev `-p` or installed `-c kos`).
+`shortcuts.uninstall` unregisters the actions and removes leftover files
+from superseded layouts.
 
 `kwin.animation.*` accepts a JSON string payload produced by the Dock animation
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,

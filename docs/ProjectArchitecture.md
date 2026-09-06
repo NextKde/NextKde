@@ -1,16 +1,16 @@
 # Project architecture
 
 KOS is organized by runtime boundary and lifecycle, not by the command used
-to reach a feature. The repository intentionally produces one Quickshell
-process, one C++ platform daemon, one Go data daemon, one settings app, and
-two KWin plugin libraries.
+to reach a feature. The core produces one Quickshell process, one C++ platform
+daemon, one Go data daemon, one settings app, and two KWin plugin libraries.
+Calendar, Todo, Weather, and Music are optional standalone applications.
 
 ```text
 NextKde/
 ├── shell/                    Quickshell configuration root
 │   ├── shell.qml
 │   └── desktop/              UI feature modules
-├── apps/settings/            independent Qt Quick application
+├── apps/                     settings plus optional standalone applications
 ├── shared/
 │   ├── qml/                  portable controls
 │   └── contracts/            JSONL and shortcut contracts
@@ -46,8 +46,10 @@ versions, error codes, and default shortcut definitions.
 | --- | --- | --- |
 | Quickshell (`qs -c kos`) | interactive | visual shell surfaces and presentation models |
 | `kos-platform` | systemd `--user` resident | live desktop integration and privileged adapters |
-| `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots |
+| `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
+| `kos-calendar`, `kos-todo`, `kos-weather`, `kos-music` | on demand | optional independent Qt Quick applications |
+| `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 
 The old `helpers/` category is intentionally gone. A short-lived utility is
@@ -69,11 +71,12 @@ on the next KWin/session start, and manually launched shell instances are
 adopted). `./tools/kosctl sync` copies QML-only edits into the installed config
 without hot-reloading (the installed shell runs with its file watcher disabled
 so a copy in progress can never trigger a half-written reload), and
-`./tools/kosctl dev` runs platform, data service, and shell from the source
-tree on dedicated sockets beside the installed services. Every launch mode
-shares one pinned state directory (`$XDG_STATE_HOME/quickshell/kos`), so user
-data such as dock pins and launcher icons is independent of how the shell was
-started. The data service keeps its existing state root under
+`./tools/kosctl dev` runs only the Shell from the source tree and reuses the
+installed systemd platform and data services through their standard sockets.
+Every launch mode shares one pinned state directory
+(`$XDG_STATE_HOME/quickshell/kos`), so user data such as dock pins and launcher
+icons is independent of how the shell was started. The data service keeps its
+existing state root under
 `$XDG_STATE_HOME/quickshell/shell-data-service` so an architecture migration
 does not erase preferences or history. `kosctl uninstall` removes binaries,
 units, and shell files but leaves those state directories intact.
@@ -88,7 +91,7 @@ Installation registers three `systemd --user` units, generated from
 
 | Unit | Description | ExecStart |
 | --- | --- | --- |
-| `kos-shell.service` | Quickshell desktop shell: the dock, launcher, bar, notifications, and every visual surface. `--no-duplicate` exits if an instance is already running; `-c kos` loads `~/.config/quickshell/kos`. `KillMode=mixed` stops only the main `qs` process so desktop apps it launched via `QProcess::startDetached()` survive a restart, and `QS_DISABLE_FILE_WATCHER=1` disables hot-reload of the installed config. | `/usr/bin/qs --no-duplicate -c kos` |
+| `kos-shell.service` | Quickshell desktop shell: the dock, launcher, bar, notifications, and every visual surface. `--no-duplicate` exits if an instance is already running; `-c kos` loads `~/.config/quickshell/kos`. `KillMode=process` stops only the main `qs` process so desktop apps it launched via `QProcess::startDetached()` survive a restart, and `QS_DISABLE_FILE_WATCHER=1` disables hot-reload of the installed config. | `/usr/bin/qs --no-duplicate -c kos` |
 | `kos-platform.service` | C++ platform daemon: KWin bridge, live window events, thumbnails, and privileged host adapters. Loads the bridge QtScript from `~/.local/share/kos/platform/kwin/window-bridge.js`. | `~/.local/libexec/kos-platform daemon` |
 | `kos-data.service` | Go data daemon: telemetry, activity ledger, and desktop-directory snapshots served on `$XDG_RUNTIME_DIR/kos-data.sock`. | `~/.local/libexec/kos-data-service` |
 
@@ -111,19 +114,24 @@ optional application.
 
 An application-owned service must be activated on demand by that application
 or through D-Bus activation. It must not install a session autostart entry by
-default. This keeps calendar, todo, music, and similar future applications from
-creating resident processes for Shell-only users.
+default. Calendar and Todo therefore share the D-Bus-activated PIM service;
+Music keeps playback in its application process.
 
 Optional services are enhancements, never a single point of failure for an
-existing Shell feature. If a Shell surface consumes optional service data, it
-must retain a local, documented fallback. In particular, weather surfaces must
-continue to use the existing keyless Open-Meteo request/cache path whenever the
-shared weather service is not installed, unavailable, or returns an invalid
-snapshot.
+existing Shell feature. Weather is not application-owned: it is an operation
+set in the core `kos-data-service`, so the Shell and standalone Weather app
+share one Open-Meteo request policy and persisted cache. Consumers preserve
+their previous complete conditions and show an unavailable/error state while
+the core service reconnects.
 
-`apps/settings/` is the first application. The desktop top-bar gear only
-starts its process through `DesktopAppLauncher`; it never loads Settings UI
-into the Quickshell process.
+`apps/settings/` is the first application. The gear exposed by the top bar or
+Dock-hosted status area starts its process through `DesktopAppLauncher`; it
+never loads Settings UI into the Quickshell process.
+
+The optional applications are separate CMake modules under `apps/<name>/`.
+They link portable `shared/` modules but never import `shell/desktop`. Calendar
+and Todo share the contracts in `shared/pim`; Weather speaks the versioned
+`kos-data.sock` protocol; Music exposes MPRIS for ordinary shell consumers.
 
 ## Code-review rules
 

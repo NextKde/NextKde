@@ -160,6 +160,7 @@ PopupWindow {
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 0.88
         materialDepth: 2
+        material: "clear"
 
         HoverHandler {
             id: backgroundHover

@@ -7,6 +7,7 @@ telemetry and activity history:
 - CPU, memory, disk, frequency, temperature, and sensor sampling;
 - boot uptime and foreground-application attribution;
 - desktop-directory watching and atomic snapshots;
+- Open-Meteo location search, forecast refresh, units, and offline weather cache;
 - the `kos-data.sock` JSONL API.
 
 The service deliberately does not own a Wayland clipboard. Clipboard MIME
@@ -35,10 +36,31 @@ The socket is mode `0600`. Requests are versioned JSON Lines:
 {"version":1,"requestId":"42","ok":true,"result":{"metrics":{}}}
 ```
 
-Supported operations are `metrics.snapshot`, `activity.snapshot`,
-`activity.active-app`, `desktop.snapshot`, and `desktop.refresh`. Desktop
-changes are pushed as `desktop.changed` events after the complete directory
-scan has been atomically persisted.
+Supported operations are:
+
+- `metrics.snapshot`;
+- `activity.snapshot` and `activity.active-app`;
+- `desktop.snapshot` and `desktop.refresh`;
+- `weather.snapshot`, `weather.search`, `weather.refresh`,
+  `weather.set-location`, and `weather.set-units`.
+
+Desktop changes are pushed as `desktop.changed` events after a complete
+directory scan has been persisted. A completed weather state transition is
+pushed as `weather.changed`; clients then request `weather.snapshot`, so every
+response uses the same versioned envelope and request correlation.
+
+Example weather requests:
+
+```json
+{"version":1,"requestId":"w1","operation":"weather.search","payload":{"query":"Changsha","language":"en","limit":8}}
+{"version":1,"requestId":"w2","operation":"weather.set-units","payload":{"units":"metric"}}
+```
+
+The weather payload itself follows
+[`shared/contracts/weather-v1.schema.json`](../shared/contracts/weather-v1.schema.json).
+The service requests at most 48 hourly and seven daily points, refreshes after
+one hour, and marks data stale after two hours. Failed refreshes preserve the
+last complete forecast and expose the error alongside it.
 
 ## Build and run
 

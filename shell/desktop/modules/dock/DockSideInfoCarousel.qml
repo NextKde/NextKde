@@ -28,7 +28,7 @@ Item {
         return player?.trackArtUrl ? player.trackArtUrl
             : Qt.resolvedUrl("../../assets/defaultCover.png")
     }
-    readonly property bool monochrome: ConfigService.iconMode !== "color"
+    readonly property bool monochrome: IconAppearanceService.mode !== "color"
     readonly property int availablePageCount: Number(hasMusic)
         + Number(hasWeather) + Number(showClock) + Number(showTemperature)
     property int page: clockPage
@@ -130,7 +130,7 @@ Item {
         const colorWeight = ThemeService.isDark ? 0.54 : 0.20
         const color = WallpaperPaletteService.ready
             ? source : ThemeService.backgroundColor
-        return ConfigService.styledDockColor(Qt.rgba(
+        return IconAppearanceService.styledColor(Qt.rgba(
             neutral + (color.r - neutral) * colorWeight,
             neutral + (color.g - neutral) * colorWeight,
             neutral + (color.b - neutral) * colorWeight, alpha))
@@ -141,7 +141,7 @@ Item {
             ? Math.round(MetricsService.currentMilliC / 1000) : -1
         const value = currentC >= 0 ? Math.max(0, Math.min(1,
             (currentC - 35) / 55)) : 0.25
-        return ConfigService.styledDockColor(Qt.rgba(
+        return IconAppearanceService.styledColor(Qt.rgba(
             cool.r + (warm.r - cool.r) * value,
             cool.g + (warm.g - cool.g) * value,
             cool.b + (warm.b - cool.b) * value, alpha))
@@ -151,7 +151,7 @@ Item {
         if (page === musicPage)
             return artworkTint(artworkPalette.primary, 0.82)
         if (page === weatherPage)
-            return ConfigService.styledDockColor(weatherStart(
+            return IconAppearanceService.styledColor(weatherStart(
                 WeatherService.weatherCode, WeatherService.isDay))
         if (page === temperaturePage)
             return thermalColor(Qt.rgba(0.16, 0.38, 0.62, 1),
@@ -174,7 +174,7 @@ Item {
         if (page === musicPage)
             return artworkTint(artworkPalette.primary, 0.38)
         if (page === weatherPage)
-            return ConfigService.styledDockColor(weatherEnd(
+            return IconAppearanceService.styledColor(weatherEnd(
                 WeatherService.weatherCode, WeatherService.isDay))
         if (page === temperaturePage)
             return thermalColor(Qt.rgba(0.20, 0.56, 0.68, 1),

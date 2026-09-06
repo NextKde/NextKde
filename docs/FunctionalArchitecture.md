@@ -44,7 +44,8 @@ with a distinct lifecycle remains a service.
 - Metrics and activity cards consume `MetricsService` and
   `ActivityUsageService`, backed by `kos-data-service`.
 - Settings remains a separate Qt Quick process and uses the narrow Shell IPC
-  handlers (`dock-settings`, `appearance-settings`, and `applauncher-settings`).
+  handlers (`dock-settings`, `appearance-settings`, `applauncher-settings`,
+  `shortcuts-settings`, and the read-only `integration-status`).
 
 ## Startup and recovery
 
@@ -57,6 +58,7 @@ stable error; the shell process and other features remain usable.
 
 The versioned JSONL envelope and error model are defined in
 [`shared/contracts/platform.v1.md`](../shared/contracts/platform.v1.md). The
-default shortcut table is `shared/contracts/shortcuts.v1.json`. Contract tests
+default shortcut table lives in the Shell's ShortcutsService
+(`shell/desktop/modules/shortcuts/ShortcutsService.qml`). Contract tests
 run with `python3 platform/tests/test_contract.py`; C++ builds use
 `cmake --preset debug && cmake --build --preset debug`.

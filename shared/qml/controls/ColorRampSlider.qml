@@ -93,6 +93,13 @@ Item {
             if (pressed)
                 root.previewChanged(root.valueAt(mouse.x))
         }
-        onReleased: root.commitRequested(root.value)
+        // The owner's preview handler updates `value` through a binding. On a
+        // release immediately following a drag that binding can still expose
+        // the previous value for this event turn, which persisted the old
+        // colour and snapped the thumb back. Commit the pointer position
+        // directly instead.
+        onReleased: function(mouse) {
+            root.commitRequested(root.valueAt(mouse.x))
+        }
     }
 }

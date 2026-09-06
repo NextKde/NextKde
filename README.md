@@ -60,7 +60,7 @@ KOS 自己处理通知。请从 Plasma 面板或系统托盘移除“通知”�
 
 ![KOS 控制中心](docs/images/control-center.png)
 
-设置中心：调整 Dock、外观与显示方式。
+设置中心：调整显示、主题、顶栏、Dock、启动台与快捷键，并查看接入状态。
 
 ![KOS 设置中心](docs/images/settings-center.png)
 
@@ -140,6 +140,22 @@ sudo nixos-rebuild switch --flake .#hosts
 | 外观与动效         | 提供液态玻璃、背景模糊、主题色、Dock 位置、图标风格和显示方式；Dock 与窗口动画由 KWin 插件提供。                          |
 | 设置与快捷键       | 独立设置中心可调整外观、Dock、Bar 和启动台；可安装并在 KDE 系统设置中修改全局快捷键。                                     |
 
+### 可选独立应用
+
+仓库还提供日历、待办、天气和本地音乐四个独立 Qt Quick 应用。它们默认不随 Shell
+构建；使用 `apps-dev` / `apps-release` 预设可统一构建，也可使用
+`calendar-dev`、`todo-dev`、`weather-dev` 或 `music-dev` 单独构建：
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+```
+
+用户级安装与服务注册可运行 `./tools/install-apps.sh`。依赖和模块说明见
+[apps/README.md](apps/README.md)。天气应用与 Shell 共用 `kos-data-service` 的缓存和
+Open-Meteo 数据；日历与待办共用按需启动的 PIM 服务。
+
 KOS 不替代 KDE Plasma：它复用 KWin、NetworkManager、PipeWire、BlueZ 和 systemd，
 只把这些系统能力整合到自己的界面中。
 
@@ -152,7 +168,7 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 
 - `shell/`：界面代码。
 - `platform/`：KWin、网络、音频、亮度等系统接口。
-- `services/data-service/`：系统指标、历史和桌面数据。
+- `services/data-service/`：系统指标、历史、桌面数据与共享天气缓存。
 - `integrations/kwin/`：KWin 插件；`vendor/`：第三方 Glass 特效源码。
 
 更详细的说明见 [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md)。
@@ -166,11 +182,28 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 
 ## 开发与调试
 
-只想预览界面、不安装到系统：
+只想预览界面、不安装到系统（复用已安装的服务）：
 
 ```sh
 qs -p "$PWD/shell"
 ```
+
+调试源码 QML（保持运行，`Ctrl+C` 结束）：
+
+```sh
+./tools/kosctl dev
+```
+
+它只启动源码 QML，直接复用 systemd 的 `kos-platform.service` 和 `kos-data.service`；不会编译、部署、重启服务，也不会创建第二套 socket。
+
+从源码 Shell 的齿轮打开设置中心会自动连接该源码会话。也可以在第二个终端手动启动：
+
+```sh
+KOS_SHELL_DIR="$PWD/shell" kos-settings
+```
+
+不要把 `-c` 与 `-p` 一起传给 `qs`；两者互斥。应用菜单单独打开的设置中心仍会连接安装版
+Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令。
 
 修改 QML 后应用到已安装版本：
 
@@ -185,6 +218,9 @@ qs -p "$PWD/shell"
 ./tools/kosctl install
 ./tools/kosctl start
 ```
+
+`start` 会立即应用 Shell、平台服务和数据服务更新；KWin 特效二进制会在下次注销并
+重新登录或重启后载入，避免在运行中的合成器里热替换插件。
 
 常用命令：
 

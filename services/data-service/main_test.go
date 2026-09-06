@@ -102,3 +102,26 @@ func TestRefreshDesktopReconcilesCompleteDirectory(t *testing.T) {
 		t.Fatalf("unexpected desktop snapshot: %#v", service.state.Desktop.Entries)
 	}
 }
+
+func TestAcquireInstanceLockIsExclusive(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "kos-data.sock")
+	first, err := acquireInstanceLock(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := acquireInstanceLock(socketPath)
+	if err == nil {
+		_ = second.Close()
+		t.Fatal("second service instance acquired the same lock")
+	}
+
+	if err = first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	third, err := acquireInstanceLock(socketPath)
+	if err != nil {
+		t.Fatalf("lock was not released after close: %v", err)
+	}
+	_ = third.Close()
+}

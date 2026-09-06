@@ -63,7 +63,8 @@ Control center for networking, Bluetooth, brightness, volume, and notifications.
 
 ![KOS control center](docs/images/control-center.png)
 
-Settings center for the dock, appearance, and display mode.
+Settings center for display, theme, bar, dock, launcher, shortcuts, and
+integration status.
 
 ![KOS settings center](docs/images/settings-center.png)
 
@@ -112,6 +113,24 @@ and appearance preferences remains available for a later reinstall.
 | Appearance and motion     | Offers liquid glass, background blur, theme colors, dock position, icon style, and display mode. KWin plugins power dock and window animation.                                              |
 | Settings and shortcuts    | A standalone settings center configures appearance, the dock, bar, and launcher; global shortcuts can be installed and changed in KDE System Settings.                                      |
 
+### Optional standalone applications
+
+The repository also includes independent Qt Quick applications for Calendar,
+Todo, Weather, and local Music. They are not built with the Shell by default.
+Use `apps-dev` or `apps-release` to build all four, or the `calendar-dev`,
+`todo-dev`, `weather-dev`, and `music-dev` presets for one application:
+
+```sh
+cmake --preset apps-dev
+cmake --build --preset apps-dev
+ctest --preset apps-dev
+```
+
+Run `./tools/install-apps.sh` for a per-user install and service registration.
+See [apps/README.md](apps/README.md) for dependencies and module details. Weather
+shares the `kos-data-service` Open-Meteo cache with the Shell; Calendar and Todo
+share the on-demand PIM service.
+
 KOS does not replace KDE Plasma. It reuses KWin, NetworkManager, PipeWire,
 BlueZ, and systemd, then presents those system capabilities in its own UI.
 
@@ -124,7 +143,7 @@ Quickshell Shell ──► kos-platform ──► KWin / network / audio / Bluet
 
 - `shell/`: UI code.
 - `platform/`: system adapters for KWin, networking, audio, and brightness.
-- `services/data-service/`: system metrics, history, and desktop data.
+- `services/data-service/`: system metrics, history, desktop data, and weather cache.
 - `integrations/kwin/`: KWin plugins; `vendor/`: third-party Glass source.
 
 See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
@@ -138,11 +157,33 @@ See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
 
 ## Development and debugging
 
-Preview the UI without installing it:
+Preview the UI without installing it (reuses installed services):
 
 ```sh
 qs -p "$PWD/shell"
 ```
+
+To debug source QML, run this in one terminal and leave it running; press
+`Ctrl+C` to stop it:
+
+```sh
+./tools/kosctl dev
+```
+
+It starts only the source QML and reuses systemd's `kos-platform.service` and
+`kos-data.service`. It does not build, deploy, restart services, or create a
+second socket pair.
+
+Settings opened from the source Shell's gear automatically targets that same
+source session. You can also launch it manually from a second terminal:
+
+```sh
+KOS_SHELL_DIR="$PWD/shell" kos-settings
+```
+
+Do not combine `qs -c` and `qs -p`: they are mutually exclusive. A Settings
+app opened separately from the desktop menu still targets the installed Shell;
+use the source Shell's gear or the command above while debugging.
 
 Apply QML-only changes to an installed copy:
 
@@ -157,6 +198,10 @@ After changing C++, Go, or KWin plugins:
 ./tools/kosctl install
 ./tools/kosctl start
 ```
+
+`start` applies Shell, platform-service, and data-service updates immediately.
+Updated KWin effect binaries load after the next logout/login or reboot; this
+avoids hot-replacing plugins inside the running compositor.
 
 Useful commands:
 

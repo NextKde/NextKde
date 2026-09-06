@@ -37,7 +37,7 @@ Item {
         const colorWeight = ThemeService.isDark ? 0.54 : 0.20
         const color = WallpaperPaletteService.ready
             ? source : ThemeService.backgroundColor
-        return ConfigService.styledDockColor(Qt.rgba(
+        return IconAppearanceService.styledColor(Qt.rgba(
             neutral + (color.r - neutral) * colorWeight,
             neutral + (color.g - neutral) * colorWeight,
             neutral + (color.b - neutral) * colorWeight,

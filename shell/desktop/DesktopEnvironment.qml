@@ -11,6 +11,7 @@ import qs.desktop.modules.deskcenter
 import qs.desktop.modules.overview
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
+import qs.desktop.modules.shortcuts
 
 Item {
     id: shell
@@ -28,7 +29,15 @@ Item {
 
     // Theme watching is non-visual and only loads a tiny FileView. The
     // AppLauncher and its icon grid remain lazy.
-    Component.onCompleted: IconThemeReloadService.initialize()
+    //
+    // ShortcutsService is a QML singleton, so it only instantiates on first
+    // access — and nothing else touches it during startup. Touch it here so
+    // the global shortcuts are registered on every Shell start (self-heal);
+    // the request queues until the platform daemon connects.
+    Component.onCompleted: {
+        IconThemeReloadService.initialize()
+        ShortcutsService.applyToPlatform()
+    }
 
     // The standalone Settings app is intentionally not allowed to import a
     // desktop module. This narrow IPC endpoint is its only Dock write path.
@@ -120,6 +129,12 @@ Item {
                     AppearanceConfigService.effectiveLauncherLiquid,
                 blurStrength: AppearanceConfigService.globalBlurStrength,
                 liquidStrength: AppearanceConfigService.globalLiquidStrength,
+                iconMode: IconAppearanceService.mode,
+                iconOpacity: IconAppearanceService.opacity,
+                // JSON has no QColor primitive. Send the canonical #rrggbb
+                // form so the standalone Settings C++ bridge does not parse
+                // the value as an object and fall back to its previous tint.
+                iconTintColor: IconAppearanceService.tintColor.toString(),
                 shellStyle: AppearanceConfigService.shellStyle,
                 barIntegratedWithDock:
                     AppearanceConfigService.barIntegratedWithDock,
@@ -138,6 +153,21 @@ Item {
 
         function updateGlobalLiquidStrength(value: real): string {
             AppearanceConfigService.updateGlobalLiquidStrength(value)
+            return snapshot()
+        }
+
+        function updateGlobalIconMode(mode: string): string {
+            IconAppearanceService.updateMode(mode)
+            return snapshot()
+        }
+
+        function updateGlobalIconOpacity(opacity: real): string {
+            IconAppearanceService.updateOpacity(opacity)
+            return snapshot()
+        }
+
+        function updateGlobalIconTintColor(color: string): string {
+            IconAppearanceService.updateTintColor(color)
             return snapshot()
         }
 
@@ -201,10 +231,7 @@ Item {
         function snapshot(): string {
             return JSON.stringify({
                 displayMode: AppLauncherConfigService.displayMode,
-                iconSize: AppLauncherConfigService.iconSize,
-                iconSpacing: AppLauncherConfigService.iconSpacing,
-                fontSize: AppLauncherConfigService.fontSize,
-                fontWeight: AppLauncherConfigService.fontWeight,
+                layoutProfiles: AppLauncherConfigService.layoutProfiles,
             })
         }
 
@@ -213,24 +240,62 @@ Item {
             return snapshot()
         }
 
-        function updateIconSize(size: real): string {
-            AppLauncherConfigService.updateIconSize(size)
+        function updateProfileIconSize(mode: string, size: string): string {
+            AppLauncherConfigService.updateProfileIconSize(mode, size)
             return snapshot()
         }
 
-        function updateIconSpacing(spacing: real): string {
-            AppLauncherConfigService.updateIconSpacing(spacing)
+        function updateProfileDensity(mode: string, density: string): string {
+            AppLauncherConfigService.updateProfileDensity(mode, density)
             return snapshot()
         }
 
-        function updateFontSize(size: real): string {
-            AppLauncherConfigService.updateFontSize(size)
+        function updateProfileFontWeight(mode: string, weight: string): string {
+            AppLauncherConfigService.updateProfileFontWeight(mode, weight)
             return snapshot()
         }
 
-        function updateFontWeight(weight: string): string {
-            AppLauncherConfigService.updateFontWeight(weight)
+        function resetProfile(mode: string): string {
+            AppLauncherConfigService.resetProfile(mode)
             return snapshot()
+        }
+    }
+
+    // Global-shortcut endpoint for the standalone Settings app. ShortcutsService
+    // owns defaults, overrides, and the kglobalaccel handoff; this handler is
+    // the only write path the Settings app gets, matching the other targets.
+    IpcHandler {
+        target: "shortcuts-settings"
+
+        function snapshot(): string {
+            return JSON.stringify(ShortcutsService.snapshot())
+        }
+
+        function updateShortcut(id: string, combo: string): string {
+            return JSON.stringify(ShortcutsService.updateShortcut(id, combo))
+        }
+
+        function resetShortcut(id: string): string {
+            return JSON.stringify(ShortcutsService.resetShortcut(id))
+        }
+    }
+
+    // Read-only health snapshot for the standalone Settings app. Keep these
+    // values sourced from the live Shell connections so the UI reports what
+    // is actually connected, not merely which units were installed.
+    IpcHandler {
+        target: "integration-status"
+
+        function snapshot(): string {
+            return JSON.stringify({
+                shellReady: true,
+                platformConnected: PlatformClient.socket.connected,
+                dataConnected: DataClient.socket.connected,
+                outputAvailable: ScreenLifecycle.outputAvailable,
+                desktopWidgetsVisible: ScreenLifecycle.outputAvailable
+                    && ScreenLifecycle.activeScreen !== null,
+                desktopFilesReady: DesktopFilesService.ready,
+            })
         }
     }
 

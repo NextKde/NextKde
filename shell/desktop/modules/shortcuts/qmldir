@@ -1,0 +1,3 @@
+module qs.desktop.modules.shortcuts
+
+singleton ShortcutsService 1.0 ShortcutsService.qml

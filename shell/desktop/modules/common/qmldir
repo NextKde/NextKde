@@ -18,5 +18,6 @@ singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
 singleton SystemIconResolver 1.0 SystemIconResolver.qml
 singleton AppearanceConfigService 1.0 AppearanceConfigService.qml
+singleton IconAppearanceService 1.0 IconAppearanceService.qml
 singleton AppearanceTokens 1.0 AppearanceTokens.qml
 singleton ScreenLifecycle 1.0 ScreenLifecycle.qml
