@@ -31,16 +31,20 @@
         cfg = config.services.kos;
         kos = self.packages.${system}.kos-desktop;
         qs_bin = "/run/current-system/sw/bin/quickshell";
+        
+        # NixOS control interface
+        kos-ctl = pkgs.callPackage ./nix/kos-ctl.nix {};
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
         };
 
         config = lib.mkIf cfg.enable {
-          # System-wide packages: binaries + KWin plugins + kosctl
+          # System-wide packages: binaries + KWin plugins + kosctl + kos-ctl
           environment.systemPackages = [
             kos
             kos.passthru.kosctl
+            kos-ctl
             kos.passthru.kwin-dock-window-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
@@ -60,13 +64,27 @@
                 ExecStart = pkgs.writeShellScript "kos-shell-init" ''
                   set -e
                   shell_config="$HOME/.config/quickshell/kos"
+                  
+                  # Fix permissions on existing files before removal
+                  # (Nix store copies may be read-only)
+                  if [[ -d "$shell_config" ]]; then
+                    find "$shell_config" -type d -exec chmod u+w {} + 2>/dev/null || true
+                    find "$shell_config" -type f -exec chmod u+w {} + 2>/dev/null || true
+                    rm -rf "$shell_config"
+                  fi
+                  
+                  # Create fresh directories
                   mkdir -p "$shell_config/shared/qml"
-                  # Ensure target is writable (Nix store files are read-only)
-                  chmod -R u+w "$shell_config" 2>/dev/null || true
-                  # Overwrite shell QML (follow symlinks, force overwrite)
-                  cp -rfL ${kos}/share/kos-desktop/. "$shell_config/"
-                  # Overwrite shared QML controls
-                  cp -rfL ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
+                  
+                  # Copy shell QML (follow symlinks, ignore source permissions)
+                  cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shell/. "$shell_config/"
+                  
+                  # Copy shared QML controls
+                  if [[ -d ${kos}/share/shared/qml/controls ]]; then
+                    cp -rL --no-preserve=mode ${kos}/share/shared/qml/controls "$shell_config/shared/qml/"
+                  elif [[ -d ${kos}/share/kos-desktop/shared/qml/controls ]]; then
+                    cp -rL --no-preserve=mode ${kos}/share/kos-desktop/shared/qml/controls "$shell_config/shared/qml/"
+                  fi
                 '';
               };
             };
