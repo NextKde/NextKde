@@ -30,6 +30,16 @@ a window — the client's own opaque content included — to rounded corners, an
 only round the rectangle it paints inside its own title bar strip, so the
 window's bottom two corners stay square no matter what the QML says.
 
+The frosted material is likewise not painted here. The decoration publishes its
+title bar via `setBlurRegion()` and the Glass effect frosts what is behind it.
+Glass's `BlurDecorations` option widens that to the whole window, so an
+application can leave its own background transparent and still sit on the same
+glass as the Dock and the Bar; `kosctl` turns it on alongside selecting the
+decoration. The vendored effect keys that option on the window actually having
+a server-side decoration and subtracts the client's opaque region, which is
+what keeps full-screen layer-shell surfaces from blurring the wallpaper away
+and stops the title bar flickering behind opaque clients.
+
 ## JSONL contract
 
 Requests and responses are UTF-8 JSON objects separated by `\n`:
