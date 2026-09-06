@@ -131,7 +131,10 @@
                 Type = "simple";
                 KillMode = "mixed";
                 ExecStart = "${qs_bin} --no-duplicate -c kos";
-                Environment = [ "QS_DISABLE_FILE_WATCHER=1" ];
+                Environment = [
+                  "QS_DISABLE_FILE_WATCHER=1"
+                  "PATH=${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"
+                ];
                 Restart = "on-failure";
                 RestartSec = 2;
               };
