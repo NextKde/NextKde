@@ -527,6 +527,17 @@ install_kwin_plugins() {
     rm -rf -- "$stage_dir"
     mkdir -p "$stage_dir" "$(dirname "$kwin_manifest")"
 
+    # Keep the previous manifest so files this install no longer ships can be
+    # removed. Without it a component that changes shape leaves orphans behind
+    # in /usr -- the QML Aurorae package that preceded the compiled decoration
+    # plugin would keep being discovered by KWin as a second theme.
+    local previous_manifest="$build_dir/kwin-system-files.manifest.previous"
+    if [[ -s "$kwin_manifest" ]]; then
+        sort -u "$kwin_manifest" > "$previous_manifest"
+    else
+        : > "$previous_manifest"
+    fi
+
     DESTDIR="$stage_dir" cmake --install "$build_dir" \
         --prefix "$kwin_system_prefix" --component kwin_plugins
     DESTDIR="$stage_dir" cmake --install "$glass_build_dir" \
@@ -546,6 +557,7 @@ install_kwin_plugins() {
     # old plugin, while overwriting in place has crashed kwin_wayland.
     local manifest_entry
     local -a system_entries=()
+    local -a stale_entries=()
     while IFS= read -r manifest_entry; do
         [[ -z "$manifest_entry" ]] && continue
         case "$manifest_entry" in
@@ -556,10 +568,27 @@ install_kwin_plugins() {
                 ;;
         esac
     done < "$kwin_manifest"
-    if (( ${#system_entries[@]} > 0 )); then
-        sudo rm -f -- "${system_entries[@]}"
+    # Entries the previous install shipped and this one does not.
+    while IFS= read -r manifest_entry; do
+        [[ -z "$manifest_entry" ]] && continue
+        case "$manifest_entry" in
+            "$kwin_system_prefix"/*) stale_entries+=("$manifest_entry") ;;
+            *) ;;  # A path outside the system prefix was never installed.
+        esac
+    done < <(comm -23 "$previous_manifest" "$kwin_manifest")
+    if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
+        sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
     fi
     sudo cp -a "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    # Directories the stale files lived in are pruned only when they end up
+    # empty, so a shared directory such as the plugin dir is never touched.
+    if (( ${#stale_entries[@]} > 0 )); then
+        # -p so an emptied leaf also takes its now-empty parents with it: the
+        # QML decoration package nested files two levels deep, and pruning only
+        # each file's own directory left the package root behind.
+        printf '%s\n' "${stale_entries[@]}" | xargs -r -n1 dirname \
+            | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
+    fi
     enable_kwin_effects
     enable_kos_decoration
     printf 'Installed and enabled KOS Dock Animation, Context Menu Input, Glass, and Liquid Glass decoration.\n'
