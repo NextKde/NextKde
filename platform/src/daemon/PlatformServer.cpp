@@ -2269,8 +2269,19 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("session.logout")) {
-        runCommand(socket, request, QStringLiteral("loginctl"), {QStringLiteral("terminate-session"),
-                   qEnvironmentVariable("XDG_SESSION_ID")});
+        // plasma-kwin_wayland/kos-shell/kos-platform are PartOf=graphical-
+        // session.target, not members of the login session's scope, so
+        // `loginctl terminate-session` never reaches them: it kills the PAM
+        // helper trio and leaves the compositor running, still holding the
+        // DRM device, so the next login's fresh compositor fails to become
+        // DRM master and the new session hangs on a blank screen. Stopping
+        // the target is what actually tears the session down; --no-block
+        // matters because this daemon is itself PartOf=graphical-session
+        // .target and would be stopped by this same command, so the call
+        // must return before its own process is reaped by that stop.
+        runCommand(socket, request, QStringLiteral("systemctl"),
+                   {QStringLiteral("--user"), QStringLiteral("--no-block"),
+                    QStringLiteral("stop"), QStringLiteral("graphical-session.target")});
         return true;
     }
     if (op == QStringLiteral("session.switch-user")) {
