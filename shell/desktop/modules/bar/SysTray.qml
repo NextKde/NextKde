@@ -72,6 +72,17 @@ Item {
     readonly property var allKeys: root.nativeKeys.concat(root.trailingCellKeys)
     readonly property var arrangedKeys: SysTrayOrderService.arrange(root.allKeys)
 
+    // Let the order service see every key as it appears, so an icon that
+    // shows up later is recognisably new and lands at the head of the row
+    // instead of sorting with the other never-reordered items.
+    onAllKeysChanged: SysTrayOrderService.register(root.allKeys)
+    Connections {
+        target: SysTrayOrderService
+        // The saved order arrives asynchronously; keys seen before it does
+        // are registered once it has loaded.
+        function onReadyChanged() { SysTrayOrderService.register(root.allKeys) }
+    }
+
     function targetIndexFor(key) {
         const arranged = root.arrangedKeys.indexOf(key)
         if (arranged >= 0)
