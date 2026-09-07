@@ -10,14 +10,46 @@ KWin, NetworkManager, and other system components in place.
 
 ### 1. Install requirements
 
-Use a KDE Plasma 6 **Wayland** session. You need Git, CMake, Ninja, a C++
-compiler, Qt 6, Go, and Quickshell 0.3.x.
+Use a KDE Plasma 6 **Wayland** session (KWin 6.4 or newer), Quickshell 0.3.x,
+Qt 6.6 or newer, and the complete KF6 and KWin development dependencies. The
+default installation builds the platform service, Settings, KWin effects, and
+the window decoration.
 
 On Arch:
 
 ```sh
-sudo pacman -S git quickshell cmake ninja gcc qt6-base go
+sudo pacman -S --needed \
+  git quickshell cmake ninja gcc go qt6-base qt6-declarative \
+  kwindowsystem kiconthemes kglobalaccel \
+  extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
+  kcoreaddons kdecoration gettext libxcb vulkan-headers
 ```
+
+These runtime integration packages are recommended:
+
+```sh
+sudo pacman -S --needed \
+  networkmanager wireplumber bluez-utils brightnessctl \
+  wl-clipboard cliphist glib2 xdg-utils spectacle
+```
+
+The first group is required by the default build. The second group is optional
+per feature and provides networking, audio, Bluetooth, brightness, clipboard
+history, trash/file operations, and screenshots. Set
+`KOS_BUILD_KWIN_PLUGINS=OFF` to build only the platform service and Settings
+without the KWin plugin development packages.
+
+`extra-cmake-modules` is a direct CMake dependency of the KWin plugins.
+`vulkan-headers` supplies the `Vulkan::Vulkan` compile interface exported by
+KWin; Arch's `kwin` package does not currently pull it in automatically, so it
+must be listed explicitly. KWin also exports Wayland, libdrm, and libepoxy
+development interfaces, but those are hard dependencies of Arch's `kwin`
+package and do not need to be repeated here.
+
+Calendar, Todo, Weather, and Music are separate optional applications and are
+not built by `kosctl install`. They have additional Qt/KF6, GStreamer, TagLib,
+or Go dependencies; read [apps/README.md](apps/README.md) and each app's own
+documentation before running `./tools/install-apps.sh`.
 
 Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.
@@ -37,7 +69,9 @@ cd NextKde
 ./tools/kosctl start
 ```
 
-`doctor` reports missing dependencies. `install` builds and installs KOS; the
+`doctor` checks commands, Arch packages, and optional runtime integrations. On
+Arch, `install` offers to install missing required build packages before it
+builds KOS; the
 first KWin-plugin installation may ask for your sudo password. `start` applies
 the new version immediately and briefly refreshes the desktop UI.
 

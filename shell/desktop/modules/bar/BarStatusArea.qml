@@ -59,6 +59,11 @@ Item {
             NetworkStatus {
                 id: networkStatus
                 anchors.centerIn: parent
+                // The Wi-Fi glyph is a thin arc fan and the battery glyph is
+                // a flat capsule; both read visually smaller than the filled
+                // control-center mark at the same nominal box size, so they
+                // get a bit more room within the shared tray slot.
+                iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
@@ -79,6 +84,7 @@ Item {
         Item {
             Battery {
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
@@ -91,6 +97,7 @@ Item {
         Item {
             SettingsButton {
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
                 verticalDock: root.verticalDock
             }
@@ -104,6 +111,7 @@ Item {
             ControlCenterToggle {
                 id: controlCenterToggle
                 anchors.centerIn: parent
+                iconSize: systemTray.iconSize
                 panelOpen: root.controlCenterOpen
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
@@ -154,7 +162,7 @@ Item {
             SysTray {
                 id: systemTray
                 anchors.centerIn: parent
-                iconSize: 16
+                iconSize: 18
                 visualYOffset: 0
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
@@ -162,6 +170,7 @@ Item {
                 availableHeight: root.height
                 trailingComponents: [networkQuickControl, batteryQuickControl,
                     settingsQuickControl, controlCenterQuickControl]
+                trailingKeys: ["network", "battery", "settings", "controlcenter"]
             }
         }
     }

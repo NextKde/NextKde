@@ -29,6 +29,21 @@ For a persistent per-user installation on Plasma, run:
 ./tools/install-apps.sh
 ```
 
+`install-apps.sh` builds all four applications, rather than only the app you
+intend to open. In addition to the base requirements in the repository README,
+install these Arch build dependencies first:
+
+```sh
+sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
+```
+
+`kcalendarcore` is required by Calendar and Todo; GStreamer and TagLib are
+required by Music. Go is required by Weather and is already part of the core
+KOS build requirements. Runtime GStreamer codec/plugin packages are separate:
+install the ones needed for the audio formats and output backends you use.
+Building a single app with its corresponding CMake preset needs only that
+app's direct dependencies.
+
 This performs a Release build and test pass, installs the binaries under
 `~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
 enables the core `kos-data.service`, registers the D-Bus-activated PIM service,

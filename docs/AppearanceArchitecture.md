@@ -111,12 +111,12 @@ schema 9：
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
-  "barLayoutMode": "full",
+  "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale"
 }
 ```
 
-- 默认 `shellStyle` 为 `macos`，因为它最接近引入主题前的现有 Shell 形态，升级不会突然重排界面。
+- 默认 `shellStyle` 为 `macos`；默认 `barLayoutMode` 为 `transparent`。已有合法配置继续保留用户选择。
 - schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数，schema 9 新增 `barVisibilityMode` 与 `barLayoutMode`。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
 - 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
@@ -163,7 +163,7 @@ snapshot 示例：
   "shellStyle": "macos",
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
-  "barLayoutMode": "full",
+  "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
   "tokenVersion": 5
 }
@@ -178,7 +178,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v5
+## 6. AppearanceTokens v6
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -194,7 +194,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | `itemSpacingRatio` | 0.07 | 0.09 | 0.08 |
 | `dividerMarginRatio` | 0.16 | 0.20 | 0.18 |
 | `edgeMargin` | 0 | 5 | 8 |
-| `workspaceGap` | 0 | 5 | 8 |
+| `workspaceGap` | 0 | 0 | 0 |
 | `indicatorStyle` | `underline` | `dot` | `tonal` |
 | `indicatorLengthRatio` | 0.42 | 0.13 | 0.34 |
 | `indicatorThicknessRatio` | 0.07 | 0.13 | 0.07 |

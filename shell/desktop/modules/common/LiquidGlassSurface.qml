@@ -68,17 +68,19 @@ Rectangle {
             return 0.0
         const lightMix = Math.max(0.0, Math.min(1.0,
             (ambientLuminance - 0.30) / 0.40))
-        const base = 0.07 + 0.06 * lightMix
-        const protection = (0.07 + 0.12 * lightMix)
+        const base = 0.04 + 0.035 * lightMix
+        const protection = (0.035 + 0.07 * lightMix)
             * ambientExtremeProtection
-        return Math.min(0.32, (base + protection)
+        return Math.min(0.20, (base + protection)
             * (material === "thick" ? 1.18 : 1.0))
     }
     property bool _useDarkForeground: estimatedMaterialLuminance >= 0.58
     readonly property color foregroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.94) : Qt.rgba(1, 1, 1, 0.94)
+        ? Qt.rgba(0.02, 0.025, 0.035, 1.0) : Qt.rgba(1, 1, 1, 1.0)
     readonly property color secondaryForegroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.64)
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.76) : Qt.rgba(1, 1, 1, 0.82)
+    readonly property color tertiaryForegroundColor: _useDarkForeground
+        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.66)
     onEstimatedMaterialLuminanceChanged: {
         if (_useDarkForeground && estimatedMaterialLuminance < 0.42)
             _useDarkForeground = false
@@ -154,14 +156,16 @@ Rectangle {
             * surfaceOpacity * root.normalizedBlurStrength
     )
 
-    // This layer intentionally stays neutral and dark. Using a white lift on
-    // black backdrops creates the grey-plastic look that dense glass panels
-    // should avoid.
+    // Reinforce the side of the material opposite its foreground ink. A light
+    // lift supports dark labels; a dark scrim supports white labels. This is
+    // the static QML counterpart of Liquid Glass's dynamic-range adaptation.
     Rectangle {
         anchors.fill: parent
         radius: root.radius
         visible: root.adaptiveScrimOpacity > 0.001
-        color: Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
+        color: root._useDarkForeground
+            ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
+            : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
         Behavior on color {
             ColorAnimation { duration: root.ambientTransitionDuration; easing.type: Easing.InOutSine }
         }
@@ -174,14 +178,14 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.45 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.22 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.10 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.035 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.32 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.14 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.06 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.018 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop {
                 position: 1.0
                 color: Qt.rgba(0, 0, 0, root.bottomShadeVisible
-                    ? (0.16 + Math.max(0.0, root.materialDepth) * 0.04)
+                    ? (0.08 + Math.max(0.0, root.materialDepth) * 0.025)
                         * root.normalizedLiquidStrength : 0.0)
             }
         }
@@ -199,14 +203,14 @@ Rectangle {
                 position: 0.0
                 color: Qt.rgba(
                     root._displayAmbientPrimary.r, root._displayAmbientPrimary.g, root._displayAmbientPrimary.b,
-                    root.ambientStrength * 0.38 * root.normalizedLiquidStrength
+                    root.ambientStrength * 0.26 * root.normalizedLiquidStrength
                 )
             }
             GradientStop {
                 position: 0.55
                 color: Qt.rgba(
                     root._displayAmbientSecondary.r, root._displayAmbientSecondary.g, root._displayAmbientSecondary.b,
-                    root.ambientStrength * 0.22 * root.normalizedLiquidStrength
+                    root.ambientStrength * 0.14 * root.normalizedLiquidStrength
                 )
             }
             GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
@@ -222,9 +226,9 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.08 * root.materialHighlightFactor) }
+            GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.045 * root.materialHighlightFactor) }
             GradientStop { position: 0.46; color: Qt.rgba(1, 1, 1, 0.0) }
-            GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.06 * root.materialHighlightFactor) }
+            GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.035 * root.materialHighlightFactor) }
         }
     }
 

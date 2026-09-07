@@ -27,9 +27,24 @@ def test_platform_contract_mentions_socket_and_errors() -> None:
     assert "kos-platform.sock" in text
     assert "requestId" in text
     assert "retryable" in text
+    assert "kwin.layout.update" in text
+    for field in ("outputName", "outputRect", "barReservedHeight", "dockRect"):
+        assert field in text
+
+
+def test_theme_toggle_uses_the_safe_palette_path() -> None:
+    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    toggle = source[source.index('if (op == QStringLiteral("theme.toggle"))'):]
+    assert "QSettings settings" in toggle
+    assert "auto *reader" not in toggle
+    helper = source[source.index("void PlatformServer::applySystemTheme"):]
+    assert helper.index("plasma-apply-colorscheme") < helper.index(
+        "plasma-apply-lookandfeel"
+    )
 
 
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
+    test_theme_toggle_uses_the_safe_palette_path()
     print("platform contracts: ok")

@@ -68,7 +68,10 @@ Item {
         cardOffsetX: !panel.dockHosted ? 0
             : panel.dockEdge === "left" ? -20
             : panel.dockEdge === "right" ? 20 : 0
-        cardOffsetY: panel.dockHosted && panel.dockEdge === "bottom" ? 20 : 0
+        // Card offsets include a historical 20px top inset. Cancel it for the
+        // standalone Bar so the visible cards begin 4px below the Bar.
+        cardOffsetY: !panel.dockHosted ? -18
+            : (panel.dockEdge === "bottom" ? 20 : 0)
     }
 
     // Geometry oracle: it is anchored to the clicked control, which makes
@@ -93,7 +96,7 @@ Item {
                 : panel.dockEdge === "right" ? Edges.Left : Edges.Top
             adjustment: PopupAdjustment.Slide
             margins.top: 0
-            margins.bottom: panel.dockHosted ? 0 : -8
+            margins.bottom: panel.dockHosted ? 0 : -4
             margins.left: 0
             margins.right: 0
         }
@@ -120,7 +123,14 @@ Item {
 
     onSessionModalVisibleChanged: {
         _triggerTransitionGuard()
-        coordinator.suspended = panel.sessionModalVisible
+        if (panel.sessionModalVisible) {
+            // The session sheet is a second layer of the Control Center. Keep
+            // every primary card mapped behind it even if an external caller
+            // requests the sheet while the opening transition is still live.
+            if (!coordinator.open)
+                coordinator.openAll()
+            coordinator.modalActive = true
+        }
         if (!panel.sessionModalVisible) {
             panel.pendingConfirmAction = ""
         }
@@ -134,17 +144,21 @@ Item {
         } else {
             panel.sessionModalVisible = false
             panel.pendingConfirmAction = ""
-            coordinator.suspended = false
             ControlCenterService.refresh()
             coordinator.openAll()
         }
     }
     function close() {
         _triggerTransitionGuard()
+        const closingModal = sessionModalVisible
+        coordinator.closeAll(closingModal)
         sessionModalVisible = false
         pendingConfirmAction = ""
-        coordinator.suspended = false
-        coordinator.closeAll()
+    }
+
+    function openSessionPanel() {
+        pendingConfirmAction = ""
+        sessionModalVisible = true
     }
 
     // Fullscreen transparent click-catcher window mapped ONLY while the control center is open.
@@ -195,7 +209,7 @@ Item {
     }
 
     // ── Card 1: Wi-Fi ────────────────────────────────────────────────
-    // Opens the Wi-Fi picker. Power toggle lives inside that picker.
+    // Disc toggles power; tapping the rest of the pill opens the network list.
     ControlCenterCard {
         id: wifiCard
         coordinator: coordinator
@@ -209,70 +223,111 @@ Item {
         liquidStrength: panel.effectiveLiquid
 
         Rectangle {
+            id: wifiToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
                 ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
-            Canvas {
-                id: controlWifiGlyph
+            opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
+            scale: wifiTogglePointer.pressed ? 0.92
+                : (wifiTogglePointer.containsMouse ? 1.04 : 1.0)
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+            WifiSignalIcon {
                 anchors.centerIn: parent
                 width: 20; height: 20
-                property bool active: NetworkService.wifiEnabled
-                property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
-                onActiveChanged: requestPaint()
-                onGlyphColorChanged: requestPaint()
-                onPaint: {
-                    const ctx = getContext("2d")
-                    ctx.reset()
-                    ctx.strokeStyle = glyphColor
-                    ctx.fillStyle = glyphColor
-                    ctx.lineWidth = 1.55
-                    ctx.lineCap = "round"
-                    ctx.lineJoin = "round"
-                    ctx.scale(1.08, 1.08)
-                    ctx.translate(0, -1.8)
-                    const rings = NetworkService.signalStrength < 25 ? 1
-                        : (NetworkService.signalStrength < 50 ? 2 : 3)
-                    for (let ring = 0; ring < rings; ring++) {
-                        const radius = 3.1 + ring * 2.45
+                opacity: NetworkService.wifiToggleInProgress ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+                wifiEnabled: NetworkService.wifiEnabled
+                connected: NetworkService.deviceState === "connected"
+                    && NetworkService.connectionType === "wifi"
+                signalStrength: NetworkService.signalStrength
+                glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
+                    : (ThemeService.isDark ? "white" : "#000000")
+            }
+            // Toggling NetworkManager's radio is not instant either; mirror
+            // the Bluetooth disc's busy arc so both read as "working", not
+            // "stuck", while the toggle is in flight.
+            Item {
+                id: wifiBusySpinner
+                anchors.centerIn: parent
+                width: 21; height: 21
+                opacity: NetworkService.wifiToggleInProgress ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                Canvas {
+                    id: wifiBusyArc
+                    anchors.fill: parent
+                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    onGlyphColorChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = glyphColor
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        const cx = width / 2, cy = height / 2, r = width / 2 - 1.5
                         ctx.beginPath()
-                        ctx.arc(8, 14.2, radius, Math.PI * 1.22, Math.PI * 1.78)
+                        ctx.arc(cx, cy, r, 0, Math.PI * 1.5)
                         ctx.stroke()
                     }
-                    ctx.beginPath()
-                    ctx.arc(8, 13.8, 1.15, 0, Math.PI * 2)
-                    ctx.fill()
+                    Connections {
+                        target: ThemeService
+                        function onIsDarkChanged() { wifiBusyArc.requestPaint() }
+                    }
+                    Component.onCompleted: requestPaint()
                 }
-                Connections {
-                    target: NetworkService
-                    function onSignalStrengthChanged() { controlWifiGlyph.requestPaint() }
+
+                RotationAnimation on rotation {
+                    running: NetworkService.wifiToggleInProgress
+                    loops: Animation.Infinite
+                    from: 0; to: 360
+                    duration: 900
                 }
+            }
+            MouseArea {
+                id: wifiTogglePointer
+                anchors.fill: parent
+                enabled: NetworkService.available
+                    && !NetworkService.wifiToggleInProgress
+                hoverEnabled: true
+                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: NetworkService.setWifiEnabled(
+                    !NetworkService.wifiEnabled)
             }
         }
         Column {
             anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 1
-            Text {
+            GlassText {
                 width: parent.width
                 text: "Wi‑Fi"
                 color: wifiCard.materialForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: NetworkService.wifiEnabled ? (NetworkService.ssid || "未连接") : "已关闭"
                 elide: Text.ElideRight
                 color: wifiCard.materialSecondaryForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
-                opacity: 0.72
+                opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
         }
-        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.networkRequested() }
+        MouseArea {
+            anchors {
+                top: parent.top
+                right: parent.right
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: 49
+            }
+            enabled: NetworkService.available
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: panel.networkRequested()
+        }
     }
 
     // ── Card 2: Bluetooth ────────────────────────────────────────────
@@ -291,17 +346,25 @@ Item {
         liquidStrength: panel.effectiveLiquid
 
         Rectangle {
+            id: bluetoothToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
                 ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
+            scale: bluetoothTogglePointer.pressed ? 0.92
+                : (bluetoothTogglePointer.containsMouse ? 1.04 : 1.0)
+            Behavior on color { ColorAnimation { duration: 140 } }
+            Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
             Canvas {
                 id: controlBtGlyph
                 anchors.centerIn: parent
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
                 property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
+                opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
                 onGlyphColorChanged: requestPaint()
                 onPaint: {
@@ -329,9 +392,52 @@ Item {
                     function onIsDarkChanged() { controlBtGlyph.requestPaint() }
                 }
             }
+            // Powering BlueZ's adapter genuinely takes a second or more; a
+            // flat opacity dim alone reads as "stuck", not "working". Spin an
+            // indeterminate arc in its place, macOS Control Center style.
+            Item {
+                id: bluetoothBusySpinner
+                anchors.centerIn: parent
+                width: 21; height: 21
+                opacity: ControlCenterService.bluetoothChangeInProgress ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 140 } }
+
+                Canvas {
+                    id: bluetoothBusyArc
+                    anchors.fill: parent
+                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    onGlyphColorChanged: requestPaint()
+                    onPaint: {
+                        const ctx = getContext("2d")
+                        ctx.reset()
+                        ctx.strokeStyle = glyphColor
+                        ctx.lineWidth = 2.0
+                        ctx.lineCap = "round"
+                        const cx = width / 2, cy = height / 2, r = width / 2 - 1.5
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, 0, Math.PI * 1.5)
+                        ctx.stroke()
+                    }
+                    Connections {
+                        target: ThemeService
+                        function onIsDarkChanged() { bluetoothBusyArc.requestPaint() }
+                    }
+                    Component.onCompleted: requestPaint()
+                }
+
+                RotationAnimation on rotation {
+                    running: ControlCenterService.bluetoothChangeInProgress
+                    loops: Animation.Infinite
+                    from: 0; to: 360
+                    duration: 900
+                }
+            }
             MouseArea {
+                id: bluetoothTogglePointer
                 anchors.fill: parent
                 enabled: ControlCenterService.bluetoothAvailable && !ControlCenterService.bluetoothChangeInProgress
+                hoverEnabled: true
                 cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: ControlCenterService.setBluetoothEnabled(!ControlCenterService.bluetoothPowered)
             }
@@ -339,27 +445,29 @@ Item {
         Column {
             anchors { left: parent.left; right: parent.right; leftMargin: 58; rightMargin: 10; verticalCenter: parent.verticalCenter }
             spacing: 1
-            Text {
+            GlassText {
                 width: parent.width
                 text: "Bluetooth"
                 color: bluetoothCard.materialForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: ControlCenterService.bluetoothPowered ? "已开启" : "已关闭"
                 color: bluetoothCard.materialSecondaryForegroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
-                opacity: 0.72
+                opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
         }
         MouseArea {
-            anchors.fill: parent
-            enabled: ControlCenterService.bluetoothAvailable && !ControlCenterService.bluetoothChangeInProgress
+            anchors {
+                top: parent.top
+                right: parent.right
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: 49
+            }
+            enabled: ControlCenterService.bluetoothAvailable
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: panel.bluetoothRequested()
         }
@@ -401,12 +509,10 @@ Item {
             width: 43; height: 43; radius: 13
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 13 }
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
-            Text {
+            GlassText {
                 anchors.centerIn: parent
                 text: "♫"
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.86
                 font.pixelSize: 21
             }
@@ -434,22 +540,18 @@ Item {
         Column {
             anchors { left: artwork.right; right: parent.right; top: artwork.top; leftMargin: 8; rightMargin: 10 }
             spacing: 2
-            Text {
+            GlassText {
                 width: parent.width
                 text: panel.player?.trackTitle || "未在播放"
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
-            Text {
+            GlassText {
                 width: parent.width
                 text: panel.player?.trackArtist || "媒体控制"
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 opacity: 0.70
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
@@ -495,10 +597,17 @@ Item {
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors.centerIn: parent
-            width: 25
-            height: 25
+            width: 24
+            height: 24
             source: "../../assets/screenshot.svg"
             sourceSize.width: 46
             sourceSize.height: 46
@@ -521,19 +630,29 @@ Item {
         cardRadius: 27
         cardWidth: 54
         cardHeight: 54
-        cardBorderColor: ThemeService.isDark ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
+        cardBorderColor: ThemeService.isDark
+            ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-        Text {
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: themePointer.containsMouse && !themePointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
+        GlassText {
             anchors.centerIn: parent
+            width: 24
+            height: 24
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
             text: ThemeService.isDark ? "☾" : "☼"
-            color: ThemeService.isDark ? "#0a84ff" : ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
-            font.pixelSize: 22
+            color: ThemeService.foregroundColor
+            font.pixelSize: 24
             font.weight: Font.Bold
         }
         MouseArea {
@@ -560,6 +679,13 @@ Item {
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors.centerIn: parent
             width: 24
@@ -581,10 +707,7 @@ Item {
             hoverEnabled: true
             enabled: !ControlCenterService.sessionActionInProgress
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                panel.pendingConfirmAction = ""
-                panel.sessionModalVisible = true
-            }
+            onClicked: panel.openSessionPanel()
         }
     }
 
@@ -603,6 +726,13 @@ Item {
 
         cardScale: dndPointer.pressed ? 0.97 : (dndPointer.containsMouse ? 1.025 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 27
+            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
+            opacity: dndPointer.containsMouse && !dndPointer.pressed ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
         Image {
             anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
             width: 21
@@ -619,12 +749,10 @@ Item {
                     ? "#0a84ff" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
             }
         }
-        Text {
+        GlassText {
             anchors { left: parent.left; leftMargin: 42; verticalCenter: parent.verticalCenter }
             text: "勿扰"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
         }
         MouseArea { id: dndPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ControlCenterService.toggleDoNotDisturb() }
@@ -642,21 +770,17 @@ Item {
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        Text {
+        GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             text: "显示亮度"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.70
             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
         }
-        Text {
+        GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
             text: ControlCenterService.brightnessAvailable ? Math.round(panel.brightnessPreview) + "%" : "无亮度设备"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.50
             font { pixelSize: 9; family: "Noto Sans CJK SC" }
         }
@@ -679,12 +803,10 @@ Item {
                 ControlCenterService.setBrightness(Math.round(v * 100))
             }
         }
-        Text {
+        GlassText {
             anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
             text: "☀"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.65
             font.pixelSize: 13
         }
@@ -702,20 +824,16 @@ Item {
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        Text {
+        GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             text: "声音"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
         }
-        Text {
+        GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
             text: Math.round(panel.volumePreview) + "%"
             color: ThemeService.foregroundColor
-            style: ThemeService.isDark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.72
             font { pixelSize: 10; family: "Noto Sans CJK SC" }
         }
@@ -773,6 +891,11 @@ Item {
     // carries the app icon/name, and every row has its own close button.
     ControlCenterCard {
         coordinator: coordinator
+        // An empty history is not worth a permanently visible, permanently
+        // empty card taking up the bottom of the panel; only occupy that
+        // window/blur-region/hit-test space once there is something to show.
+        visible: coordinator.cardAnchor !== null
+            && ControlCenterService.historyGroups.length > 0
         offsetTop: 347
         offsetRight: 20
         cardRadius: 19
@@ -785,14 +908,14 @@ Item {
         Item {
             anchors { fill: parent; margins: 10 }
 
-            Text {
+            GlassText {
                 id: historyTitle
                 text: "通知历史"
                 color: ThemeService.foregroundColor
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                 anchors { left: parent.left; top: parent.top }
             }
-            Text {
+            GlassText {
                 text: "清空"
                 color: clearMouse.containsMouse ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.45))
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
@@ -835,7 +958,7 @@ Item {
                             asynchronous: true
                             anchors.verticalCenter: parent.verticalCenter
                         }
-                        Text {
+                        GlassText {
                             text: modelData.appName
                             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.62) : Qt.rgba(0, 0, 0, 0.62)
                             font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
@@ -853,7 +976,7 @@ Item {
                                 width: historyList.width
                                 height: rowSummary.implicitHeight + (rowBody.visible ? rowBody.implicitHeight + 1 : 0)
 
-                                Text {
+                                GlassText {
                                     id: rowSummary
                                     width: parent.width - removeButton.width - 6
                                     text: modelData.summary.length > 0 ? modelData.summary : "通知"
@@ -862,7 +985,7 @@ Item {
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
-                                Text {
+                                GlassText {
                                     id: rowBody
                                     anchors.top: rowSummary.bottom
                                     anchors.topMargin: 1
@@ -874,7 +997,7 @@ Item {
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
                                 }
-                                Text {
+                                GlassText {
                                     id: removeButton
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
@@ -894,7 +1017,7 @@ Item {
                         }
                     }
                 }
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     visible: historyList.count === 0
                     text: "暂无历史通知"
@@ -906,8 +1029,9 @@ Item {
     }
 
     // ── Card 10 (Sub-panel): Power & Session Management ──────────────
-    // Replaces the 9 main cards with a dedicated power & session sheet
-    // covering Lock, Suspend, Switch User, Logout, Reboot and Power Off.
+    // Overlays the 9 dimmed, non-interactive main cards with a dedicated power
+    // & session sheet covering Lock, Suspend, Switch User, Logout, Reboot and
+    // Power Off.
     ControlCenterCard {
         id: sessionCard
         coordinator: coordinator
@@ -921,6 +1045,10 @@ Item {
         cardShown: panel.sessionModalVisible
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
+        onMotionClosed: {
+            if (!panel.sessionModalVisible)
+                coordinator.modalActive = false
+        }
 
         // ── VIEW 1: 6-action Grid ──
         Item {
@@ -966,19 +1094,15 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 0
 
-                        Text {
+                        GlassText {
                             text: ControlCenterService.currentUserName
                             color: ThemeService.foregroundColor
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: Qt.rgba(0, 0, 0, 0.50)
                             font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                         }
-                        Text {
+                        GlassText {
                             text: "电源与会话管理"
                             color: ThemeService.foregroundColor
                             opacity: 0.60
-                            style: ThemeService.isDark ? Text.Outline : Text.Normal
-                            styleColor: Qt.rgba(0, 0, 0, 0.40)
                             font { pixelSize: 9; family: "Noto Sans CJK SC" }
                         }
                     }
@@ -999,7 +1123,7 @@ Item {
                     border.width: 1
                     border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "×"
                         color: ThemeService.foregroundColor
@@ -1061,14 +1185,13 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "锁屏"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "锁定屏幕"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "锁屏"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "锁定屏幕"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
                         id: lockArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.lockSession()
                         }
@@ -1095,14 +1218,13 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "睡眠"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "挂起系统"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "睡眠"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "挂起系统"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
                         id: sleepArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.suspendSystem()
                         }
@@ -1129,14 +1251,13 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "切换用户"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "保留会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "切换用户"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "保留会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
                         id: switchUserArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            panel.sessionModalVisible = false
                             panel.close()
                             ControlCenterService.switchUser()
                         }
@@ -1163,8 +1284,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "注销"; color: "#ff9f0a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "注销"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1193,8 +1314,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "重启"; color: "#ff9f0a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "重启"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1225,8 +1346,8 @@ Item {
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: 1
-                            Text { text: "关机"; color: "#ff453a"; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            Text { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "关机"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
+                            GlassText { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
                         }
                     }
                     MouseArea {
@@ -1237,7 +1358,7 @@ Item {
             }
 
             // Error / Status bar
-            Text {
+            GlassText {
                 anchors {
                     bottom: parent.bottom
                     bottomMargin: 6
@@ -1263,23 +1384,19 @@ Item {
                     : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout")
             }
 
-            Text {
+            GlassText {
                 anchors { top: parent.top; topMargin: 50; horizontalCenter: parent.horizontalCenter }
                 text: panel.pendingConfirmAction === "poweroff" ? "确定要关机吗？"
                     : (panel.pendingConfirmAction === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
                 color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
 
-            Text {
+            GlassText {
                 anchors { top: parent.top; topMargin: 72; horizontalCenter: parent.horizontalCenter }
                 text: "未保存的工作可能会丢失"
                 color: ThemeService.foregroundColor
                 opacity: 0.66
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
             }
 
@@ -1296,7 +1413,7 @@ Item {
                         : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.05))
                     border.width: 1
                     border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "取消"
                         color: ThemeService.foregroundColor
@@ -1318,11 +1435,11 @@ Item {
                     color: executeConfirmMouse.containsMouse ? Qt.rgba(255, 69, 58, 0.35) : Qt.rgba(255, 69, 58, 0.20)
                     border.width: 1
                     border.color: "#ff453a"
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: panel.pendingConfirmAction === "poweroff" ? "关机"
                             : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
-                        color: "#ff6961"
+                        color: ThemeService.foregroundColor
                         font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     MouseArea {
@@ -1332,8 +1449,6 @@ Item {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             const action = panel.pendingConfirmAction
-                            panel.pendingConfirmAction = ""
-                            panel.sessionModalVisible = false
                             panel.close()
                             if (action === "poweroff") {
                                 ControlCenterService.powerOffSystem()

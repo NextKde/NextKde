@@ -1,12 +1,13 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Widgets
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
-// Passive first-stage network indicator. Connection controls will later use
-// NetworkService too, while this component remains only a visual consumer.
+// Passive first-stage network indicator. Wi-Fi uses the same live signal
+// glyph as the power controls; Ethernet keeps its dedicated cable icon.
 Item {
     id: root
 
@@ -15,12 +16,13 @@ Item {
     property bool dockHosted: false
     property string dockEdge: "bottom"
     property bool verticalDock: false
+    property real iconSize: 18
     rotation: verticalDock ? -90 : 0
 
     // Reserve the same visual footprint as the adjacent status glyphs while
     // allowing differently proportioned system-theme icons to stay centred.
-    implicitWidth: 21
-    implicitHeight: 18
+    implicitWidth: 23
+    implicitHeight: 20
     width: implicitWidth
     height: implicitHeight
     visible: NetworkService.available
@@ -32,15 +34,44 @@ Item {
         || (NetworkService.deviceState === "connected"
             && NetworkService.connectivity === "none")
     readonly property bool connected: NetworkService.deviceState === "connected"
+    readonly property color statusIconColor: IconAppearanceService.mode === "tint"
+        ? IconAppearanceService.styledSymbolicColor()
+        : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+    readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
+        ? IconAppearanceService.opacity : 1.0
+
     DockStatusSvgIcon {
         id: networkGlyph
+        visible: NetworkService.connectionType === "ethernet"
         anchors.centerIn: parent
-        width: 20
-        height: 20
-        source: Qt.resolvedUrl(NetworkService.connectionType === "ethernet"
-            ? "../../assets/status-ethernet.svg"
-            : "../../assets/status-wifi.svg")
+        width: root.iconSize
+        height: root.iconSize
+        source: Qt.resolvedUrl("../../assets/status-ethernet.svg")
         opacity: root.connected ? 0.96 : 0.68
+    }
+
+    WifiSignalIcon {
+        anchors.centerIn: parent
+        anchors.verticalCenterOffset: 2
+        visible: NetworkService.connectionType !== "ethernet"
+        width: root.iconSize
+        height: root.iconSize
+        wifiEnabled: NetworkService.wifiEnabled
+        connected: root.connected
+            && NetworkService.connectionType === "wifi"
+        signalStrength: NetworkService.signalStrength
+        glyphColor: root.statusIconColor
+        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: IconAppearanceService.mode !== "color"
+                || ThemeService.isDark
+            shadowColor: Qt.rgba(0, 0, 0, 0.82)
+            shadowOpacity: 0.62
+            shadowBlur: 0.32
+            shadowVerticalOffset: 0.7
+            shadowScale: 1.04
+        }
     }
 
     Rectangle {
