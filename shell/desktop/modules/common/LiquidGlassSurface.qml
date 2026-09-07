@@ -178,7 +178,7 @@ Rectangle {
         opacity: root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.32 * root.materialHighlightFactor * root.materialReflectionScale) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.28 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.14 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.06 * root.materialHighlightFactor * root.materialReflectionScale) }
             GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.018 * root.materialHighlightFactor * root.materialReflectionScale) }
@@ -244,7 +244,7 @@ Rectangle {
             orientation: Gradient.Horizontal
             GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
             GradientStop { position: 0.18; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
-            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0.42 * root.materialHighlightFactor) }
+            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0.35 * root.materialHighlightFactor) }
             GradientStop { position: 0.82; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
             GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
         }
@@ -259,11 +259,11 @@ Rectangle {
         height: 1
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-            GradientStop { position: 0.20; color: Qt.rgba(0, 0, 0, 0.15 * root.normalizedLiquidStrength) }
-            GradientStop { position: 0.50; color: Qt.rgba(0, 0, 0, 0.28 * root.normalizedLiquidStrength) }
-            GradientStop { position: 0.80; color: Qt.rgba(0, 0, 0, 0.15 * root.normalizedLiquidStrength) }
-            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.0) }
+            GradientStop { position: 0.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
+            GradientStop { position: 0.20; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
+            GradientStop { position: 0.50; color: Qt.rgba(0.88, 0.94, 1.0, 0.10 * root.normalizedLiquidStrength) }
+            GradientStop { position: 0.80; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
         }
     }
 
