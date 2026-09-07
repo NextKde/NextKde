@@ -4,6 +4,7 @@ import QtQuick
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 
 // One concrete output-bound Dock layer surface.
 //
@@ -101,10 +102,8 @@ PanelWindow {
         launcherOpen: AppLauncherService.open
     }
 
-    // §9.3 Only "always" reserves a workspace strip. Floating Dock styles add
-    // workspaceGap beyond the visible glass, keeping maximised windows from
-    // touching it. Hide modes keep the zone at 0 so windows do not reflow on
-    // every show/hide.
+    // Only a permanently visible Dock reserves workspace. Hide modes keep the
+    // zone at 0 so windows do not reflow whenever the Dock reveals or hides.
     exclusiveZone: ConfigService.visibilityMode === "always"
         ? (root.vertical
             ? dockContainer.width + root.edgeMargin + root.workspaceGap
@@ -148,6 +147,42 @@ PanelWindow {
     readonly property real restY: root.vertical
         ? (root.height - dockContainer.height) / 2
         : root.height - root.edgeMargin - dockContainer.height
+
+    function publishWorkspaceLayout() {
+        if (!root.screen || dockContainer.width <= 0 || dockContainer.height <= 0)
+            return
+        WorkspaceLayoutService.updateDock(root.screen, root.position, {
+            x: root.surfaceGlobalX + root.restX,
+            y: root.surfaceGlobalY + root.restY,
+            width: dockContainer.width,
+            height: dockContainer.height
+        // A permanently visible Dock reserves the same visual gap above/beside
+        // its glass. Hide modes deliberately publish no gap: otherwise a new
+        // window would avoid an invisible Dock after it has slid away.
+        }, ConfigService.visibilityMode === "always" ? root.workspaceGap : 0)
+    }
+
+    Timer {
+        id: layoutPublishTimer
+        interval: 0
+        repeat: false
+        onTriggered: root.publishWorkspaceLayout()
+    }
+
+    onScreenChanged: layoutPublishTimer.restart()
+    onPositionChanged: layoutPublishTimer.restart()
+    onRestXChanged: layoutPublishTimer.restart()
+    onRestYChanged: layoutPublishTimer.restart()
+    onSurfaceGlobalXChanged: layoutPublishTimer.restart()
+    onSurfaceGlobalYChanged: layoutPublishTimer.restart()
+
+    Connections {
+        target: dockContainer
+        function onWidthChanged() { layoutPublishTimer.restart() }
+        function onHeightChanged() { layoutPublishTimer.restart() }
+    }
+
+    Component.onCompleted: layoutPublishTimer.restart()
 
     Item {
         id: dockWrapper

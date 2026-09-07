@@ -7,7 +7,7 @@ import QtQuick
 QtObject {
     id: tokens
 
-    readonly property int version: 5
+    readonly property int version: 6
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -29,10 +29,10 @@ QtObject {
             : tokens.isMaterial ? 0.18 : 0.20
         readonly property int edgeMargin: tokens.isWindows12 ? 0
             : tokens.isMaterial ? 8 : 5
-        // Reserve the same breathing room on both sides of the Dock: between
-        // the glass and the screen edge, and between the glass and maximised
-        // windows. Keep this as a separate semantic role so it can diverge in
-        // a future design without changing DockWindow's layout contract.
+        // Match the float between the glass and the screen edge with an equal
+        // visual breathing space between the glass and windows. DockWindow
+        // applies this only while the Dock is permanently visible, so hidden
+        // modes do not create an invisible spatial dead strip.
         readonly property int workspaceGap: edgeMargin
         readonly property string indicatorStyle: tokens.isWindows12 ? "underline"
             : tokens.isMaterial ? "tonal" : "dot"
@@ -95,5 +95,11 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
+        // Anchored popups share Launchpad's entrance rhythm: a short cubic
+        // settle from 0.96 scale with a directional fade/translation.
+        readonly property int popupOpenDuration: 150
+        readonly property int popupCloseDuration: 140
+        readonly property real popupStartScale: 0.96
+        readonly property real popupAnchorOffset: 20
     }
 }

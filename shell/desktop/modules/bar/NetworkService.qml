@@ -38,17 +38,34 @@ QtObject {
     function _applySnapshot(result) {
         available = !!result.available
         networkingEnabled = result.networkingEnabled !== false
-        wifiEnabled = result.wifiEnabled !== false
+        // A radio power change is not instant: NetworkManager can still
+        // report the pre-toggle state for a moment after setWifiEnabled()'s
+        // own request already resolved. Applying a periodic refresh's stale
+        // read here raced that resolution and flipped the toggle back and
+        // forth (off -> briefly on -> off again). Trust only the toggle's
+        // own response while one is in flight.
+        if (!wifiToggleInProgress)
+            wifiEnabled = result.wifiEnabled !== false
         connectionType = result.connectionType || "none"
         deviceState = result.deviceState || "unknown"
         connectivity = result.connectivity || "unknown"
         deviceName = result.deviceName || ""
         connectionName = result.connectionName || ""
         ssid = result.ssid || ""
-        signalStrength = Number(result.signalStrength ?? -1)
-        ipv4 = result.ipv4 || ""
-        if (deviceState === "connected")
+        // network.refresh never carries real ipv4/signalStrength (nmcli's
+        // device table has neither); network.details fills them in a moment
+        // later via _refreshDetails(). Leaving them alone here avoids
+        // clobbering the last known-good value to a placeholder every
+        // refreshTimer tick, which made the tooltip/icon flicker empty and
+        // resize every few seconds.
+        if (deviceState === "connected") {
+            if (connectionType !== "wifi")
+                signalStrength = -1
             _refreshDetails()
+        } else {
+            ipv4 = ""
+            signalStrength = -1
+        }
     }
 
     function _refreshDetails() {
@@ -63,6 +80,8 @@ QtObject {
             ipv4 = String(result.ipv4 || "").replace(/\/\d+$/, "")
             if (connectionType === "wifi" && result.ssid)
                 ssid = String(result.ssid)
+            if (connectionType === "wifi" && result.signalStrength !== undefined)
+                signalStrength = Number(result.signalStrength)
         })
     }
 

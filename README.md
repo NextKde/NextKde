@@ -9,14 +9,42 @@ KOS 是 KDE Plasma 6 Wayland 上的 Quickshell 桌面 Shell。它提供顶部栏
 
 ### 1. 准备环境
 
-需要 KDE Plasma 6 **Wayland** 会话，以及 Git、CMake、Ninja、C++ 编译器、Qt 6、
-Go 和 Quickshell 0.3.x。
+需要 KDE Plasma 6 **Wayland** 会话（KWin 6.4 或更高版本）、Quickshell 0.3.x、
+Qt 6.6 或更高版本，以及完整的 KF6 和 KWin 开发依赖。默认安装会同时编译平台
+服务、设置应用、KWin 特效和窗口装饰。
 
 Arch 常用基础包：
 
 ```sh
-sudo pacman -S git quickshell cmake ninja gcc qt6-base go
+sudo pacman -S --needed \
+  git quickshell cmake ninja gcc go qt6-base qt6-declarative \
+  kwindowsystem kiconthemes kglobalaccel \
+  extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
+  kcoreaddons kdecoration gettext libxcb vulkan-headers
 ```
+
+建议同时安装这些运行时集成包：
+
+```sh
+sudo pacman -S --needed \
+  networkmanager wireplumber bluez-utils brightnessctl \
+  wl-clipboard cliphist glib2 xdg-utils spectacle
+```
+
+前一组是默认构建的必需依赖；后一组按功能可选，分别提供网络、音频、蓝牙、
+亮度、剪贴板历史、回收站/文件操作和截图支持。如只构建平台服务和设置应用、
+禁用 KWin 插件，可设置 `KOS_BUILD_KWIN_PLUGINS=OFF`，此时不需要 KWin 插件
+开发依赖。
+
+其中 `extra-cmake-modules` 是 KWin 插件 CMake 配置的直接依赖；`vulkan-headers`
+是 KWin 导出的 `Vulkan::Vulkan` 编译接口所需依赖。Arch 的 `kwin` 包不会自动安装
+`vulkan-headers`，因此这里必须显式列出。KWin 同时需要 Wayland、libdrm 和
+libepoxy 的开发文件，但这些已是 Arch `kwin` 包的硬依赖，无需重复安装。
+
+Calendar、Todo、Weather 和 Music 是独立的可选应用，不由 `kosctl install` 构建；
+它们需要额外的 Qt/KF6、GStreamer、TagLib 或 Go 依赖。安装前请阅读
+[apps/README.zh-CN.md](apps/README.zh-CN.md) 及各应用目录的说明，再运行
+`./tools/install-apps.sh`。
 
 其他发行版请安装对应软件包。Quickshell 的安装方式见
 [官方文档](https://quickshell.org/docs/)。
@@ -36,7 +64,8 @@ cd NextKde
 ./tools/kosctl start
 ```
 
-`doctor` 会指出缺少的依赖。`install` 会编译并安装 KOS；首次安装 KWin 插件时
+`doctor` 会检查命令、Arch 软件包及可选运行时集成。`install` 在 Arch 上会提示并
+安装缺少的必需构建包，然后编译安装 KOS；首次安装 KWin 插件时
 可能要求输入 sudo 密码。`start` 立即重启 KOS 服务，桌面界面会短暂刷新。
 
 安装完成后，KOS 会在之后登录时自动启动。

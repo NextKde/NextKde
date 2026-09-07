@@ -36,7 +36,7 @@ QtObject {
     property string shellStyle: "macos"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
-    property string barLayoutMode: "full" // "full" | "floating" | "transparent"
+    property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
     property string dockWindowAnimationStyle: "scale"
     property bool ready: false
 
@@ -62,6 +62,16 @@ QtObject {
         const number = Number(value)
         return Number.isFinite(number)
             ? Math.max(0.0, Math.min(1.0, number)) : NaN
+    }
+
+    // Blur radius is perceived much more strongly in the lower half of the
+    // compositor's 15-step range.  A perceptual response keeps the middle of
+    // the settings slider clear and refractive, while preserving both end
+    // points for users who explicitly want no blur or maximum frosting.
+    function _compositorBlurLevel(strength) {
+        const value = _normalized(strength)
+        return Number.isFinite(value)
+            ? Math.round(1 + Math.pow(value, 1.5) * 14) : 1
     }
 
     function _toBool(value) {
@@ -238,8 +248,10 @@ QtObject {
     }
 
     function _syncGlassEffect() {
-        const dockBlurLevel = Math.round(1 + service.globalBlurStrength * 14)
-        const contentBlurLevel = Math.round(1 + service.globalBlurStrength * 14)
+        const dockBlurLevel = service._compositorBlurLevel(
+            service.globalBlurStrength)
+        const contentBlurLevel = service._compositorBlurLevel(
+            service.globalBlurStrength)
         const refractionLevel = Math.round(service.globalLiquidStrength * 20)
         PlatformClient.request("theme.sync-glass", {
             contentBlurLevel: contentBlurLevel,

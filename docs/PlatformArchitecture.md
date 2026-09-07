@@ -19,6 +19,26 @@ The KWin script is installed as data and loaded by the daemon. Its private
 session-D-Bus object is `org.kos.Platform` at `/Platform`; Shell never calls
 that object directly. KWin effects under `integrations/kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
+`integrations/kwin/decoration-liquid-glass` is a KDecoration3 plugin rather
+than an effect: it installs to the `org.kde.kdecoration3` plugin directory and
+kwinrc selects it with `[org.kde.kdecoration3] library=kos_liquid_glass`.
+
+It is compiled C++ rather than a QML Aurorae theme for one reason:
+`KDecoration3::Decoration::setBorderRadius()` is the only way to make KWin clip
+a window — the client's own opaque content included — to rounded corners, and
+`org.kde.kwin.aurorae.so` does not link that symbol at all. A QML theme can
+only round the rectangle it paints inside its own title bar strip, so the
+window's bottom two corners stay square no matter what the QML says.
+
+The frosted material is likewise not painted here. The decoration publishes its
+title bar via `setBlurRegion()` and the Glass effect frosts what is behind it.
+Glass's `BlurDecorations` option widens that to the whole window, so an
+application can leave its own background transparent and still sit on the same
+glass as the Dock and the Bar; `kosctl` turns it on alongside selecting the
+decoration. The vendored effect keys that option on the window actually having
+a server-side decoration and subtracts the client's opaque region, which is
+what keeps full-screen layer-shell surfaces from blurring the wallpaper away
+and stops the title bar flickering behind opaque clients.
 
 ## JSONL contract
 

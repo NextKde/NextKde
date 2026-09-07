@@ -94,6 +94,8 @@ Item {
                 screenName: r.screenName || "",
                 isMinimized: !!r.toplevel?.minimized || r.isVisible === false,
                 isFullscreen: !!r.toplevel?.fullscreen,
+                isMaximized: !!r.isMaximized,
+                isVisible: r.isVisible !== false,
                 onAllDesktops: !!r.onAllDesktops,
                 desktopIds: Array.isArray(r.desktopIds) ? r.desktopIds : []
             })
@@ -112,7 +114,7 @@ Item {
             ctl.dockWidth, ctl.dockHeight, ctl.edgeMargin)
         const cands = ctl._windowCandidates()
         const next = DockMath.hasConflict(cands, target,
-            DockMath.avoidanceRect(base), DockMath.releaseRect(base),
+            DockMath.intentionalOverlapRect(base, ctl.position), base,
             ctl.hasWindowConflict, WindowService.currentDesktopId)
         const changed = next !== ctl.hasWindowConflict
         if (changed)

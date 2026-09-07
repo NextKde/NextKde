@@ -36,7 +36,11 @@ private:
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {});
+    void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
+                          bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
+    void runNetworkDetails(QLocalSocket *socket, const QJsonObject &request,
+                           const QString &device);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
@@ -62,6 +66,7 @@ private:
     // window event to broadcast. Retain the authoritative last snapshot so a
     // new subscriber never has to wait for unrelated window activity.
     QJsonObject m_latestWindowSnapshot;
+    QJsonObject m_latestDesktopSnapshot;
     QProcess *m_textHistoryWatcher = nullptr;
     QProcess *m_imageHistoryWatcher = nullptr;
     bool m_watchImages = true;
