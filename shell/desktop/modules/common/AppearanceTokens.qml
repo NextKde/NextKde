@@ -29,9 +29,11 @@ QtObject {
             : tokens.isMaterial ? 0.18 : 0.20
         readonly property int edgeMargin: tokens.isWindows12 ? 0
             : tokens.isMaterial ? 8 : 5
-        // Windows meet the full-reveal Dock edge directly. A hidden spatial
-        // buffer made users move windows through an invisible dead strip.
-        readonly property int workspaceGap: 0
+        // Match the float between the glass and the screen edge with an equal
+        // visual breathing space between the glass and windows. DockWindow
+        // applies this only while the Dock is permanently visible, so hidden
+        // modes do not create an invisible spatial dead strip.
+        readonly property int workspaceGap: edgeMargin
         readonly property string indicatorStyle: tokens.isWindows12 ? "underline"
             : tokens.isMaterial ? "tonal" : "dot"
         readonly property real indicatorLengthRatio: tokens.isWindows12 ? 0.42

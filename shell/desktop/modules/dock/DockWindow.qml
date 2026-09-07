@@ -156,7 +156,10 @@ PanelWindow {
             y: root.surfaceGlobalY + root.restY,
             width: dockContainer.width,
             height: dockContainer.height
-        }, root.workspaceGap)
+        // A permanently visible Dock reserves the same visual gap above/beside
+        // its glass. Hide modes deliberately publish no gap: otherwise a new
+        // window would avoid an invisible Dock after it has slid away.
+        }, ConfigService.visibilityMode === "always" ? root.workspaceGap : 0)
     }
 
     Timer {

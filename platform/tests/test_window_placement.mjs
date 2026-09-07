@@ -36,7 +36,7 @@ assert.deepEqual(safeArea({
     dockPosition: "bottom",
     dockRect: { x: -1400, y: 1000, width: 880, height: 70 },
     workspaceGap: 8
-}), { x: -1920, y: 35, width: 1920, height: 965 });
+}), { x: -1920, y: 35, width: 1920, height: 957 });
 
 assert.deepEqual(safeArea({
     outputRect: { x: 0, y: -1080, width: 1920, height: 1080 },
@@ -44,7 +44,7 @@ assert.deepEqual(safeArea({
     dockPosition: "left",
     dockRect: { x: 0, y: -800, width: 80, height: 600 },
     workspaceGap: 6
-}), { x: 80, y: -1050, width: 1840, height: 1050 });
+}), { x: 86, y: -1050, width: 1834, height: 1050 });
 
 assert.deepEqual(safeArea({
     outputRect: { x: 0, y: 0, width: 1600, height: 900 },
@@ -52,13 +52,13 @@ assert.deepEqual(safeArea({
     dockPosition: "right",
     dockRect: { x: 1520, y: 200, width: 80, height: 600 },
     workspaceGap: 4
-}), { x: 0, y: 0, width: 1520, height: 900 });
+}), { x: 0, y: 0, width: 1516, height: 900 });
 
 assert.deepEqual(place(
     { x: -2100, y: -20, width: 2400, height: 1400 },
     { width: 100, height: 100 },
-    { x: -1920, y: 35, width: 1920, height: 965 }
-), { x: -1920, y: 35, width: 1920, height: 965 });
+    { x: -1920, y: 35, width: 1920, height: 957 }
+), { x: -1920, y: 35, width: 1920, height: 957 });
 
 // An application's minimum size wins even when it cannot fit. The remaining
 // overflow is deterministic and anchored to the safe area's top-left.

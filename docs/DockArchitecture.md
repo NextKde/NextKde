@@ -384,8 +384,10 @@ Non-negotiable invariants:
    the handle hit target. All other transparent surface area must pass clicks
    through. In `always` mode the handle hit target is zero-sized.
 4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
-   Smart and persistent modes keep it at `0`, so revealing or hiding the Dock
-   never reflows windows.
+   That mode also gives newly opened windows the same `workspaceGap` as the
+   Dock's screen-edge float, preserving visible breathing room. Smart and
+   persistent modes publish both values as `0`, so revealing or hiding the
+   Dock never reflows windows or leaves an invisible placement gap.
 5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
    Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
    force the Dock visible; popups must join the `activeDockPopup` coordinator
