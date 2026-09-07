@@ -36,7 +36,7 @@ QtObject {
     property string shellStyle: "macos"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
-    property string barLayoutMode: "full" // "full" | "floating" | "transparent"
+    property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
     property string dockWindowAnimationStyle: "scale"
     property bool ready: false
 

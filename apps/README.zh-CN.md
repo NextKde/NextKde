@@ -26,6 +26,18 @@
 ./tools/install-apps.sh
 ```
 
+`install-apps.sh` 会一次构建全部四个应用，而不只是当前要使用的应用。除仓库
+根目录 README 中的基础依赖外，Arch 还需要先安装：
+
+```sh
+sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
+```
+
+其中 `kcalendarcore` 由日历和待办使用；GStreamer 与 TagLib 由音乐使用；天气所需
+的 Go 已包含在 KOS 核心构建依赖中。实际播放和转码所需的 GStreamer 编解码/输出
+插件需按使用场景另行安装。若仅使用对应的 CMake preset 构建单个应用，只需要该
+应用的直接依赖。
+
 脚本会完成 Release 构建和测试，安装到 `~/.local`，注册桌面入口、hicolor
 图标和 AppStream 元数据，启用核心 `kos-data.service`、注册由 D-Bus 按需激活的
 PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行路径，因此重新登录后无需回到源码目录构建。

@@ -37,7 +37,7 @@ function migrate(previous = {}) {
         shellStyle: previous.shellStyle ?? "macos",
         barIntegratedWithDock: previous.barIntegratedWithDock ?? false,
         barVisibilityMode: previous.barVisibilityMode ?? "always",
-        barLayoutMode: previous.barLayoutMode ?? "full",
+        barLayoutMode: previous.barLayoutMode ?? "transparent",
         dockWindowAnimationStyle: previous.dockWindowAnimationStyle ?? "scale",
     };
 }
@@ -88,6 +88,7 @@ function migrate(previous = {}) {
     assert.equal(v8.globalLiquidStrength, 0.82);
     assert.equal("dockBlurStrength" in v8, false);
     assert.equal("barBlurInherit" in v8, false);
+    assert.equal(v8.barLayoutMode, "transparent");
     console.log("ok: v7 configuration migrates to flattened v8");
 }
 

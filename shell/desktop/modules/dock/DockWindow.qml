@@ -102,11 +102,13 @@ PanelWindow {
         launcherOpen: AppLauncherService.open
     }
 
-    // Dock never changes the compositor work area. New ordinary windows avoid
-    // its full-reveal rectangle through the KWin one-shot placement rule;
-    // maximized windows may reach the screen edge and naturally trigger smart
-    // hide when they overlap the Dock.
-    exclusiveZone: 0
+    // Only a permanently visible Dock reserves workspace. Hide modes keep the
+    // zone at 0 so windows do not reflow whenever the Dock reveals or hides.
+    exclusiveZone: ConfigService.visibilityMode === "always"
+        ? (root.vertical
+            ? dockContainer.width + root.edgeMargin + root.workspaceGap
+            : dockContainer.height + root.edgeMargin + root.workspaceGap)
+        : 0
 
     // The custom KWin glass effect consumes this region for both backdrop
     // blur and liquid refraction. Keep publishing it when either channel is

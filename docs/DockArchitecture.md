@@ -383,10 +383,9 @@ Non-negotiable invariants:
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
    through. In `always` mode the handle hit target is zero-sized.
-4. Dock `exclusiveZone` is fixed at `0` in every visibility mode. New normal
-   windows receive one initial KWin placement inside the Bar/Dock safe area;
-   maximized windows may extend behind the Dock and therefore naturally drive
-   smart hide. Existing or user-moved windows are never continuously clamped.
+4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
+   Smart and persistent modes keep it at `0`, so revealing or hiding the Dock
+   never reflows windows.
 5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
    Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
    force the Dock visible; popups must join the `activeDockPopup` coordinator

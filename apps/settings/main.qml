@@ -2151,7 +2151,7 @@ ApplicationWindow {
         property bool barIntegratedWithDock: false
         property int barVisibilityModeIndex: 0
         readonly property var barVisibilityModes: ["always", "smart", "persistent"]
-        property int barLayoutModeIndex: 0
+        property int barLayoutModeIndex: 2
         readonly property var barLayoutModes: ["full", "floating", "transparent"]
         property bool barBlurInherit: true
         property real barBlurStrength: 0.42

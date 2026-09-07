@@ -342,7 +342,7 @@ private:
             {QStringLiteral("barVisibilityMode"),
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),
-                object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("full"))},
+                object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("transparent"))},
             {QStringLiteral("dockWindowAnimationStyle"),
                 object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
             {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
