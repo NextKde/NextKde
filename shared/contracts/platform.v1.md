@@ -30,7 +30,7 @@ Current operation groups are:
   `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
   `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
   `file.open-kde`
-- `kwin.subscribe`, `kwin.command`
+- `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `settings.open` (allow-listed KDE System Settings modules)
 - `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
@@ -44,6 +44,21 @@ KWin events are sent to subscribers as `window.snapshot`, `desktops`,
 `thumbnail`, `animation.started`, and related event names. KWin's internal script-to-daemon channel
 continues to use the session D-Bus service `org.kos.Platform` at `/Platform`;
 clients must not call that private interface directly.
+
+`kwin.layout.update` is an internal Shell-to-compositor layout update. Its
+payload is
+`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap}`.
+Rectangles use global logical coordinates; `dockPosition` is one of `bottom`,
+`left`, or `right`. The daemon bounds and validates every field before
+forwarding an `update-layout` command to the KWin script. A new normal main
+window may use the latest layout for its one-time initial placement; existing,
+maximized, fullscreen, dialog, transient, and special windows are not moved.
+`workspaceGap` remains accepted for v1 compatibility, but initial placement
+meets the Bar/Dock safe edges directly and does not create an invisible gap.
+
+On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
+latest `desktops` event when available. Consumers may explicitly request a
+fresh desktop event with `kwin.command {action: "desktops"}` during startup.
 
 Platform adapters validate all paths and operation names before executing a
 system action. Existing paths are canonicalized and new targets are resolved
@@ -64,4 +79,7 @@ from superseded layouts.
 model and forwards it only to the project-owned KWin effect. `theme.apply-system`,
 `theme.sync-glass`, and `theme.sync-dock-animation` accept bounded values and
 own the KDE configuration writes; Shell and Settings never invoke `qdbus6` or
-`kwriteconfig6`.
+`kwriteconfig6`. `theme.apply-system` and `theme.toggle` change only the KDE
+color scheme when that tool is available; applying a complete Look-and-Feel
+package is a compatibility fallback, because replacing icons and workspace
+defaults is outside the light/dark toggle contract.

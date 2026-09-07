@@ -56,6 +56,30 @@ export function releaseRect(baseRect) {
     return expandRect(baseRect, 16);
 }
 
+// Smart hide should not fire on a one-pixel touch while a window is being
+// positioned. Require a small, directional overlap into the full-reveal Dock
+// body; once hidden, leaving the real Dock rectangle is enough to reveal it.
+export function intentionalOverlapRect(baseRect, position, depth = 12) {
+    const amount = Math.max(0, Math.min(Number(depth) || 0,
+        position === "bottom" ? baseRect.height - 1 : baseRect.width - 1));
+    if (position === "bottom") {
+        return {
+            x: baseRect.x, y: baseRect.y + amount,
+            width: baseRect.width, height: baseRect.height - amount
+        };
+    }
+    if (position === "left") {
+        return {
+            x: baseRect.x, y: baseRect.y,
+            width: baseRect.width - amount, height: baseRect.height
+        };
+    }
+    return {
+        x: baseRect.x + amount, y: baseRect.y,
+        width: baseRect.width - amount, height: baseRect.height
+    };
+}
+
 export function expandRect(rect, amount) {
     return {
         x: rect.x - amount,
@@ -82,10 +106,18 @@ export function windowEligible(window, targetScreen, currentDesktopId) {
     if (window.isMinimized)
         return false;
     if (!window.onAllDesktops) {
-        const onCurrent = Array.isArray(window.desktopIds)
-            && window.desktopIds.indexOf(String(currentDesktopId || "")) >= 0;
-        if (!onCurrent)
+        const current = String(currentDesktopId || "");
+        if (current) {
+            const onCurrent = Array.isArray(window.desktopIds)
+                && window.desktopIds.indexOf(current) >= 0;
+            if (!onCurrent)
+                return false;
+        } else if (window.isVisible === false) {
+            // During daemon upgrades an older platform may not have cached a
+            // desktop event yet. KWin's visibility is the safe membership
+            // fallback; do not accidentally filter every visible window.
             return false;
+        }
     }
     const onScreen = (window.screenName && window.screenName === targetScreen?.name)
         || intersects(window.geometry, targetScreen);
@@ -94,7 +126,9 @@ export function windowEligible(window, targetScreen, currentDesktopId) {
 
 // §7.3/§7.6 Returns true when any eligible window overlaps the dock's space.
 // Fullscreen windows on the target screen always force a conflict.
-export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect, previousConflict, currentDesktopId) {
+export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect,
+                            previousConflict, currentDesktopId,
+                            maximizedConflicts = false) {
     if (!Array.isArray(windows))
         return false;
     // Hysteresis: while already conflicting, require the window to leave the
@@ -109,6 +143,9 @@ export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect, p
             return true;
         if (window.isFullscreen)
             continue;
+        if (maximizedConflicts && window.isMaximized
+                && intersects(window.geometry, targetScreen))
+            return true;
         if (intersects(window.geometry, activeRect))
             return true;
     }

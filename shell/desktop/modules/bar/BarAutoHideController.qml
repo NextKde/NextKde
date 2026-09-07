@@ -37,6 +37,12 @@ Item {
     property string phase: "Bootstrapping"
     property real revealProgress: 0.0
     readonly property bool hidden: ctl.phase === "Hidden"
+    // Reserve as soon as reveal begins, keep the reservation throughout the
+    // hide animation, and release it only at the Hidden boundary. This avoids
+    // resizing maximized windows on every animation frame.
+    readonly property bool workspaceReserved: ctl.mode === "always"
+        || (ctl.phase !== "Bootstrapping" && ctl.phase !== "Hidden"
+            && ctl.phase !== "RevealPending")
     readonly property bool handleActive: ctl.mode !== "always"
     property bool hasWindowConflict: false
     readonly property bool policyWantsHidden:
@@ -71,6 +77,8 @@ Item {
                 screenName: r.screenName || "",
                 isMinimized: !!r.toplevel?.minimized || r.isVisible === false,
                 isFullscreen: !!r.toplevel?.fullscreen,
+                isMaximized: !!r.isMaximized,
+                isVisible: r.isVisible !== false,
                 onAllDesktops: !!r.onAllDesktops,
                 desktopIds: Array.isArray(r.desktopIds) ? r.desktopIds : []
             })
@@ -91,8 +99,8 @@ Item {
             barWidth, ctl.barHeight, ctl.edgeMargin)
         const cands = ctl._windowCandidates()
         const next = DockMath.hasConflict(cands, target,
-            DockMath.avoidanceRect(base), DockMath.releaseRect(base),
-            ctl.hasWindowConflict, WindowService.currentDesktopId)
+            base, base,
+            ctl.hasWindowConflict, WindowService.currentDesktopId, true)
         const changed = next !== ctl.hasWindowConflict
         if (changed)
             ctl.hasWindowConflict = next

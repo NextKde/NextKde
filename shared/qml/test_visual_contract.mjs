@@ -28,6 +28,21 @@ function contrast(first, second) {
     return (light + 0.05) / (dark + 0.05);
 }
 
+function rgbaProperty(source, name) {
+    const match = source.match(new RegExp(
+        `readonly property color ${name}: Qt\\.rgba\\(([^)]*)\\)`));
+    assert.ok(match, `${name} is an explicit RGBA role`);
+    const values = match[1].split(",").map(value => Number(value.trim()));
+    assert.equal(values.length, 4, `${name} has four RGBA channels`);
+    assert.ok(values.every(Number.isFinite), `${name} uses numeric RGBA channels`);
+    return values;
+}
+
+function composite(foreground, background) {
+    return foreground.slice(0, 3).map((channelValue, index) =>
+        channelValue * foreground[3] + background[index] * (1 - foreground[3]));
+}
+
 for (const accent of ["#3478f6", "#8b5cf6", "#16875f", "#d66a20"]) {
     const background = rgb(accent);
     assert.ok(Math.max(contrast(background, [0, 0, 0]),
@@ -55,6 +70,24 @@ assert.match(themeSource, /appearanceMode === "dark"/,
     "the shared theme supports a forced dark appearance");
 assert.match(themeSource, /contrastRatio\(accent, blackSeed\)[\s\S]*contrastRatio\(accent, whiteSeed\)/,
     "accent foreground chooses the stronger black-or-white contrast");
+
+const shellThemeSource = read("../../shell/desktop/modules/dock/DockThemeService.qml");
+for (const mode of ["dark", "light"]) {
+    const background = rgbaProperty(shellThemeSource, `${mode}Bg`);
+    const primary = rgbaProperty(shellThemeSource, `${mode}Fg`);
+    const secondary = rgbaProperty(shellThemeSource, `${mode}SecondaryFg`);
+    const tertiary = rgbaProperty(shellThemeSource, `${mode}TertiaryFg`);
+    assert.ok(contrast(primary, background) >= 7,
+        `${mode} primary shell text reaches enhanced contrast`);
+    assert.ok(contrast(composite(secondary, background), background) >= 4.5,
+        `${mode} secondary shell text reaches AA contrast`);
+    assert.ok(contrast(composite(tertiary, background), background) >= 4.5,
+        `${mode} tertiary shell text remains readable at small sizes`);
+}
+const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
+assert.match(glassTextSource,
+    /inkLuminance[\s\S]*styleColor:[\s\S]*inkLuminance\s*>=\s*0\.55/,
+    "glass text chooses an opposite-luminance outline without thickening the material");
 
 for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
                       "KosSwitch", "KosSlider"]) {
@@ -201,4 +234,97 @@ assert.doesNotMatch(appActions,
     /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
     "desktop deep links do not shadow JavaScript's implicit arguments object");
 
+const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
+const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
+const controlCenterCoordinator = read("../../shell/desktop/modules/bar/ControlCenterCoordinator.qml");
+const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
+assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
+    "shared popup motion uses Launchpad's 150ms entrance timing");
+assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
+    "shared popup motion uses Launchpad's 0.96 settle scale");
+assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
+    "popup open and close use cubic easing without overshoot");
+assert.doesNotMatch(controlCenterCoordinator, /cascade|interval:\s*12/,
+    "control-center cards use one synchronized animation");
+assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
+    "centered application menus only slide at screen edges");
+const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
+const controlCenterPanelSource = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const globalMenuSource = read("../../shell/desktop/modules/bar/GlobalMenu.qml");
+assert.match(appLauncherWindow,
+    /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
+    "Launchpad and anchored popups consume the same entrance tokens");
+assert.match(controlCenterPanelSource,
+    /cardOffsetY:\s*!panel\.dockHosted\s*\?\s*-18[\s\S]{0,1800}margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
+    "standalone Control Center starts four pixels below the Bar");
+assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
+    "application menus keep a four-pixel Bar gap");
+
+const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
+const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
+const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
+const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
+const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
+const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
+assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
+    "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
+assert.match(barDateStatus, /GlassText\s*\{/,
+    "top-bar labels protect their glyph edges over changing wallpaper");
+assert.doesNotMatch(controlCenterPanel, /^\s*Text\s*\{/m,
+    "control-center labels use bidirectional glass readability outlines");
+assert.match(globalMenuSource,
+    /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,
+    "application menus follow the stable light/dark material palette");
+assert.match(barStatusArea, /iconSize:\s*18/,
+    "top-bar tray icons use the enlarged 18px optical size");
+assert.match(wifiSignalIcon,
+    /signalStrength\s*<\s*30\s*\?\s*1\s*:\s*\(signalStrength\s*<\s*60\s*\?\s*2\s*:\s*3\)/,
+    "the shared Wi-Fi glyph exposes three live signal-quality levels");
+assert.match(networkStatus,
+    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    "the top-bar Wi-Fi icon renders NetworkManager signal quality");
+assert.match(networkPanel,
+    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    "the network panel reuses the live Wi-Fi signal glyph");
+for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
+    const start = controlCenterPanel.indexOf(marker);
+    const section = controlCenterPanel.slice(start, start + 5200);
+    assert.match(section,
+        /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
+        `${marker} round disc owns its power toggle`);
+    assert.match(section,
+        /leftMargin:\s*49[\s\S]{0,220}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
+        `${marker} card body opens details without covering the toggle`);
+}
+for (const component of ["NetworkStatus", "Battery", "SettingsButton",
+                         "ControlCenterToggle"]) {
+    assert.match(barStatusArea,
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,180}iconSize:\\s*systemTray\\.iconSize"),
+        component + " shares the native tray icon size");
+}
+assert.doesNotMatch(controlCenterPanel,
+    /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
+    "theme toggle does not use the blue active treatment");
+const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
+assert.match(controlCenterCard,
+    /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
+    "the power sheet moves primary Control Center cards out of view");
+assert.doesNotMatch(controlCenterCard,
+    /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
+    "hidden primary cards do not leave a dimmed visual veil");
+assert.match(controlCenterPanel,
+    /if\s*\(!coordinator\.open\)\s*\n\s*coordinator\.openAll\(\)/,
+    "closing the power sheet can restore the primary Control Center state");
+for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"]) {
+    const start = controlCenterPanel.indexOf(marker);
+    const section = controlCenterPanel.slice(start, start + 1800);
+    assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
+        `${marker} uses a 24x24 icon container`);
+}
+const powerGlyph = read("../../shell/desktop/assets/logout.svg");
+assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
+    "the power glyph uses the same light outline weight as adjacent controls");
+assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
+    "the power glyph does not regress to an oversized solid silhouette");
 console.log("KOS UI visual contract: all checks passed");

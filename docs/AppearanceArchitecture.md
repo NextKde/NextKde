@@ -178,7 +178,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v5
+## 6. AppearanceTokens v6
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -194,7 +194,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | `itemSpacingRatio` | 0.07 | 0.09 | 0.08 |
 | `dividerMarginRatio` | 0.16 | 0.20 | 0.18 |
 | `edgeMargin` | 0 | 5 | 8 |
-| `workspaceGap` | 0 | 5 | 8 |
+| `workspaceGap` | 0 | 0 | 0 |
 | `indicatorStyle` | `underline` | `dot` | `tonal` |
 | `indicatorLengthRatio` | 0.42 | 0.13 | 0.34 |
 | `indicatorThicknessRatio` | 0.07 | 0.13 | 0.07 |

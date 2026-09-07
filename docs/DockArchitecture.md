@@ -373,16 +373,20 @@ Non-negotiable invariants:
 1. Collision judgement always uses the **static rectangle the Dock would
    occupy at full reveal**, computed from screen geometry and configured
    sizes — never the animated transform position, `mapToItem`, or global
-   coordinate sampling.
+   coordinate sampling. A fresh conflict requires a stable 200ms overlap at
+   least 12px into that rectangle, avoiding accidental hides during edge
+   placement. Once hidden, leaving the real Dock rectangle reveals it; there
+   is no invisible spatial release strip.
 2. Hiding never destroys the `PanelWindow`, toggles `visible`, changes
    anchors, or spawns a second layer-shell window for the handle; it only
    translates `dockWrapper` inside the permanently mapped surface.
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
    through. In `always` mode the handle hit target is zero-sized.
-4. `exclusiveZone` stays `dockThickness + edgeMargin` in `always` mode and is
-   fixed at `0` in `smart`/`persistent`; it must not change per animation
-   frame, or maximized windows reflow on every hide/show.
+4. Dock `exclusiveZone` is fixed at `0` in every visibility mode. New normal
+   windows receive one initial KWin placement inside the Bar/Dock safe area;
+   maximized windows may extend behind the Dock and therefore naturally drive
+   smart hide. Existing or user-moved windows are never continuously clamped.
 5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
    Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
    force the Dock visible; popups must join the `activeDockPopup` coordinator
@@ -392,7 +396,9 @@ Window data contract: `WindowService` normalized records carry
 `geometry`/`screenName`/`isMaximized`/`isVisible` plus `providerReady`; the
 KWin bridge publishes `frameGeometry`, output, maximized and visibility per
 window and re-snapshots on their change signals (each connection defensively
-try/caught). When a provider exposes no geometry, degrade to "hide only on
+try/caught). Provider readiness requires both the first window and virtual
+desktop snapshots. Until a desktop id is known, KWin `visible` is used as the
+membership fallback. When a provider exposes no geometry, degrade to "hide only on
 same-screen fullscreen" — never substitute "an active window exists" for
 collision.
 

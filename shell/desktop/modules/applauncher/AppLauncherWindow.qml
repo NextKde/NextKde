@@ -138,7 +138,7 @@ PanelWindow {
         property: "contentRevealProgress"
         from: 0.0
         to: 1.0
-        duration: 150
+        duration: AppearanceTokens.motion.popupOpenDuration
         easing.type: Easing.OutCubic
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
@@ -1203,8 +1203,12 @@ PanelWindow {
                         Scale {
                             origin.x: launcherContent.width / 2
                             origin.y: launcherContent.height / 2
-                            xScale: 0.96 + 0.04 * root.contentRevealProgress
-                            yScale: 0.96 + 0.04 * root.contentRevealProgress
+                            xScale: AppearanceTokens.motion.popupStartScale
+                                + (1 - AppearanceTokens.motion.popupStartScale)
+                                    * root.contentRevealProgress
+                            yScale: AppearanceTokens.motion.popupStartScale
+                                + (1 - AppearanceTokens.motion.popupStartScale)
+                                    * root.contentRevealProgress
                         },
                         Translate {
                             y: Math.round((root.isFullscreenMode ? 60 : 200) * (1.0 - root.contentRevealProgress))

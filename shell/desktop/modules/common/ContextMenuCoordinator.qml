@@ -25,8 +25,12 @@ QtObject {
         const previous = activeMenu
         activeMenu = menu
         activeMenuOpenedAt = Date.now()
-        if (previous && previous.visible)
-            previous.visible = false
+        if (previous && previous.visible) {
+            if (typeof previous.hide === "function")
+                previous.hide()
+            else
+                previous.visible = false
+        }
         menu.visible = true
     }
 
@@ -44,8 +48,12 @@ QtObject {
         activeMenu = null
         activeMenuOpenedAt = 0
 
-        if (menu && menu.visible)
-            menu.visible = false
+        if (menu && menu.visible) {
+            if (typeof menu.hide === "function")
+                menu.hide()
+            else
+                menu.visible = false
+        }
     }
 
     property Connections lifecycleConnections: Connections {
