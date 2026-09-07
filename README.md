@@ -122,12 +122,6 @@ nix flake update nextkde
 sudo nixos-rebuild switch --flake .#hosts
 ```
 
-##### 目前基于 NixOS 打包已知问题（已在修复 todo list，预计周六上线）
-
-- 无法开机自启动
-- 脚本诊断功能未打包进入
-- kos-settings无法正常启动
-
 ## 主要功能
 
 | 模块               | 能做什么                                                                                                                  |
