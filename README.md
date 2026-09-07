@@ -133,7 +133,7 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 
 ```Nix
 nextkde = {
-         # Gitee 源：KOS Desktop Shell
+         # github 源：KOS Desktop Shell
          url = "git+https://github.com/SuceV587/NextKde.git"
          inputs.nixpkgs.follows = "nixpkgs";
 };
