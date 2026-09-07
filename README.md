@@ -151,6 +151,18 @@ nix flake update nextkde
 sudo nixos-rebuild switch --flake .#hosts
 ```
 
+4. 使用方法
+
+```Nix
+    services.kos = {
+        enable = true;
+        # 如需禁用直接改为 `enable = false;` 即可
+        weather.enable = true;
+        # kos 内置的天气服务
+    };
+
+```
+
 ## 主要功能
 
 | 模块               | 能做什么                                                                                                                  |
