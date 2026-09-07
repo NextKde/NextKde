@@ -129,11 +129,11 @@
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
-                KillMode = "mixed";
+                KillMode = "process";
                 ExecStart = "${qs_bin} --no-duplicate -c kos";
                 Environment = [
                   "QS_DISABLE_FILE_WATCHER=1"
-                  "PATH=${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"
+                  "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"
                 ];
                 Restart = "on-failure";
                 RestartSec = 2;
