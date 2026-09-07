@@ -29,7 +29,7 @@
       nixosModules.kos = { config, lib, pkgs, ... }:
       let
         cfg = config.services.kos;
-        kos = self.packages.${system}.kos-desktop;
+        kos = self.packages.${system}.kos-desktop.override { buildWeather = cfg.weather.enable; };
         qs_bin = "/run/current-system/sw/bin/quickshell";
         
         # NixOS control interface
@@ -37,6 +37,9 @@
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
+          weather = {
+            enable = lib.mkEnableOption "KOS Weather standalone application";
+          };
         };
 
         config = lib.mkIf cfg.enable {
@@ -48,6 +51,8 @@
             kos.passthru.kwin-dock-window-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
+          ] ++ lib.optionals cfg.weather.enable [
+            kos.passthru.weather
           ];
 
           # KWin plugins live under lib/kwin/ in the Nix store
