@@ -100,6 +100,7 @@
                 ExecStart = "${kos}/libexec/kos-platform daemon";
                 Environment = [
                   "KOS_PLATFORM_KWIN_SCRIPT=${kos}/share/kos/platform/kwin/window-bridge.js"
+                  "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin"
                 ];
                 Restart = "on-failure";
                 RestartSec = 2;
