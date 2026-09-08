@@ -7,11 +7,20 @@ import QtQuick
 QtObject {
     id: tokens
 
-    readonly property int version: 6
+    readonly property int version: 7
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
     readonly property bool isMaterial: style === "material"
+
+    readonly property QtObject typography: QtObject {
+        readonly property string recommendedDisplayFamily: "SF Pro Display"
+        readonly property bool hasRecommendedDisplayFamily:
+            Qt.fontFamilies().indexOf(recommendedDisplayFamily) >= 0
+        // An empty family delegates fallback to the user's Qt/KDE font setup.
+        readonly property string displayFamily: hasRecommendedDisplayFamily
+            ? recommendedDisplayFamily : ""
+    }
 
     readonly property QtObject dock: QtObject {
         readonly property string form: tokens.isWindows12 ? "taskbar"
