@@ -126,6 +126,10 @@ QJsonObject menuItemFromArgument(const QDBusArgument &argument)
     const QVariant label = unwrapDbusValue(properties.value(QStringLiteral("label")));
     const QVariant visible = unwrapDbusValue(properties.value(QStringLiteral("visible")));
     const QVariant enabled = unwrapDbusValue(properties.value(QStringLiteral("enabled")));
+    const QVariant iconName = unwrapDbusValue(properties.value(QStringLiteral("icon-name")));
+    const QVariant childrenDisplay = unwrapDbusValue(properties.value(QStringLiteral("children-display")));
+    const QVariant toggleType = unwrapDbusValue(properties.value(QStringLiteral("toggle-type")));
+    const QVariant toggleState = unwrapDbusValue(properties.value(QStringLiteral("toggle-state")));
     QJsonArray children;
     argument.beginArray();
     while (!argument.atEnd()) {
@@ -139,12 +143,19 @@ QJsonObject menuItemFromArgument(const QDBusArgument &argument)
     }
     argument.endArray();
     argument.endStructure();
+    const bool hasChildren = !children.isEmpty()
+        || childrenDisplay.toString() == QStringLiteral("submenu");
+    const bool checkable = toggleType.isValid() && !toggleType.toString().isEmpty();
+    const bool checked = toggleState.isValid() && toggleState.toInt() == 1;
     return QJsonObject{{QStringLiteral("id"), id},
                        {QStringLiteral("label"), label.toString().remove(QLatin1Char('_'))},
+                       {QStringLiteral("icon"), QString()},
                        {QStringLiteral("separator"), type.toString() == QStringLiteral("separator")},
                        {QStringLiteral("visible"), !visible.isValid() || visible.toBool()},
                        {QStringLiteral("enabled"), !enabled.isValid() || enabled.toBool()},
-                       {QStringLiteral("hasChildren"), !children.isEmpty()},
+                       {QStringLiteral("hasChildren"), hasChildren},
+                       {QStringLiteral("checkable"), checkable},
+                       {QStringLiteral("checked"), checked},
                        {QStringLiteral("children"), children}};
 }
 
@@ -1918,10 +1929,12 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
     if (op == QStringLiteral("appmenu.layout")) {
         // The root needs one additional level so top-level labels such as
         // File and Edit are identified as submenus rather than actions.
-        const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 2);
+        const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 5);
         const QDBusMessage reply = menu.call(QStringLiteral("GetLayout"), id, depth,
             QStringList{QStringLiteral("label"), QStringLiteral("visible"),
-                        QStringLiteral("enabled"), QStringLiteral("type")});
+                        QStringLiteral("enabled"), QStringLiteral("type"),
+                        QStringLiteral("children-display"), QStringLiteral("toggle-type"),
+                        QStringLiteral("toggle-state"), QStringLiteral("icon-name")});
         if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().size() < 2) {
             respond(socket, request, false, {}, QStringLiteral("appmenu-layout-failed"),
                     QStringLiteral("无法读取应用菜单"), true);
@@ -1940,8 +1953,18 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
             : op == QStringLiteral("appmenu.close") ? QStringLiteral("closed")
             : QStringLiteral("clicked");
         const quint32 timestamp = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch());
+
+        if (op == QStringLiteral("appmenu.open")) {
+            // Give Qt / KDE applications an opportunity to populate lazy dynamic submenus.
+            menu.call(QStringLiteral("AboutToShow"), id);
+        }
+
+        // com.canonical.dbusmenu Event signature is (isvu): the data argument
+        // MUST be typed as a D-Bus variant. Sending a bare QVariantMap produces
+        // (isa{sv}u), which Qt's QDBusMenuAdaptor rejects as an unknown method.
+        const QDBusVariant dbusData(QVariantMap{{QStringLiteral("timestamp"), timestamp}});
         const QDBusMessage reply = menu.call(QStringLiteral("Event"), id, event,
-            QVariantMap{{QStringLiteral("timestamp"), timestamp}}, timestamp);
+            QVariant::fromValue(dbusData), timestamp);
         if (reply.type() == QDBusMessage::ErrorMessage) {
             respond(socket, request, false, {}, QStringLiteral("appmenu-event-failed"),
                     QStringLiteral("应用菜单操作失败"), true);
