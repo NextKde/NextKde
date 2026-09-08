@@ -505,13 +505,13 @@ Item {
             vertical: container.vertical
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
-            iconSource: AppPresentationService.iconSource("user-trash")
+            iconSource: SystemIconResolver.source("trash",
+                DockTrashService.hasItems ? "full" : "empty")
             displayName: "回收站"
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
             isPinnedItem: false
-            statusBadge: DockTrashService.hasItems
             onActivate: {
                 if (container.isEditing) {
                     container.editMode = false
