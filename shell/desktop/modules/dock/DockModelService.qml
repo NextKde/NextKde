@@ -109,6 +109,9 @@ QtObject {
                     name: identity.name || dockItem.appId,
                     icon: windows[0]?.iconSource ?? identity.iconSource,
                     isRunning: windows.length > 0,
+                    isUrgent: windows.some(window => !!window.isUrgent)
+                        || TrayAttentionService.needsAttention(
+                            identity.desktopId, identity.name),
                     windowCount: windows.length,
                 });
                 continue;
@@ -126,6 +129,7 @@ QtObject {
                     && item.name === prev.name
                     && item.icon === prev.icon
                     && item.isRunning === prev.isRunning
+                    && item.isUrgent === prev.isUrgent
                     && item.windowCount === prev.windowCount;
             });
         if (!same) {
@@ -177,6 +181,8 @@ QtObject {
                     groupOrder.push(desktopId);
                 }
                 const group = unpinnedGroups[desktopId];
+                if (TrayAttentionService.needsAttention(desktopId, group.title))
+                    group.isUrgent = true;
                 group.windowCount++;
                 if (record.toplevel.activated)
                     group.isActivated = true;
@@ -210,7 +216,9 @@ QtObject {
                     icon: record.iconSource ?? record.identity.iconSource,
                     isActivated: !!record.toplevel.activated,
                     isMinimized: !!record.toplevel.minimized,
-                    isUrgent: !!record.isUrgent,
+                    isUrgent: !!record.isUrgent
+                        || TrayAttentionService.needsAttention(
+                            record.identity.desktopId, record.identity.name),
                     isFullscreen: !!record.toplevel.fullscreen,
                     pid: Number(record.pid || 0),
                     isWindowItem: true,
@@ -293,6 +301,11 @@ QtObject {
         function onRevisionChanged() {
             svc._refreshPresentation();
         }
+    }
+
+    property Connections _trayAttentionConnections: Connections {
+        target: TrayAttentionService
+        function onRevisionChanged() { svc._refreshPresentation() }
     }
 
     function activateApp(appId) {

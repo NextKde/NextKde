@@ -510,6 +510,23 @@ Item {
         }
     }
 
+    Rectangle {
+        width: Math.max(8, Math.round(icon.iconSize * 0.2))
+        height: width
+        radius: width / 2
+        anchors { right: iconRenderer.right; top: iconRenderer.top }
+        color: "#ff3b30"
+        border { width: 1; color: Qt.rgba(1, 1, 1, 0.95) }
+        opacity: icon.isUrgent && !icon.editMode ? 1 : 0
+        scale: opacity > 0 ? 1 : 0
+        visible: opacity > 0.01
+        z: 3
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+        Behavior on scale {
+            NumberAnimation { duration: 160; easing.type: Easing.OutBack }
+        }
+    }
+
     // Keep the fixed-size indicator used by the previous main branch. A row
     // of per-window dots expands after the side Dock rotates its content and
     // can visibly escape the icon slot on left/right edges.

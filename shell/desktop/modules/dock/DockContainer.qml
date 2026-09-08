@@ -707,6 +707,7 @@ Item {
                                 isRunning: pinnedItemLoader.itemData.isRunning ?? false
                                 isActivated: DockModelService.isAppActivated(
                                     pinnedItemLoader.itemData.appId ?? "")
+                                isUrgent: pinnedItemLoader.itemData.isUrgent ?? false
                                 appId: pinnedItemLoader.itemData.appId ?? ""
                                 isWindowItem: false
                                 isPinnedItem: true
