@@ -133,7 +133,7 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 
 ```Nix
 nextkde = {
-         # Gitee 源：KOS Desktop Shell
+         # github 源：KOS Desktop Shell
          url = "git+https://github.com/SuceV587/NextKde.git"
          inputs.nixpkgs.follows = "nixpkgs";
 };
@@ -151,11 +151,17 @@ nix flake update nextkde
 sudo nixos-rebuild switch --flake .#hosts
 ```
 
-##### 目前基于 NixOS 打包已知问题（已在修复 todo list，预计周六上线）
+4. 使用方法
 
-- 无法开机自启动
-- 脚本诊断功能未打包进入
-- kos-settings无法正常启动
+```Nix
+    services.kos = {
+        enable = true;
+        # 如需禁用直接改为 `enable = false;` 即可
+        weather.enable = true;
+        # kos 内置的天气服务
+    };
+
+```
 
 ## 主要功能
 

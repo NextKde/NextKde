@@ -21,7 +21,8 @@
         inherit kos-desktop;
         inherit (kos-desktop.passthru)
           shell-data-service kos-settings kos-platform kosctl
-          kwin-dock-window-animation kwin-context-menu-input kwin-effects-glass;
+          kwin-dock-window-animation kwin-context-menu-input kwin-effects-glass
+          kwin-decoration-liquid-glass;
         default = kos-desktop;
       };
 
@@ -29,7 +30,7 @@
       nixosModules.kos = { config, lib, pkgs, ... }:
       let
         cfg = config.services.kos;
-        kos = self.packages.${system}.kos-desktop;
+        kos = self.packages.${system}.kos-desktop.override { buildWeather = cfg.weather.enable; };
         qs_bin = "/run/current-system/sw/bin/quickshell";
         
         # NixOS control interface
@@ -37,6 +38,9 @@
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";
+          weather = {
+            enable = lib.mkEnableOption "KOS Weather standalone application";
+          };
         };
 
         config = lib.mkIf cfg.enable {
@@ -48,6 +52,9 @@
             kos.passthru.kwin-dock-window-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
+            kos.passthru.kwin-decoration-liquid-glass
+          ] ++ lib.optionals cfg.weather.enable [
+            kos.passthru.weather
           ];
 
           # KWin plugins live under lib/kwin/ in the Nix store
@@ -100,6 +107,7 @@
                 ExecStart = "${kos}/libexec/kos-platform daemon";
                 Environment = [
                   "KOS_PLATFORM_KWIN_SCRIPT=${kos}/share/kos/platform/kwin/window-bridge.js"
+                  "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin"
                 ];
                 Restart = "on-failure";
                 RestartSec = 2;
@@ -129,11 +137,11 @@
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
-                KillMode = "mixed";
+                KillMode = "process";
                 ExecStart = "${qs_bin} --no-duplicate -c kos";
                 Environment = [
                   "QS_DISABLE_FILE_WATCHER=1"
-                  "PATH=${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"
+                  "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"
                 ];
                 Restart = "on-failure";
                 RestartSec = 2;
