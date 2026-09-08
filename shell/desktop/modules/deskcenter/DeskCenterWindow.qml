@@ -218,6 +218,11 @@ PanelWindow {
         precision: SystemClock.Seconds
     }
 
+    DateProjection {
+        id: calendarClock
+        sourceDate: clock.date
+    }
+
     // Global desktop background click handler: catches clicks on any empty area of the desktop
     // (left widget columns, margins, empty spaces between widgets, and background wallpaper).
     MouseArea {
@@ -589,14 +594,14 @@ PanelWindow {
                 }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }
-                    text: Qt.formatDateTime(clock.date, "yyyy年M月")
+                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
                     color: "white"
                     font { pixelSize: 11; weight: Font.Bold }
                 }
-                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: Qt.formatDateTime(clock.date, "d日 dddd"); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
+                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: Qt.formatDateTime(calendarClock.dayDate, "d日 dddd"); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
-                    text: Qt.formatDateTime(clock.date, "dddd")
+                    text: Qt.formatDateTime(calendarClock.dayDate, "dddd")
                     color: "#3c3c43"
                     font.pixelSize: 9
                 }
@@ -1802,8 +1807,8 @@ PanelWindow {
 	                id: calendarContent
 	                anchors.fill: parent
 	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
-                readonly property int year: clock.date.getFullYear()
-                readonly property int month: clock.date.getMonth()
+                readonly property int year: calendarClock.dayDate.getFullYear()
+                readonly property int month: calendarClock.dayDate.getMonth()
                 // Monday-first month layout: 星期一 is the first column and
                 // 星期日 is the final column, matching the requested reading order.
                 readonly property int firstWeekday: (new Date(year, month, 1).getDay() + 6) % 7
@@ -1868,20 +1873,20 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: calendarHeader
-                    text: Qt.formatDateTime(clock.date, "yyyy年M月")
+                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
                     horizontalAlignment: Text.AlignHCenter
                     color: "white"
                     font { pixelSize: 15; weight: Font.Bold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
-                    text: Qt.formatDateTime(clock.date, "d日")
+                    text: Qt.formatDateTime(calendarClock.dayDate, "d日")
 	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor() : "#15151a"
                     font { family: "SF Pro Display"; pixelSize: 32; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
-                    text: Qt.formatDateTime(clock.date, "ddd") + " · " + root.lunarDate(clock.date)
+                    text: Qt.formatDateTime(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
 	                    color: calendarContent.glassMode ? IconAppearanceService.glassContentColor(0.74) : "#4d4d55"
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
@@ -1939,8 +1944,8 @@ PanelWindow {
                                 width: parent.width / 7
                                 height: parent.height / calendarContent.weekCount
                                 readonly property int day: index - calendarContent.firstWeekday + 1
-                                readonly property bool today: day === clock.date.getDate()
-                                    && calendarContent.month === clock.date.getMonth()
+                                readonly property bool today: day === calendarClock.dayDate.getDate()
+                                    && calendarContent.month === calendarClock.dayDate.getMonth()
                                 Rectangle {
                                     anchors.centerIn: parent
                                     width: 16
