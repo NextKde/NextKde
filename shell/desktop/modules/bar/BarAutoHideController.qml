@@ -391,7 +391,7 @@ Item {
 
     Connections {
         target: WindowService
-        function onRevisionChanged() {
+        function onPlacementRevisionChanged() {
             if (ctl._recomputeConflict())
                 ctl._doEvaluate()
             else if (ctl.mode !== "always")

@@ -31,6 +31,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
         )
         set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.window-placement-updates
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_placement_updates.mjs
+        )
+        set_tests_properties(kos-shell.window-placement-updates PROPERTIES TIMEOUT 10)
     endif()
 endif()
 

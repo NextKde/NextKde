@@ -411,11 +411,11 @@ Item {
     Connections {
         target: WindowService
         // Geographic/desktop changes to windows, or a just-completed first
-        // snapshot, all wake the conflict pass. A revision bump means a window
+        // snapshot, all wake the conflict pass. A placement bump means a window
         // moved/resized/appeared — the cached conflict must be recomputed, not
         // just re-evaluated against the stale value (otherwise a window that
         // arrives after boot never hides a smart dock).
-        function onRevisionChanged() {
+        function onPlacementRevisionChanged() {
             // Geometry snapshots are already throttled at the KWin boundary.
             // React to an actual collision edge immediately; waiting on the
             // generic 80ms debounce made reveal/hide lag behind the window.
