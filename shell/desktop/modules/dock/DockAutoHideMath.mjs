@@ -108,9 +108,15 @@ export function windowEligible(window, targetScreen, currentDesktopId) {
     if (!window.onAllDesktops) {
         const current = String(currentDesktopId || "");
         if (current) {
-            const onCurrent = Array.isArray(window.desktopIds)
-                && window.desktopIds.indexOf(current) >= 0;
-            if (!onCurrent)
+            const desktopIds = Array.isArray(window.desktopIds)
+                ? window.desktopIds : [];
+            if (desktopIds.length > 0
+                    && desktopIds.indexOf(current) < 0)
+                return false;
+            // An empty membership list is incomplete provider data, not proof
+            // that the window belongs to every desktop. Fall back to KWin's
+            // current-workspace visibility until a populated list arrives.
+            if (desktopIds.length === 0 && window.isVisible === false)
                 return false;
         } else if (window.isVisible === false) {
             // During daemon upgrades an older platform may not have cached a

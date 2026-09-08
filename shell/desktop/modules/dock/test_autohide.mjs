@@ -90,6 +90,12 @@ function win(overrides) {
 ok(!windowEligible(win({ isMinimized: true }), S, "d1"), "minimized filtered");
 // A window on another desktop is filtered.
 ok(!windowEligible(win({ desktopIds: ["d2"] }), S, "d1"), "other-desktop filtered");
+// A missing membership list falls back to KWin visibility instead of being
+// interpreted as either every desktop or no desktop.
+ok(windowEligible(win({ desktopIds: [], isVisible: true }), S, "d1"),
+    "empty desktop list keeps visible window");
+ok(!windowEligible(win({ desktopIds: [], isVisible: false }), S, "d1"),
+    "empty desktop list filters invisible window");
 // Before the first desktop snapshot, KWin visibility is the safe fallback.
 ok(windowEligible(win({ desktopIds: ["d2"], isVisible: true }), S, ""),
     "unknown desktop keeps visible window");
