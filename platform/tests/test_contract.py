@@ -43,8 +43,17 @@ def test_theme_toggle_uses_the_safe_palette_path() -> None:
     )
 
 
+def test_bridge_trace_is_opt_in() -> None:
+    source = (ROOT / "platform/src/kwin/KWinBridge.cpp").read_text()
+    publish = source[source.index("void publishEvent("):source.index("void publishThumbnailError(")]
+    assert 'qEnvironmentVariableIntValue("KOS_PLATFORM_TRACE_EVENTS") == 1' in publish
+    assert publish.index("g_eventHandler(event)") < publish.index("if (traceEvents)")
+    assert publish.index("if (traceEvents)") < publish.index("QJsonDocument(event).toJson")
+
+
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
     test_theme_toggle_uses_the_safe_palette_path()
+    test_bridge_trace_is_opt_in()
     print("platform contracts: ok")
