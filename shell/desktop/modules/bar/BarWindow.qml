@@ -36,7 +36,8 @@ PanelWindow {
         barHeight: root.implicitHeight
         edgeMargin: 15
         pointerInsideBar: contentHoverHandler.hovered
-        popupOpen: barContentLoader.item?.statusArea?.anyPanelOpen ?? false
+        popupOpen: (barContentLoader.item?.statusArea?.anyPanelOpen ?? false)
+            || (barContentLoader.item?.globalMenu?.menuOpen ?? false)
         launcherOpen: AppLauncherService.open
     }
 
@@ -52,9 +53,8 @@ PanelWindow {
         right: true
     }
     margins {
-        top: (AppearanceConfigService.barLayoutMode === "floating")
-            ? (AppearanceConfigService.barVisibilityMode !== "always" ? 8 : 6)
-            : 0
+        top: (AppearanceConfigService.barLayoutMode === "floating"
+            && AppearanceConfigService.barVisibilityMode === "always") ? 6 : 0
         left: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
         right: (AppearanceConfigService.barLayoutMode === "floating") ? 15 : 0
     }
@@ -114,6 +114,7 @@ PanelWindow {
                 Item {
                     id: barContentItem
                     readonly property alias statusArea: barStatusArea
+                    readonly property alias globalMenu: barGlobalMenu
 
                     BarDateStatus {
                         id: barDateStatus
@@ -128,6 +129,7 @@ PanelWindow {
                     // integrated into the Dock, so the Dock never owns or
                     // fetches an application menu.
                     GlobalMenu {
+                        id: barGlobalMenu
                         anchors.left: barDateStatus.right
                         anchors.leftMargin: 12
                         anchors.verticalCenter: parent.verticalCenter

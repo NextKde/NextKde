@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.dock
 
 // A row in a ContextMenu: icon + label, with optional checkmark (checkable),
 // submenu chevron, and a thin separator variant. Hover only changes the row's
@@ -23,7 +24,7 @@ Item {
     readonly property bool _hover: pointer.containsMouse
     readonly property color _hi: Qt.rgba(
         row.foregroundColor.r, row.foregroundColor.g, row.foregroundColor.b,
-        itemEnabled ? 0.24 : 0.20)
+        itemEnabled ? (ThemeService.isDark ? 0.22 : 0.10) : 0.05)
 
     height: row.separator ? 1 : 38
     visible: row.separator || label.length > 0
@@ -55,11 +56,12 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 9
+        spacing: row.icon.length > 0 ? 9 : 0
         visible: !row.separator
 
         Text {
-            width: 18
+            visible: row.icon.length > 0
+            width: visible ? 18 : 0
             text: row.icon
             font.family: "Font Awesome 7 Free"
             font.pixelSize: 13
@@ -70,11 +72,14 @@ Item {
         Text {
             text: row.label
             elide: Text.ElideRight
+            font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
             font.pixelSize: 13
             font.weight: Font.DemiBold
+            renderType: Text.NativeRendering
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, (row.width - 24) - (row.icon.length > 0 ? 27 : 0) - ((row.checked || row.hasSubmenu) ? 24 : 0))
         }
     }
 
@@ -90,6 +95,7 @@ Item {
                 row.foregroundColor.b, 0.55)
         font.pixelSize: row.checked ? 12 : 16
         font.weight: Font.Bold
+        renderType: Text.NativeRendering
     }
 
     MouseArea {

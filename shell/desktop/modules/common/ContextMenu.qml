@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
+import qs.desktop.modules.dock
 
 // Shared self-drawn context menu. Submenus deliberately reuse this one popup
 // as a page stack: only a click enters a child page, and hover is visual only.
@@ -16,18 +17,26 @@ PopupWindow {
     property bool macosPopupMotion: false
     property bool centerBelowAnchor: false
     property real centerBelowOffset: 0
-    property color baseColor: Qt.rgba(0, 0, 0, 0.55)
-    property color foregroundColor: "#ffffff"
+    property var customAnchorEdges: null
+    property var customGravity: null
+    property var customMarginsTop: null
+    property color baseColor: ThemeService.backgroundColor
+    property color foregroundColor: ThemeService.foregroundColor
     property bool adaptiveForeground: true
-    property color ambientPrimary: "transparent"
-    property color ambientSecondary: "transparent"
-    property real ambientStrength: 0.0
+    property color ambientPrimary: WallpaperPaletteService.primary
+    property color ambientSecondary: WallpaperPaletteService.secondary
+    property real ambientStrength: 0.25 * AppearanceTokens.glass.ambientMultiplier
     // Context menus need more separation from a busy desktop than the Dock.
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real darkOverlayOpacity: 0.27
+    property real darkOverlayOpacity: ThemeService.isDark ? 0.27 : 0.04
     property real menuRadius: 16
+    readonly property color effectiveForegroundColor: {
+        if (!root.adaptiveForeground)
+            return root.foregroundColor
+        return ThemeService.isDark ? glass.foregroundColor : ThemeService.foregroundColor
+    }
     // Some anchors receive their opening press through the compositor's
     // global-pointer bridge slightly after this popup is mapped.
     property int globalDismissGraceMs: 0
@@ -143,21 +152,21 @@ PopupWindow {
         item: root.anchorItem
         rect.x: root.centerBelowAnchor && root.anchorItem
             ? root.anchorItem.width / 2 - root.implicitWidth / 2 : 0
-        rect.y: root.centerBelowAnchor ? root.centerBelowOffset : 0
-        rect.width: root.centerBelowAnchor ? root.implicitWidth : 0
-        rect.height: root.centerBelowAnchor ? 1 : 0
-        edges: root.centerBelowAnchor ? (Edges.Top | Edges.Left)
+        rect.y: (root.centerBelowAnchor || root.centerBelowOffset > 0) ? root.centerBelowOffset : 0
+        rect.width: root.centerBelowAnchor ? root.implicitWidth : (root.anchorItem ? root.anchorItem.width : 0)
+        rect.height: (root.centerBelowAnchor || root.centerBelowOffset > 0) ? 1 : (root.anchorItem ? root.anchorItem.height : 0)
+        edges: root.customAnchorEdges !== null ? root.customAnchorEdges : (root.centerBelowAnchor ? (Edges.Top | Edges.Left)
             : root.position === "bottom"
             ? (root.placeBelow ? (Edges.Top | Edges.Left) : Edges.Top)
-            : Edges.Right
-        gravity: root.centerBelowAnchor ? (Edges.Bottom | Edges.Right)
+            : Edges.Right)
+        gravity: root.customGravity !== null ? root.customGravity : (root.centerBelowAnchor ? (Edges.Bottom | Edges.Right)
             : root.position === "bottom"
             ? (root.placeBelow ? (Edges.Bottom | Edges.Right) : Edges.Top)
-            : Edges.Right
+            : Edges.Right)
         adjustment: root.centerBelowAnchor ? PopupAdjustment.Slide
             : (PopupAdjustment.Flip | PopupAdjustment.Slide)
-        margins.top: root.centerBelowAnchor ? 0
-            : (root.position === "bottom" ? -8 : 0)
+        margins.top: root.customMarginsTop !== null ? root.customMarginsTop : (root.centerBelowAnchor ? 0
+            : (root.position === "bottom" ? -8 : 0))
         margins.right: root.position === "right" ? -8 : 8
         margins.left: root.position === "left" ? 8 : 0
     }
@@ -166,7 +175,7 @@ PopupWindow {
         if (root.visible) {
             // Support the few callers that set visible directly as well as
             // the normal show()/setDockPopupVisible() entry points.
-            if (ContextMenuCoordinator.activeMenu !== root)
+            if (!root.macosPopupMotion)
                 ContextMenuCoordinator.open(root)
             root.page = ({ items: root.rootItems, parents: [] })
             root.aboutToShow()
@@ -213,7 +222,7 @@ PopupWindow {
         materialDepth: 0.6
         material: "thick"
         adaptiveDarkScrim: true
-        scale: root.macosPopupMotion
+        scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
                 + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
             : 1
@@ -221,8 +230,8 @@ PopupWindow {
         opacity: root.macosPopupMotion ? popupMotion.progress : 1
         enabled: !root.macosPopupMotion || popupMotion.interactive
         transform: Translate {
-            y: root.macosPopupMotion
-                ? (1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset
+            y: (root.macosPopupMotion && popupMotion.progress < 0.999)
+                ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
                 : 0
         }
 
@@ -248,7 +257,7 @@ PopupWindow {
                 visible: root.page.parents.length > 0
                 icon: "←"
                 label: "返回"
-                foregroundColor: root.adaptiveForeground ? glass.foregroundColor : root.foregroundColor
+                foregroundColor: root.effectiveForegroundColor
                 onClicked: root.back()
             }
 
@@ -259,7 +268,7 @@ PopupWindow {
                     required property var modelData
                     readonly property var submenuItems: root.childrenFor(modelData)
                     width: parent.width
-                    foregroundColor: root.adaptiveForeground ? glass.foregroundColor : root.foregroundColor
+                    foregroundColor: root.effectiveForegroundColor
                     icon: modelData.icon || ""
                     label: modelData.label || ""
                     separator: !!modelData.separator

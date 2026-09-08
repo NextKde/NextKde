@@ -75,6 +75,7 @@ Item {
     // enter the pinned-app edit/reorder state.
     property bool   allowEdit: true
     property bool   isRunning:   false
+    property int    windowCount: isRunning ? 1 : 0
     property bool   isActivated: false
     // Urgency is independent from activation. A window requesting attention
     // paints an orange-red slot until the compositor clears that state.
@@ -83,6 +84,8 @@ Item {
     // icons intentionally leave it false.
     property bool   editMode: false
     property bool   isDragging: false
+    readonly property int notificationCount:
+        AppNotificationService.countForApp(icon.appId, icon.displayName)
     // A small neutral marker for persistent shell-control state, currently
     // used by the Trash icon while it contains recoverable items.
     property bool   statusBadge: false
@@ -510,16 +513,66 @@ Item {
         }
     }
 
-    // Keep the fixed-size indicator used by the previous main branch. A row
-    // of per-window dots expands after the side Dock rotates its content and
-    // can visibly escape the icon slot on left/right edges.
     Rectangle {
+        id: attentionBadge
+        readonly property bool hasCount: icon.notificationCount > 0
+        readonly property real badgeHeight: hasCount
+            ? Math.max(16, Math.round(icon.iconSize * 0.36))
+            : Math.max(8, Math.round(icon.iconSize * 0.2))
+        width: hasCount
+            ? Math.max(badgeHeight,
+                badgeText.implicitWidth + Math.round(badgeHeight * 0.55))
+            : badgeHeight
+        height: badgeHeight
+        radius: badgeHeight / 2
+        anchors { right: iconRenderer.right; top: iconRenderer.top }
+        anchors.rightMargin: hasCount ? -Math.round(icon.iconSize * 0.06) : 0
+        anchors.topMargin: hasCount ? -Math.round(icon.iconSize * 0.06) : 0
+        rotation: icon.vertical ? -90 : 0
+        transformOrigin: Item.Center
+        color: "#ff3b30"
+        border.width: 0
+        opacity: (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
+        scale: opacity > 0 ? 1 : 0
+        visible: opacity > 0.01
+        z: 3
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+        Behavior on scale {
+            NumberAnimation { duration: 160; easing.type: Easing.OutBack }
+        }
+
+        Text {
+            id: badgeText
+            anchors.centerIn: parent
+            visible: attentionBadge.hasCount
+            text: icon.notificationCount > 99
+                ? "99+" : String(icon.notificationCount)
+            color: "white"
+            renderType: Text.NativeRendering
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font {
+                family: AppearanceTokens.typography.displayFamily
+                pixelSize: Math.max(8,
+                    Math.round(attentionBadge.badgeHeight * 0.52))
+                weight: Font.Bold
+            }
+        }
+    }
+
+    // Keep the dots inside the existing indicator slot. In particular, the
+    // side Dock rotates this item with the row, so an unbounded window-count
+    // strip would protrude past the icon edge.
+    Item {
         id: runningIndicator
-        width: icon.runningIndicatorWidth
+        readonly property int dotCount: Math.min(3,
+            Math.max(1, icon.windowCount))
+        readonly property real dotSize: dotCount >= 3 ? 4 : 5
+        readonly property real dotSpacing: 2
+        width: icon.dotIndicator
+            ? dotCount * dotSize + (dotCount - 1) * dotSpacing
+            : icon.runningIndicatorWidth
         height: icon.runningIndicatorHeight
-        radius: width / 2
-        color: icon.dotIndicator ? Qt.rgba(1, 1, 1, 0.95)
-            : ThemeService.accentColor
         opacity: icon.isRunning ? 1 : 0
         visible: opacity > 0.01
         z: 2
@@ -533,6 +586,31 @@ Item {
 
         Behavior on opacity {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: runningIndicator.dotSpacing
+            visible: icon.dotIndicator
+            Repeater {
+                model: runningIndicator.dotCount
+                delegate: Rectangle {
+                    required property int index
+                    width: runningIndicator.dotSize
+                    height: width
+                    radius: width / 2
+                    color: ThemeService.isDark
+                        ? Qt.rgba(1, 1, 1, 0.95)
+                        : Qt.rgba(0, 0, 0, 0.85)
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: !icon.dotIndicator
+            radius: width / 2
+            color: ThemeService.accentColor
         }
     }
 

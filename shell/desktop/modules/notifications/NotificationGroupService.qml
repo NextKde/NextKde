@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Services.Notifications
 import qs.desktop.modules.bar
+import qs.desktop.modules.common
 
 // Groups tracked notifications by desktopEntry (fallback appName) into a
 // ListModel that the popup and history views consume. Quickshell's
@@ -322,6 +323,7 @@ QtObject {
             .filter(n => n && typeof n.dismiss === "function")
         if (arr.length === 0)
             return
+        AppNotificationService.clearGroup(key)
         for (let i = 0; i < arr.length; i++)
             svc._pushHistory(arr[i])
         for (let j = arr.length - 1; j >= 0; j--)
@@ -363,6 +365,7 @@ QtObject {
     function dismissNotification(notification) {
         if (!svc._isAlive(notification))
             return
+        AppNotificationService.clearGroup(svc._groupKey(notification))
         svc._pushHistory(notification)
         notification.dismiss()
     }
