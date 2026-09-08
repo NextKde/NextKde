@@ -155,7 +155,6 @@ Item {
             materialDepth: handle.materialDepth
             material: "clear"
             ambientTransitionDuration: 600
-            bottomEdgeVisible: true
         }
     }
 }

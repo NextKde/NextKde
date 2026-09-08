@@ -300,6 +300,15 @@ Item {
         }
     }
 
+    // Every compositor-backed shell panel uses the same client-side material.
+    // KWin supplies backdrop blur/refraction; this layer contributes only the
+    // shared pigment and wallpaper response.
+    ShellGlassSurface {
+        anchors.fill: parent
+        z: -2
+        radius: container.pillRadius
+    }
+
     // This sits behind the delegates, so it only receives clicks in the Dock
     // gaps. It provides a natural way to leave the persistent edit state.
     MouseArea {

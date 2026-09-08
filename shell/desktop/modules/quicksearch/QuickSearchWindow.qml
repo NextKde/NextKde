@@ -372,22 +372,9 @@ PanelWindow {
         color: "transparent"
         opacity: root.revealProgress
 
-        LiquidGlassSurface {
+        ShellGlassSurface {
             anchors.fill: parent
             radius: dialog.radius
-            baseColor: ThemeService.isDark
-                ? Qt.rgba(0.08, 0.09, 0.12, 0.35)
-                : Qt.rgba(0.95, 0.95, 0.98, 0.50)
-            blurStrength: AppearanceConfigService.effectiveLauncherBlur
-            liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-            // QuickSearch stays neutral. Wallpaper-derived tint makes this
-            // transient surface look coloured even when only KWin liquid
-            // glass is intended to be enabled globally.
-            ambientStrength: 0.0
-            border.width: 1
-            border.color: ThemeService.isDark
-                ? Qt.rgba(1, 1, 1, 0.12)
-                : Qt.rgba(1, 1, 1, 0.60)
         }
 
         Item {
@@ -402,7 +389,7 @@ PanelWindow {
             z: 1
 
             // The editable search field: a liquid-glass capsule
-            LiquidGlassSurface {
+            ShellGlassSurface {
                 id: fieldPill
                 anchors {
                     left: parent.left
@@ -413,37 +400,8 @@ PanelWindow {
                     bottom: parent.bottom
                 }
                 radius: height / 2
-                baseColor: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.07)
-                    : Qt.rgba(0, 0, 0, 0.06)
                 surfaceOpacity: 1.0
                 materialDepth: 1.0
-                bottomShadeVisible: false
-                // Keep the input capsule neutral as well; the previous 0.8
-                // wallpaper tint was especially visible on colourful walls.
-                ambientStrength: 0.0
-
-                // Inner top-edge glow: a thin bright line hugging the capsule's
-                // upper rim, the hallmark of iOS liquid components.
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        leftMargin: fieldPill.radius * 0.7
-                        rightMargin: fieldPill.radius * 0.7
-                    }
-                    height: 1
-                    radius: 0.5
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                        GradientStop { position: 0.25; color: Qt.rgba(1, 1, 1, 0.28) }
-                        GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0.4) }
-                        GradientStop { position: 0.75; color: Qt.rgba(1, 1, 1, 0.28) }
-                        GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-                    }
-                }
 
                 // Focus ring over the glass body.
                 Rectangle {
@@ -669,19 +627,9 @@ PanelWindow {
                 rightMargin: 12
             }
 
-            LiquidGlassSurface {
+            ShellGlassSurface {
                 anchors.fill: parent
                 radius: settingsPopover.radius
-                baseColor: ThemeService.isDark
-                    ? Qt.rgba(0.12, 0.13, 0.16, 0.95)
-                    : Qt.rgba(0.96, 0.96, 0.98, 0.95)
-                blurStrength: AppearanceConfigService.effectiveLauncherBlur
-                liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-                ambientStrength: 0.0
-                border.width: 1
-                border.color: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.18)
-                    : Qt.rgba(0, 0, 0, 0.12)
             }
 
             Column {

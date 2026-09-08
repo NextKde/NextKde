@@ -210,8 +210,10 @@ PopupWindow {
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        materialDepth: 0.6
-        material: "thick"
+        // Context menus are a single navigation layer, not pressed-in cards.
+        // KWin owns their backdrop lens; keep QML to a calm, regular body.
+        materialDepth: 0.25
+        material: "regular"
         adaptiveDarkScrim: true
         scale: root.macosPopupMotion
             ? AppearanceTokens.motion.popupStartScale

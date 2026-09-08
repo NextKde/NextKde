@@ -43,13 +43,6 @@ Item {
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     readonly property int controlCenterHeight: 597
     readonly property int controlCenterWidth: 336
-    readonly property real effectiveBlur: dockHosted
-        ? AppearanceConfigService.effectiveDockBlur
-        : AppearanceConfigService.effectiveBarBlur
-    readonly property real effectiveLiquid: dockHosted
-        ? AppearanceConfigService.effectiveDockLiquid
-        : AppearanceConfigService.effectiveBarLiquid
-
     // Compact counterpart to the Dock player's transport controls. It keeps
     // the same circular glass treatment but is sized for this small panel.
     // Uses the shared LiquidGlassButton for a pure-QML liquid glass effect.
@@ -218,9 +211,6 @@ Item {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         Rectangle {
             id: wifiToggleDisc
@@ -340,10 +330,7 @@ Item {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
         cardOpacity: ControlCenterService.bluetoothAvailable ? 1 : 0.48
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         Rectangle {
             id: bluetoothToggleDisc
@@ -482,9 +469,6 @@ Item {
         cardRadius: 25
         cardWidth: 151
         cardHeight: 127
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.95, 1, 0.32) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         // A faint wallpaper-tone layer is both the card's quiet liquid base
         // and the blur source for the transport buttons. Blurring it makes
@@ -591,9 +575,6 @@ Item {
         cardRadius: 27
         cardWidth: 54
         cardHeight: 54
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -630,10 +611,6 @@ Item {
         cardRadius: 27
         cardWidth: 54
         cardHeight: 54
-        cardBorderColor: ThemeService.isDark
-            ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -673,9 +650,6 @@ Item {
         cardRadius: 27
         cardWidth: 54
         cardHeight: 54
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -719,10 +693,6 @@ Item {
         cardRadius: 27
         cardWidth: 104
         cardHeight: 54
-        cardBorderColor: ControlCenterService.doNotDisturbEnabled
-            ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: dndPointer.pressed ? 0.97 : (dndPointer.containsMouse ? 1.025 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -766,9 +736,6 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 57
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
@@ -820,9 +787,6 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 57
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.93, 1, 0.27) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         GlassText {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
@@ -901,9 +865,6 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 230
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         Item {
             anchors { fill: parent; margins: 10 }
@@ -1041,10 +1002,7 @@ Item {
         cardRadius: 22
         cardWidth: 296
         cardHeight: panel.pendingConfirmAction === "" ? 278 : 180
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
         cardShown: panel.sessionModalVisible
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
         onMotionClosed: {
             if (!panel.sessionModalVisible)
                 coordinator.modalActive = false

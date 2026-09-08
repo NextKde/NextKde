@@ -26,9 +26,6 @@ PopupWindow {
     property int offsetRight: 0
     // Corner radius for the blur region and the visual border.
     property real cardRadius: 19
-    // Visual card fill (above the blur).
-    property color cardColor: ThemeService.backgroundColor
-    property color cardBorderColor: Qt.rgba(1, 1, 1, 0.20)
     // Available to card content that needs locally adaptive foreground ink.
     readonly property color materialForegroundColor: cardGlass.foregroundColor
     readonly property color materialSecondaryForegroundColor: cardGlass.secondaryForegroundColor
@@ -96,11 +93,6 @@ PopupWindow {
         Math.round(root.cardRadius),
         Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
 
-    property real blurStrength: AppearanceConfigService.effectiveBarBlur
-    property real liquidStrength: AppearanceConfigService.effectiveBarLiquid
-    readonly property real effectiveBlur: Math.max(0.0, Math.min(1.0, blurStrength))
-    readonly property real effectiveLiquid: Math.max(0.0, Math.min(1.0, liquidStrength))
-
     // Blur region with the radius encoded explicitly, instead of
     // RoundedBlurRegion's ellipse scanlines (whose top-row inset is corrupted
     // by DPR scaling, making the plugin recover a smaller radius than QML
@@ -109,7 +101,8 @@ PopupWindow {
     // Everything below it is full-width so the card blurs completely and the
     // SDF mask rounds the corners to blurRadius.
     BackgroundEffect.blurRegion: (root.visible
-        && (root.effectiveBlur > 0.005 || root.effectiveLiquid > 0.005))
+        && (AppearanceConfigService.globalBlurStrength > 0.005
+            || AppearanceConfigService.globalLiquidStrength > 0.005))
         ? cardBlurRegionHolder : null
 
     Region {
@@ -126,22 +119,13 @@ PopupWindow {
         }
     }
 
-    // Card surface: LiquidGlassSurface provides liquid finish, ambient wallpaper reflections,
-    // and responsive opacity tied to effectiveBlur and effectiveLiquid.
-    LiquidGlassSurface {
+    // The canonical shell material; only geometry and presentation animation
+    // differ from Dock, QuickSearch and AppLauncher.
+    ShellGlassSurface {
         id: cardGlass
         anchors.fill: parent
         radius: root.blurRadius
-        baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
-        blurStrength: root.effectiveBlur
-        liquidStrength: root.effectiveLiquid
-        ambientPrimary: WallpaperPaletteService.primary
-        ambientSecondary: WallpaperPaletteService.secondary
-        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-        material: "regular"
-        border.width: 1
-        border.color: root.cardBorderColor
         scale: root.popupScale
         transformOrigin: Item.TopRight
         opacity: root.motionProgress

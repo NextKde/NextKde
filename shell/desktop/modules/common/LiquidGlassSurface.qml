@@ -17,10 +17,11 @@ Rectangle {
     // continuous dark scrim that becomes stronger only near white/black
     // wallpaper, keeping ordinary imagery visibly behind the glass.
     property bool adaptiveDarkScrim: false
-    // Some lightweight surfaces (for example notification cards) should keep
-    // the upper reflection without the heavier bottom inset edge.
-    property bool bottomEdgeVisible: true
-    property bool bottomShadeVisible: true
+    // One material contract: surfaces backed by KWin use KWin as the only
+    // optical renderer. QML then supplies geometry, pigment and content only.
+    // The local shader is reserved for real fallbacks that cannot publish a
+    // compositor backdrop region (for example desktop widgets).
+    property bool compositorManaged: true
     // Wallpaper changes should feel like pigment slowly moving through the
     // glass rather than a theme colour snapping to its next value.
     property int ambientTransitionDuration: 2600
@@ -171,24 +172,21 @@ Rectangle {
         }
     }
 
-    // A soft top reflection gives the surface depth without a hard border.
-    Rectangle {
+    // A static, shape-aware reflection. The fragment shader derives a bevel
+    // normal from the rounded-rectangle SDF, so the glint follows both straight
+    // edges and corners instead of reading as a white vertical wash.
+    ShaderEffect {
         anchors.fill: parent
-        radius: root.radius
-        opacity: root.normalizedLiquidStrength
-        gradient: Gradient {
-            orientation: Gradient.Vertical
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.28 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.12; color: Qt.rgba(0.88, 0.94, 1, 0.14 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.32; color: Qt.rgba(1, 1, 1, 0.06 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop { position: 0.60; color: Qt.rgba(0.86, 0.93, 1, 0.018 * root.materialHighlightFactor * root.materialReflectionScale) }
-            GradientStop {
-                position: 1.0
-                color: Qt.rgba(0, 0, 0, root.bottomShadeVisible
-                    ? (0.08 + Math.max(0.0, root.materialDepth) * 0.025)
-                        * root.normalizedLiquidStrength : 0.0)
-            }
-        }
+        visible: !root.compositorManaged
+        blending: true
+        property real u_radius: root.radius
+        property real u_strength: root.materialHighlightFactor * 0.42
+        property real u_reflectionScale: root.materialReflectionScale
+        property real u_depth: root.materialDepth
+        property real u_bottomShade: 0.0
+        property vector2d u_size: Qt.vector2d(width, height)
+        vertexShader: Qt.resolvedUrl("../../shaders/glass_highlight.vert.qsb")
+        fragmentShader: Qt.resolvedUrl("../../shaders/glass_highlight.frag.qsb")
     }
 
     // Wallpaper-derived tint: it stays deliberately below the specular layer
@@ -229,41 +227,6 @@ Rectangle {
             GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.045 * root.materialHighlightFactor) }
             GradientStop { position: 0.46; color: Qt.rgba(1, 1, 1, 0.0) }
             GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.035 * root.materialHighlightFactor) }
-        }
-    }
-
-    // Inset specular lines imply a glass edge without reintroducing a visible
-    // outline. Their endpoints begin after the curved corners.
-    Rectangle {
-        opacity: root.normalizedLiquidStrength
-        x: Math.min(parent.width / 2, root.radius + 3)
-        y: 0.8
-        width: Math.max(0, parent.width - x * 2)
-        height: 0.8
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
-            GradientStop { position: 0.18; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
-            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0.35 * root.materialHighlightFactor) }
-            GradientStop { position: 0.82; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
-            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
-        }
-    }
-
-    Rectangle {
-        visible: root.bottomEdgeVisible
-        opacity: root.normalizedLiquidStrength
-        x: Math.min(parent.width / 2, root.radius + 3)
-        y: parent.height - 2
-        width: Math.max(0, parent.width - x * 2)
-        height: 1
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
-            GradientStop { position: 0.20; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
-            GradientStop { position: 0.50; color: Qt.rgba(0.88, 0.94, 1.0, 0.10 * root.normalizedLiquidStrength) }
-            GradientStop { position: 0.80; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
-            GradientStop { position: 1.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
         }
     }
 
