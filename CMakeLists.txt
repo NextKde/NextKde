@@ -41,6 +41,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_tray_attention_match.mjs
         )
         set_tests_properties(kos-shell.tray-attention-match PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.notification-count-match
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_notification_count_match.mjs
+        )
+        set_tests_properties(kos-shell.notification-count-match PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.app-launch-isolation
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_app_launch_isolation.mjs

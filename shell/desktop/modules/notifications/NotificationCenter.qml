@@ -22,6 +22,16 @@ Scope {
         keepOnReload: false
 
         onNotification: notification => {
+            // Count arrival events before tracked/untracked presentation is
+            // decided. Replacements are new message events even though they
+            // reuse one banner object.
+            AppNotificationService.recordNotification({
+                desktopEntry: notification.desktopEntry || "",
+                appName: notification.appName || "",
+                summary: notification.summary || "",
+                body: notification.body || "",
+                hints: notification.hints || ({})
+            })
             // Do Not Disturb still accepts the notification at D-Bus level,
             // but keeps it out of the visible banner stack. Untracked
             // notifications never reach dismiss/expire, so snapshot them into

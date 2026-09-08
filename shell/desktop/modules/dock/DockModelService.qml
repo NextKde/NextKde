@@ -281,6 +281,12 @@ QtObject {
         function onRevisionChanged() {
             svc._refreshPresentation();
         }
+        function onActiveWindowIdChanged() {
+            const record = WindowService.windowById(WindowService.activeWindowId)
+            if (record)
+                AppNotificationService.clearForApp(record.identity.desktopId,
+                    record.identity.name)
+        }
     }
 
     property Connections _configConnections: Connections {
@@ -310,6 +316,7 @@ QtObject {
 
     function activateApp(appId) {
         const identity = AppIdentityService.resolve(appId);
+        AppNotificationService.clearForApp(identity.desktopId, identity.name);
         const windows = WindowService.windowsForApp(identity.desktopId);
 
         if (windows.length === 0) {
@@ -388,6 +395,10 @@ QtObject {
     function activateWindow(windowId) {
         // WindowService remains the sole authority for the actual Wayland
         // activation request.
+        const record = WindowService.windowById(windowId);
+        if (record)
+            AppNotificationService.clearForApp(record.identity.desktopId,
+                record.identity.name);
         WindowService.activateWindow(windowId);
     }
 

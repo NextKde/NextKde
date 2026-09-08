@@ -84,6 +84,8 @@ Item {
     // icons intentionally leave it false.
     property bool   editMode: false
     property bool   isDragging: false
+    readonly property int notificationCount:
+        AppNotificationService.countForApp(icon.appId, icon.displayName)
     // A small neutral marker for persistent shell-control state, currently
     // used by the Trash icon while it contains recoverable items.
     property bool   statusBadge: false
@@ -512,19 +514,49 @@ Item {
     }
 
     Rectangle {
-        width: Math.max(8, Math.round(icon.iconSize * 0.2))
-        height: width
-        radius: width / 2
+        id: attentionBadge
+        readonly property bool hasCount: icon.notificationCount > 0
+        readonly property real badgeHeight: hasCount
+            ? Math.max(16, Math.round(icon.iconSize * 0.36))
+            : Math.max(8, Math.round(icon.iconSize * 0.2))
+        width: hasCount
+            ? Math.max(badgeHeight,
+                badgeText.implicitWidth + Math.round(badgeHeight * 0.55))
+            : badgeHeight
+        height: badgeHeight
+        radius: badgeHeight / 2
         anchors { right: iconRenderer.right; top: iconRenderer.top }
+        anchors.rightMargin: hasCount ? -Math.round(icon.iconSize * 0.06) : 0
+        anchors.topMargin: hasCount ? -Math.round(icon.iconSize * 0.06) : 0
+        rotation: icon.vertical ? -90 : 0
+        transformOrigin: Item.Center
         color: "#ff3b30"
-        border { width: 1; color: Qt.rgba(1, 1, 1, 0.95) }
-        opacity: icon.isUrgent && !icon.editMode ? 1 : 0
+        border.width: 0
+        opacity: (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
         scale: opacity > 0 ? 1 : 0
         visible: opacity > 0.01
         z: 3
         Behavior on opacity { NumberAnimation { duration: 140 } }
         Behavior on scale {
             NumberAnimation { duration: 160; easing.type: Easing.OutBack }
+        }
+
+        Text {
+            id: badgeText
+            anchors.centerIn: parent
+            visible: attentionBadge.hasCount
+            text: icon.notificationCount > 99
+                ? "99+" : String(icon.notificationCount)
+            color: "white"
+            renderType: Text.NativeRendering
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font {
+                family: AppearanceTokens.typography.displayFamily
+                pixelSize: Math.max(8,
+                    Math.round(attentionBadge.badgeHeight * 0.52))
+                weight: Font.Bold
+            }
         }
     }
 
