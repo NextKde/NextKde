@@ -8,7 +8,7 @@ QtObject {
     id: launcher
 
     readonly property string settingsBinary:
-        Quickshell.shellDir + "/../apps/settings/build/kos-settings"
+        Quickshell.shellDir + "/../.build/kosctl/apps/settings/kos-settings"
 
     function openSettings() {
         Quickshell.execDetached([
@@ -17,7 +17,7 @@ QtObject {
             // the active Shell directory so a source-tree session opens a
             // Settings window connected to that same session rather than the
             // installed `kos` configuration. Candidates are deliberately
-            // limited to the one canonical in-tree artifact plus the
+            // limited to the canonical kosctl build artifact plus the
             // installed copy: a second build tree would drift and open a
             // Settings build that does not match the running Shell.
             "export KOS_SHELL_DIR=\"$2\"; "
