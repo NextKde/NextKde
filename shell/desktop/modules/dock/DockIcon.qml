@@ -75,6 +75,7 @@ Item {
     // enter the pinned-app edit/reorder state.
     property bool   allowEdit: true
     property bool   isRunning:   false
+    property int    windowCount: isRunning ? 1 : 0
     property bool   isActivated: false
     // Urgency is independent from activation. A window requesting attention
     // paints an orange-red slot until the compositor clears that state.
@@ -527,16 +528,19 @@ Item {
         }
     }
 
-    // Keep the fixed-size indicator used by the previous main branch. A row
-    // of per-window dots expands after the side Dock rotates its content and
-    // can visibly escape the icon slot on left/right edges.
-    Rectangle {
+    // Keep the dots inside the existing indicator slot. In particular, the
+    // side Dock rotates this item with the row, so an unbounded window-count
+    // strip would protrude past the icon edge.
+    Item {
         id: runningIndicator
-        width: icon.runningIndicatorWidth
+        readonly property int dotCount: Math.min(3,
+            Math.max(1, icon.windowCount))
+        readonly property real dotSize: dotCount >= 3 ? 4 : 5
+        readonly property real dotSpacing: 2
+        width: icon.dotIndicator
+            ? dotCount * dotSize + (dotCount - 1) * dotSpacing
+            : icon.runningIndicatorWidth
         height: icon.runningIndicatorHeight
-        radius: width / 2
-        color: icon.dotIndicator ? Qt.rgba(1, 1, 1, 0.95)
-            : ThemeService.accentColor
         opacity: icon.isRunning ? 1 : 0
         visible: opacity > 0.01
         z: 2
@@ -550,6 +554,31 @@ Item {
 
         Behavior on opacity {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: runningIndicator.dotSpacing
+            visible: icon.dotIndicator
+            Repeater {
+                model: runningIndicator.dotCount
+                delegate: Rectangle {
+                    required property int index
+                    width: runningIndicator.dotSize
+                    height: width
+                    radius: width / 2
+                    color: ThemeService.isDark
+                        ? Qt.rgba(1, 1, 1, 0.95)
+                        : Qt.rgba(0, 0, 0, 0.85)
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            visible: !icon.dotIndicator
+            radius: width / 2
+            color: ThemeService.accentColor
         }
     }
 

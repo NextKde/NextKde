@@ -705,6 +705,7 @@ Item {
                                 iconSource: pinnedItemLoader.itemData.icon ?? ""
                                 displayName: pinnedItemLoader.itemData.name ?? ""
                                 isRunning: pinnedItemLoader.itemData.isRunning ?? false
+                                windowCount: pinnedItemLoader.itemData.windowCount ?? 0
                                 isActivated: DockModelService.isAppActivated(
                                     pinnedItemLoader.itemData.appId ?? "")
                                 isUrgent: pinnedItemLoader.itemData.isUrgent ?? false
@@ -739,6 +740,7 @@ Item {
                                         ?? modelData.identity.iconSource ?? ""
                                     displayName: modelData.title ?? ""
                                     isRunning: true
+                                    windowCount: 1
                                     isActivated: modelData.toplevel.activated ?? false
                                     isUrgent: modelData.isUrgent ?? false
                                     appId: modelData.identity.desktopId ?? ""
@@ -785,6 +787,7 @@ Item {
                 iconSource: model.icon ?? ""
                 displayName: model.title ?? ""
                 isRunning: true
+                windowCount: model.windowCount ?? 1
                 isActivated: model.isActivated ?? false
                 isUrgent: model.isUrgent ?? false
                 appId: model.appId ?? ""
