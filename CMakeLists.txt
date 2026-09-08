@@ -31,6 +31,21 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
         )
         set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.date-buckets
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_date_buckets.mjs
+        )
+        set_tests_properties(kos-shell.date-buckets PROPERTIES TIMEOUT 10)
+        find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
+            HINTS /usr/lib/qt6/bin)
+        if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.date-projection
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/date-projection/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.date-projection PROPERTIES TIMEOUT 15)
+        endif()
         add_test(NAME kos-shell.window-placement-updates
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_placement_updates.mjs

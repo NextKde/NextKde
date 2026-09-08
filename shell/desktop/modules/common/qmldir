@@ -1,4 +1,5 @@
 module qs.desktop.modules.common
+DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
 GlassSlider 1.0 GlassSlider.qml
 GlassToggle 1.0 GlassToggle.qml
