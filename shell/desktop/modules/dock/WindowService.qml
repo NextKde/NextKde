@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell.Wayland._ToplevelManagement
 import qs.desktop.modules.platform
+import "WindowRecordIndex.mjs" as WindowRecordIndex
 
 // WindowService — provider-neutral runtime window model.
 //
@@ -171,19 +172,6 @@ QtObject {
         return result;
     }
 
-    function _findOldRecord(toplevel, provider, handleId) {
-        for (let i = 0; i < svc.records.length; i++) {
-            const record = svc.records[i];
-            if (provider === "kwin") {
-                if (record.provider === "kwin" && record.handleId === handleId)
-                    return record;
-            } else if (record.provider === "foreign" && record.toplevel === toplevel) {
-                return svc.records[i];
-            }
-        }
-        return null;
-    }
-
     function _newWindowId() {
         return "window-" + (svc._nextWindowNumber++);
     }
@@ -249,6 +237,7 @@ QtObject {
         const tops = useKwin ? svc._kwinWindows : foreignTops;
         const nextRecords = [];
         const nextById = ({});
+        const oldRecords = WindowRecordIndex.indexWindowRecords(svc.records);
 
         for (let i = 0; i < tops.length; i++) {
             const source = tops[i];
@@ -270,7 +259,8 @@ QtObject {
                 maximized: !!source.maximized,
                 visible: source.visible === undefined ? true : !!source.visible
             } : source;
-            const old = _findOldRecord(toplevel, provider, handleId);
+            const old = useKwin ? oldRecords.kwin.get(handleId)
+                : oldRecords.foreign.get(toplevel);
             const identity = AppIdentityService.resolve(toplevel.appId);
             // A user-selected icon is part of the app presentation contract
             // and must win over every provider-derived value. Otherwise use
