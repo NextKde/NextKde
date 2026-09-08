@@ -154,9 +154,14 @@ private:
     {
         if (g_eventHandler)
             g_eventHandler(event);
-        QTextStream(stdout) << "EVENT "
-                            << QJsonDocument(event).toJson(QJsonDocument::Compact)
-                            << Qt::endl;
+        // Socket subscribers receive the event above. Full JSON on stdout is
+        // diagnostic only; avoid serializing and flushing every geometry tick.
+        static const bool traceEvents = qEnvironmentVariableIntValue("KOS_PLATFORM_TRACE_EVENTS") == 1;
+        if (traceEvents) {
+            QTextStream(stdout) << "EVENT "
+                                << QJsonDocument(event).toJson(QJsonDocument::Compact)
+                                << Qt::endl;
+        }
     }
 
     void publishThumbnailError(const QString &id, const QString &message)
