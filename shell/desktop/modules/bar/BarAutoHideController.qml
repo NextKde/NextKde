@@ -37,12 +37,9 @@ Item {
     property string phase: "Bootstrapping"
     property real revealProgress: 0.0
     readonly property bool hidden: ctl.phase === "Hidden"
-    // Reserve as soon as reveal begins, keep the reservation throughout the
-    // hide animation, and release it only at the Hidden boundary. This avoids
-    // resizing maximized windows on every animation frame.
+    // Auto-hide modes are overlays: only the permanently visible mode reserves
+    // workspace, so maximized windows never reflow during reveal/hide cycles.
     readonly property bool workspaceReserved: ctl.mode === "always"
-        || (ctl.phase !== "Bootstrapping" && ctl.phase !== "Hidden"
-            && ctl.phase !== "RevealPending")
     readonly property bool handleActive: ctl.mode !== "always"
     property bool hasWindowConflict: false
     readonly property bool policyWantsHidden:
@@ -391,7 +388,7 @@ Item {
 
     Connections {
         target: WindowService
-        function onRevisionChanged() {
+        function onPlacementRevisionChanged() {
             if (ctl._recomputeConflict())
                 ctl._doEvaluate()
             else if (ctl.mode !== "always")

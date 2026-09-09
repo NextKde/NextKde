@@ -32,6 +32,9 @@
 #include <QUrl>
 #include <QTimer>
 
+#include <KIO/ApplicationLauncherJob>
+#include <KService>
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -126,6 +129,10 @@ QJsonObject menuItemFromArgument(const QDBusArgument &argument)
     const QVariant label = unwrapDbusValue(properties.value(QStringLiteral("label")));
     const QVariant visible = unwrapDbusValue(properties.value(QStringLiteral("visible")));
     const QVariant enabled = unwrapDbusValue(properties.value(QStringLiteral("enabled")));
+    const QVariant iconName = unwrapDbusValue(properties.value(QStringLiteral("icon-name")));
+    const QVariant childrenDisplay = unwrapDbusValue(properties.value(QStringLiteral("children-display")));
+    const QVariant toggleType = unwrapDbusValue(properties.value(QStringLiteral("toggle-type")));
+    const QVariant toggleState = unwrapDbusValue(properties.value(QStringLiteral("toggle-state")));
     QJsonArray children;
     argument.beginArray();
     while (!argument.atEnd()) {
@@ -139,12 +146,19 @@ QJsonObject menuItemFromArgument(const QDBusArgument &argument)
     }
     argument.endArray();
     argument.endStructure();
+    const bool hasChildren = !children.isEmpty()
+        || childrenDisplay.toString() == QStringLiteral("submenu");
+    const bool checkable = toggleType.isValid() && !toggleType.toString().isEmpty();
+    const bool checked = toggleState.isValid() && toggleState.toInt() == 1;
     return QJsonObject{{QStringLiteral("id"), id},
                        {QStringLiteral("label"), label.toString().remove(QLatin1Char('_'))},
+                       {QStringLiteral("icon"), QString()},
                        {QStringLiteral("separator"), type.toString() == QStringLiteral("separator")},
                        {QStringLiteral("visible"), !visible.isValid() || visible.toBool()},
                        {QStringLiteral("enabled"), !enabled.isValid() || enabled.toBool()},
-                       {QStringLiteral("hasChildren"), !children.isEmpty()},
+                       {QStringLiteral("hasChildren"), hasChildren},
+                       {QStringLiteral("checkable"), checkable},
+                       {QStringLiteral("checked"), checked},
                        {QStringLiteral("children"), children}};
 }
 
@@ -694,6 +708,15 @@ PlatformServer::PlatformServer(QObject *parent)
             {wlPaste, QStringLiteral("--type"), QStringLiteral("image"),
              QStringLiteral("--watch"), cliphist, QStringLiteral("store")});
     }
+}
+
+PlatformServer::~PlatformServer()
+{
+    // QLocalServer owns accepted sockets and is destroyed after the tracking
+    // containers below. Disconnect first so socket destruction cannot call
+    // clientDisconnected() after those containers have already been freed.
+    for (QLocalSocket *socket : m_buffers.keys())
+        QObject::disconnect(socket, nullptr, this, nullptr);
 }
 
 bool PlatformServer::listen()
@@ -1454,6 +1477,80 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
     return false;
 }
 
+bool PlatformServer::handleApplication(QLocalSocket *socket,
+                                       const QJsonObject &request)
+{
+    if (operation(request) != QStringLiteral("application.launch"))
+        return false;
+
+    const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
+    const QString desktopId = payload.value(QStringLiteral("desktopId")).toString().trimmed();
+    if (desktopId.isEmpty() || desktopId.contains(QChar('/'))
+        || desktopId.contains(QChar('\\')) || desktopId.size() > 255) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-desktop-id"),
+                QStringLiteral("应用标识无效"), false);
+        return true;
+    }
+
+    const KService::Ptr service = KService::serviceByStorageId(desktopId);
+    if (!service || !service->isApplication()) {
+        respond(socket, request, false, {}, QStringLiteral("application-not-found"),
+                QStringLiteral("应用启动器不存在"), false);
+        return true;
+    }
+
+    QList<QUrl> urls;
+    const QJsonValue urlsValue = payload.value(QStringLiteral("urls"));
+    if (!urlsValue.isUndefined() && !urlsValue.isArray()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-urls"),
+                QStringLiteral("应用 URL 参数无效"), false);
+        return true;
+    }
+    const QJsonArray urlArray = urlsValue.toArray();
+    if (urlArray.size() > 64) {
+        respond(socket, request, false, {}, QStringLiteral("too-many-urls"),
+                QStringLiteral("应用 URL 参数过多"), false);
+        return true;
+    }
+    for (const QJsonValue &value : urlArray) {
+        if (!value.isString()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-urls"),
+                    QStringLiteral("应用 URL 参数无效"), false);
+            return true;
+        }
+        const QUrl url = QUrl::fromUserInput(value.toString());
+        if (!url.isValid()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-urls"),
+                    QStringLiteral("应用 URL 参数无效"), false);
+            return true;
+        }
+        urls.append(url);
+    }
+
+    auto *job = new KIO::ApplicationLauncherJob(service, this);
+    job->setUrls(urls);
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    connect(job, &KJob::result, this,
+            [this, guardedSocket, request, job]() {
+        if (job->error() != 0) {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("application-launch-failed"),
+                    job->errorText().isEmpty() ? QStringLiteral("应用启动失败")
+                                               : job->errorText(),
+                    true);
+            return;
+        }
+        QJsonArray pids;
+        for (const qint64 pid : job->pids())
+            pids.append(pid);
+        respond(guardedSocket.data(), request, true,
+                QJsonObject{{QStringLiteral("started"), true},
+                            {QStringLiteral("pids"), pids}});
+    });
+    job->start();
+    return true;
+}
+
 bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject &request)
 {
     const QString op = operation(request);
@@ -1918,10 +2015,12 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
     if (op == QStringLiteral("appmenu.layout")) {
         // The root needs one additional level so top-level labels such as
         // File and Edit are identified as submenus rather than actions.
-        const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 2);
+        const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 5);
         const QDBusMessage reply = menu.call(QStringLiteral("GetLayout"), id, depth,
             QStringList{QStringLiteral("label"), QStringLiteral("visible"),
-                        QStringLiteral("enabled"), QStringLiteral("type")});
+                        QStringLiteral("enabled"), QStringLiteral("type"),
+                        QStringLiteral("children-display"), QStringLiteral("toggle-type"),
+                        QStringLiteral("toggle-state"), QStringLiteral("icon-name")});
         if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().size() < 2) {
             respond(socket, request, false, {}, QStringLiteral("appmenu-layout-failed"),
                     QStringLiteral("无法读取应用菜单"), true);
@@ -1940,8 +2039,18 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
             : op == QStringLiteral("appmenu.close") ? QStringLiteral("closed")
             : QStringLiteral("clicked");
         const quint32 timestamp = static_cast<quint32>(QDateTime::currentMSecsSinceEpoch());
+
+        if (op == QStringLiteral("appmenu.open")) {
+            // Give Qt / KDE applications an opportunity to populate lazy dynamic submenus.
+            menu.call(QStringLiteral("AboutToShow"), id);
+        }
+
+        // com.canonical.dbusmenu Event signature is (isvu): the data argument
+        // MUST be typed as a D-Bus variant. Sending a bare QVariantMap produces
+        // (isa{sv}u), which Qt's QDBusMenuAdaptor rejects as an unknown method.
+        const QDBusVariant dbusData(QVariantMap{{QStringLiteral("timestamp"), timestamp}});
         const QDBusMessage reply = menu.call(QStringLiteral("Event"), id, event,
-            QVariantMap{{QStringLiteral("timestamp"), timestamp}}, timestamp);
+            QVariant::fromValue(dbusData), timestamp);
         if (reply.type() == QDBusMessage::ErrorMessage) {
             respond(socket, request, false, {}, QStringLiteral("appmenu-event-failed"),
                     QStringLiteral("应用菜单操作失败"), true);
@@ -2471,7 +2580,8 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         respond(socket, request, true, QJsonObject{{QStringLiteral("ready"), true}});
         return;
     }
-    if (handleClipboard(socket, request) || handleFileOperation(socket, request)
+    if (handleClipboard(socket, request) || handleApplication(socket, request)
+        || handleFileOperation(socket, request)
         || handleKWin(socket, request) || handleAppMenu(socket, request)
         || handleSystemOperation(socket, request))
         return;

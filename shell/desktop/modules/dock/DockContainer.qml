@@ -514,13 +514,13 @@ Item {
             vertical: container.vertical
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
-            iconSource: AppPresentationService.iconSource("user-trash")
+            iconSource: SystemIconResolver.source("trash",
+                DockTrashService.hasItems ? "full" : "empty")
             displayName: "回收站"
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
             isPinnedItem: false
-            statusBadge: DockTrashService.hasItems
             onActivate: {
                 if (container.isEditing) {
                     container.editMode = false
@@ -714,8 +714,10 @@ Item {
                                 iconSource: pinnedItemLoader.itemData.icon ?? ""
                                 displayName: pinnedItemLoader.itemData.name ?? ""
                                 isRunning: pinnedItemLoader.itemData.isRunning ?? false
+                                windowCount: pinnedItemLoader.itemData.windowCount ?? 0
                                 isActivated: DockModelService.isAppActivated(
                                     pinnedItemLoader.itemData.appId ?? "")
+                                isUrgent: pinnedItemLoader.itemData.isUrgent ?? false
                                 appId: pinnedItemLoader.itemData.appId ?? ""
                                 isWindowItem: false
                                 isPinnedItem: true
@@ -747,6 +749,7 @@ Item {
                                         ?? modelData.identity.iconSource ?? ""
                                     displayName: modelData.title ?? ""
                                     isRunning: true
+                                    windowCount: 1
                                     isActivated: modelData.toplevel.activated ?? false
                                     isUrgent: modelData.isUrgent ?? false
                                     appId: modelData.identity.desktopId ?? ""
@@ -793,6 +796,7 @@ Item {
                 iconSource: model.icon ?? ""
                 displayName: model.title ?? ""
                 isRunning: true
+                windowCount: model.windowCount ?? 1
                 isActivated: model.isActivated ?? false
                 isUrgent: model.isUrgent ?? false
                 appId: model.appId ?? ""

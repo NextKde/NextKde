@@ -47,7 +47,10 @@ QtObject {
         case "paste":
             return ["edit-paste-symbolic", "edit-paste"]
         case "trash":
-            return ["user-trash-symbolic", "user-trash"]
+            return variant === "full"
+                ? ["user-trash-full", "user-trash-full-symbolic",
+                    "user-trash", "user-trash-symbolic"]
+                : ["user-trash", "user-trash-symbolic"]
         case "folder":
             return ["folder-symbolic", "folder"]
         case "newFile":

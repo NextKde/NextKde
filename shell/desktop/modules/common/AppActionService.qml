@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import qs.desktop.modules.platform
 
 // Shared application-action contract.
 //
@@ -17,21 +18,52 @@ QtObject {
     signal hideRequested(string appId)
     signal editRequested(var application)
 
-    function launch(application) {
-        const entry = application?.entry ?? application
-        const appId = String(application?.id ?? entry?.id ?? "")
-        if (!entry?.execute) {
-            console.warn("[AppAction] cannot launch without DesktopEntry app=" + appId)
-            return false
-        }
+    function _executeDirect(entry, appId, reason) {
         try {
             entry.execute()
-            console.log("[AppAction] launch app=" + appId)
+            console.log("[AppAction] native launch app=" + appId
+                        + (reason ? " fallback=" + reason : ""))
             return true
         } catch (error) {
             console.warn("[AppAction] failed to launch app=" + appId + ": " + error)
             return false
         }
+    }
+
+    function _executeCommandDirect(command, appId) {
+        try {
+            Quickshell.execDetached(command)
+            console.log("[AppAction] direct command fallback app=" + appId)
+            return true
+        } catch (error) {
+            console.warn("[AppAction] direct command failed app=" + appId
+                         + ": " + error)
+            return false
+        }
+    }
+
+    function launch(application) {
+        const entry = application?.entry ?? application
+        const appId = String(entry?.id ?? application?.id ?? "")
+        if (!entry?.execute) {
+            console.warn("[AppAction] cannot launch without DesktopEntry app=" + appId)
+            return false
+        }
+        // DesktopEntry.execute() knows how to select the user's terminal. Keep
+        // that native path for terminal entries rather than guessing one here.
+        if (entry.runInTerminal)
+            return _executeDirect(entry, appId, "terminal-entry")
+        if (!PlatformClient.socket.connected)
+            return _executeDirect(entry, appId, "platform-unavailable")
+        PlatformClient.request("application.launch", {
+            desktopId: appId,
+            urls: []
+        }, function(response) {
+            if (!response.ok)
+                service._executeDirect(entry, appId, "platform-launch")
+        })
+        console.log("[AppAction] platform launch app=" + appId)
+        return true
     }
 
     function entryForId(desktopId) {
@@ -65,16 +97,13 @@ QtObject {
             console.warn("[AppAction] desktop entry has no launch command: " + desktopId)
             return false
         }
-        try {
-            Quickshell.execDetached([String(baseCommand[0])].concat(extra))
-            console.log("[AppAction] deep link app=" + desktopId
-                        + " args=" + JSON.stringify(extra))
-            return true
-        } catch (error) {
-            console.warn("[AppAction] deep-link launch failed app=" + desktopId
-                         + ": " + error)
-            return false
-        }
+        if (entry.runInTerminal)
+            return _executeDirect(entry, desktopId, "terminal-deep-link")
+        console.log("[AppAction] deep link app=" + desktopId
+                    + " args=" + JSON.stringify(extra))
+        // KOS-owned deep links currently use explicit argv rather than URLs.
+        // Keep that narrow path until each app publishes a URL scheme.
+        return _executeCommandDirect(Array.from(baseCommand).concat(extra), desktopId)
     }
 
     function pin(appId) {

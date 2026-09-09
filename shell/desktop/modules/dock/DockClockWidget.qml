@@ -25,6 +25,11 @@ Item {
         precision: SystemClock.Seconds
     }
 
+    DateProjection {
+        id: calendarClock
+        sourceDate: clock.date
+    }
+
     function shortWeekday(date) {
         return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()]
     }
@@ -223,8 +228,8 @@ Item {
             Text {
                 width: parent.width
                 height: Math.round(widget.iconSize * 0.27)
-                text: Qt.formatDateTime(clock.date, "yyyy年M月d日")
-                    + " " + widget.shortWeekday(clock.date)
+                text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月d日")
+                    + " " + widget.shortWeekday(calendarClock.dayDate)
                 color: ThemeService.foregroundColor
                 opacity: 0.82
                 horizontalAlignment: Text.AlignHCenter
@@ -274,7 +279,7 @@ Item {
             glyphColor: "white"
         }
         Text {
-            text: Qt.formatDateTime(clock.date, "HH:mm")
+            text: Qt.formatDateTime(calendarClock.minuteDate, "HH:mm")
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {

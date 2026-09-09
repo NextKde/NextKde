@@ -31,6 +31,55 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
         )
         set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.date-buckets
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_date_buckets.mjs
+        )
+        set_tests_properties(kos-shell.date-buckets PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.tray-attention-match
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_tray_attention_match.mjs
+        )
+        set_tests_properties(kos-shell.tray-attention-match PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.notification-count-match
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_notification_count_match.mjs
+        )
+        set_tests_properties(kos-shell.notification-count-match PROPERTIES TIMEOUT 10)
+        find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
+            HINTS /usr/lib/qt6/bin)
+        if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.date-projection
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/date-projection/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.date-projection PROPERTIES TIMEOUT 15)
+        endif()
+        add_test(NAME kos-shell.window-placement-updates
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_placement_updates.mjs
+        )
+        set_tests_properties(kos-shell.window-placement-updates PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.window-record-index
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_record_index.mjs
+        )
+        set_tests_properties(kos-shell.window-record-index PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-palette
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_palette.mjs
+        )
+        set_tests_properties(kos-shell.wallpaper-palette PROPERTIES TIMEOUT 10)
+        find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
+        if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-shell.static-work-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/static-work/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.static-work-runtime PROPERTIES TIMEOUT 15)
+        endif()
     endif()
 endif()
 

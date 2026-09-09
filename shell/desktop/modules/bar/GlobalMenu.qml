@@ -20,8 +20,10 @@ Item {
     property Item popupAnchorItem: null
 
     readonly property bool available: service.length > 0 && path.length > 0
+    readonly property bool menuOpen: menuPopup.visible
     readonly property var shownItems: items.slice(0, visibleCount)
     readonly property var overflowItems: items.slice(visibleCount)
+    property int activeOpeningId: 0
     implicitHeight: 28
     implicitWidth: available && items.length > 0
         ? Math.min(maximumWidth, menuRow.implicitWidth + (overflowItems.length > 0 ? 34 : 0)) : 0
@@ -76,32 +78,32 @@ Item {
                 item.children = []
                 continue
             }
+            if (item.children && item.children.length > 0) {
+                pending++
+                hydrate(item.children, depth + 1, function(result) {
+                    item.children = result
+                    finish()
+                })
+                continue
+            }
             pending++
             AppMenuService.requestLayout(item.id, function(children) {
                 hydrate(children, depth + 1, function(result) {
                     item.children = result
                     finish()
                 })
-            })
+            }, 2)
         }
         if (pending === 0)
             done(itemsToHydrate)
     }
 
-    // Switching to a different anchor (a different top-level item, or the
-    // overflow button) while the popup is already visible reuses the same
-    // mapped surface for a new anchor and a different item count, i.e. a
-    // live resize+reposition of an already-mapped popup. That is the same
-    // class of bug the Column/PopupWindow sizing comment above already
-    // documents for submenu paging; here it leaves the surface at the
-    // previous menu's size with the new, differently sized menu rendered
-    // inside it. Force a clean unmap/remap whenever the anchor actually
-    // changes instead of mutating the live popup in place.
     function presentMenu(rootId, anchorItem, result) {
         const anchorChanging = menuPopup.visible && root.popupAnchorItem !== anchorItem
         const openNew = function() {
             popupRootId = rootId
             popupAnchorItem = anchorItem
+            menuPopup.anchorItem = anchorItem
             menuPopup.setItems(result)
             console.info("[GlobalMenu] popup items=" + result.length)
             menuPopup.show()
@@ -123,15 +125,37 @@ Item {
             PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
             return
         }
+        popupRootId = item.id
+        activeOpeningId = item.id
         PlatformClient.request("appmenu.open", { service, path, id: item.id })
         AppMenuService.requestLayout(item.id, function(children) {
+            if (activeOpeningId !== item.id)
+                return
             hydrate(children, 0, function(result) {
+                if (activeOpeningId !== item.id)
+                    return
                 root.presentMenu(item.id, clickedItem, result)
             })
+        }, 2)
+    }
+
+    function openOverflow(anchor) {
+        popupRootId = 0
+        activeOpeningId = 0
+        hydrate(overflowItems, 0, function(result) {
+            root.presentMenu(0, anchor, result)
         })
     }
 
     onMaximumWidthChanged: updateVisibleCount()
+    onServiceChanged: {
+        if (menuPopup.visible)
+            menuPopup.hide()
+    }
+    onPathChanged: {
+        if (menuPopup.visible)
+            menuPopup.hide()
+    }
     onItemsChanged: updateVisibleCount()
 
     Row {
@@ -150,14 +174,16 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: 8
-                    color: pointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
-                        ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                    color: (pointer.containsMouse || (menuPopup.visible && root.popupRootId === modelData.id))
+                        ? Qt.rgba(ThemeService.foregroundColor.r,
+                            ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
                 }
-                GlassText {
+                Text {
                     anchors.centerIn: parent
                     text: modelData.label || ""
                     color: ThemeService.foregroundColor
                     font: labelMetrics.font
+                    renderType: Text.NativeRendering
                     elide: Text.ElideRight
                     width: parent.width - 14
                     horizontalAlignment: Text.AlignHCenter
@@ -167,7 +193,18 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: modelData.enabled !== false
-                    onClicked: root.openItem(modelData, menuItem)
+                    onClicked: {
+                        if (menuPopup.visible && root.popupRootId === modelData.id) {
+                            menuPopup.hide()
+                        } else {
+                            root.openItem(modelData, menuItem)
+                        }
+                    }
+                    onEntered: {
+                        if (menuPopup.visible && root.popupRootId !== modelData.id) {
+                            root.openItem(modelData, menuItem)
+                        }
+                    }
                 }
             }
         }
@@ -179,18 +216,26 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 radius: 8
-                color: morePointer.containsMouse ? Qt.rgba(ThemeService.foregroundColor.r,
-                    ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                color: (morePointer.containsMouse || (menuPopup.visible && root.popupRootId === 0))
+                    ? Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
             }
-            GlassText { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16 }
+            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16; renderType: Text.NativeRendering }
             MouseArea {
                 id: morePointer
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: {
-                    root.hydrate(root.overflowItems, 0, function(result) {
-                        root.presentMenu(0, overflowButton, result)
-                    })
+                    if (menuPopup.visible && root.popupRootId === 0) {
+                        menuPopup.hide()
+                    } else {
+                        root.openOverflow(overflowButton)
+                    }
+                }
+                onEntered: {
+                    if (menuPopup.visible && root.popupRootId !== 0) {
+                        root.openOverflow(overflowButton)
+                    }
                 }
             }
         }
@@ -202,11 +247,14 @@ Item {
         baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         position: "bottom"
-        centerBelowAnchor: true
+        centerBelowAnchor: false
         centerBelowOffset: root.popupAnchorItem
             ? root.popupAnchorItem.height
                 + Math.max(0, (root.parent?.height ?? root.height) - root.height) / 2 + 4
             : root.height + 4
+        customAnchorEdges: Edges.Top | Edges.Left
+        customGravity: Edges.Bottom | Edges.Right
+        customMarginsTop: 0
         macosPopupMotion: true
         globalDismissGraceMs: 250
         dismissOnGlobalPointerPress: false
@@ -216,9 +264,13 @@ Item {
                 console.info("[GlobalMenu] trigger result=" + (response?.ok ? "ok" : (response?.error?.code || "failed")))
             })
         }
-        onAboutToHide: PlatformClient.request("appmenu.close", {
-            service: root.service, path: root.path, id: root.popupRootId
-        })
+        onAboutToHide: {
+            PlatformClient.request("appmenu.close", {
+                service: root.service, path: root.path, id: root.popupRootId
+            })
+            root.popupRootId = 0
+            root.activeOpeningId = 0
+        }
         onVisibleChanged: console.info("[GlobalMenu] popup visible=" + visible)
     }
 }

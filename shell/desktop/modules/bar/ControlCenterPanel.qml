@@ -887,7 +887,10 @@ Item {
                     anchors.margins: -6
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: ControlCenterService.notificationHistory.clear()
+                    onClicked: {
+                        ControlCenterService.notificationHistory.clear()
+                        AppNotificationService.clearAll()
+                    }
                 }
             }
             ListView {

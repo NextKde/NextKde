@@ -34,8 +34,12 @@ QtObject {
         PlatformClient.request("appmenu.active", {}, function(response) {
             requestPending = false
             const address = response?.ok ? (response.result || {}) : ({})
-            dbusService = address.available ? (address.service || "") : ""
-            dbusPath = address.available ? (address.path || "") : ""
+            const newService = address.available ? (address.service || "") : ""
+            const newPath = address.available ? (address.path || "") : ""
+            if (newService === dbusService && newPath === dbusPath && items.length > 0)
+                return
+            dbusService = newService
+            dbusPath = newPath
             if (!available) {
                 items = []
                 return

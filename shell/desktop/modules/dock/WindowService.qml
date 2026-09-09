@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell.Wayland._ToplevelManagement
 import qs.desktop.modules.platform
+import "WindowRecordIndex.mjs" as WindowRecordIndex
 
 // WindowService — provider-neutral runtime window model.
 //
@@ -17,6 +18,9 @@ QtObject {
     readonly property int windowCount: windowModel.count
     property var records: []
     property int revision: 0
+    // Placement consumers must observe this counter, not recordsChanged.
+    // Pure geometry updates retain the presentation array and its objects.
+    property int placementRevision: 0
     property string activeWindowId: ""
 
     // Forwarded by the KWin input effect through this service's existing local
@@ -171,24 +175,11 @@ QtObject {
         return result;
     }
 
-    function _findOldRecord(toplevel, provider, handleId) {
-        for (let i = 0; i < svc.records.length; i++) {
-            const record = svc.records[i];
-            if (provider === "kwin") {
-                if (record.provider === "kwin" && record.handleId === handleId)
-                    return record;
-            } else if (record.provider === "foreign" && record.toplevel === toplevel) {
-                return svc.records[i];
-            }
-        }
-        return null;
-    }
-
     function _newWindowId() {
         return "window-" + (svc._nextWindowNumber++);
     }
 
-    function _recordsEqual(left, right) {
+    function _presentationEqual(left, right) {
         return left.windowId === right.windowId
             && left.provider === right.provider
             && left.handleId === right.handleId
@@ -203,11 +194,29 @@ QtObject {
             && !!left.toplevel.fullscreen === !!right.toplevel.fullscreen
             && !!left.onAllDesktops === !!right.onAllDesktops
             && left.desktopIds.length === right.desktopIds.length
-            && left.desktopIds.every((id, i) => id === right.desktopIds[i])
-            && !!left.isMaximized === !!right.isMaximized
+            && left.desktopIds.every((id, i) => id === right.desktopIds[i]);
+    }
+
+    function _placementEqual(left, right) {
+        return !!left.isMaximized === !!right.isMaximized
             && !!left.isVisible === !!right.isVisible
             && (left.screenName || "") === (right.screenName || "")
             && geometriesEqual(left.geometry, right.geometry);
+    }
+
+    function _updatePlacement(record, next) {
+        record.geometry = next.geometry;
+        record.screenName = next.screenName;
+        record.isMaximized = next.isMaximized;
+        record.isVisible = next.isVisible;
+        // KWin toplevels are plain snapshot objects; foreign toplevels are
+        // provider-owned QObjects and must never be written here.
+        if (record.provider === "kwin") {
+            record.toplevel.geometry = next.toplevel.geometry;
+            record.toplevel.outputName = next.toplevel.outputName;
+            record.toplevel.maximized = next.toplevel.maximized;
+            record.toplevel.visible = next.toplevel.visible;
+        }
     }
 
     // Null-safe geometry equality. A window that moves (or stops reporting
@@ -249,6 +258,7 @@ QtObject {
         const tops = useKwin ? svc._kwinWindows : foreignTops;
         const nextRecords = [];
         const nextById = ({});
+        const oldRecords = WindowRecordIndex.indexWindowRecords(svc.records);
 
         for (let i = 0; i < tops.length; i++) {
             const source = tops[i];
@@ -270,7 +280,8 @@ QtObject {
                 maximized: !!source.maximized,
                 visible: source.visible === undefined ? true : !!source.visible
             } : source;
-            const old = _findOldRecord(toplevel, provider, handleId);
+            const old = useKwin ? oldRecords.kwin.get(handleId)
+                : oldRecords.foreign.get(toplevel);
             const identity = AppIdentityService.resolve(toplevel.appId);
             // A user-selected icon is part of the app presentation contract
             // and must win over every provider-derived value. Otherwise use
@@ -314,12 +325,16 @@ QtObject {
         }
 
         let changed = svc.records.length !== nextRecords.length;
-        if (!changed) {
+        let presentationChanged = changed;
+        if (!presentationChanged) {
             for (let i = 0; i < nextRecords.length; i++) {
-                if (!svc._recordsEqual(svc.records[i], nextRecords[i])) {
+                if (!svc._presentationEqual(svc.records[i], nextRecords[i])) {
+                    presentationChanged = true;
                     changed = true;
                     break;
                 }
+                if (!svc._placementEqual(svc.records[i], nextRecords[i]))
+                    changed = true;
             }
         }
         if (!changed)
@@ -328,6 +343,13 @@ QtObject {
         svc._hasRebuiltOnce = true;
         if (!useKwin)
             svc._foreignRebuiltOnce = true;
+
+        if (!presentationChanged) {
+            for (let i = 0; i < nextRecords.length; i++)
+                svc._updatePlacement(svc.records[i], nextRecords[i]);
+            svc.placementRevision++;
+            return;
+        }
 
         while (windowModel.count > tops.length)
             windowModel.remove(windowModel.count - 1);
@@ -377,6 +399,9 @@ QtObject {
         const active = nextRecords.find(record => record.toplevel.activated);
         svc.activeWindowId = active?.windowId ?? "";
         svc.revision++;
+        // Add/remove, minimization and desktop membership also affect
+        // collision eligibility, so presentation updates notify both lanes.
+        svc.placementRevision++;
     }
 
     // ── Virtual desktops (KWin D-Bus, via the bridge) ──
