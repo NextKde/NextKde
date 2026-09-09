@@ -2,7 +2,7 @@
 
 `kos-platform` is the user-session adapter boundary. It is one C++20/Qt 6
 process started by `kos-platform.service`; its internal modules are grouped by
-capability (`kwin`, `clipboard`, `files`, `network`, `audio`, `bluetooth`,
+capability (`applications`, `kwin`, `clipboard`, `files`, `network`, `audio`, `bluetooth`,
 `display`, `session`, `theme`, `screenshot`, and `shortcuts`). They are not
 separate helper executables.
 
@@ -80,6 +80,7 @@ operation list and examples live in
 
 | Module | Operations | Implementation boundary |
 | --- | --- | --- |
+| `applications` | launch installed desktop entries with optional URLs | KDE `KService` + `KIO::ApplicationLauncherJob`; desktop-entry parsing, activation and process grouping remain KDE-owned |
 | `clipboard` | `clipboard.set/read/save-image`, history watch/list/copy/delete/clear | Qt `QClipboard`, Wayland MIME ownership, platform-supervised cliphist |
 | `files` | open, copy, launch, transfer, trash, Trash state/empty, Open-With | Qt file APIs and `gio` |
 | `kwin` | snapshots, activation, desktops, thumbnails, Dock animation tickets | KWin script + internal D-Bus |

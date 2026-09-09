@@ -32,6 +32,27 @@ def test_platform_contract_mentions_socket_and_errors() -> None:
         assert field in text
 
 
+def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> None:
+    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    handler = source[source.index("bool PlatformServer::handleApplication"):]
+    handler = handler[:handler.index("bool PlatformServer::handleFileOperation")]
+    assert 'QStringLiteral("application.launch")' in handler
+    assert "KService::serviceByStorageId" in handler
+    assert "KIO::ApplicationLauncherJob" in handler
+    assert 'value(QStringLiteral("desktopId"))' in handler
+    assert 'value(QStringLiteral("urls"))' in handler
+    assert 'value(QStringLiteral("command"))' not in handler
+
+    qml = (ROOT / "shell/desktop/modules/common/AppActionService.qml").read_text()
+    assert 'PlatformClient.request("application.launch"' in qml
+    assert "systemd-run" not in qml
+
+    main = (ROOT / "platform/src/daemon/main.cpp").read_text()
+    assert "app.setQuitOnLastWindowClosed(false)" in main
+    assert "QCoreApplication::setQuitLockEnabled(false)" in main
+    assert "PlatformServer::~PlatformServer()" in source
+
+
 def test_theme_toggle_uses_the_safe_palette_path() -> None:
     source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("theme.toggle"))'):]
@@ -54,6 +75,7 @@ def test_bridge_trace_is_opt_in() -> None:
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
+    test_application_launch_uses_kde_launcher_without_arbitrary_commands()
     test_theme_toggle_uses_the_safe_palette_path()
     test_bridge_trace_is_opt_in()
     print("platform contracts: ok")

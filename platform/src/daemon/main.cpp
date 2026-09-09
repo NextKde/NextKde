@@ -10,6 +10,11 @@ using namespace KosPlatform;
 int main(int argc, char **argv)
 {
     QGuiApplication app(argc, argv);
+    // KIO launch jobs may briefly create GUI-side startup-notification state.
+    // This process is a session daemon, so its lifetime must never follow the
+    // last-window lifecycle inherited from QGuiApplication.
+    app.setQuitOnLastWindowClosed(false);
+    QCoreApplication::setQuitLockEnabled(false);
     // The desktop file basename is the KGlobalAccel component identity: all
     // shell shortcuts register under this ONE component in the Shortcuts KCM.
     app.setApplicationName(QStringLiteral("kos-platform"));
