@@ -5,8 +5,8 @@ This repository is a KDE Plasma 6 Wayland desktop shell built with Quickshell
 
 ## Runtime products
 
-- `kos-platform` (`platform/`): one C++20/Qt 6 user daemon. It owns KWin
-  snapshots/commands, Wayland clipboard MIME ownership, file operations and
+- `kos-platform` (`platform/`): one C++20/Qt 6 user daemon. It owns KDE-native
+  application launching, KWin snapshots/commands, Wayland clipboard MIME ownership, file operations and
   Open-With, NetworkManager, PipeWire, BlueZ, brightness, session actions,
   themes, screenshots, and global shortcut installation.
 - `kos-data-service` (`services/data-service/`): one Go user daemon. It samples

@@ -22,6 +22,8 @@ Errors use stable machine-readable codes:
 
 Current operation groups are:
 
+- `application.launch` (KDE-native desktop-entry launch; accepts a desktop ID
+  and optional URLs, never an arbitrary command)
 - `clipboard.set`, `clipboard.read`, `clipboard.save-image`,
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,

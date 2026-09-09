@@ -16,6 +16,7 @@ class PlatformServer final : public QObject {
 
 public:
     explicit PlatformServer(QObject *parent = nullptr);
+    ~PlatformServer() override;
     bool listen();
     QString socketPath() const { return m_socketPath; }
 
@@ -47,6 +48,7 @@ private:
     QString operation(const QJsonObject &request) const;
 
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
+    bool handleApplication(QLocalSocket *socket, const QJsonObject &request);
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
