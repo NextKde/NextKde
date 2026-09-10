@@ -6,6 +6,10 @@ Rectangle {
     id: root
 
     property color baseColor: Qt.rgba(0, 0, 0, 0.1)
+    // Material uses opaque tonal surfaces rather than live backdrop glass.
+    // This single branch intentionally covers every existing consumer of the
+    // shared surface, keeping component structure and content unchanged.
+    readonly property bool usesMaterialSurface: AppearanceTokens.isMaterial
     // Semantic material roles mirror the system vocabulary. They describe
     // readability intent, never a fixed light/dark paint colour.
     property string material: "regular" // "clear", "regular", "thick"
@@ -77,9 +81,15 @@ Rectangle {
     // Glass controls use the same white foreground hierarchy in light and
     // dark themes. Choosing black from the estimated wallpaper makes symbols
     // flip while the material itself remains visually dark/transparent.
-    readonly property color foregroundColor: Qt.rgba(1, 1, 1, 1.0)
-    readonly property color secondaryForegroundColor: Qt.rgba(1, 1, 1, 0.82)
-    readonly property color tertiaryForegroundColor: Qt.rgba(1, 1, 1, 0.66)
+    readonly property color foregroundColor: usesMaterialSurface
+        ? AppearanceTokens.colors.onSurface : Qt.rgba(1, 1, 1, 1.0)
+    readonly property color secondaryForegroundColor: usesMaterialSurface
+        ? AppearanceTokens.colors.onSurfaceVariant : Qt.rgba(1, 1, 1, 0.82)
+    readonly property color tertiaryForegroundColor: usesMaterialSurface
+        ? Qt.rgba(AppearanceTokens.colors.onSurfaceVariant.r,
+            AppearanceTokens.colors.onSurfaceVariant.g,
+            AppearanceTokens.colors.onSurfaceVariant.b, 0.70)
+        : Qt.rgba(1, 1, 1, 0.66)
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
     // Bright surfaces need less white overlay to remain translucent; darker
@@ -141,13 +151,25 @@ Rectangle {
         NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
     }
 
-    color: Qt.rgba(
-        baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
-        baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
-        baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
-        Math.min(1.0, baseColor.a * root.materialOpacityScale)
-            * surfaceOpacity * root.normalizedBlurStrength
-    )
+    color: usesMaterialSurface
+        ? (material === "thick" ? AppearanceTokens.colors.surfaceContainerHigh
+            : AppearanceTokens.colors.surfaceContainer)
+        : Qt.rgba(
+            baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
+            baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
+            baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
+            Math.min(1.0, baseColor.a * root.materialOpacityScale)
+                * surfaceOpacity * root.normalizedBlurStrength
+        )
+
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: root.usesMaterialSurface
+        color: "transparent"
+        border.width: 1
+        border.color: AppearanceTokens.colors.outline
+    }
 
     // Reinforce the side of the material opposite its foreground ink. A light
     // lift supports dark labels; a dark scrim supports white labels. This is
@@ -155,8 +177,8 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.adaptiveScrimOpacity > 0.001
-        color: root._useDarkForeground
+        visible: !root.usesMaterialSurface && root.adaptiveScrimOpacity > 0.001
+        color: root.estimatedMaterialLuminance >= 0.58
             ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
             : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
         Behavior on color {
@@ -168,7 +190,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
             GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.28 * root.materialHighlightFactor * root.materialReflectionScale) }
@@ -189,7 +211,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -216,7 +238,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.045 * root.materialHighlightFactor) }
@@ -228,7 +250,7 @@ Rectangle {
     // Inset specular lines imply a glass edge without reintroducing a visible
     // outline. Their endpoints begin after the curved corners.
     Rectangle {
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         x: Math.min(parent.width / 2, root.radius + 3)
         y: 0.8
         width: Math.max(0, parent.width - x * 2)
@@ -245,7 +267,7 @@ Rectangle {
 
     Rectangle {
         visible: root.bottomEdgeVisible
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         x: Math.min(parent.width / 2, root.radius + 3)
         y: parent.height - 2
         width: Math.max(0, parent.width - x * 2)

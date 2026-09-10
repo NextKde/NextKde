@@ -113,7 +113,7 @@ PanelWindow {
     // The custom KWin glass effect consumes this region for both backdrop
     // blur and liquid refraction. Keep publishing it when either channel is
     // active; gating only on blur makes a liquid-only Dock fully transparent.
-    BackgroundEffect.blurRegion: (root.visible
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? dockBlurRegionHolder : null
@@ -198,6 +198,18 @@ PanelWindow {
         transformOrigin: root.vertical
             ? (root.position === "right" ? Item.Right : Item.Left)
             : Item.Bottom
+
+        // The macOS Dock obtains its body from the compositor glass effect.
+        // Material deliberately owns an opaque tonal surface in QML instead.
+        Rectangle {
+            anchors.fill: parent
+            visible: AppearanceTokens.isMaterial
+            radius: dockContainer.pillRadius
+            color: AppearanceTokens.colors.surfaceContainerHigh
+            border.width: 1
+            border.color: AppearanceTokens.colors.outline
+            z: -1
+        }
 
         DockContainer {
             id: dockContainer
