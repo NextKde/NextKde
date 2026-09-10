@@ -279,15 +279,20 @@ PanelWindow {
                 width: sizeLabel.implicitWidth + 14
                 height: 24
                 radius: 12
-                color: Qt.rgba(0, 0, 0, 0.52)
+                color: AppearanceTokens.isMaterial
+                    ? AppearanceTokens.colors.surfaceContainerHighest
+                    : Qt.rgba(0, 0, 0, 0.52)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
+                border.color: AppearanceTokens.isMaterial
+                    ? AppearanceTokens.colors.outlineVariant
+                    : Qt.rgba(1, 1, 1, 0.18)
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
                     text: ({ small: "小", medium: "中", large: "大" })[
                         DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键切换"
-                    color: "white"
+                    color: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.colors.onSurface : "white"
                     font { pixelSize: 9; weight: Font.DemiBold }
                 }
             }
@@ -322,6 +327,18 @@ PanelWindow {
                     y: root.timerView ? -height : 0
                     Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
 
+                MaterialFlower {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width, parent.height) - 18
+                    height: width
+                    visible: AppearanceTokens.isMaterial
+                    lobes: 12
+                    amplitude: 0.075
+                    fillColor: AppearanceTokens.colors.primaryContainer
+                    outlineColor: AppearanceTokens.colors.outlineVariant
+                    outlineWidth: 1
+                }
+
                 Canvas {
                     id: analogClock
                     anchors.fill: parent
@@ -344,9 +361,11 @@ PanelWindow {
                             ctx.fillStyle = "#fafafa"
                             ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
                         }
-	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor(0.42).toString() : "#dedede"
-                        ctx.lineWidth = 1
-                        ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
+                        if (!AppearanceTokens.isMaterial) {
+                            ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor(0.42).toString() : "#dedede"
+                            ctx.lineWidth = 1
+                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
+                        }
 	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#171717"
                         ctx.lineCap = "round"
                         for (let mark = 0; mark < 12; mark++) {
@@ -1448,7 +1467,9 @@ PanelWindow {
                             readonly property var offsets: [4, 34, 54]
                             x: offsets[index]
                             text: modelData
-                            color: Qt.rgba(1, 1, 1, 0.60)
+                            color: AppearanceTokens.isMaterial
+                                ? AppearanceTokens.colors.tertiary
+                                : Qt.rgba(1, 1, 1, 0.60)
                             font { family: "SF Pro Display"; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
                             SequentialAnimation on y {
                                 running: musicNotes.running
@@ -1506,7 +1527,7 @@ PanelWindow {
                                 layer.effect: MultiEffect {
                                     maskEnabled: true
                                     maskSource: musicArtworkMask
-                                    saturation: musicContent.glassMode ? -1.0 : 0.0
+                                    saturation: IconAppearanceService.mode === "color" ? 0.0 : -1.0
                                 }
                             }
                             Rectangle {
@@ -1555,14 +1576,29 @@ PanelWindow {
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 12 }
                             height: 5
                             visible: musicContent.safeLength > 0
+                            WavyProgress {
+                                anchors.fill: parent
+                                anchors.topMargin: -3
+                                anchors.bottomMargin: -3
+                                visible: AppearanceTokens.isMaterial
+                                value: musicContent.progress
+                                animated: musicContent.player?.isPlaying ?? false
+                                activeColor: AppearanceTokens.colors.primary
+                                trackColor: AppearanceTokens.colors.outlineVariant
+                                amplitude: 2.4
+                                wavelength: 11
+                                lineWidth: 2.5
+                            }
                             Rectangle {
                                 anchors.fill: parent
+                                visible: !AppearanceTokens.isMaterial
                                 radius: height / 2
                                 color: Qt.rgba(1, 1, 1, 0.20)
                             }
                             Rectangle {
                                 width: parent.width * musicContent.progress
                                 height: parent.height
+                                visible: !AppearanceTokens.isMaterial
                                 radius: height / 2
                                 color: Qt.rgba(1, 1, 1, 0.82)
                             }
@@ -1607,9 +1643,13 @@ PanelWindow {
                             height: width
                             y: (parent.height - height) / 2
                             radius: width / 2
-                            color: index === 1
-                                ? Qt.rgba(1, 1, 1, controlEnabled ? 0.24 : 0.10)
-                                : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055)
+                            color: AppearanceTokens.isMaterial
+                                ? (index === 1
+                                    ? AppearanceTokens.colors.primaryContainer
+                                    : AppearanceTokens.colors.secondaryContainer)
+                                : (index === 1
+                                    ? Qt.rgba(1, 1, 1, controlEnabled ? 0.24 : 0.10)
+                                    : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055))
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData

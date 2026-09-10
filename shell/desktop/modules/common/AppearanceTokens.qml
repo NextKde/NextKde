@@ -46,46 +46,46 @@ QtObject {
     }
 
     readonly property QtObject colors: QtObject {
-        readonly property color primary: tokens._tone(tokens.seedColor, 0, 1.0,
-            tokens.isDarkTheme ? 0.80 : 0.40)
-        readonly property color onPrimary: tokens._tone(tokens.seedColor, 0, 0.85,
-            tokens.isDarkTheme ? 0.20 : 1.0)
-        readonly property color primaryContainer: tokens._tone(tokens.seedColor, 0, 0.82,
-            tokens.isDarkTheme ? 0.30 : 0.90)
-        readonly property color onPrimaryContainer: tokens._tone(tokens.seedColor, 0, 0.75,
-            tokens.isDarkTheme ? 0.90 : 0.10)
-        readonly property color secondary: tokens._tone(tokens.seedColor, 0.035, 0.42,
-            tokens.isDarkTheme ? 0.80 : 0.40)
-        readonly property color onSecondary: tokens._tone(tokens.seedColor, 0.035, 0.36,
-            tokens.isDarkTheme ? 0.20 : 1.0)
-        readonly property color secondaryContainer: tokens._tone(tokens.seedColor, 0.035, 0.38,
-            tokens.isDarkTheme ? 0.30 : 0.90)
-        readonly property color onSecondaryContainer: tokens._tone(tokens.seedColor, 0.035, 0.34,
-            tokens.isDarkTheme ? 0.90 : 0.10)
-        readonly property color tertiary: tokens._tone(tokens.seedColor, 0.16, 0.56,
-            tokens.isDarkTheme ? 0.80 : 0.40)
-        readonly property color surface: tokens._tone(tokens.seedColor, 0, 0.12,
-            tokens.isDarkTheme ? 0.06 : 0.98)
-        readonly property color surfaceContainerLow: tokens._tone(tokens.seedColor, 0, 0.14,
-            tokens.isDarkTheme ? 0.10 : 0.96)
-        readonly property color surfaceContainer: tokens._tone(tokens.seedColor, 0, 0.16,
-            tokens.isDarkTheme ? 0.12 : 0.94)
-        readonly property color surfaceContainerHigh: tokens._tone(tokens.seedColor, 0, 0.18,
-            tokens.isDarkTheme ? 0.17 : 0.90)
-        readonly property color surfaceContainerHighest: tokens._tone(tokens.seedColor, 0, 0.20,
-            tokens.isDarkTheme ? 0.22 : 0.86)
+        readonly property color primary: MaterialThemeService.color("primary", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 1.0, tokens.isDarkTheme ? 0.80 : 0.40))
+        readonly property color onPrimary: MaterialThemeService.color("on_primary", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.85, tokens.isDarkTheme ? 0.20 : 1.0))
+        readonly property color primaryContainer: MaterialThemeService.color("primary_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.82, tokens.isDarkTheme ? 0.30 : 0.90))
+        readonly property color onPrimaryContainer: MaterialThemeService.color("on_primary_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.75, tokens.isDarkTheme ? 0.90 : 0.10))
+        readonly property color secondary: MaterialThemeService.color("secondary", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.035, 0.42, tokens.isDarkTheme ? 0.80 : 0.40))
+        readonly property color onSecondary: MaterialThemeService.color("on_secondary", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.035, 0.36, tokens.isDarkTheme ? 0.20 : 1.0))
+        readonly property color secondaryContainer: MaterialThemeService.color("secondary_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.035, 0.38, tokens.isDarkTheme ? 0.30 : 0.90))
+        readonly property color onSecondaryContainer: MaterialThemeService.color("on_secondary_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.035, 0.34, tokens.isDarkTheme ? 0.90 : 0.10))
+        readonly property color tertiary: MaterialThemeService.color("tertiary", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.16, 0.56, tokens.isDarkTheme ? 0.80 : 0.40))
+        readonly property color surface: MaterialThemeService.color("surface", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
+        readonly property color surfaceContainerLow: MaterialThemeService.color("surface_container_low", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.14, tokens.isDarkTheme ? 0.10 : 0.96))
+        readonly property color surfaceContainer: MaterialThemeService.color("surface_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.12 : 0.94))
+        readonly property color surfaceContainerHigh: MaterialThemeService.color("surface_container_high", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.18, tokens.isDarkTheme ? 0.17 : 0.90))
+        readonly property color surfaceContainerHighest: MaterialThemeService.color("surface_container_highest", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.20, tokens.isDarkTheme ? 0.22 : 0.86))
         readonly property bool surfaceIsDark:
             tokens._luminance(surfaceContainer) < 0.48
-        readonly property color onSurface: surfaceIsDark
-            ? Qt.rgba(0.96, 0.96, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1)
-        readonly property color onSurfaceVariant: surfaceIsDark
-            ? Qt.rgba(0.78, 0.80, 0.88, 1) : Qt.rgba(0.30, 0.31, 0.36, 1)
-        readonly property color outline: tokens._tone(tokens.seedColor, 0, 0.16,
-            tokens.isDarkTheme ? 0.60 : 0.50)
-        readonly property color outlineVariant: tokens._tone(tokens.seedColor, 0, 0.14,
-            tokens.isDarkTheme ? 0.30 : 0.80)
-        readonly property color error: tokens.isDarkTheme
-            ? Qt.rgba(1.0, 0.71, 0.67, 1) : Qt.rgba(0.73, 0.10, 0.12, 1)
+        readonly property color onSurface: MaterialThemeService.color("on_surface", tokens.isDarkTheme,
+            surfaceIsDark ? Qt.rgba(0.96, 0.96, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1))
+        readonly property color onSurfaceVariant: MaterialThemeService.color("on_surface_variant", tokens.isDarkTheme,
+            surfaceIsDark ? Qt.rgba(0.78, 0.80, 0.88, 1) : Qt.rgba(0.30, 0.31, 0.36, 1))
+        readonly property color outline: MaterialThemeService.color("outline", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.60 : 0.50))
+        readonly property color outlineVariant: MaterialThemeService.color("outline_variant", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.14, tokens.isDarkTheme ? 0.30 : 0.80))
+        readonly property color error: MaterialThemeService.color("error", tokens.isDarkTheme,
+            tokens.isDarkTheme ? Qt.rgba(1.0, 0.71, 0.67, 1) : Qt.rgba(0.73, 0.10, 0.12, 1))
         readonly property color scrim: Qt.rgba(0, 0, 0,
             tokens.isDarkTheme ? 0.42 : 0.24)
     }
