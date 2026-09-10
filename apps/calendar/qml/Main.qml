@@ -1015,36 +1015,40 @@ KosApplicationWindow {
                 }
             }
 
-            StackLayout {
+            KosPageCache {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: root.viewIndex
+                cacheLimit: 3
+                pages: [monthPage, weekPage, dayPage]
 
-                ColumnLayout {
-                    spacing: 10
+                Component {
+                    id: monthPage
+                    ColumnLayout {
+                        spacing: 10
 
-                    CalendarMonthView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visibleDate: root.visibleMonth
-                        selectedDate: root.selectedDate
-                        currentTime: root.now
-                        firstDayOfWeek: root.localeFirstDayOfWeek
-                        itemsForDate: root.itemsForDate
-                        itemTitle: root.itemTitle
-                        itemColor: root.itemColor
-                        itemCompleted: root.itemCompleted
-                        onDateSelected: function(date) { root.selectedDate = date }
-                        onItemActivated: function(item) { root.openItem(item) }
-                        onCreateRequested: function(date) { eventEditor.openForDate(date) }
-                    }
+                        CalendarMonthView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visibleDate: root.visibleMonth
+                            selectedDate: root.selectedDate
+                            currentTime: root.now
+                            firstDayOfWeek: root.localeFirstDayOfWeek
+                            itemsForDate: root.itemsForDate
+                            itemTitle: root.itemTitle
+                            itemColor: root.itemColor
+                            itemCompleted: root.itemCompleted
+                            onDateSelected: function(date) { root.selectedDate = date }
+                            onItemActivated: function(item) { root.openItem(item) }
+                            onCreateRequested: function(date) { eventEditor.openForDate(date) }
+                        }
 
-                    KosCard {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 210
+                        KosCard {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 210
 
-                        contentItem: ColumnLayout {
-                            spacing: 5
+                            contentItem: ColumnLayout {
+                                spacing: 5
 
                             RowLayout {
                                 Layout.fillWidth: true
@@ -1176,41 +1180,48 @@ KosApplicationWindow {
                                     }
                                 }
                             }
+                            }
                         }
                     }
                 }
 
-                CalendarScheduleView {
-                    firstDate: root.weekStart
-                    currentTime: root.now
-                    dayCount: 7
-                    itemsForDate: root.itemsForDate
-                    itemTitle: root.itemTitle
-                    itemColor: root.itemColor
-                    itemCompleted: root.itemCompleted
-                    itemAllDay: root.itemAllDay
-                    itemHour: root.itemHour
-                    onDateSelected: function(date) { root.selectedDate = date }
-                    onItemActivated: function(item) { root.openItem(item) }
-                    onCreateRequested: function(date, hour) {
-                        eventEditor.openForDate(date, hour)
+                Component {
+                    id: weekPage
+                    CalendarScheduleView {
+                        firstDate: root.weekStart
+                        currentTime: root.now
+                        dayCount: 7
+                        itemsForDate: root.itemsForDate
+                        itemTitle: root.itemTitle
+                        itemColor: root.itemColor
+                        itemCompleted: root.itemCompleted
+                        itemAllDay: root.itemAllDay
+                        itemHour: root.itemHour
+                        onDateSelected: function(date) { root.selectedDate = date }
+                        onItemActivated: function(item) { root.openItem(item) }
+                        onCreateRequested: function(date, hour) {
+                            eventEditor.openForDate(date, hour)
+                        }
                     }
                 }
 
-                CalendarScheduleView {
-                    firstDate: root.selectedDate
-                    currentTime: root.now
-                    dayCount: 1
-                    itemsForDate: root.itemsForDate
-                    itemTitle: root.itemTitle
-                    itemColor: root.itemColor
-                    itemCompleted: root.itemCompleted
-                    itemAllDay: root.itemAllDay
-                    itemHour: root.itemHour
-                    onDateSelected: function(date) { root.selectedDate = date }
-                    onItemActivated: function(item) { root.openItem(item) }
-                    onCreateRequested: function(date, hour) {
-                        eventEditor.openForDate(date, hour)
+                Component {
+                    id: dayPage
+                    CalendarScheduleView {
+                        firstDate: root.selectedDate
+                        currentTime: root.now
+                        dayCount: 1
+                        itemsForDate: root.itemsForDate
+                        itemTitle: root.itemTitle
+                        itemColor: root.itemColor
+                        itemCompleted: root.itemCompleted
+                        itemAllDay: root.itemAllDay
+                        itemHour: root.itemHour
+                        onDateSelected: function(date) { root.selectedDate = date }
+                        onItemActivated: function(item) { root.openItem(item) }
+                        onCreateRequested: function(date, hour) {
+                            eventEditor.openForDate(date, hour)
+                        }
                     }
                 }
             }

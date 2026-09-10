@@ -746,67 +746,88 @@ KosApplicationWindow {
                 Layout.fillHeight: true
                 padding: 8
 
-                contentItem: StackLayout {
+                contentItem: KosPageCache {
                     currentIndex: root.contentIndex
+                    cacheLimit: 3
+                    pinnedIndexes: [0]
+                    pages: [libraryPage, albumsPage, artistsPage,
+                            queuePage, playlistPage, foldersPage]
 
-                    TrackListView {
-                        musicController: music
-                        trackModel: music.libraryModel
-                        contextMode: "library"
-                        emptyTitle: music.libraryFolders.length === 0
-                            ? qsTr("Your library is empty")
-                            : qsTr("No matching tracks")
-                        emptyDescription: music.libraryFolders.length === 0
-                            ? qsTr("Add a local music folder to start building your library.")
-                            : qsTr("Try a different search or rescan the library.")
-                        onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                        onTranscodeRequested: (trackId, trackTitle) =>
-                            root.requestTranscode(trackId, trackTitle)
+                    Component {
+                        id: libraryPage
+                        TrackListView {
+                            musicController: music
+                            trackModel: music.libraryModel
+                            contextMode: "library"
+                            emptyTitle: music.libraryFolders.length === 0
+                                ? qsTr("Your library is empty")
+                                : qsTr("No matching tracks")
+                            emptyDescription: music.libraryFolders.length === 0
+                                ? qsTr("Add a local music folder to start building your library.")
+                                : qsTr("Try a different search or rescan the library.")
+                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
+                            onTranscodeRequested: (trackId, trackTitle) =>
+                                root.requestTranscode(trackId, trackTitle)
+                        }
                     }
 
-                    MusicGroupGrid {
-                        groupModel: music.albums
-                        groupKind: "album"
-                        emptyTitle: qsTr("No albums yet")
-                        onOpenRequested: (name, subtitle, filterValue) =>
-                            root.openAlbum(name, subtitle, filterValue)
-                        onPlayRequested: filterValue => music.playAlbum(filterValue)
+                    Component {
+                        id: albumsPage
+                        MusicGroupGrid {
+                            groupModel: music.albums
+                            groupKind: "album"
+                            emptyTitle: qsTr("No albums yet")
+                            onOpenRequested: (name, subtitle, filterValue) =>
+                                root.openAlbum(name, subtitle, filterValue)
+                            onPlayRequested: filterValue => music.playAlbum(filterValue)
+                        }
                     }
 
-                    MusicGroupGrid {
-                        groupModel: music.artists
-                        groupKind: "artist"
-                        emptyTitle: qsTr("No artists yet")
-                        onOpenRequested: (name, subtitle, filterValue) =>
-                            root.openArtist(name, filterValue)
-                        onPlayRequested: filterValue => music.playArtist(filterValue)
+                    Component {
+                        id: artistsPage
+                        MusicGroupGrid {
+                            groupModel: music.artists
+                            groupKind: "artist"
+                            emptyTitle: qsTr("No artists yet")
+                            onOpenRequested: (name, subtitle, filterValue) =>
+                                root.openArtist(name, filterValue)
+                            onPlayRequested: filterValue => music.playArtist(filterValue)
+                        }
                     }
 
-                    TrackListView {
-                        musicController: music
-                        trackModel: music.queueModel
-                        contextMode: "queue"
-                        emptyTitle: qsTr("The queue is empty")
-                        emptyDescription: qsTr("Add tracks from your library to create a play queue.")
-                        onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                        onTranscodeRequested: (trackId, trackTitle) =>
-                            root.requestTranscode(trackId, trackTitle)
+                    Component {
+                        id: queuePage
+                        TrackListView {
+                            musicController: music
+                            trackModel: music.queueModel
+                            contextMode: "queue"
+                            emptyTitle: qsTr("The queue is empty")
+                            emptyDescription: qsTr("Add tracks from your library to create a play queue.")
+                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
+                            onTranscodeRequested: (trackId, trackTitle) =>
+                                root.requestTranscode(trackId, trackTitle)
+                        }
                     }
 
-                    TrackListView {
-                        musicController: music
-                        trackModel: music.playlistTracksModel
-                        contextMode: "playlist"
-                        playlistId: root.selectedPlaylistId
-                        emptyTitle: qsTr("This playlist is empty")
-                        emptyDescription: qsTr("Use a track's action menu to add music here.")
-                        onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                        onTranscodeRequested: (trackId, trackTitle) =>
-                            root.requestTranscode(trackId, trackTitle)
+                    Component {
+                        id: playlistPage
+                        TrackListView {
+                            musicController: music
+                            trackModel: music.playlistTracksModel
+                            contextMode: "playlist"
+                            playlistId: root.selectedPlaylistId
+                            emptyTitle: qsTr("This playlist is empty")
+                            emptyDescription: qsTr("Use a track's action menu to add music here.")
+                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
+                            onTranscodeRequested: (trackId, trackTitle) =>
+                                root.requestTranscode(trackId, trackTitle)
+                        }
                     }
 
-                    Item {
-                        ColumnLayout {
+                    Component {
+                        id: foldersPage
+                        Item {
+                            ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 10
                             spacing: 10
@@ -919,6 +940,7 @@ KosApplicationWindow {
                                 color: AppTheme.warning
                                 wrapMode: Text.WordWrap
                                 font.pixelSize: 11
+                            }
                             }
                         }
                     }

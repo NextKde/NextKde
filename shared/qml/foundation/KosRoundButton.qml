@@ -4,9 +4,17 @@ import QtQuick.Controls
 RoundButton {
     id: root
 
+    hoverEnabled: true
     implicitWidth: 46
     implicitHeight: 46
     padding: 8
+    transformOrigin: Item.Center
+    scale: !enabled ? 1 : (down ? AppTheme.pressScale
+                               : (hovered ? AppTheme.hoverScale : 1))
+
+    Behavior on scale {
+        NumberAnimation { duration: AppTheme.motionFast; easing.type: Easing.OutCubic }
+    }
 
     contentItem: Label {
         text: root.text
@@ -18,21 +26,21 @@ RoundButton {
         verticalAlignment: Text.AlignVCenter
     }
 
-    background: Rectangle {
+    background: KosSurface {
         radius: width / 2
-        color: root.highlighted
+        fillColor: root.highlighted
             ? (root.down ? AppTheme.accentPressed
                          : (root.hovered ? AppTheme.accentHover : AppTheme.accent))
             : (root.down ? AppTheme.buttonPressed
                          : (root.hovered ? AppTheme.buttonHover : AppTheme.button))
-        border.width: root.activeFocus ? 2 : 1
-        border.color: root.activeFocus
-            ? AppTheme.withAlpha(AppTheme.accent, 0.72)
-            : (root.highlighted
-               ? AppTheme.withAlpha(AppTheme.accentText, 0.16)
-               : AppTheme.border)
+        strokeWidth: 1
+        strokeColor: root.highlighted
+            ? AppTheme.withAlpha(AppTheme.accentText, 0.16)
+            : AppTheme.border
+        elevation: root.highlighted ? 0.72 : (root.hovered ? 0.64 : 0.46)
+        hovered: root.hovered
+        pressed: root.down
+        focused: root.activeFocus
         opacity: root.enabled ? 1 : 0.64
-
-        Behavior on color { ColorAnimation { duration: AppTheme.motionFast } }
     }
 }

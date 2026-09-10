@@ -80,6 +80,11 @@ if(BUILD_TESTING)
             )
             set_tests_properties(kos-shell.static-work-runtime PROPERTIES TIMEOUT 15)
         endif()
+        add_test(NAME kos-ui.page-cache-policy
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_page_cache_policy.mjs
+        )
+        set_tests_properties(kos-ui.page-cache-policy PROPERTIES TIMEOUT 10)
     endif()
 endif()
 

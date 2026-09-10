@@ -1,4 +1,4 @@
-import QtQuick
+import QtQuick 2.15
 import "DateBuckets.mjs" as DateBuckets
 
 // No extra timer: consume the existing clock and only notify consumers when

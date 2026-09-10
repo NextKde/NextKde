@@ -16,11 +16,14 @@ qt_add_qml_module(kos_ui
         foundation/KosCard.qml
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
+        foundation/KosPageCache.qml
         foundation/KosRoundButton.qml
         foundation/KosSettingsDialog.qml
         foundation/KosSlider.qml
+        foundation/KosSurface.qml
         foundation/KosSwitch.qml
         foundation/KosToolButton.qml
+        foundation/PageCachePolicy.js
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
 )

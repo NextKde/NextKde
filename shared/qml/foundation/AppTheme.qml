@@ -108,6 +108,19 @@ QtObject {
     readonly property color border: dark
         ? Qt.rgba(1, 1, 1, 0.13)
         : Qt.rgba(0.10, 0.16, 0.25, 0.14)
+    readonly property color borderHover: dark
+        ? Qt.rgba(1, 1, 1, 0.20)
+        : Qt.rgba(0.10, 0.16, 0.25, 0.22)
+    readonly property color innerHighlight: dark
+        ? Qt.rgba(1, 1, 1, 0.055)
+        : Qt.rgba(1, 1, 1, 0.58)
+    readonly property color focusRing: withAlpha(accent, dark ? 0.76 : 0.64)
+    readonly property color shadowAmbient: dark
+        ? Qt.rgba(0, 0, 0, 0.24)
+        : Qt.rgba(0.10, 0.15, 0.24, 0.105)
+    readonly property color shadowKey: dark
+        ? Qt.rgba(0, 0, 0, 0.34)
+        : Qt.rgba(0.08, 0.13, 0.22, 0.13)
     readonly property color text: paletteText
     readonly property color mutedText: mix(paletteText, window, dark ? 0.46 : 0.36)
     readonly property bool accentUsesDarkText:
@@ -136,6 +149,8 @@ QtObject {
     readonly property int compactSidebarWidth: Math.round(196 * densityScale)
     readonly property int motionFast: reduceMotion ? 0 : 120
     readonly property int motionNormal: reduceMotion ? 0 : 220
+    readonly property real hoverScale: reduceMotion ? 1 : 1.012
+    readonly property real pressScale: reduceMotion ? 1 : 0.968
 
     function clamp(value, minimum, maximum) {
         return Math.max(minimum, Math.min(maximum, value))

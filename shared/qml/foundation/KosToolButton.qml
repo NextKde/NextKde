@@ -6,9 +6,17 @@ ToolButton {
 
     property bool destructive: false
 
+    hoverEnabled: true
     implicitWidth: AppTheme.controlHeight
     implicitHeight: AppTheme.controlHeight
     padding: 7
+    transformOrigin: Item.Center
+    scale: !enabled ? 1 : (down ? AppTheme.pressScale
+                               : (hovered ? AppTheme.hoverScale : 1))
+
+    Behavior on scale {
+        NumberAnimation { duration: AppTheme.motionFast; easing.type: Easing.OutCubic }
+    }
 
     contentItem: Label {
         text: root.text
@@ -21,16 +29,21 @@ ToolButton {
         verticalAlignment: Text.AlignVCenter
     }
 
-    background: Rectangle {
+    background: KosSurface {
         radius: Math.min(AppTheme.smallRadius, height / 2)
-        color: root.destructive && (root.hovered || root.down)
+        fillColor: root.destructive && (root.hovered || root.down)
             ? AppTheme.withAlpha(AppTheme.destructive, root.down ? 0.20 : 0.11)
             : (root.down ? AppTheme.buttonPressed
                : (root.hovered || (root.checkable && root.checked)
                   ? AppTheme.buttonHover : "transparent"))
-        border.width: root.activeFocus ? 2 : 0
-        border.color: AppTheme.withAlpha(AppTheme.accent, 0.70)
-
-        Behavior on color { ColorAnimation { duration: AppTheme.motionFast } }
+        strokeWidth: root.activeFocus || root.hovered
+            || (root.checkable && root.checked) ? 1 : 0
+        strokeColor: root.destructive ? AppTheme.withAlpha(AppTheme.destructive, 0.32)
+                                      : AppTheme.border
+        elevation: root.hovered || (root.checkable && root.checked) ? 0.42 : 0
+        hovered: root.hovered
+        pressed: root.down
+        focused: root.activeFocus
+        showInnerHighlight: root.hovered || (root.checkable && root.checked)
     }
 }

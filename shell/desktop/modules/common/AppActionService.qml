@@ -13,6 +13,17 @@ import qs.desktop.modules.platform
 QtObject {
     id: service
 
+    property var _pendingDeepLinks: []
+
+    // Give the platform-authorized launch enough time to create (or activate)
+    // the primary instance before a second invocation forwards widget context.
+    // This keeps compositor activation on the KDE/KIO path.
+    property Timer _deepLinkDelay: Timer {
+        interval: 150
+        repeat: false
+        onTriggered: service._flushDeepLinks()
+    }
+
     signal pinRequested(string appId)
     signal unpinRequested(string appId)
     signal hideRequested(string appId)
@@ -80,9 +91,38 @@ QtObject {
         return null
     }
 
-    // Widgets use the desktop entry as the executable authority, then append
-    // app-owned deep-link arguments. With no arguments the regular launcher
-    // path remains in use, including all DesktopEntry environment handling.
+    function _queueDeepLink(desktopId, command, launchArguments) {
+        const pending = _pendingDeepLinks.slice()
+        pending.push({
+            desktopId: desktopId,
+            command: command,
+            launchArguments: launchArguments
+        })
+        _pendingDeepLinks = pending
+        if (!_deepLinkDelay.running)
+            _deepLinkDelay.start()
+    }
+
+    function _flushDeepLinks() {
+        const pending = _pendingDeepLinks
+        _pendingDeepLinks = []
+        for (let index = 0; index < pending.length; index++) {
+            const request = pending[index]
+            try {
+                Quickshell.execDetached(request.command.concat(request.launchArguments))
+                console.log("[AppAction] deep link app=" + request.desktopId
+                            + " args=" + JSON.stringify(request.launchArguments))
+            } catch (error) {
+                console.warn("[AppAction] deep-link launch failed app="
+                             + request.desktopId + ": " + error)
+            }
+        }
+    }
+
+    // The platform request (with DesktopEntry fallback) remains the
+    // authoritative launch path so the compositor receives activation
+    // metadata. A delayed second invocation only forwards widget context to
+    // the app's single-instance activation handler.
     function launchById(desktopId, launchArguments) {
         const entry = entryForId(desktopId)
         if (!entry) {
@@ -90,20 +130,17 @@ QtObject {
             return false
         }
         const extra = launchArguments ?? []
+        if (!launch(entry))
+            return false
         if (extra.length === 0)
-            return launch(entry)
+            return true
         const baseCommand = entry.command ?? []
         if (baseCommand.length === 0) {
             console.warn("[AppAction] desktop entry has no launch command: " + desktopId)
-            return false
+            return true
         }
-        if (entry.runInTerminal)
-            return _executeDirect(entry, desktopId, "terminal-deep-link")
-        console.log("[AppAction] deep link app=" + desktopId
-                    + " args=" + JSON.stringify(extra))
-        // KOS-owned deep links currently use explicit argv rather than URLs.
-        // Keep that narrow path until each app publishes a URL scheme.
-        return _executeCommandDirect(Array.from(baseCommand).concat(extra), desktopId)
+        _queueDeepLink(desktopId, [String(baseCommand[0])], extra)
+        return true
     }
 
     function pin(appId) {

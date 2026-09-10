@@ -96,6 +96,32 @@ for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
     assert.match(source, /AppTheme\./, `${button} uses semantic application colours`);
 }
 
+const surfaceSource = read("./foundation/KosSurface.qml");
+assert.match(surfaceSource, /shadowAmbient[\s\S]*shadowKey/,
+    "shared surfaces render ambient and key shadow layers");
+assert.match(surfaceSource, /showInnerHighlight[\s\S]*innerHighlight/,
+    "shared surfaces provide a restrained inner edge highlight");
+assert.match(surfaceSource, /focused[\s\S]*focusRing/,
+    "shared surfaces keep keyboard focus visible");
+for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
+                      "KosNavigationButton"]) {
+    const source = read(`./foundation/${button}.qml`);
+    assert.match(source, /AppTheme\.pressScale/,
+        `${button} provides consistent press feedback`);
+    assert.match(source, /hoverEnabled:\s*true/,
+        `${button} enables hover consistently across desktop styles`);
+    assert.match(source, /background:\s*KosSurface/,
+        `${button} uses the shared border and elevation treatment`);
+}
+
+const pageCacheSource = read("./foundation/KosPageCache.qml");
+assert.match(pageCacheSource, /cacheLimit[\s\S]*PageCachePolicy\.trim/,
+    "page cache has a bounded eviction policy");
+assert.match(pageCacheSource, /_lastUsed[\s\S]*PageCachePolicy\.trim/,
+    "page cache delegates eviction to its tested policy");
+assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIndex/,
+    "inactive page construction cannot block the selected page");
+
 for (const app of ["calendar", "todo", "weather", "music"]) {
     const source = read(`../../apps/${app}/qml/Main.qml`);
     assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
@@ -145,6 +171,9 @@ assert.match(segmentedSource,
     "segmented choices immediately mirror externally changed state");
 
 const calendar = read("../../apps/calendar/qml/Main.qml");
+assert.match(calendar,
+    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
+    "Calendar lazily retains its three date views");
 assert.match(calendar, /model:\s*42/, "calendar mini-month contains six complete weeks");
 assert.doesNotMatch(calendar, /\bCheckBox\s*\{/,
     "calendar uses custom rounded toggles instead of native checkboxes");
@@ -176,6 +205,9 @@ assert.match(todo, /pendingItemId[\s\S]*onSnapshotChanged:\s*root\.openPendingIt
     "Todo retains widget item deep links until its async snapshot arrives");
 
 const music = read("../../apps/music/qml/Main.qml");
+assert.match(music,
+    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,120}pinnedIndexes:\s*\[0\]/,
+    "Music uses a bounded cache and retains the primary library page");
 assert.match(music, /function activationUri[\s\S]*workingDirectory/,
     "reused Music instances resolve relative files in the caller's directory");
 assert.match(music,
@@ -228,11 +260,25 @@ assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBl
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
+for (const [widget, desktopId] of [
+    ["Weather", "kos-weather"],
+    ["Calendar", "kos-calendar"],
+    ["Todo", "kos-todo"],
+    ["Music", "kos-music"]
+]) {
+    assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
+        `${widget} widget launches its matching installed application`);
+}
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");
 assert.doesNotMatch(appActions,
     /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
     "desktop deep links do not shadow JavaScript's implicit arguments object");
+assert.match(appActions,
+    /function launchById[\s\S]*if \(!launch\(entry\)\)[\s\S]*_queueDeepLink/,
+    "widget deep links first use DesktopEntry activation, then forward context");
+assert.match(appActions, /property Timer _deepLinkDelay:[\s\S]*interval:\s*150/,
+    "widget context forwarding waits for the activated primary instance");
 
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
@@ -289,18 +335,20 @@ assert.match(networkPanel,
     "the network panel reuses the live Wi-Fi signal glyph");
 for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
     const start = controlCenterPanel.indexOf(marker);
-    const section = controlCenterPanel.slice(start, start + 5200);
+    const nextCard = controlCenterPanel.indexOf("// ── Card", start + marker.length);
+    const section = controlCenterPanel.slice(start,
+        nextCard < 0 ? controlCenterPanel.length : nextCard);
     assert.match(section,
         /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
         `${marker} round disc owns its power toggle`);
     assert.match(section,
-        /leftMargin:\s*49[\s\S]{0,220}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
+        /leftMargin:\s*49[\s\S]{0,520}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
         `${marker} card body opens details without covering the toggle`);
 }
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
-        new RegExp(component + "\\s*\\{[\\s\\S]{0,180}iconSize:\\s*systemTray\\.iconSize"),
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,720}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*3)?"),
         component + " shares the native tray icon size");
 }
 assert.doesNotMatch(controlCenterPanel,
