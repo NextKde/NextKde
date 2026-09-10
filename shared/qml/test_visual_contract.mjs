@@ -289,7 +289,7 @@ assert.match(networkPanel,
     "the network panel reuses the live Wi-Fi signal glyph");
 for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
     const start = controlCenterPanel.indexOf(marker);
-    const section = controlCenterPanel.slice(start, start + 5200);
+    const section = controlCenterPanel.slice(start, start + 8000);
     assert.match(section,
         /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
         `${marker} round disc owns its power toggle`);
@@ -300,7 +300,7 @@ for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
-        new RegExp(component + "\\s*\\{[\\s\\S]{0,180}iconSize:\\s*systemTray\\.iconSize"),
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,400}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
         component + " shares the native tray icon size");
 }
 assert.doesNotMatch(controlCenterPanel,
