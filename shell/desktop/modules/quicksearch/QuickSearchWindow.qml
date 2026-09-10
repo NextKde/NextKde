@@ -457,14 +457,14 @@ PanelWindow {
                 }
             }
 
-            Text {
+            GlassText {
                 anchors {
                     left: fieldPill.left
                     leftMargin: 14
                     verticalCenter: fieldPill.verticalCenter
                 }
                 text: "⌕"
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(0, 0, 0, 0.65)
+                color: Qt.rgba(1, 1, 1, 0.72)
                 font.pixelSize: 20
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: dialog.textOutlineColor
@@ -521,11 +521,11 @@ PanelWindow {
                     }
                 }
 
-                Text {
+                GlassText {
                     anchors.fill: parent
                     visible: !searchInput.text
                     text: root.placeholder
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.54) : Qt.rgba(0, 0, 0, 0.45)
+                    color: Qt.rgba(1, 1, 1, 0.54)
                     font: searchInput.font
                     verticalAlignment: Text.AlignVCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -541,9 +541,9 @@ PanelWindow {
                 }
                 spacing: 6
 
-                Text {
+                GlassText {
                     text: root.modeTitle + (root.mode === "clipboard" ? " · 最新优先" : "") + " · Tab"
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.46) : Qt.rgba(0, 0, 0, 0.48)
+                    color: Qt.rgba(1, 1, 1, 0.46)
                     font.pixelSize: 11
                     anchors.verticalCenter: parent.verticalCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -565,13 +565,13 @@ PanelWindow {
                             : "transparent"
                     }
 
-                    Text {
+                    GlassText {
                         id: clearText
                         anchors.centerIn: parent
                         text: "清空"
                         color: clearMouse.containsMouse
                             ? "#ff453a"
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.60) : Qt.rgba(0, 0, 0, 0.50))
+                            : Qt.rgba(1, 1, 1, 0.60)
                         font.pixelSize: 11
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -601,12 +601,12 @@ PanelWindow {
                             : "transparent"
                     }
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "⚙"
                         color: root.clipboardSettingsOpen
                             ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.70) : Qt.rgba(0, 0, 0, 0.65))
+                            : Qt.rgba(1, 1, 1, 0.70)
                         font.pixelSize: 13
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -632,11 +632,11 @@ PanelWindow {
                         color: viewToggle.containsMouse ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
                     }
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         // The button advertises the layout selected by a click.
                         text: root.viewMode === "list" ? "▦" : "☷"
-                        color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.76) : Qt.rgba(0, 0, 0, 0.70)
+                        color: Qt.rgba(1, 1, 1, 0.76)
                         font.pixelSize: 16
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -697,7 +697,7 @@ PanelWindow {
                 // Header
                 Row {
                     width: parent.width
-                    Text {
+                    GlassText {
                         width: parent.width - 24
                         text: "剪贴板偏好设置"
                         font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
@@ -705,12 +705,12 @@ PanelWindow {
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
                     }
-                    Text {
+                    GlassText {
                         width: 24
                         horizontalAlignment: Text.AlignRight
                         text: "×"
                         font.pixelSize: 18
-                        color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.60) : Qt.rgba(0, 0, 0, 0.50)
+                        color: Qt.rgba(1, 1, 1, 0.60)
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
                         MouseArea {
@@ -735,17 +735,17 @@ PanelWindow {
                     Column {
                         width: parent.width - 46
                         spacing: 2
-                        Text {
+                        GlassText {
                             text: "监控图片内容"
                             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
-                        Text {
+                        GlassText {
                             text: "自动记录截图与复制的图片"
                             font.pixelSize: 10
-                            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(0, 0, 0, 0.50)
+                            color: Qt.rgba(1, 1, 1, 0.55)
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
@@ -784,7 +784,7 @@ PanelWindow {
                     width: parent.width
                     spacing: 6
 
-                    Text {
+                    GlassText {
                         text: "历史保留数量"
                         font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                         color: ThemeService.foregroundColor
@@ -810,7 +810,7 @@ PanelWindow {
                                     ? (ThemeService.isDark ? Qt.rgba(0.40, 0.70, 1, 0.60) : Qt.rgba(0.0, 0.45, 0.85, 0.50))
                                     : "transparent"
 
-                                Text {
+                                GlassText {
                                     anchors.centerIn: parent
                                     text: modelData + " 条"
                                     font.pixelSize: 11
@@ -853,7 +853,7 @@ PanelWindow {
                         anchors.fill: parent
                         anchors.leftMargin: 10
                         anchors.rightMargin: 10
-                        Text {
+                        GlassText {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
                             text: "⌨ 配置系统全局快捷键 (Meta+V)"
@@ -862,13 +862,13 @@ PanelWindow {
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
-                        Text {
+                        GlassText {
                             width: 20
                             horizontalAlignment: Text.AlignRight
                             anchors.verticalCenter: parent.verticalCenter
                             text: "›"
                             font.pixelSize: 16
-                            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.40) : Qt.rgba(0, 0, 0, 0.40)
+                        color: Qt.rgba(1, 1, 1, 0.40)
                         }
                     }
 
@@ -951,7 +951,7 @@ PanelWindow {
                     }
                     spacing: 1
 
-                    Text {
+                    GlassText {
                         width: parent.width
                         text: resultItem.modelData.title
                         color: ThemeService.foregroundColor
@@ -964,10 +964,10 @@ PanelWindow {
                         styleColor: dialog.textOutlineColor
                     }
 
-                    Text {
+                    GlassText {
                         width: parent.width
                         text: resultItem.modelData.subtitle
-                        color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.68) : Qt.rgba(0, 0, 0, 0.58)
+                        color: Qt.rgba(1, 1, 1, 0.68)
                         elide: Text.ElideRight
                         font.pixelSize: 11
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -995,7 +995,7 @@ PanelWindow {
                         border.width: 1
                         border.color: ThemeService.isDark ? Qt.rgba(0.66, 0.82, 1, 0.40) : Qt.rgba(0.0, 0.50, 0.90, 0.30)
 
-                        Text {
+                        GlassText {
                             anchors.centerIn: parent
                             text: "最新"
                             color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.94) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
@@ -1023,10 +1023,10 @@ PanelWindow {
                                 : "transparent"
                         }
 
-                        Text {
+                        GlassText {
                             anchors.centerIn: parent
                             text: "×"
-                            color: deleteBtnMouse.containsMouse ? "#ff453a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.60) : Qt.rgba(0, 0, 0, 0.50))
+                            color: deleteBtnMouse.containsMouse ? "#ff453a" : Qt.rgba(1, 1, 1, 0.60)
                             font.pixelSize: 16
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
@@ -1105,7 +1105,7 @@ PanelWindow {
                     }
                     color: ThemeService.isDark ? Qt.rgba(0.30, 0.56, 0.94, 0.36) : Qt.rgba(0.0, 0.50, 0.90, 0.18)
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "最新"
                         color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
@@ -1137,10 +1137,10 @@ PanelWindow {
                             : (ThemeService.isDark ? Qt.rgba(0, 0, 0, 0.35) : Qt.rgba(1, 1, 1, 0.60))
                     }
 
-                    Text {
+                    GlassText {
                         anchors.centerIn: parent
                         text: "×"
-                        color: gridDeleteMouse.containsMouse ? "#ff453a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.80) : Qt.rgba(0, 0, 0, 0.60))
+                        color: gridDeleteMouse.containsMouse ? "#ff453a" : Qt.rgba(1, 1, 1, 0.80)
                         font.pixelSize: 14
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -1184,7 +1184,7 @@ PanelWindow {
                     iconSource: gridResultItem.modelData.icon ?? ""
                 }
 
-                Text {
+                GlassText {
                     anchors {
                         left: parent.left
                         right: parent.right
@@ -1205,7 +1205,7 @@ PanelWindow {
                     styleColor: dialog.textOutlineColor
                 }
 
-                Text {
+                GlassText {
                     visible: gridResultItem.modelData.isImage ?? false
                     anchors {
                         left: parent.left
@@ -1216,7 +1216,7 @@ PanelWindow {
                         topMargin: 71
                     }
                     text: gridResultItem.modelData.subtitle.replace("图片剪贴板 · ", "")
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.54) : Qt.rgba(0, 0, 0, 0.52)
+                    color: Qt.rgba(1, 1, 1, 0.54)
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
                     font.pixelSize: 9
@@ -1237,7 +1237,7 @@ PanelWindow {
             }
         }
 
-        Text {
+        GlassText {
             visible: root.resultCount === 0
             anchors {
                 top: searchHeader.bottom
@@ -1249,7 +1249,7 @@ PanelWindow {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.mode === "app" ? "未找到匹配的应用" : (root.mode === "clipboard" ? "剪贴板历史为空" : "未找到匹配的窗口")
-            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.52) : Qt.rgba(0, 0, 0, 0.50)
+            color: Qt.rgba(1, 1, 1, 0.52)
             font.pixelSize: 13
             style: ThemeService.isDark ? Text.Outline : Text.Normal
             styleColor: dialog.textOutlineColor

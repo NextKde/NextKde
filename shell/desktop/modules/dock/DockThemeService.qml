@@ -57,11 +57,12 @@ QtObject {
     // Exposed (reactively toggled)
     // ═══════════════════════════════════════════════════
     readonly property color backgroundColor: isDark ? darkBg : lightBg
-    readonly property color foregroundColor: isDark ? darkFg : lightFg
-    readonly property color secondaryForegroundColor: isDark
-        ? darkSecondaryFg : lightSecondaryFg
-    readonly property color tertiaryForegroundColor: isDark
-        ? darkTertiaryFg : lightTertiaryFg
+    // Liquid-glass chrome keeps one white-ink hierarchy in both system
+    // themes. The compositor material, rather than a black light-theme icon,
+    // establishes contrast against the live backdrop.
+    readonly property color foregroundColor: darkFg
+    readonly property color secondaryForegroundColor: darkSecondaryFg
+    readonly property color tertiaryForegroundColor: darkTertiaryFg
     readonly property color accentColor: isDark ? darkAccent : lightAccent
     readonly property color dividerColor: isDark ? darkDivider : lightDivider
     readonly property color tooltipBackground: isDark ? darkTooltipBg : lightTooltipBg

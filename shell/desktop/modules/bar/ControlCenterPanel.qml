@@ -244,7 +244,7 @@ Item {
                     && NetworkService.connectionType === "wifi"
                 signalStrength: NetworkService.signalStrength
                 glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                    : (ThemeService.isDark ? "white" : "#000000")
+                    : "white"
             }
             // Toggling NetworkManager's radio is not instant either; mirror
             // the Bluetooth disc's busy arc so both read as "working", not
@@ -260,7 +260,7 @@ Item {
                 Canvas {
                     id: wifiBusyArc
                     anchors.fill: parent
-                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    property color glyphColor: "white"
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -362,7 +362,7 @@ Item {
                 anchors.centerIn: parent
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
-                property color glyphColor: active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
+                property color glyphColor: active ? "#0a84ff" : "white"
                 opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
@@ -406,7 +406,7 @@ Item {
                 Canvas {
                     id: bluetoothBusyArc
                     anchors.fill: parent
-                    property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+                    property color glyphColor: "white"
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -616,7 +616,7 @@ Item {
             layer.enabled: true
             layer.effect: MultiEffect {
                 colorization: 1.0
-                colorizationColor: ThemeService.isDark ? ThemeService.foregroundColor : "#000000"
+                colorizationColor: ThemeService.foregroundColor
             }
         }
         MouseArea { id: screenshotPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ControlCenterService.captureInteractiveScreenshot() }
@@ -698,7 +698,7 @@ Item {
             layer.enabled: true
             layer.effect: MultiEffect {
                 colorization: 1.0
-                colorizationColor: ThemeService.isDark ? ThemeService.foregroundColor : "#000000"
+                colorizationColor: ThemeService.foregroundColor
             }
         }
         MouseArea {
@@ -746,7 +746,7 @@ Item {
             layer.effect: MultiEffect {
                 colorization: 1.0
                 colorizationColor: ControlCenterService.doNotDisturbEnabled
-                    ? "#0a84ff" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+                    ? "#0a84ff" : ThemeService.foregroundColor
             }
         }
         GlassText {
@@ -791,9 +791,9 @@ Item {
             value: panel.brightnessPreview / 100
             enabled: ControlCenterService.brightnessAvailable
             trackHeight: 4
-            trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.12)
-            accentColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.42) : Qt.rgba(0, 0, 0, 0.35)
-            thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
+            trackColor: Qt.rgba(1, 1, 1, 0.17)
+            accentColor: Qt.rgba(1, 1, 1, 0.42)
+            thumbColor: "#ffffff"
             onPreviewChanged: function(v) {
                 panel.draggingBrightness = true
                 panel.brightnessPreview = Math.round(v * 100)
@@ -842,7 +842,7 @@ Item {
             anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
             width: 15
             height: 15
-            property color glyphColor: ThemeService.isDark ? "white" : "#000000"
+            property color glyphColor: "white"
             onGlyphColorChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
@@ -871,9 +871,9 @@ Item {
             height: 30
             value: panel.volumePreview / 100
             trackHeight: 5
-            trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.15)
-            accentColor: ThemeService.isDark ? "#ffffff" : Qt.rgba(0, 0, 0, 0.40)
-            thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
+            trackColor: Qt.rgba(1, 1, 1, 0.17)
+            accentColor: "#ffffff"
+            thumbColor: "#ffffff"
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true
                 panel.volumePreview = Math.round(v * 100)
@@ -963,7 +963,7 @@ Item {
                         }
                         GlassText {
                             text: modelData.appName
-                            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.62) : Qt.rgba(0, 0, 0, 0.62)
+                            color: Qt.rgba(1, 1, 1, 0.62)
                             font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                             elide: Text.ElideRight
                             anchors.verticalCenter: parent.verticalCenter
@@ -995,7 +995,7 @@ Item {
                                     width: parent.width - removeButton.width - 6
                                     visible: text.length > 0
                                     text: modelData.body
-                                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.50)
+                                    color: Qt.rgba(1, 1, 1, 0.50)
                                     font { pixelSize: 10; family: "Noto Sans CJK SC" }
                                     elide: Text.ElideRight
                                     maximumLineCount: 1
@@ -1024,7 +1024,7 @@ Item {
                     anchors.centerIn: parent
                     visible: historyList.count === 0
                     text: "暂无历史通知"
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.30) : Qt.rgba(0, 0, 0, 0.35)
+                    color: Qt.rgba(1, 1, 1, 0.30)
                     font { pixelSize: 11; family: "Noto Sans CJK SC" }
                 }
             }

@@ -74,19 +74,12 @@ Rectangle {
         return Math.min(0.20, (base + protection)
             * (material === "thick" ? 1.18 : 1.0))
     }
-    property bool _useDarkForeground: estimatedMaterialLuminance >= 0.58
-    readonly property color foregroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 1.0) : Qt.rgba(1, 1, 1, 1.0)
-    readonly property color secondaryForegroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.76) : Qt.rgba(1, 1, 1, 0.82)
-    readonly property color tertiaryForegroundColor: _useDarkForeground
-        ? Qt.rgba(0.02, 0.025, 0.035, 0.62) : Qt.rgba(1, 1, 1, 0.66)
-    onEstimatedMaterialLuminanceChanged: {
-        if (_useDarkForeground && estimatedMaterialLuminance < 0.42)
-            _useDarkForeground = false
-        else if (!_useDarkForeground && estimatedMaterialLuminance > 0.58)
-            _useDarkForeground = true
-    }
+    // Glass controls use the same white foreground hierarchy in light and
+    // dark themes. Choosing black from the estimated wallpaper makes symbols
+    // flip while the material itself remains visually dark/transparent.
+    readonly property color foregroundColor: Qt.rgba(1, 1, 1, 1.0)
+    readonly property color secondaryForegroundColor: Qt.rgba(1, 1, 1, 0.82)
+    readonly property color tertiaryForegroundColor: Qt.rgba(1, 1, 1, 0.66)
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
     // Bright surfaces need less white overlay to remain translucent; darker

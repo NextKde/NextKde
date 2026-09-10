@@ -285,7 +285,7 @@ PopupWindow {
                         && NetworkService.connectionType === "wifi"
                     signalStrength: NetworkService.signalStrength
                     glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                        : (ThemeService.isDark ? "white" : "#000000")
+                        : "white"
                 }
                 MouseArea {
                     anchors.fill: parent
