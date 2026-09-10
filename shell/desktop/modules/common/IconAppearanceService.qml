@@ -57,7 +57,7 @@ QtObject {
     function glassContentColor(alpha) {
         const opacity = alpha === undefined ? 1.0 : alpha
         if (AppearanceTokens.isMaterial) {
-            const base = AppearanceTokens.colors.onSurface
+            const base = AppearanceTokens.colors.surfaceForeground
             return Qt.rgba(base.r, base.g, base.b, opacity)
         }
         return Qt.rgba(1, 1, 1, opacity)

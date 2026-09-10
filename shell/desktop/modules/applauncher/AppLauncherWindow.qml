@@ -65,7 +65,7 @@ PanelWindow {
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
     readonly property color launcherForegroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.onSurface : (isFullscreenMode
+        ? AppearanceTokens.colors.surfaceForeground : (isFullscreenMode
             ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor)
     // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
     // nevertheless a useful stable cue for the Launchpad's large scrim. Keep

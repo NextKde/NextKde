@@ -48,22 +48,21 @@ QtObject {
     readonly property QtObject colors: QtObject {
         readonly property color primary: MaterialThemeService.color("primary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 1.0, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color onPrimary: MaterialThemeService.color("on_primary", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.85, tokens.isDarkTheme ? 0.20 : 1.0))
+        readonly property color primaryForeground: tokens.isDarkTheme ? "#221a00" : "#ffffff"
         readonly property color primaryContainer: MaterialThemeService.color("primary_container", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.82, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color onPrimaryContainer: MaterialThemeService.color("on_primary_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.75, tokens.isDarkTheme ? 0.90 : 0.10))
+        readonly property color primaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
         readonly property color secondary: MaterialThemeService.color("secondary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.035, 0.42, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color onSecondary: MaterialThemeService.color("on_secondary", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.035, 0.36, tokens.isDarkTheme ? 0.20 : 1.0))
+        readonly property color secondaryForeground: tokens.isDarkTheme ? "#211a00" : "#ffffff"
         readonly property color secondaryContainer: MaterialThemeService.color("secondary_container", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.035, 0.38, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color onSecondaryContainer: MaterialThemeService.color("on_secondary_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.035, 0.34, tokens.isDarkTheme ? 0.90 : 0.10))
+        readonly property color secondaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
         readonly property color tertiary: MaterialThemeService.color("tertiary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.16, 0.56, tokens.isDarkTheme ? 0.80 : 0.40))
+        readonly property color tertiaryContainer: MaterialThemeService.color("tertiary_container", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0.16, 0.48, tokens.isDarkTheme ? 0.30 : 0.90))
+        readonly property color tertiaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
         readonly property color surface: MaterialThemeService.color("surface", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
         readonly property color surfaceContainerLow: MaterialThemeService.color("surface_container_low", tokens.isDarkTheme,
@@ -76,10 +75,10 @@ QtObject {
             tokens._tone(tokens.seedColor, 0, 0.20, tokens.isDarkTheme ? 0.22 : 0.86))
         readonly property bool surfaceIsDark:
             tokens._luminance(surfaceContainer) < 0.48
-        readonly property color onSurface: MaterialThemeService.color("on_surface", tokens.isDarkTheme,
-            surfaceIsDark ? Qt.rgba(0.96, 0.96, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1))
-        readonly property color onSurfaceVariant: MaterialThemeService.color("on_surface_variant", tokens.isDarkTheme,
-            surfaceIsDark ? Qt.rgba(0.78, 0.80, 0.88, 1) : Qt.rgba(0.30, 0.31, 0.36, 1))
+        // QML reserves onXxx names for signal handlers, so foreground roles
+        // use explicit, QML-safe names instead of Material's onSurface form.
+        readonly property color surfaceForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
+        readonly property color surfaceVariantForeground: tokens.isDarkTheme ? "#c9c5d0" : "#49454f"
         readonly property color outline: MaterialThemeService.color("outline", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.60 : 0.50))
         readonly property color outlineVariant: MaterialThemeService.color("outline_variant", tokens.isDarkTheme,
@@ -103,13 +102,13 @@ QtObject {
 
     readonly property QtObject state: QtObject {
         readonly property color hover: tokens._mix(tokens.colors.surfaceContainer,
-            tokens.colors.onSurface, 0.08)
+            tokens.colors.surfaceForeground, 0.08)
         readonly property color pressed: tokens._mix(tokens.colors.surfaceContainer,
-            tokens.colors.onSurface, 0.12)
+            tokens.colors.surfaceForeground, 0.12)
         readonly property color selected: tokens.colors.primaryContainer
-        readonly property color disabled: Qt.rgba(tokens.colors.onSurfaceVariant.r,
-            tokens.colors.onSurfaceVariant.g,
-            tokens.colors.onSurfaceVariant.b, 0.38)
+        readonly property color disabled: Qt.rgba(tokens.colors.surfaceVariantForeground.r,
+            tokens.colors.surfaceVariantForeground.g,
+            tokens.colors.surfaceVariantForeground.b, 0.38)
     }
 
     readonly property QtObject typography: QtObject {

@@ -8,9 +8,11 @@ Rectangle {
     id: root
 
     property string title: ""
+    property string widgetId: ""
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
+    property color materialSurfaceColor: AppearanceTokens.colors.surfaceContainerLow
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: AppearanceTokens.widget.radius
@@ -36,8 +38,8 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: AppearanceTokens.isMaterial
-        color: AppearanceTokens.colors.surfaceContainerLow
+        visible: AppearanceTokens.isMaterial && root.widgetId !== "clock"
+        color: root.materialSurfaceColor
         border.width: 1
         border.color: AppearanceTokens.colors.outlineVariant
     }
@@ -59,7 +61,7 @@ Rectangle {
         visible: root.title.length > 0
         text: root.title
         color: AppearanceTokens.isMaterial
-            ? AppearanceTokens.colors.onSurfaceVariant : Qt.rgba(1, 1, 1, 0.78)
+            ? AppearanceTokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.78)
 
         anchors {
             left: parent.left

@@ -82,13 +82,13 @@ Rectangle {
     // dark themes. Choosing black from the estimated wallpaper makes symbols
     // flip while the material itself remains visually dark/transparent.
     readonly property color foregroundColor: usesMaterialSurface
-        ? AppearanceTokens.colors.onSurface : Qt.rgba(1, 1, 1, 1.0)
+        ? AppearanceTokens.colors.surfaceForeground : Qt.rgba(1, 1, 1, 1.0)
     readonly property color secondaryForegroundColor: usesMaterialSurface
-        ? AppearanceTokens.colors.onSurfaceVariant : Qt.rgba(1, 1, 1, 0.82)
+        ? AppearanceTokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.82)
     readonly property color tertiaryForegroundColor: usesMaterialSurface
-        ? Qt.rgba(AppearanceTokens.colors.onSurfaceVariant.r,
-            AppearanceTokens.colors.onSurfaceVariant.g,
-            AppearanceTokens.colors.onSurfaceVariant.b, 0.70)
+        ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
+            AppearanceTokens.colors.surfaceVariantForeground.g,
+            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70)
         : Qt.rgba(1, 1, 1, 0.66)
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
