@@ -343,7 +343,7 @@ PanelWindow {
                     visible: AppearanceTokens.isMaterial
                     lobes: 12
                     amplitude: 0.075
-                    fillColor: AppearanceTokens.colors.primaryContainer
+                    fillColor: AppearanceTokens.colors.surfaceContainer
                     outlineColor: AppearanceTokens.colors.outlineVariant
                     outlineWidth: 1
                 }
@@ -403,10 +403,18 @@ PanelWindow {
                         const hour = (date.getHours() % 12 + date.getMinutes() / 60) * Math.PI / 6
                         const minute = date.getMinutes() * Math.PI / 30
                         const second = date.getSeconds() * Math.PI / 30
+                        if (AppearanceTokens.isMaterial)
+                            ctx.strokeStyle = AppearanceTokens.colors.primary.toString()
                         ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
+                        if (AppearanceTokens.isMaterial)
+                            ctx.strokeStyle = AppearanceTokens.colors.tertiary.toString()
                         ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-	                        ctx.strokeStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-	                        ctx.fillStyle = glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
+	                        ctx.strokeStyle = AppearanceTokens.isMaterial
+	                            ? AppearanceTokens.colors.secondary.toString()
+	                            : glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
+	                        ctx.fillStyle = AppearanceTokens.isMaterial
+	                            ? AppearanceTokens.colors.primary.toString()
+	                            : glassMode ? IconAppearanceService.glassContentColor().toString() : "#ee7659"; ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
                     }
                     Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
 	                    Connections {
