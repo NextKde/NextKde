@@ -33,48 +33,83 @@ QtObject {
         return value.r * 0.2126 + value.g * 0.7152 + value.b * 0.0722
     }
 
+    // Tonal-Spot-style fallback used when no external Material color utility
+    // is installed. It creates the same semantic tone ladder as M3; a future
+    // HCT/matugen loader can replace the role values without touching views.
+    function _tone(source, hueShift, saturationScale, lightness, alpha) {
+        const hue = (source.hslHue < 0 ? 0 : source.hslHue)
+        const shiftedHue = (hue + hueShift + 1.0) % 1.0
+        const saturation = Math.max(0.08, Math.min(0.72,
+            source.hslSaturation * saturationScale))
+        return Qt.hsla(shiftedHue, saturation, lightness,
+            alpha === undefined ? 1.0 : alpha)
+    }
+
     readonly property QtObject colors: QtObject {
-        readonly property color primary: tokens.seedColor
-        readonly property color onPrimary: tokens.isDarkTheme
-            ? Qt.rgba(0.05, 0.05, 0.07, 1) : Qt.rgba(1, 1, 1, 1)
-        readonly property color secondary: tokens._mix(tokens.seedColor,
-            Qt.rgba(1, 1, 1, 1), 0.32)
-        readonly property color surface: tokens.isDarkTheme
-            ? tokens._mix(Qt.rgba(0.055, 0.055, 0.07, 1), tokens.seedColor, 0.16)
-            : tokens._mix(Qt.rgba(0.97, 0.97, 0.98, 1), tokens.seedColor, 0.08)
-        readonly property color surfaceContainer: tokens.isDarkTheme
-            ? tokens._mix(Qt.rgba(0.085, 0.085, 0.10, 1), tokens.seedColor, 0.20)
-            : tokens._mix(Qt.rgba(0.93, 0.94, 0.96, 1), tokens.seedColor, 0.12)
-        readonly property color surfaceContainerHigh: tokens.isDarkTheme
-            ? tokens._mix(Qt.rgba(0.12, 0.12, 0.14, 1), tokens.seedColor, 0.22)
-            : tokens._mix(Qt.rgba(0.88, 0.89, 0.93, 1), tokens.seedColor, 0.14)
+        readonly property color primary: tokens._tone(tokens.seedColor, 0, 1.0,
+            tokens.isDarkTheme ? 0.80 : 0.40)
+        readonly property color onPrimary: tokens._tone(tokens.seedColor, 0, 0.85,
+            tokens.isDarkTheme ? 0.20 : 1.0)
+        readonly property color primaryContainer: tokens._tone(tokens.seedColor, 0, 0.82,
+            tokens.isDarkTheme ? 0.30 : 0.90)
+        readonly property color onPrimaryContainer: tokens._tone(tokens.seedColor, 0, 0.75,
+            tokens.isDarkTheme ? 0.90 : 0.10)
+        readonly property color secondary: tokens._tone(tokens.seedColor, 0.035, 0.42,
+            tokens.isDarkTheme ? 0.80 : 0.40)
+        readonly property color onSecondary: tokens._tone(tokens.seedColor, 0.035, 0.36,
+            tokens.isDarkTheme ? 0.20 : 1.0)
+        readonly property color secondaryContainer: tokens._tone(tokens.seedColor, 0.035, 0.38,
+            tokens.isDarkTheme ? 0.30 : 0.90)
+        readonly property color onSecondaryContainer: tokens._tone(tokens.seedColor, 0.035, 0.34,
+            tokens.isDarkTheme ? 0.90 : 0.10)
+        readonly property color tertiary: tokens._tone(tokens.seedColor, 0.16, 0.56,
+            tokens.isDarkTheme ? 0.80 : 0.40)
+        readonly property color surface: tokens._tone(tokens.seedColor, 0, 0.12,
+            tokens.isDarkTheme ? 0.06 : 0.98)
+        readonly property color surfaceContainerLow: tokens._tone(tokens.seedColor, 0, 0.14,
+            tokens.isDarkTheme ? 0.10 : 0.96)
+        readonly property color surfaceContainer: tokens._tone(tokens.seedColor, 0, 0.16,
+            tokens.isDarkTheme ? 0.12 : 0.94)
+        readonly property color surfaceContainerHigh: tokens._tone(tokens.seedColor, 0, 0.18,
+            tokens.isDarkTheme ? 0.17 : 0.90)
+        readonly property color surfaceContainerHighest: tokens._tone(tokens.seedColor, 0, 0.20,
+            tokens.isDarkTheme ? 0.22 : 0.86)
         readonly property bool surfaceIsDark:
             tokens._luminance(surfaceContainer) < 0.48
         readonly property color onSurface: surfaceIsDark
             ? Qt.rgba(0.96, 0.96, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1)
         readonly property color onSurfaceVariant: surfaceIsDark
             ? Qt.rgba(0.78, 0.80, 0.88, 1) : Qt.rgba(0.30, 0.31, 0.36, 1)
-        readonly property color outline: tokens.isDarkTheme
-            ? Qt.rgba(0.78, 0.80, 0.88, 0.34) : Qt.rgba(0.25, 0.26, 0.30, 0.30)
-        readonly property color error: Qt.rgba(0.88, 0.26, 0.28, 1)
+        readonly property color outline: tokens._tone(tokens.seedColor, 0, 0.16,
+            tokens.isDarkTheme ? 0.60 : 0.50)
+        readonly property color outlineVariant: tokens._tone(tokens.seedColor, 0, 0.14,
+            tokens.isDarkTheme ? 0.30 : 0.80)
+        readonly property color error: tokens.isDarkTheme
+            ? Qt.rgba(1.0, 0.71, 0.67, 1) : Qt.rgba(0.73, 0.10, 0.12, 1)
         readonly property color scrim: Qt.rgba(0, 0, 0,
             tokens.isDarkTheme ? 0.42 : 0.24)
     }
 
     readonly property QtObject shape: QtObject {
-        readonly property real extraSmall: tokens.isMaterial ? 4 : 5
-        readonly property real small: tokens.isMaterial ? 8 : 10
-        readonly property real medium: tokens.isMaterial ? 12 : 14
-        readonly property real large: tokens.isMaterial ? 16 : 20
-        readonly property real extraLarge: tokens.isMaterial ? 28 : 26
+        // Matches the practical scale used by end4-pC: 6/8/12/17/23/30.
+        readonly property real unsharpened: tokens.isMaterial ? 6 : 5
+        readonly property real extraSmall: tokens.isMaterial ? 8 : 5
+        readonly property real small: tokens.isMaterial ? 12 : 10
+        readonly property real medium: tokens.isMaterial ? 17 : 14
+        readonly property real large: tokens.isMaterial ? 23 : 20
+        readonly property real extraLarge: tokens.isMaterial ? 30 : 26
         readonly property real full: 999
     }
 
     readonly property QtObject state: QtObject {
-        readonly property color hover: tokens.colors.primary
-        readonly property color pressed: tokens.colors.primary
-        readonly property color selected: tokens.colors.primary
-        readonly property color disabled: tokens.colors.onSurfaceVariant
+        readonly property color hover: tokens._mix(tokens.colors.surfaceContainer,
+            tokens.colors.onSurface, 0.08)
+        readonly property color pressed: tokens._mix(tokens.colors.surfaceContainer,
+            tokens.colors.onSurface, 0.12)
+        readonly property color selected: tokens.colors.primaryContainer
+        readonly property color disabled: Qt.rgba(tokens.colors.onSurfaceVariant.r,
+            tokens.colors.onSurfaceVariant.g,
+            tokens.colors.onSurfaceVariant.b, 0.38)
     }
 
     readonly property QtObject typography: QtObject {

@@ -1313,11 +1313,22 @@ PanelWindow {
                                 height: 35
 
                                 placeholderText: "搜索应用"
-                                liquidFinish: true
+                                liquidFinish: !AppearanceTokens.isMaterial
                                 liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
                                 ambientPrimary: WallpaperPaletteService.primary
                                 ambientSecondary: WallpaperPaletteService.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                                glassColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.surfaceContainerHighest
+                                    : Qt.rgba(1, 1, 1, 0.10)
+                                cornerRadius: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.shape.medium : height
+                                outlineColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.outlineVariant
+                                    : Qt.rgba(1, 1, 1, 0.08)
+                                focusedOutlineColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.primary
+                                    : Qt.rgba(1, 1, 1, 0.24)
                                 textColor: root.launcherForegroundColor
                                 mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
                                     root.launcherForegroundColor.g,

@@ -20,7 +20,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.usesColorArtwork
+        visible: root.usesColorArtwork && !AppearanceTokens.isMaterial
         gradient: Gradient {
             GradientStop { position: 0; color: root.startColor }
             GradientStop { position: 1; color: root.endColor }
@@ -30,13 +30,23 @@ Rectangle {
     WidgetGlassMaterial {
         anchors.fill: parent
         cornerRadius: root.radius
-        visible: !root.usesColorArtwork
+        visible: !root.usesColorArtwork && !AppearanceTokens.isMaterial
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: AppearanceTokens.isMaterial
+        color: AppearanceTokens.colors.surfaceContainerLow
+        border.width: 1
+        border.color: AppearanceTokens.colors.outlineVariant
     }
 
     // A broad, low-contrast bloom makes colour cards feel like widgets rather
     // than rectangular panels, while never running beneath the text itself.
     Rectangle {
         visible: root.showSurface && root.usesColorArtwork
+            && !AppearanceTokens.isMaterial
         width: parent.width * 0.78
         height: width
         radius: width / 2

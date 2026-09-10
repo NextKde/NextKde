@@ -312,7 +312,7 @@ PanelWindow {
                 sourceComponent: Component {
 	                    Item {
 	                anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
                 clip: true
 
                 Item {
@@ -334,7 +334,8 @@ PanelWindow {
                         if (radius <= 0)
                             return
                         const date = clock.date
-                        const glassMode = IconAppearanceService.mode !== "color"
+                        const glassMode = AppearanceTokens.isMaterial
+                            || IconAppearanceService.mode !== "color"
                         ctx.reset()
                         ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
                         // In the shared glass modes the card material is the
@@ -615,7 +616,7 @@ PanelWindow {
 	                sourceComponent: Component {
 	                    Item {
 	                anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
 
                 // The card-level gradient establishes the theme, while this
                 // explicit content-layer wash keeps that transition visible
@@ -928,7 +929,7 @@ PanelWindow {
                     Item {
 	                id: systemContent
 	                anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
                 // The kos-data-service snapshot drives this card through
                 // the shared MetricsService, so the rings and trends read the
                 // exact values the Bar's thermal indicator shows.
@@ -1191,7 +1192,7 @@ PanelWindow {
                     Item {
                 id: activityContent
                 anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
 
                 Item {
                     id: activityBody
@@ -1376,7 +1377,7 @@ PanelWindow {
                     Item {
                 id: musicContent
                 anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
                 readonly property var player: DockMprisService.activePlayer
                 readonly property bool hasPlayer: player !== null
                 readonly property url artworkSource: {
@@ -1696,7 +1697,7 @@ PanelWindow {
                         // face: skip the opaque reminder-red band and pick
                         // content colours from the appearance service, the
                         // same way the clock and calendar widgets do.
-                        readonly property bool glassMode: IconAppearanceService.mode !== "color"
+                        readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
 
                         MouseArea {
                             anchors.fill: parent
@@ -1806,7 +1807,7 @@ PanelWindow {
                     Item {
 	                id: calendarContent
 	                anchors.fill: parent
-	                readonly property bool glassMode: IconAppearanceService.mode !== "color"
+	                readonly property bool glassMode: AppearanceTokens.isMaterial || IconAppearanceService.mode !== "color"
                 readonly property int year: calendarClock.dayDate.getFullYear()
                 readonly property int month: calendarClock.dayDate.getMonth()
                 // Monday-first month layout: 星期一 is the first column and
