@@ -2087,14 +2087,15 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("设置模块不受支持"), false);
             return true;
         }
-        const QString systemsettings = QStandardPaths::findExecutable(
-            QStringLiteral("systemsettings"));
-        if (systemsettings.isEmpty()) {
+        const QString kcmshell = QStandardPaths::findExecutable(QStringLiteral("kcmshell6"));
+        const QString systemsettings = QStandardPaths::findExecutable(QStringLiteral("systemsettings"));
+        const QString executable = !kcmshell.isEmpty() ? kcmshell : systemsettings;
+        if (executable.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("settings-unavailable"),
                     QStringLiteral("KDE 系统设置不可用"), false);
             return true;
         }
-        const bool started = QProcess::startDetached(systemsettings, {module});
+        const bool started = QProcess::startDetached(executable, {module});
         respond(socket, request, started, {{QStringLiteral("started"), started}});
         return true;
     }
@@ -2107,11 +2108,22 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         const bool enabled = nightLight.property("enabled").toBool();
         const bool running = nightLight.property("running").toBool();
         const bool inhibited = nightLight.property("inhibited").toBool();
+        const uint mode = nightLight.property("mode").toUInt();
+        const uint targetTemp = nightLight.property("targetTemperature").toUInt();
+        const uint currentTemp = nightLight.property("currentTemperature").toUInt();
+
+        // Screen is in warm/eye-comfort mode if running, not inhibited, and either mode is Constant (0)
+        // or temperature target is warm (< 6000K)
+        const bool isWarm = running && !inhibited && (mode == 0 || targetTemp < 6000 || currentTemp < 6000);
+
         QJsonObject result{
             {QStringLiteral("available"), available},
             {QStringLiteral("enabled"), enabled},
-            {QStringLiteral("running"), running},
-            {QStringLiteral("inhibited"), inhibited}
+            {QStringLiteral("running"), isWarm},
+            {QStringLiteral("inhibited"), inhibited},
+            {QStringLiteral("mode"), static_cast<int>(mode)},
+            {QStringLiteral("targetTemperature"), static_cast<int>(targetTemp)},
+            {QStringLiteral("currentTemperature"), static_cast<int>(currentTemp)}
         };
         respond(socket, request, true, result);
         return true;
@@ -2122,36 +2134,59 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                                   QStringLiteral("org.kde.KWin.NightLight"),
                                   QDBusConnection::sessionBus());
         const bool available = nightLight.property("available").toBool();
-        const bool enabled = nightLight.property("enabled").toBool();
+        const bool running = nightLight.property("running").toBool();
+        const bool inhibited = nightLight.property("inhibited").toBool();
+        const uint mode = nightLight.property("mode").toUInt();
+        const uint targetTemp = nightLight.property("targetTemperature").toUInt();
+        const uint currentTemp = nightLight.property("currentTemperature").toUInt();
 
-        if (!enabled) {
-            const QString kwriteconfig = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
-            if (!kwriteconfig.isEmpty()) {
+        const bool currentlyWarm = running && !inhibited && (mode == 0 || targetTemp < 6000 || currentTemp < 6000);
+        const bool wantWarm = !currentlyWarm;
+
+        const QString kwriteconfig = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
+        if (!kwriteconfig.isEmpty()) {
+            if (wantWarm) {
+                // Instantly switch to warm temperature by setting Mode=Constant with --notify
                 QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
                                                  QStringLiteral("--group"), QStringLiteral("NightColor"),
                                                  QStringLiteral("--key"), QStringLiteral("Active"),
-                                                 QStringLiteral("true")});
+                                                 QStringLiteral("--type"), QStringLiteral("bool"),
+                                                 QStringLiteral("--notify"), QStringLiteral("true")});
+                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
+                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
+                                                 QStringLiteral("--key"), QStringLiteral("Mode"),
+                                                 QStringLiteral("--notify"), QStringLiteral("Constant")});
+                if (inhibited) {
+                    QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
+                                         QStringLiteral("/component/kwin"),
+                                         QStringLiteral("org.kde.kglobalaccel.Component"),
+                                         QDBusConnection::sessionBus());
+                    accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
+                }
+            } else {
+                // Switch back to neutral/daylight schedule by restoring Mode=DarkLight with --notify
+                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
+                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
+                                                 QStringLiteral("--key"), QStringLiteral("Mode"),
+                                                 QStringLiteral("--notify"), QStringLiteral("DarkLight")});
+                // If the scheduled temperature is still warm (e.g. night time), also inhibit
+                // so the screen returns to neutral (6500K) immediately.
+                const uint recheckTarget = nightLight.property("targetTemperature").toUInt();
+                if (recheckTarget < 6000 && !inhibited) {
+                    QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
+                                         QStringLiteral("/component/kwin"),
+                                         QStringLiteral("org.kde.kglobalaccel.Component"),
+                                         QDBusConnection::sessionBus());
+                    accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
+                }
             }
-            QDBusInterface kwin(QStringLiteral("org.kde.KWin"),
-                                QStringLiteral("/KWin"),
-                                QStringLiteral("org.kde.KWin"),
-                                QDBusConnection::sessionBus());
-            kwin.call(QStringLiteral("reconfigure"));
-        } else {
-            QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
-                                 QStringLiteral("/component/kwin"),
-                                 QStringLiteral("org.kde.kglobalaccel.Component"),
-                                 QDBusConnection::sessionBus());
-            accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
         }
 
-        const bool newRunning = nightLight.property("running").toBool();
-        const bool newInhibited = nightLight.property("inhibited").toBool();
         QJsonObject result{
             {QStringLiteral("available"), available},
-            {QStringLiteral("enabled"), nightLight.property("enabled").toBool()},
-            {QStringLiteral("running"), newRunning},
-            {QStringLiteral("inhibited"), newInhibited}
+            {QStringLiteral("enabled"), true},
+            {QStringLiteral("running"), wantWarm},
+            {QStringLiteral("inhibited"), wantWarm ? false : true}
         };
         respond(socket, request, true, result);
         return true;

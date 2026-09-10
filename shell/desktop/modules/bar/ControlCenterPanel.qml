@@ -69,7 +69,7 @@ Item {
         panel.close()
         PlatformClient.request("settings.open", { module: module }, function(response) {
             if (!response?.ok) {
-                Quickshell.execDetached(["systemsettings", module])
+                Quickshell.execDetached(["kcmshell6", module])
             }
         })
     }
