@@ -2069,11 +2069,19 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     const QString op = operation(request);
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     if (op == QStringLiteral("settings.open")) {
-        const QString module = payload.value(QStringLiteral("module")).toString();
+        QString module = payload.value(QStringLiteral("module")).toString();
+        if (module == QStringLiteral("kcm_nightcolor")) {
+            module = QStringLiteral("kcm_nightlight");
+        }
         static const QSet<QString> allowedModules{
             QStringLiteral("kcm_bluetooth"),
             QStringLiteral("kcm_keys"),
-            QStringLiteral("kcm_networkmanagement")};
+            QStringLiteral("kcm_networkmanagement"),
+            QStringLiteral("kcm_kscreen"),
+            QStringLiteral("kcm_pulseaudio"),
+            QStringLiteral("kcm_nightlight"),
+            QStringLiteral("kcm_notifications"),
+            QStringLiteral("kcm_soundtheme")};
         if (!allowedModules.contains(module)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-settings-module"),
                     QStringLiteral("设置模块不受支持"), false);
@@ -2086,7 +2094,66 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("KDE 系统设置不可用"), false);
             return true;
         }
-        runCommand(socket, request, systemsettings, {module});
+        const bool started = QProcess::startDetached(systemsettings, {module});
+        respond(socket, request, started, {{QStringLiteral("started"), started}});
+        return true;
+    }
+    if (op == QStringLiteral("nightlight.get")) {
+        QDBusInterface nightLight(QStringLiteral("org.kde.KWin"),
+                                  QStringLiteral("/org/kde/KWin/NightLight"),
+                                  QStringLiteral("org.kde.KWin.NightLight"),
+                                  QDBusConnection::sessionBus());
+        const bool available = nightLight.property("available").toBool();
+        const bool enabled = nightLight.property("enabled").toBool();
+        const bool running = nightLight.property("running").toBool();
+        const bool inhibited = nightLight.property("inhibited").toBool();
+        QJsonObject result{
+            {QStringLiteral("available"), available},
+            {QStringLiteral("enabled"), enabled},
+            {QStringLiteral("running"), running},
+            {QStringLiteral("inhibited"), inhibited}
+        };
+        respond(socket, request, true, result);
+        return true;
+    }
+    if (op == QStringLiteral("nightlight.toggle")) {
+        QDBusInterface nightLight(QStringLiteral("org.kde.KWin"),
+                                  QStringLiteral("/org/kde/KWin/NightLight"),
+                                  QStringLiteral("org.kde.KWin.NightLight"),
+                                  QDBusConnection::sessionBus());
+        const bool available = nightLight.property("available").toBool();
+        const bool enabled = nightLight.property("enabled").toBool();
+
+        if (!enabled) {
+            const QString kwriteconfig = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
+            if (!kwriteconfig.isEmpty()) {
+                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
+                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
+                                                 QStringLiteral("--key"), QStringLiteral("Active"),
+                                                 QStringLiteral("true")});
+            }
+            QDBusInterface kwin(QStringLiteral("org.kde.KWin"),
+                                QStringLiteral("/KWin"),
+                                QStringLiteral("org.kde.KWin"),
+                                QDBusConnection::sessionBus());
+            kwin.call(QStringLiteral("reconfigure"));
+        } else {
+            QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
+                                 QStringLiteral("/component/kwin"),
+                                 QStringLiteral("org.kde.kglobalaccel.Component"),
+                                 QDBusConnection::sessionBus());
+            accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
+        }
+
+        const bool newRunning = nightLight.property("running").toBool();
+        const bool newInhibited = nightLight.property("inhibited").toBool();
+        QJsonObject result{
+            {QStringLiteral("available"), available},
+            {QStringLiteral("enabled"), nightLight.property("enabled").toBool()},
+            {QStringLiteral("running"), newRunning},
+            {QStringLiteral("inhibited"), newInhibited}
+        };
+        respond(socket, request, true, result);
         return true;
     }
     if (op == QStringLiteral("shortcuts.apply")) {

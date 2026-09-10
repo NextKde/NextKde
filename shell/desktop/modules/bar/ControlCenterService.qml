@@ -37,6 +37,9 @@ QtObject {
     property bool canSuspend: true
     property bool canHibernate: false
     property bool themeChangeInProgress: false
+    property bool nightLightAvailable: true
+    property bool nightLightActive: false
+    property bool nightLightChangeInProgress: false
     signal toggleRequested()
 
     function rebuildHistoryGroups() {
@@ -111,6 +114,14 @@ QtObject {
             } else {
                 brightnessAvailable = false
                 brightnessBacklightName = ""
+            }
+        })
+        PlatformClient.request("nightlight.get", {}, function(response) {
+            if (response?.ok) {
+                const value = response.result || ({})
+                nightLightAvailable = value.available !== false
+                if (!nightLightChangeInProgress)
+                    nightLightActive = !!value.running
             }
         })
     }
@@ -289,6 +300,23 @@ QtObject {
     function toggleDoNotDisturb() {
         doNotDisturbEnabled = !doNotDisturbEnabled
         return doNotDisturbEnabled
+    }
+
+    function toggleNightLight() {
+        if (!nightLightAvailable || nightLightChangeInProgress)
+            return false
+        nightLightChangeInProgress = true
+        nightLightActive = !nightLightActive
+        PlatformClient.request("nightlight.toggle", {}, function(response) {
+            nightLightChangeInProgress = false
+            if (response?.ok) {
+                nightLightActive = !!response.result?.running
+            } else {
+                Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kwin",
+                    "org.kde.kglobalaccel.Component.invokeShortcut", "Toggle Night Color"])
+            }
+        })
+        return true
     }
 
     property Timer refreshTimer: Timer {

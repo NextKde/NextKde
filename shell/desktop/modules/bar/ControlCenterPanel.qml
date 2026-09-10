@@ -66,6 +66,15 @@ Item {
         coordinator.modalActive = false
     }
 
+    function openSettingsModule(module) {
+        panel.close()
+        PlatformClient.request("settings.open", { module: module }, function(response) {
+            if (!response?.ok) {
+                Quickshell.execDetached(["systemsettings", module])
+            }
+        })
+    }
+
     onNetworkRequested: openSubmenu("wifi")
     onBluetoothRequested: openSubmenu("bluetooth")
 
@@ -1927,10 +1936,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        panel.close()
-                        PlatformClient.request("settings.open", { module: "kcm_networkmanagement" })
-                    }
+                    onClicked: panel.openSettingsModule("kcm_networkmanagement")
                 }
             }
         }
@@ -2162,10 +2168,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        panel.close()
-                        PlatformClient.request("settings.open", { module: "kcm_bluetooth" })
-                    }
+                    onClicked: panel.openSettingsModule("kcm_bluetooth")
                 }
             }
         }
@@ -2409,10 +2412,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        panel.close()
-                        PlatformClient.request("settings.open", { module: "kcm_pulseaudio" })
-                    }
+                    onClicked: panel.openSettingsModule("kcm_pulseaudio")
                 }
             }
         }
@@ -2553,26 +2553,51 @@ Item {
                         width: 126
                         height: 60
                         radius: 14
-                        color: nightTileMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.04))
+                        color: {
+                            if (ControlCenterService.nightLightActive) {
+                                return nightTileMouse.containsMouse
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.28) : Qt.rgba(1, 0.62, 0.04, 0.20))
+                                    : (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.18) : Qt.rgba(1, 0.62, 0.04, 0.12))
+                            }
+                            return nightTileMouse.containsMouse
+                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.04))
+                        }
                         border.width: 1
-                        border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
+                        border.color: ControlCenterService.nightLightActive
+                            ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.40) : Qt.rgba(1, 0.62, 0.04, 0.30))
+                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08))
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
 
                         Column {
                             anchors.centerIn: parent
                             spacing: 4
 
-                            GlassText {
+                            Image {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "🌙"
-                                font.pixelSize: 16
+                                width: 20
+                                height: 20
+                                source: "../../assets/night-light.svg"
+                                sourceSize.width: 40
+                                sourceSize.height: 40
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                layer.enabled: true
+                                layer.effect: MultiEffect {
+                                    colorization: 1.0
+                                    colorizationColor: ControlCenterService.nightLightActive
+                                        ? "#ff9f0a"
+                                        : ThemeService.foregroundColor
+                                }
                             }
 
                             GlassText {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "夜览 / 护眼"
-                                color: ThemeService.foregroundColor
+                                text: ControlCenterService.nightLightActive ? "夜览 (开)" : "夜览 (关)"
+                                color: ControlCenterService.nightLightActive
+                                    ? (ThemeService.isDark ? "#ffb340" : "#d97706")
+                                    : ThemeService.foregroundColor
                                 font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                             }
                         }
@@ -2582,10 +2607,7 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                panel.close()
-                                PlatformClient.request("settings.open", { module: "kcm_nightcolor" })
-                            }
+                            onClicked: ControlCenterService.toggleNightLight()
                         }
                     }
                 }
@@ -2621,10 +2643,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        panel.close()
-                        PlatformClient.request("settings.open", { module: "kcm_kscreen" })
-                    }
+                    onClicked: panel.openSettingsModule("kcm_kscreen")
                 }
             }
         }
