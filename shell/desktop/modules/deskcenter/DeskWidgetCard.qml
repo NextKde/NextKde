@@ -1,9 +1,8 @@
 import QtQuick
 import qs.desktop.modules.common
 
-// iPadOS widgets rely on distinct, calm colour fields instead of a common
-// translucent panel. The colours stay dark enough for white text to remain
-// readable over every wallpaper without needing a glass effect.
+// Widget geometry stays shared across shell styles. Material uses one neutral
+// tonal surface for the collection; semantic colours belong to card content.
 Rectangle {
     id: root
 
@@ -12,7 +11,7 @@ Rectangle {
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
-    property color materialSurfaceColor: AppearanceTokens.colors.surfaceContainerLow
+    property color materialSurfaceColor: AppearanceTokens.colors.surfaceContainer
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: AppearanceTokens.widget.radius

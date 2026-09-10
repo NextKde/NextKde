@@ -214,11 +214,10 @@ PanelWindow {
     function spanSize(span) { return span * cellSize + (span - 1) * gap }
 
     function materialWidgetSurface(id) {
-        if (id === "weather") return AppearanceTokens.colors.primaryContainer
-        if (id === "todo") return AppearanceTokens.colors.secondaryContainer
-        if (id === "activity") return AppearanceTokens.colors.tertiaryContainer
-        if (id === "system" || id === "music") return AppearanceTokens.colors.surfaceContainer
-        return AppearanceTokens.colors.surfaceContainerLow
+        // Peer widgets form one collection, so they share one neutral tonal
+        // surface. Primary/secondary/tertiary are reserved for small semantic
+        // accents inside the cards instead of competing full-card fields.
+        return AppearanceTokens.colors.surfaceContainer
     }
 
     SystemClock {
