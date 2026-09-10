@@ -42,27 +42,27 @@ Item {
             alpha))
     }
 
-    Rectangle {
+    // The carousel page is a denser instance of the same shell glass used by
+    // the Dock. Thermal colours enter through the public ambient interface;
+    // this page must not paint an independent opaque gradient card.
+    ShellGlassSurface {
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
         radius: widget.iconSize * 0.35
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-                position: 0
-                color: widget.thermalColor(
-                    Qt.rgba(0.16, 0.38, 0.62, 1),
-                    Qt.rgba(0.68, 0.22, 0.18, 1), 0.68)
-            }
-            GradientStop {
-                position: 1
-                color: widget.thermalColor(
-                    Qt.rgba(0.20, 0.56, 0.68, 1),
-                    Qt.rgba(0.96, 0.52, 0.18, 1), 0.54)
-            }
-        }
+        material: "regular"
+        materialDepth: 1.0
+        surfaceOpacity: 0.88
+        ambientPigmentEnabled: true
+        ambientStrength: 1.0
+        ambientSecondaryPosition: 1.0
+        ambientPrimary: widget.thermalColor(
+            Qt.rgba(0.16, 0.38, 0.62, 1),
+            Qt.rgba(0.68, 0.22, 0.18, 1), 0.68)
+        ambientSecondary: widget.thermalColor(
+            Qt.rgba(0.20, 0.56, 0.68, 1),
+            Qt.rgba(0.96, 0.52, 0.18, 1), 0.54)
     }
 
     Row {

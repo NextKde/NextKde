@@ -307,6 +307,7 @@ Item {
         anchors.fill: parent
         z: -2
         radius: container.pillRadius
+        material: "clear"
     }
 
     // This sits behind the delegates, so it only receives clicks in the Dock
@@ -332,7 +333,6 @@ Item {
         id: trashContextMenu
         anchorItem: trashIcon
         position: ConfigService.position
-        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         property bool hasBeenVisible: false
 
@@ -366,7 +366,6 @@ Item {
         id: appLauncherContextMenu
         anchorItem: appLauncherIcon
         position: ConfigService.position
-        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         property bool hasBeenVisible: false
 

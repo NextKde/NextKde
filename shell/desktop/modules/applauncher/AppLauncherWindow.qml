@@ -64,8 +64,9 @@ PanelWindow {
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
-    readonly property color launcherForegroundColor: isFullscreenMode
-        ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
+    readonly property color launcherForegroundColor: launcherGlass.foregroundColor
+    readonly property color launcherSecondaryForegroundColor:
+        launcherGlass.secondaryForegroundColor
     onFilteredApplicationsChanged: {
         root.cancelFullscreenPageTransition();
         _clampFullscreenPage();
@@ -956,7 +957,6 @@ PanelWindow {
     ContextMenu {
         id: appContextMenu
         property var application: null
-        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         onAction: function (name) {
             const app = application;
@@ -1119,6 +1119,7 @@ PanelWindow {
                 // Center. Presentation differences are parameters, not a
                 // separate hand-painted scrim implementation.
                 ShellGlassSurface {
+                    id: launcherGlass
                     anchors.fill: parent
                     radius: background.radius
                     material: root.isFullscreenMode ? "thick" : "regular"
@@ -1276,14 +1277,12 @@ PanelWindow {
                                 ambientSecondary: WallpaperPaletteService.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                                 textColor: root.launcherForegroundColor
-                                mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
-                                    root.launcherForegroundColor.g,
-                                    root.launcherForegroundColor.b, 0.45)
+                                mutedTextColor: root.launcherSecondaryForegroundColor
                                 font.pixelSize: 12
                                 leftPadding: 32
                                 rightPadding: text.length > 0 ? 32 : 12
                                 selectionColor: Qt.rgba(1, 1, 1, 0.30)
-                                selectedTextColor: AppLauncherService.dockForegroundColor
+                                selectedTextColor: root.launcherForegroundColor
                                 enabled: !root.editMode && !root.openFolder
 
                                 onTextEdited: {
@@ -1718,6 +1717,13 @@ PanelWindow {
                                     width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                     text: modelData.type === "folder" ? modelData.name : modelData.app.name
                                     color: root.launcherForegroundColor
+                                    // App labels can sit directly on a nearly white,
+                                    // detailed launcher backdrop. Give only this
+                                    // text role a broad, diffuse local dark field;
+                                    // it preserves panel transmission and is not a
+                                    // Text.Outline-style glyph border.
+                                    glassShadowOpacity: 0.72
+                                    glassShadowBlur: 0.78
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -2363,6 +2369,8 @@ PanelWindow {
                                             width: Math.min(Math.round(root.configIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                             text: modelData.name
                                             color: AppLauncherService.dockForegroundColor
+                                            glassShadowOpacity: 0.72
+                                            glassShadowBlur: 0.78
                                             horizontalAlignment: Text.AlignHCenter
                                             elide: Text.ElideRight
                                             wrapMode: Text.NoWrap

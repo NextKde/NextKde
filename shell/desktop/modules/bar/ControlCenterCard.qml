@@ -126,6 +126,11 @@ PopupWindow {
         anchors.fill: parent
         radius: root.blurRadius
         surfaceOpacity: root.cardOpacity
+        material: "regular"
+        // Keep control-center cards optically flat for now. Their compositor
+        // blur/refraction and entrance motion remain intact; this disables
+        // only the optional QML interior raised-card contour.
+        reliefStrength: 0.0
         scale: root.popupScale
         transformOrigin: Item.TopRight
         opacity: root.motionProgress

@@ -54,14 +54,14 @@ QtObject {
     readonly property color lightHighlight: Qt.rgba(1.0, 1.0, 1.0, 0.55)
 
     // ═══════════════════════════════════════════════════
-    // Exposed (reactively toggled)
+    // Exposed material ink. Glass never flips its content to black in a
+    // light system theme: the material adapts the scene behind stable white
+    // ink instead. Theme still governs body/accent choices below.
     // ═══════════════════════════════════════════════════
     readonly property color backgroundColor: isDark ? darkBg : lightBg
-    readonly property color foregroundColor: isDark ? darkFg : lightFg
-    readonly property color secondaryForegroundColor: isDark
-        ? darkSecondaryFg : lightSecondaryFg
-    readonly property color tertiaryForegroundColor: isDark
-        ? darkTertiaryFg : lightTertiaryFg
+    readonly property color foregroundColor: darkFg
+    readonly property color secondaryForegroundColor: darkSecondaryFg
+    readonly property color tertiaryForegroundColor: darkTertiaryFg
     readonly property color accentColor: isDark ? darkAccent : lightAccent
     readonly property color dividerColor: isDark ? darkDivider : lightDivider
     readonly property color tooltipBackground: isDark ? darkTooltipBg : lightTooltipBg
