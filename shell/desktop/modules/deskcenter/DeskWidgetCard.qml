@@ -39,8 +39,8 @@ Rectangle {
         radius: root.radius
         visible: AppearanceTokens.isMaterial && root.widgetId !== "clock"
         color: root.materialSurfaceColor
-        border.width: 1
-        border.color: AppearanceTokens.colors.outlineVariant
+        opacity: AppearanceTokens.glass.materialOpacity
+        border.width: 0
     }
 
     // A broad, low-contrast bloom makes colour cards feel like widgets rather

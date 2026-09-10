@@ -343,7 +343,10 @@ PanelWindow {
                     visible: AppearanceTokens.isMaterial
                     lobes: 12
                     amplitude: 0.075
-                    fillColor: AppearanceTokens.colors.surfaceContainer
+                    fillColor: Qt.rgba(AppearanceTokens.colors.surfaceContainer.r,
+                        AppearanceTokens.colors.surfaceContainer.g,
+                        AppearanceTokens.colors.surfaceContainer.b,
+                        AppearanceTokens.glass.materialOpacity)
                     outlineColor: AppearanceTokens.colors.outlineVariant
                     outlineWidth: 1
                 }

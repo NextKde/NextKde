@@ -1158,10 +1158,13 @@ PanelWindow {
                     color: AppearanceTokens.isMaterial
                         ? AppearanceTokens.colors.surfaceContainerHigh
                         : root.launcherScrimColor
+                    opacity: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.glass.materialOpacity : 1
                     Behavior on color {
                         ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
                     }
-                    border.width: root.isFullscreenMode ? 0 : 1
+                    border.width: AppearanceTokens.isMaterial
+                        ? 0 : (root.isFullscreenMode ? 0 : 1)
                     border.color: AppearanceTokens.isMaterial
                         ? AppearanceTokens.colors.outline : (root.isDark
                             ? Qt.rgba(1, 1, 1, 0.16)

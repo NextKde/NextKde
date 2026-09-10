@@ -151,9 +151,12 @@ Rectangle {
         NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
     }
 
+    readonly property color materialSurfaceColor: material === "thick"
+        ? AppearanceTokens.colors.surfaceContainerHigh
+        : AppearanceTokens.colors.surfaceContainer
     color: usesMaterialSurface
-        ? (material === "thick" ? AppearanceTokens.colors.surfaceContainerHigh
-            : AppearanceTokens.colors.surfaceContainer)
+        ? Qt.rgba(materialSurfaceColor.r, materialSurfaceColor.g,
+            materialSurfaceColor.b, AppearanceTokens.glass.materialOpacity)
         : Qt.rgba(
             baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
             baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
@@ -165,7 +168,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.usesMaterialSurface
+        visible: false
         color: "transparent"
         border.width: 1
         border.color: AppearanceTokens.colors.outline

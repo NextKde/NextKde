@@ -206,8 +206,8 @@ PanelWindow {
             visible: AppearanceTokens.isMaterial
             radius: dockContainer.pillRadius
             color: AppearanceTokens.colors.surfaceContainerHigh
-            border.width: 1
-            border.color: AppearanceTokens.colors.outline
+            opacity: AppearanceTokens.glass.materialOpacity
+            border.width: 0
             z: -1
         }
 

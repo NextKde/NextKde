@@ -194,7 +194,7 @@ QtObject {
             : tokens.isMaterial ? 0.55 : 1.0
         readonly property real ambientMultiplier: tokens.isWindows12 ? 0.85
             : tokens.isMaterial ? 0.70 : 1.0
-        readonly property real materialOpacity: tokens.isMaterial ? 0.94 : 1.0
+        readonly property real materialOpacity: tokens.isMaterial ? 0.96 : 1.0
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
