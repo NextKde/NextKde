@@ -396,6 +396,49 @@ QJsonObject parseAudio(const QByteArray &output, int exitCode)
                        {QStringLiteral("muted"), text.contains(QStringLiteral("[MUTED]"))}};
 }
 
+QJsonObject parseAudioApplications(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return QJsonObject{{QStringLiteral("available"), false}};
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(output, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isArray())
+        return QJsonObject{{QStringLiteral("available"), false}};
+
+    QJsonArray applications;
+    for (const QJsonValue &value : document.array()) {
+        const QJsonObject stream = value.toObject();
+        const QJsonObject properties = stream.value(QStringLiteral("properties")).toObject();
+        QString name = properties.value(QStringLiteral("application.name")).toString().trimmed();
+        if (name.isEmpty())
+            name = properties.value(QStringLiteral("media.name")).toString().trimmed();
+        if (name.isEmpty())
+            name = QStringLiteral("音频应用");
+
+        const QJsonObject volume = stream.value(QStringLiteral("volume")).toObject();
+        double volumePercent = 0.0;
+        for (auto it = volume.constBegin(); it != volume.constEnd(); ++it) {
+            const QJsonObject channel = it.value().toObject();
+            const QString percent = channel.value(QStringLiteral("value_percent")).toString();
+            if (!percent.isEmpty()) {
+                volumePercent = percent.left(percent.indexOf(QLatin1Char('%'))).toDouble();
+                break;
+            }
+        }
+
+        applications.append(QJsonObject{
+            {QStringLiteral("id"), stream.value(QStringLiteral("index")).toInt()},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("percent"), qBound(0, qRound(volumePercent), 150)},
+            {QStringLiteral("muted"), stream.value(QStringLiteral("mute")).toBool()},
+            {QStringLiteral("icon"), properties.value(QStringLiteral("application.icon-name")).toString()}
+        });
+    }
+    return QJsonObject{{QStringLiteral("available"), true},
+                       {QStringLiteral("applications"), applications}};
+}
+
 QJsonObject parseNetworkScan(const QByteArray &output, int exitCode)
 {
     QJsonArray networks;
@@ -2241,6 +2284,55 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     if (op == QStringLiteral("audio.set-mute")) {
         runCommand(socket, request, QStringLiteral("wpctl"),
                    {QStringLiteral("set-mute"), QStringLiteral("@DEFAULT_AUDIO_SINK@"),
+                    payload.value(QStringLiteral("muted")).toBool() ? QStringLiteral("1") : QStringLiteral("0")});
+        return true;
+    }
+    if (op == QStringLiteral("audio.applications")) {
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("--format=json"), QStringLiteral("list"),
+                    QStringLiteral("sink-inputs")}, parseAudioApplications);
+        return true;
+    }
+    if (op == QStringLiteral("audio.application.set-volume")) {
+        const int id = payload.value(QStringLiteral("id")).toInt(-1);
+        const int value = qBound(0, payload.value(QStringLiteral("percent")).toInt(), 150);
+        if (id < 0) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-audio-stream"),
+                    QStringLiteral("音频应用无效"), false);
+            return true;
+        }
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("set-sink-input-volume"), QString::number(id),
+                    QString::number(value) + QLatin1Char('%')});
+        return true;
+    }
+    if (op == QStringLiteral("audio.application.set-mute")) {
+        const int id = payload.value(QStringLiteral("id")).toInt(-1);
+        if (id < 0) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-audio-stream"),
+                    QStringLiteral("音频应用无效"), false);
+            return true;
+        }
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("set-sink-input-mute"), QString::number(id),
                     payload.value(QStringLiteral("muted")).toBool() ? QStringLiteral("1") : QStringLiteral("0")});
         return true;
     }

@@ -12,6 +12,9 @@ QtObject {
     property bool audioAvailable: false
     property int volumePercent: 0
     property bool audioMuted: false
+    property var audioApplications: []
+    property bool audioApplicationsAvailable: false
+    property bool audioApplicationsRefreshInProgress: false
     property bool volumeChangeInProgress: false
     property bool brightnessAvailable: false
     property int brightnessPercent: 0
@@ -89,6 +92,7 @@ QtObject {
                 audioAvailable = false
             }
         })
+        refreshAudioApplications()
         PlatformClient.request("bluetooth.list", {}, function(response) {
             if (response?.ok) {
                 const value = response.result || ({})
@@ -126,6 +130,23 @@ QtObject {
         })
     }
 
+    function refreshAudioApplications() {
+        if (audioApplicationsRefreshInProgress)
+            return
+        audioApplicationsRefreshInProgress = true
+        PlatformClient.request("audio.applications", {}, function(response) {
+            audioApplicationsRefreshInProgress = false
+            if (response?.ok) {
+                const value = response.result || ({})
+                audioApplicationsAvailable = value.available !== false
+                audioApplications = Array.isArray(value.applications) ? value.applications : []
+            } else {
+                audioApplicationsAvailable = false
+                audioApplications = []
+            }
+        })
+    }
+
     function setVolume(percent) {
         const value = Math.round(Math.max(0, Math.min(100, Number(percent) || 0)))
         if (!audioAvailable || volumeChangeInProgress)
@@ -150,6 +171,23 @@ QtObject {
             if (response?.ok)
                 audioMuted = desired
             refresh()
+        })
+        return true
+    }
+
+    function setApplicationVolume(id, percent) {
+        const value = Math.round(Math.max(0, Math.min(150, Number(percent) || 0)))
+        PlatformClient.request("audio.application.set-volume", { id: id, percent: value }, function(response) {
+            if (response?.ok)
+                refreshAudioApplications()
+        })
+        return true
+    }
+
+    function setApplicationMuted(id, muted) {
+        PlatformClient.request("audio.application.set-mute", { id: id, muted: !!muted }, function(response) {
+            if (response?.ok)
+                refreshAudioApplications()
         })
         return true
     }
@@ -324,6 +362,12 @@ QtObject {
         repeat: true
         running: true
         onTriggered: service.refresh()
+    }
+    property Timer audioApplicationsTimer: Timer {
+        interval: 1800
+        repeat: true
+        running: true
+        onTriggered: service.refreshAudioApplications()
     }
     property Connections platformTransport: Connections {
         target: PlatformClient

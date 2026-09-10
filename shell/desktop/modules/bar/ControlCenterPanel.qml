@@ -68,11 +68,9 @@ Item {
 
     function openSettingsModule(module) {
         panel.close()
-        PlatformClient.request("settings.open", { module: module }, function(response) {
-            if (!response?.ok) {
-                Quickshell.execDetached(["kcmshell6", module])
-            }
-        })
+        // Launch directly from the shell so a closing popup or a stale daemon
+        // response cannot swallow the click.
+        Quickshell.execDetached(["kcmshell6", module])
     }
 
     onNetworkRequested: openSubmenu("wifi")
@@ -650,10 +648,10 @@ Item {
     ControlCenterCard {
         coordinator: coordinator
         offsetTop: 155
-        offsetRight: 262
-        cardRadius: 27
-        cardWidth: 54
-        cardHeight: 54
+        offsetRight: 264
+        cardRadius: 26
+        cardWidth: 52
+        cardHeight: 52
         cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -662,7 +660,7 @@ Item {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 27
+            radius: 26
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -689,10 +687,10 @@ Item {
     ControlCenterCard {
         coordinator: coordinator
         offsetTop: 155
-        offsetRight: 198
-        cardRadius: 27
-        cardWidth: 54
-        cardHeight: 54
+        offsetRight: 203
+        cardRadius: 26
+        cardWidth: 52
+        cardHeight: 52
         cardBorderColor: ThemeService.isDark
             ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
@@ -702,7 +700,7 @@ Item {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 27
+            radius: 26
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: themePointer.containsMouse && !themePointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -732,10 +730,10 @@ Item {
     ControlCenterCard {
         coordinator: coordinator
         offsetTop: 155
-        offsetRight: 134
-        cardRadius: 27
-        cardWidth: 54
-        cardHeight: 54
+        offsetRight: 142
+        cardRadius: 26
+        cardWidth: 52
+        cardHeight: 52
         cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -744,7 +742,7 @@ Item {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 27
+            radius: 26
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -778,31 +776,33 @@ Item {
     ControlCenterCard {
         coordinator: coordinator
         offsetTop: 155
-        offsetRight: 20
-        cardRadius: 27
-        cardWidth: 104
-        cardHeight: 54
+        offsetRight: 81
+        cardRadius: 26
+        cardWidth: 52
+        cardHeight: 52
         cardBorderColor: ControlCenterService.doNotDisturbEnabled
             ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        cardScale: dndPointer.pressed ? 0.97 : (dndPointer.containsMouse ? 1.025 : 1.0)
+        cardScale: dndPointer.pressed ? 0.91 : (dndPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 27
-            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
-            opacity: dndPointer.containsMouse && !dndPointer.pressed ? 1 : 0
+            radius: 26
+            color: ControlCenterService.doNotDisturbEnabled
+                ? (ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18))
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
+            opacity: ControlCenterService.doNotDisturbEnabled || (dndPointer.containsMouse && !dndPointer.pressed) ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
-            anchors { left: parent.left; leftMargin: 14; verticalCenter: parent.verticalCenter }
-            width: 21
-            height: 21
+            anchors.centerIn: parent
+            width: 22
+            height: 22
             source: "../../assets/do-not-disturb.svg"
-            sourceSize.width: 46
-            sourceSize.height: 46
+            sourceSize.width: 44
+            sourceSize.height: 44
             fillMode: Image.PreserveAspectFit
             smooth: true
             layer.enabled: true
@@ -812,16 +812,65 @@ Item {
                     ? "#0a84ff" : ThemeService.foregroundColor
             }
         }
-        GlassText {
-            anchors { left: parent.left; leftMargin: 42; verticalCenter: parent.verticalCenter }
-            text: "勿扰"
-            color: ThemeService.foregroundColor
-            font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+        MouseArea {
+            id: dndPointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ControlCenterService.toggleDoNotDisturb()
         }
-        MouseArea { id: dndPointer; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ControlCenterService.toggleDoNotDisturb() }
     }
 
-    // ── Card 7: Display brightness ───────────────────────────────────
+    // ── Card 8: Night Light ──────────────────────────────────────────
+    ControlCenterCard {
+        coordinator: coordinator
+        offsetTop: 155
+        offsetRight: 20
+        cardRadius: 26
+        cardWidth: 52
+        cardHeight: 52
+        cardBorderColor: ControlCenterService.nightLightActive
+            ? "#ff9f0a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
+
+        cardScale: nightLightPointer.pressed ? 0.91 : (nightLightPointer.containsMouse ? 1.06 : 1.0)
+        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Rectangle {
+            anchors.fill: parent
+            radius: 26
+            color: ControlCenterService.nightLightActive
+                ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.28) : Qt.rgba(1, 0.62, 0.04, 0.18))
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
+            opacity: ControlCenterService.nightLightActive || (nightLightPointer.containsMouse && !nightLightPointer.pressed) ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 140 } }
+        }
+        Image {
+            anchors.centerIn: parent
+            width: 22
+            height: 22
+            source: "../../assets/night-light.svg"
+            sourceSize.width: 44
+            sourceSize.height: 44
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                colorization: 1.0
+                colorizationColor: ControlCenterService.nightLightActive
+                    ? "#ff9f0a" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+            }
+        }
+        MouseArea {
+            id: nightLightPointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ControlCenterService.toggleNightLight()
+        }
+    }
+
+    // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
         offsetTop: 217
@@ -841,19 +890,6 @@ Item {
                 color: ThemeService.foregroundColor
                 font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
             }
-            GlassText {
-                text: "›"
-                color: ThemeService.foregroundColor
-                opacity: 0.50
-                font { pixelSize: 13; weight: Font.Bold }
-            }
-        }
-        MouseArea {
-            anchors { left: parent.left; top: parent.top; right: parent.right }
-            height: 26
-            cursorShape: Qt.PointingHandCursor
-            hoverEnabled: true
-            onClicked: panel.openSubmenu("display")
         }
         GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
@@ -1561,7 +1597,7 @@ Item {
         }
     }
 
-    // ── Card 11 (Submenu Panel): Wi-Fi, Bluetooth, Sound, Display ─────
+    // ── Card 11 (Submenu Panel): Wi-Fi, Bluetooth, Sound ─────────────
     ControlCenterCard {
         id: submenuCard
         coordinator: coordinator
@@ -1572,8 +1608,7 @@ Item {
         cardWidth: 296
         cardHeight: panel.activeSubmenu === "wifi" ? 360
             : (panel.activeSubmenu === "bluetooth" ? 340
-            : (panel.activeSubmenu === "sound" ? 220
-            : (panel.activeSubmenu === "display" ? 240 : 280)))
+            : (panel.activeSubmenu === "sound" ? 420 : 280))
         cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
         cardShown: panel.activeSubmenu !== "" && panel.activeSubmenu !== "session"
         blurStrength: panel.effectiveBlur
@@ -1638,8 +1673,7 @@ Item {
                 }
                 text: panel.activeSubmenu === "wifi" ? "Wi‑Fi"
                     : (panel.activeSubmenu === "bluetooth" ? "蓝牙"
-                    : (panel.activeSubmenu === "sound" ? "声音"
-                    : (panel.activeSubmenu === "display" ? "显示器" : "")))
+                    : (panel.activeSubmenu === "sound" ? "声音" : ""))
                 color: ThemeService.foregroundColor
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -2383,6 +2417,157 @@ Item {
             }
 
             Item {
+                id: soundApplicationsSection
+                anchors {
+                    top: soundOutputSection.bottom
+                    topMargin: 10
+                    left: parent.left
+                    right: parent.right
+                    bottom: soundFooter.top
+                    leftMargin: 14
+                    rightMargin: 14
+                    bottomMargin: 4
+                }
+
+                GlassText {
+                    id: soundApplicationsTitle
+                    anchors { left: parent.left; top: parent.top }
+                    text: "应用音量"
+                    color: ThemeService.foregroundColor
+                    opacity: 0.60
+                    font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                }
+
+                GlassText {
+                    visible: ControlCenterService.audioApplications.length === 0
+                    anchors.centerIn: parent
+                    anchors.verticalCenterOffset: 8
+                    text: ControlCenterService.audioApplicationsRefreshInProgress ? "正在读取…" : "没有活动的音频应用"
+                    color: ThemeService.foregroundColor
+                    opacity: 0.45
+                    font { pixelSize: 10; family: "Noto Sans CJK SC" }
+                }
+
+                Column {
+                    anchors {
+                        top: soundApplicationsTitle.bottom
+                        topMargin: 5
+                        left: parent.left
+                        right: parent.right
+                    }
+                    spacing: 3
+
+                    Repeater {
+                        model: ControlCenterService.audioApplications.slice(0, 3)
+
+                        delegate: Item {
+                            id: appVolumeRow
+                            required property var modelData
+                            width: parent.width
+                            height: 58
+                            property int volumePreview: Number(modelData.percent || 0)
+                            property bool muted: !!modelData.muted
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 8
+                                color: appVolumeHover.hovered
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055))
+                                    : "transparent"
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                            }
+
+                            Rectangle {
+                                id: appMuteButton
+                                anchors { left: parent.left; leftMargin: 4; verticalCenter: parent.verticalCenter }
+                                width: 28
+                                height: 28
+                                radius: 8
+                                color: appVolumeRow.muted
+                                    ? Qt.rgba(1.0, 0.27, 0.23, ThemeService.isDark ? 0.30 : 0.18)
+                                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07))
+
+                                GlassText {
+                                    anchors.centerIn: parent
+                                    text: appVolumeRow.muted ? "×" : "♪"
+                                    color: appVolumeRow.muted ? "#ff453a" : ThemeService.foregroundColor
+                                    font { pixelSize: appVolumeRow.muted ? 15 : 13; weight: Font.Bold }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        appVolumeRow.muted = !appVolumeRow.muted
+                                        ControlCenterService.setApplicationMuted(appVolumeRow.modelData.id,
+                                            appVolumeRow.muted)
+                                    }
+                                }
+                            }
+
+                            GlassText {
+                                id: appVolumeName
+                                anchors {
+                                    left: appMuteButton.right
+                                    leftMargin: 8
+                                    right: appVolumePercent.left
+                                    rightMargin: 6
+                                    top: parent.top
+                                    topMargin: 5
+                                }
+                                text: appVolumeRow.modelData.name || "音频应用"
+                                elide: Text.ElideRight
+                                color: ThemeService.foregroundColor
+                                font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                            }
+
+                            GlassText {
+                                id: appVolumePercent
+                                anchors { right: parent.right; rightMargin: 5; verticalCenter: appVolumeName.verticalCenter }
+                                text: Math.round(appVolumeRow.volumePreview) + "%"
+                                color: ThemeService.foregroundColor
+                                opacity: 0.55
+                                font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                            }
+
+                            LiquidControls.LiquidSlider {
+                                anchors {
+                                    left: appMuteButton.right
+                                    leftMargin: 8
+                                    right: parent.right
+                                    rightMargin: 4
+                                    bottom: parent.bottom
+                                    bottomMargin: 3
+                                }
+                                height: 27
+                                value: Math.min(1, appVolumeRow.volumePreview / 150)
+                                trackHeight: 4
+                                trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.15)
+                                accentColor: appVolumeRow.muted ? Qt.rgba(1, 1, 1, 0.25)
+                                    : (ThemeService.isDark ? "#ffffff" : Qt.rgba(0, 0, 0, 0.40))
+                                thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
+                                onPreviewChanged: function(v) {
+                                    appVolumeRow.volumePreview = Math.round(v * 150)
+                                }
+                                onCommitRequested: function(v) {
+                                    if (appVolumeRow.muted) {
+                                        appVolumeRow.muted = false
+                                        ControlCenterService.setApplicationMuted(appVolumeRow.modelData.id, false)
+                                    }
+                                    ControlCenterService.setApplicationVolume(appVolumeRow.modelData.id,
+                                        Math.round(v * 150))
+                                }
+                            }
+
+                            HoverHandler { id: appVolumeHover }
+                        }
+                    }
+                }
+            }
+
+            Item {
+                id: soundFooter
                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                 height: 38
 
@@ -2413,237 +2598,6 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: panel.openSettingsModule("kcm_pulseaudio")
-                }
-            }
-        }
-
-        // ── View D: Display ──
-        Item {
-            id: displaySubmenuView
-            visible: panel.activeSubmenu === "display"
-            anchors {
-                top: submenuDivider.bottom
-                topMargin: 6
-                left: parent.left
-                right: parent.right
-                bottom: parent.bottom
-            }
-
-            Item {
-                id: displayBrightnessSection
-                anchors {
-                    top: parent.top
-                    left: parent.left
-                    right: parent.right
-                    leftMargin: 14
-                    rightMargin: 14
-                }
-                height: 62
-
-                GlassText {
-                    anchors { left: parent.left; top: parent.top; topMargin: 2 }
-                    text: "显示亮度"
-                    color: ThemeService.foregroundColor
-                    font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
-                }
-
-                GlassText {
-                    anchors { right: parent.right; top: parent.top; topMargin: 2 }
-                    text: ControlCenterService.brightnessAvailable ? Math.round(panel.brightnessPreview) + "%" : "无亮度设备"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.65
-                    font { pixelSize: 10; family: "Noto Sans CJK SC" }
-                }
-
-                GlassText {
-                    anchors { left: parent.left; leftMargin: 3; bottom: parent.bottom; bottomMargin: 9 }
-                    text: "☀"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.65
-                    font.pixelSize: 13
-                }
-
-                LiquidControls.LiquidSlider {
-                    id: submenuBrightnessSlider
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 24; rightMargin: 2; bottomMargin: 4 }
-                    height: 28
-                    value: panel.brightnessPreview / 100
-                    enabled: ControlCenterService.brightnessAvailable
-                    trackHeight: 4
-                    trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.12)
-                    accentColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.42) : Qt.rgba(0, 0, 0, 0.35)
-                    thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
-                    onPreviewChanged: function(v) {
-                        panel.draggingBrightness = true
-                        panel.brightnessPreview = Math.round(v * 100)
-                    }
-                    onCommitRequested: function(v) {
-                        panel.draggingBrightness = false
-                        ControlCenterService.setBrightness(Math.round(v * 100))
-                    }
-                }
-            }
-
-            Item {
-                id: displayTilesSection
-                anchors {
-                    top: displayBrightnessSection.bottom
-                    topMargin: 10
-                    left: parent.left
-                    right: parent.right
-                    leftMargin: 14
-                    rightMargin: 14
-                }
-                height: 66
-
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 12
-
-                    Rectangle {
-                        width: 126
-                        height: 60
-                        radius: 14
-                        color: darkTileMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.04))
-                        border.width: 1
-                        border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            Image {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 20
-                                height: 20
-                                source: "../../assets/theme-appearance.svg"
-                                sourceSize.width: 40
-                                sourceSize.height: 40
-                                fillMode: Image.PreserveAspectFit
-                                smooth: true
-                                rotation: ThemeService.isDark ? 0 : 180
-                                Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-                                layer.enabled: true
-                                layer.effect: MultiEffect {
-                                    colorization: 1.0
-                                    colorizationColor: ThemeService.foregroundColor
-                                }
-                            }
-
-                            GlassText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: ThemeService.isDark ? "深色模式 (开)" : "深色模式 (关)"
-                                color: ThemeService.foregroundColor
-                                font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
-                            }
-                        }
-
-                        MouseArea {
-                            id: darkTileMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: ControlCenterService.toggleDarkMode()
-                        }
-                    }
-
-                    Rectangle {
-                        width: 126
-                        height: 60
-                        radius: 14
-                        color: {
-                            if (ControlCenterService.nightLightActive) {
-                                return nightTileMouse.containsMouse
-                                    ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.28) : Qt.rgba(1, 0.62, 0.04, 0.20))
-                                    : (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.18) : Qt.rgba(1, 0.62, 0.04, 0.12))
-                            }
-                            return nightTileMouse.containsMouse
-                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.04))
-                        }
-                        border.width: 1
-                        border.color: ControlCenterService.nightLightActive
-                            ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.40) : Qt.rgba(1, 0.62, 0.04, 0.30))
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08))
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            Image {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                width: 20
-                                height: 20
-                                source: "../../assets/night-light.svg"
-                                sourceSize.width: 40
-                                sourceSize.height: 40
-                                fillMode: Image.PreserveAspectFit
-                                smooth: true
-                                layer.enabled: true
-                                layer.effect: MultiEffect {
-                                    colorization: 1.0
-                                    colorizationColor: ControlCenterService.nightLightActive
-                                        ? "#ff9f0a"
-                                        : ThemeService.foregroundColor
-                                }
-                            }
-
-                            GlassText {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: ControlCenterService.nightLightActive ? "夜览 (开)" : "夜览 (关)"
-                                color: ControlCenterService.nightLightActive
-                                    ? (ThemeService.isDark ? "#ffb340" : "#d97706")
-                                    : ThemeService.foregroundColor
-                                font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
-                            }
-                        }
-
-                        MouseArea {
-                            id: nightTileMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: ControlCenterService.toggleNightLight()
-                        }
-                    }
-                }
-            }
-
-            Item {
-                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                height: 38
-
-                Rectangle {
-                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
-                    height: 1
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
-                }
-
-                GlassText {
-                    anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "显示器设置…"
-                    color: displaySettingsMouse.containsMouse ? "#0a84ff" : ThemeService.foregroundColor
-                    font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
-                }
-
-                GlassText {
-                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "›"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.45
-                    font { pixelSize: 13; weight: Font.Bold }
-                }
-
-                MouseArea {
-                    id: displaySettingsMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: panel.openSettingsModule("kcm_kscreen")
                 }
             }
         }

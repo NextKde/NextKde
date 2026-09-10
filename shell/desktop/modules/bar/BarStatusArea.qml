@@ -7,6 +7,8 @@ Item {
 
     implicitWidth: statusArea.implicitWidth
     implicitHeight: 24
+    width: implicitWidth
+    height: implicitHeight
     property bool dockHosted: false
     property string dockEdge: "bottom"
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"

@@ -31,46 +31,35 @@ Item {
     // implicitHeight avoids a height/row-count binding cycle.
     property real availableHeight: 24
     readonly property int itemSize: iconSize + 8
-    // UntypedObjectModel intentionally has no length/get API; Repeater.count
-    // is the supported reactive item count for layout calculations.
-    readonly property int itemCount: trayRepeater.count
-        + (trailingComponents ? trailingComponents.length : 0)
-    readonly property int twoRowThreshold: itemSize * 2
-    readonly property bool twoRows: dockHosted && itemCount > 1
-        && availableHeight >= twoRowThreshold
-    readonly property int rowCount: twoRows ? 2 : 1
-    readonly property real singleRowImplicitWidth: itemCount > 0
-        ? itemCount * itemSize + (itemCount - 1) * iconSpacing : 0
 
-    // ═══════════════════════════════════════════════════════════════
-    // Alt+drag reorder
-    //
-    // Native tray items and the trailing shell cells come from two
-    // different, differently-owned models (SystemTray.items has no array
-    // API to resort; trailingComponents is a fixed literal). Rather than
-    // merging them into one sorted model, every delegate keeps its natural
-    // declaration-order slot for layout purposes and a persisted, purely
-    // visual `transform: Translate` offset carries it to its preferred
-    // slot — at rest as much as while another item is being dragged past
-    // it. Only the actively dragged item ever changes its own base slot,
-    // and only on release, once the reorder is committed.
-    // ═══════════════════════════════════════════════════════════════
+    property int trayRevision: 0
+    function notifyTrayChanged() { trayRevision++ }
 
-    // Native tray items have no stable index of their own outside the
-    // Repeater; a fallback slot key keeps a still-unresolved item from
-    // breaking the key list rather than crashing on a missing id.
+    // Native tray keys are collected only from valid, active delegates so
+    // dead or crashed StatusNotifierItems do not allocate phantom slots.
     readonly property var nativeKeys: {
+        const _rev = root.trayRevision
         const keys = []
         for (let i = 0; i < trayRepeater.count; i++) {
             const item = trayRepeater.itemAt(i)
-            const id = item?.modelData?.id
-            keys.push("tray:" + (id && id.length > 0 ? id : ("#" + i)))
+            if (!item || !item.isValid || !item.trayKey)
+                continue
+            if (keys.indexOf(item.trayKey) < 0)
+                keys.push(item.trayKey)
         }
         return keys
     }
     readonly property var trailingCellKeys: (root.trailingKeys || []).map(key => "cell:" + key)
     readonly property var allKeys: root.nativeKeys.concat(root.trailingCellKeys)
     readonly property var arrangedKeys: SysTrayOrderService.arrange(root.allKeys)
+
+    readonly property int itemCount: root.allKeys.length
+    readonly property int twoRowThreshold: itemSize * 2
+    readonly property bool twoRows: dockHosted && itemCount > 1
+        && availableHeight >= twoRowThreshold
+    readonly property int rowCount: twoRows ? 2 : 1
+    readonly property real singleRowImplicitWidth: itemCount > 0
+        ? itemCount * itemSize + (itemCount - 1) * iconSpacing : 0
 
     // Let the order service see every key as it appears, so an icon that
     // shows up later is recognisably new and lands at the head of the row
@@ -105,6 +94,8 @@ Item {
     property real dragTranslationY: 0
 
     function slotOrigin(flowIndex) {
+        if (flowIndex < 0)
+            return Qt.point(0, 0)
         const rows = Math.max(1, root.rowCount)
         const column = Math.floor(flowIndex / rows)
         const row = flowIndex % rows
@@ -172,15 +163,40 @@ Item {
                 id: trayItem
                 required property var modelData
                 required property int index
-                readonly property string trayKey: root.nativeKeys[index] ?? ("tray:#" + index)
-                readonly property int naturalIndex: index
-                readonly property int targetIndex: root.targetIndexFor(trayKey)
+
+                readonly property bool isValid: Boolean(modelData && (modelData.icon || modelData.id || modelData.title))
+                readonly property string trayKey: {
+                    if (!isValid) return ""
+                    if (modelData.id && modelData.id.length > 0) {
+                        if (modelData.id.indexOf("chrome_status_icon") === 0 && (modelData.tooltipTitle || modelData.title)) {
+                            const sub = (modelData.tooltipTitle || modelData.title).trim().split("\n")[0].slice(0, 20)
+                            return "tray:" + modelData.id + ":" + sub
+                        }
+                        return "tray:" + modelData.id
+                    }
+                    if (modelData.title && modelData.title.length > 0)
+                        return "tray:" + modelData.title
+                    return "tray:#" + index
+                }
+                readonly property int naturalIndex: isValid ? root.allKeys.indexOf(trayKey) : -1
+                readonly property int targetIndex: isValid ? root.targetIndexFor(trayKey) : -1
                 readonly property bool isDraggedItem: root.draggedKey !== ""
                     && root.draggedKey === trayKey
+
+                Connections {
+                    target: trayItem.modelData
+                    function onIdChanged() { root.notifyTrayChanged() }
+                    function onIconChanged() { root.notifyTrayChanged() }
+                    function onTitleChanged() { root.notifyTrayChanged() }
+                    function onTooltipTitleChanged() { root.notifyTrayChanged() }
+                }
+                Component.onCompleted: root.notifyTrayChanged()
+                Component.onDestruction: root.notifyTrayChanged()
+
                 // Shift by exactly one slot when another item's live drag
                 // insertion point is passing over this item's resting slot.
                 readonly property int reorderSlots: {
-                    if (isDraggedItem || root.draggedKey === "" || root.dragInsertIndex < 0)
+                    if (!isValid || isDraggedItem || root.draggedKey === "" || root.dragInsertIndex < 0)
                         return 0
                     const source = root.targetIndexFor(root.draggedKey)
                     const destination = root.dragInsertIndex
@@ -197,8 +213,9 @@ Item {
                 // Dropping it would teleport any item whose arranged slot
                 // differs from its natural one, leaving the icon trailing
                 // the cursor by exactly that gap.
-                readonly property point reorderOffset:
-                    root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
+                readonly property point reorderOffset: isValid
+                    ? root.reorderOffsetFor(naturalIndex, targetIndex + reorderSlots)
+                    : Qt.point(0, 0)
                 property real offsetX: reorderOffset.x + (isDraggedItem ? root.dragTranslationX : 0)
                 property real offsetY: reorderOffset.y + (isDraggedItem ? root.dragTranslationY : 0)
                 Behavior on offsetX {
@@ -214,14 +231,15 @@ Item {
                 scale: isDraggedItem ? 1.08 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
+                visible: isValid
                 x: root.slotOrigin(naturalIndex).x
                 y: root.slotOrigin(naturalIndex).y
-                width: root.itemSize
-                height: root.itemSize
-                readonly property string tooltip: modelData.tooltipTitle
-                    || modelData.title || modelData.id
-                readonly property bool isSymbolicMask: Boolean(modelData.isMask)
-                    || (typeof modelData.icon === "string" && (
+                width: isValid ? root.itemSize : 0
+                height: isValid ? root.itemSize : 0
+                readonly property string tooltip: modelData ? (modelData.tooltipTitle
+                    || modelData.title || modelData.id || "") : ""
+                readonly property bool isSymbolicMask: Boolean(modelData?.isMask)
+                    || (typeof modelData?.icon === "string" && (
                         modelData.icon.indexOf("symbolic") !== -1
                         || modelData.icon.indexOf("-mask") !== -1
                     ))
@@ -394,7 +412,7 @@ Item {
                 readonly property alias loader: trailingLoader
                 readonly property string trayKey: root.trailingCellKeys[index]
                     ?? ("cell:#" + index)
-                readonly property int naturalIndex: trayRepeater.count + index
+                readonly property int naturalIndex: root.allKeys.indexOf(trayKey)
                 readonly property int targetIndex: root.targetIndexFor(trayKey)
                 readonly property bool isDraggedItem: root.draggedKey !== ""
                     && root.draggedKey === trayKey
