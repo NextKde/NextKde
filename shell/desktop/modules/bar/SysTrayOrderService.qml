@@ -30,29 +30,53 @@ QtObject {
     // has never seen are new arrivals: a native tray icon takes the leading
     // slots, so an app launched now shows up at the left edge of the row
     // rather than behind the shell's own cells, while an unrecognised shell
-    // cell stays at the tail where it is declared. On a first run nothing is
-    // known yet, so this reduces to the natural declaration order.
+    // cell stays at the tail where it is declared.
+    //
+    // Partitioning guarantees third-party tray icons stay strictly to the
+    // left of the shell's own system control cells, with controlcenter as
+    // the fixed trailing anchor at the rightmost edge.
     function arrange(keys) {
-        const known = []
-        const seen = ({})
+        const liveTrayKeys = (keys || []).filter(k => svc.isTrayKey(k))
+        const liveCellKeys = (keys || []).filter(k => !svc.isTrayKey(k))
+
+        // 1. Arrange native tray keys according to saved preference
+        const knownTray = []
+        const seenTray = ({})
         for (let i = 0; i < svc.order.length; i++) {
             const key = svc.order[i]
-            if (keys.indexOf(key) >= 0 && !seen[key]) {
-                known.push(key)
-                seen[key] = true
+            if (svc.isTrayKey(key) && liveTrayKeys.indexOf(key) >= 0 && !seenTray[key]) {
+                knownTray.push(key)
+                seenTray[key] = true
             }
         }
-        const head = keys.filter(key => !seen[key] && svc.isTrayKey(key))
-        const tail = keys.filter(key => !seen[key] && !svc.isTrayKey(key))
-        return head.concat(known, tail)
+        const unseenTray = liveTrayKeys.filter(k => !seenTray[k])
+        const arrangedTray = unseenTray.concat(knownTray)
+
+        // 2. Arrange shell control cells according to saved preference
+        const knownCell = []
+        const seenCell = ({})
+        for (let i = 0; i < svc.order.length; i++) {
+            const key = svc.order[i]
+            if (!svc.isTrayKey(key) && liveCellKeys.indexOf(key) >= 0 && !seenCell[key]) {
+                knownCell.push(key)
+                seenCell[key] = true
+            }
+        }
+        const unseenCell = liveCellKeys.filter(k => !seenCell[k])
+        const arrangedCell = knownCell.concat(unseenCell)
+
+        // Pin cell:controlcenter as the permanent rightmost trailing anchor
+        const ccIndex = arrangedCell.indexOf("cell:controlcenter")
+        if (ccIndex >= 0 && ccIndex !== arrangedCell.length - 1) {
+            arrangedCell.splice(ccIndex, 1)
+            arrangedCell.push("cell:controlcenter")
+        }
+
+        return arrangedTray.concat(arrangedCell)
     }
 
     // Folds keys the saved order has never seen into it — tray icons at the
-    // head, shell cells at the tail, matching arrange(). Recording a key on
-    // sight rather than only when it is dragged is what lets "new" mean
-    // "never seen before": without it every never-reordered icon stays
-    // unknown, and the one that just appeared would sort among them in
-    // SystemTray's own append order, i.e. last instead of first.
+    // head of the tray section, shell cells at the tail of the cell section.
     function register(keys) {
         if (!svc.ready)
             return
@@ -73,7 +97,9 @@ QtObject {
         }
         if (head.length === 0 && tail.length === 0)
             return
-        svc.order = head.concat(svc.order, tail)
+        const currentTray = svc.order.filter(k => svc.isTrayKey(k))
+        const currentCell = svc.order.filter(k => !svc.isTrayKey(k))
+        svc.order = head.concat(currentTray, currentCell, tail)
         scheduleSave()
     }
 
@@ -85,7 +111,26 @@ QtObject {
         const sourceIndex = arranged.indexOf(key)
         if (sourceIndex < 0)
             return
-        const destination = Math.max(0, Math.min(arranged.length - 1, Math.round(targetIndex)))
+
+        // Control Center is pinned to the far right trailing edge
+        if (key === "cell:controlcenter")
+            return
+
+        const trayCount = arranged.filter(k => svc.isTrayKey(k)).length
+        let minDest = 0
+        let maxDest = arranged.length - 1
+
+        if (svc.isTrayKey(key)) {
+            // Tray items can only be reordered within the tray section
+            minDest = 0
+            maxDest = Math.max(0, trayCount - 1)
+        } else {
+            // Shell cells can only be reordered within the cells section
+            minDest = trayCount
+            maxDest = Math.max(minDest, arranged.length - 2)
+        }
+
+        const destination = Math.max(minDest, Math.min(maxDest, Math.round(targetIndex)))
         if (sourceIndex === destination)
             return
         const moved = arranged.splice(sourceIndex, 1)[0]
@@ -129,8 +174,12 @@ QtObject {
             if (code === 0 && output) {
                 try {
                     const obj = JSON.parse(output)
-                    if (Array.isArray(obj.order))
-                        svc.order = obj.order.filter(key => typeof key === "string")
+                    if (Array.isArray(obj.order)) {
+                        const raw = obj.order.filter(key => typeof key === "string")
+                        const trayPart = raw.filter(k => svc.isTrayKey(k))
+                        const cellPart = raw.filter(k => !svc.isTrayKey(k))
+                        svc.order = trayPart.concat(cellPart)
+                    }
                 } catch (e) {
                     console.warn("[SysTrayOrder] parse error: " + e)
                 }
