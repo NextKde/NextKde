@@ -56,6 +56,10 @@ QtObject {
     // images, and QML text do not all enter an ancestor shader consistently.
     function glassContentColor(alpha) {
         const opacity = alpha === undefined ? 1.0 : alpha
+        if (AppearanceTokens.isMaterial) {
+            const base = AppearanceTokens.colors.onSurface
+            return Qt.rgba(base.r, base.g, base.b, opacity)
+        }
         return Qt.rgba(1, 1, 1, opacity)
     }
 

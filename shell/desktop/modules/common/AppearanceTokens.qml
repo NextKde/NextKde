@@ -29,6 +29,10 @@ QtObject {
             alpha === undefined ? 1.0 : alpha)
     }
 
+    function _luminance(value) {
+        return value.r * 0.2126 + value.g * 0.7152 + value.b * 0.0722
+    }
+
     readonly property QtObject colors: QtObject {
         readonly property color primary: tokens.seedColor
         readonly property color onPrimary: tokens.isDarkTheme
@@ -44,10 +48,12 @@ QtObject {
         readonly property color surfaceContainerHigh: tokens.isDarkTheme
             ? tokens._mix(Qt.rgba(0.12, 0.12, 0.14, 1), tokens.seedColor, 0.22)
             : tokens._mix(Qt.rgba(0.88, 0.89, 0.93, 1), tokens.seedColor, 0.14)
-        readonly property color onSurface: tokens.isDarkTheme
-            ? Qt.rgba(0.94, 0.95, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1)
-        readonly property color onSurfaceVariant: tokens.isDarkTheme
-            ? Qt.rgba(0.76, 0.78, 0.84, 1) : Qt.rgba(0.30, 0.31, 0.36, 1)
+        readonly property bool surfaceIsDark:
+            tokens._luminance(surfaceContainer) < 0.48
+        readonly property color onSurface: surfaceIsDark
+            ? Qt.rgba(0.96, 0.96, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1)
+        readonly property color onSurfaceVariant: surfaceIsDark
+            ? Qt.rgba(0.78, 0.80, 0.88, 1) : Qt.rgba(0.30, 0.31, 0.36, 1)
         readonly property color outline: tokens.isDarkTheme
             ? Qt.rgba(0.78, 0.80, 0.88, 0.34) : Qt.rgba(0.25, 0.26, 0.30, 0.30)
         readonly property color error: Qt.rgba(0.88, 0.26, 0.28, 1)

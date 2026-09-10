@@ -30,12 +30,15 @@ PopupWindow {
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real darkOverlayOpacity: ThemeService.isDark ? 0.27 : 0.04
-    property real menuRadius: 16
+    property real darkOverlayOpacity: AppearanceTokens.isMaterial ? 0
+        : (ThemeService.isDark ? 0.27 : 0.04)
+    property real menuRadius: AppearanceTokens.isMaterial
+        ? AppearanceTokens.shape.large : 16
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
             return root.foregroundColor
-        return ThemeService.isDark ? glass.foregroundColor : ThemeService.foregroundColor
+        return (AppearanceTokens.isMaterial || ThemeService.isDark)
+            ? glass.foregroundColor : ThemeService.foregroundColor
     }
     // Some anchors receive their opening press through the compositor's
     // global-pointer bridge slightly after this popup is mapped.
@@ -200,7 +203,8 @@ PopupWindow {
         }
     }
 
-    BackgroundEffect.blurRegion: root.visible ? contextMenuBlurHolder : null
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible)
+        ? contextMenuBlurHolder : null
 
     Region {
         id: contextMenuBlurHolder

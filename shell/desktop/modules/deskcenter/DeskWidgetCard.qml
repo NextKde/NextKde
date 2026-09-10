@@ -48,7 +48,8 @@ Rectangle {
     Text {
         visible: root.title.length > 0
         text: root.title
-        color: Qt.rgba(1, 1, 1, 0.78)
+        color: AppearanceTokens.isMaterial
+            ? AppearanceTokens.colors.onSurfaceVariant : Qt.rgba(1, 1, 1, 0.78)
 
         anchors {
             left: parent.left

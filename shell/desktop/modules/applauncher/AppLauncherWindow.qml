@@ -64,8 +64,9 @@ PanelWindow {
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
-    readonly property color launcherForegroundColor: isFullscreenMode
-        ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
+    readonly property color launcherForegroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.onSurface : (isFullscreenMode
+            ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor)
     // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
     // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
     // ordinary imagery translucent, and only protect against the low-contrast
@@ -1141,7 +1142,9 @@ PanelWindow {
             Item {
                 id: background
                 anchors.fill: parent
-                property real radius: root.isFullscreenMode ? 0 : 28
+                property real radius: root.isFullscreenMode ? 0
+                    : (AppearanceTokens.isMaterial
+                        ? AppearanceTokens.shape.extraLarge : 28)
 
                 // KWin owns the launcher card's actual blur and refraction
                 // through BackgroundEffect below. Keeping this client-side
@@ -1152,14 +1155,17 @@ PanelWindow {
                     // A launcher is a text-dense regular material. The scrim
                     // stays light through ordinary imagery, then gradually
                     // increases only near pure white or black backdrops.
-                    color: root.launcherScrimColor
+                    color: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.colors.surfaceContainerHigh
+                        : root.launcherScrimColor
                     Behavior on color {
                         ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
                     }
                     border.width: root.isFullscreenMode ? 0 : 1
-                    border.color: root.isDark
-                        ? Qt.rgba(1, 1, 1, 0.16)
-                        : Qt.rgba(1, 1, 1, 0.42)
+                    border.color: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.colors.outline : (root.isDark
+                            ? Qt.rgba(1, 1, 1, 0.16)
+                            : Qt.rgba(1, 1, 1, 0.42))
                 }
 
                 // This foreground layer deliberately excludes the backdrop
@@ -2839,7 +2845,7 @@ PanelWindow {
     // BackgroundEffect is a Wayland window attachment, so it belongs to this
     // PanelWindow root. The blur region is fixed at full card size. It never
     // scales or fades — only the foreground content animates on open.
-    BackgroundEffect.blurRegion: (root.visible
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
         && (root.isFullscreenMode
             || AppearanceConfigService.effectiveLauncherBlur > 0.005
             || AppearanceConfigService.effectiveLauncherLiquid > 0.005))
