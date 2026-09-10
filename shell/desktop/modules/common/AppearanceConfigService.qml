@@ -34,6 +34,9 @@ QtObject {
     // "macos" matches the shell geometry that predates selectable styles,
     // so upgrading an existing installation does not unexpectedly reshape it.
     property string shellStyle: "macos"
+    // WallpaperPaletteService updates this when a wallpaper is available;
+    // AppearanceTokens falls back to the KDE accent until then.
+    property color wallpaperSeedColor: "transparent"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"

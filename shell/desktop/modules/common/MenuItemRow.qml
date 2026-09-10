@@ -45,7 +45,7 @@ Item {
     Rectangle {
         id: bg
         anchors.fill: parent
-        radius: 14
+        radius: AppearanceTokens.shape.medium
         color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
         Behavior on color { ColorAnimation { duration: 90 } }
     }

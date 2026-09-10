@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import qs.desktop.modules.common
 
 // ────────────────────────────────────────────────────────────────
 // DockThemeService — Dark / light colour palette.
@@ -56,17 +57,33 @@ QtObject {
     // ═══════════════════════════════════════════════════
     // Exposed (reactively toggled)
     // ═══════════════════════════════════════════════════
-    readonly property color backgroundColor: isDark ? darkBg : lightBg
+    readonly property color backgroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.surfaceContainer : (isDark ? darkBg : lightBg)
     // Liquid-glass chrome keeps one white-ink hierarchy in both system
     // themes. The compositor material, rather than a black light-theme icon,
     // establishes contrast against the live backdrop.
-    readonly property color foregroundColor: darkFg
-    readonly property color secondaryForegroundColor: darkSecondaryFg
-    readonly property color tertiaryForegroundColor: darkTertiaryFg
-    readonly property color accentColor: isDark ? darkAccent : lightAccent
-    readonly property color dividerColor: isDark ? darkDivider : lightDivider
-    readonly property color tooltipBackground: isDark ? darkTooltipBg : lightTooltipBg
-    readonly property color indicatorColor: isDark ? darkIndicator : lightIndicator
-    readonly property color borderColor: isDark ? darkBorder : lightBorder
-    readonly property color highlightColor: isDark ? darkHighlight : lightHighlight
+    readonly property color foregroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.onSurface : darkFg
+    readonly property color secondaryForegroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.onSurfaceVariant : darkSecondaryFg
+    readonly property color tertiaryForegroundColor: AppearanceTokens.isMaterial
+        ? Qt.rgba(AppearanceTokens.colors.onSurfaceVariant.r,
+            AppearanceTokens.colors.onSurfaceVariant.g,
+            AppearanceTokens.colors.onSurfaceVariant.b, 0.70) : darkTertiaryFg
+    readonly property color accentColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.primary : (isDark ? darkAccent : lightAccent)
+    readonly property color dividerColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : (isDark ? darkDivider : lightDivider)
+    readonly property color tooltipBackground: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.surfaceContainerHigh
+        : (isDark ? darkTooltipBg : lightTooltipBg)
+    readonly property color indicatorColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.primary : (isDark ? darkIndicator : lightIndicator)
+    readonly property color borderColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : (isDark ? darkBorder : lightBorder)
+    readonly property color highlightColor: AppearanceTokens.isMaterial
+        ? Qt.rgba(AppearanceTokens.colors.primary.r,
+            AppearanceTokens.colors.primary.g,
+            AppearanceTokens.colors.primary.b, 0.22)
+        : (isDark ? darkHighlight : lightHighlight)
 }

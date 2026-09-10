@@ -3,15 +3,73 @@ import QtQuick
 
 // Semantic shell-shape values. Consumers should depend on these roles instead
 // of branching on shellStyle themselves. Values describe geometry and motion;
-// color continues to come from the active system palette and glass material.
+// color continues to come from the active system palette and semantic roles.
 QtObject {
     id: tokens
 
-    readonly property int version: 7
+    readonly property int version: 8
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
     readonly property bool isMaterial: style === "material"
+
+    readonly property SystemPalette systemPalette: SystemPalette {
+        colorGroup: SystemPalette.Active
+    }
+    readonly property color seedColor: AppearanceConfigService.wallpaperSeedColor.a > 0
+        ? AppearanceConfigService.wallpaperSeedColor : systemPalette.highlight
+    readonly property bool isDarkTheme: systemPalette.window.r * 0.2126
+        + systemPalette.window.g * 0.7152
+        + systemPalette.window.b * 0.0722 < 0.5
+
+    function _mix(base, tint, amount, alpha) {
+        return Qt.rgba(base.r + (tint.r - base.r) * amount,
+            base.g + (tint.g - base.g) * amount,
+            base.b + (tint.b - base.b) * amount,
+            alpha === undefined ? 1.0 : alpha)
+    }
+
+    readonly property QtObject colors: QtObject {
+        readonly property color primary: tokens.seedColor
+        readonly property color onPrimary: tokens.isDarkTheme
+            ? Qt.rgba(0.05, 0.05, 0.07, 1) : Qt.rgba(1, 1, 1, 1)
+        readonly property color secondary: tokens._mix(tokens.seedColor,
+            Qt.rgba(1, 1, 1, 1), 0.32)
+        readonly property color surface: tokens.isDarkTheme
+            ? tokens._mix(Qt.rgba(0.055, 0.055, 0.07, 1), tokens.seedColor, 0.16)
+            : tokens._mix(Qt.rgba(0.97, 0.97, 0.98, 1), tokens.seedColor, 0.08)
+        readonly property color surfaceContainer: tokens.isDarkTheme
+            ? tokens._mix(Qt.rgba(0.085, 0.085, 0.10, 1), tokens.seedColor, 0.20)
+            : tokens._mix(Qt.rgba(0.93, 0.94, 0.96, 1), tokens.seedColor, 0.12)
+        readonly property color surfaceContainerHigh: tokens.isDarkTheme
+            ? tokens._mix(Qt.rgba(0.12, 0.12, 0.14, 1), tokens.seedColor, 0.22)
+            : tokens._mix(Qt.rgba(0.88, 0.89, 0.93, 1), tokens.seedColor, 0.14)
+        readonly property color onSurface: tokens.isDarkTheme
+            ? Qt.rgba(0.94, 0.95, 1, 1) : Qt.rgba(0.10, 0.10, 0.12, 1)
+        readonly property color onSurfaceVariant: tokens.isDarkTheme
+            ? Qt.rgba(0.76, 0.78, 0.84, 1) : Qt.rgba(0.30, 0.31, 0.36, 1)
+        readonly property color outline: tokens.isDarkTheme
+            ? Qt.rgba(0.78, 0.80, 0.88, 0.34) : Qt.rgba(0.25, 0.26, 0.30, 0.30)
+        readonly property color error: Qt.rgba(0.88, 0.26, 0.28, 1)
+        readonly property color scrim: Qt.rgba(0, 0, 0,
+            tokens.isDarkTheme ? 0.42 : 0.24)
+    }
+
+    readonly property QtObject shape: QtObject {
+        readonly property real extraSmall: tokens.isMaterial ? 4 : 5
+        readonly property real small: tokens.isMaterial ? 8 : 10
+        readonly property real medium: tokens.isMaterial ? 12 : 14
+        readonly property real large: tokens.isMaterial ? 16 : 20
+        readonly property real extraLarge: tokens.isMaterial ? 28 : 26
+        readonly property real full: 999
+    }
+
+    readonly property QtObject state: QtObject {
+        readonly property color hover: tokens.colors.primary
+        readonly property color pressed: tokens.colors.primary
+        readonly property color selected: tokens.colors.primary
+        readonly property color disabled: tokens.colors.onSurfaceVariant
+    }
 
     readonly property QtObject typography: QtObject {
         readonly property string recommendedDisplayFamily: "SF Pro Display"
@@ -70,13 +128,17 @@ QtObject {
 
     readonly property QtObject widget: QtObject {
         readonly property int radius: tokens.isWindows12 ? 12
-            : tokens.isMaterial ? 20 : 26
+            : tokens.shape.large
         readonly property int gap: tokens.isWindows12 ? 8
             : tokens.isMaterial ? 12 : 10
         readonly property int elevation: tokens.isWindows12 ? 2
             : tokens.isMaterial ? 3 : 1
         readonly property string surfaceMode: tokens.isWindows12 ? "acrylic"
             : tokens.isMaterial ? "tonal" : "glass"
+        readonly property color surfaceColor: tokens.isMaterial
+            ? tokens.colors.surfaceContainer : "transparent"
+        readonly property color elevatedSurfaceColor: tokens.isMaterial
+            ? tokens.colors.surfaceContainerHigh : "transparent"
     }
 
     readonly property QtObject glass: QtObject {
@@ -92,6 +154,8 @@ QtObject {
             : tokens.isMaterial ? 0.55 : 1.0
         readonly property real ambientMultiplier: tokens.isWindows12 ? 0.85
             : tokens.isMaterial ? 0.70 : 1.0
+        readonly property real materialOpacity: tokens.isMaterial ? 0.94 : 1.0
+        readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
     readonly property QtObject motion: QtObject {
