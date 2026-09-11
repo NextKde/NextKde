@@ -72,7 +72,7 @@ PanelWindow {
     // The transparent layout deliberately leaves only the content: it must not
     // register a backdrop region, otherwise KWin adds blur/refraction behind
     // it. Other Bar layouts still use the regular compositor glass pipeline.
-    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && !root.transparentMode && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && !root.transparentMode && root.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? barBlurRegionHolder : null
@@ -105,11 +105,11 @@ PanelWindow {
             // Layout choice takes precedence over visual style: Material may
             // change colours and shapes, but must not turn the user's
             // intentionally transparent Bar into an opaque tonal strip.
-            visible: AppearanceTokens.isMaterial && !root.transparentMode
+            visible: !AppearanceTokens.surface.usesBackdrop && !root.transparentMode
             radius: AppearanceConfigService.barLayoutMode === "floating"
                 ? AppearanceTokens.shape.large : 0
-            color: AppearanceTokens.colors.layer0
-            opacity: AppearanceTokens.glass.materialOpacity
+            color: AppearanceTokens.surface.barFill
+            opacity: AppearanceTokens.surface.barOpacity
             border.width: 0
             z: -1
         }

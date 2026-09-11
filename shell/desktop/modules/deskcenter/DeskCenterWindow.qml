@@ -13,6 +13,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.weather
+import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
 
 // iPadOS-inspired desktop widgets. Keep this in the Bottom layer so Plasma's
@@ -340,14 +341,14 @@ PanelWindow {
                     anchors.centerIn: parent
                     width: Math.min(parent.width, parent.height) - 18
                     height: width
-                    visible: AppearanceTokens.isMaterial
+                    visible: !AppearanceTokens.surface.usesBackdrop
                     lobes: 12
                     amplitude: 0.075
                     fillColor: Qt.rgba(AppearanceTokens.colors.layer1.r,
                         AppearanceTokens.colors.layer1.g,
                         AppearanceTokens.colors.layer1.b,
-                        AppearanceTokens.widget.materialSurfaceOpacity)
-                    outlineColor: AppearanceTokens.colors.outlineVariant
+                        AppearanceTokens.surface.widgetOpacity)
+                    outlineColor: AppearanceTokens.surface.outline
                     outlineWidth: 1
                 }
 
@@ -1461,8 +1462,8 @@ PanelWindow {
                             musicContent.player.positionChanged()
                     }
                 }
-                ArtworkPalette {
-                    id: musicArtworkPalette
+                ArtworkColorSource {
+                    id: musicArtworkColors
                     source: musicContent.artworkSource
                 }
                 Rectangle {
@@ -1473,9 +1474,9 @@ PanelWindow {
                     color: "transparent"
                     gradient: Gradient {
                         orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: musicContent.artworkTint(musicArtworkPalette.primary, 0.82) }
-                        GradientStop { position: 0.52; color: musicContent.artworkTint(musicArtworkPalette.secondary, 0.64) }
-                        GradientStop { position: 1; color: musicContent.artworkTint(musicArtworkPalette.primary, 0.38) }
+                        GradientStop { position: 0; color: musicContent.artworkTint(musicArtworkColors.primary, 0.82) }
+                        GradientStop { position: 0.52; color: musicContent.artworkTint(musicArtworkColors.secondary, 0.64) }
+                        GradientStop { position: 1; color: musicContent.artworkTint(musicArtworkColors.primary, 0.38) }
                     }
                     z: 0
                 }

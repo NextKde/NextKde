@@ -1,0 +1,20 @@
+module Kos.Ui
+depends QtQuick
+singleton AppTheme 1.0 foundation/AppTheme.qml
+KosApplicationWindow 1.0 foundation/KosApplicationWindow.qml
+KosButton 1.0 foundation/KosButton.qml
+KosCard 1.0 foundation/KosCard.qml
+KosEmptyState 1.0 foundation/KosEmptyState.qml
+KosNavigationButton 1.0 foundation/KosNavigationButton.qml
+KosRoundButton 1.0 foundation/KosRoundButton.qml
+KosSettingsDialog 1.0 foundation/KosSettingsDialog.qml
+KosSlider 1.0 foundation/KosSlider.qml
+KosSwitch 1.0 foundation/KosSwitch.qml
+KosToolButton 1.0 foundation/KosToolButton.qml
+LiquidTextField 1.0 controls/LiquidTextField.qml
+LiquidSegmentedControl 1.0 controls/LiquidSegmentedControl.qml
+ArtworkColorSource 1.0 colorize/ArtworkColorSource.qml
+Cam16Hct 1.0 colorize/Cam16Hct.mjs
+singleton ColorScheme 1.0 colorize/ColorScheme.qml
+MaterialColorScheme 1.0 colorize/MaterialColorScheme.mjs
+singleton WallpaperColorSource 1.0 colorize/WallpaperColorSource.qml

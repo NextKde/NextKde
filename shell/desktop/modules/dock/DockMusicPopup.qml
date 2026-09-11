@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
+import "../../../Kos/Ui"
 
 // Full MPRIS control surface shown above DockMusicPlayer. It is deliberately a
 // PopupWindow: Dock's adaptive height stays untouched while the player gets a
@@ -72,7 +73,7 @@ PopupWindow {
 
     // Reuse the same asynchronous cover-art palette as DockMusicPlayer so
     // compact and expanded music controls always belong to one visual system.
-    ArtworkPalette {
+    ArtworkColorSource {
         id: artworkPalette
         source: popup.artworkSource
     }

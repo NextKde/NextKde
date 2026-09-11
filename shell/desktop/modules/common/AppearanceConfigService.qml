@@ -38,8 +38,9 @@ QtObject {
     // settings page historically persisted this value in DockConfigService;
     // that service mirrors the legacy value here during migration.
     property string themeMode: "system" // "system" | "light" | "dark"
-    // WallpaperPaletteService updates this when a wallpaper is available;
-    // AppearanceTokens falls back to the KDE accent until then.
+    // AppearanceTokens' wallpaper bridge persists this once the shared
+    // WallpaperColorSource reports a sampled seed; AppearanceTokens falls back
+    // to the KDE accent until then.
     property color wallpaperSeedColor: "transparent"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"

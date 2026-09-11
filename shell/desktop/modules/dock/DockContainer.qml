@@ -5,6 +5,7 @@ import qs.desktop
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
+import "../../../Kos/Ui"
 
 // ────────────────────────────────────────────────────────────────
 // DockContainer — Adaptive layout engine.
@@ -200,8 +201,8 @@ Item {
             computedDockHeight,
             ConfigService.position,
             ThemeService.backgroundColor,
-            WallpaperPaletteService.primary,
-            WallpaperPaletteService.secondary,
+            WallpaperColorSource.primary,
+            WallpaperColorSource.secondary,
             ThemeService.foregroundColor,
             reservedBarHeight)
     }
@@ -233,7 +234,7 @@ Item {
         function onForegroundColorChanged() { container.scheduleLauncherPresentation() }
     }
     Connections {
-        target: WallpaperPaletteService
+        target: WallpaperColorSource
         function onPrimaryChanged() { container.scheduleLauncherPresentation() }
         function onSecondaryChanged() { container.scheduleLauncherPresentation() }
     }

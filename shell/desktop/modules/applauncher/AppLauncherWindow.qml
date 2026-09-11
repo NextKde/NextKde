@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
 // Output-bound application-launcher surface. The panel itself spans the
@@ -71,9 +72,9 @@ PanelWindow {
     // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
     // ordinary imagery translucent, and only protect against the low-contrast
     // ends of the range (near white or black).
-    readonly property real wallpaperLuminance: WallpaperPaletteService.primary.r * 0.2126
-        + WallpaperPaletteService.primary.g * 0.7152
-        + WallpaperPaletteService.primary.b * 0.0722
+    readonly property real wallpaperLuminance: WallpaperColorSource.primary.r * 0.2126
+        + WallpaperColorSource.primary.g * 0.7152
+        + WallpaperColorSource.primary.b * 0.0722
     readonly property real launcherBackdropDistance: Math.min(
         wallpaperLuminance, 1.0 - wallpaperLuminance)
     // 1 at the two extremes, easing down to 0 for normal mid-tone imagery.
@@ -1318,8 +1319,8 @@ PanelWindow {
                                 placeholderText: "搜索应用"
                                 liquidFinish: !AppearanceTokens.isMaterial
                                 liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-                                ambientPrimary: WallpaperPaletteService.primary
-                                ambientSecondary: WallpaperPaletteService.secondary
+                                ambientPrimary: WallpaperColorSource.primary
+                                ambientSecondary: WallpaperColorSource.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                                 glassColor: AppearanceTokens.isMaterial
                                     ? AppearanceTokens.colors.layer4

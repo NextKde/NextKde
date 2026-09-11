@@ -294,6 +294,44 @@ build() {
     )
 }
 
+# materialize_kos_ui — turn the repo's source-level Kos.Ui alias into real
+# files under the installed shell config.
+#
+# In the checkout, shell/Kos/Ui/{colorize,foundation,controls} are symlinks
+# into shared/qml so `qs -p shell` resolves `import "../../../Kos/Ui"` with no
+# build step and no environment variables. `cp -a` preserves those symlinks,
+# and their ../../../shared targets do not exist under
+# ~/.config/quickshell/kos, so the installed copy would dangle. This replaces
+# the alias with real copies of the same files.
+#
+#   $1: installed shell config dir
+#   $2: qmldir source (checkout or Nix store path)
+#   $3: the directory that directly contains colorize/, foundation/ and
+#       controls/ — the checkout's shared/qml, or
+#       $out/share/kos-desktop/shared/qml in a built Nix derivation. Do not
+#       pass the parent: package.nix copies shared/ wholesale, so the QML
+#       files sit one level deeper in the store than in the checkout.
+materialize_kos_ui() {
+    local shell_config="$1" qmldir_src="$2" qml_root="$3"
+    if [[ ! -f "$qmldir_src" ]]; then
+        printf 'Kos.Ui alias qmldir not found: %s\n' "$qmldir_src" >&2
+        return 1
+    fi
+    local dir
+    for dir in colorize foundation controls; do
+        if [[ ! -d "$qml_root/$dir" ]]; then
+            printf 'Kos.Ui source dir not found: %s\n' "$qml_root/$dir" >&2
+            return 1
+        fi
+    done
+    rm -rf "$shell_config/Kos/Ui"
+    mkdir -p "$shell_config/Kos/Ui"
+    cp "$qmldir_src" "$shell_config/Kos/Ui/qmldir"
+    for dir in colorize foundation controls; do
+        cp -a "$qml_root/$dir" "$shell_config/Kos/Ui/"
+    done
+}
+
 # deploy_artifacts — deploy from a build output root to ~/.local.
 #   $1: artifact root directory (e.g. "$build_dir" or "$project_dir/result")
 #
@@ -363,6 +401,19 @@ deploy_artifacts() {
         cp -a "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
     else
         cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+    fi
+    # Kos.Ui alias: replace the checkout's symlinks with real files (see
+    # materialize_kos_ui above for why the symlinks cannot survive the copy).
+    # layout only exists when deploying from a built Nix derivation;
+    # `kosctl install` on NixOS deploys from the CMake build dir, which has no
+    # share/kos-desktop, so fall back to the checkout in that case.
+    if is_nixos && [[ -f "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" ]]; then
+        materialize_kos_ui "$shell_config" \
+            "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" \
+            "$artifact_root/share/kos-desktop/shared/qml"
+    else
+        materialize_kos_ui "$shell_config" \
+            "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
     fi
 
     # --- Systemd user services ---
@@ -502,6 +553,10 @@ sync_qml() {
     fi
     rm -rf "$shell_config/shared/qml/controls"
     cp -a "$project_dir/shell/." "$shell_config/"
+    # shell/Kos/Ui symlinks dangle once copied out of the checkout; replace
+    # them with the real files so the installed shell keeps importing Kos.Ui.
+    materialize_kos_ui "$shell_config" \
+        "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
     mkdir -p "$shell_config/shared/qml"
     rm -rf "$shell_config/shared/qml/controls"
     cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"

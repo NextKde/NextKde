@@ -4,6 +4,7 @@ import Quickshell
 import Qt5Compat.GraphicalEffects
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
+import "../../../Kos/Ui"
 
 // Two-row clock page for the Dock information carousel. macOS uses layered
 // highlights directly on the seconds glyphs; there is no inner pill/card.
@@ -40,7 +41,7 @@ Item {
     function ambientColor(source, alpha) {
         const neutral = ThemeService.isDark ? 0.035 : 0.90
         const colorWeight = ThemeService.isDark ? 0.54 : 0.20
-        const color = WallpaperPaletteService.ready
+        const color = WallpaperColorSource.ready
             ? source : ThemeService.backgroundColor
         return IconAppearanceService.styledColor(Qt.rgba(
             neutral + (color.r - neutral) * colorWeight,
@@ -100,16 +101,16 @@ Item {
             orientation: Gradient.Horizontal
             GradientStop {
                 position: 0.0
-                color: widget.ambientColor(WallpaperPaletteService.primary, 0.74)
+                color: widget.ambientColor(WallpaperColorSource.primary, 0.74)
             }
             GradientStop {
                 position: 0.55
-                color: widget.ambientMidpoint(WallpaperPaletteService.primary,
-                    WallpaperPaletteService.secondary, 0.66)
+                color: widget.ambientMidpoint(WallpaperColorSource.primary,
+                    WallpaperColorSource.secondary, 0.66)
             }
             GradientStop {
                 position: 1.0
-                color: widget.ambientColor(WallpaperPaletteService.secondary, 0.58)
+                color: widget.ambientColor(WallpaperColorSource.secondary, 0.58)
             }
         }
         border.width: 0

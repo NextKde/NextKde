@@ -6,10 +6,10 @@ Rectangle {
     id: root
 
     property color baseColor: Qt.rgba(0, 0, 0, 0.1)
-    // Material uses opaque tonal surfaces rather than live backdrop glass.
-    // This single branch intentionally covers every existing consumer of the
-    // shared surface, keeping component structure and content unchanged.
-    readonly property bool usesMaterialSurface: AppearanceTokens.isMaterial
+    // The theme policy chooses compositor glass/acrylic or a tonal surface.
+    // Keeping this decision here lets a future theme add a treatment without
+    // each popup gaining another style-specific branch.
+    readonly property bool usesMaterialSurface: AppearanceTokens.surface.usesTonalRoles
     // Semantic material roles mirror the system vocabulary. They describe
     // readability intent, never a fixed light/dark paint colour.
     property string material: "regular" // "clear", "regular", "thick"

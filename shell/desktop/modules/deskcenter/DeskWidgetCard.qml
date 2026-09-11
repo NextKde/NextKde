@@ -11,7 +11,7 @@ Rectangle {
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
-    property color materialSurfaceColor: AppearanceTokens.colors.layer1
+    property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: AppearanceTokens.widget.radius
@@ -37,9 +37,9 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: AppearanceTokens.isMaterial && root.widgetId !== "clock"
+        visible: !AppearanceTokens.surface.usesBackdrop && root.widgetId !== "clock"
         color: root.materialSurfaceColor
-        opacity: AppearanceTokens.widget.materialSurfaceOpacity
+        opacity: AppearanceTokens.surface.widgetOpacity
         border.width: 0
     }
 

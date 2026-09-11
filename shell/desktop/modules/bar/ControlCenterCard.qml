@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // A single control-center card as an independent PopupWindow.
 //
@@ -138,8 +139,8 @@ PopupWindow {
         surfaceOpacity: root.cardOpacity
         blurStrength: root.effectiveBlur
         liquidStrength: root.effectiveLiquid
-        ambientPrimary: WallpaperPaletteService.primary
-        ambientSecondary: WallpaperPaletteService.secondary
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
         border.width: 1

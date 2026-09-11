@@ -8,6 +8,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
 // Compact desktop adaptation of the supplied Control Center reference.
@@ -499,8 +500,8 @@ Item {
             radius: mediaCard.blurRadius
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(WallpaperPaletteService.primary.r, WallpaperPaletteService.primary.g, WallpaperPaletteService.primary.b, 0.16) }
-                GradientStop { position: 1.0; color: Qt.rgba(WallpaperPaletteService.secondary.r, WallpaperPaletteService.secondary.g, WallpaperPaletteService.secondary.b, 0.07) }
+                GradientStop { position: 0.0; color: Qt.rgba(WallpaperColorSource.primary.r, WallpaperColorSource.primary.g, WallpaperColorSource.primary.b, 0.16) }
+                GradientStop { position: 1.0; color: Qt.rgba(WallpaperColorSource.secondary.r, WallpaperColorSource.secondary.g, WallpaperColorSource.secondary.b, 0.07) }
             }
         }
 

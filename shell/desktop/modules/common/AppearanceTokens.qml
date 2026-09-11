@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import "../../../Kos/Ui"
 
 // Semantic shell-shape values. Consumers should depend on these roles instead
 // of branching on shellStyle themselves. Values describe geometry and motion;
@@ -22,12 +23,65 @@ QtObject {
         + systemPalette.window.g * 0.7152
         + systemPalette.window.b * 0.0722 < 0.5
     // Explicit light/dark choices must override KDE; only "system" follows
-    // SystemPalette. Material therefore selects the corresponding matugen
-    // light or dark scheme instead of imposing one mode on both choices.
+    // SystemPalette. Material therefore selects the corresponding light or dark
+    // scheme instead of imposing one mode on both choices.
     readonly property bool isDarkTheme:
         AppearanceConfigService.themeMode === "dark" ? true
         : AppearanceConfigService.themeMode === "light" ? false
         : systemIsDark
+
+    // ────────────────────────────────────────────────────────────────
+    // Wallpaper colour bridge
+    // ────────────────────────────────────────────────────────────────
+    // `WallpaperColorSource` lives in the shared Kos.Ui layer, which must not
+    // import `qs.desktop.modules.*`. This adapter is the shell-side half of that
+    // contract: it feeds the resolved light/dark branch in, and persists the
+    // sampled seed colour back into shell configuration.
+    //
+    // The bridge is a direct child of this singleton so that instantiating
+    // AppearanceTokens is enough to create it — a nested QtObject without a
+    // consumer could otherwise be elided, leaving the sampler unwired.
+    readonly property Connections _wallpaperRequest: Connections {
+        target: tokens
+        function onIsDarkThemeChanged() {
+            WallpaperColorSource.darkMode = tokens.isDarkTheme
+        }
+    }
+
+    readonly property Connections _wallpaperResult: Connections {
+        target: WallpaperColorSource
+        function onPaletteChanged(primary, secondary) {
+            AppearanceConfigService.wallpaperSeedColor = primary
+        }
+        function onPaletteCleared() {
+            AppearanceConfigService.wallpaperSeedColor = "transparent"
+        }
+    }
+
+    // Fallback seed for the scheme until a wallpaper has been sampled. Using the
+    // KDE accent keeps the very first frame on-palette instead of flashing a
+    // hardcoded default; once the wallpaper resolves this is replaced by the
+    // sampled colour via `_wallpaperResult`.
+    readonly property Connections _seedFallback: Connections {
+        target: tokens
+        function onSeedColorChanged() {
+            if (!WallpaperColorSource.ready)
+                ColorScheme.setSeed(tokens.seedColor)
+        }
+    }
+
+    // Seed both halves of the pipeline as soon as this singleton loads: the
+    // sampler needs the resolved light/dark branch, and the scheme needs a
+    // starting seed.
+    //
+    // These share one handler because QML allows only a single
+    // Component.onCompleted per object — a second one is not an override, it is
+    // a hard "Property value set multiple times" load error, and it surfaces
+    // only at runtime: qmllint accepts it.
+    Component.onCompleted: {
+        WallpaperColorSource.darkMode = tokens.isDarkTheme
+        ColorScheme.setSeed(tokens.seedColor)
+    }
 
     function _mix(base, tint, amount, alpha) {
         return Qt.rgba(base.r + (tint.r - base.r) * amount,
@@ -40,53 +94,24 @@ QtObject {
         return value.r * 0.2126 + value.g * 0.7152 + value.b * 0.0722
     }
 
-    // Tonal-Spot-style fallback used when no external Material color utility
-    // is installed. It creates the same semantic tone ladder as M3; a future
-    // HCT/matugen loader can replace the role values without touching views.
-    function _tone(source, hueShift, saturationScale, lightness, alpha) {
-        const hue = (source.hslHue < 0 ? 0 : source.hslHue)
-        const shiftedHue = (hue + hueShift + 1.0) % 1.0
-        const saturation = Math.max(0.08, Math.min(0.72,
-            source.hslSaturation * saturationScale))
-        return Qt.hsla(shiftedHue, saturation, lightness,
-            alpha === undefined ? 1.0 : alpha)
-    }
-
     readonly property QtObject colors: QtObject {
-        readonly property color primary: MaterialThemeService.color("primary", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 1.0, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color primaryForeground: MaterialThemeService.color("on_primary", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#221a00" : "#ffffff")
-        readonly property color primaryContainer: MaterialThemeService.color("primary_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.82, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color primaryContainerForeground: MaterialThemeService.color("on_primary_container", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
-        readonly property color secondary: MaterialThemeService.color("secondary", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.035, 0.42, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color secondaryForeground: MaterialThemeService.color("on_secondary", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#211a00" : "#ffffff")
-        readonly property color secondaryContainer: MaterialThemeService.color("secondary_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.035, 0.38, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color secondaryContainerForeground: MaterialThemeService.color("on_secondary_container", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
-        readonly property color tertiary: MaterialThemeService.color("tertiary", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.16, 0.56, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color tertiaryContainer: MaterialThemeService.color("tertiary_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0.16, 0.48, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color tertiaryContainerForeground: MaterialThemeService.color("on_tertiary_container", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
-        readonly property color background: MaterialThemeService.color("background", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
-        readonly property color surface: MaterialThemeService.color("surface", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
-        readonly property color surfaceContainerLow: MaterialThemeService.color("surface_container_low", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.14, tokens.isDarkTheme ? 0.10 : 0.96))
-        readonly property color surfaceContainer: MaterialThemeService.color("surface_container", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.12 : 0.94))
-        readonly property color surfaceContainerHigh: MaterialThemeService.color("surface_container_high", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.18, tokens.isDarkTheme ? 0.17 : 0.90))
-        readonly property color surfaceContainerHighest: MaterialThemeService.color("surface_container_highest", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.20, tokens.isDarkTheme ? 0.22 : 0.86))
+        readonly property color primary: ColorScheme.color("primary", tokens.isDarkTheme)
+        readonly property color primaryForeground: ColorScheme.color("on_primary", tokens.isDarkTheme)
+        readonly property color primaryContainer: ColorScheme.color("primary_container", tokens.isDarkTheme)
+        readonly property color primaryContainerForeground: ColorScheme.color("on_primary_container", tokens.isDarkTheme)
+        readonly property color secondary: ColorScheme.color("secondary", tokens.isDarkTheme)
+        readonly property color secondaryForeground: ColorScheme.color("on_secondary", tokens.isDarkTheme)
+        readonly property color secondaryContainer: ColorScheme.color("secondary_container", tokens.isDarkTheme)
+        readonly property color secondaryContainerForeground: ColorScheme.color("on_secondary_container", tokens.isDarkTheme)
+        readonly property color tertiary: ColorScheme.color("tertiary", tokens.isDarkTheme)
+        readonly property color tertiaryContainer: ColorScheme.color("tertiary_container", tokens.isDarkTheme)
+        readonly property color tertiaryContainerForeground: ColorScheme.color("on_tertiary_container", tokens.isDarkTheme)
+        readonly property color background: ColorScheme.color("background", tokens.isDarkTheme)
+        readonly property color surface: ColorScheme.color("surface", tokens.isDarkTheme)
+        readonly property color surfaceContainerLow: ColorScheme.color("surface_container_low", tokens.isDarkTheme)
+        readonly property color surfaceContainer: ColorScheme.color("surface_container", tokens.isDarkTheme)
+        readonly property color surfaceContainerHigh: ColorScheme.color("surface_container_high", tokens.isDarkTheme)
+        readonly property color surfaceContainerHighest: ColorScheme.color("surface_container_highest", tokens.isDarkTheme)
         // Keep end-4's Material layer hierarchy, but retain enough wallpaper
         // pigment in the dark branch that different wallpapers do not all
         // collapse into visually identical charcoal cards. Light surfaces use
@@ -110,16 +135,11 @@ QtObject {
             tokens._luminance(surfaceContainer) < 0.48
         // QML reserves onXxx names for signal handlers, so foreground roles
         // use explicit, QML-safe names instead of Material's onSurface form.
-        readonly property color surfaceForeground: MaterialThemeService.color("on_surface", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
-        readonly property color surfaceVariantForeground: MaterialThemeService.color("on_surface_variant", tokens.isDarkTheme,
-            tokens.isDarkTheme ? "#c9c5d0" : "#49454f")
-        readonly property color outline: MaterialThemeService.color("outline", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.60 : 0.50))
-        readonly property color outlineVariant: MaterialThemeService.color("outline_variant", tokens.isDarkTheme,
-            tokens._tone(tokens.seedColor, 0, 0.14, tokens.isDarkTheme ? 0.30 : 0.80))
-        readonly property color error: MaterialThemeService.color("error", tokens.isDarkTheme,
-            tokens.isDarkTheme ? Qt.rgba(1.0, 0.71, 0.67, 1) : Qt.rgba(0.73, 0.10, 0.12, 1))
+        readonly property color surfaceForeground: ColorScheme.color("on_surface", tokens.isDarkTheme)
+        readonly property color surfaceVariantForeground: ColorScheme.color("on_surface_variant", tokens.isDarkTheme)
+        readonly property color outline: ColorScheme.color("outline", tokens.isDarkTheme)
+        readonly property color outlineVariant: ColorScheme.color("outline_variant", tokens.isDarkTheme)
+        readonly property color error: ColorScheme.color("error", tokens.isDarkTheme)
         readonly property color scrim: Qt.rgba(0, 0, 0,
             tokens.isDarkTheme ? 0.42 : 0.24)
     }
@@ -133,6 +153,27 @@ QtObject {
         readonly property real large: tokens.isMaterial ? 23 : 20
         readonly property real extraLarge: tokens.isMaterial ? 30 : 26
         readonly property real full: 999
+    }
+
+    // Every shell surface consumes this policy rather than treating Material as
+    // the only special case. New themes add their visual treatment here; views
+    // keep their structure and ask only whether they need a backdrop or a
+    // paint layer. Today only glass and tonal are implemented.
+    readonly property QtObject surface: QtObject {
+        readonly property string treatment: tokens.isMaterial ? "tonal" : "glass"
+        readonly property bool usesBackdrop: treatment !== "tonal"
+        readonly property bool usesTonalRoles: treatment === "tonal"
+        readonly property color dockFill: usesTonalRoles
+            ? tokens.colors.layer0 : "transparent"
+        readonly property real dockOpacity: usesTonalRoles ? 0.50 : 0.0
+        readonly property color barFill: usesTonalRoles
+            ? tokens.colors.layer0 : "transparent"
+        readonly property real barOpacity: usesTonalRoles ? 1.0 : 0.0
+        readonly property color widgetFill: usesTonalRoles
+            ? tokens.colors.layer1 : "transparent"
+        readonly property real widgetOpacity: usesTonalRoles ? 0.70 : 0.0
+        readonly property color outline: usesTonalRoles
+            ? tokens.colors.outlineVariant : "transparent"
     }
 
     readonly property QtObject state: QtObject {
@@ -183,10 +224,6 @@ QtObject {
         readonly property real indicatorThicknessRatio: tokens.isMacos ? 0.13 : 0.07
         readonly property real activeRadiusRatio: tokens.isWindows12 ? 0.18
             : tokens.isMaterial ? 0.28 : 0.30
-        // Material Dock body opacity is independent from other Material
-        // surfaces so its wallpaper blending can be tuned without fading
-        // widgets, the launcher, or the Bar.
-        readonly property real materialSurfaceOpacity: 0.50
         readonly property string activeBackgroundMode: tokens.isWindows12
             ? "subtle" : tokens.isMaterial ? "tonal" : "glass"
         readonly property bool magnificationEnabled: tokens.isMacos
@@ -208,9 +245,6 @@ QtObject {
     readonly property QtObject widget: QtObject {
         readonly property int radius: tokens.isWindows12 ? 12
             : tokens.shape.large
-        // Only the Material card body is translucent; widget content remains
-        // fully opaque for legibility over changing wallpapers.
-        readonly property real materialSurfaceOpacity: 0.70
         readonly property int gap: tokens.isWindows12 ? 8
             : tokens.isMaterial ? 12 : 10
         readonly property int elevation: tokens.isWindows12 ? 2

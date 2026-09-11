@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // Shared self-drawn context menu. Submenus deliberately reuse this one popup
 // as a page stack: only a click enters a child page, and hover is visual only.
@@ -23,8 +24,8 @@ PopupWindow {
     property color baseColor: ThemeService.backgroundColor
     property color foregroundColor: ThemeService.foregroundColor
     property bool adaptiveForeground: true
-    property color ambientPrimary: WallpaperPaletteService.primary
-    property color ambientSecondary: WallpaperPaletteService.secondary
+    property color ambientPrimary: WallpaperColorSource.primary
+    property color ambientSecondary: WallpaperColorSource.secondary
     property real ambientStrength: 0.25 * AppearanceTokens.glass.ambientMultiplier
     // Context menus need more separation from a busy desktop than the Dock.
     // Compositor blur is declared below; these QML layers make it read as a
