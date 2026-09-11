@@ -1,0 +1,3 @@
+ArtworkColorSource 1.0 ArtworkColorSource.qml
+singleton ColorScheme 1.0 ColorScheme.qml
+singleton WallpaperColorSource 1.0 WallpaperColorSource.qml

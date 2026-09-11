@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // Shared self-drawn context menu. Submenus deliberately reuse this one popup
 // as a page stack: only a click enters a child page, and hover is visual only.
@@ -23,19 +24,22 @@ PopupWindow {
     property color baseColor: ThemeService.backgroundColor
     property color foregroundColor: ThemeService.foregroundColor
     property bool adaptiveForeground: true
-    property color ambientPrimary: WallpaperPaletteService.primary
-    property color ambientSecondary: WallpaperPaletteService.secondary
+    property color ambientPrimary: WallpaperColorSource.primary
+    property color ambientSecondary: WallpaperColorSource.secondary
     property real ambientStrength: 0.25 * AppearanceTokens.glass.ambientMultiplier
     // Context menus need more separation from a busy desktop than the Dock.
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real darkOverlayOpacity: ThemeService.isDark ? 0.27 : 0.04
-    property real menuRadius: 16
+    property real darkOverlayOpacity: AppearanceTokens.isMaterial ? 0
+        : (ThemeService.isDark ? 0.27 : 0.04)
+    property real menuRadius: AppearanceTokens.isMaterial
+        ? AppearanceTokens.shape.large : 16
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
             return root.foregroundColor
-        return ThemeService.isDark ? glass.foregroundColor : ThemeService.foregroundColor
+        return (AppearanceTokens.isMaterial || ThemeService.isDark)
+            ? glass.foregroundColor : ThemeService.foregroundColor
     }
     // Some anchors receive their opening press through the compositor's
     // global-pointer bridge slightly after this popup is mapped.
@@ -200,7 +204,8 @@ PopupWindow {
         }
     }
 
-    BackgroundEffect.blurRegion: root.visible ? contextMenuBlurHolder : null
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible)
+        ? contextMenuBlurHolder : null
 
     Region {
         id: contextMenuBlurHolder

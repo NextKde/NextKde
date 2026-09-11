@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
+import "../../../Kos/Ui"
 
 // Readable one-line information carousel for a left/right Dock. Its parent
 // Row is rotated by 90 degrees; the inner panel rotates back so the screen
@@ -128,7 +129,7 @@ Item {
     function ambientColor(source, alpha) {
         const neutral = ThemeService.isDark ? 0.035 : 0.90
         const colorWeight = ThemeService.isDark ? 0.54 : 0.20
-        const color = WallpaperPaletteService.ready
+        const color = WallpaperColorSource.ready
             ? source : ThemeService.backgroundColor
         return IconAppearanceService.styledColor(Qt.rgba(
             neutral + (color.r - neutral) * colorWeight,
@@ -156,7 +157,7 @@ Item {
         if (page === temperaturePage)
             return thermalColor(Qt.rgba(0.16, 0.38, 0.62, 1),
                 Qt.rgba(0.68, 0.22, 0.18, 1), 0.68)
-        return ambientColor(WallpaperPaletteService.primary, 0.74)
+        return ambientColor(WallpaperColorSource.primary, 0.74)
     }
 
     function backgroundMiddle() {
@@ -164,9 +165,9 @@ Item {
             return artworkTint(artworkPalette.secondary, 0.64)
         if (page === clockPage)
             return ambientColor(Qt.rgba(
-                (WallpaperPaletteService.primary.r + WallpaperPaletteService.secondary.r) / 2,
-                (WallpaperPaletteService.primary.g + WallpaperPaletteService.secondary.g) / 2,
-                (WallpaperPaletteService.primary.b + WallpaperPaletteService.secondary.b) / 2, 1), 0.66)
+                (WallpaperColorSource.primary.r + WallpaperColorSource.secondary.r) / 2,
+                (WallpaperColorSource.primary.g + WallpaperColorSource.secondary.g) / 2,
+                (WallpaperColorSource.primary.b + WallpaperColorSource.secondary.b) / 2, 1), 0.66)
         return backgroundStart()
     }
 
@@ -179,7 +180,7 @@ Item {
         if (page === temperaturePage)
             return thermalColor(Qt.rgba(0.20, 0.56, 0.68, 1),
                 Qt.rgba(0.96, 0.52, 0.18, 1), 0.54)
-        return ambientColor(WallpaperPaletteService.secondary, 0.58)
+        return ambientColor(WallpaperColorSource.secondary, 0.58)
     }
 
     Component.onCompleted: ensureValidPage()
@@ -188,7 +189,7 @@ Item {
     onShowClockChanged: ensureValidPage()
     onShowTemperatureChanged: ensureValidPage()
 
-    ArtworkPalette {
+    ArtworkColorSource {
         id: artworkPalette
         source: carousel.artworkSource
     }

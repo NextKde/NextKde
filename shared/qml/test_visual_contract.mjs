@@ -308,6 +308,7 @@ assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
 
 const barStatusArea = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
+const barAutoHide = read("../../shell/desktop/modules/bar/BarAutoHideController.qml");
 const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
 const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
@@ -315,6 +316,11 @@ const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
 const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
 assert.doesNotMatch(barWindow, /LiquidGlassSurface\s*\{/,
     "the Bar keeps the compositor's clear refractive glass instead of a frosted fill");
+assert.match(barWindow,
+    /topTriggerArea[\s\S]*hide\.hidden[\s\S]*\?\s*2\s*:\s*0/,
+    "the auto-hidden Bar exposes only a narrow top-edge reveal target");
+assert.match(barAutoHide, /name:\s*s\.name\s*\|\|\s*""/,
+    "Bar auto-hide identifies target screens by name as well as geometry");
 assert.match(barDateStatus, /GlassText\s*\{/,
     "top-bar labels protect their glyph edges over changing wallpaper");
 assert.doesNotMatch(controlCenterPanel, /^\s*Text\s*\{/m,
@@ -348,7 +354,7 @@ for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
-        new RegExp(component + "\\s*\\{[\\s\\S]{0,720}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*3)?"),
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,400}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
         component + " shares the native tray icon size");
 }
 assert.doesNotMatch(controlCenterPanel,

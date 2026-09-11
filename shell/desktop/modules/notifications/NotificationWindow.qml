@@ -7,6 +7,7 @@ import Qt5Compat.GraphicalEffects
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import "../../../Kos/Ui"
 
 // Top-right notification popup. One card per app group (newest on top).
 //
@@ -203,8 +204,8 @@ PanelWindow {
                     : Qt.rgba(0.95, 0.95, 0.98, 0.55)
                 blurStrength: AppearanceTokens.glass.launcherBlur
                 liquidStrength: AppearanceTokens.glass.launcherLiquid
-                ambientPrimary: WallpaperPaletteService.primary
-                ambientSecondary: WallpaperPaletteService.secondary
+                ambientPrimary: WallpaperColorSource.primary
+                ambientSecondary: WallpaperColorSource.secondary
                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                 border.width: 1
                 border.color: ThemeService.isDark

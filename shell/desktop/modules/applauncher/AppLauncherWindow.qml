@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
 // Output-bound application-launcher surface. The panel itself spans the
@@ -64,15 +65,16 @@ PanelWindow {
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
-    readonly property color launcherForegroundColor: isFullscreenMode
-        ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
+    readonly property color launcherForegroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.surfaceForeground : (isFullscreenMode
+            ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor)
     // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
     // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
     // ordinary imagery translucent, and only protect against the low-contrast
     // ends of the range (near white or black).
-    readonly property real wallpaperLuminance: WallpaperPaletteService.primary.r * 0.2126
-        + WallpaperPaletteService.primary.g * 0.7152
-        + WallpaperPaletteService.primary.b * 0.0722
+    readonly property real wallpaperLuminance: WallpaperColorSource.primary.r * 0.2126
+        + WallpaperColorSource.primary.g * 0.7152
+        + WallpaperColorSource.primary.b * 0.0722
     readonly property real launcherBackdropDistance: Math.min(
         wallpaperLuminance, 1.0 - wallpaperLuminance)
     // 1 at the two extremes, easing down to 0 for normal mid-tone imagery.
@@ -1141,7 +1143,9 @@ PanelWindow {
             Item {
                 id: background
                 anchors.fill: parent
-                property real radius: root.isFullscreenMode ? 0 : 28
+                property real radius: root.isFullscreenMode ? 0
+                    : (AppearanceTokens.isMaterial
+                        ? AppearanceTokens.shape.extraLarge : 28)
 
                 // KWin owns the launcher card's actual blur and refraction
                 // through BackgroundEffect below. Keeping this client-side
@@ -1152,14 +1156,20 @@ PanelWindow {
                     // A launcher is a text-dense regular material. The scrim
                     // stays light through ordinary imagery, then gradually
                     // increases only near pure white or black backdrops.
-                    color: root.launcherScrimColor
+                    color: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.colors.layer1
+                        : root.launcherScrimColor
+                    opacity: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.glass.materialOpacity : 1
                     Behavior on color {
                         ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
                     }
-                    border.width: root.isFullscreenMode ? 0 : 1
-                    border.color: root.isDark
-                        ? Qt.rgba(1, 1, 1, 0.16)
-                        : Qt.rgba(1, 1, 1, 0.42)
+                    border.width: AppearanceTokens.isMaterial
+                        ? 0 : (root.isFullscreenMode ? 0 : 1)
+                    border.color: AppearanceTokens.isMaterial
+                        ? AppearanceTokens.colors.outline : (root.isDark
+                            ? Qt.rgba(1, 1, 1, 0.16)
+                            : Qt.rgba(1, 1, 1, 0.42))
                 }
 
                 // This foreground layer deliberately excludes the backdrop
@@ -1307,11 +1317,22 @@ PanelWindow {
                                 height: 35
 
                                 placeholderText: "搜索应用"
-                                liquidFinish: true
+                                liquidFinish: !AppearanceTokens.isMaterial
                                 liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-                                ambientPrimary: WallpaperPaletteService.primary
-                                ambientSecondary: WallpaperPaletteService.secondary
+                                ambientPrimary: WallpaperColorSource.primary
+                                ambientSecondary: WallpaperColorSource.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                                glassColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.layer4
+                                    : Qt.rgba(1, 1, 1, 0.10)
+                                cornerRadius: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.shape.medium : height
+                                outlineColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.outlineVariant
+                                    : Qt.rgba(1, 1, 1, 0.08)
+                                focusedOutlineColor: AppearanceTokens.isMaterial
+                                    ? AppearanceTokens.colors.primary
+                                    : Qt.rgba(1, 1, 1, 0.24)
                                 textColor: root.launcherForegroundColor
                                 mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
                                     root.launcherForegroundColor.g,
@@ -2839,7 +2860,7 @@ PanelWindow {
     // BackgroundEffect is a Wayland window attachment, so it belongs to this
     // PanelWindow root. The blur region is fixed at full card size. It never
     // scales or fades — only the foreground content animates on open.
-    BackgroundEffect.blurRegion: (root.visible
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
         && (root.isFullscreenMode
             || AppearanceConfigService.effectiveLauncherBlur > 0.005
             || AppearanceConfigService.effectiveLauncherLiquid > 0.005))

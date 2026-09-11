@@ -1,26 +1,19 @@
 pragma Singleton
 import QtQuick
+import qs.desktop.modules.common
 
 // ────────────────────────────────────────────────────────────────
 // DockThemeService — Dark / light colour palette.
-// Switches reactively when ConfigService.theme changes.
+// Switches reactively with the shell-wide appearance mode.
 // Every visual component binds to these colours; no hardcoded values.
 // ────────────────────────────────────────────────────────────────
 
 QtObject {
     id: svc
 
-    property SystemPalette systemPalette: SystemPalette {
-        colorGroup: SystemPalette.Active
-    }
-
-    readonly property bool systemIsDark: {
-        const color = systemPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
-    }
-    // The user can explicitly select light/dark or follow the Qt/KDE palette.
-    property bool isDark: ConfigService.theme === "system"
-        ? systemIsDark : ConfigService.theme !== "light"
+    // AppearanceTokens owns the global system/light/dark resolution so Dock
+    // and every Material surface always select the same palette branch.
+    property bool isDark: AppearanceTokens.isDarkTheme
 
     // ═══════════════════════════════════════════════════
     // Dark palette
@@ -56,16 +49,33 @@ QtObject {
     // ═══════════════════════════════════════════════════
     // Exposed (reactively toggled)
     // ═══════════════════════════════════════════════════
-    readonly property color backgroundColor: isDark ? darkBg : lightBg
-    readonly property color foregroundColor: isDark ? darkFg : lightFg
-    readonly property color secondaryForegroundColor: isDark
-        ? darkSecondaryFg : lightSecondaryFg
-    readonly property color tertiaryForegroundColor: isDark
-        ? darkTertiaryFg : lightTertiaryFg
-    readonly property color accentColor: isDark ? darkAccent : lightAccent
-    readonly property color dividerColor: isDark ? darkDivider : lightDivider
-    readonly property color tooltipBackground: isDark ? darkTooltipBg : lightTooltipBg
-    readonly property color indicatorColor: isDark ? darkIndicator : lightIndicator
-    readonly property color borderColor: isDark ? darkBorder : lightBorder
-    readonly property color highlightColor: isDark ? darkHighlight : lightHighlight
+    readonly property color backgroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.layer0 : (isDark ? darkBg : lightBg)
+    // Liquid-glass chrome keeps one white-ink hierarchy in both system
+    // themes. The compositor material, rather than a black light-theme icon,
+    // establishes contrast against the live backdrop.
+    readonly property color foregroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.surfaceForeground : darkFg
+    readonly property color secondaryForegroundColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.surfaceVariantForeground : darkSecondaryFg
+    readonly property color tertiaryForegroundColor: AppearanceTokens.isMaterial
+        ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
+            AppearanceTokens.colors.surfaceVariantForeground.g,
+            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70) : darkTertiaryFg
+    readonly property color accentColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.primary : (isDark ? darkAccent : lightAccent)
+    readonly property color dividerColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : (isDark ? darkDivider : lightDivider)
+    readonly property color tooltipBackground: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.layer3
+        : (isDark ? darkTooltipBg : lightTooltipBg)
+    readonly property color indicatorColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.primary : (isDark ? darkIndicator : lightIndicator)
+    readonly property color borderColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : (isDark ? darkBorder : lightBorder)
+    readonly property color highlightColor: AppearanceTokens.isMaterial
+        ? Qt.rgba(AppearanceTokens.colors.primary.r,
+            AppearanceTokens.colors.primary.g,
+            AppearanceTokens.colors.primary.b, 0.22)
+        : (isDark ? darkHighlight : lightHighlight)
 }

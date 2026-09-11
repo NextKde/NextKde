@@ -34,6 +34,14 @@ QtObject {
     // "macos" matches the shell geometry that predates selectable styles,
     // so upgrading an existing installation does not unexpectedly reshape it.
     property string shellStyle: "macos"
+    // Global colour-scheme preference shared by every shell style. The Dock
+    // settings page historically persisted this value in DockConfigService;
+    // that service mirrors the legacy value here during migration.
+    property string themeMode: "system" // "system" | "light" | "dark"
+    // AppearanceTokens' wallpaper bridge persists this once the shared
+    // WallpaperColorSource reports a sampled seed; AppearanceTokens falls back
+    // to the KDE accent until then.
+    property color wallpaperSeedColor: "transparent"
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
@@ -43,6 +51,10 @@ QtObject {
     function isValidShellStyle(value) {
         return value === "windows12" || value === "macos"
             || value === "material"
+    }
+
+    function isValidThemeMode(value) {
+        return value === "system" || value === "light" || value === "dark"
     }
 
     function isValidBarVisibilityMode(value) {
@@ -117,6 +129,15 @@ QtObject {
         if (!isValidShellStyle(style) || shellStyle === style)
             return false
         shellStyle = style
+        saveTimer.restart()
+        return true
+    }
+
+    function updateThemeMode(rawMode) {
+        const mode = String(rawMode)
+        if (!isValidThemeMode(mode) || themeMode === mode)
+            return false
+        themeMode = mode
         saveTimer.restart()
         return true
     }
@@ -218,12 +239,13 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 9,
+            version: 10,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             blurStrength: service.globalBlurStrength,
             liquidStrength: service.globalLiquidStrength,
             shellStyle: service.shellStyle,
+            themeMode: service.themeMode,
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
@@ -303,6 +325,7 @@ QtObject {
                     const globalLiquid = service._normalized(object.globalLiquidStrength
                         ?? object.liquidStrength ?? object.dockLiquidStrength)
                     const style = String(object.shellStyle ?? "")
+                    const themeMode = String(object.themeMode ?? "")
                     const hasBarIntegration = typeof object.barIntegratedWithDock === "boolean"
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
@@ -318,6 +341,8 @@ QtObject {
                     }
                     if (service.isValidShellStyle(style))
                         service.shellStyle = style
+                    if (service.isValidThemeMode(themeMode))
+                        service.themeMode = themeMode
                     if (hasBarIntegration)
                         service.barIntegratedWithDock = object.barIntegratedWithDock
                     if (service.isValidBarVisibilityMode(barVisibility))
@@ -327,8 +352,9 @@ QtObject {
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
 
-                    if (Number(object.version) !== 9
+                    if (Number(object.version) !== 10
                             || !service.isValidShellStyle(style)
+                            || !service.isValidThemeMode(themeMode)
                             || !hasBarIntegration
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)

@@ -5,6 +5,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import "../../../Kos/Ui"
 
 // Network card shared by the future top control centre. Wi-Fi selection and
 // credential UI are implemented here first; the actual NetworkManager write
@@ -217,8 +218,8 @@ PopupWindow {
         surfaceOpacity: 1.0
         blurStrength: AppearanceConfigService.effectiveBarBlur
         liquidStrength: AppearanceConfigService.effectiveBarLiquid
-        ambientPrimary: WallpaperPaletteService.primary
-        ambientSecondary: WallpaperPaletteService.secondary
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
@@ -285,7 +286,7 @@ PopupWindow {
                         && NetworkService.connectionType === "wifi"
                     signalStrength: NetworkService.signalStrength
                     glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                        : (ThemeService.isDark ? "white" : "#000000")
+                        : "white"
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -303,8 +304,8 @@ PopupWindow {
             height: 0
             radius: 13
             baseColor: ThemeService.backgroundColor
-            ambientPrimary: WallpaperPaletteService.primary
-            ambientSecondary: WallpaperPaletteService.secondary
+            ambientPrimary: WallpaperColorSource.primary
+            ambientSecondary: WallpaperColorSource.secondary
             ambientStrength: 0.72
             surfaceOpacity: 0.94
             materialDepth: 1.8
@@ -598,8 +599,8 @@ PopupWindow {
             // Credential entry needs a denser, readable version of the same
             // glass: black base at 70% opacity, not a pale list-sized sheet.
             baseColor: "black"
-            ambientPrimary: WallpaperPaletteService.primary
-            ambientSecondary: WallpaperPaletteService.secondary
+            ambientPrimary: WallpaperColorSource.primary
+            ambientSecondary: WallpaperColorSource.secondary
             ambientStrength: 0.58
             surfaceOpacity: 0.70
             materialDepth: 1.35

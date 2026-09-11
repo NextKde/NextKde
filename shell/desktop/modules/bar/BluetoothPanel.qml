@@ -5,6 +5,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import "../../../Kos/Ui"
 
 // First Bluetooth picker stage: known/paired devices can be connected or
 // disconnected here. Pairing discovery and PIN workflows stay out of this
@@ -104,8 +105,8 @@ PopupWindow {
         surfaceOpacity: 1.0
         blurStrength: AppearanceConfigService.effectiveBarBlur
         liquidStrength: AppearanceConfigService.effectiveBarLiquid
-        ambientPrimary: WallpaperPaletteService.primary
-        ambientSecondary: WallpaperPaletteService.secondary
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true

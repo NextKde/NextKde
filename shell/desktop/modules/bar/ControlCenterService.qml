@@ -12,6 +12,9 @@ QtObject {
     property bool audioAvailable: false
     property int volumePercent: 0
     property bool audioMuted: false
+    property var audioApplications: []
+    property bool audioApplicationsAvailable: false
+    property bool audioApplicationsRefreshInProgress: false
     property bool volumeChangeInProgress: false
     property bool brightnessAvailable: false
     property int brightnessPercent: 0
@@ -37,6 +40,9 @@ QtObject {
     property bool canSuspend: true
     property bool canHibernate: false
     property bool themeChangeInProgress: false
+    property bool nightLightAvailable: true
+    property bool nightLightActive: false
+    property bool nightLightChangeInProgress: false
     signal toggleRequested()
 
     function rebuildHistoryGroups() {
@@ -86,6 +92,7 @@ QtObject {
                 audioAvailable = false
             }
         })
+        refreshAudioApplications()
         PlatformClient.request("bluetooth.list", {}, function(response) {
             if (response?.ok) {
                 const value = response.result || ({})
@@ -111,6 +118,31 @@ QtObject {
             } else {
                 brightnessAvailable = false
                 brightnessBacklightName = ""
+            }
+        })
+        PlatformClient.request("nightlight.get", {}, function(response) {
+            if (response?.ok) {
+                const value = response.result || ({})
+                nightLightAvailable = value.available !== false
+                if (!nightLightChangeInProgress)
+                    nightLightActive = !!value.running
+            }
+        })
+    }
+
+    function refreshAudioApplications() {
+        if (audioApplicationsRefreshInProgress)
+            return
+        audioApplicationsRefreshInProgress = true
+        PlatformClient.request("audio.applications", {}, function(response) {
+            audioApplicationsRefreshInProgress = false
+            if (response?.ok) {
+                const value = response.result || ({})
+                audioApplicationsAvailable = value.available !== false
+                audioApplications = Array.isArray(value.applications) ? value.applications : []
+            } else {
+                audioApplicationsAvailable = false
+                audioApplications = []
             }
         })
     }
@@ -139,6 +171,23 @@ QtObject {
             if (response?.ok)
                 audioMuted = desired
             refresh()
+        })
+        return true
+    }
+
+    function setApplicationVolume(id, percent) {
+        const value = Math.round(Math.max(0, Math.min(150, Number(percent) || 0)))
+        PlatformClient.request("audio.application.set-volume", { id: id, percent: value }, function(response) {
+            if (response?.ok)
+                refreshAudioApplications()
+        })
+        return true
+    }
+
+    function setApplicationMuted(id, muted) {
+        PlatformClient.request("audio.application.set-mute", { id: id, muted: !!muted }, function(response) {
+            if (response?.ok)
+                refreshAudioApplications()
         })
         return true
     }
@@ -291,11 +340,34 @@ QtObject {
         return doNotDisturbEnabled
     }
 
+    function toggleNightLight() {
+        if (!nightLightAvailable || nightLightChangeInProgress)
+            return false
+        nightLightChangeInProgress = true
+        nightLightActive = !nightLightActive
+        PlatformClient.request("nightlight.toggle", {}, function(response) {
+            nightLightChangeInProgress = false
+            if (response?.ok) {
+                nightLightActive = !!response.result?.running
+            } else {
+                Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kwin",
+                    "org.kde.kglobalaccel.Component.invokeShortcut", "Toggle Night Color"])
+            }
+        })
+        return true
+    }
+
     property Timer refreshTimer: Timer {
         interval: 3000
         repeat: true
         running: true
         onTriggered: service.refresh()
+    }
+    property Timer audioApplicationsTimer: Timer {
+        interval: 1800
+        repeat: true
+        running: true
+        onTriggered: service.refreshAudioApplications()
     }
     property Connections platformTransport: Connections {
         target: PlatformClient

@@ -9,7 +9,7 @@ import QtQuick
 Text {
     readonly property real inkLuminance: color.r * 0.2126
         + color.g * 0.7152 + color.b * 0.0722
-    style: Text.Outline
+    style: AppearanceTokens.isMaterial ? Text.Normal : Text.Outline
     // Vibrancy-like protection in both directions: light ink receives a dark
     // edge and dark ink a soft white edge. The glass stays transparent; only
     // the one-pixel glyph boundary adapts to whatever is moving underneath.

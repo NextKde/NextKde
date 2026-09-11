@@ -599,9 +599,7 @@ Item {
                     width: runningIndicator.dotSize
                     height: width
                     radius: width / 2
-                    color: ThemeService.isDark
-                        ? Qt.rgba(1, 1, 1, 0.95)
-                        : Qt.rgba(0, 0, 0, 0.85)
+                    color: Qt.rgba(1, 1, 1, 0.95)
                 }
             }
         }

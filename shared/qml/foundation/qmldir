@@ -1,0 +1,13 @@
+singleton AppTheme 1.0 AppTheme.qml
+KosApplicationWindow 1.0 KosApplicationWindow.qml
+KosButton 1.0 KosButton.qml
+KosCard 1.0 KosCard.qml
+KosEmptyState 1.0 KosEmptyState.qml
+KosNavigationButton 1.0 KosNavigationButton.qml
+KosPageCache 1.0 KosPageCache.qml
+KosRoundButton 1.0 KosRoundButton.qml
+KosSettingsDialog 1.0 KosSettingsDialog.qml
+KosSlider 1.0 KosSlider.qml
+KosSwitch 1.0 KosSwitch.qml
+KosSurface 1.0 KosSurface.qml
+KosToolButton 1.0 KosToolButton.qml

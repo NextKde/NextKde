@@ -39,7 +39,9 @@ Current operation groups are:
   shortcuts; the Shell composes each Exec line, the daemon validates,
   persists, and registers)
 - `network.*` (including `network.traffic` for read-only interface counters),
-  `audio.*`, `bluetooth.*`, `display.*`, `session.*`,
+  `audio.*` (including `audio.applications`,
+  `audio.application.set-volume`, and `audio.application.set-mute` for
+  per-application PipeWire/PulseAudio sink-input control), `bluetooth.*`, `display.*`, `session.*`,
   `theme.*`, and `screenshot.*`
 
 KWin events are sent to subscribers as `window.snapshot`, `desktops`,

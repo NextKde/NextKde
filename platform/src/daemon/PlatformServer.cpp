@@ -396,6 +396,49 @@ QJsonObject parseAudio(const QByteArray &output, int exitCode)
                        {QStringLiteral("muted"), text.contains(QStringLiteral("[MUTED]"))}};
 }
 
+QJsonObject parseAudioApplications(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return QJsonObject{{QStringLiteral("available"), false}};
+
+    QJsonParseError parseError;
+    const QJsonDocument document = QJsonDocument::fromJson(output, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !document.isArray())
+        return QJsonObject{{QStringLiteral("available"), false}};
+
+    QJsonArray applications;
+    for (const QJsonValue &value : document.array()) {
+        const QJsonObject stream = value.toObject();
+        const QJsonObject properties = stream.value(QStringLiteral("properties")).toObject();
+        QString name = properties.value(QStringLiteral("application.name")).toString().trimmed();
+        if (name.isEmpty())
+            name = properties.value(QStringLiteral("media.name")).toString().trimmed();
+        if (name.isEmpty())
+            name = QStringLiteral("音频应用");
+
+        const QJsonObject volume = stream.value(QStringLiteral("volume")).toObject();
+        double volumePercent = 0.0;
+        for (auto it = volume.constBegin(); it != volume.constEnd(); ++it) {
+            const QJsonObject channel = it.value().toObject();
+            const QString percent = channel.value(QStringLiteral("value_percent")).toString();
+            if (!percent.isEmpty()) {
+                volumePercent = percent.left(percent.indexOf(QLatin1Char('%'))).toDouble();
+                break;
+            }
+        }
+
+        applications.append(QJsonObject{
+            {QStringLiteral("id"), stream.value(QStringLiteral("index")).toInt()},
+            {QStringLiteral("name"), name},
+            {QStringLiteral("percent"), qBound(0, qRound(volumePercent), 150)},
+            {QStringLiteral("muted"), stream.value(QStringLiteral("mute")).toBool()},
+            {QStringLiteral("icon"), properties.value(QStringLiteral("application.icon-name")).toString()}
+        });
+    }
+    return QJsonObject{{QStringLiteral("available"), true},
+                       {QStringLiteral("applications"), applications}};
+}
+
 QJsonObject parseNetworkScan(const QByteArray &output, int exitCode)
 {
     QJsonArray networks;
@@ -2069,24 +2112,130 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     const QString op = operation(request);
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     if (op == QStringLiteral("settings.open")) {
-        const QString module = payload.value(QStringLiteral("module")).toString();
+        QString module = payload.value(QStringLiteral("module")).toString();
+        if (module == QStringLiteral("kcm_nightcolor")) {
+            module = QStringLiteral("kcm_nightlight");
+        }
         static const QSet<QString> allowedModules{
             QStringLiteral("kcm_bluetooth"),
             QStringLiteral("kcm_keys"),
-            QStringLiteral("kcm_networkmanagement")};
+            QStringLiteral("kcm_networkmanagement"),
+            QStringLiteral("kcm_kscreen"),
+            QStringLiteral("kcm_pulseaudio"),
+            QStringLiteral("kcm_nightlight"),
+            QStringLiteral("kcm_notifications"),
+            QStringLiteral("kcm_soundtheme")};
         if (!allowedModules.contains(module)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-settings-module"),
                     QStringLiteral("设置模块不受支持"), false);
             return true;
         }
-        const QString systemsettings = QStandardPaths::findExecutable(
-            QStringLiteral("systemsettings"));
-        if (systemsettings.isEmpty()) {
+        const QString kcmshell = QStandardPaths::findExecutable(QStringLiteral("kcmshell6"));
+        const QString systemsettings = QStandardPaths::findExecutable(QStringLiteral("systemsettings"));
+        const QString executable = !kcmshell.isEmpty() ? kcmshell : systemsettings;
+        if (executable.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("settings-unavailable"),
                     QStringLiteral("KDE 系统设置不可用"), false);
             return true;
         }
-        runCommand(socket, request, systemsettings, {module});
+        const bool started = QProcess::startDetached(executable, {module});
+        respond(socket, request, started, {{QStringLiteral("started"), started}});
+        return true;
+    }
+    if (op == QStringLiteral("nightlight.get")) {
+        QDBusInterface nightLight(QStringLiteral("org.kde.KWin"),
+                                  QStringLiteral("/org/kde/KWin/NightLight"),
+                                  QStringLiteral("org.kde.KWin.NightLight"),
+                                  QDBusConnection::sessionBus());
+        if (!nightLight.isValid()) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-unavailable"),
+                    QStringLiteral("夜灯服务不可用"), true);
+            return true;
+        }
+        const bool available = nightLight.property("available").toBool();
+        const bool enabled = nightLight.property("enabled").toBool();
+        const bool running = nightLight.property("running").toBool();
+        const bool inhibited = m_nightLightInhibitionCookie.has_value()
+            || nightLight.property("inhibited").toBool();
+        const uint mode = nightLight.property("mode").toUInt();
+        const uint targetTemp = nightLight.property("targetTemperature").toUInt();
+        const uint currentTemp = nightLight.property("currentTemperature").toUInt();
+
+        const bool isWarm = enabled && running && !inhibited;
+
+        QJsonObject result{
+            {QStringLiteral("available"), available},
+            {QStringLiteral("enabled"), enabled},
+            {QStringLiteral("running"), isWarm},
+            {QStringLiteral("inhibited"), inhibited},
+            {QStringLiteral("mode"), static_cast<int>(mode)},
+            {QStringLiteral("targetTemperature"), static_cast<int>(targetTemp)},
+            {QStringLiteral("currentTemperature"), static_cast<int>(currentTemp)}
+        };
+        respond(socket, request, true, result);
+        return true;
+    }
+    if (op == QStringLiteral("nightlight.toggle")) {
+        QDBusInterface nightLight(QStringLiteral("org.kde.KWin"),
+                                  QStringLiteral("/org/kde/KWin/NightLight"),
+                                  QStringLiteral("org.kde.KWin.NightLight"),
+                                  QDBusConnection::sessionBus());
+        if (!nightLight.isValid()
+            || !nightLight.property("available").toBool()) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-unavailable"),
+                    QStringLiteral("夜灯服务不可用"), true);
+            return true;
+        }
+
+        // KWin exposes an inhibition lock precisely for temporary controls.
+        // Unlike writing Active/Mode in kwinrc, it leaves scheduled, location,
+        // timing, and constant-mode preferences untouched and is automatically
+        // released if this daemon goes away.
+        if (m_nightLightInhibitionCookie.has_value()) {
+            const QDBusMessage reply = nightLight.call(
+                QStringLiteral("uninhibit"), *m_nightLightInhibitionCookie);
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-uninhibit-failed"),
+                        QStringLiteral("无法恢复夜灯"), true);
+                return true;
+            }
+            m_nightLightInhibitionCookie.reset();
+        } else {
+            const bool enabled = nightLight.property("enabled").toBool();
+            const bool running = nightLight.property("running").toBool();
+            const bool inhibited = nightLight.property("inhibited").toBool();
+            if (!enabled || !running) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-not-running"),
+                        QStringLiteral("夜灯当前未运行；请在系统设置中启用或等待计划开始"), false);
+                return true;
+            }
+            if (inhibited) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-already-inhibited"),
+                        QStringLiteral("夜灯正被其他应用临时暂停"), true);
+                return true;
+            }
+            const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-inhibit-failed"),
+                        QStringLiteral("无法暂停夜灯"), true);
+                return true;
+            }
+            m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
+        }
+
+        const bool available = nightLight.property("available").toBool();
+        const bool enabled = nightLight.property("enabled").toBool();
+        const bool running = nightLight.property("running").toBool();
+        const bool inhibited = m_nightLightInhibitionCookie.has_value()
+            || nightLight.property("inhibited").toBool();
+
+        QJsonObject result{
+            {QStringLiteral("available"), available},
+            {QStringLiteral("enabled"), enabled},
+            {QStringLiteral("running"), enabled && running && !inhibited},
+            {QStringLiteral("inhibited"), inhibited}
+        };
+        respond(socket, request, true, result);
         return true;
     }
     if (op == QStringLiteral("shortcuts.apply")) {
@@ -2139,6 +2288,55 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     if (op == QStringLiteral("audio.set-mute")) {
         runCommand(socket, request, QStringLiteral("wpctl"),
                    {QStringLiteral("set-mute"), QStringLiteral("@DEFAULT_AUDIO_SINK@"),
+                    payload.value(QStringLiteral("muted")).toBool() ? QStringLiteral("1") : QStringLiteral("0")});
+        return true;
+    }
+    if (op == QStringLiteral("audio.applications")) {
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("--format=json"), QStringLiteral("list"),
+                    QStringLiteral("sink-inputs")}, parseAudioApplications);
+        return true;
+    }
+    if (op == QStringLiteral("audio.application.set-volume")) {
+        const int id = payload.value(QStringLiteral("id")).toInt(-1);
+        const int value = qBound(0, payload.value(QStringLiteral("percent")).toInt(), 150);
+        if (id < 0) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-audio-stream"),
+                    QStringLiteral("音频应用无效"), false);
+            return true;
+        }
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("set-sink-input-volume"), QString::number(id),
+                    QString::number(value) + QLatin1Char('%')});
+        return true;
+    }
+    if (op == QStringLiteral("audio.application.set-mute")) {
+        const int id = payload.value(QStringLiteral("id")).toInt(-1);
+        if (id < 0) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-audio-stream"),
+                    QStringLiteral("音频应用无效"), false);
+            return true;
+        }
+        const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+        if (pactl.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("audio-unavailable"),
+                    QStringLiteral("音频服务不可用"), true);
+            return true;
+        }
+        runCommand(socket, request, pactl,
+                   {QStringLiteral("set-sink-input-mute"), QString::number(id),
                     payload.value(QStringLiteral("muted")).toBool() ? QStringLiteral("1") : QStringLiteral("0")});
         return true;
     }
@@ -2532,10 +2730,24 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         const QString configPath = QStandardPaths::writableLocation(
             QStandardPaths::GenericConfigLocation) + QStringLiteral("/kdeglobals");
         QSettings settings(configPath, QSettings::IniFormat);
-        const QString scheme = settings.value(
-            QStringLiteral("General/ColorScheme")).toString();
-        const bool currentlyDark = scheme.contains(
+        QString scheme = settings.value(
+            QStringLiteral("ColorScheme")).toString();
+        if (scheme.isEmpty()) {
+            scheme = settings.value(
+                QStringLiteral("General/ColorScheme")).toString();
+        }
+        bool currentlyDark = scheme.contains(
             QStringLiteral("dark"), Qt::CaseInsensitive);
+        if (!currentlyDark && scheme.isEmpty()) {
+            const QStringList background = settings.value(
+                QStringLiteral("Colors:Window/BackgroundNormal")).toStringList();
+            if (background.size() >= 3) {
+                const int red = background[0].toInt();
+                const int green = background[1].toInt();
+                const int blue = background[2].toInt();
+                currentlyDark = (red * 299 + green * 587 + blue * 114) / 1000 < 128;
+            }
+        }
         applySystemTheme(socket, request, !currentlyDark);
         return true;
     }

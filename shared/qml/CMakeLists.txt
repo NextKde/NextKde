@@ -1,5 +1,7 @@
 set_source_files_properties(
     foundation/AppTheme.qml
+    colorize/ColorScheme.qml
+    colorize/WallpaperColorSource.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -26,6 +28,11 @@ qt_add_qml_module(kos_ui
         foundation/PageCachePolicy.js
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+        colorize/ArtworkColorSource.qml
+        colorize/Cam16Hct.mjs
+        colorize/ColorScheme.qml
+        colorize/MaterialColorScheme.mjs
+        colorize/WallpaperColorSource.qml
 )
 
 add_library(Kos::Ui ALIAS kos_ui)

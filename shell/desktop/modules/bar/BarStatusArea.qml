@@ -7,6 +7,8 @@ Item {
 
     implicitWidth: statusArea.implicitWidth
     implicitHeight: 24
+    width: implicitWidth
+    height: implicitHeight
     property bool dockHosted: false
     property string dockEdge: "bottom"
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"
@@ -192,19 +194,6 @@ Item {
             ControlCenterPanel {
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
-                onNetworkRequested: {
-                    root.closeControlCenter()
-                    bluetoothPanel.close()
-                    const anchor = root.networkStatusAnchor()
-                    if (anchor)
-                        networkPanel.open(anchor)
-                }
-                onBluetoothRequested: {
-                    root.closeControlCenter()
-                    const anchor = root.controlCenterAnchor()
-                    if (anchor)
-                        bluetoothPanel.open(anchor)
-                }
             }
         }
     }

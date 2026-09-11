@@ -41,6 +41,57 @@ sudo pacman -S --needed \
 `vulkan-headers`，因此这里必须显式列出。KWin 同时需要 Wayland、libdrm 和
 libepoxy 的开发文件，但这些已是 Arch `kwin` 包的硬依赖，无需重复安装。
 
+### Ubuntu 26.04 (resolute)
+
+`kosctl` 的自动依赖安装目前仅在 Arch 与 NixOS 上生效；Ubuntu 用户请手动安装
+对应软件包（以下清单已在 26.04 上完成全量构建验证）。
+
+Quickshell 0.3.x 尚未进入 Ubuntu 官方仓库，可使用
+[Quickshell 官方文档](https://quickshell.org/docs/)推荐的 PPA（已提供
+resolute 软件源）：
+
+```sh
+sudo add-apt-repository ppa:avengemedia/danklinux
+sudo apt update
+sudo apt install quickshell
+```
+
+基础与 KWin 插件构建依赖：
+
+```sh
+sudo apt install \
+  git cmake ninja-build g++ golang-go \
+  qt6-base-dev qt6-declarative-dev \
+  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
+  libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \
+  libkdecorations3-dev gettext libvulkan-dev libplasma-dev \
+  libkf6kio-dev libkf6calendarcore-dev \
+  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
+  libxcb-util-dev libxkbcommon-x11-dev
+```
+
+运行时集成（可选，与上文 Arch 清单对应）：
+
+```sh
+sudo apt install \
+  network-manager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils kde-spectacle \
+  libglib2.0-0 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+```
+
+与 Arch 包名的主要差异：`kdecoration` 对应 `libkdecorations3-dev`，
+`vulkan-headers` 对应 `libvulkan-dev`，`spectacle` 对应 `kde-spectacle`。
+另外需要注意：`libplasma-dev` 提供 glass 特效引用的 `Plasma/plasma_version.h`；
+`libkf6kio-dev`、`libkf6calendarcore-dev` 是平台服务与设置应用 CMake 的直接
+依赖（Arch 上由依赖链自动带入）；KWin 导出所需的 xcb 扩展开发头文件
+（composite、randr、res、shm、sync）不会被 `kwin-dev` 自动带入，需显式安装；
+`qml6-module-qtquick-dialogs` 与 `libqt6sql6-sqlite` 是 QuickDialogs2 和
+数据服务的运行时依赖。
+
 Calendar、Todo、Weather 和 Music 是独立的可选应用，不由 `kosctl install` 构建；
 它们需要额外的 Qt/KF6、GStreamer、TagLib 或 Go 依赖。安装前请阅读
 [apps/README.zh-CN.md](apps/README.zh-CN.md) 及各应用目录的说明，再运行

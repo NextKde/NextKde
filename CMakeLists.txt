@@ -31,6 +31,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
         )
         set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-ui.color-scheme
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/color-scheme/test_color_scheme.mjs
+        )
+        set_tests_properties(kos-ui.color-scheme PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.date-buckets
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_date_buckets.mjs
@@ -66,11 +71,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_record_index.mjs
         )
         set_tests_properties(kos-shell.window-record-index PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.wallpaper-palette
+        add_test(NAME kos-shell.wallpaper-color-source
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_palette.mjs
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_color_source.mjs
         )
-        set_tests_properties(kos-shell.wallpaper-palette PROPERTIES TIMEOUT 10)
+        set_tests_properties(kos-shell.wallpaper-color-source PROPERTIES TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.static-work-runtime
