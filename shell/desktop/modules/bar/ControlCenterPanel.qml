@@ -635,9 +635,6 @@ Item {
         cardRadius: 26
         cardWidth: 52
         cardHeight: 52
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -674,10 +671,6 @@ Item {
         cardRadius: 26
         cardWidth: 52
         cardHeight: 52
-        cardBorderColor: ThemeService.isDark
-            ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -717,9 +710,6 @@ Item {
         cardRadius: 26
         cardWidth: 52
         cardHeight: 52
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -763,10 +753,6 @@ Item {
         cardRadius: 26
         cardWidth: 52
         cardHeight: 52
-        cardBorderColor: ControlCenterService.doNotDisturbEnabled
-            ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: dndPointer.pressed ? 0.91 : (dndPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -812,10 +798,6 @@ Item {
         cardRadius: 26
         cardWidth: 52
         cardHeight: 52
-        cardBorderColor: ControlCenterService.nightLightActive
-            ? "#ff9f0a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10))
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
 
         cardScale: nightLightPointer.pressed ? 0.91 : (nightLightPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1600,10 +1582,7 @@ Item {
         cardHeight: panel.activeSubmenu === "wifi" ? 360
             : (panel.activeSubmenu === "bluetooth" ? 340
             : (panel.activeSubmenu === "sound" ? 420 : 280))
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
         cardShown: panel.activeSubmenu !== "" && panel.activeSubmenu !== "session"
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
         onMotionClosed: {
             if (panel.activeSubmenu === "" && !panel.sessionModalVisible)
                 coordinator.modalActive = false
