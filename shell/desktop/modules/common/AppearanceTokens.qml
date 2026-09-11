@@ -186,7 +186,7 @@ QtObject {
         // Material Dock body opacity is independent from other Material
         // surfaces so its wallpaper blending can be tuned without fading
         // widgets, the launcher, or the Bar.
-        readonly property real materialSurfaceOpacity: 0.30
+        readonly property real materialSurfaceOpacity: 0.50
         readonly property string activeBackgroundMode: tokens.isWindows12
             ? "subtle" : tokens.isMaterial ? "tonal" : "glass"
         readonly property bool magnificationEnabled: tokens.isMacos
