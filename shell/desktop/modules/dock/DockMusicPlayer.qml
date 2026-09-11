@@ -121,29 +121,21 @@ Item {
     // ═══════════════════════════════════════════════════════════
     // Content
     // ═══════════════════════════════════════════════════════════
-    Rectangle {
+    ShellGlassSurface {
         id: playerBackground
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
         radius: widget.iconSize * 0.35
-        color: "transparent"
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-                position: 0.0
-                color: widget.artworkTint(artworkPalette.primary, 0.82)
-            }
-            GradientStop {
-                position: 0.52
-                color: widget.artworkTint(artworkPalette.secondary, 0.64)
-            }
-            GradientStop {
-                position: 1.0
-                color: widget.artworkTint(artworkPalette.primary, 0.38)
-            }
-        }
+        material: "regular"
+        materialDepth: 1.0
+        surfaceOpacity: 0.88
+        ambientPigmentEnabled: true
+        ambientStrength: 1.0
+        ambientPrimary: widget.artworkTint(artworkPalette.primary, 0.82)
+        ambientSecondary: widget.artworkTint(artworkPalette.secondary, 0.64)
+        ambientTertiary: widget.artworkTint(artworkPalette.primary, 0.38)
         z: -1
     }
 

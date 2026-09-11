@@ -36,7 +36,7 @@ Item {
     readonly property bool connected: NetworkService.deviceState === "connected"
     readonly property color statusIconColor: IconAppearanceService.mode === "tint"
         ? IconAppearanceService.styledSymbolicColor()
-        : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+        : ThemeService.foregroundColor
     readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
         ? IconAppearanceService.opacity : 1.0
 

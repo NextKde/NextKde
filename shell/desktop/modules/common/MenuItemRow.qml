@@ -1,5 +1,6 @@
 import QtQuick
 import qs.desktop.modules.dock
+import qs.desktop.modules.common
 
 // A row in a ContextMenu: icon + label, with optional checkmark (checkable),
 // submenu chevron, and a thin separator variant. Hover only changes the row's
@@ -22,9 +23,6 @@ Item {
     // flag set by onEntered/onExited can otherwise be stale or miss the first
     // hover event in a PopupWindow.
     readonly property bool _hover: pointer.containsMouse
-    readonly property color _hi: Qt.rgba(
-        row.foregroundColor.r, row.foregroundColor.g, row.foregroundColor.b,
-        itemEnabled ? (ThemeService.isDark ? 0.22 : 0.10) : 0.05)
 
     height: row.separator ? 1 : 38
     visible: row.separator || label.length > 0
@@ -42,12 +40,11 @@ Item {
     }
 
     // Hover background (behind all other content).
-    Rectangle {
-        id: bg
+    GlassInteractionLayer {
         anchors.fill: parent
-        radius: 14
-        color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
-        Behavior on color { ColorAnimation { duration: 90 } }
+        cornerRadius: 14
+        active: row._hover && row.itemEnabled && !row.separator
+        pressed: pointer.pressed
     }
 
     Row {
@@ -59,7 +56,7 @@ Item {
         spacing: row.icon.length > 0 ? 9 : 0
         visible: !row.separator
 
-        Text {
+        GlassText {
             visible: row.icon.length > 0
             width: visible ? 18 : 0
             text: row.icon
@@ -69,7 +66,7 @@ Item {
             opacity: 0.85
             anchors.verticalCenter: parent.verticalCenter
         }
-        Text {
+        GlassText {
             text: row.label
             elide: Text.ElideRight
             font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
@@ -84,7 +81,7 @@ Item {
     }
 
     // Trailing checkmark or submenu chevron.
-    Text {
+    GlassText {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter

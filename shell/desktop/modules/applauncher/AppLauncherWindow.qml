@@ -64,36 +64,9 @@ PanelWindow {
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
-    readonly property color launcherForegroundColor: isFullscreenMode
-        ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor
-    // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
-    // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
-    // ordinary imagery translucent, and only protect against the low-contrast
-    // ends of the range (near white or black).
-    readonly property real wallpaperLuminance: WallpaperPaletteService.primary.r * 0.2126
-        + WallpaperPaletteService.primary.g * 0.7152
-        + WallpaperPaletteService.primary.b * 0.0722
-    readonly property real launcherBackdropDistance: Math.min(
-        wallpaperLuminance, 1.0 - wallpaperLuminance)
-    // 1 at the two extremes, easing down to 0 for normal mid-tone imagery.
-    readonly property real launcherBackdropProtection: {
-        const t = Math.min(1.0, Math.max(0.0,
-            (launcherBackdropDistance - 0.08) / 0.30))
-        return 1.0 - t * t * (3.0 - 2.0 * t)
-    }
-    readonly property color launcherScrimColor: {
-        const lightMix = Math.min(1.0, Math.max(0.0,
-            (wallpaperLuminance - 0.30) / 0.40))
-        // A Launchpad is a large dark material in every environment. Bright
-        // backgrounds need more of this tint, but dark backgrounds must never
-        // flip to a white veil: that reads as grey plastic rather than glass.
-        const baseAlpha = 0.13 + 0.08 * lightMix
-        const extremeAlpha = (0.09 + 0.12 * lightMix)
-            * launcherBackdropProtection
-        const modeScale = isFullscreenMode ? 1.0 : 0.72
-        return Qt.rgba(0.018, 0.028, 0.052,
-            (baseAlpha + extremeAlpha) * modeScale)
-    }
+    readonly property color launcherForegroundColor: launcherGlass.foregroundColor
+    readonly property color launcherSecondaryForegroundColor:
+        launcherGlass.secondaryForegroundColor
     onFilteredApplicationsChanged: {
         root.cancelFullscreenPageTransition();
         _clampFullscreenPage();
@@ -984,7 +957,6 @@ PanelWindow {
     ContextMenu {
         id: appContextMenu
         property var application: null
-        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         onAction: function (name) {
             const app = application;
@@ -1143,23 +1115,15 @@ PanelWindow {
                 anchors.fill: parent
                 property real radius: root.isFullscreenMode ? 0 : 28
 
-                // KWin owns the launcher card's actual blur and refraction
-                // through BackgroundEffect below. Keeping this client-side
-                // layer transparent avoids a duplicate grey QML sheen.
-                Rectangle {
+                // Same material contract as Dock, QuickSearch and Control
+                // Center. Presentation differences are parameters, not a
+                // separate hand-painted scrim implementation.
+                ShellGlassSurface {
+                    id: launcherGlass
                     anchors.fill: parent
                     radius: background.radius
-                    // A launcher is a text-dense regular material. The scrim
-                    // stays light through ordinary imagery, then gradually
-                    // increases only near pure white or black backdrops.
-                    color: root.launcherScrimColor
-                    Behavior on color {
-                        ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
-                    }
-                    border.width: root.isFullscreenMode ? 0 : 1
-                    border.color: root.isDark
-                        ? Qt.rgba(1, 1, 1, 0.16)
-                        : Qt.rgba(1, 1, 1, 0.42)
+                    material: root.isFullscreenMode ? "thick" : "regular"
+                    adaptiveDarkScrim: true
                 }
 
                 // This foreground layer deliberately excludes the backdrop
@@ -1313,14 +1277,12 @@ PanelWindow {
                                 ambientSecondary: WallpaperPaletteService.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                                 textColor: root.launcherForegroundColor
-                                mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
-                                    root.launcherForegroundColor.g,
-                                    root.launcherForegroundColor.b, 0.45)
+                                mutedTextColor: root.launcherSecondaryForegroundColor
                                 font.pixelSize: 12
                                 leftPadding: 32
                                 rightPadding: text.length > 0 ? 32 : 12
                                 selectionColor: Qt.rgba(1, 1, 1, 0.30)
-                                selectedTextColor: AppLauncherService.dockForegroundColor
+                                selectedTextColor: root.launcherForegroundColor
                                 enabled: !root.editMode && !root.openFolder
 
                                 onTextEdited: {
@@ -1755,6 +1717,13 @@ PanelWindow {
                                     width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                     text: modelData.type === "folder" ? modelData.name : modelData.app.name
                                     color: root.launcherForegroundColor
+                                    // App labels can sit directly on a nearly white,
+                                    // detailed launcher backdrop. Give only this
+                                    // text role a broad, diffuse local dark field;
+                                    // it preserves panel transmission and is not a
+                                    // Text.Outline-style glyph border.
+                                    glassShadowOpacity: 0.72
+                                    glassShadowBlur: 0.78
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -2400,6 +2369,8 @@ PanelWindow {
                                             width: Math.min(Math.round(root.configIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                             text: modelData.name
                                             color: AppLauncherService.dockForegroundColor
+                                            glassShadowOpacity: 0.72
+                                            glassShadowBlur: 0.78
                                             horizontalAlignment: Text.AlignHCenter
                                             elide: Text.ElideRight
                                             wrapMode: Text.NoWrap

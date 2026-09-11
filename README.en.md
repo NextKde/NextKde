@@ -46,6 +46,60 @@ must be listed explicitly. KWin also exports Wayland, libdrm, and libepoxy
 development interfaces, but those are hard dependencies of Arch's `kwin`
 package and do not need to be repeated here.
 
+### Ubuntu 26.04 (resolute)
+
+`kosctl` installs missing build packages automatically on Arch and NixOS only.
+On Ubuntu, install them manually. The list below has been verified with a full
+default build on 26.04.
+
+Quickshell 0.3.x is not in the Ubuntu archive yet; use the PPA recommended by
+the [Quickshell documentation](https://quickshell.org/docs/), which provides a
+`resolute` series:
+
+```sh
+sudo add-apt-repository ppa:avengemedia/danklinux
+sudo apt update
+sudo apt install quickshell
+```
+
+Core and KWin plugin build dependencies:
+
+```sh
+sudo apt install \
+  git cmake ninja-build g++ golang-go \
+  qt6-base-dev qt6-declarative-dev \
+  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
+  libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \
+  libkdecorations3-dev gettext libvulkan-dev libplasma-dev \
+  libkf6kio-dev libkf6calendarcore-dev \
+  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
+  libxcb-util-dev libxkbcommon-x11-dev
+```
+
+Optional runtime integrations (mirroring the Arch list above):
+
+```sh
+sudo apt install \
+  network-manager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils kde-spectacle \
+  libglib2.0-0 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+```
+
+Key naming differences versus Arch: `kdecoration` is `libkdecorations3-dev`,
+`vulkan-headers` is `libvulkan-dev`, and `spectacle` is `kde-spectacle`.
+Also note: `libplasma-dev` provides `Plasma/plasma_version.h` used by the
+glass effect; `libkf6kio-dev` and `libkf6calendarcore-dev` are direct CMake
+dependencies of the platform service and Settings (on Arch they arrive
+through the dependency chain); the xcb extension headers required by KWin's
+exported headers (composite, randr, res, shm, sync) are not pulled in by
+`kwin-dev` and must be installed explicitly; `qml6-module-qtquick-dialogs`
+and `libqt6sql6-sqlite` are runtime dependencies of QuickDialogs2 and the
+data service.
+
 Calendar, Todo, Weather, and Music are separate optional applications and are
 not built by `kosctl install`. They have additional Qt/KF6, GStreamer, TagLib,
 or Go dependencies; read [apps/README.md](apps/README.md) and each app's own

@@ -8,6 +8,7 @@
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
 - **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
+- **Shell 玻璃组件**：Dock、QuickSearch、AppLauncher 与控制中心必须使用 `ShellGlassSurface`。KWin 统一负责背景采样、模糊、折射与光学边缘；QML 组件统一负责 pigment、壁纸环境色和内容可读性。业务模块不得再绘制自己的整面 scrim、白色描边或边缘高光。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入形态 Token。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置，适用于底部与侧边 Dock；`barLayoutMode` 提供 `full | floating | transparent`，`barVisibilityMode` 提供 `always | smart | persistent`。融合后顶部 Bar 收起，底部 Dock 托管时间与系统状态，侧边 Dock 使用纵向状态与信息布局。
@@ -221,6 +222,8 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 ### Glass 与 motion
 
 `glass.blurStrength` 和 `glass.liquidStrength` 直接投影配置。局部表面可以乘以下列系数，但不得重新定义全局强度。
+
+主 Shell 表面的材质入口固定为 `shell/desktop/modules/dock/ShellGlassSurface.qml`。调用方只允许传递几何、`material`、`materialDepth`、`surfaceOpacity` 与可读性参数；共享基础色、环境色、全局强度和 compositor ownership 由该组件集中维护。`LiquidGlassSurface` 是底层通用实现，其本地 shader 只供无法发布 KWin blur region 的 fallback 使用。
 
 | Token | Windows 12 | macOS | Material |
 | --- | --- | --- | --- |
