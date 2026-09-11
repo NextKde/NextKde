@@ -5,6 +5,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
+import "../../../Kos/Ui"
 
 // One concrete output-bound Dock layer surface.
 //
@@ -113,7 +114,7 @@ PanelWindow {
     // The custom KWin glass effect consumes this region for both backdrop
     // blur and liquid refraction. Keep publishing it when either channel is
     // active; gating only on blur makes a liquid-only Dock fully transparent.
-    BackgroundEffect.blurRegion: (root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && root.visible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? dockBlurRegionHolder : null
@@ -199,6 +200,18 @@ PanelWindow {
             ? (root.position === "right" ? Item.Right : Item.Left)
             : Item.Bottom
 
+        // The active surface policy decides whether this is compositor-backed
+        // glass/acrylic or a QML tonal layer.
+        Rectangle {
+            anchors.fill: parent
+            visible: !AppearanceTokens.surface.usesBackdrop
+            radius: dockContainer.pillRadius
+            color: AppearanceTokens.surface.dockFill
+            opacity: AppearanceTokens.surface.dockOpacity
+            border.width: 0
+            z: -1
+        }
+
         DockContainer {
             id: dockContainer
             targetScreen: root.screen
@@ -233,8 +246,8 @@ PanelWindow {
         dockWidth: dockContainer.width
         dockHeight: dockContainer.height
         // Wallpaper ambient, same liquid material as the dock's popups.
-        ambientPrimary: WallpaperPaletteService.primary
-        ambientSecondary: WallpaperPaletteService.secondary
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         active: hide.handleActive
         onEntered: hide.handleEntered()

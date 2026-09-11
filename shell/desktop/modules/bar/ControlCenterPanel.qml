@@ -8,6 +8,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
 // Compact desktop adaptation of the supplied Control Center reference.
@@ -280,7 +281,7 @@ Item {
                     && NetworkService.connectionType === "wifi"
                 signalStrength: NetworkService.signalStrength
                 glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                    : ThemeService.foregroundColor
+                    : "white"
             }
             // Toggling NetworkManager's radio is not instant either; mirror
             // the Bluetooth disc's busy arc so both read as "working", not
@@ -296,7 +297,7 @@ Item {
                 Canvas {
                     id: wifiBusyArc
                     anchors.fill: parent
-                    property color glyphColor: ThemeService.foregroundColor
+                    property color glyphColor: "white"
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -402,7 +403,7 @@ Item {
                 anchors.centerIn: parent
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
-                    property color glyphColor: active ? "#0a84ff" : ThemeService.foregroundColor
+                property color glyphColor: active ? "#0a84ff" : "white"
                 opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
@@ -446,7 +447,7 @@ Item {
                 Canvas {
                     id: bluetoothBusyArc
                     anchors.fill: parent
-                    property color glyphColor: ThemeService.foregroundColor
+                    property color glyphColor: "white"
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -543,8 +544,8 @@ Item {
             radius: mediaCard.blurRadius
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(WallpaperPaletteService.primary.r, WallpaperPaletteService.primary.g, WallpaperPaletteService.primary.b, 0.16) }
-                GradientStop { position: 1.0; color: Qt.rgba(WallpaperPaletteService.secondary.r, WallpaperPaletteService.secondary.g, WallpaperPaletteService.secondary.b, 0.07) }
+                GradientStop { position: 0.0; color: Qt.rgba(WallpaperColorSource.primary.r, WallpaperColorSource.primary.g, WallpaperColorSource.primary.b, 0.16) }
+                GradientStop { position: 1.0; color: Qt.rgba(WallpaperColorSource.secondary.r, WallpaperColorSource.secondary.g, WallpaperColorSource.secondary.b, 0.07) }
             }
         }
 
@@ -951,7 +952,7 @@ Item {
             anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
             width: 15
             height: 15
-            property color glyphColor: ThemeService.foregroundColor
+            property color glyphColor: "white"
             onGlyphColorChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
@@ -981,7 +982,7 @@ Item {
             value: panel.volumePreview / 100
             trackHeight: 5
             trackColor: Qt.rgba(1, 1, 1, 0.17)
-            accentColor: Qt.rgba(1, 1, 1, 0.42)
+            accentColor: "#ffffff"
             thumbColor: "#ffffff"
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true

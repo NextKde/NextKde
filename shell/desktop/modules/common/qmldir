@@ -4,12 +4,13 @@ GlassText 1.0 GlassText.qml
 GlassInteractionLayer 1.0 GlassInteractionLayer.qml
 GlassSlider 1.0 GlassSlider.qml
 GlassToggle 1.0 GlassToggle.qml
+MaterialFlower 1.0 MaterialFlower.qml
+WavyProgress 1.0 WavyProgress.qml
 RoundedBlurRegion 1.0 RoundedBlurRegion.qml
 LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassControl 1.0 LiquidGlassControl.qml
 PopupMotion 1.0 PopupMotion.qml
 EnhancedGlassSurface 1.0 EnhancedGlassSurface.qml
-ArtworkPalette 1.0 ArtworkPalette.qml
 AppIcon 1.0 AppIcon.qml
 SystemIcon 1.0 SystemIcon.qml
 ContextMenu 1.0 ContextMenu.qml

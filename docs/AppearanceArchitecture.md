@@ -1,12 +1,13 @@
 # 全局外观系统架构
 
-> 状态：Dock 形态、Bar 布局/隐藏、全局图标外观、Glass 同步与 Dock 窗口动画已实现（更新至 2026-09-04）。本文是后续开发和 AI 接续工作的规范来源。
+> 状态：Dock 形态、Bar 布局/隐藏、全局图标外观、Glass 同步、Dock 窗口动画与 Material 3 配色已实现（更新至 2026-09-11）。本文是后续开发和 AI 接续工作的规范来源。
 
 ## 1. 当前能力与边界
 
 外观设置分为彼此正交的维度：
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
+- **Material 3 配色**：壁纸主色作为种子，在进程内生成全套 M3 角色色。算法是 matugen `scheme-vibrant` 的纯 JS 移植，**不需要安装 matugen、Python 或 ImageMagick**。配合 Quickshell 内置 `ColorQuantizer` 完成取色，全链路无外部进程。详见第 10 节。
 - **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
 - **Shell 玻璃组件**：Dock、QuickSearch、AppLauncher 与控制中心必须使用 `ShellGlassSurface`。KWin 统一负责背景采样、模糊、折射与光学边缘；QML 组件统一负责 pigment、壁纸环境色和内容可读性。业务模块不得再绘制自己的整面 scrim、白色描边或边缘高光。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
@@ -29,15 +30,37 @@ AppearanceConfigService ──────► state/appearance/config.json
 IconAppearanceService ────────► state/appearance/icon-appearance.json
         │                         custom KWin glass effect
         ▼
-AppearanceTokens
-   ├── dock
-   ├── bar
-   ├── widget
-   ├── glass
-   └── motion
+AppearanceTokens ◄──── 壁纸取色桥（shared 无反向依赖）
+   ├── dock            │
+   ├── bar             │
+   ├── widget          │
+   ├── surface         │
+   ├── glass           │
+   └── motion          │
+                       │
+   shared/qml/colorize/（Kos.Ui 模块）
+   ├── WallpaperColorSource  读 Plasma 壁纸配置，解析壁纸包
+   ├── ArtworkColorSource    ColorQuantizer 从图像抽两色
+   ├── ColorScheme           种子色 → M3 全套角色色（纯 JS，无外部进程）
+   ├── MaterialColorScheme.mjs   角色→色族/色调映射 + 各族色度曲线
+   └── Cam16Hct.mjs          CAM16/HCT 色彩外观模型（MCU 移植）
         │
         ▼
 Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter（图标外观已接入）
+```
+
+配色链路的数据流：
+
+```text
+Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──► 主色
+                     │                          │
+                     │                          ▼
+                     │                   ColorScheme.setSeed()
+                     │                          │
+                     └── paletteChanged ──► AppearanceConfigService.wallpaperSeedColor
+                                                │
+                                                ▼
+                                        AppearanceTokens.seedColor ──► colors.*
 ```
 
 职责约束：
@@ -45,15 +68,26 @@ Dock（已接入，可托管 Bar 内容） / Bar（统一视觉） / DeskCenter�
 1. `AppearanceConfigService` 是形态、Glass、Bar 与窗口动画配置的所有者；`IconAppearanceService` 单独拥有全局图标外观。
 2. `AppearanceTokens` 只把配置映射成语义值，不执行 IO，也不拥有业务数据。
 3. 消费组件读取 Token，不应散落 `shellStyle === ...` 分支。
+   表面宿主还应读取 `AppearanceTokens.surface`：当前 `treatment` 为
+   `glass | tonal`，并预留新增值；`usesBackdrop` 决定是否登记合成器背景区域，
+   各 surface 的 fill/opacity/outline 则由同一组 Token 提供。新增主题应先在
+   此处定义表面策略，不能把新主题当作 `!isMaterial` 的默认回退。
 4. Dock 的固定项、尺寸、位置、窗口分组和显示策略仍归 `DockConfigService` 所有；全局图标模式归 `IconAppearanceService`，切换形态不得覆盖这些用户设置。
 5. 独立进程 `apps/settings` 不允许 import `shell/desktop/`，只通过 IPC 读写。
+6. **`shared/qml/colorize/` 属于 `Kos.Ui` 公共层，不得 import `qs.desktop.modules.*`。** 需要与 shell 通信时用「注入属性 + 出站 signal」，由 `AppearanceTokens` 中的两个 `Connections` 完成接线。
+
 
 ## 3. 文件索引
 
 | 文件 | 责任 |
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
-| `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token |
+| `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token；同时托管壁纸取色与 shell 配置之间的两个 `Connections` 适配器 |
+| `shared/qml/colorize/WallpaperColorSource.qml` | 单例。读 Plasma 壁纸配置，解析壁纸包（按屏幕宽高比选图），对外只暴露 `darkMode` 注入与 `paletteChanged` / `paletteCleared` 信号 |
+| `shared/qml/colorize/ArtworkColorSource.qml` | `Item`。用 Quickshell `ColorQuantizer` 从图像抽两个可区分的主色；MPRIS 封面与本地壁纸通用 |
+| `shared/qml/colorize/ColorScheme.qml` | 单例。接收种子色，产出 49 个 M3 角色 × light/dark。纯同步计算，不启动任何进程 |
+| `shared/qml/colorize/MaterialColorScheme.mjs` | 角色→色族/色调映射、各族随色调变化的色度曲线、变体（vibrant / tonal-spot）的色相旋转表 |
+| `shared/qml/colorize/Cam16Hct.mjs` | CAM16/HCT 色彩外观模型。MCU 的 `hct/*.ts`、`viewing_conditions.ts`、`hct_solver.ts` 移植版，对外提供 `hexToHct` / `hctToHex` |
 | `shell/desktop/modules/common/IconAppearanceService.qml` | 全局图标模式、不透明度、染色与旧 Dock 配置迁移 |
 | `shell/desktop/modules/common/qmldir` | 注册公共组件与 singleton |
 | `shell/desktop/modules/common/SystemIconResolver.qml` | 将语义角色、状态和回退候选解析为当前系统主题图标 |
@@ -287,21 +321,136 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 
 每完成一个 surface，更新本文的“当前能力与边界”和 Token 消费清单，再开放下一 surface。
 
-## 10. 验证清单
+## 10. Material 3 配色算法
+
+配色方案完全在进程内计算，**不依赖 matugen、Python 或 ImageMagick**。算法实现在
+`shared/qml/colorize/MaterialColorScheme.mjs`（纯 ES module，可被 Node 直接测试），
+底层的 CAM16/HCT 色彩外观模型在 `shared/qml/colorize/Cam16Hct.mjs`。
+
+### 10.1 用 CAM16/HCT，不是 CIE Lab
+
+> **HCT 移植已经完成（2026-09-11）。** 本节原有的「用 Lab 近似」方案已被替换。
+> 下面保留替换的理由与实测证据，因为它们是这次决策的依据。
+
+Material 的 HCT 用 CAM16 承载色相与彩度通道，tone 则精确等于 CIE Lab 的 L\*。
+曾经据此认为可以「用普通 Lab/LCh 复现官方方案，完全跳过 CAM16」——**这个判断是
+错的**。实测下来，Lab 近似只在当初校准用的那一个种子上准确，换任何别的种子都会
+明显偏色；原因是 Lab 与 CAM16 的彩度通道在 M3 所使用的观看条件下并不可线性互换。
+
+现在的实现是 MCU 的 `hct/*.ts`、`viewing_conditions.ts`、`hct_solver.ts`、
+`utils/color_utils.ts` 的忠实移植。代价只是「一次 3×3 矩阵加几次非线性」，在
+QML/JS 里完全可以承受：单次生成整套 49×2 角色耗时在毫秒级。
+
+实测准确率（12 个种子 × 49 角色 × 2 模式）：
+
+| 指标 | 数值 |
+| --- | --- |
+| 逐角色完全一致 | **75.0%** |
+| ≤ 1 字节步长（肉眼等同） | **91.2%** |
+| 最大字节步长 | 9 |
+
+**已知残差（都不是 bug，改动前先读）**：
+
+1. 容器色调上，请求色度基本不起作用——色域会把高、低两种请求裁到同一个代表色。
+   所以「按角色取名义色度」这条路走不通：用字节步长重测后，它反而比现在的
+   tone 表更差（曾输出 `#00fde7` 而基准是 `#bcece3`，188 步）。
+2. `on_surface_variant:dark` 差 1 步，是基准工具自身不一致：同一个角色在它的
+   `outline_variant:light` 里必须等于同一颜色，却输出了不同字节。我们取满足更多角色的那个值。
+3. `on_background:light` 在个别种子上差几步，因为基准那边这个值经过 `ContrastCurve` /
+   `tMaxC` 处理，我们只做纯 M3 角色映射。
+
+### 10.2 结构
+
+| 部分 | 说明 |
+| --- | --- |
+| 色彩空间 | sRGB ↔ 线性 ↔ XYZ(D65) ↔ CAM16（HCT）|
+| 色域映射 | `HctSolver.solveToInt(hue, chroma, lstar)` 单入口求逆；J 上二分（MCU 的牛顿种子在我们的观看条件下会过冲）|
+| 六个色族 | `primary` / `secondary` / `tertiary` / `neutral` / `neutralVariant` / `error` |
+| 色度策略 | 每族的色度**随所请求色调变化**（锚点表 + 分段线性插值），不是每族常量 |
+| 色相策略 | 旋转用 MCU 的 `getPiecewiseHue` / `getRotatedHue` 分段表，不是线性拟合 |
+| 角色映射 | 49 个角色 × (色族, light 色调, dark 色调)，遵循 M3 baseline 分配 |
+
+### 10.3 shell 如何引用 Kos.Ui（源码别名）
+
+`shared/qml` 在 CMake 里注册为 QML 模块 `Kos.Ui`（`qt_add_qml_module(kos_ui ... STATIC)`），
+由 `apps/` 编译链接使用。但 **shell 不走这条路**：`qs -p shell` 直接读源码，而 Quickshell
+既不会把配置目录、也不会把它的父目录加入 QML 导入路径，所以 `import Kos.Ui 1.0` 在源码
+运行时永远报 `module "Kos.Ui" is not installed`。
+
+解决办法是仓库里的源码别名 `shell/Kos/Ui/`：
+
+| 组成 | 作用 |
+| --- | --- |
+| `shell/Kos/Ui/qmldir` | 与编译模块完全相同的类型清单，条目写成相对路径 `colorize/ColorScheme.qml` |
+| `shell/Kos/Ui/{colorize,foundation,controls}` | 指向 `../../../shared/qml/*` 的符号链接 |
+| `shared/qml/{colorize,foundation}/qmldir` | 让目录内同族类型互相可见（如 `WallpaperColorSource.qml` 里的 `ArtworkColorSource`）|
+| shell 各文件 | `import "../../../Kos/Ui"` —— 相对导入，不需要任何环境变量 |
+
+三个必须遵守的约束：
+
+1. **qmldir 条目不能写 `../` 逃出配置根。** Quickshell 会拦截并报
+   `Script qrc:/qs-blackhole unavailable`，即使那个路径在磁盘上真实存在。
+   因此必须用符号链接，把词法路径留在 `shell/` 内部。
+2. **`import qs.Kos.Ui` 同样不可行**（同上，撞 blackhole）。
+   `QML_IMPORT_PATH` 倒是能解决，但要求每次启动都带环境变量，不采用。
+3. **符号链接只服务于源码运行。** `kosctl install` / `kosctl sync` 会把它们替换成
+   真实文件（见 `materialize_kos_ui`），因为拷到 `~/.config/quickshell/kos` 之后
+   链接目标已不存在，会变成悬空链接。
+
+这个模式不是新发明的：`shell/shared/qml/controls` 本来就指向
+`../../../shared/qml/controls`，这里只是把同一套做法扩展到 colorize 与 foundation。
+
+### 10.4 修改算法时的注意事项
+
+1. **色度表对齐的是 matugen 的 `colors` 表，不是 `palettes` 表。** 两者不同：
+   `palettes` 永远是 `scheme-tonal-spot`（不论 `--type` 传什么），`colors` 才是
+   按 scheme type 解析后的方案。曾经对着 `palettes` 校准导致偏差卡在 4.1。
+2. **色度是色调的函数。** 反解每个色调对应的色度得到的是一条光滑曲线，写进
+   `NEUTRAL_CHROMA_ANCHORS` 等锚点表。把它退化成每族常量会让所有表面角色出现
+   残差——这曾经是最大的偏差来源。
+3. **不要用 HCT 距离单独判断对错。** 色度约 1.2 时色相坐标数值不稳定，1 个
+   sRGB 步长能让色相读数摆动 10° 以上、距离算出 13。会掩盖真实错误：曾有一版
+   实现输出 `#00fde7` 而 matugen 是 `#bcece3`（188 步），HCT 距离报 2.41。
+   **必须同时用 sRGB 字节步长兜底**（测试套件里有 `byte-step sanity` 块，并按色度
+   分流度量）。
+4. 改动后必须跑 `node tests/color-scheme/test_color_scheme.mjs`——它锁定了参考
+   种子 `#64c4d4` 的 33 个角色值、matugen 的 44 个角色逐字节值、表面色调落点、
+   色域裁剪的色相依赖，以及确定性。
+5. `ColorScheme.qml` 保留 `color(role, darkMode, fallback)` 签名以兼容既有消费点，
+   但 `AppearanceTokens` 已不再传 fallback：调色板在单例加载时就会用
+   `AppearanceTokens.seedColor`（KDE 强调色）预置，壁纸取色完成后替换。
+6. `.mjs` 必须列在 `shared/qml/CMakeLists.txt` 的 `QML_FILES` 中，否则不会打进
+   `Kos.Ui` 模块资源。`MaterialColorScheme.mjs` 依赖 `Cam16Hct.mjs`，**两个都要
+   列出**（相对 import 在打包后由 QML 模块解析，漏一个会在运行时才炸）。
+
+## 11. 验证清单
 
 ```bash
-qmllint apps/settings/main.qml
-qmllint shell/desktop/modules/common/AppearanceConfigService.qml \
-  shell/desktop/modules/common/AppearanceTokens.qml shell/desktop/DesktopEnvironment.qml
-cmake --build .build/apps/settings
+qmllint -I shared/qml -I shell -I . apps/settings/main.qml
+qmllint -I shared/qml -I shell -I . \
+  shell/desktop/modules/common/AppearanceConfigService.qml \
+  shell/desktop/modules/common/AppearanceTokens.qml \
+  shared/qml/colorize/ColorScheme.qml
+node tests/color-scheme/test_color_scheme.mjs
+node shell/desktop/modules/dock/test_wallpaper_color_source.mjs
 node shell/desktop/modules/dock/test_adaptive.mjs
 node shell/desktop/modules/dock/test_autohide.mjs
+# 无显示环境下编译 QML 模块需把 TMPDIR 指到大分区，/tmp 常为小容量 tmpfs
+TMPDIR=$PWD/.build/tmp cmake --build .build/apps-dev --target kos_ui
+# 源码运行链路（不设任何环境变量；无显示时用 offscreen 平台）。
+# 加载链走完 = 只剩 "No PanelWindow backend loaded"，那是缺少合成器，不是代码问题。
+QT_QPA_PLATFORM=offscreen quickshell --path shell --no-color
+node tools/qml-duplicate-handlers.mjs   # 同一对象内重复 Component.onCompleted 等
 git diff --check
 ```
 
 运行验证需按 `.agents/skills/verify/SKILL.md` 启动独立 Quickshell 实例，确认 `Configuration Loaded`，检查新错误后只停止该验证实例。IPC 测试切换三个枚举后必须恢复测试前的 `shellStyle`，不得改动用户玻璃强度。
 
-## 11. AI 接续检查表
+> 注意：`tests/date-projection` 与 `shared/qml/test_visual_contract.mjs` 依赖
+> `qmltestrunner`，在无显示环境下无法运行（`qmltestrunner` 静默退出码 1）。
+> 这两项失败是环境限制，不是回归。
+
+## 12. AI 接续检查表
 
 开始后续外观工作前，AI 应依次：
 

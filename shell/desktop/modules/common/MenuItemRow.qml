@@ -23,6 +23,12 @@ Item {
     // flag set by onEntered/onExited can otherwise be stale or miss the first
     // hover event in a PopupWindow.
     readonly property bool _hover: pointer.containsMouse
+    readonly property color _hi: AppearanceTokens.isMaterial
+        ? (itemEnabled ? AppearanceTokens.state.hover
+            : AppearanceTokens.state.disabled)
+        : Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
+            row.foregroundColor.b,
+            itemEnabled ? (ThemeService.isDark ? 0.22 : 0.10) : 0.05)
 
     height: row.separator ? 1 : 38
     visible: row.separator || label.length > 0
@@ -42,9 +48,9 @@ Item {
     // Hover background (behind all other content).
     GlassInteractionLayer {
         anchors.fill: parent
-        cornerRadius: 14
-        active: row._hover && row.itemEnabled && !row.separator
-        pressed: pointer.pressed
+        radius: AppearanceTokens.shape.medium
+        color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
+        Behavior on color { ColorAnimation { duration: 90 } }
     }
 
     Row {

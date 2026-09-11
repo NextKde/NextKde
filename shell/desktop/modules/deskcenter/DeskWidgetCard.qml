@@ -1,16 +1,17 @@
 import QtQuick
 import qs.desktop.modules.common
 
-// iPadOS widgets rely on distinct, calm colour fields instead of a common
-// translucent panel. The colours stay dark enough for white text to remain
-// readable over every wallpaper without needing a glass effect.
+// Widget geometry stays shared across shell styles. Material uses one neutral
+// tonal surface for the collection; semantic colours belong to card content.
 Rectangle {
     id: root
 
     property string title: ""
+    property string widgetId: ""
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
+    property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: AppearanceTokens.widget.radius
@@ -20,7 +21,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.usesColorArtwork
+        visible: root.usesColorArtwork && !AppearanceTokens.isMaterial
         gradient: Gradient {
             GradientStop { position: 0; color: root.startColor }
             GradientStop { position: 1; color: root.endColor }
@@ -30,13 +31,23 @@ Rectangle {
     WidgetGlassMaterial {
         anchors.fill: parent
         cornerRadius: root.radius
-        visible: !root.usesColorArtwork
+        visible: !root.usesColorArtwork && !AppearanceTokens.isMaterial
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: !AppearanceTokens.surface.usesBackdrop && root.widgetId !== "clock"
+        color: root.materialSurfaceColor
+        opacity: AppearanceTokens.surface.widgetOpacity
+        border.width: 0
     }
 
     // A broad, low-contrast bloom makes colour cards feel like widgets rather
     // than rectangular panels, while never running beneath the text itself.
     Rectangle {
         visible: root.showSurface && root.usesColorArtwork
+            && !AppearanceTokens.isMaterial
         width: parent.width * 0.78
         height: width
         radius: width / 2
@@ -48,7 +59,8 @@ Rectangle {
     Text {
         visible: root.title.length > 0
         text: root.title
-        color: Qt.rgba(1, 1, 1, 0.78)
+        color: AppearanceTokens.isMaterial
+            ? AppearanceTokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.78)
 
         anchors {
             left: parent.left

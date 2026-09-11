@@ -5,6 +5,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import "../../../Kos/Ui"
 
 // Network card shared by the future top control centre. Wi-Fi selection and
 // credential UI are implemented here first; the actual NetworkManager write
@@ -217,7 +218,12 @@ PopupWindow {
         anchors.fill: parent
         radius: panel.blurRadius
         surfaceOpacity: 1.0
-        material: "regular"
+        blurStrength: AppearanceConfigService.effectiveBarBlur
+        liquidStrength: AppearanceConfigService.effectiveBarLiquid
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
+        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+        material: "thick"
         adaptiveDarkScrim: true
     }
 
@@ -280,7 +286,7 @@ PopupWindow {
                         && NetworkService.connectionType === "wifi"
                     signalStrength: NetworkService.signalStrength
                     glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                        : ThemeService.foregroundColor
+                        : "white"
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -297,6 +303,10 @@ PopupWindow {
             width: parent.width
             height: 0
             radius: 13
+            baseColor: ThemeService.backgroundColor
+            ambientPrimary: WallpaperColorSource.primary
+            ambientSecondary: WallpaperColorSource.secondary
+            ambientStrength: 0.72
             surfaceOpacity: 0.94
             materialDepth: 1.8
             material: "regular"
@@ -569,10 +579,12 @@ PopupWindow {
             anchors.centerIn: parent
             focus: networkDialogOverlay.visible
             radius: 21
-            // Credential entry requests a denser variant through the shared
-            // material interface instead of painting its own glass recipe.
-            material: "thick"
-            adaptiveDarkScrim: true
+            // Credential entry needs a denser, readable version of the same
+            // glass: black base at 70% opacity, not a pale list-sized sheet.
+            baseColor: "black"
+            ambientPrimary: WallpaperColorSource.primary
+            ambientSecondary: WallpaperColorSource.secondary
+            ambientStrength: 0.58
             surfaceOpacity: 0.70
             materialDepth: 1.35
 

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.desktop.modules.common
+import "../../../Kos/Ui"
 
 // iPadOS-style destructive confirmation, anchored to the trash icon instead
 // of interrupting the desktop with a conventional modal dialog.
@@ -31,7 +32,7 @@ PopupWindow {
         radius: 22
         baseColor: ThemeService.backgroundColor
         ambientPrimary: Qt.rgba(0.95, 0.22, 0.28, 1)
-        ambientSecondary: WallpaperPaletteService.secondary
+        ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.32
         materialDepth: 1.35
         material: "thick"

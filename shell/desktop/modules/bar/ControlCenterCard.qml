@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import QtQuick
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // A single control-center card as an independent PopupWindow.
 //
@@ -25,7 +26,12 @@ PopupWindow {
     // negative = further left).
     property int offsetRight: 0
     // Corner radius for the blur region and the visual border.
-    property real cardRadius: 19
+    property real cardRadius: AppearanceTokens.isMaterial
+        ? AppearanceTokens.shape.large : 19
+    // Visual card fill (above the blur).
+    property color cardColor: ThemeService.backgroundColor
+    property color cardBorderColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
     // Available to card content that needs locally adaptive foreground ink.
     readonly property color materialForegroundColor: cardGlass.foregroundColor
     readonly property color materialSecondaryForegroundColor: cardGlass.secondaryForegroundColor
@@ -100,9 +106,8 @@ PopupWindow {
     // smoothQuickshellCard reads exactly this inset as the corner radius.
     // Everything below it is full-width so the card blurs completely and the
     // SDF mask rounds the corners to blurRadius.
-    BackgroundEffect.blurRegion: (root.visible
-        && (AppearanceConfigService.globalBlurStrength > 0.005
-            || AppearanceConfigService.globalLiquidStrength > 0.005))
+    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
+        && (root.effectiveBlur > 0.005 || root.effectiveLiquid > 0.005))
         ? cardBlurRegionHolder : null
 
     Region {
@@ -126,6 +131,11 @@ PopupWindow {
         anchors.fill: parent
         radius: root.blurRadius
         surfaceOpacity: root.cardOpacity
+        blurStrength: root.effectiveBlur
+        liquidStrength: root.effectiveLiquid
+        ambientPrimary: WallpaperColorSource.primary
+        ambientSecondary: WallpaperColorSource.secondary
+        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
         // Keep control-center cards optically flat for now. Their compositor
         // blur/refraction and entrance motion remain intact; this disables

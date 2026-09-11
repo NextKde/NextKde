@@ -34,5 +34,4 @@ DockTrashConfirmPopup 1.0 DockTrashConfirmPopup.qml
 singleton AppIdentityService 1.0 AppIdentityService.qml
 singleton WindowService 1.0 WindowService.qml
 singleton AppGroupService 1.0 AppGroupService.qml
-singleton WallpaperPaletteService 1.0 WallpaperPaletteService.qml
 singleton DockTrashService 1.0 DockTrashService.qml

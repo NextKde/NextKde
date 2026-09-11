@@ -599,8 +599,6 @@ Item {
                     width: runningIndicator.dotSize
                     height: width
                     radius: width / 2
-                    // Running state belongs to the same white-ink contract
-                    // as labels and symbolic status icons, in both themes.
                     color: Qt.rgba(1, 1, 1, 0.95)
                 }
             }

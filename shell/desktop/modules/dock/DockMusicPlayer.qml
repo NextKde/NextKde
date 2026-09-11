@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell.Services.Mpris
 import qs.desktop.modules.common
+import "../../../Kos/Ui"
 
 // ────────────────────────────────────────────────────────────────
 // DockMusicPlayer — Music player widget sized in icon-width units.
@@ -139,7 +140,7 @@ Item {
         z: -1
     }
 
-    ArtworkPalette {
+    ArtworkColorSource {
         id: artworkPalette
         source: widget.artworkSource
     }

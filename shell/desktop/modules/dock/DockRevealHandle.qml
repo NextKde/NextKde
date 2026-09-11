@@ -38,7 +38,7 @@ Item {
     // Ambient pigment from the owning window's wallpaper palette, so the bar
     // reads as the same liquid material as the dock's popups/panels rather
     // than a flat white pill. The handle stays Service-free; the window wires
-    // WallpaperPaletteService into these.
+    // WallpaperColorSource into these.
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0

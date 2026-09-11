@@ -6,6 +6,10 @@ Rectangle {
     id: root
 
     property color baseColor: Qt.rgba(0, 0, 0, 0.1)
+    // The theme policy chooses compositor glass/acrylic or a tonal surface.
+    // Keeping this decision here lets a future theme add a treatment without
+    // each popup gaining another style-specific branch.
+    readonly property bool usesMaterialSurface: AppearanceTokens.surface.usesTonalRoles
     // Semantic material roles mirror the system vocabulary. They describe
     // readability intent, never a fixed light/dark paint colour.
     property string material: "regular" // "clear", "regular", "thick"
@@ -88,14 +92,18 @@ Rectangle {
         return Math.min(0.18, (base + protection)
             * (material === "thick" ? 1.18 : 1.0))
     }
-    // Shell chrome uses white ink in both themes. KWin protects it by
-    // darkening only bright framebuffer content below the glass.
-    readonly property bool _useDarkForeground: false
-    readonly property color foregroundColor: Qt.rgba(1, 1, 1, 1.0)
-    readonly property color secondaryForegroundColor: Qt.rgba(1, 1, 1, 0.82)
-    readonly property color tertiaryForegroundColor: Qt.rgba(1, 1, 1, 0.66)
-    readonly property color disabledForegroundColor: Qt.rgba(1, 1, 1, 0.50)
-    readonly property color separatorColor: Qt.rgba(1, 1, 1, 0.20)
+    // Glass controls use the same white foreground hierarchy in light and
+    // dark themes. Choosing black from the estimated wallpaper makes symbols
+    // flip while the material itself remains visually dark/transparent.
+    readonly property color foregroundColor: usesMaterialSurface
+        ? AppearanceTokens.colors.surfaceForeground : Qt.rgba(1, 1, 1, 1.0)
+    readonly property color secondaryForegroundColor: usesMaterialSurface
+        ? AppearanceTokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.82)
+    readonly property color tertiaryForegroundColor: usesMaterialSurface
+        ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
+            AppearanceTokens.colors.surfaceVariantForeground.g,
+            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70)
+        : Qt.rgba(1, 1, 1, 0.66)
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
     // Bright surfaces need less white overlay to remain translucent; darker
@@ -164,13 +172,27 @@ Rectangle {
         NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
     }
 
-    color: Qt.rgba(
-        baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
-        baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
-        baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
-        Math.min(1.0, baseColor.a * root.materialOpacityScale)
-            * surfaceOpacity * root.normalizedBlurStrength
-    )
+    readonly property color materialSurfaceColor: material === "thick"
+        ? AppearanceTokens.colors.layer2 : AppearanceTokens.colors.layer1
+    color: usesMaterialSurface
+        ? Qt.rgba(materialSurfaceColor.r, materialSurfaceColor.g,
+            materialSurfaceColor.b, AppearanceTokens.glass.materialOpacity)
+        : Qt.rgba(
+            baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
+            baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,
+            baseColor.b * (1.0 - ambientBaseMix) + _displayAmbientPrimary.b * ambientBaseMix,
+            Math.min(1.0, baseColor.a * root.materialOpacityScale)
+                * surfaceOpacity * root.normalizedBlurStrength
+        )
+
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        visible: false
+        color: "transparent"
+        border.width: 1
+        border.color: AppearanceTokens.colors.outline
+    }
 
     // Reinforce the side of the material opposite its foreground ink. A light
     // lift supports dark labels; a dark scrim supports white labels. This is
@@ -178,8 +200,8 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.adaptiveScrimOpacity > 0.001
-        color: root._useDarkForeground
+        visible: !root.usesMaterialSurface && root.adaptiveScrimOpacity > 0.001
+        color: root.estimatedMaterialLuminance >= 0.58
             ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
             : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
         Behavior on color {
@@ -195,24 +217,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.protectedReadability
-        color: Qt.rgba(0.012, 0.020, 0.042,
-                       (0.075 + 0.055 * root.normalizedLiquidStrength)
-                       * root.surfaceOpacity
-                       * Math.max(0.0, Math.min(1.0, root.readabilityStrength)))
-    }
-
-    // Raised-card interior, retained from the original control-center
-    // material. The broad vertical transition makes a small card feel like a
-    // coherent piece of glass without turning its outline into an embossed
-    // white stroke. It is opt-in because large chrome (Dock, search) should
-    // stay optically flatter and let KWin's live backdrop dominate.
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        visible: root.compositorManaged && root.reliefStrength > 0.001
-        opacity: Math.max(0.0, Math.min(1.0, root.reliefStrength))
-            * root.normalizedLiquidStrength * root.surfaceOpacity
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Vertical
             GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.115) }
@@ -246,8 +251,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: root.ambientPigmentEnabled
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -283,13 +287,47 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        visible: !root.compositorManaged
-        opacity: root.normalizedLiquidStrength
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0.0; color: Qt.rgba(0.72, 0.88, 1, 0.045 * root.materialHighlightFactor) }
             GradientStop { position: 0.46; color: Qt.rgba(1, 1, 1, 0.0) }
             GradientStop { position: 1.0; color: Qt.rgba(1, 0.84, 0.92, 0.035 * root.materialHighlightFactor) }
+        }
+    }
+
+    // Inset specular lines imply a glass edge without reintroducing a visible
+    // outline. Their endpoints begin after the curved corners.
+    Rectangle {
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
+        x: Math.min(parent.width / 2, root.radius + 3)
+        y: 0.8
+        width: Math.max(0, parent.width - x * 2)
+        height: 0.8
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.0) }
+            GradientStop { position: 0.18; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
+            GradientStop { position: 0.50; color: Qt.rgba(1, 1, 1, 0.35 * root.materialHighlightFactor) }
+            GradientStop { position: 0.82; color: Qt.rgba(1, 1, 1, 0.22 * root.materialHighlightFactor) }
+            GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
+        }
+    }
+
+    Rectangle {
+        visible: root.bottomEdgeVisible
+        opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
+        x: Math.min(parent.width / 2, root.radius + 3)
+        y: parent.height - 2
+        width: Math.max(0, parent.width - x * 2)
+        height: 1
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
+            GradientStop { position: 0.20; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
+            GradientStop { position: 0.50; color: Qt.rgba(0.88, 0.94, 1.0, 0.10 * root.normalizedLiquidStrength) }
+            GradientStop { position: 0.80; color: Qt.rgba(0.82, 0.90, 1.0, 0.045 * root.normalizedLiquidStrength) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.82, 0.90, 1.0, 0.0) }
         }
     }
 
