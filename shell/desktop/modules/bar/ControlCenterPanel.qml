@@ -840,9 +840,10 @@ Item {
             anchors.fill: parent
             radius: 26
             color: ControlCenterService.nightLightActive
-                ? (ThemeService.isDark ? Qt.rgba(1, 0.62, 0.04, 0.28) : Qt.rgba(1, 0.62, 0.04, 0.18))
+                ? (ThemeService.isDark ? Qt.rgba(1, 0.49, 0.02, 0.62) : Qt.rgba(1, 0.57, 0.02, 0.52))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
             opacity: ControlCenterService.nightLightActive || (nightLightPointer.containsMouse && !nightLightPointer.pressed) ? 1 : 0
+            Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -858,8 +859,27 @@ Item {
             layer.effect: MultiEffect {
                 colorization: 1.0
                 colorizationColor: ControlCenterService.nightLightActive
-                    ? "#ff9f0a" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+                    ? "#fff7df" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
             }
+        }
+        // The warm fill is visible at a glance; this small dot provides an
+        // unambiguous state cue even on a colourful or bright wallpaper.
+        Rectangle {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.rightMargin: 7
+            anchors.bottomMargin: 7
+            width: 7
+            height: 7
+            radius: width / 2
+            color: "#fff7df"
+            border.width: 1
+            border.color: "#d66b00"
+            visible: ControlCenterService.nightLightActive
+            scale: visible ? 1.0 : 0.45
+            opacity: visible ? 1.0 : 0.0
+            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 120 } }
         }
         MouseArea {
             id: nightLightPointer
