@@ -102,7 +102,10 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            visible: AppearanceTokens.isMaterial
+            // Layout choice takes precedence over visual style: Material may
+            // change colours and shapes, but must not turn the user's
+            // intentionally transparent Bar into an opaque tonal strip.
+            visible: AppearanceTokens.isMaterial && !root.transparentMode
             radius: AppearanceConfigService.barLayoutMode === "floating"
                 ? AppearanceTokens.shape.large : 0
             color: AppearanceTokens.colors.layer0
