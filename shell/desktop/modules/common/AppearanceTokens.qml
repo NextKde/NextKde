@@ -160,7 +160,7 @@ QtObject {
             : tokens.isMaterial ? "navigationDock" : "floatingDock"
         readonly property string position: "bottom"
         readonly property real radiusRatio: tokens.isWindows12 ? 0.20
-            : tokens.isMaterial ? 0.34 : 0.45
+            : tokens.isMaterial ? 0.50 : 0.45
         readonly property real horizontalPaddingRatio: tokens.isWindows12 ? 0.24
             : tokens.isMaterial ? 0.32 : 0.40
         readonly property real verticalPaddingRatio: tokens.isWindows12 ? 0.12
