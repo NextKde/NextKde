@@ -599,9 +599,9 @@ Item {
                     width: runningIndicator.dotSize
                     height: width
                     radius: width / 2
-                    color: ThemeService.isDark
-                        ? Qt.rgba(1, 1, 1, 0.95)
-                        : Qt.rgba(0, 0, 0, 0.85)
+                    // Running state belongs to the same white-ink contract
+                    // as labels and symbolic status icons, in both themes.
+                    color: Qt.rgba(1, 1, 1, 0.95)
                 }
             }
         }
@@ -738,7 +738,6 @@ Item {
         property bool hasBeenVisible: false
         anchorItem: icon
         position: ConfigService.position
-        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         onAboutToShow: hasBeenVisible = true
         onAboutToHide: {

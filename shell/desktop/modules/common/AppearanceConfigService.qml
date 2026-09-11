@@ -218,7 +218,7 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 9,
+            version: 11,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             blurStrength: service.globalBlurStrength,
@@ -326,8 +326,7 @@ QtObject {
                         service.barLayoutMode = barLayout
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
-
-                    if (Number(object.version) !== 9
+                    if (Number(object.version) !== 11
                             || !service.isValidShellStyle(style)
                             || !hasBarIntegration
                             || !service.isValidBarVisibilityMode(barVisibility)

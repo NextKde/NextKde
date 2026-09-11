@@ -35,6 +35,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    // Lets KWin select the protected (softer) backdrop pipeline for this
+    // text-dense layer-shell surface without affecting the Dock.
+    WlrLayershell.namespace: "quickshell-notification"
 
     // Fixed surface: top-anchored, enough vertical room for a stack of cards
     // growing downward. The mask keeps empty space click-through.
@@ -178,11 +181,9 @@ PanelWindow {
             readonly property bool isLow: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Low
             readonly property bool expanded: !card.groupCollapsed && card.groupCount > 1
-            readonly property color foregroundColor: ThemeService.foregroundColor
-            readonly property color textOutlineColor: ThemeService.isDark
-                ? Qt.rgba(0.05, 0.08, 0.12, 0.38)
-                : Qt.rgba(1, 1, 1, 0.50)
-            readonly property int textStyle: ThemeService.isDark ? Text.Outline : Text.Normal
+            // Notifications are a protected glass role: white content in
+            // both themes, with material adapting behind it for contrast.
+            readonly property color foregroundColor: Qt.rgba(1, 1, 1, 1)
             readonly property string iconSource: card.displayIconSource
 
             width: notificationList.width
@@ -194,22 +195,22 @@ PanelWindow {
             color: "transparent"
 
             // ---- backgrounds ----
-            // Frosted liquid glass backdrop adapting to theme
+            // A notification is deliberately denser than the Dock. Its dark,
+            // neutral pigment preserves readability on light and colourful
+            // backdrops while KWin still supplies the live refracted scene.
             LiquidGlassSurface {
                 anchors.fill: parent
                 radius: card.radius
-                baseColor: ThemeService.isDark
-                    ? Qt.rgba(0.08, 0.09, 0.12, 0.38)
-                    : Qt.rgba(0.95, 0.95, 0.98, 0.55)
+                baseColor: Qt.rgba(0.035, 0.045, 0.075, 0.44)
+                readabilityProfile: "protected"
+                readabilityStrength: 1.0
                 blurStrength: AppearanceTokens.glass.launcherBlur
                 liquidStrength: AppearanceTokens.glass.launcherLiquid
                 ambientPrimary: WallpaperPaletteService.primary
                 ambientSecondary: WallpaperPaletteService.secondary
                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                 border.width: 1
-                border.color: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.12)
-                    : Qt.rgba(0, 0, 0, 0.08)
+                border.color: Qt.rgba(1, 1, 1, 0.13)
             }
 
             Rectangle {
@@ -238,7 +239,7 @@ PanelWindow {
                 y: 0.6
                 width: Math.max(0, parent.width - x * 2)
                 height: 1
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06)
+                color: Qt.rgba(1, 1, 1, 0.10)
             }
 
             // ---- close + auto-expire ----
@@ -277,15 +278,13 @@ PanelWindow {
                 width: 34; height: width
                 anchors { left: parent.left; leftMargin: 14; top: parent.top; topMargin: 14 }
 
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     visible: !iconMask.visible
                     text: card.displayAppName.length > 0
                         ? card.displayAppName.slice(0, 1).toUpperCase()
                         : "•"
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 16; bold: true }
                 }
                 Rectangle {
@@ -323,8 +322,8 @@ PanelWindow {
                 width: badgeText.implicitWidth + 12
                 height: 18; radius: 9
                 anchors { right: closeButton.left; rightMargin: 8; top: parent.top; topMargin: 15 }
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-                Text {
+                color: Qt.rgba(1, 1, 1, 0.16)
+                GlassText {
                     id: badgeText
                     anchors.centerIn: parent
                     text: card.groupCount
@@ -356,27 +355,26 @@ PanelWindow {
                 }
                 spacing: 4
 
-                Text {
+                GlassText {
                     width: parent.width
                     text: card.expanded
                         ? (modelData.appName.length > 0 ? modelData.appName : "Notifications")
                         : card.displaySummary
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 14; bold: true }
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
 
-                Text {
+                GlassText {
                     width: parent.width
                     visible: !card.expanded && text.length > 0
                     text: card.displayBody
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
-                    opacity: 0.78
+                    // Notification copy uses the same white ink as its title;
+                    // contrast comes from the protected material and soft
+                    // GlassText shadow, never from theme-dependent grey text.
+                    opacity: 1.0
                     font.pixelSize: 13
                     wrapMode: Text.Wrap
                     maximumLineCount: 4
@@ -396,7 +394,7 @@ PanelWindow {
                         width: content.width
                         height: Math.max(notifRowText.implicitHeight, 20)
                         visible: card.expanded
-                        Text {
+                        GlassText {
                             id: notifRowText
                             anchors {
                                 left: parent.left
@@ -408,18 +406,14 @@ PanelWindow {
                                 ? modelData.summary
                                 : (modelData.appName || "")
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             font { pixelSize: 13; bold: true }
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
-                        Text {
+                        GlassText {
                             id: notifRowClose
                             text: "×"
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             opacity: notifRowCloseArea.containsMouse ? 0.9 : 0.45
                             font.pixelSize: 16
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
@@ -451,9 +445,9 @@ PanelWindow {
                             width: actionLabel.implicitWidth + 24
                             radius: 14
                             color: actionMouse.containsMouse
-                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
-                                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))
-                            Text {
+                                ? Qt.rgba(1, 1, 1, 0.20)
+                                : Qt.rgba(1, 1, 1, 0.10)
+                            GlassText {
                                 id: actionLabel
                                 anchors.centerIn: parent
                                 text: {
@@ -500,7 +494,7 @@ PanelWindow {
                     radius: 8
                     visible: !card.expanded
                         && card.notification && card.notification.hasInlineReply
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.05)
+                    color: Qt.rgba(1, 1, 1, 0.08)
                     TextInput {
                         id: replyInput
                         anchors { fill: parent; margins: 6 }
@@ -513,7 +507,7 @@ PanelWindow {
                             text: card.notification
                                 ? (card.notification.inlineReplyPlaceholder || "Reply…")
                                 : "Reply…"
-                            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.40) : Qt.rgba(0, 0, 0, 0.40)
+                            color: Qt.rgba(1, 1, 1, 0.46)
                             font.pixelSize: 13
                             anchors.fill: parent
                             verticalAlignment: Text.AlignVCenter
@@ -532,12 +526,10 @@ PanelWindow {
 
             // ---- close button ----
 
-            Text {
+            GlassText {
                 id: closeButton
                 text: "×"
                 color: card.foregroundColor
-                style: card.textStyle
-                styleColor: card.textOutlineColor
                 opacity: 0.55
                 font.pixelSize: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }

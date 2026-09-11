@@ -87,32 +87,27 @@ Item {
         }
     }
 
-    // Match the music/weather card contract exactly: the visible background
-    // extends by backgroundGap on every side and shares their 0.35 radius.
-    Rectangle {
+    // The clock supplies wallpaper-derived ambience to the shared glass
+    // contract rather than painting a separate gradient card.
+    ShellGlassSurface {
         id: clockBackground
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
         radius: widget.iconSize * 0.35
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-                position: 0.0
-                color: widget.ambientColor(WallpaperPaletteService.primary, 0.74)
-            }
-            GradientStop {
-                position: 0.55
-                color: widget.ambientMidpoint(WallpaperPaletteService.primary,
-                    WallpaperPaletteService.secondary, 0.66)
-            }
-            GradientStop {
-                position: 1.0
-                color: widget.ambientColor(WallpaperPaletteService.secondary, 0.58)
-            }
-        }
-        border.width: 0
+        material: "regular"
+        materialDepth: 1.0
+        surfaceOpacity: 0.88
+        ambientPigmentEnabled: true
+        ambientStrength: 1.0
+        ambientPrimary: widget.ambientColor(
+            WallpaperPaletteService.primary, 0.74)
+        ambientSecondary: widget.ambientMidpoint(
+            WallpaperPaletteService.primary,
+            WallpaperPaletteService.secondary, 0.66)
+        ambientTertiary: widget.ambientColor(
+            WallpaperPaletteService.secondary, 0.58)
         z: -1
     }
 

@@ -20,22 +20,16 @@ PopupWindow {
     property var customAnchorEdges: null
     property var customGravity: null
     property var customMarginsTop: null
-    property color baseColor: ThemeService.backgroundColor
-    property color foregroundColor: ThemeService.foregroundColor
+    // Glass menus retain white ink in either system theme; the material adapts
+    // its luminance behind it rather than switching the foreground to black.
+    property color foregroundColor: Qt.rgba(1, 1, 1, 1)
     property bool adaptiveForeground: true
-    property color ambientPrimary: WallpaperPaletteService.primary
-    property color ambientSecondary: WallpaperPaletteService.secondary
-    property real ambientStrength: 0.25 * AppearanceTokens.glass.ambientMultiplier
-    // Context menus need more separation from a busy desktop than the Dock.
-    // Compositor blur is declared below; these QML layers make it read as a
-    // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real darkOverlayOpacity: ThemeService.isDark ? 0.27 : 0.04
     property real menuRadius: 16
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
             return root.foregroundColor
-        return ThemeService.isDark ? glass.foregroundColor : ThemeService.foregroundColor
+        return glass.foregroundColor
     }
     // Some anchors receive their opening press through the compositor's
     // global-pointer bridge slightly after this popup is mapped.
@@ -210,17 +204,17 @@ PopupWindow {
         }
     }
 
-    LiquidGlassSurface {
+    ShellGlassSurface {
         id: glass
         anchors.fill: parent
         radius: root.menuRadius
-        baseColor: root.baseColor
-        ambientPrimary: root.ambientPrimary
-        ambientSecondary: root.ambientSecondary
-        ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        materialDepth: 0.6
-        material: "thick"
+        // Context menus are a single navigation layer, not pressed-in cards.
+        // KWin owns their backdrop lens; keep QML to a calm, regular body.
+        materialDepth: 0.25
+        material: "regular"
+        readabilityProfile: "protected"
+        readabilityStrength: 0.82
         adaptiveDarkScrim: true
         scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
@@ -233,12 +227,6 @@ PopupWindow {
             y: (root.macosPopupMotion && popupMotion.progress < 0.999)
                 ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
                 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            color: Qt.rgba(0, 0, 0, root.darkOverlayOpacity)
         }
 
         Column {
