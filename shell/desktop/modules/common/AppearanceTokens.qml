@@ -183,6 +183,10 @@ QtObject {
         readonly property real indicatorThicknessRatio: tokens.isMacos ? 0.13 : 0.07
         readonly property real activeRadiusRatio: tokens.isWindows12 ? 0.18
             : tokens.isMaterial ? 0.28 : 0.30
+        // Material Dock body opacity is independent from other Material
+        // surfaces so its wallpaper blending can be tuned without fading
+        // widgets, the launcher, or the Bar.
+        readonly property real materialSurfaceOpacity: 0.30
         readonly property string activeBackgroundMode: tokens.isWindows12
             ? "subtle" : tokens.isMaterial ? "tonal" : "glass"
         readonly property bool magnificationEnabled: tokens.isMacos

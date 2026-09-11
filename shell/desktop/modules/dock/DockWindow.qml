@@ -200,13 +200,13 @@ PanelWindow {
             : Item.Bottom
 
         // The macOS Dock obtains its body from the compositor glass effect.
-        // Material deliberately owns an opaque tonal surface in QML instead.
+        // Material owns a wallpaper-blended tonal surface in QML instead.
         Rectangle {
             anchors.fill: parent
             visible: AppearanceTokens.isMaterial
             radius: dockContainer.pillRadius
             color: AppearanceTokens.colors.layer0
-            opacity: AppearanceTokens.glass.materialOpacity
+            opacity: AppearanceTokens.dock.materialSurfaceOpacity
             border.width: 0
             z: -1
         }
