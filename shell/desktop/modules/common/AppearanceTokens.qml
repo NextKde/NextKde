@@ -18,9 +18,13 @@ QtObject {
     }
     readonly property color seedColor: AppearanceConfigService.wallpaperSeedColor.a > 0
         ? AppearanceConfigService.wallpaperSeedColor : systemPalette.highlight
-    readonly property bool isDarkTheme: systemPalette.window.r * 0.2126
+    // end-4's Material palette defaults to dark mode. KDE can retain a light
+    // ColorScheme while a dark LookAndFeel package is active, so SystemPalette
+    // is not a reliable Material mode source on Plasma. Other shell styles
+    // continue to follow the native palette as before.
+    readonly property bool isDarkTheme: isMaterial || (systemPalette.window.r * 0.2126
         + systemPalette.window.g * 0.7152
-        + systemPalette.window.b * 0.0722 < 0.5
+        + systemPalette.window.b * 0.0722 < 0.5)
 
     function _mix(base, tint, amount, alpha) {
         return Qt.rgba(base.r + (tint.r - base.r) * amount,
