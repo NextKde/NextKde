@@ -172,8 +172,8 @@ assert.match(segmentedSource,
 
 const calendar = read("../../apps/calendar/qml/Main.qml");
 assert.match(calendar,
-    /KosPageCache[\s\S]{0,220}cacheLimit:\s*3[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
-    "Calendar lazily retains its three date views");
+    /KosPageCache[\s\S]{0,320}cacheLimit:\s*2[\s\S]{0,220}monthPage[\s\S]{0,100}weekPage[\s\S]{0,100}dayPage/,
+    "Calendar keeps its active and recent date views without retaining every page");
 assert.match(calendar, /model:\s*42/, "calendar mini-month contains six complete weeks");
 assert.doesNotMatch(calendar, /\bCheckBox\s*\{/,
     "calendar uses custom rounded toggles instead of native checkboxes");
@@ -275,10 +275,10 @@ assert.doesNotMatch(appActions,
     /function [A-Za-z0-9_]+\([^)]*\barguments\b/,
     "desktop deep links do not shadow JavaScript's implicit arguments object");
 assert.match(appActions,
-    /function launchById[\s\S]*if \(!launch\(entry\)\)[\s\S]*_queueDeepLink/,
-    "widget deep links first use DesktopEntry activation, then forward context");
-assert.match(appActions, /property Timer _deepLinkDelay:[\s\S]*interval:\s*150/,
-    "widget context forwarding waits for the activated primary instance");
+    /function launchById[\s\S]*Array\.from\(baseCommand\)\.concat\(extra\)/,
+    "widget deep links preserve the DesktopEntry command and append context once");
+assert.doesNotMatch(appActions, /_queueDeepLink|_deepLinkDelay/,
+    "widget deep links never launch a second delayed process");
 
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");

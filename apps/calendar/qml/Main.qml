@@ -1019,7 +1019,9 @@ KosApplicationWindow {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 currentIndex: root.viewIndex
-                cacheLimit: 3
+                // Keep the active view and one recent view warm. Retaining all
+                // three would only defer StackLayout's original memory cost.
+                cacheLimit: 2
                 pages: [monthPage, weekPage, dayPage]
 
                 Component {
