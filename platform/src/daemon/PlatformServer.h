@@ -9,6 +9,8 @@
 #include <QProcess>
 #include <QSet>
 
+#include <optional>
+
 namespace KosPlatform {
 
 class PlatformServer final : public QObject {
@@ -71,6 +73,10 @@ private:
     QJsonObject m_latestDesktopSnapshot;
     QProcess *m_textHistoryWatcher = nullptr;
     QProcess *m_imageHistoryWatcher = nullptr;
+    // An inhibition cookie belongs to this D-Bus client and is released by
+    // KWin if the daemon exits. Keeping it here lets the shell temporarily
+    // suppress Night Light without changing the user's NightColor settings.
+    std::optional<quint32> m_nightLightInhibitionCookie;
     bool m_watchImages = true;
 };
 

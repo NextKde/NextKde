@@ -2147,17 +2147,21 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                                   QStringLiteral("/org/kde/KWin/NightLight"),
                                   QStringLiteral("org.kde.KWin.NightLight"),
                                   QDBusConnection::sessionBus());
+        if (!nightLight.isValid()) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-unavailable"),
+                    QStringLiteral("夜灯服务不可用"), true);
+            return true;
+        }
         const bool available = nightLight.property("available").toBool();
         const bool enabled = nightLight.property("enabled").toBool();
         const bool running = nightLight.property("running").toBool();
-        const bool inhibited = nightLight.property("inhibited").toBool();
+        const bool inhibited = m_nightLightInhibitionCookie.has_value()
+            || nightLight.property("inhibited").toBool();
         const uint mode = nightLight.property("mode").toUInt();
         const uint targetTemp = nightLight.property("targetTemperature").toUInt();
         const uint currentTemp = nightLight.property("currentTemperature").toUInt();
 
-        // Screen is in warm/eye-comfort mode if running, not inhibited, and either mode is Constant (0)
-        // or temperature target is warm (< 6000K)
-        const bool isWarm = running && !inhibited && (mode == 0 || targetTemp < 6000 || currentTemp < 6000);
+        const bool isWarm = enabled && running && !inhibited;
 
         QJsonObject result{
             {QStringLiteral("available"), available},
@@ -2176,60 +2180,60 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                                   QStringLiteral("/org/kde/KWin/NightLight"),
                                   QStringLiteral("org.kde.KWin.NightLight"),
                                   QDBusConnection::sessionBus());
-        const bool available = nightLight.property("available").toBool();
-        const bool running = nightLight.property("running").toBool();
-        const bool inhibited = nightLight.property("inhibited").toBool();
-        const uint mode = nightLight.property("mode").toUInt();
-        const uint targetTemp = nightLight.property("targetTemperature").toUInt();
-        const uint currentTemp = nightLight.property("currentTemperature").toUInt();
-
-        const bool currentlyWarm = running && !inhibited && (mode == 0 || targetTemp < 6000 || currentTemp < 6000);
-        const bool wantWarm = !currentlyWarm;
-
-        const QString kwriteconfig = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
-        if (!kwriteconfig.isEmpty()) {
-            if (wantWarm) {
-                // Instantly switch to warm temperature by setting Mode=Constant with --notify
-                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
-                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
-                                                 QStringLiteral("--key"), QStringLiteral("Active"),
-                                                 QStringLiteral("--type"), QStringLiteral("bool"),
-                                                 QStringLiteral("--notify"), QStringLiteral("true")});
-                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
-                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
-                                                 QStringLiteral("--key"), QStringLiteral("Mode"),
-                                                 QStringLiteral("--notify"), QStringLiteral("Constant")});
-                if (inhibited) {
-                    QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
-                                         QStringLiteral("/component/kwin"),
-                                         QStringLiteral("org.kde.kglobalaccel.Component"),
-                                         QDBusConnection::sessionBus());
-                    accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
-                }
-            } else {
-                // Switch back to neutral/daylight schedule by restoring Mode=DarkLight with --notify
-                QProcess::execute(kwriteconfig, {QStringLiteral("--file"), QStringLiteral("kwinrc"),
-                                                 QStringLiteral("--group"), QStringLiteral("NightColor"),
-                                                 QStringLiteral("--key"), QStringLiteral("Mode"),
-                                                 QStringLiteral("--notify"), QStringLiteral("DarkLight")});
-                // If the scheduled temperature is still warm (e.g. night time), also inhibit
-                // so the screen returns to neutral (6500K) immediately.
-                const uint recheckTarget = nightLight.property("targetTemperature").toUInt();
-                if (recheckTarget < 6000 && !inhibited) {
-                    QDBusInterface accel(QStringLiteral("org.kde.kglobalaccel"),
-                                         QStringLiteral("/component/kwin"),
-                                         QStringLiteral("org.kde.kglobalaccel.Component"),
-                                         QDBusConnection::sessionBus());
-                    accel.call(QStringLiteral("invokeShortcut"), QStringLiteral("Toggle Night Color"));
-                }
-            }
+        if (!nightLight.isValid()
+            || !nightLight.property("available").toBool()) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-unavailable"),
+                    QStringLiteral("夜灯服务不可用"), true);
+            return true;
         }
+
+        // KWin exposes an inhibition lock precisely for temporary controls.
+        // Unlike writing Active/Mode in kwinrc, it leaves scheduled, location,
+        // timing, and constant-mode preferences untouched and is automatically
+        // released if this daemon goes away.
+        if (m_nightLightInhibitionCookie.has_value()) {
+            const QDBusMessage reply = nightLight.call(
+                QStringLiteral("uninhibit"), *m_nightLightInhibitionCookie);
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-uninhibit-failed"),
+                        QStringLiteral("无法恢复夜灯"), true);
+                return true;
+            }
+            m_nightLightInhibitionCookie.reset();
+        } else {
+            const bool enabled = nightLight.property("enabled").toBool();
+            const bool running = nightLight.property("running").toBool();
+            const bool inhibited = nightLight.property("inhibited").toBool();
+            if (!enabled || !running) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-not-running"),
+                        QStringLiteral("夜灯当前未运行；请在系统设置中启用或等待计划开始"), false);
+                return true;
+            }
+            if (inhibited) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-already-inhibited"),
+                        QStringLiteral("夜灯正被其他应用临时暂停"), true);
+                return true;
+            }
+            const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+                respond(socket, request, false, {}, QStringLiteral("nightlight-inhibit-failed"),
+                        QStringLiteral("无法暂停夜灯"), true);
+                return true;
+            }
+            m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
+        }
+
+        const bool available = nightLight.property("available").toBool();
+        const bool enabled = nightLight.property("enabled").toBool();
+        const bool running = nightLight.property("running").toBool();
+        const bool inhibited = m_nightLightInhibitionCookie.has_value()
+            || nightLight.property("inhibited").toBool();
 
         QJsonObject result{
             {QStringLiteral("available"), available},
-            {QStringLiteral("enabled"), true},
-            {QStringLiteral("running"), wantWarm},
-            {QStringLiteral("inhibited"), wantWarm ? false : true}
+            {QStringLiteral("enabled"), enabled},
+            {QStringLiteral("running"), enabled && running && !inhibited},
+            {QStringLiteral("inhibited"), inhibited}
         };
         respond(socket, request, true, result);
         return true;
