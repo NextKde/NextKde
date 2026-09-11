@@ -1837,10 +1837,14 @@ Item {
                         topMargin: 2
                         left: parent.left
                         right: parent.right
-                        bottom: wifiFooter.top
+                        // wifiFooter is a sibling of this state container, so
+                        // it cannot be used as an anchor target. Reserve its
+                        // height locally; cross-parent anchoring collapses the
+                        // ListView and makes all scanned networks invisible.
+                        bottom: parent.bottom
                         leftMargin: 8
                         rightMargin: 8
-                        bottomMargin: 4
+                        bottomMargin: 42
                     }
                     clip: true
                     spacing: 2
@@ -2070,10 +2074,13 @@ Item {
                         topMargin: 2
                         left: parent.left
                         right: parent.right
-                        bottom: btFooter.top
+                        // btFooter is a sibling of this state container; use
+                        // local geometry rather than an invalid cross-parent
+                        // anchor so paired devices receive a real list height.
+                        bottom: parent.bottom
                         leftMargin: 8
                         rightMargin: 8
-                        bottomMargin: 4
+                        bottomMargin: 42
                     }
                     clip: true
                     spacing: 2
