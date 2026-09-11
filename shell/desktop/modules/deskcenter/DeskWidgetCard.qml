@@ -39,7 +39,7 @@ Rectangle {
         radius: root.radius
         visible: AppearanceTokens.isMaterial && root.widgetId !== "clock"
         color: root.materialSurfaceColor
-        opacity: AppearanceTokens.glass.materialOpacity
+        opacity: AppearanceTokens.widget.materialSurfaceOpacity
         border.width: 0
     }
 

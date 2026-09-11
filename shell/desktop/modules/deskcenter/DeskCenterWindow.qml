@@ -346,7 +346,7 @@ PanelWindow {
                     fillColor: Qt.rgba(AppearanceTokens.colors.layer1.r,
                         AppearanceTokens.colors.layer1.g,
                         AppearanceTokens.colors.layer1.b,
-                        AppearanceTokens.glass.materialOpacity)
+                        AppearanceTokens.widget.materialSurfaceOpacity)
                     outlineColor: AppearanceTokens.colors.outlineVariant
                     outlineWidth: 1
                 }

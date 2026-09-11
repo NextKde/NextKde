@@ -208,6 +208,9 @@ QtObject {
     readonly property QtObject widget: QtObject {
         readonly property int radius: tokens.isWindows12 ? 12
             : tokens.shape.large
+        // Only the Material card body is translucent; widget content remains
+        // fully opaque for legibility over changing wallpapers.
+        readonly property real materialSurfaceOpacity: 0.70
         readonly property int gap: tokens.isWindows12 ? 8
             : tokens.isMaterial ? 12 : 10
         readonly property int elevation: tokens.isWindows12 ? 2
