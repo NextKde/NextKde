@@ -58,7 +58,7 @@ QtObject {
     // Exposed (reactively toggled)
     // ═══════════════════════════════════════════════════
     readonly property color backgroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceContainer : (isDark ? darkBg : lightBg)
+        ? AppearanceTokens.colors.layer0 : (isDark ? darkBg : lightBg)
     // Liquid-glass chrome keeps one white-ink hierarchy in both system
     // themes. The compositor material, rather than a black light-theme icon,
     // establishes contrast against the live backdrop.
@@ -75,7 +75,7 @@ QtObject {
     readonly property color dividerColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.outline : (isDark ? darkDivider : lightDivider)
     readonly property color tooltipBackground: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceContainerHigh
+        ? AppearanceTokens.colors.layer3
         : (isDark ? darkTooltipBg : lightTooltipBg)
     readonly property color indicatorColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.primary : (isDark ? darkIndicator : lightIndicator)

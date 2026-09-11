@@ -1156,7 +1156,7 @@ PanelWindow {
                     // stays light through ordinary imagery, then gradually
                     // increases only near pure white or black backdrops.
                     color: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.colors.surfaceContainerHigh
+                        ? AppearanceTokens.colors.layer1
                         : root.launcherScrimColor
                     opacity: AppearanceTokens.isMaterial
                         ? AppearanceTokens.glass.materialOpacity : 1
@@ -1322,7 +1322,7 @@ PanelWindow {
                                 ambientSecondary: WallpaperPaletteService.secondary
                                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
                                 glassColor: AppearanceTokens.isMaterial
-                                    ? AppearanceTokens.colors.surfaceContainerHighest
+                                    ? AppearanceTokens.colors.layer4
                                     : Qt.rgba(1, 1, 1, 0.10)
                                 cornerRadius: AppearanceTokens.isMaterial
                                     ? AppearanceTokens.shape.medium : height

@@ -11,7 +11,7 @@ Rectangle {
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
-    property color materialSurfaceColor: AppearanceTokens.colors.surfaceContainer
+    property color materialSurfaceColor: AppearanceTokens.colors.layer1
     readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
 
     radius: AppearanceTokens.widget.radius

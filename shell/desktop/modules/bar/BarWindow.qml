@@ -105,7 +105,7 @@ PanelWindow {
             visible: AppearanceTokens.isMaterial
             radius: AppearanceConfigService.barLayoutMode === "floating"
                 ? AppearanceTokens.shape.large : 0
-            color: AppearanceTokens.colors.surfaceContainer
+            color: AppearanceTokens.colors.layer0
             opacity: AppearanceTokens.glass.materialOpacity
             border.width: 0
             z: -1

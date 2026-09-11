@@ -205,7 +205,7 @@ PanelWindow {
             anchors.fill: parent
             visible: AppearanceTokens.isMaterial
             radius: dockContainer.pillRadius
-            color: AppearanceTokens.colors.surfaceContainerHigh
+            color: AppearanceTokens.colors.layer0
             opacity: AppearanceTokens.glass.materialOpacity
             border.width: 0
             z: -1

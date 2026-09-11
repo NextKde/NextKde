@@ -152,8 +152,7 @@ Rectangle {
     }
 
     readonly property color materialSurfaceColor: material === "thick"
-        ? AppearanceTokens.colors.surfaceContainerHigh
-        : AppearanceTokens.colors.surfaceContainer
+        ? AppearanceTokens.colors.layer2 : AppearanceTokens.colors.layer1
     color: usesMaterialSurface
         ? Qt.rgba(materialSurfaceColor.r, materialSurfaceColor.g,
             materialSurfaceColor.b, AppearanceTokens.glass.materialOpacity)

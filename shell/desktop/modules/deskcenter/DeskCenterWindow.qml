@@ -217,7 +217,7 @@ PanelWindow {
         // Peer widgets form one collection, so they share one neutral tonal
         // surface. Primary/secondary/tertiary are reserved for small semantic
         // accents inside the cards instead of competing full-card fields.
-        return AppearanceTokens.colors.surfaceContainer
+        return AppearanceTokens.colors.layer1
     }
 
     SystemClock {
@@ -289,7 +289,7 @@ PanelWindow {
                 height: 24
                 radius: 12
                 color: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.colors.surfaceContainerHighest
+                    ? AppearanceTokens.colors.layer4
                     : Qt.rgba(0, 0, 0, 0.52)
                 border.width: 1
                 border.color: AppearanceTokens.isMaterial
@@ -343,9 +343,9 @@ PanelWindow {
                     visible: AppearanceTokens.isMaterial
                     lobes: 12
                     amplitude: 0.075
-                    fillColor: Qt.rgba(AppearanceTokens.colors.surfaceContainer.r,
-                        AppearanceTokens.colors.surfaceContainer.g,
-                        AppearanceTokens.colors.surfaceContainer.b,
+                    fillColor: Qt.rgba(AppearanceTokens.colors.layer1.r,
+                        AppearanceTokens.colors.layer1.g,
+                        AppearanceTokens.colors.layer1.b,
                         AppearanceTokens.glass.materialOpacity)
                     outlineColor: AppearanceTokens.colors.outlineVariant
                     outlineWidth: 1

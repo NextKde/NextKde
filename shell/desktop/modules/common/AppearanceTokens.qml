@@ -48,21 +48,28 @@ QtObject {
     readonly property QtObject colors: QtObject {
         readonly property color primary: MaterialThemeService.color("primary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 1.0, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color primaryForeground: tokens.isDarkTheme ? "#221a00" : "#ffffff"
+        readonly property color primaryForeground: MaterialThemeService.color("on_primary", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#221a00" : "#ffffff")
         readonly property color primaryContainer: MaterialThemeService.color("primary_container", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.82, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color primaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
+        readonly property color primaryContainerForeground: MaterialThemeService.color("on_primary_container", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
         readonly property color secondary: MaterialThemeService.color("secondary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.035, 0.42, tokens.isDarkTheme ? 0.80 : 0.40))
-        readonly property color secondaryForeground: tokens.isDarkTheme ? "#211a00" : "#ffffff"
+        readonly property color secondaryForeground: MaterialThemeService.color("on_secondary", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#211a00" : "#ffffff")
         readonly property color secondaryContainer: MaterialThemeService.color("secondary_container", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.035, 0.38, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color secondaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
+        readonly property color secondaryContainerForeground: MaterialThemeService.color("on_secondary_container", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
         readonly property color tertiary: MaterialThemeService.color("tertiary", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.16, 0.56, tokens.isDarkTheme ? 0.80 : 0.40))
         readonly property color tertiaryContainer: MaterialThemeService.color("tertiary_container", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0.16, 0.48, tokens.isDarkTheme ? 0.30 : 0.90))
-        readonly property color tertiaryContainerForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
+        readonly property color tertiaryContainerForeground: MaterialThemeService.color("on_tertiary_container", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
+        readonly property color background: MaterialThemeService.color("background", tokens.isDarkTheme,
+            tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
         readonly property color surface: MaterialThemeService.color("surface", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.12, tokens.isDarkTheme ? 0.06 : 0.98))
         readonly property color surfaceContainerLow: MaterialThemeService.color("surface_container_low", tokens.isDarkTheme,
@@ -73,12 +80,21 @@ QtObject {
             tokens._tone(tokens.seedColor, 0, 0.18, tokens.isDarkTheme ? 0.17 : 0.90))
         readonly property color surfaceContainerHighest: MaterialThemeService.color("surface_container_highest", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.20, tokens.isDarkTheme ? 0.22 : 0.86))
+        // end-4 content hierarchy. Layer 0 carries only a 1% primary tint;
+        // higher layers use the matching Material surface-container roles.
+        readonly property color layer0: tokens._mix(background, primary, 0.01)
+        readonly property color layer1: surfaceContainerLow
+        readonly property color layer2: surfaceContainer
+        readonly property color layer3: surfaceContainerHigh
+        readonly property color layer4: surfaceContainerHighest
         readonly property bool surfaceIsDark:
             tokens._luminance(surfaceContainer) < 0.48
         // QML reserves onXxx names for signal handlers, so foreground roles
         // use explicit, QML-safe names instead of Material's onSurface form.
-        readonly property color surfaceForeground: tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20"
-        readonly property color surfaceVariantForeground: tokens.isDarkTheme ? "#c9c5d0" : "#49454f"
+        readonly property color surfaceForeground: MaterialThemeService.color("on_surface", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#f7f2fa" : "#1d1b20")
+        readonly property color surfaceVariantForeground: MaterialThemeService.color("on_surface_variant", tokens.isDarkTheme,
+            tokens.isDarkTheme ? "#c9c5d0" : "#49454f")
         readonly property color outline: MaterialThemeService.color("outline", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.16, tokens.isDarkTheme ? 0.60 : 0.50))
         readonly property color outlineVariant: MaterialThemeService.color("outline_variant", tokens.isDarkTheme,
@@ -101,9 +117,9 @@ QtObject {
     }
 
     readonly property QtObject state: QtObject {
-        readonly property color hover: tokens._mix(tokens.colors.surfaceContainer,
+        readonly property color hover: tokens._mix(tokens.colors.layer2,
             tokens.colors.surfaceForeground, 0.08)
-        readonly property color pressed: tokens._mix(tokens.colors.surfaceContainer,
+        readonly property color pressed: tokens._mix(tokens.colors.layer2,
             tokens.colors.surfaceForeground, 0.12)
         readonly property color selected: tokens.colors.primaryContainer
         readonly property color disabled: Qt.rgba(tokens.colors.surfaceVariantForeground.r,
@@ -194,7 +210,7 @@ QtObject {
             : tokens.isMaterial ? 0.55 : 1.0
         readonly property real ambientMultiplier: tokens.isWindows12 ? 0.85
             : tokens.isMaterial ? 0.70 : 1.0
-        readonly property real materialOpacity: tokens.isMaterial ? 0.96 : 1.0
+        readonly property real materialOpacity: 1.0
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
