@@ -389,6 +389,14 @@ deploy_artifacts() {
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
     mkdir -p "$shell_config"
+    # These source entries are symlinks in the checkout, but older releases
+    # installed them as directories. Remove only those known legacy targets
+    # before copying the shell tree; otherwise cp refuses to replace a
+    # directory with the symlink and the install aborts before materializing
+    # Kos.Ui below.
+    rm -rf "$shell_config/Kos/Ui/colorize" \
+           "$shell_config/Kos/Ui/foundation" \
+           "$shell_config/Kos/Ui/controls"
     rm -rf "$shell_config/shared/qml/controls"
     if is_nixos; then
         cp -a "$artifact_root/share/kos-desktop/." "$shell_config/"
