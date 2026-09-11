@@ -559,6 +559,12 @@ sync_qml() {
         echo "kos is not installed; run ./tools/kosctl install first" >&2
         return 1
     fi
+    # Keep the QML-only path compatible with installations made before
+    # Kos.Ui became source symlinks; deploy_artifacts performs the same
+    # targeted migration during a full install.
+    rm -rf "$shell_config/Kos/Ui/colorize" \
+           "$shell_config/Kos/Ui/foundation" \
+           "$shell_config/Kos/Ui/controls"
     rm -rf "$shell_config/shared/qml/controls"
     cp -a "$project_dir/shell/." "$shell_config/"
     # shell/Kos/Ui symlinks dangle once copied out of the checkout; replace

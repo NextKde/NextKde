@@ -698,16 +698,22 @@ Item {
             opacity: themePointer.containsMouse && !themePointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
-        GlassText {
+        Image {
             anchors.centerIn: parent
             width: 24
             height: 24
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            text: ThemeService.isDark ? "☾" : "☼"
-            color: ThemeService.foregroundColor
-            font.pixelSize: 24
-            font.weight: Font.Bold
+            source: "../../assets/theme-appearance.svg"
+            sourceSize.width: 48
+            sourceSize.height: 48
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            rotation: ThemeService.isDark ? 0 : 180
+            Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                colorization: 1.0
+                colorizationColor: ThemeService.isDark ? ThemeService.foregroundColor : "#000000"
+            }
         }
         MouseArea {
             id: themePointer
