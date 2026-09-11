@@ -58,8 +58,9 @@ Item {
     function _targetRect() {
         const s = ctl.targetScreen
         if (!s || s.x === undefined || s.width === undefined)
-            return { x: 0, y: 0, width: 1, height: 1 }
-        return { x: s.x, y: s.y, width: s.width, height: s.height }
+            return { x: 0, y: 0, width: 1, height: 1, name: "" }
+        return { x: s.x, y: s.y, width: s.width, height: s.height,
+            name: s.name || "" }
     }
 
     function _windowCandidates() {

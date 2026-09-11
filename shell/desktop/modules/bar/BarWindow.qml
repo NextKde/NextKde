@@ -163,18 +163,19 @@ PanelWindow {
     }
 
     // ── Touch-top invisible trigger ──
-    // A 8px hit area at the screen top to reveal Bar when hovered in hide modes.
+    // A narrow hit area at the screen top reveals a hidden Bar without
+    // intercepting normal top-edge interactions while it is visible.
     Item {
         id: topTriggerArea
         x: 0
         y: 0
         width: root.width
-        height: hide.handleActive ? 8 : 0
+        height: (hide.handleActive && (hide.hidden || hide.phase === "RevealPending")) ? 2 : 0
         visible: hide.handleActive
 
         HoverHandler {
             id: topHoverHandler
-            enabled: hide.handleActive
+            enabled: hide.handleActive && (hide.hidden || hide.phase === "RevealPending")
             onHoveredChanged: {
                 if (hovered) {
                     hide.handleEntered()
@@ -185,7 +186,7 @@ PanelWindow {
         }
 
         TapHandler {
-            enabled: hide.handleActive
+            enabled: hide.handleActive && (hide.hidden || hide.phase === "RevealPending")
             onTapped: hide.handleClicked()
         }
     }
@@ -205,7 +206,7 @@ PanelWindow {
         x: 0
         y: 0
         width: root.width
-        height: hide.handleActive ? 8 : 0
+        height: (hide.handleActive && (hide.hidden || hide.phase === "RevealPending")) ? 2 : 0
         visible: false
     }
 

@@ -2730,10 +2730,24 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         const QString configPath = QStandardPaths::writableLocation(
             QStandardPaths::GenericConfigLocation) + QStringLiteral("/kdeglobals");
         QSettings settings(configPath, QSettings::IniFormat);
-        const QString scheme = settings.value(
-            QStringLiteral("General/ColorScheme")).toString();
-        const bool currentlyDark = scheme.contains(
+        QString scheme = settings.value(
+            QStringLiteral("ColorScheme")).toString();
+        if (scheme.isEmpty()) {
+            scheme = settings.value(
+                QStringLiteral("General/ColorScheme")).toString();
+        }
+        bool currentlyDark = scheme.contains(
             QStringLiteral("dark"), Qt::CaseInsensitive);
+        if (!currentlyDark && scheme.isEmpty()) {
+            const QStringList background = settings.value(
+                QStringLiteral("Colors:Window/BackgroundNormal")).toStringList();
+            if (background.size() >= 3) {
+                const int red = background[0].toInt();
+                const int green = background[1].toInt();
+                const int blue = background[2].toInt();
+                currentlyDark = (red * 299 + green * 587 + blue * 114) / 1000 < 128;
+            }
+        }
         applySystemTheme(socket, request, !currentlyDark);
         return true;
     }
