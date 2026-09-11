@@ -1261,7 +1261,7 @@ Item {
                     GlassText {
                         anchors.centerIn: parent
                         text: "×"
-                        color: ThemeService.foregroundColor
+                        color: "white"
                         font { pixelSize: 15; weight: Font.Bold }
                     }
                     MouseArea {
@@ -1762,14 +1762,13 @@ Item {
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "Wi‑Fi 已关闭"
-                        color: ThemeService.foregroundColor
+                        color: "white"
                         font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "在上方开启开关以查看附近网络"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.55
+                        color: "white"
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -1794,8 +1793,7 @@ Item {
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         text: "附近网络"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.60
+                        color: "white"
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
 
@@ -1803,8 +1801,7 @@ Item {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: NetworkService.wifiScanInProgress
                         text: "正在扫描…"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.50
+                        color: "white"
                         font { pixelSize: 9; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -1843,7 +1840,7 @@ Item {
                             visible: !!modelData.active
                             anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                             text: "✓"
-                            color: "#0a84ff"
+                            color: "white"
                             font { pixelSize: 13; weight: Font.Bold }
                         }
 
@@ -1871,7 +1868,7 @@ Item {
                             }
                             text: modelData.ssid || "隐藏网络"
                             elide: Text.ElideRight
-                            color: modelData.active ? "#0a84ff" : ThemeService.foregroundColor
+                            color: "white"
                             font {
                                 pixelSize: 11
                                 weight: modelData.active ? Font.Bold : Font.Normal
@@ -1888,7 +1885,7 @@ Item {
                                 visible: modelData.security && modelData.security !== "none"
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: "🔒"
-                                opacity: 0.50
+                                color: "white"
                                 font.pixelSize: 10
                             }
 
@@ -1903,7 +1900,7 @@ Item {
                                 GlassText {
                                     anchors.centerIn: parent
                                     text: "断开"
-                                    color: ThemeService.foregroundColor
+                                    color: "white"
                                     font { pixelSize: 9; weight: Font.Medium; family: "Noto Sans CJK SC" }
                                 }
                                 MouseArea {
@@ -1935,8 +1932,7 @@ Item {
                         anchors.centerIn: parent
                         visible: submenuWifiList.count === 0 && !NetworkService.wifiScanInProgress
                         text: "未搜索到 Wi‑Fi 网络"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.45
+                        color: "white"
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -1956,15 +1952,14 @@ Item {
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "网络设置…"
-                    color: wifiSettingsMouse.containsMouse ? "#0a84ff" : ThemeService.foregroundColor
+                    color: "white"
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
 
                 GlassText {
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "›"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.45
+                    color: "white"
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
@@ -2000,14 +1995,13 @@ Item {
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "蓝牙已关闭"
-                        color: ThemeService.foregroundColor
+                        color: "white"
                         font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "在上方开启开关以连接设备"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.55
+                        color: "white"
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2031,8 +2025,7 @@ Item {
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         text: "设备"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.60
+                        color: "white"
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
 
@@ -2040,8 +2033,7 @@ Item {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: ControlCenterService.bluetoothDevicesRefreshInProgress
                         text: "正在刷新…"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.50
+                        color: "white"
                         font { pixelSize: 9; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2079,7 +2071,7 @@ Item {
                             visible: !!modelData.connected
                             anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                             text: "✓"
-                            color: "#0a84ff"
+                            color: "white"
                             font { pixelSize: 13; weight: Font.Bold }
                         }
 
@@ -2127,14 +2119,13 @@ Item {
                                 width: parent.width
                                 text: modelData.name || "未知设备"
                                 elide: Text.ElideRight
-                                color: modelData.connected ? "#0a84ff" : ThemeService.foregroundColor
+                                color: "white"
                                 font { pixelSize: 11; weight: modelData.connected ? Font.DemiBold : Font.Normal; family: "Noto Sans CJK SC" }
                             }
 
                             GlassText {
                                 text: modelData.connected ? "已连接" : "未连接"
-                                color: ThemeService.foregroundColor
-                                opacity: 0.50
+                                color: "white"
                                 font { pixelSize: 9; family: "Noto Sans CJK SC" }
                             }
                         }
@@ -2150,8 +2141,7 @@ Item {
                                 id: btBatteryText
                                 anchors.centerIn: parent
                                 text: (modelData.battery || 0) + "%"
-                                color: ThemeService.foregroundColor
-                                opacity: 0.60
+                                color: "white"
                                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
                             }
                         }
@@ -2170,8 +2160,7 @@ Item {
                         anchors.centerIn: parent
                         visible: submenuBtList.count === 0 && !ControlCenterService.bluetoothDevicesRefreshInProgress
                         text: "未发现已配对设备"
-                        color: ThemeService.foregroundColor
-                        opacity: 0.45
+                        color: "white"
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2191,15 +2180,14 @@ Item {
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "蓝牙设置…"
-                    color: btSettingsMouse.containsMouse ? "#0a84ff" : ThemeService.foregroundColor
+                    color: "white"
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
 
                 GlassText {
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "›"
-                    color: ThemeService.foregroundColor
-                    opacity: 0.45
+                    color: "white"
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
