@@ -21,9 +21,8 @@ PopupWindow {
     property var customAnchorEdges: null
     property var customGravity: null
     property var customMarginsTop: null
-    // Glass menus retain white ink in either system theme; the material adapts
-    // its luminance behind it rather than switching the foreground to black.
-    property color foregroundColor: Qt.rgba(1, 1, 1, 1)
+    property color baseColor: ThemeService.backgroundColor
+    property color foregroundColor: ThemeService.foregroundColor
     property bool adaptiveForeground: true
     property color ambientPrimary: WallpaperColorSource.primary
     property color ambientSecondary: WallpaperColorSource.secondary
@@ -216,17 +215,17 @@ PopupWindow {
         }
     }
 
-    ShellGlassSurface {
+    LiquidGlassSurface {
         id: glass
         anchors.fill: parent
         radius: root.menuRadius
+        baseColor: root.baseColor
+        ambientPrimary: root.ambientPrimary
+        ambientSecondary: root.ambientSecondary
+        ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        // Context menus are a single navigation layer, not pressed-in cards.
-        // KWin owns their backdrop lens; keep QML to a calm, regular body.
-        materialDepth: 0.25
-        material: "regular"
-        readabilityProfile: "protected"
-        readabilityStrength: 0.82
+        materialDepth: 0.6
+        material: "thick"
         adaptiveDarkScrim: true
         scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
@@ -239,6 +238,12 @@ PopupWindow {
             y: (root.macosPopupMotion && popupMotion.progress < 0.999)
                 ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
                 : 0
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            color: Qt.rgba(0, 0, 0, root.darkOverlayOpacity)
         }
 
         Column {

@@ -83,6 +83,13 @@ Item {
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     readonly property int controlCenterHeight: 597
     readonly property int controlCenterWidth: 336
+    readonly property real effectiveBlur: dockHosted
+        ? AppearanceConfigService.effectiveDockBlur
+        : AppearanceConfigService.effectiveBarBlur
+    readonly property real effectiveLiquid: dockHosted
+        ? AppearanceConfigService.effectiveDockLiquid
+        : AppearanceConfigService.effectiveBarLiquid
+
     // Compact counterpart to the Dock player's transport controls. It keeps
     // the same circular glass treatment but is sized for this small panel.
     // Uses the shared LiquidGlassButton for a pure-QML liquid glass effect.
@@ -258,14 +265,17 @@ Item {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         Rectangle {
             id: wifiToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
-                ? Qt.rgba(1, 1, 1, 0.18)
-                : Qt.rgba(0.012, 0.020, 0.042, 0.055)
+                ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
             opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
             scale: wifiTogglePointer.pressed ? 0.92
                 : (wifiTogglePointer.containsMouse ? 1.04 : 1.0)
@@ -384,15 +394,18 @@ Item {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
         cardOpacity: ControlCenterService.bluetoothAvailable ? 1 : 0.48
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         Rectangle {
             id: bluetoothToggleDisc
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
-                ? Qt.rgba(1, 1, 1, 0.18)
-                : Qt.rgba(0.012, 0.020, 0.042, 0.055)
+                ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
             opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
             scale: bluetoothTogglePointer.pressed ? 0.92
                 : (bluetoothTogglePointer.containsMouse ? 1.04 : 1.0)
@@ -530,6 +543,9 @@ Item {
         cardRadius: 25
         cardWidth: 151
         cardHeight: 127
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.95, 1, 0.32) : Qt.rgba(0, 0, 0, 0.10)
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         // A faint wallpaper-tone layer is both the card's quiet liquid base
         // and the blur source for the transport buttons. Blurring it makes
@@ -864,6 +880,9 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 57
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         Row {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
@@ -917,6 +936,9 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 57
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.93, 1, 0.27) : Qt.rgba(0, 0, 0, 0.10)
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         Row {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
@@ -1011,6 +1033,9 @@ Item {
         cardRadius: 19
         cardWidth: 296
         cardHeight: 230
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
 
         Item {
             anchors { fill: parent; margins: 10 }
@@ -1024,7 +1049,7 @@ Item {
             }
             GlassText {
                 text: "清空"
-                color: clearMouse.containsMouse ? "#0a84ff" : Qt.rgba(1, 1, 1, 0.50)
+                color: clearMouse.containsMouse ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.45))
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
                 anchors { right: parent.right; top: parent.top }
                 MouseArea {
@@ -1112,7 +1137,7 @@ Item {
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "×"
-                                    color: removeMouse.containsMouse ? "#ff453a" : Qt.rgba(1, 1, 1, 0.42)
+                                    color: removeMouse.containsMouse ? "#ff453a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.42) : Qt.rgba(0, 0, 0, 0.35))
                                     font { pixelSize: 13; weight: Font.Bold }
                                     MouseArea {
                                         id: removeMouse
@@ -1151,7 +1176,10 @@ Item {
         cardRadius: 22
         cardWidth: 296
         cardHeight: panel.pendingConfirmAction === "" ? 278 : 180
+        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
         cardShown: panel.sessionModalVisible
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
         onMotionClosed: {
             if (!panel.sessionModalVisible && panel.activeSubmenu === "")
                 coordinator.modalActive = false
@@ -1276,10 +1304,10 @@ Item {
                 Rectangle {
                     width: 132; height: 56; radius: 14
                     color: lockArea.containsMouse
-                        ? Qt.rgba(0.012, 0.020, 0.042, lockArea.pressed ? 0.080 : 0.055)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -1309,10 +1337,10 @@ Item {
                 Rectangle {
                     width: 132; height: 56; radius: 14
                     color: sleepArea.containsMouse
-                        ? Qt.rgba(0.012, 0.020, 0.042, sleepArea.pressed ? 0.080 : 0.055)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -1342,10 +1370,10 @@ Item {
                 Rectangle {
                     width: 132; height: 56; radius: 14
                     color: switchUserArea.containsMouse
-                        ? Qt.rgba(0.012, 0.020, 0.042, switchUserArea.pressed ? 0.080 : 0.055)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -1375,10 +1403,10 @@ Item {
                 Rectangle {
                     width: 132; height: 56; radius: 14
                     color: logoutArea.containsMouse
-                        ? Qt.rgba(0.012, 0.020, 0.042, logoutArea.pressed ? 0.080 : 0.055)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -1405,10 +1433,10 @@ Item {
                 Rectangle {
                     width: 132; height: 56; radius: 14
                     color: rebootArea.containsMouse
-                        ? Qt.rgba(0.012, 0.020, 0.042, rebootArea.pressed ? 0.080 : 0.055)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
-                    border.color: Qt.rgba(1, 1, 1, 0.12)
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -1436,11 +1464,11 @@ Item {
                     width: 132; height: 56; radius: 14
                     color: powerOffArea.containsMouse
                         ? Qt.rgba(255, 69, 58, 0.22)
-                        : Qt.rgba(0.012, 0.020, 0.042, 0.035)
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
                     border.width: 1
                     border.color: powerOffArea.containsMouse
                         ? Qt.rgba(255, 69, 58, 0.50)
-                        : Qt.rgba(1, 1, 1, 0.12)
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08))
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }

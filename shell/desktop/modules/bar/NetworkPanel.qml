@@ -30,9 +30,6 @@ PopupWindow {
     property bool useSavedCredentials: false
     property bool confirmForgetNetwork: false
     property string dialogError: ""
-    readonly property color materialForegroundColor: panelSurface.foregroundColor
-    readonly property color materialSecondaryForegroundColor: panelSurface.secondaryForegroundColor
-    readonly property color materialTertiaryForegroundColor: panelSurface.tertiaryForegroundColor
     // Keep the popup geometry stable while a join sheet opens. The sheet is
     // intentionally narrower than the 310px Wi-Fi list, so it reads as a
     // nested action instead of making the top-bar panel suddenly expand.
@@ -66,8 +63,8 @@ PopupWindow {
     // encodes the corner radius explicitly (top scanline at x=blurRadius) so
     // the plugin's smoothQuickshellCard path rounds corners with the exact
     // radius, avoiding the aliasing from ellipse-scanline regions.
-    // The list and credential sheet both use the shared ShellGlassSurface;
-    // this popup owns no independent glass paint or outline.
+    // The join sheet (LiquidGlassSurface) is a separate QML material on top;
+    // the list card below becomes transparent so this blur shows through.
     readonly property int blurRadius: Math.max(1, Math.min(19, Math.floor(310 / 2)))
     BackgroundEffect.blurRegion: (panel.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
@@ -213,10 +210,11 @@ PopupWindow {
             selectedNetwork.savedProfileUuid || "")
     }
 
-    ShellGlassSurface {
+    LiquidGlassSurface {
         id: panelSurface
         anchors.fill: parent
         radius: panel.blurRadius
+        baseColor: ThemeService.backgroundColor
         surfaceOpacity: 1.0
         blurStrength: AppearanceConfigService.effectiveBarBlur
         liquidStrength: AppearanceConfigService.effectiveBarLiquid
@@ -225,6 +223,8 @@ PopupWindow {
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
+        border.width: 1
+        border.color: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
     }
 
     Column {
@@ -240,7 +240,7 @@ PopupWindow {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Wi‑Fi"
-                color: panel.materialForegroundColor
+                color: ThemeService.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
                 font { pixelSize: 16; weight: Font.Bold }
@@ -250,7 +250,7 @@ PopupWindow {
                 anchors.rightMargin: 48
                 anchors.verticalCenter: parent.verticalCenter
                 text: NetworkService.wifiScanInProgress ? "正在扫描…" : "↻"
-                color: panel.materialForegroundColor
+                color: ThemeService.foregroundColor
                 opacity: NetworkService.wifiScanInProgress ? 0.55 : 0.82
                 font { pixelSize: 15; weight: Font.DemiBold }
                 MouseArea {
@@ -297,7 +297,7 @@ PopupWindow {
             }
         }
 
-        ShellGlassSurface {
+        EnhancedGlassSurface {
             id: connectionCard
             visible: false
             width: parent.width
@@ -309,20 +309,20 @@ PopupWindow {
             ambientStrength: 0.72
             surfaceOpacity: 0.94
             materialDepth: 1.8
-            material: "regular"
-            adaptiveDarkScrim: true
+            border.width: 1
+            border.color: Qt.rgba(0.74, 0.95, 1, 0.30)
             Column {
                 anchors {
                     left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
                     leftMargin: 11; rightMargin: 108
                 }
                 spacing: 3
-                GlassText {
+                Text {
                     text: !NetworkService.wifiEnabled ? "Wi‑Fi 已关闭"
                         : (NetworkService.connectionType === "wifi"
                         ? (NetworkService.ssid || "未连接 Wi‑Fi") : "未连接 Wi‑Fi"
                         )
-                    color: connectionCard.foregroundColor
+                    color: ThemeService.foregroundColor
                     style: Text.Outline
                     styleColor: Qt.rgba(0, 0, 0, 0.38)
                     font { pixelSize: 13; weight: Font.DemiBold }
@@ -335,7 +335,8 @@ PopupWindow {
                                 : (NetworkService.connectivity === "limited"
                                     ? "网络受限" : "已连接")))
                         : "未连接")
-                    color: connectionCard.secondaryForegroundColor
+                    color: ThemeService.foregroundColor
+                    opacity: 0.64
                     font.pixelSize: 10
                 }
             }
@@ -390,15 +391,24 @@ PopupWindow {
         }
 
     }
-    Item {
+    Rectangle {
         id: networkListCard
         anchors.fill: parent
+        radius: 19
+        // Transparent so the compositor blur region (BackgroundEffect on
+        // this panel) shows through - real liquid glass with windows
+        // visible behind it. A subtle tint + border keep text readable.
+        color: Qt.rgba(1, 1, 1, 0.08)
+        border.width: 1
+        border.color: Qt.rgba(0.74, 0.95, 1, 0.28)
 
-        GlassText {
+        Text {
             visible: false
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 10 }
             text: NetworkService.wifiEnabled ? "附近 Wi‑Fi" : "Wi‑Fi 已关闭"
-            color: panel.materialSecondaryForegroundColor
+            color: ThemeService.foregroundColor
+            style: Text.Outline
+            styleColor: Qt.rgba(0, 0, 0, 0.50)
             opacity: 0.78
             font { pixelSize: 11; weight: Font.DemiBold }
         }
@@ -420,11 +430,13 @@ PopupWindow {
                 color: networkRowMouse.containsMouse
                     ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
                 Behavior on color { ColorAnimation { duration: 110 } }
-                GlassText {
+                Text {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                     text: "✓"
                     color: panelSurface.foregroundColor
+                    style: Text.Outline
+                    styleColor: Qt.rgba(0, 0, 0, 0.50)
                     font { pixelSize: 19; weight: Font.DemiBold }
                 }
                 Canvas {
@@ -483,7 +495,7 @@ PopupWindow {
                         ctx.fill()
                     }
                 }
-                GlassText {
+                Text {
                     // Reserve the checkmark slot in every row. Connected
                     // state changes only the checkmark, never alignment.
                     anchors {
@@ -495,6 +507,8 @@ PopupWindow {
                     }
                     text: modelData.ssid
                     color: panelSurface.foregroundColor
+                    style: Text.Outline
+                    styleColor: Qt.rgba(0, 0, 0, 0.50)
                     elide: Text.ElideRight
                     font { pixelSize: 12; weight: Font.DemiBold }
                 }
@@ -512,6 +526,7 @@ PopupWindow {
                     && NetworkService.nearbyWifi.length === 0
                 text: "未发现可用 Wi‑Fi"
                 color: panelSurface.secondaryForegroundColor
+                opacity: 0.5
                 font.pixelSize: 12
             }
         }
@@ -528,10 +543,12 @@ PopupWindow {
                 height: 1
                 color: Qt.rgba(1, 1, 1, 0.16)
             }
-            GlassText {
+            Text {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
                 text: "无线局域网设置…"
                 color: panelSurface.foregroundColor
+                style: Text.Outline
+                styleColor: Qt.rgba(0, 0, 0, 0.50)
                 font { pixelSize: 14; weight: Font.DemiBold }
             }
             MouseArea {
@@ -565,7 +582,7 @@ PopupWindow {
             onClicked: panel.closeNetworkDialog()
         }
 
-        ShellGlassSurface {
+        LiquidGlassSurface {
             id: networkDialog
             // Keep credentials focused: the old near-full-size 282×340 card
             // read as a pale rectangular replacement for the Wi-Fi list.
@@ -587,6 +604,8 @@ PopupWindow {
             ambientStrength: 0.58
             surfaceOpacity: 0.70
             materialDepth: 1.35
+            border.width: 1
+            border.color: Qt.rgba(0.74, 0.95, 1, 0.34)
 
             // Consume pointer movement in the card's visual gaps as well.
             // Interactive children declared later stay above this blocker.
@@ -603,7 +622,7 @@ PopupWindow {
                 anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 12 }
                 color: Qt.rgba(1, 1, 1, 0.13)
                 border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.28)
-                GlassText { anchors.centerIn: parent; text: "×"; color: networkDialog.foregroundColor; font { pixelSize: 22; weight: Font.Light } }
+                GlassText { anchors.centerIn: parent; text: "×"; color: ThemeService.foregroundColor; font { pixelSize: 22; weight: Font.Light } }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: panel.closeNetworkDialog() }
             }
 
@@ -614,7 +633,7 @@ PopupWindow {
                 color: Qt.rgba(1, 1, 1, 0.15)
                 border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.30)
                 opacity: NetworkService.wifiConnectInProgress ? 0.55 : 1.0
-                GlassText { anchors.centerIn: parent; text: NetworkService.wifiConnectInProgress ? "…" : "✓"; color: networkDialog.foregroundColor; font { pixelSize: 18; weight: Font.Light } }
+                GlassText { anchors.centerIn: parent; text: NetworkService.wifiConnectInProgress ? "…" : "✓"; color: ThemeService.foregroundColor; font { pixelSize: 18; weight: Font.Light } }
                 MouseArea { anchors.fill: parent; enabled: !NetworkService.wifiConnectInProgress; cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: panel.confirmConnection() }
             }
 
@@ -640,7 +659,7 @@ PopupWindow {
                 Text {
                     width: parent.width
                     text: "加入 “" + (panel.selectedNetwork?.ssid || "Wi‑Fi") + "”"
-                    color: networkDialog.foregroundColor
+                    color: ThemeService.foregroundColor
                     style: Text.Outline; styleColor: Qt.rgba(0, 0, 0, 0.34)
                     elide: Text.ElideRight
                     font { pixelSize: 16; weight: Font.Bold }
@@ -655,7 +674,8 @@ PopupWindow {
                                 ? "将使用已保存的密码加入此无线局域网。"
                                 : (panel.selectedNetwork?.secured
                                 ? "输入密码加入此无线局域网。" : "加入此无线局域网。"))))
-                    color: networkDialog.secondaryForegroundColor
+                    color: ThemeService.foregroundColor
+                    opacity: 0.66
                     wrapMode: Text.WordWrap
                     font.pixelSize: 12
                 }
@@ -683,7 +703,7 @@ PopupWindow {
                             GlassText {
                                 anchors.centerIn: parent
                                 text: modelData.label
-                                color: networkDialog.foregroundColor
+                                color: ThemeService.foregroundColor
                                 font { pixelSize: 10; weight: Font.DemiBold }
                             }
                             MouseArea {
@@ -697,13 +717,15 @@ PopupWindow {
                         anchors.verticalCenter: parent.verticalCenter
                         text: panel.selectedEnterpriseEap === "peap"
                             ? "MSCHAPv2" : "PAP"
-                        color: networkDialog.tertiaryForegroundColor
+                        color: ThemeService.foregroundColor
+                        opacity: 0.48
                         font.pixelSize: 10
                     }
                     GlassText {
                         anchors.verticalCenter: parent.verticalCenter
                         text: panel.showAnonymousIdentity ? "收起" : "匿名身份"
-                        color: networkDialog.tertiaryForegroundColor
+                        color: ThemeService.foregroundColor
+                        opacity: 0.48
                         font.pixelSize: 10
                         MouseArea {
                             anchors.fill: parent
@@ -725,9 +747,7 @@ PopupWindow {
                     height: panel.selectedNetwork?.enterprise
                         ? (panel.showAnonymousIdentity ? 96 : 64) : 34
                     radius: 12
-                    // A stable local contrast bed for text entry; intentionally
-                    // below card strength so it does not read as a modal slab.
-                    color: Qt.rgba(0.012, 0.020, 0.042, 0.070)
+                    color: Qt.rgba(1, 1, 1, 0.105)
                     border.width: (usernameInput.activeFocus || passwordInput.activeFocus) ? 1 : 0
                     border.color: Qt.rgba(0.15, 0.52, 1, 0.80)
 
@@ -737,13 +757,13 @@ PopupWindow {
                         anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 14; rightMargin: 14 }
                         height: 32
                         verticalAlignment: TextInput.AlignVCenter
-                        color: networkDialog.foregroundColor
+                        color: ThemeService.foregroundColor
                         selectionColor: Qt.rgba(0.15, 0.52, 1, 0.48)
-                        selectedTextColor: networkDialog.foregroundColor
+                        selectedTextColor: ThemeService.foregroundColor
                         clip: true
                         font.pixelSize: 13
                         onTextEdited: panel.requestedUsername = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: "用户名"; color: networkDialog.tertiaryForegroundColor; font.pixelSize: 13 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: "用户名"; color: ThemeService.foregroundColor; opacity: 0.62; font.pixelSize: 13 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise)
@@ -763,15 +783,15 @@ PopupWindow {
                         }
                         height: panel.selectedNetwork?.enterprise ? 32 : parent.height
                         verticalAlignment: TextInput.AlignVCenter
-                        color: networkDialog.foregroundColor
+                        color: ThemeService.foregroundColor
                         selectionColor: Qt.rgba(0.15, 0.52, 1, 0.48)
-                        selectedTextColor: networkDialog.foregroundColor
+                        selectedTextColor: ThemeService.foregroundColor
                         echoMode: TextInput.Password
                         clip: true
                         font.pixelSize: 13
                         onTextEdited: panel.requestedPassword = text
                         Keys.onPressed: function(event) { if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { panel.confirmConnection(); event.accepted = true } }
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: "密码"; color: networkDialog.tertiaryForegroundColor; font.pixelSize: 13 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: "密码"; color: ThemeService.foregroundColor; opacity: 0.62; font.pixelSize: 13 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise
@@ -790,13 +810,13 @@ PopupWindow {
                         anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14 }
                         height: 32
                         verticalAlignment: TextInput.AlignVCenter
-                        color: networkDialog.foregroundColor
+                        color: ThemeService.foregroundColor
                         selectionColor: Qt.rgba(0.15, 0.52, 1, 0.48)
-                        selectedTextColor: networkDialog.foregroundColor
+                        selectedTextColor: ThemeService.foregroundColor
                         clip: true
                         font.pixelSize: 13
                         onTextEdited: panel.requestedAnonymousIdentity = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: "匿名身份（可选）"; color: networkDialog.tertiaryForegroundColor; font.pixelSize: 13 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: "匿名身份（可选）"; color: ThemeService.foregroundColor; opacity: 0.62; font.pixelSize: 13 }
                     }
                 }
                 Rectangle {
@@ -812,13 +832,14 @@ PopupWindow {
                     GlassText {
                         anchors { left: parent.left; leftMargin: 13; verticalCenter: parent.verticalCenter }
                         text: panel.confirmForgetNetwork ? "忘记此网络？" : "✓  已保存密码"
-                        color: networkDialog.foregroundColor
+                        color: ThemeService.foregroundColor
                         font { pixelSize: 12; weight: Font.DemiBold }
                     }
                     GlassText {
                         anchors { right: parent.right; rightMargin: 60; verticalCenter: parent.verticalCenter }
                         text: panel.confirmForgetNetwork ? "取消" : "更换"
-                        color: networkDialog.secondaryForegroundColor
+                        color: ThemeService.foregroundColor
+                        opacity: 0.66
                         font.pixelSize: 11
                         MouseArea {
                             anchors.fill: parent
@@ -838,9 +859,8 @@ PopupWindow {
                         anchors { right: parent.right; rightMargin: 13; verticalCenter: parent.verticalCenter }
                         text: NetworkService.wifiForgetInProgress ? "…"
                             : (panel.confirmForgetNetwork ? "确认" : "忘记")
-                        color: panel.confirmForgetNetwork ? "#ff8a80"
-                            : networkDialog.secondaryForegroundColor
-                        opacity: NetworkService.wifiForgetInProgress ? 0.5 : 1.0
+                        color: panel.confirmForgetNetwork ? "#ff8a80" : ThemeService.foregroundColor
+                        opacity: NetworkService.wifiForgetInProgress ? 0.5 : 0.66
                         font.pixelSize: 11
                         MouseArea {
                             anchors.fill: parent
@@ -863,7 +883,8 @@ PopupWindow {
                         && !panel.useSavedCredentials
                     width: parent.width
                     text: "密码将由 NetworkManager 安全保存。"
-                    color: networkDialog.tertiaryForegroundColor
+                    color: ThemeService.foregroundColor
+                    opacity: 0.42
                     wrapMode: Text.WordWrap
                     font.pixelSize: 12
                 }

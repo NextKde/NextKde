@@ -3606,6 +3606,7 @@ PanelWindow {
             anchorItem: desktopContextAnchor
             position: "bottom"
             placeBelow: true
+            baseColor: ThemeService.backgroundColor
             foregroundColor: ThemeService.foregroundColor
             onAction: function(cmd, item) {
                 desktopFileGrid.runContextCmd(cmd, item)

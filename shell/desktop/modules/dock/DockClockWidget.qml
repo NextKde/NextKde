@@ -88,9 +88,9 @@ Item {
         }
     }
 
-    // The clock supplies wallpaper-derived ambience to the shared glass
-    // contract rather than painting a separate gradient card.
-    ShellGlassSurface {
+    // Match the music/weather card contract exactly: the visible background
+    // extends by backgroundGap on every side and shares their 0.35 radius.
+    Rectangle {
         id: clockBackground
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap

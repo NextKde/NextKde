@@ -40,22 +40,25 @@ Item {
     width: contentWidth + backgroundGap * 2
     height: iconSize
 
-    ShellGlassSurface {
+    Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         y: -widget.backgroundGap
         width: widget.width
         height: widget.iconSize + widget.backgroundGap * 2
         radius: widget.iconSize * 0.35
-        material: "regular"
-        materialDepth: 1.0
-        surfaceOpacity: 0.88
-        ambientPigmentEnabled: true
-        ambientStrength: 1.0
-        ambientSecondaryPosition: 1.0
-        ambientPrimary: widget.tone(widget.backgroundStart(
-            WeatherService.weatherCode, WeatherService.isDay))
-        ambientSecondary: widget.tone(widget.backgroundEnd(
-            WeatherService.weatherCode, WeatherService.isDay))
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop {
+                position: 0.0
+                color: widget.tone(widget.backgroundStart(WeatherService.weatherCode,
+                                                          WeatherService.isDay))
+            }
+            GradientStop {
+                position: 1.0
+                color: widget.tone(widget.backgroundEnd(WeatherService.weatherCode,
+                                                        WeatherService.isDay))
+            }
+        }
 
         // Keep ambient weather decoration static while the Dock is idle.
         // Infinite property animations force a full scene-graph update at the

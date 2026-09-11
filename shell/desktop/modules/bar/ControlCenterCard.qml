@@ -99,6 +99,11 @@ PopupWindow {
         Math.round(root.cardRadius),
         Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
 
+    property real blurStrength: AppearanceConfigService.effectiveBarBlur
+    property real liquidStrength: AppearanceConfigService.effectiveBarLiquid
+    readonly property real effectiveBlur: Math.max(0.0, Math.min(1.0, blurStrength))
+    readonly property real effectiveLiquid: Math.max(0.0, Math.min(1.0, liquidStrength))
+
     // Blur region with the radius encoded explicitly, instead of
     // RoundedBlurRegion's ellipse scanlines (whose top-row inset is corrupted
     // by DPR scaling, making the plugin recover a smaller radius than QML
@@ -124,12 +129,13 @@ PopupWindow {
         }
     }
 
-    // The canonical shell material; only geometry and presentation animation
-    // differ from Dock, QuickSearch and AppLauncher.
-    ShellGlassSurface {
+    // Card surface: LiquidGlassSurface provides liquid finish, ambient wallpaper reflections,
+    // and responsive opacity tied to effectiveBlur and effectiveLiquid.
+    LiquidGlassSurface {
         id: cardGlass
         anchors.fill: parent
         radius: root.blurRadius
+        baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
         blurStrength: root.effectiveBlur
         liquidStrength: root.effectiveLiquid
@@ -137,10 +143,8 @@ PopupWindow {
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
-        // Keep control-center cards optically flat for now. Their compositor
-        // blur/refraction and entrance motion remain intact; this disables
-        // only the optional QML interior raised-card contour.
-        reliefStrength: 0.0
+        border.width: 1
+        border.color: root.cardBorderColor
         scale: root.popupScale
         transformOrigin: Item.TopRight
         opacity: root.motionProgress

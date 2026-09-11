@@ -736,6 +736,7 @@ Item {
         property bool hasBeenVisible: false
         anchorItem: icon
         position: ConfigService.position
+        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         onAboutToShow: hasBeenVisible = true
         onAboutToHide: {

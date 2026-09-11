@@ -986,6 +986,7 @@ PanelWindow {
     ContextMenu {
         id: appContextMenu
         property var application: null
+        baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
         onAction: function (name) {
             const app = application;
@@ -1146,11 +1147,10 @@ PanelWindow {
                     : (AppearanceTokens.isMaterial
                         ? AppearanceTokens.shape.extraLarge : 28)
 
-                // Same material contract as Dock, QuickSearch and Control
-                // Center. Presentation differences are parameters, not a
-                // separate hand-painted scrim implementation.
-                ShellGlassSurface {
-                    id: launcherGlass
+                // KWin owns the launcher card's actual blur and refraction
+                // through BackgroundEffect below. Keeping this client-side
+                // layer transparent avoids a duplicate grey QML sheen.
+                Rectangle {
                     anchors.fill: parent
                     radius: background.radius
                     // A launcher is a text-dense regular material. The scrim
@@ -1334,12 +1334,14 @@ PanelWindow {
                                     ? AppearanceTokens.colors.primary
                                     : Qt.rgba(1, 1, 1, 0.24)
                                 textColor: root.launcherForegroundColor
-                                mutedTextColor: root.launcherSecondaryForegroundColor
+                                mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
+                                    root.launcherForegroundColor.g,
+                                    root.launcherForegroundColor.b, 0.45)
                                 font.pixelSize: 12
                                 leftPadding: 32
                                 rightPadding: text.length > 0 ? 32 : 12
                                 selectionColor: Qt.rgba(1, 1, 1, 0.30)
-                                selectedTextColor: root.launcherForegroundColor
+                                selectedTextColor: AppLauncherService.dockForegroundColor
                                 enabled: !root.editMode && !root.openFolder
 
                                 onTextEdited: {
@@ -1774,13 +1776,6 @@ PanelWindow {
                                     width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                     text: modelData.type === "folder" ? modelData.name : modelData.app.name
                                     color: root.launcherForegroundColor
-                                    // App labels can sit directly on a nearly white,
-                                    // detailed launcher backdrop. Give only this
-                                    // text role a broad, diffuse local dark field;
-                                    // it preserves panel transmission and is not a
-                                    // Text.Outline-style glyph border.
-                                    glassShadowOpacity: 0.72
-                                    glassShadowBlur: 0.78
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                     elide: Text.ElideRight
@@ -2426,8 +2421,6 @@ PanelWindow {
                                             width: Math.min(Math.round(root.configIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
                                             text: modelData.name
                                             color: AppLauncherService.dockForegroundColor
-                                            glassShadowOpacity: 0.72
-                                            glassShadowBlur: 0.78
                                             horizontalAlignment: Text.AlignHCenter
                                             elide: Text.ElideRight
                                             wrapMode: Text.NoWrap

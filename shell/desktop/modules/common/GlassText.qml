@@ -1,15 +1,12 @@
 import QtQuick
-import QtQuick.Effects
 
-// Text with a soft glass readability shadow baked in. Root type is Text, so
+// Text with the glass readability outline baked in. Root type is Text, so
 // every property (anchors, font, elide, nested MouseArea, Text.* enums)
 // passes through natively — swap `Text {` for `GlassText {` on white/light
 // text that sits on translucent glass or directly on the wallpaper.
-// The text itself stays sharp; only a centred, diffuse shadow separates it
-// from detailed content beneath the glass.
+// The outline follows the ink luminance, protecting both light text on bright
+// content and dark text on dark content. Callers can still override styleColor.
 Text {
-    id: root
-
     readonly property real inkLuminance: color.r * 0.2126
         + color.g * 0.7152 + color.b * 0.0722
     style: AppearanceTokens.isMaterial ? Text.Normal : Text.Outline

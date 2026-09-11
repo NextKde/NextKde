@@ -4,7 +4,6 @@ module qs.desktop.modules.dock
 # ── Entry point ──
 Dock 1.0 Dock.qml
 DockWindow 1.0 DockWindow.qml
-ShellGlassSurface 1.0 ShellGlassSurface.qml
 # ── Show-mode (auto-hide) ──
 DockAutoHideController 1.0 DockAutoHideController.qml
 DockRevealHandle 1.0 DockRevealHandle.qml

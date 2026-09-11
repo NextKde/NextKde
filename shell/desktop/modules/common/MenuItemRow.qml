@@ -1,6 +1,5 @@
 import QtQuick
 import qs.desktop.modules.dock
-import qs.desktop.modules.common
 
 // A row in a ContextMenu: icon + label, with optional checkmark (checkable),
 // submenu chevron, and a thin separator variant. Hover only changes the row's
@@ -46,7 +45,8 @@ Item {
     }
 
     // Hover background (behind all other content).
-    GlassInteractionLayer {
+    Rectangle {
+        id: bg
         anchors.fill: parent
         radius: AppearanceTokens.shape.medium
         color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
@@ -62,7 +62,7 @@ Item {
         spacing: row.icon.length > 0 ? 9 : 0
         visible: !row.separator
 
-        GlassText {
+        Text {
             visible: row.icon.length > 0
             width: visible ? 18 : 0
             text: row.icon
@@ -72,7 +72,7 @@ Item {
             opacity: 0.85
             anchors.verticalCenter: parent.verticalCenter
         }
-        GlassText {
+        Text {
             text: row.label
             elide: Text.ElideRight
             font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
@@ -87,7 +87,7 @@ Item {
     }
 
     // Trailing checkmark or submenu chevron.
-    GlassText {
+    Text {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter

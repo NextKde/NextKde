@@ -175,12 +175,13 @@ Item {
                     anchors.fill: parent
                     radius: 8
                     color: (pointer.containsMouse || (menuPopup.visible && root.popupRootId === modelData.id))
-                        ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
+                        ? Qt.rgba(ThemeService.foregroundColor.r,
+                            ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
                 }
-                GlassText {
+                Text {
                     anchors.centerIn: parent
                     text: modelData.label || ""
-                    color: Qt.rgba(1, 1, 1, 1)
+                    color: ThemeService.foregroundColor
                     font: labelMetrics.font
                     renderType: Text.NativeRendering
                     elide: Text.ElideRight
@@ -216,9 +217,10 @@ Item {
                 anchors.fill: parent
                 radius: 8
                 color: (morePointer.containsMouse || (menuPopup.visible && root.popupRootId === 0))
-                    ? Qt.rgba(1, 1, 1, 0.16) : "transparent"
+                    ? Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
             }
-            GlassText { anchors.centerIn: parent; text: "››"; color: Qt.rgba(1, 1, 1, 1); font.pixelSize: 16; renderType: Text.NativeRendering }
+            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16; renderType: Text.NativeRendering }
             MouseArea {
                 id: morePointer
                 anchors.fill: parent
@@ -242,7 +244,8 @@ Item {
     ContextMenu {
         id: menuPopup
         anchorItem: root.popupAnchorItem
-        foregroundColor: Qt.rgba(1, 1, 1, 1)
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
         position: "bottom"
         centerBelowAnchor: false
         centerBelowOffset: root.popupAnchorItem
