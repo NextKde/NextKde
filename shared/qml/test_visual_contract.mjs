@@ -52,6 +52,10 @@ for (const accent of ["#3478f6", "#8b5cf6", "#16875f", "#d66a20"]) {
 
 const windowSource = read("./foundation/KosApplicationWindow.qml");
 const themeSource = read("./foundation/AppTheme.qml");
+const uiModuleCmake = read("./CMakeLists.txt");
+assert.doesNotMatch(uiModuleCmake,
+    /colorize\/(?:Artwork|Wallpaper)ColorSource\.qml/,
+    "standalone Kos.Ui never packages Quickshell-only color samplers");
 assert.match(windowSource, /color:\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
     "glass mode clears the native window exactly once");
 assert.match(windowSource, /background:[\s\S]*color:\s*AppTheme\.windowSurface/,
