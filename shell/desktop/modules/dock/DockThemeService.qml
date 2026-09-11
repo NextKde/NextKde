@@ -4,24 +4,16 @@ import qs.desktop.modules.common
 
 // ────────────────────────────────────────────────────────────────
 // DockThemeService — Dark / light colour palette.
-// Switches reactively when ConfigService.theme changes.
+// Switches reactively with the shell-wide appearance mode.
 // Every visual component binds to these colours; no hardcoded values.
 // ────────────────────────────────────────────────────────────────
 
 QtObject {
     id: svc
 
-    property SystemPalette systemPalette: SystemPalette {
-        colorGroup: SystemPalette.Active
-    }
-
-    readonly property bool systemIsDark: {
-        const color = systemPalette.window
-        return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
-    }
-    // The user can explicitly select light/dark or follow the Qt/KDE palette.
-    property bool isDark: ConfigService.theme === "system"
-        ? systemIsDark : ConfigService.theme !== "light"
+    // AppearanceTokens owns the global system/light/dark resolution so Dock
+    // and every Material surface always select the same palette branch.
+    property bool isDark: AppearanceTokens.isDarkTheme
 
     // ═══════════════════════════════════════════════════
     // Dark palette

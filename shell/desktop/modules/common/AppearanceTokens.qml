@@ -18,13 +18,16 @@ QtObject {
     }
     readonly property color seedColor: AppearanceConfigService.wallpaperSeedColor.a > 0
         ? AppearanceConfigService.wallpaperSeedColor : systemPalette.highlight
-    // end-4's Material palette defaults to dark mode. KDE can retain a light
-    // ColorScheme while a dark LookAndFeel package is active, so SystemPalette
-    // is not a reliable Material mode source on Plasma. Other shell styles
-    // continue to follow the native palette as before.
-    readonly property bool isDarkTheme: isMaterial || (systemPalette.window.r * 0.2126
+    readonly property bool systemIsDark: systemPalette.window.r * 0.2126
         + systemPalette.window.g * 0.7152
-        + systemPalette.window.b * 0.0722 < 0.5)
+        + systemPalette.window.b * 0.0722 < 0.5
+    // Explicit light/dark choices must override KDE; only "system" follows
+    // SystemPalette. Material therefore selects the corresponding matugen
+    // light or dark scheme instead of imposing one mode on both choices.
+    readonly property bool isDarkTheme:
+        AppearanceConfigService.themeMode === "dark" ? true
+        : AppearanceConfigService.themeMode === "light" ? false
+        : systemIsDark
 
     function _mix(base, tint, amount, alpha) {
         return Qt.rgba(base.r + (tint.r - base.r) * amount,
@@ -84,13 +87,25 @@ QtObject {
             tokens._tone(tokens.seedColor, 0, 0.18, tokens.isDarkTheme ? 0.17 : 0.90))
         readonly property color surfaceContainerHighest: MaterialThemeService.color("surface_container_highest", tokens.isDarkTheme,
             tokens._tone(tokens.seedColor, 0, 0.20, tokens.isDarkTheme ? 0.22 : 0.86))
-        // end-4 content hierarchy. Layer 0 carries only a 1% primary tint;
-        // higher layers use the matching Material surface-container roles.
-        readonly property color layer0: tokens._mix(background, primary, 0.01)
-        readonly property color layer1: surfaceContainerLow
-        readonly property color layer2: surfaceContainer
-        readonly property color layer3: surfaceContainerHigh
-        readonly property color layer4: surfaceContainerHighest
+        // Keep end-4's Material layer hierarchy, but retain enough wallpaper
+        // pigment in the dark branch that different wallpapers do not all
+        // collapse into visually identical charcoal cards. Light surfaces use
+        // the unmodified Material roles; dark surfaces remain dark and keep
+        // their ordered elevation while borrowing a restrained primary tint.
+        readonly property color layer0: tokens._mix(background, primary,
+            tokens.isDarkTheme ? 0.12 : 0.01)
+        readonly property color layer1: tokens.isDarkTheme
+            ? tokens._mix(surfaceContainerLow, primary, 0.10)
+            : surfaceContainerLow
+        readonly property color layer2: tokens.isDarkTheme
+            ? tokens._mix(surfaceContainer, primary, 0.09)
+            : surfaceContainer
+        readonly property color layer3: tokens.isDarkTheme
+            ? tokens._mix(surfaceContainerHigh, primary, 0.08)
+            : surfaceContainerHigh
+        readonly property color layer4: tokens.isDarkTheme
+            ? tokens._mix(surfaceContainerHighest, primary, 0.07)
+            : surfaceContainerHighest
         readonly property bool surfaceIsDark:
             tokens._luminance(surfaceContainer) < 0.48
         // QML reserves onXxx names for signal handlers, so foreground roles

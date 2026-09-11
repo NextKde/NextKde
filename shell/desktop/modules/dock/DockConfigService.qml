@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.desktop.modules.common
 
 // ────────────────────────────────────────────────────────────────
 // DockConfigService — Persistent JSON configuration.
@@ -177,11 +178,13 @@ QtObject {
         const nextTheme = String(rawTheme)
         if (!isValidTheme(nextTheme))
             return false
-        if (theme === nextTheme)
-            return false
-        theme = nextTheme
-        scheduleSave()
-        return true
+        const dockChanged = theme !== nextTheme
+        const appearanceChanged = AppearanceConfigService.updateThemeMode(nextTheme)
+        if (dockChanged) {
+            theme = nextTheme
+            scheduleSave()
+        }
+        return dockChanged || appearanceChanged
     }
 
     function updateIconMode(rawMode) {
@@ -485,6 +488,7 @@ QtObject {
         if (obj.theme !== undefined) {
             if (isValidTheme(obj.theme)) {
                 svc.theme = obj.theme
+                AppearanceConfigService.updateThemeMode(obj.theme)
             } else {
                 // Do not let a malformed legacy value leak into the IPC
                 // contract. The next ordinary save rewrites it as "dark".
