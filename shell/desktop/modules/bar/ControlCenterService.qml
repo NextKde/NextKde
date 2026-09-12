@@ -43,6 +43,7 @@ QtObject {
     property bool canHibernate: false
     property bool themeChangeInProgress: false
     property bool nightLightAvailable: true
+    property bool nightLightEnabled: false
     property bool nightLightActive: false
     property bool nightLightChangeInProgress: false
     signal toggleRequested()
@@ -130,8 +131,10 @@ QtObject {
             if (response?.ok) {
                 const value = response.result || ({})
                 nightLightAvailable = value.available !== false
-                if (!nightLightChangeInProgress)
+                if (!nightLightChangeInProgress) {
+                    nightLightEnabled = !!value.enabled
                     nightLightActive = !!value.running
+                }
             }
         })
     }
@@ -377,10 +380,13 @@ QtObject {
         if (!nightLightAvailable || nightLightChangeInProgress)
             return false
         nightLightChangeInProgress = true
-        nightLightActive = !nightLightActive
-        PlatformClient.request("nightlight.toggle", {}, function(response) {
+        const requestedEnabled = !nightLightEnabled
+        nightLightEnabled = requestedEnabled
+        nightLightActive = requestedEnabled
+        PlatformClient.request("nightlight.toggle", { enabled: requestedEnabled }, function(response) {
             nightLightChangeInProgress = false
             if (response?.ok) {
+                nightLightEnabled = !!response.result?.enabled
                 nightLightActive = !!response.result?.running
             } else {
                 Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kwin",

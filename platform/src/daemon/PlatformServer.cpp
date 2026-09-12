@@ -2244,7 +2244,17 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
         const bool available = nightLight.property("available").toBool();
-        const bool enabled = nightLight.property("enabled").toBool();
+        const bool runtimeEnabled = nightLight.property("enabled").toBool();
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/kwinrc");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const bool enabled = settings.value(
+            QStringLiteral("NightColor/Active"), runtimeEnabled).toBool();
+        if (!enabled && runtimeEnabled && !m_nightLightInhibitionCookie.has_value()) {
+            const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
+            if (reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty())
+                m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
+        }
         const bool running = nightLight.property("running").toBool();
         const bool inhibited = m_nightLightInhibitionCookie.has_value()
             || nightLight.property("inhibited").toBool();
@@ -2278,52 +2288,63 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
 
-        // KWin exposes an inhibition lock precisely for temporary controls.
-        // Unlike writing Active/Mode in kwinrc, it leaves scheduled, location,
-        // timing, and constant-mode preferences untouched and is automatically
-        // released if this daemon goes away.
-        if (m_nightLightInhibitionCookie.has_value()) {
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/kwinrc");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const bool currentEnabled = settings.value(
+            QStringLiteral("NightColor/Active"),
+            nightLight.property("enabled").toBool()).toBool();
+        const bool requestedEnabled = payload.contains(QStringLiteral("enabled"))
+            ? payload.value(QStringLiteral("enabled")).toBool()
+            : !currentEnabled;
+
+        // Active is KWin's persistent master switch. Change only this key so
+        // the user's mode, schedule, location, and temperature remain intact.
+        settings.setValue(QStringLiteral("NightColor/Active"), requestedEnabled);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-config-failed"),
+                    QStringLiteral("无法保存夜灯开关状态"), true);
+            return true;
+        }
+
+        if (requestedEnabled && m_nightLightInhibitionCookie.has_value()) {
             const QDBusMessage reply = nightLight.call(
                 QStringLiteral("uninhibit"), *m_nightLightInhibitionCookie);
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 respond(socket, request, false, {}, QStringLiteral("nightlight-uninhibit-failed"),
-                        QStringLiteral("无法恢复夜灯"), true);
+                        QStringLiteral("夜灯已启用，但未能立即恢复"), true);
                 return true;
             }
             m_nightLightInhibitionCookie.reset();
-        } else {
-            const bool enabled = nightLight.property("enabled").toBool();
-            const bool running = nightLight.property("running").toBool();
-            const bool inhibited = nightLight.property("inhibited").toBool();
-            if (!enabled || !running) {
-                respond(socket, request, false, {}, QStringLiteral("nightlight-not-running"),
-                        QStringLiteral("夜灯当前未运行；请在系统设置中启用或等待计划开始"), false);
-                return true;
-            }
-            if (inhibited) {
-                respond(socket, request, false, {}, QStringLiteral("nightlight-already-inhibited"),
-                        QStringLiteral("夜灯正被其他应用临时暂停"), true);
-                return true;
-            }
+        } else if (!requestedEnabled && !m_nightLightInhibitionCookie.has_value()) {
             const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
             if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
                 respond(socket, request, false, {}, QStringLiteral("nightlight-inhibit-failed"),
-                        QStringLiteral("无法暂停夜灯"), true);
+                        QStringLiteral("夜灯已关闭，但未能立即暂停当前效果"), true);
                 return true;
             }
             m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
         }
 
+        QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                            QStringLiteral("org.kde.KWin"), QDBusConnection::sessionBus());
+        const QDBusMessage reconfigureReply = kwin.call(QStringLiteral("reconfigure"));
+        if (reconfigureReply.type() == QDBusMessage::ErrorMessage) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-reconfigure-failed"),
+                    QStringLiteral("夜灯状态已保存，但 KWin 未能立即应用"), true);
+            return true;
+        }
+
         const bool available = nightLight.property("available").toBool();
-        const bool enabled = nightLight.property("enabled").toBool();
         const bool running = nightLight.property("running").toBool();
         const bool inhibited = m_nightLightInhibitionCookie.has_value()
             || nightLight.property("inhibited").toBool();
 
         QJsonObject result{
             {QStringLiteral("available"), available},
-            {QStringLiteral("enabled"), enabled},
-            {QStringLiteral("running"), enabled && running && !inhibited},
+            {QStringLiteral("enabled"), requestedEnabled},
+            {QStringLiteral("running"), requestedEnabled && running && !inhibited},
             {QStringLiteral("inhibited"), inhibited}
         };
         respond(socket, request, true, result);
