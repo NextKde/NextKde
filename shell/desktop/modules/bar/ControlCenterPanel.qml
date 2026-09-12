@@ -1613,7 +1613,12 @@ Item {
         id: submenuCard
         coordinator: coordinator
         managedByCoordinator: false
-        offsetTop: 20
+        // Top Bar submenus grow down from the systray. Bottom/side Dock
+        // submenus instead keep their lower edge beside the systray/control
+        // area, regardless of the selected submenu's individual height.
+        offsetTop: panel.notificationFirst
+            ? panel.controlCenterHeight - 20 - submenuCard.cardHeight
+            : 20
         offsetRight: 20
         cardRadius: 22
         cardWidth: 296
