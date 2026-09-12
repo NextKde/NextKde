@@ -87,7 +87,7 @@ operation list and examples live in
 | `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |
 | `audio` | get volume, set volume/mute | PipeWire/WirePlumber adapter |
 | `bluetooth` | power, list, connect/disconnect | BlueZ adapter |
-| `display` | brightness get/set | brightnessctl/PowerDevil fallback |
+| `display` | per-display brightness get/set | KDE ScreenBrightness (including DDC/CI) / brightnessctl / sysfs fallback |
 | `session` | lock, suspend, hibernate, logout, power | logind/systemd adapter |
 | `theme` | toggle/reconfigure, glass and Dock-animation sync | KDE config and KWin reconfigure |
 | `screenshot` | interactive capture | first available supported utility |

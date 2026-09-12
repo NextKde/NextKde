@@ -96,69 +96,22 @@ Item {
         onClicked: root.panelToggleRequested()
     }
 
-    PopupWindow {
-        id: tooltip
-        visible: hoverArea.containsMouse && !root.sharedPanelOpen
-
-        Connections {
-            target: ScreenLifecycle
-            function onOutputAvailableChanged() {
-                if (!ScreenLifecycle.outputAvailable)
-                    tooltip.visible = false
-            }
-        }
-        implicitWidth: Math.max(150, tooltipColumn.implicitWidth + 18)
-        implicitHeight: tooltipColumn.implicitHeight + 14
-        color: "transparent"
-        anchor {
-            item: root
-            edges: !root.dockHosted ? Edges.Bottom
-                : root.dockEdge === "left" ? Edges.Right
-                : root.dockEdge === "right" ? Edges.Left : Edges.Top
-            gravity: !root.dockHosted ? Edges.Bottom
-                : root.dockEdge === "left" ? Edges.Right
-                : root.dockEdge === "right" ? Edges.Left : Edges.Top
-            margins.top: root.dockHosted
-                && root.dockEdge === "bottom" ? -6 : 0
-            margins.bottom: root.dockHosted ? 0 : -6
-            margins.left: root.dockHosted
-                && root.dockEdge === "right" ? -6 : 0
-            margins.right: root.dockHosted
-                && root.dockEdge === "left" ? -6 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 7
-            color: ThemeService.tooltipBackground
-            Column {
-                id: tooltipColumn
-                anchors.centerIn: parent
-                spacing: 3
-                Text {
-                    text: root.connected
-                        ? (NetworkService.connectionType === "ethernet"
-                            ? "有线网络" : (NetworkService.ssid || "Wi‑Fi"))
-                        : (NetworkService.deviceState === "connecting"
-                            ? "正在连接网络…" : "未连接网络")
-                    color: ThemeService.foregroundColor
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.38)
-                    font { pixelSize: 12; weight: Font.DemiBold }
-                }
-                Text {
-                    visible: root.connected
-                    text: root.hasIssue
-                        ? (NetworkService.connectivity === "portal"
-                            ? "需要网页登录认证" : "网络受限，无法访问互联网")
-                        : (NetworkService.ipv4.length > 0
-                            ? "已连接 · " + NetworkService.ipv4 : "已连接互联网")
-                    color: ThemeService.foregroundColor
-                    opacity: 0.66
-                    font.pixelSize: 10
-                }
-            }
-        }
+    StatusTooltip {
+        anchorItem: root
+        shown: hoverArea.containsMouse && !root.sharedPanelOpen
+        dockHosted: root.dockHosted
+        dockEdge: root.dockEdge
+        minimumWidth: 150
+        primaryText: root.connected
+            ? (NetworkService.connectionType === "ethernet"
+                ? "有线网络" : (NetworkService.ssid || "Wi‑Fi"))
+            : (NetworkService.deviceState === "connecting"
+                ? "正在连接网络…" : "未连接网络")
+        secondaryText: !root.connected ? "" : (root.hasIssue
+            ? (NetworkService.connectivity === "portal"
+                ? "需要网页登录认证" : "网络受限，无法访问互联网")
+            : (NetworkService.ipv4.length > 0
+                ? "已连接 · " + NetworkService.ipv4 : "已连接互联网"))
     }
 
 }

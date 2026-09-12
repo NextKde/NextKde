@@ -365,9 +365,29 @@ assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
+const controlCenterSlider = read("../../shell/desktop/modules/bar/ControlCenterSlider.qml");
+const statusTooltip = read("../../shell/desktop/modules/bar/StatusTooltip.qml");
+assert.match(statusTooltip, /color:\s*"#000000"/,
+    "built-in status tooltips use a black background");
+assert.ok((statusTooltip.match(/color:\s*"#ffffff"/g) || []).length >= 2,
+    "built-in status tooltip text is always white");
+for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar/Battery.qml"),
+                            read("../../shell/desktop/modules/bar/ControlCenterToggle.qml")]) {
+    assert.match(statusSource, /StatusTooltip\s*\{/,
+        "built-in status items share the edge-aware tooltip component");
+}
+assert.match(controlCenterSlider, /LiquidControls\.LiquidSlider\s*\{/,
+    "Control Center sliders share one styled LiquidSlider wrapper");
+assert.ok((controlCenterPanel.match(/ControlCenterSlider\s*\{/g) || []).length >= 4,
+    "volume and brightness surfaces reuse the Control Center slider style");
+const wifiSubmenuStart = controlCenterPanel.indexOf("id: wifiSubmenuView");
+const bluetoothSubmenuStart = controlCenterPanel.indexOf("id: bluetoothSubmenuView");
+const wifiSubmenu = controlCenterPanel.slice(wifiSubmenuStart, bluetoothSubmenuStart);
+assert.doesNotMatch(wifiSubmenu, /glyphColor:[^\n]*#000000/,
+    "Wi-Fi list icons never switch to black");
 assert.match(controlCenterCard,
-    /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
-    "the power sheet moves primary Control Center cards out of view");
+    /effectiveShown:[\s\S]{0,180}root\.managedByCoordinator[\s\S]{0,100}\?\s*root\.cardShown[\s\S]{0,140}!root\.visuallySuppressed/,
+    "the power sheet suppresses primary cards while independent sheets finish closing");
 assert.doesNotMatch(controlCenterCard,
     /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
     "hidden primary cards do not leave a dimmed visual veil");

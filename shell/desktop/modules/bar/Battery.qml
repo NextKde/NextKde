@@ -90,56 +90,14 @@ Item {
         hoverEnabled: true
     }
 
-    PopupWindow {
-        id: tooltip
-        visible: hoverArea.containsMouse && batteryDevice.ready
-        implicitWidth: tooltipText.implicitWidth + 16
-        implicitHeight: tooltipText.implicitHeight + 10
-        color: "transparent"
-
-        Connections {
-            target: ScreenLifecycle
-            function onOutputAvailableChanged() {
-                if (!ScreenLifecycle.outputAvailable)
-                    tooltip.visible = false
-            }
-        }
-        anchor {
-            item: root
-            edges: !root.dockHosted ? Edges.Bottom
-                : root.dockEdge === "left" ? Edges.Right
-                : root.dockEdge === "right" ? Edges.Left : Edges.Top
-            gravity: !root.dockHosted ? Edges.Bottom
-                : root.dockEdge === "left" ? Edges.Right
-                : root.dockEdge === "right" ? Edges.Left : Edges.Top
-            margins.top: root.dockHosted
-                && root.dockEdge === "bottom" ? -6 : 0
-            margins.bottom: root.dockHosted ? 0 : -6
-            margins.left: root.dockHosted
-                && root.dockEdge === "right" ? -6 : 0
-            margins.right: root.dockHosted
-                && root.dockEdge === "left" ? -6 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: ThemeService.tooltipBackground
-
-            Text {
-                id: tooltipText
-                anchors.centerIn: parent
-                text: root.isCharging
-                    ? "充电中 · " + root.percent + "%"
-                    : "电池 · " + root.percent + "%"
-                color: ThemeService.foregroundColor
-                font {
-                    family: "Noto Sans CJK SC"
-                    pixelSize: 12
-                    weight: Font.DemiBold
-                }
-            }
-        }
+    StatusTooltip {
+        anchorItem: root
+        shown: hoverArea.containsMouse && batteryDevice.ready
+        dockHosted: root.dockHosted
+        dockEdge: root.dockEdge
+        primaryText: root.isCharging
+            ? "充电中 · " + root.percent + "%"
+            : "电池 · " + root.percent + "%"
     }
 
     readonly property var batteryDevice: UPower.displayDevice

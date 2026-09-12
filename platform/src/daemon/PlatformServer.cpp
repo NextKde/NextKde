@@ -11,6 +11,7 @@
 #include <QDBusMessage>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
+#include <QDBusReply>
 #include <QDBusVariant>
 #include <QDateTime>
 #include <QDir>
@@ -576,6 +577,96 @@ QJsonObject parseBluetooth(const QByteArray &output, int exitCode)
     return QJsonObject{{QStringLiteral("available"), exitCode == 0 && powerMatch.hasMatch()},
                        {QStringLiteral("powered"), powerMatch.hasMatch() && powerMatch.captured(1).toLower() == QStringLiteral("yes")},
                        {QStringLiteral("devices"), devices}};
+}
+
+std::unique_ptr<QDBusInterface> openScreenBrightness(QString &serviceName)
+{
+    for (const QString &candidate : {QStringLiteral("org.kde.ScreenBrightness"),
+                                     QStringLiteral("org.kde.Solid.PowerManagement")}) {
+        auto interface = std::make_unique<QDBusInterface>(
+            candidate, QStringLiteral("/org/kde/ScreenBrightness"),
+            QStringLiteral("org.kde.ScreenBrightness"), QDBusConnection::sessionBus());
+        if (interface->isValid()) {
+            serviceName = candidate;
+            return interface;
+        }
+    }
+    return nullptr;
+}
+
+QString screenBrightnessPath(const QString &displayId)
+{
+    return QStringLiteral("/org/kde/ScreenBrightness/") + displayId;
+}
+
+QJsonObject readKdeBrightness()
+{
+    QString serviceName;
+    auto screenBrightness = openScreenBrightness(serviceName);
+    if (!screenBrightness)
+        return {{QStringLiteral("available"), false}};
+
+    const QStringList displayIds = screenBrightness->property("DisplaysDBusNames").toStringList();
+    QJsonArray displays;
+    QJsonObject primary;
+    for (const QString &displayId : displayIds) {
+        if (displayId.isEmpty() || displayId.contains(QLatin1Char('/')))
+            continue;
+        QDBusInterface display(serviceName, screenBrightnessPath(displayId),
+                               QStringLiteral("org.kde.ScreenBrightness.Display"),
+                               QDBusConnection::sessionBus());
+        if (!display.isValid())
+            continue;
+        const int maximum = display.property("MaxBrightness").toInt();
+        if (maximum <= 0)
+            continue;
+        const int current = qBound(0, display.property("Brightness").toInt(), maximum);
+        const bool internal = display.property("IsInternal").toBool();
+        const QString label = display.property("Label").toString().trimmed();
+        const QJsonObject item{
+            {QStringLiteral("id"), displayId},
+            {QStringLiteral("label"), label.isEmpty() ? displayId : label},
+            {QStringLiteral("isInternal"), internal},
+            {QStringLiteral("percent"), qRound(current * 100.0 / maximum)},
+            {QStringLiteral("brightness"), current},
+            {QStringLiteral("maximum"), maximum}
+        };
+        displays.append(item);
+        if (primary.isEmpty() || (internal && !primary.value(QStringLiteral("isInternal")).toBool()))
+            primary = item;
+    }
+    if (primary.isEmpty())
+        return {{QStringLiteral("available"), false}};
+    return {
+        {QStringLiteral("available"), true},
+        {QStringLiteral("percent"), primary.value(QStringLiteral("percent"))},
+        {QStringLiteral("device"), primary.value(QStringLiteral("label"))},
+        {QStringLiteral("displayId"), primary.value(QStringLiteral("id"))},
+        {QStringLiteral("displays"), displays}
+    };
+}
+
+bool setKdeDisplayBrightness(const QString &displayId, int percent)
+{
+    QString serviceName;
+    auto screenBrightness = openScreenBrightness(serviceName);
+    if (!screenBrightness)
+        return false;
+    const QStringList displayIds = screenBrightness->property("DisplaysDBusNames").toStringList();
+    if (!displayIds.contains(displayId))
+        return false;
+    QDBusInterface display(serviceName, screenBrightnessPath(displayId),
+                           QStringLiteral("org.kde.ScreenBrightness.Display"),
+                           QDBusConnection::sessionBus());
+    if (!display.isValid())
+        return false;
+    const int maximum = display.property("MaxBrightness").toInt();
+    if (maximum <= 0)
+        return false;
+    const int target = qRound(qBound(0, percent, 100) * maximum / 100.0);
+    const QDBusMessage reply = display.call(QStringLiteral("SetBrightness"), target,
+                                            static_cast<uint>(0));
+    return reply.type() == QDBusMessage::ReplyMessage;
 }
 
 QJsonObject readSysfsBrightness()
@@ -2153,7 +2244,17 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
         const bool available = nightLight.property("available").toBool();
-        const bool enabled = nightLight.property("enabled").toBool();
+        const bool runtimeEnabled = nightLight.property("enabled").toBool();
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/kwinrc");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const bool enabled = settings.value(
+            QStringLiteral("NightColor/Active"), runtimeEnabled).toBool();
+        if (!enabled && runtimeEnabled && !m_nightLightInhibitionCookie.has_value()) {
+            const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
+            if (reply.type() != QDBusMessage::ErrorMessage && !reply.arguments().isEmpty())
+                m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
+        }
         const bool running = nightLight.property("running").toBool();
         const bool inhibited = m_nightLightInhibitionCookie.has_value()
             || nightLight.property("inhibited").toBool();
@@ -2187,52 +2288,63 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
 
-        // KWin exposes an inhibition lock precisely for temporary controls.
-        // Unlike writing Active/Mode in kwinrc, it leaves scheduled, location,
-        // timing, and constant-mode preferences untouched and is automatically
-        // released if this daemon goes away.
-        if (m_nightLightInhibitionCookie.has_value()) {
+        const QString configPath = QStandardPaths::writableLocation(
+            QStandardPaths::ConfigLocation) + QStringLiteral("/kwinrc");
+        QSettings settings(configPath, QSettings::IniFormat);
+        const bool currentEnabled = settings.value(
+            QStringLiteral("NightColor/Active"),
+            nightLight.property("enabled").toBool()).toBool();
+        const bool requestedEnabled = payload.contains(QStringLiteral("enabled"))
+            ? payload.value(QStringLiteral("enabled")).toBool()
+            : !currentEnabled;
+
+        // Active is KWin's persistent master switch. Change only this key so
+        // the user's mode, schedule, location, and temperature remain intact.
+        settings.setValue(QStringLiteral("NightColor/Active"), requestedEnabled);
+        settings.sync();
+        if (settings.status() != QSettings::NoError) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-config-failed"),
+                    QStringLiteral("无法保存夜灯开关状态"), true);
+            return true;
+        }
+
+        if (requestedEnabled && m_nightLightInhibitionCookie.has_value()) {
             const QDBusMessage reply = nightLight.call(
                 QStringLiteral("uninhibit"), *m_nightLightInhibitionCookie);
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 respond(socket, request, false, {}, QStringLiteral("nightlight-uninhibit-failed"),
-                        QStringLiteral("无法恢复夜灯"), true);
+                        QStringLiteral("夜灯已启用，但未能立即恢复"), true);
                 return true;
             }
             m_nightLightInhibitionCookie.reset();
-        } else {
-            const bool enabled = nightLight.property("enabled").toBool();
-            const bool running = nightLight.property("running").toBool();
-            const bool inhibited = nightLight.property("inhibited").toBool();
-            if (!enabled || !running) {
-                respond(socket, request, false, {}, QStringLiteral("nightlight-not-running"),
-                        QStringLiteral("夜灯当前未运行；请在系统设置中启用或等待计划开始"), false);
-                return true;
-            }
-            if (inhibited) {
-                respond(socket, request, false, {}, QStringLiteral("nightlight-already-inhibited"),
-                        QStringLiteral("夜灯正被其他应用临时暂停"), true);
-                return true;
-            }
+        } else if (!requestedEnabled && !m_nightLightInhibitionCookie.has_value()) {
             const QDBusMessage reply = nightLight.call(QStringLiteral("inhibit"));
             if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
                 respond(socket, request, false, {}, QStringLiteral("nightlight-inhibit-failed"),
-                        QStringLiteral("无法暂停夜灯"), true);
+                        QStringLiteral("夜灯已关闭，但未能立即暂停当前效果"), true);
                 return true;
             }
             m_nightLightInhibitionCookie = reply.arguments().constFirst().toUInt();
         }
 
+        QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
+                            QStringLiteral("org.kde.KWin"), QDBusConnection::sessionBus());
+        const QDBusMessage reconfigureReply = kwin.call(QStringLiteral("reconfigure"));
+        if (reconfigureReply.type() == QDBusMessage::ErrorMessage) {
+            respond(socket, request, false, {}, QStringLiteral("nightlight-reconfigure-failed"),
+                    QStringLiteral("夜灯状态已保存，但 KWin 未能立即应用"), true);
+            return true;
+        }
+
         const bool available = nightLight.property("available").toBool();
-        const bool enabled = nightLight.property("enabled").toBool();
         const bool running = nightLight.property("running").toBool();
         const bool inhibited = m_nightLightInhibitionCookie.has_value()
             || nightLight.property("inhibited").toBool();
 
         QJsonObject result{
             {QStringLiteral("available"), available},
-            {QStringLiteral("enabled"), enabled},
-            {QStringLiteral("running"), enabled && running && !inhibited},
+            {QStringLiteral("enabled"), requestedEnabled},
+            {QStringLiteral("running"), requestedEnabled && running && !inhibited},
             {QStringLiteral("inhibited"), inhibited}
         };
         respond(socket, request, true, result);
@@ -2596,6 +2708,11 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
         return true;
     }
     if (op == QStringLiteral("display.brightness.get")) {
+        const QJsonObject kdeBrightness = readKdeBrightness();
+        if (kdeBrightness.value(QStringLiteral("available")).toBool()) {
+            respond(socket, request, true, kdeBrightness);
+            return true;
+        }
         const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
         if (!brightnessctl.isEmpty())
             runCommand(socket, request, brightnessctl, {QStringLiteral("-m")}, parseBrightness);
@@ -2605,6 +2722,19 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("display.brightness.set")) {
         const int value = qBound(0, payload.value(QStringLiteral("percent")).toInt(), 100);
+        const QString displayId = payload.value(QStringLiteral("displayId")).toString();
+        if (!displayId.isEmpty()) {
+            if (!setKdeDisplayBrightness(displayId, value)) {
+                respond(socket, request, false, {}, QStringLiteral("brightness-display-set-failed"),
+                        QStringLiteral("无法设置指定显示器亮度"), true);
+                return true;
+            }
+            respond(socket, request, true, {
+                {QStringLiteral("displayId"), displayId},
+                {QStringLiteral("percent"), value}
+            });
+            return true;
+        }
         const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
         if (!brightnessctl.isEmpty()) {
             runCommand(socket, request, brightnessctl,

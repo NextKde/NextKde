@@ -28,3 +28,5 @@ singleton ControlCenterService 1.0 ControlCenterService.qml
 singleton SysTrayOrderService 1.0 SysTrayOrderService.qml
 ControlCenterCard 1.0 ControlCenterCard.qml
 ControlCenterCoordinator 1.0 ControlCenterCoordinator.qml
+ControlCenterSlider 1.0 ControlCenterSlider.qml
+StatusTooltip 1.0 StatusTooltip.qml
