@@ -70,7 +70,9 @@ Item {
         activeSubmenu = ""
         sessionModalVisible = false
         pendingConfirmAction = ""
-        coordinator.modalActive = false
+        // Keep primary cards suppressed until submenuCard finishes its close
+        // motion. onMotionClosed releases modalActive; doing it here maps the
+        // primary cards underneath the still-visible submenu for one frame.
     }
 
     function openSettingsModule(module) {
