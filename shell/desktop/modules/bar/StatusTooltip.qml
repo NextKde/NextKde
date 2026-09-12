@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell
-import qs.desktop.modules.dock
+import qs.desktop.modules.common
 
 // Edge-aware tooltip shared by built-in status items. A PopupWindow is used
 // instead of Qt Quick Controls ToolTip because tray items can live in separate
