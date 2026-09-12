@@ -365,6 +365,16 @@ assert.doesNotMatch(controlCenterPanel,
     /Card 5:[\s\S]{0,1000}(?:cardBorderColor|color):[^\n]*#0a84ff/,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
+const controlCenterSlider = read("../../shell/desktop/modules/bar/ControlCenterSlider.qml");
+assert.match(controlCenterSlider, /LiquidControls\.LiquidSlider\s*\{/,
+    "Control Center sliders share one styled LiquidSlider wrapper");
+assert.ok((controlCenterPanel.match(/ControlCenterSlider\s*\{/g) || []).length >= 4,
+    "volume and brightness surfaces reuse the Control Center slider style");
+const wifiSubmenuStart = controlCenterPanel.indexOf("id: wifiSubmenuView");
+const bluetoothSubmenuStart = controlCenterPanel.indexOf("id: bluetoothSubmenuView");
+const wifiSubmenu = controlCenterPanel.slice(wifiSubmenuStart, bluetoothSubmenuStart);
+assert.doesNotMatch(wifiSubmenu, /glyphColor:[^\n]*#000000/,
+    "Wi-Fi list icons never switch to black");
 assert.match(controlCenterCard,
     /effectiveShown:[\s\S]{0,180}root\.managedByCoordinator[\s\S]{0,100}\?\s*root\.cardShown[\s\S]{0,140}!root\.visuallySuppressed/,
     "the power sheet suppresses primary cards while independent sheets finish closing");

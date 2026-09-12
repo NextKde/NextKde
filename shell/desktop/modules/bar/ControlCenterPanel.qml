@@ -898,16 +898,11 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onClicked: panel.openSubmenu("brightness")
         }
-        LiquidControls.LiquidSlider {
+        ControlCenterSlider {
             id: brightnessSlider
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 31; rightMargin: 31; bottomMargin: 8 }
-            height: 30
             value: panel.brightnessPreview / 100
             enabled: ControlCenterService.brightnessAvailable
-            trackHeight: 4
-            trackColor: Qt.rgba(1, 1, 1, 0.17)
-            accentColor: Qt.rgba(1, 1, 1, 0.42)
-            thumbColor: "#ffffff"
             onPreviewChanged: function(v) {
                 panel.draggingBrightness = true
                 panel.brightnessPreview = Math.round(v * 100)
@@ -995,15 +990,10 @@ Item {
                 function onAudioMutedChanged() { volumeGlyph.requestPaint() }
             }
         }
-        LiquidControls.LiquidSlider {
+        ControlCenterSlider {
             id: volumeSlider
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 34; rightMargin: 17; bottomMargin: 8 }
-            height: 30
             value: panel.volumePreview / 100
-            trackHeight: 5
-            trackColor: Qt.rgba(1, 1, 1, 0.17)
-            accentColor: "#ffffff"
-            thumbColor: "#ffffff"
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true
                 panel.volumePreview = Math.round(v * 100)
@@ -1656,7 +1646,7 @@ Item {
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: -1
                     text: "‹"
-                    color: ThemeService.foregroundColor
+                    color: "white"
                     font { pixelSize: 18; weight: Font.Bold }
                 }
 
@@ -1680,7 +1670,7 @@ Item {
                     : (panel.activeSubmenu === "bluetooth" ? "蓝牙"
                     : (panel.activeSubmenu === "brightness" ? "显示亮度"
                     : (panel.activeSubmenu === "sound" ? "声音" : "")))
-                color: ThemeService.foregroundColor
+                color: "white"
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
 
@@ -1862,7 +1852,7 @@ Item {
                             wifiEnabled: true
                             connected: !!modelData.active
                             signalStrength: modelData.signalStrength !== undefined ? modelData.signalStrength : 70
-                            glyphColor: modelData.active ? "#0a84ff" : (ThemeService.isDark ? "white" : "#000000")
+                            glyphColor: modelData.active ? "#0a84ff" : "white"
                         }
 
                         GlassText {
@@ -2262,15 +2252,10 @@ Item {
                             color: "white"
                             font { pixelSize: 9; family: "Noto Sans CJK SC" }
                         }
-                        LiquidControls.LiquidSlider {
+                        ControlCenterSlider {
                             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 3 }
-                            height: 31
                             value: displayBrightnessRow.preview / 100
                             enabled: !ControlCenterService.brightnessChangeInProgress
-                            trackHeight: 4
-                            trackColor: Qt.rgba(1, 1, 1, 0.17)
-                            accentColor: Qt.rgba(1, 1, 1, 0.42)
-                            thumbColor: "#ffffff"
                             onPreviewChanged: function(v) {
                                 displayBrightnessRow.preview = Math.round(v * 100)
                             }
@@ -2446,15 +2431,11 @@ Item {
                     }
                 }
 
-                LiquidControls.LiquidSlider {
+                ControlCenterSlider {
                     id: submenuVolumeSlider
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 26; rightMargin: 2; bottomMargin: 4 }
                     height: 28
                     value: panel.volumePreview / 100
-                    trackHeight: 5
-                    trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.15)
-                    accentColor: ThemeService.isDark ? "#ffffff" : Qt.rgba(0, 0, 0, 0.40)
-                    thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
                     onPreviewChanged: function(v) {
                         panel.draggingVolume = true
                         panel.volumePreview = Math.round(v * 100)
@@ -2643,7 +2624,7 @@ Item {
                                 font { pixelSize: 9; family: "Noto Sans CJK SC" }
                             }
 
-                            LiquidControls.LiquidSlider {
+                            ControlCenterSlider {
                                 anchors {
                                     left: appMuteButton.right
                                     leftMargin: 8
@@ -2654,11 +2635,8 @@ Item {
                                 }
                                 height: 27
                                 value: Math.min(1, appVolumeRow.volumePreview / 150)
-                                trackHeight: 4
-                                trackColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.17) : Qt.rgba(0, 0, 0, 0.15)
                                 accentColor: appVolumeRow.muted ? Qt.rgba(1, 1, 1, 0.25)
-                                    : (ThemeService.isDark ? "#ffffff" : Qt.rgba(0, 0, 0, 0.40))
-                                thumbColor: ThemeService.isDark ? "#ffffff" : "#e7f1ff"
+                                    : Qt.rgba(1, 1, 1, 0.42)
                                 onPreviewChanged: function(v) {
                                     appVolumeRow.volumePreview = Math.round(v * 150)
                                 }
