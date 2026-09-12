@@ -52,6 +52,8 @@ Item {
         } else if (name === "bluetooth") {
             ControlCenterService.refresh()
             ControlCenterService.refreshBluetoothDevices()
+        } else if (name === "brightness") {
+            ControlCenterService.refresh()
         }
         if (!coordinator.open)
             coordinator.openAll()
@@ -900,11 +902,24 @@ Item {
             }
         }
         GlassText {
-            anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
+            anchors { right: parent.right; top: parent.top; rightMargin: 30; topMargin: 8 }
             text: ControlCenterService.brightnessAvailable ? Math.round(panel.brightnessPreview) + "%" : "无亮度设备"
             color: ThemeService.foregroundColor
             opacity: 0.50
             font { pixelSize: 9; family: "Noto Sans CJK SC" }
+        }
+        GlassText {
+            anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }
+            text: "›"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 15; weight: Font.Bold }
+        }
+        MouseArea {
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            height: 27
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: panel.openSubmenu("brightness")
         }
         LiquidControls.LiquidSlider {
             id: brightnessSlider
@@ -1605,7 +1620,7 @@ Item {
         }
     }
 
-    // ── Card 11 (Submenu Panel): Wi-Fi, Bluetooth, Sound ─────────────
+    // ── Card 11 (Submenu Panel): Wi-Fi, Bluetooth, Brightness, Sound ─
     ControlCenterCard {
         id: submenuCard
         coordinator: coordinator
@@ -1616,7 +1631,8 @@ Item {
         cardWidth: 296
         cardHeight: panel.activeSubmenu === "wifi" ? 360
             : (panel.activeSubmenu === "bluetooth" ? 340
-            : (panel.activeSubmenu === "sound" ? 420 : 280))
+            : (panel.activeSubmenu === "brightness" ? 280
+            : (panel.activeSubmenu === "sound" ? 420 : 280)))
         cardShown: panel.activeSubmenu !== "" && panel.activeSubmenu !== "session"
         onMotionClosed: {
             if (panel.activeSubmenu === "" && !panel.sessionModalVisible)
@@ -1678,7 +1694,8 @@ Item {
                 }
                 text: panel.activeSubmenu === "wifi" ? "Wi‑Fi"
                     : (panel.activeSubmenu === "bluetooth" ? "蓝牙"
-                    : (panel.activeSubmenu === "sound" ? "声音" : ""))
+                    : (panel.activeSubmenu === "brightness" ? "显示亮度"
+                    : (panel.activeSubmenu === "sound" ? "声音" : "")))
                 color: ThemeService.foregroundColor
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -2207,7 +2224,111 @@ Item {
             }
         }
 
-        // ── View C: Sound ──
+        // ── View C: Per-display brightness ──
+        Item {
+            id: brightnessSubmenuView
+            visible: panel.activeSubmenu === "brightness"
+            anchors {
+                top: submenuDivider.bottom
+                topMargin: 8
+                left: parent.left
+                right: parent.right
+                bottom: parent.bottom
+            }
+
+            Column {
+                anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 14; rightMargin: 14 }
+                spacing: 4
+
+                Repeater {
+                    model: ControlCenterService.brightnessDisplays
+
+                    delegate: Item {
+                        id: displayBrightnessRow
+                        required property var modelData
+                        width: parent.width
+                        height: 82
+                        property real preview: Number(modelData.percent || 0)
+
+                        GlassText {
+                            anchors { left: parent.left; right: displayBrightnessPercent.left; top: parent.top; rightMargin: 8 }
+                            text: modelData.label || modelData.id || "显示器"
+                            elide: Text.ElideRight
+                            color: "white"
+                            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                        }
+                        GlassText {
+                            id: displayBrightnessPercent
+                            anchors { right: parent.right; top: parent.top }
+                            text: Math.round(displayBrightnessRow.preview) + "%"
+                            color: "white"
+                            font { pixelSize: 10; family: "Noto Sans CJK SC" }
+                        }
+                        GlassText {
+                            anchors { left: parent.left; top: parent.top; topMargin: 20 }
+                            text: modelData.isInternal ? "内置屏幕" : "外接显示器"
+                            color: "white"
+                            font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                        }
+                        LiquidControls.LiquidSlider {
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 3 }
+                            height: 31
+                            value: displayBrightnessRow.preview / 100
+                            enabled: !ControlCenterService.brightnessChangeInProgress
+                            trackHeight: 4
+                            trackColor: Qt.rgba(1, 1, 1, 0.17)
+                            accentColor: Qt.rgba(1, 1, 1, 0.42)
+                            thumbColor: "#ffffff"
+                            onPreviewChanged: function(v) {
+                                displayBrightnessRow.preview = Math.round(v * 100)
+                            }
+                            onCommitRequested: function(v) {
+                                ControlCenterService.setDisplayBrightness(
+                                    displayBrightnessRow.modelData.id, Math.round(v * 100))
+                            }
+                        }
+                    }
+                }
+            }
+
+            GlassText {
+                anchors.centerIn: parent
+                visible: ControlCenterService.brightnessDisplays.length === 0
+                text: "未发现可调节亮度的显示器"
+                color: "white"
+                font { pixelSize: 11; family: "Noto Sans CJK SC" }
+            }
+
+            Item {
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                height: 38
+                Rectangle {
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
+                    height: 1
+                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                }
+                GlassText {
+                    anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
+                    text: "显示设置…"
+                    color: "white"
+                    font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                }
+                GlassText {
+                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                    text: "›"
+                    color: "white"
+                    font { pixelSize: 13; weight: Font.Bold }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: panel.openSettingsModule("kcm_kscreen")
+                }
+            }
+        }
+
+        // ── View D: Sound ──
         Item {
             id: soundSubmenuView
             visible: panel.activeSubmenu === "sound"

@@ -85,6 +85,23 @@ def test_bridge_trace_is_opt_in() -> None:
     assert publish.index("if (traceEvents)") < publish.index("QJsonDocument(event).toJson")
 
 
+def test_brightness_targets_one_kde_display() -> None:
+    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    assert "openScreenBrightness" in source
+    assert 'property("DisplaysDBusNames")' in source
+    assert 'QStringLiteral("org.kde.ScreenBrightness.Display")' in source
+    setter = source[source.index("bool setKdeDisplayBrightness("):]
+    setter = setter[:setter.index("QJsonObject readSysfsBrightness()")]
+    assert "displayIds.contains(displayId)" in setter
+    assert 'display.call(QStringLiteral("SetBrightness")' in setter
+    assert "for (const QString &displayId : displayIds)" not in setter
+
+    handler = source[source.index('if (op == QStringLiteral("display.brightness.set"))'):]
+    handler = handler[:handler.index('if (op == QStringLiteral("theme.reconfigure"))')]
+    assert 'payload.value(QStringLiteral("displayId"))' in handler
+    assert "setKdeDisplayBrightness(displayId, value)" in handler
+
+
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
@@ -92,4 +109,5 @@ if __name__ == "__main__":
     test_theme_toggle_uses_the_safe_palette_path()
     test_nightlight_toggle_does_not_overwrite_user_configuration()
     test_bridge_trace_is_opt_in()
+    test_brightness_targets_one_kde_display()
     print("platform contracts: ok")

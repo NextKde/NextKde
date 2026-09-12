@@ -18,6 +18,8 @@ QtObject {
     property bool volumeChangeInProgress: false
     property bool brightnessAvailable: false
     property int brightnessPercent: 0
+    property var brightnessDisplays: []
+    property string brightnessPrimaryDisplayId: ""
     property bool brightnessChangeInProgress: false
     property string brightnessBacklightName: ""
     property bool bluetoothAvailable: false
@@ -115,9 +117,13 @@ QtObject {
                 brightnessAvailable = !!value.available
                 brightnessPercent = Number(value.percent || 0)
                 brightnessBacklightName = value.device || ""
+                brightnessDisplays = Array.isArray(value.displays) ? value.displays : []
+                brightnessPrimaryDisplayId = value.displayId || ""
             } else {
                 brightnessAvailable = false
                 brightnessBacklightName = ""
+                brightnessDisplays = []
+                brightnessPrimaryDisplayId = ""
             }
         })
         PlatformClient.request("nightlight.get", {}, function(response) {
@@ -193,6 +199,8 @@ QtObject {
     }
 
     function setBrightness(percent) {
+        if (brightnessPrimaryDisplayId)
+            return setDisplayBrightness(brightnessPrimaryDisplayId, percent)
         const value = Math.round(Math.max(0, Math.min(100, Number(percent) || 0)))
         if (!brightnessAvailable || brightnessChangeInProgress)
             return false
@@ -201,6 +209,31 @@ QtObject {
             brightnessChangeInProgress = false
             if (response?.ok)
                 brightnessPercent = value
+            refresh()
+        })
+        return true
+    }
+
+    function setDisplayBrightness(displayId, percent) {
+        const id = String(displayId || "")
+        const value = Math.round(Math.max(0, Math.min(100, Number(percent) || 0)))
+        if (!id || !brightnessAvailable || brightnessChangeInProgress)
+            return false
+        brightnessChangeInProgress = true
+        PlatformClient.request("display.brightness.set", { displayId: id, percent: value }, function(response) {
+            brightnessChangeInProgress = false
+            if (response?.ok) {
+                const updated = brightnessDisplays.map(function(display) {
+                    if (display.id !== id)
+                        return display
+                    return Object.assign({}, display, { percent: value })
+                })
+                brightnessDisplays = updated
+                if (updated.length > 0) {
+                    brightnessPercent = Number(updated[0].percent || 0)
+                    brightnessBacklightName = updated[0].label || updated[0].id || ""
+                }
+            }
             refresh()
         })
         return true
