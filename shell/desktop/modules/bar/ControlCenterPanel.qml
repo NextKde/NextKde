@@ -717,7 +717,7 @@ Item {
             layer.enabled: true
             layer.effect: MultiEffect {
                 colorization: 1.0
-                colorizationColor: ThemeService.isDark ? "#ffffff" : "#000000"
+                colorizationColor: ThemeService.isDark ? "#000000" : "#ffffff"
             }
         }
         MouseArea {
@@ -851,8 +851,7 @@ Item {
             layer.enabled: true
             layer.effect: MultiEffect {
                 colorization: 1.0
-                colorizationColor: ControlCenterService.nightLightActive
-                    ? "#ffffff" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+                colorizationColor: "#ffffff"
             }
         }
         MouseArea {
