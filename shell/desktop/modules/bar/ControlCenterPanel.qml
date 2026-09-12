@@ -276,7 +276,7 @@ Item {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
-                ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
+                ? "#0a84ff"
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
             opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
             scale: wifiTogglePointer.pressed ? 0.92
@@ -292,7 +292,7 @@ Item {
                 connected: NetworkService.deviceState === "connected"
                     && NetworkService.connectionType === "wifi"
                 signalStrength: NetworkService.signalStrength
-                glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
+                glyphColor: NetworkService.wifiEnabled ? "#ffffff"
                     : "white"
             }
             // Toggling NetworkManager's radio is not instant either; mirror
@@ -406,7 +406,7 @@ Item {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
-                ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
+                ? "#0a84ff"
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
             opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
             scale: bluetoothTogglePointer.pressed ? 0.92
@@ -418,7 +418,7 @@ Item {
                 anchors.centerIn: parent
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
-                property color glyphColor: active ? "#0a84ff" : "white"
+                property color glyphColor: "white"
                 opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
@@ -696,8 +696,11 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: 26
-            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
-            opacity: themePointer.containsMouse && !themePointer.pressed ? 1 : 0
+            color: ThemeService.isDark
+                ? "#ffffff"
+                : Qt.rgba(1, 1, 1, 0.45)
+            opacity: ThemeService.isDark || (themePointer.containsMouse && !themePointer.pressed) ? 1 : 0
+            Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -714,7 +717,7 @@ Item {
             layer.enabled: true
             layer.effect: MultiEffect {
                 colorization: 1.0
-                colorizationColor: ThemeService.isDark ? ThemeService.foregroundColor : "#000000"
+                colorizationColor: ThemeService.isDark ? "#ffffff" : "#000000"
             }
         }
         MouseArea {
@@ -830,7 +833,7 @@ Item {
             anchors.fill: parent
             radius: 26
             color: ControlCenterService.nightLightActive
-                ? (ThemeService.isDark ? Qt.rgba(1, 0.49, 0.02, 0.62) : Qt.rgba(1, 0.57, 0.02, 0.52))
+                ? "#ffcc00"
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
             opacity: ControlCenterService.nightLightActive || (nightLightPointer.containsMouse && !nightLightPointer.pressed) ? 1 : 0
             Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
@@ -849,27 +852,8 @@ Item {
             layer.effect: MultiEffect {
                 colorization: 1.0
                 colorizationColor: ControlCenterService.nightLightActive
-                    ? "#fff7df" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
+                    ? "#ffffff" : (ThemeService.isDark ? ThemeService.foregroundColor : "#000000")
             }
-        }
-        // The warm fill is visible at a glance; this small dot provides an
-        // unambiguous state cue even on a colourful or bright wallpaper.
-        Rectangle {
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.rightMargin: 7
-            anchors.bottomMargin: 7
-            width: 7
-            height: 7
-            radius: width / 2
-            color: "#fff7df"
-            border.width: 1
-            border.color: "#d66b00"
-            visible: ControlCenterService.nightLightActive
-            scale: visible ? 1.0 : 0.45
-            opacity: visible ? 1.0 : 0.0
-            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-            Behavior on opacity { NumberAnimation { duration: 120 } }
         }
         MouseArea {
             id: nightLightPointer
