@@ -552,27 +552,8 @@ Item {
         cardRadius: 25
         cardWidth: 151
         cardHeight: 127
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.95, 1, 0.32) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
-
-        // A faint wallpaper-tone layer is both the card's quiet liquid base
-        // and the blur source for the transport buttons. Blurring it makes
-        // each button a frosted lens that absorbs the ambient wallpaper tint
-        // (iOS-style), instead of a swatch of the album artwork.
-        Rectangle {
-            id: mediaBackdrop
-            anchors.fill: parent
-            // `parent` here is the card's contentHost (a plain Item), which
-            // has no cardRadius; read the card's blurRadius instead so the
-            // backdrop corners follow the card's SDF-rounded shape.
-            radius: mediaCard.blurRadius
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(WallpaperColorSource.primary.r, WallpaperColorSource.primary.g, WallpaperColorSource.primary.b, 0.16) }
-                GradientStop { position: 1.0; color: Qt.rgba(WallpaperColorSource.secondary.r, WallpaperColorSource.secondary.g, WallpaperColorSource.secondary.b, 0.07) }
-            }
-        }
 
         Rectangle {
             id: artwork
