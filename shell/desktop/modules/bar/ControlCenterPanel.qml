@@ -2236,17 +2236,25 @@ Item {
                 bottom: parent.bottom
             }
 
-            Column {
-                anchors { top: parent.top; left: parent.left; right: parent.right; leftMargin: 14; rightMargin: 14 }
+            ListView {
+                id: brightnessDisplayList
+                anchors {
+                    top: parent.top
+                    left: parent.left
+                    right: parent.right
+                    bottom: parent.bottom
+                    leftMargin: 14
+                    rightMargin: 14
+                    bottomMargin: 38
+                }
                 spacing: 4
+                clip: true
+                model: ControlCenterService.brightnessDisplays
 
-                Repeater {
-                    model: ControlCenterService.brightnessDisplays
-
-                    delegate: Item {
+                delegate: Item {
                         id: displayBrightnessRow
                         required property var modelData
-                        width: parent.width
+                        width: brightnessDisplayList.width
                         height: 82
                         property real preview: Number(modelData.percent || 0)
 
@@ -2287,7 +2295,6 @@ Item {
                                     displayBrightnessRow.modelData.id, Math.round(v * 100))
                             }
                         }
-                    }
                 }
             }
 
