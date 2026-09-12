@@ -1760,13 +1760,13 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "Wi‑Fi 已关闭"
                         color: "white"
-                        font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "在上方开启开关以查看附近网络"
                         color: "white"
-                        font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
             }
@@ -1791,7 +1791,7 @@ Item {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         text: "附近网络"
                         color: "white"
-                        font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 11; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
 
                     GlassText {
@@ -1799,7 +1799,7 @@ Item {
                         visible: NetworkService.wifiScanInProgress
                         text: "正在扫描…"
                         color: "white"
-                        font { pixelSize: 9; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
 
@@ -1826,7 +1826,7 @@ Item {
                     delegate: Rectangle {
                         required property var modelData
                         width: submenuWifiList.width
-                        height: 38
+                        height: 42
                         radius: 10
                         color: wifiRowMouse.containsMouse
                             ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
@@ -1867,8 +1867,8 @@ Item {
                             elide: Text.ElideRight
                             color: "white"
                             font {
-                                pixelSize: 11
-                                weight: modelData.active ? Font.Bold : Font.Normal
+                                pixelSize: 12
+                                weight: modelData.active ? Font.Bold : Font.DemiBold
                                 family: "Noto Sans CJK SC"
                             }
                         }
@@ -1878,12 +1878,35 @@ Item {
                             anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
                             spacing: 6
 
-                            GlassText {
+                            Canvas {
                                 visible: modelData.security && modelData.security !== "none"
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "🔒"
-                                color: "white"
-                                font.pixelSize: 10
+                                width: 12
+                                height: 14
+                                onPaint: {
+                                    const ctx = getContext("2d")
+                                    ctx.reset()
+                                    ctx.strokeStyle = "#ffffff"
+                                    ctx.fillStyle = "#ffffff"
+                                    ctx.lineWidth = 1.5
+                                    ctx.lineCap = "round"
+                                    ctx.beginPath()
+                                    ctx.arc(width / 2, 5, 3, Math.PI, 0)
+                                    ctx.stroke()
+                                    ctx.beginPath()
+                                    ctx.moveTo(3.5, 5)
+                                    ctx.lineTo(width - 3.5, 5)
+                                    ctx.quadraticCurveTo(width - 2, 5, width - 2, 6.5)
+                                    ctx.lineTo(width - 2, 10.5)
+                                    ctx.quadraticCurveTo(width - 2, 12, width - 3.5, 12)
+                                    ctx.lineTo(3.5, 12)
+                                    ctx.quadraticCurveTo(2, 12, 2, 10.5)
+                                    ctx.lineTo(2, 6.5)
+                                    ctx.quadraticCurveTo(2, 5, 3.5, 5)
+                                    ctx.closePath()
+                                    ctx.fill()
+                                }
+                                Component.onCompleted: requestPaint()
                             }
 
                             Rectangle {
@@ -1898,7 +1921,7 @@ Item {
                                     anchors.centerIn: parent
                                     text: "断开"
                                     color: "white"
-                                    font { pixelSize: 9; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                                    font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -1930,7 +1953,7 @@ Item {
                         visible: submenuWifiList.count === 0 && !NetworkService.wifiScanInProgress
                         text: "未搜索到 Wi‑Fi 网络"
                         color: "white"
-                        font { pixelSize: 11; family: "Noto Sans CJK SC" }
+                        font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
             }
@@ -1950,7 +1973,7 @@ Item {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "网络设置…"
                     color: "white"
-                    font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                    font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                 }
 
                 GlassText {
