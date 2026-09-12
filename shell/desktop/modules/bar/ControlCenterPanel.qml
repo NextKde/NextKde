@@ -36,6 +36,11 @@ Item {
     property alias logoutConfirmationVisible: panel.sessionModalVisible
     property string activeSubmenu: ""
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
+    // A standalone top Bar grows downward, so controls come first. A panel
+    // hosted by a bottom/side Dock grows away from the Dock, so keep the
+    // controls nearest the Dock and place notification history above them.
+    readonly property bool notificationFirst: dockHosted && dockEdge !== "top"
+    readonly property int mainControlsOffsetY: notificationFirst ? 238 : 0
     signal networkRequested()
     signal bluetoothRequested()
 
@@ -262,7 +267,7 @@ Item {
     ControlCenterCard {
         id: wifiCard
         coordinator: coordinator
-        offsetTop: 20
+        offsetTop: 20 + panel.mainControlsOffsetY
         offsetRight: 179
         cardRadius: 29.5
         cardWidth: 137
@@ -391,7 +396,7 @@ Item {
     ControlCenterCard {
         id: bluetoothCard
         coordinator: coordinator
-        offsetTop: 87
+        offsetTop: 87 + panel.mainControlsOffsetY
         offsetRight: 179
         cardRadius: 29.5
         cardWidth: 137
@@ -540,7 +545,7 @@ Item {
     ControlCenterCard {
         id: mediaCard
         coordinator: coordinator
-        offsetTop: 20
+        offsetTop: 20 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: 25
         cardWidth: 151
@@ -649,7 +654,7 @@ Item {
     // ── Card 4: Screenshot ───────────────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 155
+        offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 264
         cardRadius: 26
         cardWidth: 52
@@ -685,7 +690,7 @@ Item {
     // ── Card 5: Dark Mode / Theme Toggle ─────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 155
+        offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 203
         cardRadius: 26
         cardWidth: 52
@@ -733,7 +738,7 @@ Item {
     // ── Card 6: Power & Session ──────────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 155
+        offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 142
         cardRadius: 26
         cardWidth: 52
@@ -776,7 +781,7 @@ Item {
     // ── Card 7: Do Not Disturb ───────────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 155
+        offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 81
         cardRadius: 26
         cardWidth: 52
@@ -821,7 +826,7 @@ Item {
     // ── Card 8: Night Light ──────────────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 155
+        offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: 26
         cardWidth: 52
@@ -866,7 +871,7 @@ Item {
     // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 217
+        offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: 19
         cardWidth: 296
@@ -935,7 +940,7 @@ Item {
     // ── Card 8: Sound / volume ───────────────────────────────────────
     ControlCenterCard {
         coordinator: coordinator
-        offsetTop: 282
+        offsetTop: 282 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: 19
         cardWidth: 296
@@ -1032,7 +1037,7 @@ Item {
         // window/blur-region/hit-test space once there is something to show.
         visible: coordinator.cardAnchor !== null
             && ControlCenterService.historyGroups.length > 0
-        offsetTop: 347
+        offsetTop: panel.notificationFirst ? 20 : 347
         offsetRight: 20
         cardRadius: 19
         cardWidth: 296
