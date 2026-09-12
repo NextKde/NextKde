@@ -366,6 +366,16 @@ assert.doesNotMatch(controlCenterPanel,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
 const controlCenterSlider = read("../../shell/desktop/modules/bar/ControlCenterSlider.qml");
+const statusTooltip = read("../../shell/desktop/modules/bar/StatusTooltip.qml");
+assert.match(statusTooltip, /color:\s*"#000000"/,
+    "built-in status tooltips use a black background");
+assert.ok((statusTooltip.match(/color:\s*"#ffffff"/g) || []).length >= 2,
+    "built-in status tooltip text is always white");
+for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar/Battery.qml"),
+                            read("../../shell/desktop/modules/bar/ControlCenterToggle.qml")]) {
+    assert.match(statusSource, /StatusTooltip\s*\{/,
+        "built-in status items share the edge-aware tooltip component");
+}
 assert.match(controlCenterSlider, /LiquidControls\.LiquidSlider\s*\{/,
     "Control Center sliders share one styled LiquidSlider wrapper");
 assert.ok((controlCenterPanel.match(/ControlCenterSlider\s*\{/g) || []).length >= 4,
