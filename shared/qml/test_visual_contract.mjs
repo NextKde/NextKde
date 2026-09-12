@@ -366,8 +366,8 @@ assert.doesNotMatch(controlCenterPanel,
     "theme toggle does not use the blue active treatment");
 const controlCenterCard = read("../../shell/desktop/modules/bar/ControlCenterCard.qml");
 assert.match(controlCenterCard,
-    /effectiveShown:[^\n]*root\.cardShown[^\n]*root\.motionMapped\s*\n\s*&&\s*!root\.visuallySuppressed/,
-    "the power sheet moves primary Control Center cards out of view");
+    /effectiveShown:[\s\S]{0,180}root\.managedByCoordinator[\s\S]{0,100}\?\s*root\.cardShown[\s\S]{0,140}!root\.visuallySuppressed/,
+    "the power sheet suppresses primary cards while independent sheets finish closing");
 assert.doesNotMatch(controlCenterCard,
     /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
     "hidden primary cards do not leave a dimmed visual veil");

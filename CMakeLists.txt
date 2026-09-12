@@ -51,6 +51,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_notification_count_match.mjs
         )
         set_tests_properties(kos-shell.notification-count-match PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.control-center-submenu-state
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/bar/test_control_center_submenu_state.mjs
+        )
+        set_tests_properties(kos-shell.control-center-submenu-state PROPERTIES TIMEOUT 10)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
             HINTS /usr/lib/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)

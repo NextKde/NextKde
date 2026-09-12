@@ -53,7 +53,10 @@ PopupWindow {
         ? (root.coordinator?.motionMapped ?? false) : ownMotion.mapped
     readonly property bool motionInteractive: root.managedByCoordinator
         ? (root.coordinator?.motionInteractive ?? false) : ownMotion.interactive
-    readonly property bool effectiveShown: root.cardShown && root.motionMapped
+    // Independent overlay cards remain at their real anchor throughout their
+    // close motion. Managed primary cards still follow cardShown directly.
+    readonly property bool effectiveShown: (root.managedByCoordinator
+        ? root.cardShown : (root.cardShown || root.motionMapped)) && root.motionMapped
         && !root.visuallySuppressed
     readonly property real popupScale: AppearanceTokens.motion.popupStartScale
         + (1 - AppearanceTokens.motion.popupStartScale) * root.motionProgress
@@ -66,7 +69,8 @@ PopupWindow {
     // Keep the popup surface allocated while this control-center instance is
     // loaded. Closing moves the anchor point off screen instead of switching
     // `visible`, so the blur region remains stable through the transition.
-    visible: root.coordinator?.cardAnchor !== null
+    visible: root.coordinator?.cardAnchor !== null && (root.managedByCoordinator
+        || root.cardShown || root.motionMapped)
 
     anchor {
         item: root.coordinator?.cardAnchor ?? null

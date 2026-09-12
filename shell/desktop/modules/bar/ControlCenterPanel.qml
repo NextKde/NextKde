@@ -35,6 +35,7 @@ Item {
     property string pendingConfirmAction: ""
     property alias logoutConfirmationVisible: panel.sessionModalVisible
     property string activeSubmenu: ""
+    property bool submenuOpen: false
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
     // A standalone top Bar grows downward, so controls come first. A panel
     // hosted by a bottom/side Dock grows away from the Dock, so keep the
@@ -51,6 +52,7 @@ Item {
         }
         _triggerTransitionGuard()
         activeSubmenu = name
+        submenuOpen = true
         sessionModalVisible = false
         if (name === "wifi") {
             NetworkService.refreshWifiNetworks()
@@ -67,12 +69,11 @@ Item {
 
     function closeSubmenu() {
         _triggerTransitionGuard()
-        activeSubmenu = ""
+        submenuOpen = false
         sessionModalVisible = false
         pendingConfirmAction = ""
-        // Keep primary cards suppressed until submenuCard finishes its close
-        // motion. onMotionClosed releases modalActive; doing it here maps the
-        // primary cards underneath the still-visible submenu for one frame.
+        // Keep the page identity and geometry stable through the close motion.
+        // onMotionClosed clears activeSubmenu and restores the primary cards.
     }
 
     function openSettingsModule(module) {
@@ -194,6 +195,7 @@ Item {
             close()
         } else {
             panel.sessionModalVisible = false
+            panel.submenuOpen = false
             panel.activeSubmenu = ""
             panel.pendingConfirmAction = ""
             ControlCenterService.refresh()
@@ -202,15 +204,19 @@ Item {
     }
     function close() {
         _triggerTransitionGuard()
-        const closingModal = sessionModalVisible || activeSubmenu !== ""
+        const closingSubmenu = submenuOpen || activeSubmenu !== ""
+        const closingModal = sessionModalVisible || closingSubmenu
         coordinator.closeAll(closingModal)
         sessionModalVisible = false
-        activeSubmenu = ""
+        submenuOpen = false
+        if (!closingSubmenu)
+            activeSubmenu = ""
         pendingConfirmAction = ""
     }
 
     function openSessionPanel() {
         pendingConfirmAction = ""
+        submenuOpen = false
         activeSubmenu = ""
         sessionModalVisible = true
     }
@@ -1609,10 +1615,12 @@ Item {
             : (panel.activeSubmenu === "bluetooth" ? 340
             : (panel.activeSubmenu === "brightness" ? 280
             : (panel.activeSubmenu === "sound" ? 420 : 280)))
-        cardShown: panel.activeSubmenu !== "" && panel.activeSubmenu !== "session"
+        cardShown: panel.submenuOpen
         onMotionClosed: {
-            if (panel.activeSubmenu === "" && !panel.sessionModalVisible)
+            if (!panel.submenuOpen && !panel.sessionModalVisible) {
+                panel.activeSubmenu = ""
                 coordinator.modalActive = false
+            }
         }
 
         // Navigation Header
