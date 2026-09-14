@@ -11,15 +11,9 @@ kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
 kwin_decoration_state="$prefix/share/kos/kwin-decoration-state"
-# KWin stores the selected decoration in the legacy `org.kde.kdecoration2`
-# config group even though KDecoration3 plugins now install into an
-# `org.kde.kdecoration3` directory. Both KWin 6.6.6 and 6.7/master keep that
-# split (decorationbridge.cpp: `s_pluginName` names the plugin directory while
-# `s_configKeyName` names the config group), so `org.kde.kdecoration3` alone
-# never selects the plugin. Read and write both groups so the selection cannot
-# land in a group the compositor does not read, and so a future rename of the
-# config group does not strand it either.
-kwin_decoration_groups=(org.kde.kdecoration2 org.kde.kdecoration3)
+# KWin reads the selected decoration from this legacy config group even though
+# KDecoration3 plugins install into an `org.kde.kdecoration3` directory.
+kwin_decoration_group=org.kde.kdecoration2
 kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
 kwin_plugin_api_version=""
 kwin_plugin_rebuild_required=0
@@ -649,19 +643,10 @@ remember_decoration_state() {
     [[ -e "$kwin_decoration_state" ]] && return 0
     local prior_library="" prior_theme=""
     if command -v kreadconfig6 >/dev/null 2>&1; then
-        local group value
-        for group in "${kwin_decoration_groups[@]}"; do
-            value=$(kreadconfig6 --file kwinrc \
-                --group "$group" --key library --default "")
-            if [[ -z "$prior_library" ]]; then
-                prior_library=$value
-            fi
-            value=$(kreadconfig6 --file kwinrc \
-                --group "$group" --key theme --default "")
-            if [[ -z "$prior_theme" ]]; then
-                prior_theme=$value
-            fi
-        done
+        prior_library=$(kreadconfig6 --file kwinrc \
+            --group "$kwin_decoration_group" --key library --default "")
+        prior_theme=$(kreadconfig6 --file kwinrc \
+            --group "$kwin_decoration_group" --key theme --default "")
     fi
     {
         printf 'library=%s\n' "$prior_library"
@@ -678,16 +663,11 @@ enable_kos_decoration() {
     # kos_liquid_glass is a compiled KDecoration3 plugin, so it is named by
     # `library` alone. `theme` only applies to plugins that host several themes
     # (org.kde.kwin.aurorae); leaving a stale theme key behind would make KWin
-    # look for an Aurorae package that no longer exists. Both config groups are
-    # written because KWin reads `org.kde.kdecoration2` while the plugin is
-    # named after KDecoration3.
-    local group
-    for group in "${kwin_decoration_groups[@]}"; do
-        kwriteconfig6 --file kwinrc --group "$group" \
-            --key library kos_liquid_glass --notify false
-        kwriteconfig6 --file kwinrc --group "$group" \
-            --key theme --delete --notify false
-    done
+    # look for an Aurorae package that no longer exists.
+    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+        --key library kos_liquid_glass --notify false
+    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+        --key theme --delete --notify false
     # Glass supplies the material behind the whole window, not just the title
     # bar, so an application can leave its own background fully transparent and
     # still sit on the same glass as the Dock and the Bar. In this build the
@@ -706,23 +686,20 @@ restore_decoration_state() {
         prior_library=$(sed -n 's/^library=//p' "$kwin_decoration_state" | head -n 1)
         prior_theme=$(sed -n 's/^theme=//p' "$kwin_decoration_state" | head -n 1)
     fi
-    local group
-    for group in "${kwin_decoration_groups[@]}"; do
-        if [[ -n "$prior_library" ]]; then
-            kwriteconfig6 --file kwinrc --group "$group" \
-                --key library "$prior_library" --notify true
-        else
-            kwriteconfig6 --file kwinrc --group "$group" \
-                --key library --delete --notify true
-        fi
-        if [[ -n "$prior_theme" ]]; then
-            kwriteconfig6 --file kwinrc --group "$group" \
-                --key theme "$prior_theme" --notify true
-        else
-            kwriteconfig6 --file kwinrc --group "$group" \
-                --key theme --delete --notify true
-        fi
-    done
+    if [[ -n "$prior_library" ]]; then
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key library "$prior_library" --notify true
+    else
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key library --delete --notify true
+    fi
+    if [[ -n "$prior_theme" ]]; then
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key theme "$prior_theme" --notify true
+    else
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key theme --delete --notify true
+    fi
 }
 
 # Applies the just-installed effect binaries to the RUNNING compositor.
