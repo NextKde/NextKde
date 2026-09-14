@@ -40,7 +40,7 @@ PopupWindow {
     readonly property real cardWidth: 220
     readonly property real cardHeight: 160
     // Keep the new-window action as an affordance, not another window card.
-    readonly property real newWindowButtonSize: 30
+    readonly property real newWindowButtonSize: 34
     readonly property real rowPadding: 10
     readonly property real rowSpacing: 8
 
@@ -388,8 +388,8 @@ PopupWindow {
                     }
                 }
 
-                // Compact new-window action, deliberately distinct from a
-                // window thumbnail so it does not look like an empty card.
+                // A secondary action in the panel's top-right, kept visually
+                // separate from the window thumbnails.
                 Item {
                     id: newWindowButton
                     width: preview.newWindowButtonSize
@@ -398,9 +398,10 @@ PopupWindow {
                     Rectangle {
                         id: plusBg
                         width: preview.newWindowButtonSize
-                        height: width
-                        anchors.centerIn: parent
-                        radius: width / 2
+                        height: 26
+                        x: (parent.width - width) / 2
+                        y: 4
+                        radius: 8
                         color: plusMouse.containsMouse
                             ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
                             : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
