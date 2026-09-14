@@ -209,7 +209,7 @@ PopupWindow {
                     border.width: 1
                     border.color: plusMouse.containsMouse
                         ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.65)
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08))
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.16))
 
                     Behavior on color {
                         ColorAnimation { duration: 100 }
