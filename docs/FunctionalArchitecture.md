@@ -27,7 +27,7 @@ resident services.
 | Platform adapters | `platform/` | live desktop integration and allow-listed system operations |
 | Durable data | `services/data-service/` | sampling, history, activity ledger, desktop watcher |
 | Independent apps | `apps/` | settings and future utilities; Shell IPC only |
-| KWin integrations | `integrations/kwin/` | the two plugin `.so` targets required by KWin |
+| KWin integrations | `integrations/kwin/` | the three plugin `.so` targets required by KWin |
 
 The former collection of helper projects is intentionally not a runtime layer.
 One-shot operations are platform modules or `tools/` commands; only a process

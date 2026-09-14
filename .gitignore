@@ -13,3 +13,4 @@ config/dock/config.json
 # Local build outputs
 .build/
 apps/settings/build/
+/.workbuddy/memory

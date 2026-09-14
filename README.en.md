@@ -111,7 +111,7 @@ Install equivalent packages on other distributions. See the
 ### 2. Clone the repository
 
 ```sh
-git clone git@https://github.com/SuceV587/NextKde.git
+git clone https://github.com/SuceV587/NextKde.git
 cd NextKde
 ```
 

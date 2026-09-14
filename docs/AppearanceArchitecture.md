@@ -133,16 +133,17 @@ SystemIcon { role: "controlCenter" }
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 9：
+schema 10：
 
 ```json
 {
-  "version": 9,
+  "version": 10,
   "globalBlurStrength": 0.42,
   "globalLiquidStrength": 1.0,
   "blurStrength": 0.42,
   "liquidStrength": 1.0,
   "shellStyle": "macos",
+  "themeMode": "system",
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
@@ -150,9 +151,9 @@ schema 9：
 }
 ```
 
-- 默认 `shellStyle` 为 `macos`；默认 `barLayoutMode` 为 `transparent`。已有合法配置继续保留用户选择。
-- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数，schema 9 新增 `barVisibilityMode` 与 `barLayoutMode`。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
-- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法强度不会覆盖内存默认值。
+- 默认 `shellStyle` 为 `macos`；默认 `barLayoutMode` 为 `transparent`；默认 `themeMode` 为 `system`（合法值 `system` / `light` / `dark`）。已有合法配置继续保留用户选择。
+- schema 1 只有两个强度字段，schema 2 新增 `shellStyle`，schema 3 新增 `barIntegratedWithDock`，schema 4 新增 `dockWindowAnimationStyle`；schema 5–7 曾加入分表面玻璃继承，schema 8 将其移除并统一为全局 KWin glass 参数，schema 9 新增 `barVisibilityMode` 与 `barLayoutMode`，schema 10 新增 `themeMode`。升级时旧 Dock 值仅作为缺失全局值的迁移来源，随后防抖写回最新 schema。
+- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法或缺失的 `themeMode` 回退为 `system`；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
 - `resetStrengths()` 只恢复 `0.42 / 1.0`，不重置主题形态或 Dock 数据。
@@ -199,7 +200,7 @@ snapshot 示例：
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
-  "tokenVersion": 5
+  "tokenVersion": 8
 }
 ```
 
@@ -212,7 +213,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v6
+## 6. AppearanceTokens v8
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -228,7 +229,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | `itemSpacingRatio` | 0.07 | 0.09 | 0.08 |
 | `dividerMarginRatio` | 0.16 | 0.20 | 0.18 |
 | `edgeMargin` | 0 | 5 | 8 |
-| `workspaceGap` | 0 | 0 | 0 |
+| `workspaceGap` | 0 | 5 | 8 |
 | `indicatorStyle` | `underline` | `dot` | `tonal` |
 | `indicatorLengthRatio` | 0.42 | 0.13 | 0.34 |
 | `indicatorThicknessRatio` | 0.07 | 0.13 | 0.07 |

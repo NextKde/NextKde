@@ -3,7 +3,7 @@
 **[English](README.md) | [中文](README.zh-CN.md)**
 
 每个直接子目录都是独立的 Qt Quick 应用和进程。应用可以导入 `shared/`，
-通过已记录的契约与 `services/` 通信，但绝不能导入 `desktop/`。
+通过已记录的契约与 `services/` 通信，但绝不能导入 `shell/desktop/`。
 
 应用工作区从仓库根目录配置。四个构建开关和对应 CMake preset 使各应用可
 独立管理：
