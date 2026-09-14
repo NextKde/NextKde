@@ -11,6 +11,9 @@ kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
 kwin_decoration_state="$prefix/share/kos/kwin-decoration-state"
+# KWin reads the selected decoration from this legacy config group even though
+# KDecoration3 plugins install into an `org.kde.kdecoration3` directory.
+kwin_decoration_group=org.kde.kdecoration2
 kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
 kwin_plugin_api_version=""
 kwin_plugin_rebuild_required=0
@@ -641,9 +644,9 @@ remember_decoration_state() {
     local prior_library="" prior_theme=""
     if command -v kreadconfig6 >/dev/null 2>&1; then
         prior_library=$(kreadconfig6 --file kwinrc \
-            --group org.kde.kdecoration3 --key library --default "")
+            --group "$kwin_decoration_group" --key library --default "")
         prior_theme=$(kreadconfig6 --file kwinrc \
-            --group org.kde.kdecoration3 --key theme --default "")
+            --group "$kwin_decoration_group" --key theme --default "")
     fi
     {
         printf 'library=%s\n' "$prior_library"
@@ -661,9 +664,9 @@ enable_kos_decoration() {
     # `library` alone. `theme` only applies to plugins that host several themes
     # (org.kde.kwin.aurorae); leaving a stale theme key behind would make KWin
     # look for an Aurorae package that no longer exists.
-    kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
         --key library kos_liquid_glass --notify false
-    kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
         --key theme --delete --notify false
     # Glass supplies the material behind the whole window, not just the title
     # bar, so an application can leave its own background fully transparent and
@@ -684,17 +687,17 @@ restore_decoration_state() {
         prior_theme=$(sed -n 's/^theme=//p' "$kwin_decoration_state" | head -n 1)
     fi
     if [[ -n "$prior_library" ]]; then
-        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
             --key library "$prior_library" --notify true
     else
-        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
             --key library --delete --notify true
     fi
     if [[ -n "$prior_theme" ]]; then
-        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
             --key theme "$prior_theme" --notify true
     else
-        kwriteconfig6 --file kwinrc --group org.kde.kdecoration3 \
+        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
             --key theme --delete --notify true
     fi
 }
