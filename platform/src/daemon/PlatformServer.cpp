@@ -2778,8 +2778,6 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     if (op == QStringLiteral("theme.sync-glass")) {
         const int contentBlur = qBound(1,
             payload.value(QStringLiteral("contentBlurLevel")).toInt(), 15);
-        const int dockBlur = qBound(1,
-            payload.value(QStringLiteral("dockBlurLevel")).toInt(), 15);
         const int refraction = qBound(0,
             payload.value(QStringLiteral("refractionLevel")).toInt(), 20);
         const double materialSoftness = qBound(0.0,
@@ -2799,17 +2797,6 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("BlurStrength"), QString::number(contentBlur)},
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("DockBlurStrength"), QString::number(dockBlur)},
-            // Window glass runs through Glass's decoration pipeline, whose own
-            // strength defaults to 15 while the shell asks for 5. Left unset it
-            // would blur application windows three times as hard as the Dock
-            // and the Bar, so it tracks the content level rather than being a
-            // separate knob.
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("DecorationBlurStrength"), QString::number(contentBlur)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("RefractionStrength"), QString::number(refraction)},

@@ -121,9 +121,7 @@ public:
                 {QStringLiteral("step"), step},
                 {QStringLiteral("value"), config.value(QString::fromLatin1(key), fallback)}});
         };
-        add("BlurStrength", "内容模糊等级", "模糊", "int", 1, 15, 1, 15);
-        add("DecorationBlurStrength", "窗口装饰模糊等级", "模糊", "int", 1, 15, 1, 15);
-        add("DockBlurStrength", "Dock 模糊等级", "模糊", "int", 1, 15, 1, 15);
+        add("BlurStrength", "模糊等级", "模糊", "int", 1, 15, 1, 15);
         add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
         add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
         add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);

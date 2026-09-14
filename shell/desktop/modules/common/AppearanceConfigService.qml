@@ -353,15 +353,12 @@ QtObject {
     }
 
     function _syncGlassEffect() {
-        const dockBlurLevel = service._compositorBlurLevel(
-            service.globalBlurStrength)
         const contentBlurLevel = service._compositorBlurLevel(
             service.globalBlurStrength)
         const refractionLevel = Math.round(service.globalLiquidStrength
             * service.activePresetRefraction * 20)
         PlatformClient.request("theme.sync-glass", {
             contentBlurLevel: contentBlurLevel,
-            dockBlurLevel: dockBlurLevel,
             refractionLevel: refractionLevel,
             materialSoftness: service.activePresetSoftness,
             materialHighlightStrength: service.activePresetHighlight,
@@ -371,8 +368,8 @@ QtObject {
                 console.warn("[AppearanceConfig] Glass effect sync failed: "
                     + (response?.error?.message || "platform unavailable"))
             else {
-                console.log("[AppearanceConfig] Glass effect dockBlur=" + dockBlurLevel
-                    + " contentBlur=" + contentBlurLevel + " liquid=" + refractionLevel
+                console.log("[AppearanceConfig] Glass effect blur=" + contentBlurLevel
+                    + " liquid=" + refractionLevel
                     + " style=" + service.glassStyle
                     + " softness=" + service.activePresetSoftness
                     + " highlight=" + service.activePresetHighlight
