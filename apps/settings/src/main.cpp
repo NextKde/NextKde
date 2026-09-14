@@ -14,6 +14,7 @@
 #include <QQmlContext>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QSettings>
 #include <QThread>
 #include <QVariantMap>
 
@@ -101,6 +102,103 @@ public:
     Q_INVOKABLE QVariantMap resetGlassPreset(const QString &style) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("resetGlassPreset"), style}));
+    }
+
+    Q_INVOKABLE QVariantList glassDebugSnapshot() {
+        const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+            + QStringLiteral("/kwinrc");
+        QSettings config(path, QSettings::IniFormat);
+        config.beginGroup(QStringLiteral("Effect-blurplus"));
+        QVariantList result;
+        const auto add = [&](const char *key, const char *label, const char *section,
+                             const char *type, double minimum, double maximum,
+                             double step, const QVariant &fallback) {
+            result.append(QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)},
+                {QStringLiteral("label"), QString::fromUtf8(label)},
+                {QStringLiteral("section"), QString::fromUtf8(section)},
+                {QStringLiteral("type"), QString::fromLatin1(type)},
+                {QStringLiteral("min"), minimum}, {QStringLiteral("max"), maximum},
+                {QStringLiteral("step"), step},
+                {QStringLiteral("value"), config.value(QString::fromLatin1(key), fallback)}});
+        };
+        add("BlurStrength", "内容模糊等级", "模糊", "int", 1, 15, 1, 15);
+        add("DecorationBlurStrength", "窗口装饰模糊等级", "模糊", "int", 1, 15, 1, 15);
+        add("DockBlurStrength", "Dock 模糊等级", "模糊", "int", 1, 15, 1, 15);
+        add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
+        add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
+        add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);
+        add("DockNoiseStrength", "Dock 噪点", "模糊", "int", 0, 100, 1, 5);
+        add("BlurSaturationCompensation", "模糊饱和度补偿", "模糊", "bool", 0, 1, 1, true);
+        add("Brightness", "亮度", "色彩", "real", 0, 2, .01, 1.0);
+        add("Saturation", "饱和度", "色彩", "real", 0, 3, .01, 1.0);
+        add("Contrast", "对比度", "色彩", "real", 0, 2, .01, 1.0);
+        add("OklabSaturation", "使用 OKLab 饱和度", "色彩", "bool", 0, 1, 1, false);
+        add("TintColor", "染色颜色（#AARRGGBB）", "色彩", "string", 0, 0, 0, QStringLiteral("#00000000"));
+        add("AutoTintAlpha", "自动染色透明度", "色彩", "bool", 0, 1, 1, false);
+        add("GlowColor", "辉光颜色（#AARRGGBB）", "色彩", "string", 0, 0, 0, QStringLiteral("#00000000"));
+        add("RefractionStrength", "折射强度", "材质", "real", 0, 20, .1, 0.0);
+        add("RefractionEdgeSize", "折射边缘范围", "材质", "real", 0, 50, .1, 20.0);
+        add("RefractionNormalPow", "折射法线曲线", "材质", "real", .1, 10, .1, 2.0);
+        add("RefractionRGBFringing", "RGB 色散", "材质", "real", 0, 20, .1, 1.0);
+        add("HighlightWidthPx", "高光宽度", "材质", "real", 0, 20, .1, 3.0);
+        add("MaterialSoftness", "柔和度", "材质", "real", 0, 1, .01, 0.0);
+        add("MaterialHighlightStrength", "窄高光强度", "材质", "real", 0, 1, .01, 1.0);
+        add("MaterialReflectionStrength", "宽反射强度", "材质", "real", 0, 1, .01, 0.0);
+        add("EdgeLighting", "边缘光", "适用范围", "bool", 0, 1, 1, false);
+        add("EdgeLightingDock", "Dock 边缘光", "适用范围", "bool", 0, 1, 1, false);
+        add("EdgeLightingTooltip", "Tooltip 边缘光", "适用范围", "bool", 0, 1, 1, false);
+        add("ExcludeDocks", "Dock 不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("ExcludeDecorations", "窗口装饰不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("ExcludeTooltips", "Tooltip 不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("ExcludeMenus", "菜单不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("ExcludeOSD", "通知与 OSD 不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("TopCornerRadius", "窗口上圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("BottomCornerRadius", "窗口下圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("MenuCornerRadius", "菜单圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("DockCornerRadius", "Dock 圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("UseDeclaredCornerRadius", "优先使用应用声明圆角", "圆角", "bool", 0, 1, 1, false);
+        add("IgnoreContentBlurRegion", "忽略内容模糊区域", "圆角", "bool", 0, 1, 1, false);
+        add("RoundCornersOfMaximizedWindows", "最大化窗口保留圆角", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCorners", "动态圆角", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeWindows", "动态圆角排除普通窗口", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeDocks", "动态圆角排除 Dock", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeTooltips", "动态圆角排除 Tooltip", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeMenus", "动态圆角排除菜单", "圆角", "bool", 0, 1, 1, false);
+        add("OnlyQuickshell", "仅处理 Quickshell", "窗口匹配", "bool", 0, 1, 1, true);
+        add("WindowClasses", "窗口类列表", "窗口匹配", "string", 0, 0, 0, QStringLiteral("quickshell"));
+        add("BlurMatching", "匹配列表内窗口", "窗口匹配", "bool", 0, 1, 1, true);
+        add("BlurDecorations", "强制模糊窗口装饰", "窗口匹配", "bool", 0, 1, 1, false);
+        add("BlurMenus", "强制模糊菜单", "窗口匹配", "bool", 0, 1, 1, false);
+        add("BlurDocks", "强制模糊 Dock", "窗口匹配", "bool", 0, 1, 1, false);
+        add("SkipEmptyDockBlurRegions", "跳过空 Dock 模糊区域", "窗口匹配", "bool", 0, 1, 1, true);
+        config.endGroup();
+        return result;
+    }
+
+    Q_INVOKABLE bool updateGlassDebugValue(const QString &key, const QVariant &value) {
+        const QVariantList specs = glassDebugSnapshot();
+        QVariantMap match;
+        for (const QVariant &item : specs) {
+            const QVariantMap spec = item.toMap();
+            if (spec.value(QStringLiteral("key")).toString() == key) { match = spec; break; }
+        }
+        if (match.isEmpty()) return false;
+        QVariant stored = value;
+        const QString type = match.value(QStringLiteral("type")).toString();
+        if (type == QStringLiteral("bool")) stored = value.toBool();
+        else if (type != QStringLiteral("string")) {
+            const double number = qBound(match.value(QStringLiteral("min")).toDouble(),
+                value.toDouble(), match.value(QStringLiteral("max")).toDouble());
+            stored = type == QStringLiteral("int") ? QVariant(qRound(number)) : QVariant(number);
+        }
+        QSettings config(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+            + QStringLiteral("/kwinrc"), QSettings::IniFormat);
+        config.beginGroup(QStringLiteral("Effect-blurplus"));
+        config.setValue(key, stored); config.endGroup(); config.sync();
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+            QStringLiteral("org.kde.kwin.Effects"));
+        if (effects.isValid()) effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
+        return config.status() == QSettings::NoError;
     }
 
     Q_INVOKABLE QVariantMap updateGlobalIconMode(const QString &mode) {

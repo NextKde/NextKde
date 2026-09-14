@@ -1679,60 +1679,19 @@ ApplicationWindow {
         spacing: 7
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
-        property string glassStyle: "liquid"
-        property real refraction: 1.0
-        property real softness: 0.0
-        property real highlight: 1.0
-        property real reflection: 0.0
-        property string pendingName: ""
-        property real pendingValue: 0.0
+        property var controls: []
         property string errorText: ""
-        readonly property var controls: [
-            { key: "refraction", title: "折射比例", icon: "≈", tint: "#af52de" },
-            { key: "softness", title: "柔和度", icon: "◌", tint: "#5ac8fa" },
-            { key: "highlight", title: "窄高光", icon: "✦", tint: "#ffd60a" },
-            { key: "reflection", title: "宽反射", icon: "◒", tint: "#64d2ff" }
-        ]
-
-        function applyState(state) {
-            if (!state)
-                return
-            glassStyle = state.glassStyle === "soft" ? "soft" : "liquid"
-            refraction = Number(state.activePresetRefraction)
-            softness = Number(state.activePresetSoftness)
-            highlight = Number(state.activePresetHighlight)
-            reflection = Number(state.activePresetReflection)
-            errorText = ""
-        }
-        function valueFor(name) { return Number(glassDebugPage[name]) }
-        function preview(name, value) {
-            glassDebugPage[name] = Math.max(0, Math.min(1, value))
-            pendingName = name
-            pendingValue = glassDebugPage[name]
-            livePresetDebounce.restart()
-        }
-        function commit(name) {
-            livePresetDebounce.stop()
-            if (!bridge)
-                return
-            applyState(bridge.updateGlassPresetParameter(name, valueFor(name)))
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
         function refresh() {
-            if (bridge)
-                applyState(bridge.appearanceSnapshot())
+            if (!bridge) return
+            controls = bridge.glassDebugSnapshot()
+            errorText = bridge.lastError || ""
         }
-
-        Timer {
-            id: livePresetDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (glassDebugPage.bridge && glassDebugPage.pendingName.length > 0)
-                    glassDebugPage.bridge.updateGlassPresetParameter(
-                        glassDebugPage.pendingName, glassDebugPage.pendingValue)
+        function updateValue(key, value) {
+            if (!bridge || !bridge.updateGlassDebugValue(key, value)) {
+                errorText = bridge ? (bridge.lastError || "写入 KWin 配置失败") : "设置桥不可用"
+                return
             }
+            errorText = ""
         }
 
         Component.onCompleted: refresh()
@@ -1743,8 +1702,7 @@ ApplicationWindow {
 
         Text {
             Layout.fillWidth: true
-            text: "当前编辑：" + (glassDebugPage.glassStyle === "soft"
-                ? "柔光玻璃预设" : "液态玻璃预设")
+            text: "以下数值直接来自 kwinrc 的 [Effect-blurplus]，修改后立即重配 Glass。普通预设可能覆盖对应的模糊、折射和材质参数。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1754,7 +1712,7 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: debugRows.implicitHeight
+            implicitHeight: debugRows.implicitHeight + 8
             radius: 18
             color: theme.card
 
@@ -1767,30 +1725,68 @@ ApplicationWindow {
                         required property var modelData
                         required property int index
                         width: debugRows.width
-                        height: 49
+                        height: 72
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 16
+                            anchors.top: parent.top
+                            anchors.topMargin: 4
+                            text: modelData.section
+                            visible: index === 0 || glassDebugPage.controls[index - 1].section !== modelData.section
+                            color: theme.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                        }
                         RowLayout {
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 52
                             anchors.leftMargin: 16
                             anchors.rightMargin: 16
                             spacing: 12
-                            SettingIcon { symbol: modelData.icon; tint: modelData.tint }
-                            Text { text: modelData.title; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: modelData.label; color: theme.primaryText; font.pixelSize: 13 }
                             Item { Layout.fillWidth: true }
                             Text {
-                                text: Math.round(glassDebugPage.valueFor(modelData.key) * 100) + "%"
+                                visible: modelData.type !== "bool" && modelData.type !== "string"
+                                text: modelData.type === "int" ? String(Math.round(Number(modelData.value)))
+                                    : Number(modelData.value).toFixed(2)
                                 color: theme.secondaryText
                                 font.pixelSize: 12
-                                Layout.preferredWidth: 38
+                                Layout.preferredWidth: 48
                                 horizontalAlignment: Text.AlignRight
                             }
                             LiquidControls.LiquidSlider {
                                 Layout.preferredWidth: 220
-                                value: glassDebugPage.valueFor(modelData.key)
+                                visible: modelData.type === "int" || modelData.type === "real"
+                                value: (Number(modelData.value) - Number(modelData.min))
+                                    / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider
                                 onPreviewChanged: function(position) {
-                                    glassDebugPage.preview(modelData.key, position)
+                                    const raw = Number(modelData.min) + position
+                                        * (Number(modelData.max) - Number(modelData.min))
+                                    modelData.value = modelData.type === "int" ? Math.round(raw)
+                                        : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
                                 }
-                                onCommitRequested: glassDebugPage.commit(modelData.key)
+                                onCommitRequested: glassDebugPage.updateValue(modelData.key, modelData.value)
+                            }
+                            Switch {
+                                visible: modelData.type === "bool"
+                                checked: modelData.value === true || String(modelData.value) === "true"
+                                onToggled: {
+                                    modelData.value = checked
+                                    glassDebugPage.updateValue(modelData.key, checked)
+                                }
+                            }
+                            TextField {
+                                visible: modelData.type === "string"
+                                Layout.preferredWidth: 220
+                                text: String(modelData.value)
+                                color: theme.primaryText
+                                onEditingFinished: {
+                                    modelData.value = text
+                                    glassDebugPage.updateValue(modelData.key, text)
+                                }
                             }
                         }
                         Rectangle {
@@ -1803,34 +1799,6 @@ ApplicationWindow {
                             visible: index < glassDebugPage.controls.length - 1
                         }
                     }
-                }
-            }
-        }
-
-        Rectangle {
-            Layout.alignment: Qt.AlignRight
-            implicitWidth: 126
-            implicitHeight: 34
-            radius: 17
-            color: resetGlassPointer.containsMouse ? theme.sidebarHover : theme.card
-            border.width: 1
-            border.color: theme.floatingBorder
-            Text {
-                anchors.centerIn: parent
-                text: "恢复当前预设"
-                color: theme.primaryText
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
-            }
-            MouseArea {
-                id: resetGlassPointer
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (glassDebugPage.bridge)
-                        glassDebugPage.applyState(glassDebugPage.bridge.resetGlassPreset(
-                            glassDebugPage.glassStyle))
                 }
             }
         }
