@@ -1680,7 +1680,14 @@ ApplicationWindow {
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property var controls: []
+        property bool showAdvanced: false
         property string errorText: ""
+        readonly property var visibleControls: controls.filter(function(control) {
+            return showAdvanced || control.section === "材质"
+                || (control.section === "模糊" && control.key === "BlurStrength")
+                || (control.section === "色彩" && ["Brightness", "Saturation",
+                    "Contrast", "TintColor"].indexOf(control.key) >= 0)
+        })
         function refresh() {
             if (!bridge) return
             controls = bridge.glassDebugSnapshot()
@@ -1710,6 +1717,28 @@ ApplicationWindow {
             Layout.rightMargin: 13
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            Text {
+                Layout.fillWidth: true
+                text: glassDebugPage.showAdvanced
+                    ? "正在显示全部 KWin 参数" : "仅显示影响玻璃观感的核心参数"
+                color: theme.secondaryText
+                font.pixelSize: 12
+            }
+            Switch {
+                checked: glassDebugPage.showAdvanced
+                onToggled: glassDebugPage.showAdvanced = checked
+            }
+            Text {
+                text: "高级参数"
+                color: theme.primaryText
+                font.pixelSize: 12
+            }
+        }
+
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: debugRows.implicitHeight + 8
@@ -1720,10 +1749,14 @@ ApplicationWindow {
                 id: debugRows
                 width: parent.width
                 Repeater {
-                    model: glassDebugPage.controls
+                    model: glassDebugPage.visibleControls
                     delegate: Item {
                         required property var modelData
                         required property int index
+                        property real currentNumber: Number(modelData.value)
+                        property bool currentBool: modelData.value === true
+                            || String(modelData.value) === "true"
+                        property string currentText: String(modelData.value)
                         width: debugRows.width
                         height: 72
                         Text {
@@ -1732,7 +1765,7 @@ ApplicationWindow {
                             anchors.top: parent.top
                             anchors.topMargin: 4
                             text: modelData.section
-                            visible: index === 0 || glassDebugPage.controls[index - 1].section !== modelData.section
+                            visible: index === 0 || glassDebugPage.visibleControls[index - 1].section !== modelData.section
                             color: theme.secondaryText
                             font.pixelSize: 10
                             font.weight: Font.DemiBold
@@ -1749,8 +1782,8 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: modelData.type !== "bool" && modelData.type !== "string"
-                                text: modelData.type === "int" ? String(Math.round(Number(modelData.value)))
-                                    : Number(modelData.value).toFixed(2)
+                                text: modelData.type === "int" ? String(Math.round(currentNumber))
+                                    : currentNumber.toFixed(2)
                                 color: theme.secondaryText
                                 font.pixelSize: 12
                                 Layout.preferredWidth: 48
@@ -1759,32 +1792,32 @@ ApplicationWindow {
                             LiquidControls.LiquidSlider {
                                 Layout.preferredWidth: 220
                                 visible: modelData.type === "int" || modelData.type === "real"
-                                value: (Number(modelData.value) - Number(modelData.min))
+                                value: (currentNumber - Number(modelData.min))
                                     / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider
                                 onPreviewChanged: function(position) {
                                     const raw = Number(modelData.min) + position
                                         * (Number(modelData.max) - Number(modelData.min))
-                                    modelData.value = modelData.type === "int" ? Math.round(raw)
+                                    currentNumber = modelData.type === "int" ? Math.round(raw)
                                         : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
                                 }
-                                onCommitRequested: glassDebugPage.updateValue(modelData.key, modelData.value)
+                                onCommitRequested: glassDebugPage.updateValue(modelData.key, currentNumber)
                             }
                             Switch {
                                 visible: modelData.type === "bool"
-                                checked: modelData.value === true || String(modelData.value) === "true"
+                                checked: currentBool
                                 onToggled: {
-                                    modelData.value = checked
+                                    currentBool = checked
                                     glassDebugPage.updateValue(modelData.key, checked)
                                 }
                             }
                             TextField {
                                 visible: modelData.type === "string"
                                 Layout.preferredWidth: 220
-                                text: String(modelData.value)
+                                text: currentText
                                 color: theme.primaryText
                                 onEditingFinished: {
-                                    modelData.value = text
+                                    currentText = text
                                     glassDebugPage.updateValue(modelData.key, text)
                                 }
                             }
@@ -1796,7 +1829,7 @@ ApplicationWindow {
                             anchors.bottom: parent.bottom
                             height: 1
                             color: theme.separator
-                            visible: index < glassDebugPage.controls.length - 1
+                            visible: index < glassDebugPage.visibleControls.length - 1
                         }
                     }
                 }
