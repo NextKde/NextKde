@@ -454,6 +454,8 @@ PopupWindow {
         }
     }
 
+        }
+
     BackgroundEffect.blurRegion: preview.visible ? previewBlurHolder : null
 
     Region {
