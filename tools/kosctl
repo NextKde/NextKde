@@ -792,7 +792,18 @@ install_kwin_plugins() {
     if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
         sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
     fi
-    sudo cp -a "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    # The staged tree is written by the invoking user, so a plain `cp -a` copies
+    # its ownership into the system prefix: the KWin plugins and the glass
+    # effect would end up user-writable while the compositor loads them, which
+    # is a local privilege escalation. `cp -a` also propagates the staged
+    # directories' umask-derived modes (0775 under umask 002) onto /usr,
+    # /usr/lib and /usr/share, leaving the system prefix group-writable. Drop
+    # group/other write from the staged tree and copy without preserving
+    # ownership, so every installed file lands root-owned with the modes the
+    # build intended and the system directories keep 0755.
+    find "$stage_dir$kwin_system_prefix" -exec chmod go-w {} +
+    sudo cp -a --no-preserve=ownership \
+        "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
