@@ -307,17 +307,13 @@ PopupWindow {
                             Item {
                                 id: thumbnailBox
                                 anchors.top: parent.top
-                                anchors.bottom: titleText.top
+                                anchors.bottom: parent.bottom
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.topMargin: 6
                                 anchors.leftMargin: 6
                                 anchors.rightMargin: 6
-                                // Keep a compact, deliberate gap above the
-                                // title instead of reserving a fixed-height
-                                // thumbnail area that makes short previews
-                                // appear detached from their label.
-                                anchors.bottomMargin: 5
+                                anchors.bottomMargin: 6
 
                                 Image {
                                     id: thumbMetrics
@@ -382,25 +378,6 @@ PopupWindow {
                                         }
                                     }
                                 }
-                            }
-
-                            // Window title bar at bottom of card
-                            Text {
-                                id: titleText
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 7
-                                text: cardDelegate.winTitle || "窗口"
-                                color: ThemeService.foregroundColor
-                                style: Text.Outline
-                                styleColor: Qt.rgba(0, 0, 0, 0.45)
-                                font {
-                                    pixelSize: 11
-                                    weight: Font.DemiBold
-                                }
-                                elide: Text.ElideRight
-                                horizontalAlignment: Text.AlignHCenter
                             }
 
                             // Close button '×'
