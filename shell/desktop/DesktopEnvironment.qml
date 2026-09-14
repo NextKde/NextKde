@@ -5,6 +5,7 @@ import QtQuick
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
 import qs.desktop.modules.quicksearch
+import qs.desktop.modules.clipboard
 import qs.desktop.modules.notifications
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
@@ -320,6 +321,7 @@ Item {
     QuickSearch {
         id: quickSearch
     }
+    Clipboard {}
     AppLauncher {}
     Overview {}
     IpcHandler {
