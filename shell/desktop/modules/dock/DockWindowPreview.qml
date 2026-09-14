@@ -181,6 +181,21 @@ PopupWindow {
                 width: parent.width
                 height: 28
 
+                Text {
+                    id: previewTitle
+                    anchors.left: parent.left
+                    anchors.right: plusBg.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: preview.title || preview.effectiveWindows[0]?.title || "窗口"
+                    color: ThemeService.foregroundColor
+                    elide: Text.ElideRight
+                    font {
+                        pixelSize: 12
+                        weight: Font.DemiBold
+                    }
+                }
+
                 Rectangle {
                     id: plusBg
                     width: 34
