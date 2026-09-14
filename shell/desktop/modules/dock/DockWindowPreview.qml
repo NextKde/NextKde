@@ -43,20 +43,18 @@ PopupWindow {
     readonly property real rowSpacing: 8
 
     readonly property real calculatedWidth: rowPadding * 2
-        + windowCount * cardWidth
-        + Math.max(0, windowCount - 1) * rowSpacing
+        + (windowCount > 0
+           ? windowCount * cardWidth + (windowCount - 1) * rowSpacing
+           : 0)
 
     readonly property real maxAllowedWidth: {
         const screenW = anchorItem?.targetScreen?.width ?? Quickshell.screens[0]?.width ?? 1920
         return Math.max(300, screenW * 0.88)
     }
 
-    // A single 220px card needs only its two 10px margins. The previous 300px
-    // floor existed for the removed new-window card and left a visible blank
-    // strip to the right of a lone preview.
-    implicitWidth: Math.min(maxAllowedWidth,
-                            Math.max(cardWidth + rowPadding * 2, calculatedWidth))
-    implicitHeight: 184
+    implicitWidth: Math.min(maxAllowedWidth, Math.max(cardWidth + rowPadding * 2, calculatedWidth))
+    // The secondary action has its own toolbar row above the thumbnails.
+    implicitHeight: 212
     color: "transparent"
     grabFocus: false
 
@@ -173,19 +171,98 @@ PopupWindow {
             acceptedButtons: Qt.NoButton
         }
 
-        Flickable {
-            id: cardsFlickable
+        Column {
             anchors.fill: parent
             anchors.margins: preview.rowPadding
-            contentWidth: cardsRow.implicitWidth
-            contentHeight: height
-            boundsBehavior: Flickable.StopAtBounds
-            clip: true
+            spacing: 4
 
-            Row {
-                id: cardsRow
-                spacing: preview.rowSpacing
-                height: parent.height
+            Item {
+                id: previewToolbar
+                width: parent.width
+                height: 28
+
+                Text {
+                    id: previewTitle
+                    anchors.left: parent.left
+                    anchors.right: plusBg.left
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: preview.title || preview.effectiveWindows[0]?.title || "窗口"
+                    color: ThemeService.foregroundColor
+                    elide: Text.ElideRight
+                    font {
+                        pixelSize: 12
+                        weight: Font.DemiBold
+                    }
+                }
+
+                Rectangle {
+                    id: plusBg
+                    width: 34
+                    height: 26
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: 8
+                    color: plusMouse.containsMouse
+                        ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
+                    border.width: 1
+                    border.color: plusMouse.containsMouse
+                        ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.65)
+                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.16))
+
+                    Behavior on color {
+                        ColorAnimation { duration: 100 }
+                    }
+                    Behavior on border.color {
+                        ColorAnimation { duration: 100 }
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "+"
+                        color: ThemeService.foregroundColor
+                        font.pixelSize: 21
+                        font.weight: Font.Medium
+                    }
+
+                    MouseArea {
+                        id: plusMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            const targetAppId = preview.appId
+                                || (preview.effectiveWindows.length > 0
+                                    ? (preview.effectiveWindows[0].identity?.desktopId
+                                       || preview.effectiveWindows[0].desktopId
+                                       || preview.effectiveWindows[0].appId
+                                       || preview.effectiveWindows[0].identity?.rawAppId
+                                       || preview.effectiveWindows[0].rawAppId)
+                                    : "")
+                            console.log("[DockPreview] new window clicked targetAppId=" + targetAppId)
+                            if (targetAppId)
+                                DockModelService.launchNewWindow(targetAppId)
+                            DockModelService.setDockPopupVisible(preview, false)
+                        }
+                    }
+                }
+            }
+
+            Flickable {
+                id: cardsFlickable
+                width: parent.width
+                height: preview.cardHeight
+                contentWidth: cardsRow.implicitWidth
+                contentHeight: height
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
+
+                Row {
+                    id: cardsRow
+                    spacing: preview.rowSpacing
+                    height: parent.height
 
                 Repeater {
                     model: preview.effectiveWindows
@@ -387,9 +464,12 @@ PopupWindow {
                         }
                     }
                 }
+
             }
         }
     }
+
+        }
 
     BackgroundEffect.blurRegion: preview.visible ? previewBlurHolder : null
 
