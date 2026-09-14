@@ -2782,6 +2782,12 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             payload.value(QStringLiteral("dockBlurLevel")).toInt(), 15);
         const int refraction = qBound(0,
             payload.value(QStringLiteral("refractionLevel")).toInt(), 20);
+        const double materialSoftness = qBound(0.0,
+            payload.value(QStringLiteral("materialSoftness")).toDouble(), 1.0);
+        const double materialHighlight = qBound(0.0,
+            payload.value(QStringLiteral("materialHighlightStrength")).toDouble(1.0), 1.0);
+        const double materialReflection = qBound(0.0,
+            payload.value(QStringLiteral("materialReflectionStrength")).toDouble(), 1.0);
         const QString kwriteconfig = QStandardPaths::findExecutable(
             QStringLiteral("kwriteconfig6"));
         if (kwriteconfig.isEmpty()) {
@@ -2807,6 +2813,15 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("RefractionStrength"), QString::number(refraction)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("MaterialSoftness"), QString::number(materialSoftness, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("MaterialHighlightStrength"), QString::number(materialHighlight, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("MaterialReflectionStrength"), QString::number(materialReflection, 'f', 3)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blur"), QStringLiteral("--key"),
              QStringLiteral("BlurStrength"), QString::number(contentBlur)}};

@@ -86,6 +86,10 @@ ApplicationWindow {
         {
             subtitle: "接入状态",
             groups: []
+        },
+        {
+            subtitle: "玻璃调试",
+            groups: []
         }
     ]
 
@@ -1357,6 +1361,7 @@ ApplicationWindow {
             ? settingsBridge : null
         property real blurStrength: 0.42
         property real liquidStrength: 1.0
+        property string glassStyle: "liquid"
         property bool blurDirty: false
         property bool liquidDirty: false
         property string errorText: ""
@@ -1376,6 +1381,7 @@ ApplicationWindow {
                 return
             blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
             liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
+            glassStyle = state.glassStyle === "soft" ? "soft" : "liquid"
             blurDirty = false
             liquidDirty = false
             errorText = ""
@@ -1463,6 +1469,14 @@ ApplicationWindow {
             errorText = ""
         }
 
+        function setGlassStyle(index) {
+            if (!bridge)
+                return
+            applyState(bridge.updateGlassStyle(index === 1 ? "soft" : "liquid"))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
         Component.onCompleted: refresh()
 
         Text {
@@ -1508,7 +1522,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "液态玻璃".toUpperCase()
+            text: "玻璃材质".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -1517,12 +1531,49 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: 97
+            implicitHeight: 145
             radius: 18
             color: theme.card
 
             Column {
                 anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 48
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◇"; tint: "#64d2ff" }
+                        Text {
+                            text: "材质风格"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            model: [
+                                { id: "liquid", label: "液态玻璃" },
+                                { id: "soft", label: "柔光玻璃" }
+                            ]
+                            currentIndex: displayPage.glassStyle === "soft" ? 1 : 0
+                            onSelectionChanged: function(index) {
+                                displayPage.setGlassStyle(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
 
                 Item {
                     width: parent.width
@@ -1619,6 +1670,176 @@ ApplicationWindow {
             color: "#ff453a"
             font.pixelSize: 12
             wrapMode: Text.Wrap
+        }
+    }
+
+    component GlassDebugPage: ColumnLayout {
+        id: glassDebugPage
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property string glassStyle: "liquid"
+        property real refraction: 1.0
+        property real softness: 0.0
+        property real highlight: 1.0
+        property real reflection: 0.0
+        property string pendingName: ""
+        property real pendingValue: 0.0
+        property string errorText: ""
+        readonly property var controls: [
+            { key: "refraction", title: "折射比例", icon: "≈", tint: "#af52de" },
+            { key: "softness", title: "柔和度", icon: "◌", tint: "#5ac8fa" },
+            { key: "highlight", title: "窄高光", icon: "✦", tint: "#ffd60a" },
+            { key: "reflection", title: "宽反射", icon: "◒", tint: "#64d2ff" }
+        ]
+
+        function applyState(state) {
+            if (!state)
+                return
+            glassStyle = state.glassStyle === "soft" ? "soft" : "liquid"
+            refraction = Number(state.activePresetRefraction)
+            softness = Number(state.activePresetSoftness)
+            highlight = Number(state.activePresetHighlight)
+            reflection = Number(state.activePresetReflection)
+            errorText = ""
+        }
+        function valueFor(name) { return Number(glassDebugPage[name]) }
+        function preview(name, value) {
+            glassDebugPage[name] = Math.max(0, Math.min(1, value))
+            pendingName = name
+            pendingValue = glassDebugPage[name]
+            livePresetDebounce.restart()
+        }
+        function commit(name) {
+            livePresetDebounce.stop()
+            if (!bridge)
+                return
+            applyState(bridge.updateGlassPresetParameter(name, valueFor(name)))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+        function refresh() {
+            if (bridge)
+                applyState(bridge.appearanceSnapshot())
+        }
+
+        Timer {
+            id: livePresetDebounce
+            interval: 60
+            repeat: false
+            onTriggered: {
+                if (glassDebugPage.bridge && glassDebugPage.pendingName.length > 0)
+                    glassDebugPage.bridge.updateGlassPresetParameter(
+                        glassDebugPage.pendingName, glassDebugPage.pendingValue)
+            }
+        }
+
+        Component.onCompleted: refresh()
+        onVisibleChanged: {
+            if (visible)
+                refresh()
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: "当前编辑：" + (glassDebugPage.glassStyle === "soft"
+                ? "柔光玻璃预设" : "液态玻璃预设")
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: debugRows.implicitHeight
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: debugRows
+                width: parent.width
+                Repeater {
+                    model: glassDebugPage.controls
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        width: debugRows.width
+                        height: 49
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+                            spacing: 12
+                            SettingIcon { symbol: modelData.icon; tint: modelData.tint }
+                            Text { text: modelData.title; color: theme.primaryText; font.pixelSize: 14 }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: Math.round(glassDebugPage.valueFor(modelData.key) * 100) + "%"
+                                color: theme.secondaryText
+                                font.pixelSize: 12
+                                Layout.preferredWidth: 38
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            LiquidControls.LiquidSlider {
+                                Layout.preferredWidth: 220
+                                value: glassDebugPage.valueFor(modelData.key)
+                                trackColor: theme.divider
+                                onPreviewChanged: function(position) {
+                                    glassDebugPage.preview(modelData.key, position)
+                                }
+                                onCommitRequested: glassDebugPage.commit(modelData.key)
+                            }
+                        }
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 53
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: theme.separator
+                            visible: index < glassDebugPage.controls.length - 1
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.alignment: Qt.AlignRight
+            implicitWidth: 126
+            implicitHeight: 34
+            radius: 17
+            color: resetGlassPointer.containsMouse ? theme.sidebarHover : theme.card
+            border.width: 1
+            border.color: theme.floatingBorder
+            Text {
+                anchors.centerIn: parent
+                text: "恢复当前预设"
+                color: theme.primaryText
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+            }
+            MouseArea {
+                id: resetGlassPointer
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (glassDebugPage.bridge)
+                        glassDebugPage.applyState(glassDebugPage.bridge.resetGlassPreset(
+                            glassDebugPage.glassStyle))
+                }
+            }
+        }
+
+        Text {
+            visible: glassDebugPage.errorText.length > 0
+            text: glassDebugPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
         }
     }
 
@@ -3343,6 +3564,15 @@ ApplicationWindow {
                     navTint: "#30d158"
                 }
 
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 7
+                    label: "玻璃调试"
+                    navSymbol: "⚙"
+                    navTint: "#64d2ff"
+                }
+
                 Item {
                     Layout.fillHeight: true
                 }
@@ -3385,7 +3615,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 6)
+                        model: (window.currentPage >= 0 && window.currentPage <= 7)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -3426,6 +3656,10 @@ ApplicationWindow {
 
                     IntegrationStatusPage {
                         visible: window.currentPage === 6
+                    }
+
+                    GlassDebugPage {
+                        visible: window.currentPage === 7
                     }
 
                     DockSettingsPage {

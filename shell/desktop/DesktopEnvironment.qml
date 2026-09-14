@@ -126,6 +126,11 @@ Item {
             return JSON.stringify({
                 globalBlurStrength: AppearanceConfigService.globalBlurStrength,
                 globalLiquidStrength: AppearanceConfigService.globalLiquidStrength,
+                glassStyle: AppearanceConfigService.glassStyle,
+                activePresetRefraction: AppearanceConfigService.activePresetRefraction,
+                activePresetSoftness: AppearanceConfigService.activePresetSoftness,
+                activePresetHighlight: AppearanceConfigService.activePresetHighlight,
+                activePresetReflection: AppearanceConfigService.activePresetReflection,
                 effectiveDockBlur: AppearanceConfigService.effectiveDockBlur,
                 effectiveDockLiquid: AppearanceConfigService.effectiveDockLiquid,
                 effectiveBarBlur: AppearanceConfigService.effectiveBarBlur,
@@ -160,6 +165,21 @@ Item {
 
         function updateGlobalLiquidStrength(value: real): string {
             AppearanceConfigService.updateGlobalLiquidStrength(value)
+            return snapshot()
+        }
+
+        function updateGlassStyle(style: string): string {
+            AppearanceConfigService.updateGlassStyle(style)
+            return snapshot()
+        }
+
+        function updateGlassPresetParameter(name: string, value: real): string {
+            AppearanceConfigService.updateGlassPresetParameter(name, value)
+            return snapshot()
+        }
+
+        function resetGlassPreset(style: string): string {
+            AppearanceConfigService.resetGlassPreset(style)
             return snapshot()
         }
 

@@ -87,6 +87,22 @@ public:
             QString::number(strength, 'f', 3)}));
     }
 
+    Q_INVOKABLE QVariantMap updateGlassStyle(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlassStyle"), style}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlassPresetParameter(const QString &name, double value) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlassPresetParameter"), name,
+            QString::number(value, 'f', 3)}));
+    }
+
+    Q_INVOKABLE QVariantMap resetGlassPreset(const QString &style) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("resetGlassPreset"), style}));
+    }
+
     Q_INVOKABLE QVariantMap updateGlobalIconMode(const QString &mode) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateGlobalIconMode"), mode}));
@@ -325,6 +341,16 @@ private:
         return {
             {QStringLiteral("globalBlurStrength"), globalBlur},
             {QStringLiteral("globalLiquidStrength"), globalLiquid},
+            {QStringLiteral("glassStyle"),
+                object.value(QStringLiteral("glassStyle")).toString(QStringLiteral("liquid"))},
+            {QStringLiteral("activePresetRefraction"),
+                object.value(QStringLiteral("activePresetRefraction")).toDouble(1.0)},
+            {QStringLiteral("activePresetSoftness"),
+                object.value(QStringLiteral("activePresetSoftness")).toDouble()},
+            {QStringLiteral("activePresetHighlight"),
+                object.value(QStringLiteral("activePresetHighlight")).toDouble(1.0)},
+            {QStringLiteral("activePresetReflection"),
+                object.value(QStringLiteral("activePresetReflection")).toDouble()},
             {QStringLiteral("effectiveDockBlur"), globalBlur},
             {QStringLiteral("effectiveDockLiquid"), globalLiquid},
             {QStringLiteral("effectiveBarBlur"), globalBlur},

@@ -19,6 +19,27 @@ QtObject {
     property real globalBlurStrength: 0.42
     property real globalLiquidStrength: 1.0
 
+    // Both styles are presets over the same compositor material. Keeping the
+    // values flattened makes user-tuned presets easy to persist and migrate.
+    property string glassStyle: "liquid" // "liquid" | "soft"
+    property real liquidPresetRefraction: 1.0
+    property real liquidPresetSoftness: 0.0
+    property real liquidPresetHighlight: 1.0
+    property real liquidPresetReflection: 0.0
+    property real softPresetRefraction: 0.28
+    property real softPresetSoftness: 0.72
+    property real softPresetHighlight: 0.32
+    property real softPresetReflection: 0.58
+
+    readonly property real activePresetRefraction: glassStyle === "soft"
+        ? softPresetRefraction : liquidPresetRefraction
+    readonly property real activePresetSoftness: glassStyle === "soft"
+        ? softPresetSoftness : liquidPresetSoftness
+    readonly property real activePresetHighlight: glassStyle === "soft"
+        ? softPresetHighlight : liquidPresetHighlight
+    readonly property real activePresetReflection: glassStyle === "soft"
+        ? softPresetReflection : liquidPresetReflection
+
     property real blurStrength: globalBlurStrength
     property real liquidStrength: globalLiquidStrength
 
@@ -70,6 +91,10 @@ QtObject {
         return value === "scale" || value === "genie"
     }
 
+    function isValidGlassStyle(value) {
+        return value === "liquid" || value === "soft"
+    }
+
     function _normalized(value) {
         const number = Number(value)
         return Number.isFinite(number)
@@ -112,6 +137,55 @@ QtObject {
         liquidStrength = value
         saveTimer.restart()
         effectSyncTimer.restart()
+        return true
+    }
+
+    function updateGlassStyle(rawStyle) {
+        const style = String(rawStyle)
+        if (!isValidGlassStyle(style) || glassStyle === style)
+            return false
+        glassStyle = style
+        saveTimer.restart()
+        effectSyncTimer.restart()
+        return true
+    }
+
+    function updateGlassPresetParameter(rawName, rawValue) {
+        const name = String(rawName)
+        const value = _normalized(rawValue)
+        if (!Number.isFinite(value))
+            return false
+        const prefix = glassStyle === "soft" ? "softPreset" : "liquidPreset"
+        const propertyName = prefix + name.charAt(0).toUpperCase() + name.slice(1)
+        if (["Refraction", "Softness", "Highlight", "Reflection"]
+                .indexOf(name.charAt(0).toUpperCase() + name.slice(1)) < 0)
+            return false
+        if (Math.abs(Number(service[propertyName]) - value) <= 0.001)
+            return false
+        service[propertyName] = value
+        saveTimer.restart()
+        effectSyncTimer.restart()
+        return true
+    }
+
+    function resetGlassPreset(rawStyle) {
+        const style = String(rawStyle)
+        if (!isValidGlassStyle(style))
+            return false
+        if (style === "soft") {
+            softPresetRefraction = 0.28
+            softPresetSoftness = 0.72
+            softPresetHighlight = 0.32
+            softPresetReflection = 0.58
+        } else {
+            liquidPresetRefraction = 1.0
+            liquidPresetSoftness = 0.0
+            liquidPresetHighlight = 1.0
+            liquidPresetReflection = 0.0
+        }
+        saveTimer.restart()
+        if (glassStyle === style)
+            effectSyncTimer.restart()
         return true
     }
 
@@ -239,9 +313,18 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 10,
+            version: 11,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
+            glassStyle: service.glassStyle,
+            liquidPresetRefraction: service.liquidPresetRefraction,
+            liquidPresetSoftness: service.liquidPresetSoftness,
+            liquidPresetHighlight: service.liquidPresetHighlight,
+            liquidPresetReflection: service.liquidPresetReflection,
+            softPresetRefraction: service.softPresetRefraction,
+            softPresetSoftness: service.softPresetSoftness,
+            softPresetHighlight: service.softPresetHighlight,
+            softPresetReflection: service.softPresetReflection,
             blurStrength: service.globalBlurStrength,
             liquidStrength: service.globalLiquidStrength,
             shellStyle: service.shellStyle,
@@ -274,18 +357,26 @@ QtObject {
             service.globalBlurStrength)
         const contentBlurLevel = service._compositorBlurLevel(
             service.globalBlurStrength)
-        const refractionLevel = Math.round(service.globalLiquidStrength * 20)
+        const refractionLevel = Math.round(service.globalLiquidStrength
+            * service.activePresetRefraction * 20)
         PlatformClient.request("theme.sync-glass", {
             contentBlurLevel: contentBlurLevel,
             dockBlurLevel: dockBlurLevel,
             refractionLevel: refractionLevel,
+            materialSoftness: service.activePresetSoftness,
+            materialHighlightStrength: service.activePresetHighlight,
+            materialReflectionStrength: service.activePresetReflection,
         }, function(response) {
             if (!response?.ok)
                 console.warn("[AppearanceConfig] Glass effect sync failed: "
                     + (response?.error?.message || "platform unavailable"))
             else {
                 console.log("[AppearanceConfig] Glass effect dockBlur=" + dockBlurLevel
-                    + " contentBlur=" + contentBlurLevel + " liquid=" + refractionLevel)
+                    + " contentBlur=" + contentBlurLevel + " liquid=" + refractionLevel
+                    + " style=" + service.glassStyle
+                    + " softness=" + service.activePresetSoftness
+                    + " highlight=" + service.activePresetHighlight
+                    + " reflection=" + service.activePresetReflection)
             }
         })
     }
@@ -330,6 +421,7 @@ QtObject {
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
+                    const glassStyle = String(object.glassStyle ?? "liquid")
 
                     if (Number.isFinite(globalBlur)) {
                         service.globalBlurStrength = globalBlur
@@ -351,13 +443,27 @@ QtObject {
                         service.barLayoutMode = barLayout
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
+                    if (service.isValidGlassStyle(glassStyle))
+                        service.glassStyle = glassStyle
 
-                    if (Number(object.version) !== 10
+                    const presetNames = ["liquidPresetRefraction",
+                        "liquidPresetSoftness", "liquidPresetHighlight",
+                        "liquidPresetReflection", "softPresetRefraction",
+                        "softPresetSoftness", "softPresetHighlight",
+                        "softPresetReflection"]
+                    for (const name of presetNames) {
+                        const value = service._normalized(object[name])
+                        if (Number.isFinite(value))
+                            service[name] = value
+                    }
+
+                    if (Number(object.version) !== 11
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
                             || !hasBarIntegration
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
+                            || !service.isValidGlassStyle(glassStyle)
                             || !service.isValidDockWindowAnimationStyle(animationStyle))
                         service.saveTimer.restart()
                 } catch (error) {
