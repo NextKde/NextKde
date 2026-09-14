@@ -39,12 +39,16 @@ PopupWindow {
     readonly property int windowCount: effectiveWindows.length
     readonly property real cardWidth: 220
     readonly property real cardHeight: 160
-    readonly property real plusCardWidth: 64
+    // Keep the new-window action as an affordance, not another window card.
+    readonly property real newWindowButtonSize: 30
     readonly property real rowPadding: 10
     readonly property real rowSpacing: 8
 
     readonly property real calculatedWidth: rowPadding * 2
-        + (windowCount > 0 ? windowCount * cardWidth + (windowCount - 1) * rowSpacing + rowSpacing + plusCardWidth : plusCardWidth)
+        + (windowCount > 0
+           ? windowCount * cardWidth + (windowCount - 1) * rowSpacing
+             + rowSpacing + newWindowButtonSize
+           : 0)
 
     readonly property real maxAllowedWidth: {
         const screenW = anchorItem?.targetScreen?.width ?? Quickshell.screens[0]?.width ?? 1920
@@ -384,22 +388,25 @@ PopupWindow {
                     }
                 }
 
-                // '+' New Window Button Card
+                // Compact new-window action, deliberately distinct from a
+                // window thumbnail so it does not look like an empty card.
                 Item {
-                    id: plusCard
-                    width: preview.plusCardWidth
+                    id: newWindowButton
+                    width: preview.newWindowButtonSize
                     height: preview.cardHeight
 
                     Rectangle {
                         id: plusBg
-                        anchors.fill: parent
-                        radius: 8
+                        width: preview.newWindowButtonSize
+                        height: width
+                        anchors.centerIn: parent
+                        radius: width / 2
                         color: plusMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10))
-                            : (ThemeService.isDark ? Qt.rgba(0.06, 0.06, 0.08, 0.35) : Qt.rgba(1, 1, 1, 0.25))
+                            ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
+                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
                         border.width: 1
                         border.color: plusMouse.containsMouse
-                            ? Qt.rgba(1, 1, 1, 0.30)
+                            ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.65)
                             : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08))
 
                         Behavior on color {
@@ -409,40 +416,12 @@ PopupWindow {
                             ColorAnimation { duration: 100 }
                         }
 
-                        Column {
+                        Text {
                             anchors.centerIn: parent
-                            spacing: 6
-
-                            Rectangle {
-                                width: 32
-                                height: 32
-                                radius: 16
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: plusMouse.containsMouse
-                                    ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
-                                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08))
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "＋"
-                                    color: ThemeService.foregroundColor
-                                    font.pixelSize: 18
-                                    font.bold: true
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "新建窗口"
-                                color: ThemeService.foregroundColor
-                                style: ThemeService.isDark ? Text.Outline : Text.Normal
-                                styleColor: Qt.rgba(0, 0, 0, 0.40)
-                                opacity: 0.78
-                                font {
-                                    pixelSize: 10
-                                    weight: Font.DemiBold
-                                }
-                            }
+                            text: "+"
+                            color: ThemeService.foregroundColor
+                            font.pixelSize: 21
+                            font.weight: Font.Medium
                         }
 
                         MouseArea {
