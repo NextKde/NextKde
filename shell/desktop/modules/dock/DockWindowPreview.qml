@@ -39,7 +39,7 @@ PopupWindow {
     readonly property int windowCount: effectiveWindows.length
     readonly property real cardWidth: 220
     readonly property real cardHeight: 160
-    readonly property real rowPadding: 10
+    readonly property real rowPadding: 8
     readonly property real rowSpacing: 8
 
     readonly property real calculatedWidth: rowPadding * 2
@@ -54,7 +54,7 @@ PopupWindow {
 
     implicitWidth: Math.min(maxAllowedWidth, Math.max(cardWidth + rowPadding * 2, calculatedWidth))
     // The secondary action has its own toolbar row above the thumbnails.
-    implicitHeight: 212
+    implicitHeight: 204
     color: "transparent"
     grabFocus: false
 
@@ -174,12 +174,12 @@ PopupWindow {
         Column {
             anchors.fill: parent
             anchors.margins: preview.rowPadding
-            spacing: 4
+            spacing: 2
 
             Item {
                 id: previewToolbar
                 width: parent.width
-                height: 28
+                height: 26
 
                 Text {
                     id: previewTitle
