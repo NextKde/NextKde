@@ -599,7 +599,9 @@ Item {
                     width: runningIndicator.dotSize
                     height: width
                     radius: width / 2
-                    color: Qt.rgba(1, 1, 1, 0.95)
+                    color: Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g,
+                        ThemeService.foregroundColor.b, 0.95)
                 }
             }
         }
@@ -618,7 +620,9 @@ Item {
         visible: !!icon.glyph
         rotation: icon.vertical ? -90 : 0
         transformOrigin: Item.Center
-        color: Qt.rgba(1, 1, 1, 0.92)
+        color: Qt.rgba(ThemeService.foregroundColor.r,
+            ThemeService.foregroundColor.g,
+            ThemeService.foregroundColor.b, 0.92)
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         font {

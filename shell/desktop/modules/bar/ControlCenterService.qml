@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import qs.desktop.modules.lock
 import qs.desktop.modules.platform
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
@@ -351,7 +352,17 @@ QtObject {
         })
         return true
     }
-    function lockSession() { return _sessionAction("session.lock", "锁屏失败") }
+    // Locking is the one action in this group that stays in-process, and it is
+    // not routed through `session.lock` on purpose. That operation ends in
+    // `loginctl lock-session`, which on KDE ksmserver answers with its own
+    // locker -- the Plasma greeter would land on top of the shell's lock
+    // surface and there would be two locks to get past. LockService owns the
+    // lock state, so the button talks to it directly; the platform daemon still
+    // serves every other session operation unchanged.
+    function lockSession() {
+        LockService.lock()
+        return true
+    }
     function suspendSystem() { return _sessionAction("session.suspend", "睡眠操作失败") }
     function hibernateSystem() { return _sessionAction("session.hibernate", "休眠操作失败") }
     function rebootSystem() { return _sessionAction("session.reboot", "重启操作失败") }

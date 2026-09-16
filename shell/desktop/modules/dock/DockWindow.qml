@@ -200,16 +200,45 @@ PanelWindow {
             ? (root.position === "right" ? Item.Right : Item.Left)
             : Item.Bottom
 
-        // The active surface policy decides whether this is compositor-backed
-        // glass/acrylic or a QML tonal layer.
-        Rectangle {
+        // The dock's own glass, and the same component its popups already use.
+        //
+        // In backdrop mode the pill is a two-part surface: the compositor
+        // blurs and tints inside glassRegion (published below), and this panel
+        // paints the silhouette and finish on top of it. That split is what the
+        // DockWindowPreview / DockMusicPopup / DockTrashConfirmPopup pairings
+        // already do, so the point of moving the base pill onto it is that the
+        // Dock's corner profile is finally one family instead of a
+        // superelliptical popup floating over a circular pill.
+        //
+        // The panel neither knows about nor touches glassRegion, so the
+        // compositor's mask stays a rounded rectangle: the superellipse only
+        // reaches as far past the circular arc as the exponent adds (~0.12 *
+        // pillRadius at 3), and that sliver is glass whose backdrop is not
+        // blurred. Closing that last gap is the compositor-side change, not
+        // this one.
+        //
+        // Tonal mode has no backdrop to blur or tint, and there the Dock keeps
+        // the fill it has always carried rather than the generic material
+        // layer: the panel paints fallbackColor and its body stands down. Either
+        // way the silhouette is the same corner field, so the pill and its
+        // popups share one corner profile in both treatments.
+        LiquidGlassPanel {
+            id: pill
             anchors.fill: parent
-            visible: !AppearanceTokens.surface.usesBackdrop
-            radius: dockContainer.pillRadius
-            color: AppearanceTokens.surface.dockFill
-            opacity: AppearanceTokens.surface.dockOpacity
-            border.width: 0
             z: -1
+            radius: dockContainer.pillRadius
+            // Soften the shell-wide squircle for this low-height capsule while
+            // retaining a little continuous-corner character.
+            cornerExponent: 2.35
+            blurEnabled: AppearanceTokens.surface.usesBackdrop
+            baseColor: ThemeService.backgroundColor
+            surfaceOpacity: 1.0
+            // The tonal roles are a fill *and* an opacity; the panel's fallback
+            // is a single colour, so the alpha has to be folded in here.
+            fallbackColor: Qt.rgba(AppearanceTokens.surface.dockFill.r,
+                AppearanceTokens.surface.dockFill.g,
+                AppearanceTokens.surface.dockFill.b,
+                AppearanceTokens.surface.dockOpacity)
         }
 
         DockContainer {

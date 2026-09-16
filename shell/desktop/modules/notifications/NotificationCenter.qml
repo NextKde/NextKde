@@ -11,6 +11,13 @@ Scope {
     id: root
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
+
+    // The lock screen shows the same unread set the popup does, so it takes the
+    // one group service rather than reading the server model itself. Exposed by
+    // alias because a second NotificationGroupService over the same server
+    // model would build a second, diverging group list.
+    readonly property alias groupService: notifGroupService
+
     NotificationServer {
         id: server
         bodySupported: true

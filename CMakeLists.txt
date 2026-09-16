@@ -41,6 +41,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_date_buckets.mjs
         )
         set_tests_properties(kos-shell.date-buckets PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.squircle
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_squircle.mjs
+        )
+        set_tests_properties(kos-shell.squircle PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.tray-attention-match
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_tray_attention_match.mjs
@@ -89,6 +94,28 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.static-work-runtime PROPERTIES TIMEOUT 15)
+            add_test(NAME kos-shell.squircle-mask
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/squircle-mask/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.squircle-mask PROPERTIES TIMEOUT 15)
+            add_test(NAME kos-shell.liquid-glass-panel
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/liquid-glass-panel/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.liquid-glass-panel PROPERTIES TIMEOUT 15)
+            add_test(NAME kos-shell.lock-surface
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/lock-surface/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.lock-surface PROPERTIES TIMEOUT 30)
+            set_tests_properties(kos-shell.static-work-runtime
+                kos-shell.squircle-mask kos-shell.liquid-glass-panel
+                kos-shell.lock-surface
+                PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         add_test(NAME kos-ui.page-cache-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
@@ -161,6 +188,7 @@ if(KOS_BUILD_MUSIC)
 endif()
 
 if(KOS_BUILD_KWIN_PLUGINS)
+    add_subdirectory(integrations/quickshell/surface-shape)
     add_subdirectory(integrations/kwin/dock-window-animation)
     add_subdirectory(integrations/kwin/context-menu-input)
     add_subdirectory(integrations/kwin/decoration-liquid-glass)

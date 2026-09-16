@@ -23,10 +23,27 @@ QtObject {
     // values flattened makes user-tuned presets easy to persist and migrate.
     property string glassStyle: "liquid" // "liquid" | "soft"
     property real liquidPresetRefraction: 1.0
+    property real liquidPresetEdgeSize: 1.8
+    property real liquidPresetNormalPow: 4.0
+    property real liquidPresetRGBFringing: 5.4
+    property real liquidPresetOffsetStrength: 8.0
+    property real liquidPresetBevelIntensity: 14.0
+    property real liquidPresetHighlightWidth: 0.0
+    property real liquidPresetHighlightAngle: 45.0
     property real liquidPresetSoftness: 0.0
     property real liquidPresetHighlight: 1.0
     property real liquidPresetReflection: 0.0
     property real softPresetRefraction: 0.28
+    // Until the soft material is tuned, keep a separate copy of the current
+    // optical geometry. Future soft-glass changes can modify these fields
+    // without destroying the verified liquid preset above.
+    property real softPresetEdgeSize: 1.8
+    property real softPresetNormalPow: 4.0
+    property real softPresetRGBFringing: 5.4
+    property real softPresetOffsetStrength: 8.0
+    property real softPresetBevelIntensity: 14.0
+    property real softPresetHighlightWidth: 0.0
+    property real softPresetHighlightAngle: 45.0
     property real softPresetSoftness: 0.72
     property real softPresetHighlight: 0.32
     property real softPresetReflection: 0.58
@@ -35,6 +52,20 @@ QtObject {
         ? softPresetRefraction : liquidPresetRefraction
     readonly property real activePresetSoftness: glassStyle === "soft"
         ? softPresetSoftness : liquidPresetSoftness
+    readonly property real activePresetEdgeSize: glassStyle === "soft"
+        ? softPresetEdgeSize : liquidPresetEdgeSize
+    readonly property real activePresetNormalPow: glassStyle === "soft"
+        ? softPresetNormalPow : liquidPresetNormalPow
+    readonly property real activePresetRGBFringing: glassStyle === "soft"
+        ? softPresetRGBFringing : liquidPresetRGBFringing
+    readonly property real activePresetOffsetStrength: glassStyle === "soft"
+        ? softPresetOffsetStrength : liquidPresetOffsetStrength
+    readonly property real activePresetBevelIntensity: glassStyle === "soft"
+        ? softPresetBevelIntensity : liquidPresetBevelIntensity
+    readonly property real activePresetHighlightWidth: glassStyle === "soft"
+        ? softPresetHighlightWidth : liquidPresetHighlightWidth
+    readonly property real activePresetHighlightAngle: glassStyle === "soft"
+        ? softPresetHighlightAngle : liquidPresetHighlightAngle
     readonly property real activePresetHighlight: glassStyle === "soft"
         ? softPresetHighlight : liquidPresetHighlight
     readonly property real activePresetReflection: glassStyle === "soft"
@@ -174,11 +205,25 @@ QtObject {
             return false
         if (style === "soft") {
             softPresetRefraction = 0.28
+            softPresetEdgeSize = 1.8
+            softPresetNormalPow = 4.0
+            softPresetRGBFringing = 5.4
+            softPresetOffsetStrength = 8.0
+            softPresetBevelIntensity = 14.0
+            softPresetHighlightWidth = 0.0
+            softPresetHighlightAngle = 45.0
             softPresetSoftness = 0.72
             softPresetHighlight = 0.32
             softPresetReflection = 0.58
         } else {
             liquidPresetRefraction = 1.0
+            liquidPresetEdgeSize = 1.8
+            liquidPresetNormalPow = 4.0
+            liquidPresetRGBFringing = 5.4
+            liquidPresetOffsetStrength = 8.0
+            liquidPresetBevelIntensity = 14.0
+            liquidPresetHighlightWidth = 0.0
+            liquidPresetHighlightAngle = 45.0
             liquidPresetSoftness = 0.0
             liquidPresetHighlight = 1.0
             liquidPresetReflection = 0.0
@@ -313,15 +358,29 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 11,
+            version: 12,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             glassStyle: service.glassStyle,
             liquidPresetRefraction: service.liquidPresetRefraction,
+            liquidPresetEdgeSize: service.liquidPresetEdgeSize,
+            liquidPresetNormalPow: service.liquidPresetNormalPow,
+            liquidPresetRGBFringing: service.liquidPresetRGBFringing,
+            liquidPresetOffsetStrength: service.liquidPresetOffsetStrength,
+            liquidPresetBevelIntensity: service.liquidPresetBevelIntensity,
+            liquidPresetHighlightWidth: service.liquidPresetHighlightWidth,
+            liquidPresetHighlightAngle: service.liquidPresetHighlightAngle,
             liquidPresetSoftness: service.liquidPresetSoftness,
             liquidPresetHighlight: service.liquidPresetHighlight,
             liquidPresetReflection: service.liquidPresetReflection,
             softPresetRefraction: service.softPresetRefraction,
+            softPresetEdgeSize: service.softPresetEdgeSize,
+            softPresetNormalPow: service.softPresetNormalPow,
+            softPresetRGBFringing: service.softPresetRGBFringing,
+            softPresetOffsetStrength: service.softPresetOffsetStrength,
+            softPresetBevelIntensity: service.softPresetBevelIntensity,
+            softPresetHighlightWidth: service.softPresetHighlightWidth,
+            softPresetHighlightAngle: service.softPresetHighlightAngle,
             softPresetSoftness: service.softPresetSoftness,
             softPresetHighlight: service.softPresetHighlight,
             softPresetReflection: service.softPresetReflection,
@@ -360,9 +419,17 @@ QtObject {
         PlatformClient.request("theme.sync-glass", {
             contentBlurLevel: contentBlurLevel,
             refractionLevel: refractionLevel,
+            refractionEdgeSize: service.activePresetEdgeSize,
+            refractionNormalPow: service.activePresetNormalPow,
+            refractionRGBFringing: service.activePresetRGBFringing,
+            refractionOffsetStrength: service.activePresetOffsetStrength,
+            refractionBevelIntensity: service.activePresetBevelIntensity,
+            highlightWidthPx: service.activePresetHighlightWidth,
+            highlightAngle: service.activePresetHighlightAngle,
             materialSoftness: service.activePresetSoftness,
             materialHighlightStrength: service.activePresetHighlight,
             materialReflectionStrength: service.activePresetReflection,
+            cornerExponent: AppearanceTokens.shape.cornerExponent,
         }, function(response) {
             if (!response?.ok)
                 console.warn("[AppearanceConfig] Glass effect sync failed: "
@@ -373,7 +440,8 @@ QtObject {
                     + " style=" + service.glassStyle
                     + " softness=" + service.activePresetSoftness
                     + " highlight=" + service.activePresetHighlight
-                    + " reflection=" + service.activePresetReflection)
+                    + " reflection=" + service.activePresetReflection
+                    + " cornerExponent=" + AppearanceTokens.shape.cornerExponent)
             }
         })
     }
@@ -454,7 +522,30 @@ QtObject {
                             service[name] = value
                     }
 
-                    if (Number(object.version) !== 11
+                    const opticalPresetRanges = {
+                        liquidPresetEdgeSize: [0.0, 50.0],
+                        liquidPresetNormalPow: [0.1, 10.0],
+                        liquidPresetRGBFringing: [0.0, 20.0],
+                        liquidPresetOffsetStrength: [0.0, 20.0],
+                        liquidPresetBevelIntensity: [0.0, 100.0],
+                        liquidPresetHighlightWidth: [0.0, 20.0],
+                        liquidPresetHighlightAngle: [0.0, 360.0],
+                        softPresetEdgeSize: [0.0, 50.0],
+                        softPresetNormalPow: [0.1, 10.0],
+                        softPresetRGBFringing: [0.0, 20.0],
+                        softPresetOffsetStrength: [0.0, 20.0],
+                        softPresetBevelIntensity: [0.0, 100.0],
+                        softPresetHighlightWidth: [0.0, 20.0],
+                        softPresetHighlightAngle: [0.0, 360.0],
+                    }
+                    for (const name in opticalPresetRanges) {
+                        const value = Number(object[name])
+                        const range = opticalPresetRanges[name]
+                        if (Number.isFinite(value))
+                            service[name] = Math.max(range[0], Math.min(range[1], value))
+                    }
+
+                    if (Number(object.version) !== 12
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
                             || !hasBarIntegration

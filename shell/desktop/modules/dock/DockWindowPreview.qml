@@ -147,7 +147,7 @@ PopupWindow {
         margins.top: -6
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: background
         anchors.fill: parent
         opacity: preview.revealProgress
@@ -155,6 +155,7 @@ PopupWindow {
             y: (1.0 - preview.revealProgress) * 7
         }
         radius: 14
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 0.88
         materialDepth: 2

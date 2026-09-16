@@ -2780,12 +2780,28 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             payload.value(QStringLiteral("contentBlurLevel")).toInt(), 15);
         const int refraction = qBound(0,
             payload.value(QStringLiteral("refractionLevel")).toInt(), 20);
+        const double refractionEdgeSize = qBound(0.0,
+            payload.value(QStringLiteral("refractionEdgeSize")).toDouble(1.8), 50.0);
+        const double refractionNormalPow = qBound(0.1,
+            payload.value(QStringLiteral("refractionNormalPow")).toDouble(4.0), 10.0);
+        const double refractionRGBFringing = qBound(0.0,
+            payload.value(QStringLiteral("refractionRGBFringing")).toDouble(5.4), 20.0);
+        const double refractionOffsetStrength = qBound(0.0,
+            payload.value(QStringLiteral("refractionOffsetStrength")).toDouble(8.0), 20.0);
+        const int refractionBevelIntensity = qBound(0,
+            payload.value(QStringLiteral("refractionBevelIntensity")).toInt(14), 100);
+        const double highlightWidthPx = qBound(0.0,
+            payload.value(QStringLiteral("highlightWidthPx")).toDouble(), 20.0);
+        const int highlightAngle = qBound(0,
+            payload.value(QStringLiteral("highlightAngle")).toInt(45), 360);
         const double materialSoftness = qBound(0.0,
             payload.value(QStringLiteral("materialSoftness")).toDouble(), 1.0);
         const double materialHighlight = qBound(0.0,
             payload.value(QStringLiteral("materialHighlightStrength")).toDouble(1.0), 1.0);
         const double materialReflection = qBound(0.0,
             payload.value(QStringLiteral("materialReflectionStrength")).toDouble(), 1.0);
+        const double cornerExponent = qBound(2.0,
+            payload.value(QStringLiteral("cornerExponent")).toDouble(3.0), 8.0);
         const QString kwriteconfig = QStandardPaths::findExecutable(
             QStringLiteral("kwriteconfig6"));
         if (kwriteconfig.isEmpty()) {
@@ -2802,6 +2818,27 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
              QStringLiteral("RefractionStrength"), QString::number(refraction)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionEdgeSize"), QString::number(refractionEdgeSize, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionNormalPow"), QString::number(refractionNormalPow, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionRGBFringing"), QString::number(refractionRGBFringing, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionOffsetStrength"), QString::number(refractionOffsetStrength, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("RefractionBevelIntensity"), QString::number(refractionBevelIntensity)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("HighlightWidthPx"), QString::number(highlightWidthPx, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("HighlightAngle"), QString::number(highlightAngle)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("MaterialSoftness"), QString::number(materialSoftness, 'f', 3)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
@@ -2809,6 +2846,9 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("MaterialReflectionStrength"), QString::number(materialReflection, 'f', 3)},
+            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
+             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
+             QStringLiteral("CornerExponent"), QString::number(cornerExponent, 'f', 2)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blur"), QStringLiteral("--key"),
              QStringLiteral("BlurStrength"), QString::number(contentBlur)}};

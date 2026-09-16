@@ -599,7 +599,8 @@ dev_all() {
     fi
     "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     printf 'Starting source Shell with system platform and data services\n'
-    exec "$qs_bin" -p "$project_dir/shell"
+    QML2_IMPORT_PATH="$build_dir/qml${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
+        exec "$qs_bin" -p "$project_dir/shell"
 }
 
 remember_blur_state() {

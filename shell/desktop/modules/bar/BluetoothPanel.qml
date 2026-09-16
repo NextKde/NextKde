@@ -97,10 +97,11 @@ PopupWindow {
         }
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: surface
         anchors.fill: parent
         radius: panel.blurRadius
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 1.0
         blurStrength: AppearanceConfigService.effectiveBarBlur
@@ -110,8 +111,8 @@ PopupWindow {
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
-        border.width: 1
-        border.color: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
+        outlineWidth: 1
+        outlineColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
 
         ListView {
             id: deviceList

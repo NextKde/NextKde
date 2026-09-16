@@ -139,14 +139,21 @@ Item {
         scale: targetHover.hovered ? 1.08 : 1.0
         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-        // The liquid-glass Home Indicator. LiquidGlassSurface gives the same
+        // The liquid-glass Home Indicator. LiquidGlassPanel gives the same
         // base + specular + wallpaper-ambient material as the dock's panels
-        // (DockMusicPopup/DockWindowPreview) instead of a flat white pill; the
-        // owning window's backdrop blur (barRegion) still frosts what is behind.
-        LiquidGlassSurface {
+        // (DockMusicPopup/DockWindowPreview) instead of a flat white pill, and
+        // shapes the whole thing -- fill and edge together -- from the corner
+        // token; the owning window's backdrop blur (barRegion) still frosts
+        // what is behind it. The capsule is a poor place to judge the corner
+        // profile (its radius is half its thickness, so at exponent 2 there is
+        // no straight edge left to compare against), but it does prove the mask
+        // survives at the smallest surface in the shell.
+        LiquidGlassPanel {
             id: pill
             anchors.fill: parent
             radius: Math.min(handle.visualThickness, handle.barLength) / 2
+            // Match the Dock's softened capsule profile.
+            cornerExponent: 2.35
             baseColor: handle.barBaseColor
             surfaceOpacity: 1.0
             ambientPrimary: handle.ambientPrimary

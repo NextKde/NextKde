@@ -8,7 +8,7 @@
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
 - **Material 3 配色**：壁纸主色作为种子，在进程内生成全套 M3 角色色。算法是 matugen `scheme-vibrant` 的纯 JS 移植，**不需要安装 matugen、Python 或 ImageMagick**。配合 Quickshell 内置 `ColorQuantizer` 完成取色，全链路无外部进程。详见第 10 节。
-- **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
+- **玻璃材质**：全局 `blurStrength` 与 `liquidStrength`，范围均为 `0.0...1.0`。它们由所有 Quickshell 液态玻璃表面共享，并同步给自定义 KWin `glass` effect；不会修改 KDE 自带的 `Effect-blur`。Quickshell 的显式 Blur Region 使用完整玻璃材质和全局 `CornerExponent`；普通窗口即使进入该 effect，也只使用同一模糊管线，不执行折射、染色、高光、噪点或圆角裁切。不提供 Dock、Bar 或启动器的独立强度，因为 KWin 没有对应的可靠分表面强度接口。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入形态 Token。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置，适用于底部与侧边 Dock；`barLayoutMode` 提供 `full | floating | transparent`，`barVisibilityMode` 提供 `always | smart | persistent`。融合后顶部 Bar 收起，底部 Dock 托管时间与系统状态，侧边 Dock 使用纵向状态与信息布局。
@@ -200,7 +200,7 @@ snapshot 示例：
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
-  "tokenVersion": 8
+  "tokenVersion": 9
 }
 ```
 
@@ -213,7 +213,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 
 `SettingsBridge` 会拒绝缺少任一核心字段的响应，并用 `lastError` 告知 QML。增加 snapshot 字段时应保持向后兼容；删除或重命名字段需要同时升级桥接层。
 
-## 6. AppearanceTokens v8
+## 6. AppearanceTokens v9
 
 数值单位：`height/radius/gap` 与 duration 分别为逻辑像素和毫秒；以 `Ratio` 结尾的值乘以消费组件的 `iconSize` 或基准高度。字符串用于选择布局策略或视觉 delegate。
 
@@ -223,7 +223,7 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | --- | --- | --- | --- |
 | `form` | `taskbar` | `floatingDock` | `navigationDock` |
 | `position` | `bottom` | `bottom` | `bottom` |
-| `radiusRatio` | 0.20 | 0.45 | 0.34 |
+| `radiusRatio` | 0.20 | 0.50 | 0.50 |
 | `horizontalPaddingRatio` | 0.24 | 0.40 | 0.32 |
 | `verticalPaddingRatio` | 0.12 | 0.20 | 0.16 |
 | `itemSpacingRatio` | 0.07 | 0.09 | 0.08 |
@@ -267,7 +267,21 @@ quickshell --path shell ipc call appearance-settings updateShellStyle material
 | `motion.standardEasing` | OutCubic | OutCubic | OutQuart |
 | `motion.springEnabled` | false | true | false |
 
-Token schema 当前为 `AppearanceTokens.version === 5`。现有 Dock、Bar、widget、glass 与 motion Token 表保持上表语义；修改现有 Token 语义或删除字段时必须升版本。
+### Shape
+
+| Token | 值 | 说明 |
+| --- | --- | --- |
+| `shape.cornerExponent` | 3.0 | 圆角族指数。`2.0` 是精确的圆弧，等价于改造前的 `Rectangle.radius`；大于 2 时角相对圆弧沿对角线外鼓 `2^(1/2-1/n) - 1`，即 2.5→7%、3→12%、4→19%。**数值越大角越方**，想更圆就往 2.0 调；要改角的大小（形状不变）动的是各组件的 `radius`。 |
+| 圆角刻度 | 非 Material `5/5/10/14/20/26/999`，Material `6/8/12/17/23/30/999` | 依次为 `unsharpened / extraSmall / small / medium / large / extraLarge / full`。 |
+
+指数是形状族里唯一跨进程的 Token，有两处消费者，必须一起看：
+
+- **QML 侧**：`common/Squircle.mjs` 是几何真值；`LiquidGlassPanel` 是常规消费者（内部经 `SquircleMask` 上遮罩），全仓唯一仍手写遮罩的地方是锁定屏通知卡 `lock/LockNotificationCard.qml`。
+- **合成器侧**：同一个值经 `AppearanceConfigService._syncGlassEffect()` → `theme.sync-glass` → `kwriteconfig6 Effect-blurplus CornerExponent` → `reconfigureEffect("glass")` 送达自定义 KWin glass effect。**这条通道是全局单值**，不是按窗口传的。
+
+QML 无法把半径告诉合成器——`ext-background-effect` 只有 `set_blur_region`，载荷是整数矩形列表，没有 radius 字段。逐 surface 的精确形状因此走项目自有的 `kos-surface-shape-v1`，细节见 `PlatformArchitecture.md`。
+
+Token schema 当前为 `AppearanceTokens.version === 9`。现有 Dock、Bar、widget、glass 与 motion Token 表保持上表语义；修改现有 Token 语义或删除字段时必须升版本。v9 新增 `shape.cornerExponent`，并把非 Windows 12 形态的 `dock.radiusRatio` 统一到 0.50。
 
 ## 7. 消费规则
 

@@ -31,8 +31,6 @@ PopupWindow {
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real darkOverlayOpacity: AppearanceTokens.isMaterial ? 0
-        : (ThemeService.isDark ? 0.27 : 0.04)
     property real menuRadius: AppearanceTokens.isMaterial
         ? AppearanceTokens.shape.large : 16
     readonly property color effectiveForegroundColor: {
@@ -215,18 +213,16 @@ PopupWindow {
         }
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: glass
         anchors.fill: parent
         radius: root.menuRadius
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        materialDepth: 0.6
-        material: "thick"
-        adaptiveDarkScrim: true
         scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
                 + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
@@ -238,12 +234,6 @@ PopupWindow {
             y: (root.macosPopupMotion && popupMotion.progress < 0.999)
                 ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
                 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: parent.radius
-            color: Qt.rgba(0, 0, 0, root.darkOverlayOpacity)
         }
 
         Column {

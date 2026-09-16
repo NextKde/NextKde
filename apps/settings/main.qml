@@ -15,7 +15,7 @@ ApplicationWindow {
     title: "kos设置界面"
     color: theme.background
 
-    property int currentPage: 0
+    property int currentPage: 1
     property string searchText: ""
 
     // Qt updates SystemPalette when the desktop colour scheme changes. We use
@@ -1357,6 +1357,10 @@ ApplicationWindow {
         Layout.fillWidth: true
         spacing: 7
 
+        property bool showSystemAppearance: true
+        property bool showGlassMaterial: true
+        property bool showIconAppearance: true
+
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property real blurStrength: 0.42
@@ -1480,6 +1484,7 @@ ApplicationWindow {
         Component.onCompleted: refresh()
 
         Text {
+            visible: displayPage.showSystemAppearance
             text: "系统外观".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
@@ -1488,6 +1493,7 @@ ApplicationWindow {
         }
 
         Rectangle {
+            visible: displayPage.showSystemAppearance
             Layout.fillWidth: true
             implicitHeight: 54
             radius: 18
@@ -1522,6 +1528,7 @@ ApplicationWindow {
         }
 
         Text {
+            visible: displayPage.showGlassMaterial
             text: "玻璃材质".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
@@ -1530,6 +1537,7 @@ ApplicationWindow {
         }
 
         Rectangle {
+            visible: displayPage.showGlassMaterial
             Layout.fillWidth: true
             implicitHeight: 145
             radius: 18
@@ -1555,6 +1563,8 @@ ApplicationWindow {
                         }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
+                            Layout.preferredWidth: 176
+                            itemWidthOverride: 88
                             model: [
                                 { id: "liquid", label: "液态玻璃" },
                                 { id: "soft", label: "柔光玻璃" }
@@ -1658,6 +1668,7 @@ ApplicationWindow {
         }
 
         IconAppearanceSection {
+            visible: displayPage.showIconAppearance
             bridge: displayPage.bridge
         }
 
@@ -1686,7 +1697,7 @@ ApplicationWindow {
             return showAdvanced || control.section === "材质"
                 || (control.section === "模糊" && control.key === "BlurStrength")
                 || (control.section === "色彩" && ["Brightness", "Saturation",
-                    "Contrast", "TintColor"].indexOf(control.key) >= 0)
+                    "Contrast"].indexOf(control.key) >= 0)
         })
         function refresh() {
             if (!bridge) return
@@ -1753,6 +1764,11 @@ ApplicationWindow {
                     delegate: Item {
                         required property var modelData
                         required property int index
+                        // Outer modelData alias: the TintMode Repeater shadows
+                        // `modelData` with its own {value,label} items, so the
+                        // key-based write-back must reach the debug control's
+                        // spec through this name instead.
+                        readonly property var debugItem: modelData
                         property real currentNumber: Number(modelData.value)
                         property bool currentBool: modelData.value === true
                             || String(modelData.value) === "true"
@@ -1782,6 +1798,7 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: modelData.type !== "bool" && modelData.type !== "string"
+                                    && modelData.key !== "TintMode"
                                 text: modelData.type === "int" ? String(Math.round(currentNumber))
                                     : currentNumber.toFixed(2)
                                 color: theme.secondaryText
@@ -1791,7 +1808,8 @@ ApplicationWindow {
                             }
                             LiquidControls.LiquidSlider {
                                 Layout.preferredWidth: 220
-                                visible: modelData.type === "int" || modelData.type === "real"
+                                visible: (modelData.type === "int" || modelData.type === "real")
+                                    && modelData.key !== "TintMode"
                                 value: (currentNumber - Number(modelData.min))
                                     / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider
@@ -1802,6 +1820,42 @@ ApplicationWindow {
                                         : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
                                 }
                                 onCommitRequested: glassDebugPage.updateValue(modelData.key, currentNumber)
+                            }
+                            Row {
+                                visible: modelData.key === "TintMode"
+                                spacing: 6
+                                property var modes: [
+                                    { value: 0, label: "关闭" },
+                                    { value: 1, label: "恒暗" },
+                                    { value: 2, label: "跟随主题" }
+                                ]
+                                Repeater {
+                                    model: parent.modes
+                                    Rectangle {
+                                        required property var modelData
+                                        width: 74
+                                        height: 30
+                                        radius: 15
+                                        color: modelData.value === Math.round(currentNumber)
+                                            ? (theme.dark ? "#2a6fb0" : "#0066cc")
+                                            : theme.divider
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            color: modelData.value === Math.round(currentNumber)
+                                                ? "#ffffff" : theme.primaryText
+                                            font.pixelSize: 12
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                currentNumber = modelData.value
+                                                glassDebugPage.updateValue(debugItem.key, modelData.value)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             Switch {
                                 visible: modelData.type === "bool"
@@ -2052,20 +2106,16 @@ ApplicationWindow {
         property string errorText: ""
         readonly property var styles: [
             {
-                id: "windows12",
-                name: "Windows 12",
-                description: "居中任务栏、轻亚克力表面与紧凑圆角组件",
-                accent: "#3b82f6"
-            },
-            {
                 id: "macos",
                 name: "macOS",
+                feature: "LIQUID GLASS",
                 description: "悬浮 Dock、通透顶部栏与更柔和的大圆角组件",
                 accent: "#0a84ff"
             },
             {
                 id: "material",
                 name: "Material Design",
+                feature: "MONET TONAL",
                 description: "Tonal 表面、状态指示和标准化层级与动效",
                 accent: "#6750a4"
             }
@@ -2128,155 +2178,280 @@ ApplicationWindow {
             Layout.leftMargin: 13
         }
 
-        Repeater {
-            model: themePage.styles
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 550
+            radius: 26
+            color: theme.dark ? "#000000" : "#ffffff"
+            border.width: 1
+            border.color: theme.floatingBorder
+            clip: true
 
-            delegate: Rectangle {
-                id: styleCard
-                required property var modelData
+            Flickable {
+                id: styleGallery
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 16
+                height: 310
+                contentWidth: styleGalleryRow.width
+                contentHeight: styleGalleryRow.height
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
 
-                Layout.fillWidth: true
-                implicitHeight: 148
-                radius: 22
-                color: theme.card
-                border.width: themePage.shellStyle === modelData.id ? 2 : 1
-                border.color: themePage.shellStyle === modelData.id
-                    ? modelData.accent : theme.floatingBorder
+                Row {
+                    id: styleGalleryRow
+                    width: childrenRect.width
+                    height: 310
+                    spacing: 14
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 16
+                    Repeater {
+                        model: themePage.styles
 
-                    Rectangle {
-                        Layout.preferredWidth: 156
-                        Layout.fillHeight: true
-                        radius: 14
-                        color: theme.previewPane
-                        clip: true
+                        delegate: Rectangle {
+                            id: styleCard
+                            required property var modelData
 
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 14
-                            color: theme.previewBar
-                            visible: styleCard.modelData.id !== "windows12"
+                            // Only implemented styles are shown for now, so
+                            // both cards should be complete rather than look
+                            // accidentally clipped.
+                            width: Math.max(300,
+                                (styleGallery.width - styleGalleryRow.spacing) / 2)
+                            height: styleGalleryRow.height
+                            radius: 22
+                            color: theme.dark
+                                ? (themePage.shellStyle === modelData.id
+                                    ? "#34343a" : "#262629")
+                                : Qt.rgba(0, 0, 0, themePage.shellStyle === modelData.id ? 0.085 : 0.045)
+                            border.width: themePage.shellStyle === modelData.id ? 2 : 1
+                            border.color: themePage.shellStyle === modelData.id
+                                ? modelData.accent : theme.floatingBorder
 
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 14
-                                height: 4
-                                radius: 2
-                                color: styleCard.modelData.accent
-                            }
-                        }
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 13
+                                spacing: 10
 
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: styleCard.modelData.id === "macos" ? 8 : 0
-                            width: styleCard.modelData.id === "windows12"
-                                ? parent.width : (styleCard.modelData.id === "macos" ? 112 : 92)
-                            height: styleCard.modelData.id === "windows12" ? 18 : 16
-                            radius: styleCard.modelData.id === "windows12"
-                                ? 0 : (styleCard.modelData.id === "macos" ? 8 : 4)
-                            color: styleCard.modelData.id === "windows12"
-                                ? theme.previewTaskbar : theme.previewDock
+                                Rectangle {
+                                    id: stylePreview
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 166
+                                    radius: 16
+                                    clip: true
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop {
+                                            position: 0
+                                            color: styleCard.modelData.id === "material"
+                                                ? "#d8c8f0" : (styleCard.modelData.id === "macos" ? "#789cc6" : "#b9d8ef")
+                                        }
+                                        GradientStop {
+                                            position: 1
+                                            color: styleCard.modelData.id === "material"
+                                                ? "#a8d5c6" : (styleCard.modelData.id === "macos" ? "#b786bd" : "#9ba9c3")
+                                        }
+                                    }
 
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 4
-
-                                Repeater {
-                                    model: 4
                                     Rectangle {
-                                        width: 8
-                                        height: 8
-                                        radius: styleCard.modelData.id === "macos" ? 4 : 2
-                                        color: index === 0
-                                            ? styleCard.modelData.accent : theme.previewIcon
+                                        x: 18; y: 32
+                                        width: parent.width * 0.46
+                                        height: 76
+                                        radius: styleCard.modelData.id === "material" ? 22 : 10
+                                        color: styleCard.modelData.id === "material"
+                                            ? Qt.rgba(0.96, 0.91, 1, 0.70) : Qt.rgba(1, 1, 1, 0.44)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.48)
+
+                                        Rectangle {
+                                            x: 12; y: 13; width: parent.width * 0.58; height: 7
+                                            radius: 4; color: Qt.rgba(0.18, 0.20, 0.28, 0.35)
+                                        }
+                                        Rectangle {
+                                            x: 12; y: 28; width: parent.width * 0.76; height: 5
+                                            radius: 3; color: Qt.rgba(0.18, 0.20, 0.28, 0.18)
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        height: 22
+                                        color: Qt.rgba(1, 1, 1,
+                                            styleCard.modelData.id === "macos" ? 0.34 : 0.16)
+                                        visible: styleCard.modelData.id !== "windows12"
+
+                                        Row {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 9
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 4
+                                            Repeater {
+                                                model: 3
+                                                Rectangle {
+                                                    width: 6; height: 6; radius: 3
+                                                    color: index === 0 ? "#ff665d"
+                                                        : (index === 1 ? "#ffbd45" : "#28c941")
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 18
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: 45
+                                        width: 42; height: 42; radius: 21
+                                        visible: styleCard.modelData.id === "material"
+                                        color: "#72558f"
+                                        Text { anchors.centerIn: parent; text: "+"; color: "white"; font.pixelSize: 25 }
+                                    }
+
+                                    Rectangle {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: styleCard.modelData.id === "macos" ? 10 : 0
+                                        width: styleCard.modelData.id === "windows12"
+                                            ? parent.width : (styleCard.modelData.id === "macos" ? 206 : 222)
+                                        height: styleCard.modelData.id === "windows12" ? 34 : 42
+                                        radius: styleCard.modelData.id === "windows12"
+                                            ? 0 : (styleCard.modelData.id === "macos" ? 16 : 21)
+                                        color: styleCard.modelData.id === "material"
+                                            ? Qt.rgba(0.92, 0.84, 1, 0.88)
+                                            : Qt.rgba(0.92, 0.96, 1, styleCard.modelData.id === "macos" ? 0.47 : 0.76)
+                                        border.width: styleCard.modelData.id === "macos" ? 1 : 0
+                                        border.color: Qt.rgba(1, 1, 1, 0.80)
+
+                                        Rectangle {
+                                            visible: styleCard.modelData.id === "macos"
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 2
+                                            height: 8
+                                            radius: 7
+                                            color: Qt.rgba(1, 1, 1, 0.32)
+                                        }
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: styleCard.modelData.id === "material" ? 21 : 9
+                                            Repeater {
+                                                model: styleCard.modelData.id === "macos" ? 6 : 5
+                                                Rectangle {
+                                                    width: styleCard.modelData.id === "macos" ? 24 : 16
+                                                    height: width
+                                                    radius: styleCard.modelData.id === "macos" ? 7 : width / 2
+                                                    color: index === 0 ? styleCard.modelData.accent
+                                                        : (index % 3 === 1 ? "#f49e5c"
+                                                        : (index % 3 === 2 ? "#70b98c" : "#8b83ca"))
+                                                    border.width: styleCard.modelData.id === "macos" ? 1 : 0
+                                                    border.color: Qt.rgba(1, 1, 1, 0.55)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                    }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: styleCard.modelData.feature
+                                            color: styleCard.modelData.accent
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 0.8
+                                        }
+                                        Text {
+                                            text: styleCard.modelData.name
+                                            color: theme.primaryText
+                                            font.pixelSize: 18
+                                            font.weight: Font.Bold
+                                        }
+                                    }
 
-                            Text {
-                                text: styleCard.modelData.name
-                                color: theme.primaryText
-                                font.pixelSize: 17
-                                font.weight: Font.Bold
-                            }
-
-                            Rectangle {
-                                visible: themePage.shellStyle === styleCard.modelData.id
-                                Layout.preferredWidth: 46
-                                Layout.preferredHeight: 20
-                                radius: 10
-                                color: Qt.rgba(0.04, 0.52, 1, 0.16)
+                                    Rectangle {
+                                        visible: themePage.shellStyle === styleCard.modelData.id
+                                        Layout.preferredWidth: 46
+                                        Layout.preferredHeight: 22
+                                        radius: 11
+                                        color: Qt.rgba(0.04, 0.52, 1, 0.16)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "当前"
+                                            color: styleCard.modelData.accent
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+                                }
 
                                 Text {
-                                    anchors.centerIn: parent
-                                    text: "当前"
-                                    color: styleCard.modelData.accent
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
+                                    Layout.fillWidth: true
+                                    text: styleCard.modelData.description
+                                    color: theme.secondaryText
+                                    font.pixelSize: 12
+                                    wrapMode: Text.Wrap
                                 }
                             }
 
-                            Item { Layout.fillWidth: true }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: styleCard.modelData.description
-                            color: theme.secondaryText
-                            font.pixelSize: 13
-                            wrapMode: Text.Wrap
-                        }
-
-                        Item { Layout.fillHeight: true }
-
-                        Text {
-                            text: themePage.shellStyle === styleCard.modelData.id
-                                ? "已应用到桌面" : "点击切换此形态"
-                            color: themePage.shellStyle === styleCard.modelData.id
-                                ? styleCard.modelData.accent : theme.tertiaryText
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: themePage.selectStyle(styleCard.modelData.id)
+                            }
                         }
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: themePage.selectStyle(styleCard.modelData.id)
-                }
+            }
+
+            Rectangle {
+                id: themeMaterialDivider
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: styleGallery.bottom
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                anchors.topMargin: 13
+                height: 1
+                color: theme.dark ? Qt.rgba(1, 1, 1, 0.18)
+                                  : Qt.rgba(0, 0, 0, 0.12)
+            }
+
+            DisplaySettingsPage {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: themeMaterialDivider.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 10
+                showSystemAppearance: false
+                showGlassMaterial: true
+                showIconAppearance: false
             }
         }
 
-        Text {
+        Item {
             Layout.fillWidth: true
-            Layout.leftMargin: 13
-            Layout.rightMargin: 13
-            text: "选择界面形态会立即切换桌面组件的圆角、间距与表面质感规范。"
-            color: theme.secondaryText
-            font.pixelSize: 12
-            wrapMode: Text.Wrap
+            Layout.preferredHeight: 12
+        }
+
+        // Appearance controls belong to the selected theme. Keep the global
+        // blur control available for every shell style, including Material.
+        DisplaySettingsPage {
+            Layout.fillWidth: true
+            showSystemAppearance: true
+            showGlassMaterial: false
+            showIconAppearance: true
         }
 
         Text {
@@ -2320,10 +2495,6 @@ ApplicationWindow {
                 SettingsNavBar {
                     Layout.preferredWidth: 148
                     Layout.preferredHeight: 30
-                    // LiquidNavBar delegates expect { id, label, icon }.
-                    // A string model leaves modelData.label undefined, so the
-                    // previous control had no visible text despite rendering
-                    // its track and thumb.
                     size: "tiny"
                     barHeight: 30
                     itemWidthOverride: 74
@@ -3505,15 +3676,6 @@ ApplicationWindow {
 
                 SidebarEntry {
                     Layout.fillWidth: true
-                    pageIndex: 0
-                    label: "显示"
-                    navSymbol: "▱"
-                    navTint: "#34c759"
-                }
-
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
                     pageIndex: 1
                     label: "主题"
                     navSymbol: "◈"
@@ -3675,9 +3837,6 @@ ApplicationWindow {
                         visible: window.currentPage === 1
                     }
 
-                    DisplaySettingsPage {
-                        visible: window.currentPage === 0
-                    }
                 }
             }
         }

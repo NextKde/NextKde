@@ -5,6 +5,14 @@ import QtQuick
 Rectangle {
     id: root
 
+    // Where the inset specular lines begin, measured inward from each side. It
+    // follows radius by default. A host that shapes the corners with an SDF
+    // mask instead of Rectangle.radius -- see LiquidGlassPanel -- has to keep
+    // radius at 0 so the fill stays square for the mask to cut, and passes the
+    // visual radius here; otherwise those two lines would start inside the
+    // curve and be clipped by it.
+    property real cornerInset: radius
+
     property color baseColor: Qt.rgba(0, 0, 0, 0.1)
     // The theme policy chooses compositor glass/acrylic or a tonal surface.
     // Keeping this decision here lets a future theme add a treatment without
@@ -253,7 +261,7 @@ Rectangle {
     // outline. Their endpoints begin after the curved corners.
     Rectangle {
         opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
-        x: Math.min(parent.width / 2, root.radius + 3)
+        x: Math.min(parent.width / 2, root.cornerInset + 3)
         y: 0.8
         width: Math.max(0, parent.width - x * 2)
         height: 0.8
@@ -270,7 +278,7 @@ Rectangle {
     Rectangle {
         visible: root.bottomEdgeVisible
         opacity: root.usesMaterialSurface ? 0 : root.normalizedLiquidStrength
-        x: Math.min(parent.width / 2, root.radius + 3)
+        x: Math.min(parent.width / 2, root.cornerInset + 3)
         y: parent.height - 2
         width: Math.max(0, parent.width - x * 2)
         height: 1

@@ -59,12 +59,13 @@ PopupWindow {
 
     // Real liquid glass: a compositor blur region on the panel surface, so
     // windows behind the Wi-Fi list are visible through the glass (QML-only
-    // surfaces cannot sample the compositor buffer). The stepped region
-    // encodes the corner radius explicitly (top scanline at x=blurRadius) so
-    // the plugin's smoothQuickshellCard path rounds corners with the exact
-    // radius, avoiding the aliasing from ellipse-scanline regions.
-    // The join sheet (LiquidGlassSurface) is a separate QML material on top;
-    // the list card below becomes transparent so this blur shows through.
+    // surfaces cannot sample the compositor buffer). The region decides which
+    // background pixels are captured; it no longer decides the outline, because
+    // the panel declares its radius and exponent through kos-surface-shape-v1
+    // and the effect draws that instead of inferring a corner from the region's
+    // top scanline. The inset is kept so the region stops where the glass does.
+    // The join sheet (LiquidGlassPanel) is the material on top; the list card
+    // below becomes transparent so this blur shows through.
     readonly property int blurRadius: Math.max(1, Math.min(19, Math.floor(310 / 2)))
     BackgroundEffect.blurRegion: (panel.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
@@ -210,10 +211,11 @@ PopupWindow {
             selectedNetwork.savedProfileUuid || "")
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: panelSurface
         anchors.fill: parent
         radius: panel.blurRadius
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 1.0
         blurStrength: AppearanceConfigService.effectiveBarBlur
@@ -223,8 +225,8 @@ PopupWindow {
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
-        border.width: 1
-        border.color: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
+        outlineWidth: 1
+        outlineColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
     }
 
     Column {
@@ -297,20 +299,21 @@ PopupWindow {
             }
         }
 
-        EnhancedGlassSurface {
+        LiquidGlassPanel {
             id: connectionCard
             visible: false
             width: parent.width
             height: 0
             radius: 13
+            cornerExponent: AppearanceTokens.shape.cornerExponent
             baseColor: ThemeService.backgroundColor
             ambientPrimary: WallpaperColorSource.primary
             ambientSecondary: WallpaperColorSource.secondary
             ambientStrength: 0.72
             surfaceOpacity: 0.94
             materialDepth: 1.8
-            border.width: 1
-            border.color: Qt.rgba(0.74, 0.95, 1, 0.30)
+            outlineWidth: 1
+            outlineColor: Qt.rgba(0.74, 0.95, 1, 0.30)
             Column {
                 anchors {
                     left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
@@ -582,7 +585,7 @@ PopupWindow {
             onClicked: panel.closeNetworkDialog()
         }
 
-        LiquidGlassSurface {
+        LiquidGlassPanel {
             id: networkDialog
             // Keep credentials focused: the old near-full-size 282×340 card
             // read as a pale rectangular replacement for the Wi-Fi list.
@@ -596,6 +599,7 @@ PopupWindow {
             anchors.centerIn: parent
             focus: networkDialogOverlay.visible
             radius: 21
+            cornerExponent: AppearanceTokens.shape.cornerExponent
             // Credential entry needs a denser, readable version of the same
             // glass: black base at 70% opacity, not a pale list-sized sheet.
             baseColor: "black"
@@ -604,8 +608,8 @@ PopupWindow {
             ambientStrength: 0.58
             surfaceOpacity: 0.70
             materialDepth: 1.35
-            border.width: 1
-            border.color: Qt.rgba(0.74, 0.95, 1, 0.34)
+            outlineWidth: 1
+            outlineColor: Qt.rgba(0.74, 0.95, 1, 0.34)
 
             // Consume pointer movement in the card's visual gaps as well.
             // Interactive children declared later stay above this blocker.

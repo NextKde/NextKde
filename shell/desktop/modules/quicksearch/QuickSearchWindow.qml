@@ -373,9 +373,10 @@ PanelWindow {
         color: "transparent"
         opacity: root.revealProgress
 
-        LiquidGlassSurface {
+        LiquidGlassPanel {
             anchors.fill: parent
             radius: dialog.radius
+            cornerExponent: AppearanceTokens.shape.cornerExponent
             baseColor: ThemeService.isDark
                 ? Qt.rgba(0.08, 0.09, 0.12, 0.35)
                 : Qt.rgba(0.95, 0.95, 0.98, 0.50)
@@ -385,8 +386,8 @@ PanelWindow {
             // transient surface look coloured even when only KWin liquid
             // glass is intended to be enabled globally.
             ambientStrength: 0.0
-            border.width: 1
-            border.color: ThemeService.isDark
+            outlineWidth: 1
+            outlineColor: ThemeService.isDark
                 ? Qt.rgba(1, 1, 1, 0.12)
                 : Qt.rgba(1, 1, 1, 0.60)
         }
@@ -403,7 +404,7 @@ PanelWindow {
             z: 1
 
             // The editable search field: a liquid-glass capsule
-            LiquidGlassSurface {
+            LiquidGlassPanel {
                 id: fieldPill
                 anchors {
                     left: parent.left
@@ -415,6 +416,7 @@ PanelWindow {
                 }
                 radius: AppearanceTokens.isMaterial
                     ? AppearanceTokens.shape.medium : height / 2
+                cornerExponent: AppearanceTokens.shape.cornerExponent
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(1, 1, 1, 0.07)
                     : Qt.rgba(0, 0, 0, 0.06)
@@ -450,7 +452,7 @@ PanelWindow {
                 // Focus ring over the glass body.
                 Rectangle {
                     anchors.fill: parent
-                    radius: fieldPill.radius
+                    radius: fieldPill.contentRadius
                     color: "transparent"
                     border.width: searchInput.activeFocus ? 1 : 0
                     border.color: ThemeService.isDark
@@ -671,17 +673,18 @@ PanelWindow {
                 rightMargin: 12
             }
 
-            LiquidGlassSurface {
+            LiquidGlassPanel {
                 anchors.fill: parent
                 radius: settingsPopover.radius
+                cornerExponent: AppearanceTokens.shape.cornerExponent
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(0.12, 0.13, 0.16, 0.95)
                     : Qt.rgba(0.96, 0.96, 0.98, 0.95)
                 blurStrength: AppearanceConfigService.effectiveLauncherBlur
                 liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
                 ambientStrength: 0.0
-                border.width: 1
-                border.color: ThemeService.isDark
+                outlineWidth: 1
+                outlineColor: ThemeService.isDark
                     ? Qt.rgba(1, 1, 1, 0.18)
                     : Qt.rgba(0, 0, 0, 0.12)
             }

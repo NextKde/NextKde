@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 QtObject {
     id: tokens
 
-    readonly property int version: 8
+    readonly property int version: 9
     readonly property string style: AppearanceConfigService.shellStyle
     readonly property bool isWindows12: style === "windows12"
     readonly property bool isMacos: style === "macos"
@@ -153,6 +153,34 @@ QtObject {
         readonly property real large: tokens.isMaterial ? 23 : 20
         readonly property real extraLarge: tokens.isMaterial ? 30 : 26
         readonly property real full: 999
+        // Corner continuity, not corner size: 2.0 is a circular arc and keeps
+        // Rectangle.radius and today's compositor mask. Everything above it
+        // sweeps the corner towards the continuous-curvature profile iOS uses,
+        // which makes the corner fuller without moving where the straight edge
+        // ends. The geometry lives in Squircle.mjs / SquircleMask.qml; this is
+        // only the knob. 2.5-4 is the useful range, and the dial is easy to
+        // read: the corner overhangs the circular arc by 2^(1/2-1/n) - 1 along
+        // the diagonal, so 7% at 2.5, 12% at 3, 19% at 4 -- bigger n hugs the
+        // corner tip harder, which reads as "squarer". The anti-aliasing band
+        // does not widen with the exponent: test_squircle.mjs measures it, and
+        // beyond that the only way to judge the shape is to look at a card.
+        //
+        // The 6.0 experiment settled it: the unblurred corner ring does scale
+        // with the radius, and pushing the dial up revealed it on the music
+        // popup and the window preview too, so every surface is on the same
+        // path. Nothing in QML can close that gap -- the compositor replaces
+        // whatever region we publish with a circle -- so the only fix left is
+        // on the effect side.
+        //
+        // Surfaces that honour the token: the Dock pill itself, plus its Home
+        // Indicator, music and window-preview popups and the trash
+        // confirmation, plus the notification card (which carries its own
+        // inline mask). The rest of the shell still draws Rectangle.radius.
+        // Back at 2.0 every mask switches off and the corners are circular
+        // again -- but the Dock pill is not the pre-token surface either way,
+        // because it now carries a LiquidGlassPanel where the compositor used
+        // to paint alone.
+        readonly property real cornerExponent: 3.0
     }
 
     // Every shell surface consumes this policy rather than treating Material as
@@ -200,8 +228,12 @@ QtObject {
         readonly property string form: tokens.isWindows12 ? "taskbar"
             : tokens.isMaterial ? "navigationDock" : "floatingDock"
         readonly property string position: "bottom"
-        readonly property real radiusRatio: tokens.isWindows12 ? 0.20
-            : tokens.isMaterial ? 0.50 : 0.45
+        // Pill radius as a fraction of the Dock's height, so the cap keeps its
+        // shape as the Dock grows. 0.5 is the ceiling that still means
+        // something -- the cap becomes a half circle -- and both glass
+        // styles are pinned to it; Windows 12 stays a taskbar, where a
+        // full-round cap would be out of place.
+        readonly property real radiusRatio: tokens.isWindows12 ? 0.20 : 0.50
         readonly property real horizontalPaddingRatio: tokens.isWindows12 ? 0.24
             : tokens.isMaterial ? 0.32 : 0.40
         readonly property real verticalPaddingRatio: tokens.isWindows12 ? 0.12

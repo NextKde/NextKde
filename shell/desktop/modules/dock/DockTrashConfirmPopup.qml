@@ -26,10 +26,14 @@ PopupWindow {
         visible = shouldOpen
     }
 
-    LiquidGlassSurface {
+    // Its content is written straight into the panel, so it renders above the
+    // glass and is clipped by the same mask that shapes the glass -- the popup
+    // edge and the popup content edge are one outline.
+    LiquidGlassPanel {
         id: surface
         anchors.fill: parent
         radius: 22
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         ambientPrimary: Qt.rgba(0.95, 0.22, 0.28, 1)
         ambientSecondary: WallpaperColorSource.secondary

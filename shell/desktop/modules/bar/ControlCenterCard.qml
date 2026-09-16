@@ -133,12 +133,18 @@ PopupWindow {
         }
     }
 
-    // Card surface: LiquidGlassSurface provides liquid finish, ambient wallpaper reflections,
-    // and responsive opacity tied to effectiveBlur and effectiveLiquid.
-    LiquidGlassSurface {
+    // Card surface: the panel provides the liquid finish, ambient wallpaper
+    // reflections, and responsive opacity tied to effectiveBlur and
+    // effectiveLiquid. Its radius drives both the QML corner mask and the
+    // per-surface shape the compositor draws.
+    LiquidGlassPanel {
         id: cardGlass
         anchors.fill: parent
         radius: root.blurRadius
+        // Exponent 2.0: plain circular arcs, so each card's radius renders as a
+        // true circle/capsule instead of the shell-wide superellipse that
+        // squarifies corners above 2.0.
+        cornerExponent: 2.0
         baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
         blurStrength: root.effectiveBlur
@@ -147,8 +153,8 @@ PopupWindow {
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
-        border.width: 1
-        border.color: root.cardBorderColor
+        outlineWidth: 1
+        outlineColor: root.cardBorderColor
         scale: root.popupScale
         transformOrigin: Item.TopRight
         opacity: root.motionProgress
@@ -157,14 +163,16 @@ PopupWindow {
             y: (1 - root.motionProgress) * AppearanceTokens.motion.popupAnchorOffset
         }
 
-        // Concrete card content (declared by the card instance).
-        default property alias content: contentHost.data
+        // Concrete card content (declared by the card instance). The alias is
+        // kept and re-pointed at an item of our own because a card scales its
+        // content independently of the surface it sits on, and the panel's own
+        // content host carries no such scale.
+        default property alias content: cardContent.data
         Item {
-            id: contentHost
+            id: cardContent
             anchors.fill: parent
             scale: root.cardScale
         }
-
     }
 
     Component.onCompleted: {

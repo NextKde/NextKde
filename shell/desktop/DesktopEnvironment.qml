@@ -10,6 +10,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
 import qs.desktop.modules.overview
 import qs.desktop.modules.common
+import qs.desktop.modules.lock
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
 
@@ -347,7 +348,17 @@ Item {
         function toggle(): void { WindowService.toggleShowDesktop() }
         function show(): void { WindowService.toggleShowDesktop() }
     }
-    NotificationCenter {}
+    NotificationCenter {
+        id: notificationCenter
+    }
+
+    // The lock surface reads the unread set from the notification centre rather
+    // than importing that module: the lock owns no notifications, it only draws
+    // the ones the session already has.
+    LockScreen {
+        groupService: notificationCenter.groupService
+    }
+
     DeskCenter {}
     // Do not briefly map the standalone Bar with the default setting and then
     // hide it while its tray delegates are still being constructed. Qt 6.11

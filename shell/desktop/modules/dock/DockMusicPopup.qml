@@ -78,10 +78,11 @@ PopupWindow {
         source: popup.artworkSource
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: surface
         anchors.fill: parent
         radius: 18
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         // Keep the original Dock glass base. Cover colour is applied by the
         // explicit translucent gradient below, just like DockMusicPlayer.
         baseColor: ThemeService.backgroundColor
@@ -95,10 +96,14 @@ PopupWindow {
         // LiquidGlassSurface deliberately caps ambient pigment, which is too
         // subtle for music artwork. This is the same direct cover-gradient
         // strategy used by DockMusicPlayer, but with lower alpha so the
-        // Hyprglass blur remains visible through the full popup.
+        // Hyprglass blur remains visible through the full popup. The radius
+        // follows the panel, not the literal: with the mask on the panel is
+        // square and this rect has to be square too, otherwise its own circular
+        // corners stop short of the superelliptical silhouette and leave the
+        // panel corners untinted.
         Rectangle {
             anchors.fill: parent
-            radius: surface.radius
+            radius: surface.contentRadius
             color: "transparent"
             gradient: Gradient {
                 orientation: Gradient.Horizontal

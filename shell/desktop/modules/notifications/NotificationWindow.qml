@@ -194,11 +194,27 @@ PanelWindow {
             radius: 28
             color: "transparent"
 
+            // Continuous (superelliptical) corners are the panel's job now: it
+            // owns the corner field, the mask and the outline, and publishes the
+            // same radius and exponent to the compositor as this surface's
+            // shape. The hand-rolled mask this card used to carry is gone with
+            // it, along with the child-radius plumbing it needed -- two masks
+            // would round the card twice, and the plumbing only existed because
+            // a Rectangle could not switch its own circular paint off.
+            readonly property color _outlineColor: ThemeService.isDark
+                ? Qt.rgba(1, 1, 1, 0.12)
+                : Qt.rgba(0, 0, 0, 0.08)
+
             // ---- backgrounds ----
-            // Frosted liquid glass backdrop adapting to theme
-            LiquidGlassSurface {
+            // Frosted liquid glass backdrop adapting to theme. The urgency
+            // tints and the edge accents sit inside it so that the corner mask
+            // shapes them too instead of letting their own circular radius
+            // disagree with the silhouette.
+            LiquidGlassPanel {
+                id: panel
                 anchors.fill: parent
                 radius: card.radius
+                cornerExponent: AppearanceTokens.shape.cornerExponent
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(0.08, 0.09, 0.12, 0.38)
                     : Qt.rgba(0.95, 0.95, 0.98, 0.55)
@@ -207,39 +223,39 @@ PanelWindow {
                 ambientPrimary: WallpaperColorSource.primary
                 ambientSecondary: WallpaperColorSource.secondary
                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-                border.width: 1
-                border.color: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.12)
-                    : Qt.rgba(0, 0, 0, 0.08)
-            }
+                // Above exponent 2 the outline is drawn from the same corner
+                // field as the silhouette rather than as a straight border.
+                outlineWidth: 1
+                outlineColor: card._outlineColor
 
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                visible: card.isCritical
-                color: Qt.rgba(0.55, 0.10, 0.08, 0.22)
-            }
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                visible: card.isLow
-                color: ThemeService.isDark
-                    ? Qt.rgba(0.04, 0.05, 0.08, 0.12)
-                    : Qt.rgba(0, 0, 0, 0.04)
-            }
-            Rectangle {
-                visible: card.isCritical
-                x: 4; y: parent.radius * 0.5
-                width: 3; height: parent.height - parent.radius
-                radius: 1.5
-                color: Qt.rgba(1.0, 0.27, 0.23, 0.95)
-            }
-            Rectangle {
-                x: Math.min(parent.width / 2, parent.radius + 2)
-                y: 0.6
-                width: Math.max(0, parent.width - x * 2)
-                height: 1
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06)
+                Rectangle {
+                    anchors.fill: parent
+                    radius: panel.contentRadius
+                    visible: card.isCritical
+                    color: Qt.rgba(0.55, 0.10, 0.08, 0.22)
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    radius: panel.contentRadius
+                    visible: card.isLow
+                    color: ThemeService.isDark
+                        ? Qt.rgba(0.04, 0.05, 0.08, 0.12)
+                        : Qt.rgba(0, 0, 0, 0.04)
+                }
+                Rectangle {
+                    visible: card.isCritical
+                    x: 4; y: panel.contentRadius * 0.5
+                    width: 3; height: panel.height - panel.contentRadius
+                    radius: 1.5
+                    color: Qt.rgba(1.0, 0.27, 0.23, 0.95)
+                }
+                Rectangle {
+                    x: Math.min(panel.width / 2, panel.contentRadius + 2)
+                    y: 0.6
+                    width: Math.max(0, panel.width - x * 2)
+                    height: 1
+                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06)
+                }
             }
 
             // ---- close + auto-expire ----
