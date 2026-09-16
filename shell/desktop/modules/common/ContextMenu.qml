@@ -203,15 +203,7 @@ PopupWindow {
     }
 
     BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible)
-        ? contextMenuBlurHolder : null
-
-    Region {
-        id: contextMenuBlurHolder
-        RoundedBlurRegion {
-            item: glass
-            radius: root.menuRadius
-        }
-    }
+        ? glass.blurRegion : null
 
     LiquidGlassPanel {
         id: glass
@@ -223,6 +215,10 @@ PopupWindow {
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
+        // Menu text sits on this surface, so it carries the same balanced
+        // readability scrim as notification cards.
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        scrimLevel: "balanced"
         scale: (root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
                 + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress

@@ -94,6 +94,10 @@ QtObject {
     // WallpaperColorSource reports a sampled seed; AppearanceTokens falls back
     // to the KDE accent until then.
     property color wallpaperSeedColor: "transparent"
+    // Whether the liquid glass's appearance (its adaptive contrast scrim and
+    // depth) follows the resolved light/dark palette. Persisted here; the
+    // rendering behaviour that consumes it is wired up independently.
+    property bool glassFollowsAppearanceMode: true
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
@@ -270,6 +274,15 @@ QtObject {
         return true
     }
 
+    function updateGlassFollowsAppearanceMode(rawValue) {
+        const value = _toBool(rawValue)
+        if (glassFollowsAppearanceMode === value)
+            return false
+        glassFollowsAppearanceMode = value
+        saveTimer.restart()
+        return true
+    }
+
     function updateBarVisibilityMode(rawMode) {
         const mode = String(rawMode)
         if (!isValidBarVisibilityMode(mode) || barVisibilityMode === mode)
@@ -358,7 +371,7 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 12,
+            version: 14,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             glassStyle: service.glassStyle,
@@ -388,6 +401,7 @@ QtObject {
             liquidStrength: service.globalLiquidStrength,
             shellStyle: service.shellStyle,
             themeMode: service.themeMode,
+            glassFollowsAppearanceMode: service.glassFollowsAppearanceMode,
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
@@ -487,6 +501,10 @@ QtObject {
                     const barLayout = String(object.barLayoutMode ?? "")
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
                     const glassStyle = String(object.glassStyle ?? "liquid")
+                    const followsAppearance = object.glassFollowsAppearanceMode
+                    const followsAppearanceLegacy = object.glassFollowsColorMode
+                    const hasGlassFollows = typeof followsAppearance === "boolean"
+                        || typeof followsAppearanceLegacy === "boolean"
 
                     if (Number.isFinite(globalBlur)) {
                         service.globalBlurStrength = globalBlur
@@ -502,6 +520,11 @@ QtObject {
                         service.themeMode = themeMode
                     if (hasBarIntegration)
                         service.barIntegratedWithDock = object.barIntegratedWithDock
+                    if (hasGlassFollows)
+                        service.glassFollowsAppearanceMode =
+                            typeof followsAppearance === "boolean"
+                                ? followsAppearance
+                                : followsAppearanceLegacy
                     if (service.isValidBarVisibilityMode(barVisibility))
                         service.barVisibilityMode = barVisibility
                     if (service.isValidBarLayoutMode(barLayout))
@@ -545,10 +568,11 @@ QtObject {
                             service[name] = Math.max(range[0], Math.min(range[1], value))
                     }
 
-                    if (Number(object.version) !== 12
+                    if (Number(object.version) !== 14
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
                             || !hasBarIntegration
+                            || !hasGlassFollows
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
                             || !service.isValidGlassStyle(glassStyle)

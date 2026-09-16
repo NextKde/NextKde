@@ -114,15 +114,8 @@ PanelWindow {
     focusable: true
     // Blur only the compact search card; the rest of the screen remains an
     // untouched, transparent Spotlight-style surface.
-    BackgroundEffect.blurRegion: (root.visible && dialog.radius > 0) ? searchBlurRegionHolder : null
-
-    Region {
-        id: searchBlurRegionHolder
-        RoundedBlurRegion {
-            item: dialog
-            radius: dialog.radius
-        }
-    }
+    BackgroundEffect.blurRegion: (root.visible && dialog.radius > 0)
+        ? dialogSurface.blurRegion : null
     anchors {
         top: true
         left: true
@@ -374,22 +367,24 @@ PanelWindow {
         opacity: root.revealProgress
 
         LiquidGlassPanel {
+            id: dialogSurface
             anchors.fill: parent
             radius: dialog.radius
             cornerExponent: AppearanceTokens.shape.cornerExponent
+            // The dialog is centred under the search header, so the panel's own
+            // x/y read 0; anchor the region to the dialog, which carries that
+            // offset in the full-output surface.
+            blurAnchor: dialog
             baseColor: ThemeService.isDark
                 ? Qt.rgba(0.08, 0.09, 0.12, 0.35)
                 : Qt.rgba(0.95, 0.95, 0.98, 0.50)
-            blurStrength: AppearanceConfigService.effectiveLauncherBlur
-            liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
             // QuickSearch stays neutral. Wallpaper-derived tint makes this
             // transient surface look coloured even when only KWin liquid
             // glass is intended to be enabled globally.
             ambientStrength: 0.0
-            outlineWidth: 1
-            outlineColor: ThemeService.isDark
-                ? Qt.rgba(1, 1, 1, 0.12)
-                : Qt.rgba(1, 1, 1, 0.60)
+            // Match the launcher: a readable mid-level scrim over the results.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: "balanced"
         }
 
         Item {
@@ -680,13 +675,7 @@ PanelWindow {
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(0.12, 0.13, 0.16, 0.95)
                     : Qt.rgba(0.96, 0.96, 0.98, 0.95)
-                blurStrength: AppearanceConfigService.effectiveLauncherBlur
-                liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
                 ambientStrength: 0.0
-                outlineWidth: 1
-                outlineColor: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.18)
-                    : Qt.rgba(0, 0, 0, 0.12)
             }
 
             Column {

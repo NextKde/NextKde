@@ -21,8 +21,30 @@ import "../../../shared/qml/controls" as LiquidControls
 // exactly what is behind it (wallpaper AND open windows) and the gaps
 // between cards show the real desktop - the iOS "hollow" control center.
 // ControlCenterCoordinator owns the group so all cards open/close together.
-Item {
+PopupWindow {
     id: panel
+
+    // ── Single-block windowing ──
+    // One window, one glass block, cards laid out by simple anchors inside it.
+    // This replaces the per-card PopupWindow + ControlCenterCoordinator model.
+    implicitWidth: panel.controlCenterWidth
+    implicitHeight: panel.controlCenterHeight
+    color: "transparent"
+    grabFocus: true
+    anchor {
+        item: panel.anchorItem
+        edges: !panel.dockHosted ? Edges.Bottom
+            : panel.dockEdge === "left" ? Edges.Right
+            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
+        gravity: !panel.dockHosted ? Edges.Bottom
+            : panel.dockEdge === "left" ? Edges.Right
+            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
+        adjustment: PopupAdjustment.Slide
+        margins.top: 0
+        margins.bottom: panel.dockHosted ? 0 : -4
+        margins.left: 0
+        margins.right: 0
+    }
 
     property Item anchorItem: null
     property bool dockHosted: false
@@ -111,50 +133,58 @@ Item {
         height: width
     }
 
-    ControlCenterCoordinator {
+    // Stubbed coordinator: the single block replaces the N-card orchestration.
+    // Keeps the same surface (open/close/modal/cardAnchor) so existing call
+    // sites and card content compile; openAll/closeAll now just show/hide this
+    // one window.
+    QtObject {
         id: coordinator
-        cardAnchor: positioningAnchor
-        gridWidth: panel.controlCenterWidth
-        cardOffsetX: !panel.dockHosted ? 0
-            : panel.dockEdge === "left" ? -20
-            : panel.dockEdge === "right" ? 20 : 0
-        // Card offsets include a historical 20px top inset. Cancel it for the
-        // standalone Bar so the visible cards begin 4px below the Bar.
-        cardOffsetY: !panel.dockHosted ? -18
-            : (panel.dockEdge === "bottom" ? 20 : 0)
+        property bool open: panel.visible
+        property bool modalActive: false
+        property var cardAnchor: panel.anchorItem
+        function openAll() { panel.visible = true }
+        function closeAll(closingModal) { panel.visible = false }
     }
 
-    // Geometry oracle: it is anchored to the clicked control, which makes
-    // Quickshell select the correct output and clamp the group on every Dock
-    // edge. The visible cards use positioningAnchor as their common origin.
-    PopupWindow {
-        id: positioningPopup
-        visible: panel.anchorItem !== null
-        implicitWidth: panel.controlCenterWidth
-        implicitHeight: panel.controlCenterHeight
-        color: "transparent"
-        grabFocus: false
-        mask: Region { width: 0; height: 0 }
+    // No panel-wide glass slab: the window blur region is the UNION of every
+    // primary card's blurRegion, so KWin blurs behind the cards (real frosted
+    // glass) but not over the gaps between them -- hollow and frosted, in one
+    // window with no coordinator. Overlay cards (session/submenu) are excluded;
+    // they cover the primary area when shown. The notification-history card
+    // (slotCard8) hides when its history is empty, so its footprint contributes
+    // to the union only while it is actually visible (an empty area would
+    // otherwise be blurred into a lingering frosted slab).
+    Region { id: emptyRegion }
+    Region {
+        id: cardsBlurRegion
+        regions: [
+            wifiCard.blurRegion,
+            bluetoothCard.blurRegion,
+            mediaCard.blurRegion,
+            slotCard1.blurRegion,
+            slotCard2.blurRegion,
+            slotCard3.blurRegion,
+            slotCard4.blurRegion,
+            slotCard5.blurRegion,
+            slotCard6.blurRegion,
+            slotCard7.blurRegion,
+            slotCard8.visible ? slotCard8.blurRegion : emptyRegion
+        ]
+    }
+    BackgroundEffect.blurRegion: cardsBlurRegion
 
-        anchor {
-            item: panel.anchorItem
-            edges: !panel.dockHosted ? Edges.Bottom
-                : panel.dockEdge === "left" ? Edges.Right
-                : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-            gravity: !panel.dockHosted ? Edges.Bottom
-                : panel.dockEdge === "left" ? Edges.Right
-                : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-            adjustment: PopupAdjustment.Slide
-            margins.top: 0
-            margins.bottom: panel.dockHosted ? 0 : -4
-            margins.left: 0
-            margins.right: 0
+    // Position the cards at their grid offsets (top-right origin). One pass on
+    // completion; the window owns layout.
+    Component.onCompleted: {
+        for (let i = 0; i < panel.data.length; i++) {
+            const c = panel.data[i]
+            if (c && c.isControlCenterCard)
+                panel.placeCard(c)
         }
-
-        Item {
-            id: positioningAnchor
-            anchors.fill: parent
-        }
+    }
+    function placeCard(c) {
+        c.x = panel.controlCenterWidth - c.offsetRight - c.width
+        c.y = c.offsetTop
     }
 
     property bool _internalTransition: false
@@ -221,31 +251,8 @@ Item {
         sessionModalVisible = true
     }
 
-    // Fullscreen transparent click-catcher window mapped ONLY while the control center is open.
-    // Clicking anywhere outside the control center cards instantly dismisses it.
-    PanelWindow {
-        id: dismissalBackdrop
-        screen: panel.targetScreen
-        visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
-            && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "quickshell-controlcenter-backdrop"
-
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.ArrowCursor
-            onPressed: panel.close()
-        }
-    }
+    // (Single-block: no extra full-screen dismissal window needed; Escape and
+    // WindowService's active-window change below close the control center.)
 
     Connections {
         target: WindowService
@@ -642,6 +649,7 @@ Item {
 
     // ── Card 4: Screenshot ───────────────────────────────────────────
     ControlCenterCard {
+        id: slotCard1
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 264
@@ -678,6 +686,7 @@ Item {
 
     // ── Card 5: Dark Mode / Theme Toggle ─────────────────────────────
     ControlCenterCard {
+        id: slotCard2
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 203
@@ -726,6 +735,7 @@ Item {
 
     // ── Card 6: Power & Session ──────────────────────────────────────
     ControlCenterCard {
+        id: slotCard3
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 142
@@ -769,6 +779,7 @@ Item {
 
     // ── Card 7: Do Not Disturb ───────────────────────────────────────
     ControlCenterCard {
+        id: slotCard4
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 81
@@ -814,6 +825,7 @@ Item {
 
     // ── Card 8: Night Light ──────────────────────────────────────────
     ControlCenterCard {
+        id: slotCard5
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -859,6 +871,7 @@ Item {
 
     // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
+        id: slotCard6
         coordinator: coordinator
         offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -923,6 +936,7 @@ Item {
 
     // ── Card 8: Sound / volume ───────────────────────────────────────
     ControlCenterCard {
+        id: slotCard7
         coordinator: coordinator
         offsetTop: 282 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -1010,6 +1024,7 @@ Item {
     // notifications (which are never shown) land here. Each group header
     // carries the app icon/name, and every row has its own close button.
     ControlCenterCard {
+        id: slotCard8
         coordinator: coordinator
         // An empty history is not worth a permanently visible, permanently
         // empty card taking up the bottom of the panel; only occupy that
@@ -1168,10 +1183,6 @@ Item {
         cardShown: panel.sessionModalVisible
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
-        onMotionClosed: {
-            if (!panel.sessionModalVisible && panel.activeSubmenu === "")
-                coordinator.modalActive = false
-        }
 
         // ── VIEW 1: 6-action Grid ──
         Item {
@@ -1606,12 +1617,6 @@ Item {
             : (panel.activeSubmenu === "brightness" ? 280
             : (panel.activeSubmenu === "sound" ? 420 : 280)))
         cardShown: panel.submenuOpen
-        onMotionClosed: {
-            if (!panel.submenuOpen && !panel.sessionModalVisible) {
-                panel.activeSubmenu = ""
-                coordinator.modalActive = false
-            }
-        }
 
         // Navigation Header
         Item {

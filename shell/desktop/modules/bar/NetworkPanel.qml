@@ -59,32 +59,15 @@ PopupWindow {
 
     // Real liquid glass: a compositor blur region on the panel surface, so
     // windows behind the Wi-Fi list are visible through the glass (QML-only
-    // surfaces cannot sample the compositor buffer). The region decides which
-    // background pixels are captured; it no longer decides the outline, because
-    // the panel declares its radius and exponent through kos-surface-shape-v1
-    // and the effect draws that instead of inferring a corner from the region's
-    // top scanline. The inset is kept so the region stops where the glass does.
-    // The join sheet (LiquidGlassPanel) is the material on top; the list card
-    // below becomes transparent so this blur shows through.
+    // surfaces cannot sample the compositor buffer). The panel owns that region
+    // together with its radius and exponent (kos-surface-shape-v1), so the
+    // region decides which background pixels are captured and the effect draws
+    // the exact outline from the shape — no separate hand-written region.
     readonly property int blurRadius: Math.max(1, Math.min(19, Math.floor(310 / 2)))
     BackgroundEffect.blurRegion: (panel.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
-        ? networkBlurRegionHolder : null
-
-    Region {
-        id: networkBlurRegionHolder
-        x: panel.blurRadius
-        y: 0
-        width: 310 - panel.blurRadius
-        height: 1
-        Region {
-            x: 0
-            y: 1
-            width: 310
-            height: 365 - 1
-        }
-    }
+        ? panelSurface.blurRegion : null
 
     function toggle(item) {
         anchorItem = item
@@ -218,15 +201,11 @@ PopupWindow {
         cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         surfaceOpacity: 1.0
-        blurStrength: AppearanceConfigService.effectiveBarBlur
-        liquidStrength: AppearanceConfigService.effectiveBarLiquid
         ambientPrimary: WallpaperColorSource.primary
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
-        outlineWidth: 1
-        outlineColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.30) : Qt.rgba(0, 0, 0, 0.10)
     }
 
     Column {
@@ -312,8 +291,6 @@ PopupWindow {
             ambientStrength: 0.72
             surfaceOpacity: 0.94
             materialDepth: 1.8
-            outlineWidth: 1
-            outlineColor: Qt.rgba(0.74, 0.95, 1, 0.30)
             Column {
                 anchors {
                     left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
@@ -608,8 +585,6 @@ PopupWindow {
             ambientStrength: 0.58
             surfaceOpacity: 0.70
             materialDepth: 1.35
-            outlineWidth: 1
-            outlineColor: Qt.rgba(0.74, 0.95, 1, 0.34)
 
             // Consume pointer movement in the card's visual gaps as well.
             // Interactive children declared later stay above this blocker.

@@ -449,13 +449,5 @@ PopupWindow {
 
         }
 
-    BackgroundEffect.blurRegion: preview.visible ? previewBlurHolder : null
-
-    Region {
-        id: previewBlurHolder
-        RoundedBlurRegion {
-            item: background
-            radius: background.radius
-        }
-    }
+    BackgroundEffect.blurRegion: preview.visible ? background.blurRegion : null
 }

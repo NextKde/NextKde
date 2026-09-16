@@ -121,21 +121,10 @@ PanelWindow {
 
     Region {
         id: dockBlurRegionHolder
-        RoundedBlurRegion {
-            id: glassRegion
-            item: dockWrapper
-            radius: dockContainer.pillRadius
-        }
-        // The reveal bar's backdrop blur. visualBar is a direct child of the
-        // handle at the window origin, so its x/y are already surface coords.
-        // Radius matches the pill's own capsule so the frosted halo sits
-        // exactly under the visible bar (§6.4).
-        RoundedBlurRegion {
-            id: barRegion
-            item: revealHandle.visualBar
-            radius: Math.min(revealHandle.visualThickness,
-                revealHandle.barLength) / 2
-        }
+        // Each LiquidGlassPanel owns its own rounded blur mask and exact
+        // SurfaceShape. This window is only the compositor boundary: it
+        // combines the two independently shaped surfaces into one region.
+        regions: [pill.blurRegion, revealHandle.blurRegion]
     }
 
     // Stable, full-reveal position of the glass inside the surface. Always
@@ -202,26 +191,9 @@ PanelWindow {
 
         // The dock's own glass, and the same component its popups already use.
         //
-        // In backdrop mode the pill is a two-part surface: the compositor
-        // blurs and tints inside glassRegion (published below), and this panel
-        // paints the silhouette and finish on top of it. That split is what the
-        // DockWindowPreview / DockMusicPopup / DockTrashConfirmPopup pairings
-        // already do, so the point of moving the base pill onto it is that the
-        // Dock's corner profile is finally one family instead of a
-        // superelliptical popup floating over a circular pill.
-        //
-        // The panel neither knows about nor touches glassRegion, so the
-        // compositor's mask stays a rounded rectangle: the superellipse only
-        // reaches as far past the circular arc as the exponent adds (~0.12 *
-        // pillRadius at 3), and that sliver is glass whose backdrop is not
-        // blurred. Closing that last gap is the compositor-side change, not
-        // this one.
-        //
-        // Tonal mode has no backdrop to blur or tint, and there the Dock keeps
-        // the fill it has always carried rather than the generic material
-        // layer: the panel paints fallbackColor and its body stands down. Either
-        // way the silhouette is the same corner field, so the pill and its
-        // popups share one corner profile in both treatments.
+        // The panel owns both its rounded blur mask and its exact SurfaceShape.
+        // DockWindow only aggregates that declaration with the reveal handle
+        // above, then passes the result across the window/compositor boundary.
         LiquidGlassPanel {
             id: pill
             anchors.fill: parent
@@ -230,15 +202,20 @@ PanelWindow {
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
             cornerExponent: 2.35
-            blurEnabled: AppearanceTokens.surface.usesBackdrop
             baseColor: ThemeService.backgroundColor
             surfaceOpacity: 1.0
-            // The tonal roles are a fill *and* an opacity; the panel's fallback
-            // is a single colour, so the alpha has to be folded in here.
-            fallbackColor: Qt.rgba(AppearanceTokens.surface.dockFill.r,
-                AppearanceTokens.surface.dockFill.g,
-                AppearanceTokens.surface.dockFill.b,
-                AppearanceTokens.surface.dockOpacity)
+            // Compositor contrast scrim. The tint (black vs white) is owned by
+            // LiquidGlassPanel: it follows the appearance mode switch, with a
+            // black fallback when off. Tied to usesBackdrop so a tonal
+            // (non-glass) surface never draws a compositor scrim it was not
+            // asked for. The dock keeps its see-through character, so it takes
+            // the subtlest scrim level.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: "subtle"
+            // The card fills a positioned wrapper, so its own x/y read 0; anchor
+            // the published region to the wrapper, whose x/y carry the capsule's
+            // offset in this surface.
+            blurAnchor: dockWrapper
         }
 
         DockContainer {

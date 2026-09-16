@@ -412,13 +412,5 @@ PopupWindow {
         acceptedButtons: Qt.NoButton
     }
 
-    BackgroundEffect.blurRegion: popup.visible ? musicPopupBlurHolder : null
-
-    Region {
-        id: musicPopupBlurHolder
-        RoundedBlurRegion {
-            item: surface
-            radius: surface.radius
-        }
-    }
+    BackgroundEffect.blurRegion: popup.visible ? surface.blurRegion : null
 }

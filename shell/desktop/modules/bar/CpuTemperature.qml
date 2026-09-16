@@ -335,15 +335,8 @@ Item {
             }
         }
 
-        BackgroundEffect.blurRegion: detailsPopup.visible ? cpuDetailsBlurHolder : null
-
-        Region {
-            id: cpuDetailsBlurHolder
-            RoundedBlurRegion {
-                item: detailsSurface
-                radius: detailsSurface.radius
-            }
-        }
+        BackgroundEffect.blurRegion: detailsPopup.visible
+            ? detailsSurface.blurRegion : null
     }
 
     function formatBytes(value) {

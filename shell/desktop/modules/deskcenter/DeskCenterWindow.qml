@@ -221,6 +221,30 @@ PanelWindow {
         return AppearanceTokens.colors.layer1
     }
 
+    // Per-card real glass. Every widget card publishes its own compositor
+    // SurfaceShape (blurRegion) through its ControlCenterCard; this window
+    // joins them into one union so KWin blurs behind the cards but not over
+    // the grid gaps -- hollow and frosted, one surface, no per-card QML
+    // simulation. Each blurRegion is a persistent KosRoundedBlurRegion whose
+    // geometry follows its card, so the union only needs to re-resolve when the
+    // card set itself changes (Repeater count). Gate on usesBackdrop so
+    // tonal/non-glass themes publish nothing.
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop
+        && root.visible) ? widgetBlurHolder : null
+
+    Region {
+        id: widgetBlurHolder
+        regions: {
+            const arr = []
+            for (let i = 0; i < widgetRepeater.count; ++i) {
+                const card = widgetRepeater.itemAt(i)
+                if (card && card.blurRegion)
+                    arr.push(card.blurRegion)
+            }
+            return arr
+        }
+    }
+
     SystemClock {
         id: clock
         precision: SystemClock.Seconds
@@ -252,6 +276,7 @@ PanelWindow {
     }
 
     Repeater {
+        id: widgetRepeater
         model: root.widgetDefinitions
 
         delegate: DeskWidgetCard {

@@ -1,7 +1,6 @@
 import QtQuick
-import Kos.SurfaceShape 1.0
 
-// A glass panel whose shape, material and finish are all decided by its caller.
+// A surface-shaped content panel. KWin Glass owns the visual glass finish.
 //
 // This exists beside LiquidGlassSurface rather than replacing it, and the
 // difference is where the paint lives. LiquidGlassSurface is a Rectangle, so
@@ -24,21 +23,8 @@ import Kos.SurfaceShape 1.0
 //       Text { anchors.centerIn: parent; text: "hello" }
 //   }
 //
-// At cornerExponent 2.0 every masked path is off: the body keeps a plain
-// Rectangle.radius, the outline is a native border, and the panel renders what
-// LiquidGlassSurface would have rendered on its own. The mask only turns on
-// above it, so raising the exponent is the whole opt-in.
-//
-// Two switches, deliberately orthogonal:
-//
-//   liquidEnabled  the finish -- specular highlight, wallpaper pigment, the
-//                  inset edge lines, the bottom shade. Off leaves flat glass.
-//   blurEnabled    whether anything blurs what sits behind the panel. On, the
-//                  fill is translucent so the backdrop shows through. Off,
-//                  fallbackColor becomes the surface, because translucent over
-//                  nothing is unreadable. The blur region itself is still
-//                  published by the shell through RoundedBlurRegion, which this
-//                  component neither knows about nor touches.
+// At cornerExponent 2.0 every masked path is off. The mask only turns on above
+// it, so raising the exponent is the whole opt-in.
 Item {
     id: root
 
@@ -54,30 +40,37 @@ Item {
     property real cornerExponent: 2.0
     readonly property bool continuousCorners: cornerExponent > 2.0
 
-    // ---- outline --------------------------------------------------------
+    // The exact compositor declaration for this surface. A window that owns a
+    // BackgroundEffect publishes this object (or combines several of them);
+    // the panel itself remains unaware of window-level effect policy. It is
+    // null when the panel falls back to its own QML liquid, so a host binding
+    // `BackgroundEffect.blurRegion: panel.blurRegion` publishes nothing.
+    readonly property var blurRegion: root.useKwinEffect ? surfaceRegion : null
+    // Item whose x/y already are this panel's position in the surface. A panel
+    // that fills a positioned wrapper (the Dock's capsule, the launcher card)
+    // anchors to it, so its own x/y read 0 wherever the glass sits; point this
+    // at the wrapper, whose x/y carry that offset. Defaults to the panel.
+    property Item blurAnchor: root
 
-    // Measured inward from the edge, in pixels. Above exponent 2 the mask draws
-    // it along the same field as the silhouette, so it follows the corner
-    // instead of being cut off by it; Rectangle.border cannot do that. At
-    // exponent 2 the field is a rounded rectangle, so a native border is both
-    // correct and cheaper, and that is where it goes.
-    property real outlineWidth: 0
-    property color outlineColor: AppearanceTokens.colors.outline
+    // ---- KWin vs QML rendering ------------------------------------------
 
-    // ---- switches -------------------------------------------------------
+    // True: KWin Glass owns blur, refraction and highlights; this panel
+    // publishes a compositor blur region + SurfaceShape and paints no material.
+    // False: the panel falls back to its own QML liquid finish through
+    // LiquidGlassSurface and publishes nothing to the compositor. Item-level
+    // glass inside a shared surface -- the desk-center widgets -- uses this,
+    // because per-item compositor blur is not present on that surface.
+    property bool useKwinEffect: true
 
-    property bool liquidEnabled: true
-    property bool blurEnabled: true
-    // A compositor-backed panel receives its finish from KWin Glass. Keeping
-    // the QML reflection active there would draw a second highlight on top.
-    // When there is no compositor backdrop, the QML finish remains the visual
-    // fallback instead.
-    readonly property bool compositorOwnsFinish: root.blurEnabled
-        && !AppearanceTokens.isMaterial
-    // Defaults follow the shell's glass settings; a host overrides them for its
-    // own surface class (launcher, bar, dock) exactly as it does today.
-    property real liquidStrength: AppearanceTokens.glass.liquidStrength
-    property real blurStrength: AppearanceTokens.glass.blurStrength
+    // The edge is owned by KWin's liquid rim, which adapts its light colour
+    // (white over dark, dark gold over bright) per backdrop. No client-side
+    // outline is drawn here, so there is no separate border to drift from the
+    // glass silhouette.
+
+    // A tonal theme has no compositor glass treatment, so it keeps a plain
+    // QML surface. In every glass theme this panel paints no material at all:
+    // KWin is the sole owner of blur, refraction and highlights.
+    property bool fallbackEnabled: AppearanceTokens.isMaterial
 
     // ---- material -------------------------------------------------------
 
@@ -91,16 +84,63 @@ Item {
     property real materialDepth: 0.0
     property real surfaceOpacity: 1.0
     property bool adaptiveDarkScrim: false
+    // Contrast scrim owned by the compositor: a black or white tint whose
+    // opacity the glass scales to the backdrop it sits on, so light text over
+    // a bright wallpaper (black tint) and dark text over a dark one (white
+    // tint) both stay legible.
+    property bool scrimEnabled: false
+    // Named readability/transparency tradeoff, expressed as how far the scrim
+    // is allowed to ramp at the backdrop extreme:
+    //   "subtle"      a hint at most, keeps the surface almost fully see-through,
+    //   "transparent" keeps most see-through (dock capsule, toolbars),
+    //   "balanced"    sits mid-way,
+    //   "readable"    will fill in near-opaque to hold text (notifications),
+    //   "custom"      falls back to the explicit scrimCap/scrimDecay below.
+    property string scrimLevel: "transparent"
+    // What cap and decay mean at the shader:
+    //
+    //   amount = smoothstep(0.40, 0.85, damage)   // 0..1, from backdrop luminance
+    //   alpha  = clamp(max(amount * decay, 0.06 * cap), 0.0, cap)
+    //
+    // cap is the absolute ceiling on scrim opacity -- how solid the fill is ever
+    // allowed to become at the extreme, regardless of how bright/dark the
+    // backdrop is. decay is a per-surface calm factor that scales the curve down
+    // earlier (below the ceiling); it governs the mid-tone ramp, not the max,
+    // because cap always bites at the extreme. Every preset keeps cap < decay so
+    // cap stays the real maximum and decay only slows the approach to it.
+    // The 0.06*cap floor keeps a scrim from collapsing fully to invisible on a
+    // backdrop that already matches the tint; it scales with cap so see-through
+    // levels stay nearly transparent while readable ones hold a faint presence.
+    property real scrimCap: 0.5
+    property real scrimDecay: 1.0
+    // The tint is owned by the panel, not passed in by a host. It follows the
+    // "liquid glass follows appearance mode" switch: when on, a light
+    // appearance picks a white tint (so dark content stays legible on a bright
+    // backdrop) and a dark appearance a black tint; when the switch is off the
+    // tint is fixed black.
+    readonly property int scrimTint:
+        AppearanceConfigService.glassFollowsAppearanceMode
+            ? (AppearanceTokens.isDarkTheme ? 0 : 1)
+            : 0 // 0 = black, 1 = white
+
+    // Named presets concretize the readability/transparency tradeoff as one
+    // ceiling (cap) plus a per-surface calm factor (decay). "custom" ignores
+    // these and takes the explicit scrimCap/scrimDecay verbatim.
+    readonly property real _presetCap: scrimLevel === "readable" ? 0.72
+        : scrimLevel === "balanced" ? 0.47
+        : scrimLevel === "transparent" ? 0.22
+        : scrimLevel === "subtle" ? 0.12 : 0.5
+    readonly property real _presetDecay: scrimLevel === "readable" ? 1.0
+        : scrimLevel === "balanced" ? 0.75
+        : scrimLevel === "transparent" ? 0.5
+        : scrimLevel === "subtle" ? 0.45 : 1.0
+    readonly property real _effectiveScrimCap:
+        scrimLevel === "custom" ? scrimCap : _presetCap
+    readonly property real _effectiveScrimDecay:
+        scrimLevel === "custom" ? scrimDecay : _presetDecay
+
     property bool bottomEdgeVisible: true
     property bool bottomShadeVisible: true
-
-    // What is painted instead of the glass when blurEnabled is false, i.e. the
-    // fill a host uses when it knows there is nothing behind the panel to blur.
-    // The tonal surface roles are a sane default, but a host with a tonal
-    // identity of its own -- the Dock's layer0 at half opacity -- passes that
-    // instead, and the body steps aside so it survives (see below).
-    property color fallbackColor: material === "thick"
-        ? AppearanceTokens.colors.layer2 : AppearanceTokens.colors.layer1
 
     // ---- content --------------------------------------------------------
 
@@ -131,39 +171,29 @@ Item {
     // fill, leaving a sliver of untinted glass at each corner.
     readonly property real contentRadius: continuousCorners ? 0 : radius
 
-    // Native QML extension: publish this panel's exact surface-local geometry
-    // and corner field to KWin. Multiple panels in one PopupWindow each own an
-    // independent protocol object, so their radii never have to be inferred
-    // from the integer Blur Region.
-    SurfaceShape {
-        target: root
+    // Keep the approximate integer blur mask and exact compositor shape in
+    // lockstep. Consumers only need `panel.blurRegion`; they never duplicate
+    // radius, exponent, or a SurfaceShape declaration beside the panel.
+    KosRoundedBlurRegion {
+        id: surfaceRegion
+        item: root.blurAnchor
         radius: root.radius
         exponent: root.cornerExponent
-        enabled: root.visible && root.blurEnabled
-    }
-
-    // ---------------------------------------------------------------------
-
-    Rectangle {
-        anchors.fill: parent
-        radius: root.continuousCorners ? 0 : root.radius
-        visible: !root.blurEnabled
-        color: root.fallbackColor
+        shapeEnabled: root.visible && root.useKwinEffect
+        scrimEnabled: root.scrimEnabled
+        scrimTint: root.scrimTint
+        scrimCap: root._effectiveScrimCap
+        scrimDecay: root._effectiveScrimDecay
     }
 
     LiquidGlassSurface {
         id: bodySurface
         anchors.fill: parent
 
-        // In a tonal theme the body paints an opaque material fill of its own
-        // (layer1 at alpha 1, see LiquidGlassSurface.color) rather than the
-        // host's, which would bury fallbackColor and with it the host's tonal
-        // identity. So there, and only there, a host that has declared there is
-        // no backdrop makes the body stand down and the fallback becomes the
-        // surface. In a glass theme the fill is already transparent at
-        // blurStrength 0, so the body stays: a host that wants the finish
-        // without the blur keeps it.
-        visible: root.blurEnabled || !bodySurface.usesMaterialSurface
+        // The QML liquid fallback paints always when the host opts out of KWin
+        // Glass; otherwise the body is the tonal-theme fallback only (KWin owns
+        // the finish in every glass theme).
+        visible: !root.useKwinEffect || root.fallbackEnabled
 
         // Square whenever the mask is on. The mask rounds the whole panel, and
         // rounding the fill as well would round it twice -- near the corner the
@@ -173,10 +203,9 @@ Item {
         // longer carries once the mask is on.
         cornerInset: root.radius
 
-        // A straight border is cut off wherever the corner departs from the
-        // rectangle edge, so above exponent 2 the outline moves into the shader.
-        border.width: root.continuousCorners ? 0 : root.outlineWidth
-        border.color: root.outlineColor
+        // No client-side border: the edge comes from KWin's liquid rim.
+        border.width: 0
+        border.color: "transparent"
 
         baseColor: root.baseColor
         ambientPrimary: root.ambientPrimary
@@ -190,13 +219,12 @@ Item {
         bottomEdgeVisible: root.bottomEdgeVisible
         bottomShadeVisible: root.bottomShadeVisible
 
-        // Strength 0 is exactly how LiquidGlassSurface turns a layer off: every
-        // finish term is multiplied by normalizedLiquidStrength and the fill
-        // alpha by normalizedBlurStrength, so zeroing them is the switch, not a
-        // near-equivalent reimplementation of one.
-        liquidStrength: root.liquidEnabled && !root.compositorOwnsFinish
-            ? root.liquidStrength : 0.0
-        blurStrength: root.blurEnabled ? root.blurStrength : 0.0
+        // KWin owns the finish: the body is a flat tonal fallback only. When
+        // KWin is opted out, the body becomes the real QML liquid finish.
+        liquidStrength: root.useKwinEffect
+            ? 0.0 : AppearanceTokens.glass.liquidStrength
+        blurStrength: root.useKwinEffect
+            ? 1.0 : AppearanceTokens.glass.blurStrength
     }
 
     Item {
@@ -214,7 +242,7 @@ Item {
         cornerExponent: root.cornerExponent
         maskWidth: root.width
         maskHeight: root.height
-        borderWidth: root.outlineWidth
-        borderColor: root.outlineColor
+        borderWidth: 0
+        borderColor: "transparent"
     }
 }

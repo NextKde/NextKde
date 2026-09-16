@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -52,7 +53,7 @@ Item {
         Text { anchors.centerIn: parent; text: "continuous" }
     }
 
-    // ---- both switches off ----------------------------------------------
+    // ---- another independent shaped surface -----------------------------
 
     LiquidGlassPanel {
         id: flat
@@ -61,8 +62,6 @@ Item {
         width: 200
         height: 60
         radius: 12
-        liquidEnabled: false
-        blurEnabled: false
     }
 
     // ---- caller content is re-parented ------------------------------------
@@ -100,6 +99,14 @@ Item {
         active: true
     }
 
+    // A PanelWindow combines independent panel declarations exactly as the
+    // Dock does. This also makes the list-property reference syntax load in
+    // the offscreen fixture rather than only in the live Dock.
+    Region {
+        id: combinedRegions
+        regions: [round.blurRegion, handle.blurRegion]
+    }
+
     readonly property real tokenExponent: AppearanceTokens.shape.cornerExponent
 
     property var failures: []
@@ -134,22 +141,11 @@ Item {
         check("contentRadius follows the mask",
             continuous.contentRadius === 0 && round.contentRadius === 18)
 
-        // Strength zero is how LiquidGlassSurface disables a layer, so these
-        // two assert the forwarding, not a reimplementation of the switch.
-        check("liquidEnabled false zeroes the finish",
-            flat.glass.liquidStrength === 0)
-        check("blurEnabled false zeroes the fill", flat.glass.blurStrength === 0)
-
-        // The body must not be hidden just because a host turned the blur off:
-        // in a glass theme the fill is already transparent at blurStrength 0,
-        // and the fallback below is what a host's own tonal identity rides on.
-        // Only the tonal branch (where the body would paint an opaque material
-        // layer over that fallback) makes it stand down, and that branch cannot
-        // be reached from here -- flipping AppearanceConfigService.shellStyle
-        // would persist a real user setting.
-        check("body survives a host turning the blur off",
-            flat.glass.visible === true)
-        check("body shows while the backdrop is live", round.glass.visible === true)
+        // In a glass theme KWin is the only material renderer. The QML body
+        // exists solely for the tonal fallback, so it must be invisible here.
+        check("glass panels have no QML material layer",
+            round.glass.visible === AppearanceTokens.isMaterial
+            && flat.glass.visible === AppearanceTokens.isMaterial)
 
         // Foreground roles are forwarded from the body; content reads against
         // them, so an undefined one is a silent invisible-text bug.
@@ -168,11 +164,14 @@ Item {
         // radius is half the 6px thickness.
         check("dock pill exists", handle.visualPill !== null
             && handle.visualPill !== undefined)
-        check("dock pill takes the token",
-            handle.visualPill.cornerExponent === root.tokenExponent)
+        check("dock pill keeps its capsule profile",
+            handle.visualPill.cornerExponent === 2.35)
         check("dock pill capsule radius", handle.visualPill.radius === 3)
-        check("dock pill mask follows the token",
-            handle.visualPill.layer.enabled === (root.tokenExponent > 2))
+        check("dock pill mask follows its profile",
+            handle.visualPill.layer.enabled === true)
+        check("panels expose compositor regions",
+            round.blurRegion !== null && handle.blurRegion !== null
+            && combinedRegions !== null)
         check("dock pill content radius follows the token",
             handle.visualPill.contentRadius
                 === (root.tokenExponent > 2 ? 0 : 3))

@@ -64,14 +64,14 @@ PanelWindow {
     }
 
     // KWin compositor backdrop blur
-    BackgroundEffect.blurRegion: (root.visible && root.open) ? overviewBlurRegionHolder : null
+    BackgroundEffect.blurRegion: (root.visible && root.open) ? overviewBlurRegion : null
 
+    // This is a full-output backdrop, not a rounded liquid surface. It needs
+    // only an ordinary rectangular blur region and deliberately sends no
+    // SurfaceShape declaration.
     Region {
-        id: overviewBlurRegionHolder
-        RoundedBlurRegion {
-            item: backdrop
-            radius: 0
-        }
+        id: overviewBlurRegion
+        item: backdrop
     }
 
     Rectangle {

@@ -26,9 +26,8 @@ assert.ok(existsSync(shaderBinary),
 // DockWindow is a PanelWindow, so it needs a Wayland session and cannot be
 // loaded here. Its base pill is nevertheless the reason the panel exists and
 // the one consumer whose regression no other test would notice, so read its
-// shape out of the source: the Dock's own glass has to be the panel carrying
-// the corner token, and it has to carry the surface policy that decides whether
-// there is a backdrop at all.
+// shape out of the source: the Dock's base pill must carry its own capsule
+// corner profile while KWin remains the sole glass renderer.
 const dockWindow = readFileSync(
     join(shell, "desktop", "modules", "dock", "DockWindow.qml"), "utf8");
 const dockPill = dockWindow.match(
@@ -37,14 +36,11 @@ assert.ok(dockPill, "the Dock's base pill is a LiquidGlassPanel named pill");
 assert.match(dockPill[1], /\n\s*radius: dockContainer\.pillRadius/,
     "the Dock pill keeps its own radius");
 assert.match(dockPill[1],
-    /\n\s*cornerExponent: AppearanceTokens\.shape\.cornerExponent/,
-    "the Dock pill follows the corner token");
-assert.match(dockPill[1],
-    /\n\s*blurEnabled: AppearanceTokens\.surface\.usesBackdrop/,
-    "the Dock pill follows the surface policy");
-assert.match(dockPill[1], /\n\s*fallbackColor: /,
-    "the Dock pill keeps its tonal fill for the no-backdrop treatment");
-console.log("Dock pill: the window's glass is the panel, on the corner token");
+    /\n\s*cornerExponent: 2\.35/,
+    "the Dock pill keeps its capsule corner profile");
+assert.doesNotMatch(dockPill[1], /\n\s*(blurEnabled|blurStrength|liquidStrength):/,
+    "the Dock pill does not own compositor glass settings");
+console.log("Dock pill: shape only; KWin owns the glass finish");
 
 const directory = mkdtempSync(join(tmpdir(), "kos-liquid-glass-panel-"));
 try {

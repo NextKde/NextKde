@@ -4,6 +4,7 @@ GlassText 1.0 GlassText.qml
 MaterialFlower 1.0 MaterialFlower.qml
 WavyProgress 1.0 WavyProgress.qml
 RoundedBlurRegion 1.0 RoundedBlurRegion.qml
+KosRoundedBlurRegion 1.0 KosRoundedBlurRegion.qml
 SquircleMask 1.0 SquircleMask.qml
 LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassPanel 1.0 LiquidGlassPanel.qml

@@ -121,7 +121,6 @@ public:
                 {QStringLiteral("step"), step},
                 {QStringLiteral("value"), config.value(QString::fromLatin1(key), fallback)}});
         };
-        add("BlurStrength", "模糊等级", "模糊", "int", 1, 15, 1, 15);
         add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
         add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
         add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);
@@ -214,6 +213,12 @@ public:
     Q_INVOKABLE QVariantMap updateBarIntegratedWithDock(bool enabled) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateBarIntegratedWithDock"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")}));
+    }
+
+    Q_INVOKABLE QVariantMap updateGlassFollowsAppearanceMode(bool enabled) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateGlassFollowsAppearanceMode"),
             enabled ? QStringLiteral("true") : QStringLiteral("false")}));
     }
 
@@ -452,6 +457,8 @@ private:
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
             {QStringLiteral("barIntegratedWithDock"),
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
+            {QStringLiteral("glassFollowsAppearanceMode"),
+                object.value(QStringLiteral("glassFollowsAppearanceMode")).toBool(true)},
             {QStringLiteral("barVisibilityMode"),
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),

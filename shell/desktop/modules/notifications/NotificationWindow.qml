@@ -51,17 +51,26 @@ PanelWindow {
     }
 
     // Blur the list content area so KWin's glass effect renders real liquid
-    // glass behind each card. We track the real content height on a dedicated
-    // `blurTrack` item, but only let its height *grow* with a delay (so the
-    // glass fades in after a new card's entrance slide finishes, instead of
-    // landing before the text arrives). Shrinking is immediate so removed
-    // cards don't leave a lingering glass slab.
-    Item {
+    // glass behind each card. The track itself is a LiquidGlassPanel, so it
+    // owns its blur region and exact corner instead of a separate hand-written
+    // region. Its height only *grows* with a delay (so the glass fades in
+    // after a new card's entrance slide finishes, instead of landing before
+    // the text arrives); shrinking is immediate so removed cards don't leave a
+    // lingering glass slab.
+    LiquidGlassPanel {
         id: blurTrack
         anchors.top: notificationList.top
         anchors.left: notificationList.left
         width: notificationList.width
         height: blurTrackHeight.value
+        radius: 28
+        // Notifications need to stay readable over whatever is beneath, so the
+        // scrim fills in rather than stay see-through.
+        scrimEnabled: true
+        scrimLevel: "balanced"
+        // A tonal theme has no compositor glass, so the panel must neither
+        // paint a material strip (KWin owns the finish) nor publish a region.
+        visible: AppearanceTokens.surface.usesBackdrop && blurTrackHeight.value > 0
 
         QtObject {
             id: blurTrackHeight
@@ -83,15 +92,9 @@ PanelWindow {
             }
         }
     }
-    BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0) ? notifBlurRegionHolder : null
-
-    Region {
-        id: notifBlurRegionHolder
-        RoundedBlurRegion {
-            item: blurTrack
-            radius: 28
-        }
-    }
+    BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0
+        && AppearanceTokens.surface.usesBackdrop)
+        ? blurTrack.blurRegion : null
 
     ListView {
         id: notificationList
@@ -201,9 +204,6 @@ PanelWindow {
             // it, along with the child-radius plumbing it needed -- two masks
             // would round the card twice, and the plumbing only existed because
             // a Rectangle could not switch its own circular paint off.
-            readonly property color _outlineColor: ThemeService.isDark
-                ? Qt.rgba(1, 1, 1, 0.12)
-                : Qt.rgba(0, 0, 0, 0.08)
 
             // ---- backgrounds ----
             // Frosted liquid glass backdrop adapting to theme. The urgency
@@ -215,18 +215,16 @@ PanelWindow {
                 anchors.fill: parent
                 radius: card.radius
                 cornerExponent: AppearanceTokens.shape.cornerExponent
+                // Text sits directly on this card, so it carries a readable scrim over
+                // whatever backdrop it ends up on.
+                scrimEnabled: AppearanceTokens.surface.usesBackdrop
+                scrimLevel: "balanced"
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(0.08, 0.09, 0.12, 0.38)
                     : Qt.rgba(0.95, 0.95, 0.98, 0.55)
-                blurStrength: AppearanceTokens.glass.launcherBlur
-                liquidStrength: AppearanceTokens.glass.launcherLiquid
                 ambientPrimary: WallpaperColorSource.primary
                 ambientSecondary: WallpaperColorSource.secondary
                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-                // Above exponent 2 the outline is drawn from the same corner
-                // field as the silhouette rather than as a straight border.
-                outlineWidth: 1
-                outlineColor: card._outlineColor
 
                 Rectangle {
                     anchors.fill: parent

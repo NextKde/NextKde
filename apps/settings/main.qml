@@ -1366,6 +1366,7 @@ ApplicationWindow {
         property real blurStrength: 0.42
         property real liquidStrength: 1.0
         property string glassStyle: "liquid"
+        property bool glassFollowsAppearanceMode: true
         property bool blurDirty: false
         property bool liquidDirty: false
         property string errorText: ""
@@ -1386,6 +1387,8 @@ ApplicationWindow {
             blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
             liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
             glassStyle = state.glassStyle === "soft" ? "soft" : "liquid"
+            if (state.glassFollowsAppearanceMode !== undefined)
+                glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
             liquidDirty = false
             errorText = ""
@@ -1481,6 +1484,14 @@ ApplicationWindow {
                 errorText = bridge.lastError
         }
 
+        function saveGlassFollowsAppearanceMode(checked) {
+            if (!bridge)
+                return
+            applyState(bridge.updateGlassFollowsAppearanceMode(checked))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
         Component.onCompleted: refresh()
 
         Text {
@@ -1495,33 +1506,85 @@ ApplicationWindow {
         Rectangle {
             visible: displayPage.showSystemAppearance
             Layout.fillWidth: true
-            implicitHeight: 54
+            implicitHeight: 109
             radius: 18
             color: theme.card
 
-            RowLayout {
+            Column {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
 
-                SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
-                Text {
-                    text: "色彩模式"
-                    color: theme.primaryText
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
+                Item {
+                    width: parent.width
+                    height: 54
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
+                        Text {
+                            text: "外观模式"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            id: systemAppearanceNavBar
+                            model: [
+                                { id: "light", label: "浅色" },
+                                { id: "dark", label: "深色" }
+                            ]
+                            currentIndex: theme.dark ? 1 : 0
+                            onSelectionChanged: function(index) {
+                                displayPage.setSystemAppearance(index)
+                            }
+                        }
+                    }
                 }
-                Item { Layout.fillWidth: true }
-                SettingsNavBar {
-                    id: systemAppearanceNavBar
-                    model: [
-                        { id: "light", label: "明亮" },
-                        { id: "dark", label: "暗色" }
-                    ]
-                    currentIndex: theme.dark ? 1 : 0
-                    onSelectionChanged: function(index) {
-                        displayPage.setSystemAppearance(index)
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "◈"; tint: "#64d2ff" }
+                        Text {
+                            text: "液态玻璃跟随外观模式"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            id: glassFollowsAppearanceModeSwitch
+                            width: 64
+                            height: 25
+                            checked: displayPage.glassFollowsAppearanceMode
+                            accentColor: "#0a84ff"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                displayPage.saveGlassFollowsAppearanceMode(checked)
+                                // The shared switch owns its checked state after
+                                // a click; put it back to the IPC-confirmed value.
+                                glassFollowsAppearanceModeSwitch.checked =
+                                    displayPage.glassFollowsAppearanceMode
+                            }
+                        }
                     }
                 }
             }
@@ -1695,7 +1758,6 @@ ApplicationWindow {
         property string errorText: ""
         readonly property var visibleControls: controls.filter(function(control) {
             return showAdvanced || control.section === "材质"
-                || (control.section === "模糊" && control.key === "BlurStrength")
                 || (control.section === "色彩" && ["Brightness", "Saturation",
                     "Contrast"].indexOf(control.key) >= 0)
         })

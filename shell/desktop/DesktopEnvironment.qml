@@ -149,6 +149,8 @@ Item {
                 // the value as an object and fall back to its previous tint.
                 iconTintColor: IconAppearanceService.tintColor.toString(),
                 shellStyle: AppearanceConfigService.shellStyle,
+                glassFollowsAppearanceMode:
+                    AppearanceConfigService.glassFollowsAppearanceMode,
                 barIntegratedWithDock:
                     AppearanceConfigService.barIntegratedWithDock,
                 barVisibilityMode: AppearanceConfigService.barVisibilityMode,
@@ -216,6 +218,11 @@ Item {
 
         function updateBarIntegratedWithDock(enabled: bool): string {
             AppearanceConfigService.updateBarIntegratedWithDock(enabled)
+            return snapshot()
+        }
+
+        function updateGlassFollowsAppearanceMode(enabled: bool): string {
+            AppearanceConfigService.updateGlassFollowsAppearanceMode(enabled)
             return snapshot()
         }
 
