@@ -29,8 +29,10 @@ Scope {
     // "auto" follows appearance; important destructive prompts may request a
     // stable light or dark material independent of the desktop theme.
     property string materialTone: "auto" // "auto" | "light" | "dark"
-    property string fixedScrimTone: "theme" // "theme" | "graphite" | "pearl"
-    property real fixedScrimOpacity: -1
+    // Shared important-dialog material: neutral graphite in dark appearance,
+    // warm pearl in light appearance. Individual dialogs may still override.
+    property string fixedScrimTone: finalGlassIsDark ? "graphite" : "pearl"
+    property real fixedScrimOpacity: finalGlassIsDark ? 0.90 : 0.94
     readonly property bool finalGlassIsDark: materialTone === "dark" ? true
         : materialTone === "light" ? false
         : AppearanceTokens.resolvedAppearanceIsDark
@@ -168,9 +170,7 @@ Scope {
             // Important interactions prioritize legibility. The host may make
             // the full-screen backdrop completely transparent; a strong
             // theme-polarized KWin scrim then carries the contrast contract.
-            scrimCap: root.fixedScrimOpacity >= 0
-                ? root.fixedScrimOpacity
-                : (root.finalGlassIsDark ? 0.88 : 0.94)
+            scrimCap: root.fixedScrimOpacity
             scrimDecay: 1.0
             scrimFixed: true
             scrimGraphite: root.fixedScrimTone === "graphite"

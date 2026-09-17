@@ -13,8 +13,6 @@ KosFloatPanel {
     contentPadding: 0
     radius: 24
     materialTone: "auto"
-    fixedScrimTone: finalGlassIsDark ? "graphite" : "pearl"
-    fixedScrimOpacity: finalGlassIsDark ? 0.90 : 0.94
 
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen)
