@@ -29,7 +29,7 @@ Scope {
     // "auto" follows appearance; important destructive prompts may request a
     // stable light or dark material independent of the desktop theme.
     property string materialTone: "auto" // "auto" | "light" | "dark"
-    property string fixedScrimTone: "theme" // "theme" | "graphite"
+    property string fixedScrimTone: "theme" // "theme" | "graphite" | "pearl"
     property real fixedScrimOpacity: -1
     readonly property bool finalGlassIsDark: materialTone === "dark" ? true
         : materialTone === "light" ? false
@@ -174,6 +174,7 @@ Scope {
             scrimDecay: 1.0
             scrimFixed: true
             scrimGraphite: root.fixedScrimTone === "graphite"
+            scrimPearl: root.fixedScrimTone === "pearl"
             scrimTintOverride: root.finalGlassIsDark ? 0 : 1
 
             width: cardHost.width + root.contentPadding * 2

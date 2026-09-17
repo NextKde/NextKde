@@ -128,6 +128,7 @@ Item {
     // compositor safely degrades it to adaptive decay 1.
     property bool scrimFixed: false
     property bool scrimGraphite: false
+    property bool scrimPearl: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
         : (AppearanceConfigService.glassFollowsAppearanceMode
@@ -194,8 +195,10 @@ Item {
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap
-        scrimDecay: root.scrimGraphite ? 3.0
+        scrimDecay: root.scrimPearl ? 4.0
+            : (root.scrimGraphite ? 3.0
             : (root.scrimFixed ? 2.0 : root._effectiveScrimDecay)
+            )
     }
 
     LiquidGlassSurface {

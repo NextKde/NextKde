@@ -8,15 +8,13 @@ KosFloatPanel {
 
     modal: true
     centerOnScreen: true
-    backdropMode: "dimBlur"
-    backdropTint: "black"
-    backdropOpacity: 0.28
+    backdropMode: "none"
     dismissOnBackdrop: true
     contentPadding: 0
     radius: 24
-    materialTone: "dark"
-    fixedScrimTone: "graphite"
-    fixedScrimOpacity: 0.90
+    materialTone: "auto"
+    fixedScrimTone: finalGlassIsDark ? "graphite" : "pearl"
+    fixedScrimOpacity: finalGlassIsDark ? 0.90 : 0.94
 
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen)
@@ -32,16 +30,20 @@ KosFloatPanel {
         Rectangle {
             width: 58
             height: 58
-            radius: 16
+            radius: width / 2
             anchors { top: parent.top; topMargin: 24; horizontalCenter: parent.horizontalCenter }
-            color: Qt.rgba(0.92, 0.12, 0.18, 0.20)
+            color: Qt.rgba(popup.contentForegroundColor.r,
+                popup.contentForegroundColor.g,
+                popup.contentForegroundColor.b, 0.08)
             border.width: 1
-            border.color: Qt.rgba(1, 0.36, 0.40, 0.34)
+            border.color: Qt.rgba(popup.contentForegroundColor.r,
+                popup.contentForegroundColor.g,
+                popup.contentForegroundColor.b, 0.34)
 
             BundledIcon {
                 anchors.centerIn: parent
                 name: "user-trash"
-                color: "#ff4d58"
+                color: popup.contentForegroundColor
                 size: 28
             }
         }
@@ -49,13 +51,20 @@ KosFloatPanel {
         Rectangle {
             width: 24
             height: 24
-            radius: 12
+            radius: width / 2
             anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 14 }
-            color: Qt.rgba(1, 1, 1, 0.16)
+            color: Qt.rgba(popup.contentForegroundColor.r,
+                popup.contentForegroundColor.g,
+                popup.contentForegroundColor.b, 0.16)
+            border.width: 1
+            border.color: Qt.rgba(popup.contentForegroundColor.r,
+                popup.contentForegroundColor.g,
+                popup.contentForegroundColor.b, 0.18)
+
             Text {
                 anchors.centerIn: parent
                 text: "?"
-                color: popup.contentSecondaryColor
+                color: popup.contentForegroundColor
                 font { pixelSize: 14; weight: Font.Bold }
             }
         }
@@ -98,7 +107,7 @@ KosFloatPanel {
                 width: (parent.width - parent.spacing) / 2
                 height: 34
                 radius: 9
-                color: Qt.rgba(1, 1, 1, 0.16)
+                color: popup.contentControlFill
                 border.width: 1
                 border.color: popup.contentControlBorder
 
