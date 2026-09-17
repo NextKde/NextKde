@@ -1,189 +1,116 @@
-import Quickshell
-import Quickshell.Wayland
 import QtQuick
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
 
-// A single control-center card as an independent PopupWindow.
+// Control-center card container for the single-block panel (experiment).
 //
-// Each card owns a full-window RoundedBlurRegion, so KWin's per-window blur
-// applies to this card alone (the compositor samples whatever is actually
-// behind the window - wallpaper AND open windows). The plugin's
-// smoothQuickshellCard path rounds the whole window with an SDF mask (no
-// scanline aliasing), and the gaps between card windows show the real
-// desktop underneath - the iOS "hollow" control center look.
-//
-// Positioning: every card anchors to the transparent geometry oracle, so the
-// clicked control determines the output, edge, and compositor clamping.
-PopupWindow {
+// A card is no longer its own window, but it keeps real KWin glass: each card
+// is a LiquidGlassPanel with useKwinEffect:true, publishing its own
+// SurfaceShape. The panel window's single BackgroundEffect region is built as
+// the UNION of every card's blurRegion, so KWin blurs behind the cards but not
+// over the gaps between them -- hollow, frosted, and still one window with no
+// ControlCenterCoordinator.
+Item {
     id: root
 
-    // ── Grid position (relative to coordinator.panelTop / panelRight) ──
-    // Vertical offset from the control center's top edge (logical px).
+    // ── Grid position & size (top-right origin, matching the old coordinator) ──
     property int offsetTop: 0
-    // Horizontal offset from the control center's right edge (logical px,
-    // negative = further left).
     property int offsetRight: 0
-    // Corner radius for the blur region and the visual border.
-    property real cardRadius: AppearanceTokens.isMaterial
-        ? AppearanceTokens.shape.large : 19
-    // Visual card fill (above the blur).
-    property color cardColor: ThemeService.backgroundColor
-    property color cardBorderColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
-    // Available to card content that needs locally adaptive foreground ink.
-    readonly property color materialForegroundColor: cardGlass.foregroundColor
-    readonly property color materialSecondaryForegroundColor: cardGlass.secondaryForegroundColor
-    readonly property color materialTertiaryForegroundColor: cardGlass.tertiaryForegroundColor
-    // PanelWindow has no opacity; this applies to the card body instead.
-    property real cardOpacity: 1.0
-    // PanelWindow has no scale; this applies to the card content.
-    property real cardScale: 1.0
-
-    // ── Wire-up (set by the bar) ──
-    required property QtObject coordinator
-    // Cards managed by the coordinator open/close together. Set false for
-    // overlays that manage their own visibility (e.g. logout confirmation).
-    property bool managedByCoordinator: true
-    property bool cardShown: false
-    readonly property real motionProgress: root.managedByCoordinator
-        ? (root.coordinator?.motionProgress ?? 0) : ownMotion.progress
-    readonly property bool motionMapped: root.managedByCoordinator
-        ? (root.coordinator?.motionMapped ?? false) : ownMotion.mapped
-    readonly property bool motionInteractive: root.managedByCoordinator
-        ? (root.coordinator?.motionInteractive ?? false) : ownMotion.interactive
-    // Independent overlay cards remain at their real anchor throughout their
-    // close motion. Managed primary cards still follow cardShown directly.
-    readonly property bool effectiveShown: (root.managedByCoordinator
-        ? root.cardShown : (root.cardShown || root.motionMapped)) && root.motionMapped
-        && !root.visuallySuppressed
-    readonly property real popupScale: AppearanceTokens.motion.popupStartScale
-        + (1 - AppearanceTokens.motion.popupStartScale) * root.motionProgress
-    readonly property bool visuallySuppressed: root.managedByCoordinator
-        && (root.coordinator?.modalActive ?? false)
-    signal motionClosed()
-
-    color: "transparent"
-    grabFocus: false
-    // Keep the popup surface allocated while this control-center instance is
-    // loaded. Closing moves the anchor point off screen instead of switching
-    // `visible`, so the blur region remains stable through the transition.
-    visible: root.coordinator?.cardAnchor !== null && (root.managedByCoordinator
-        || root.cardShown || root.motionMapped)
-
-    anchor {
-        item: root.coordinator?.cardAnchor ?? null
-        rect.x: (root.coordinator?.gridWidth ?? 336) - root.offsetRight
-            - root.cardWidth + (root.coordinator?.cardOffsetX ?? 0)
-        rect.y: root.effectiveShown
-            ? root.offsetTop + (root.coordinator?.cardOffsetY ?? 0)
-            : -2000
-        rect.width: 0
-        rect.height: 0
-        edges: Edges.Top | Edges.Left
-        gravity: Edges.Bottom | Edges.Right
-        // Hidden cards use a deliberately off-screen anchor. Do not let the
-        // popup placement engine slide that point back on-screen, otherwise
-        // independent sub-panels (such as Power & Session) remain visible.
-        adjustment: PopupAdjustment.None
-    }
-
-    implicitWidth: root.cardWidth
-    implicitHeight: root.cardHeight
-
-    // Set by each concrete card.
     property int cardWidth: 296
     property int cardHeight: 59
+    property real cardRadius: AppearanceTokens.isMaterial
+        ? AppearanceTokens.shape.large : 19
+    property color cardColor: ThemeService.backgroundColor
+    // Readability scrim for this card's glass. The control center stays as
+    // see-through as the Dock, so it defaults to the subtlest level; widgets
+    // hosting white content can raise it (widgets use "readable") so text
+    // holds over a bright backdrop.
+    property string cardScrimLevel: "subtle"
+    property color cardBorderColor: AppearanceTokens.isMaterial
+        ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
+    property real cardOpacity: 1.0
+    property real cardScale: 1.0
+    // Hosts with their own tonal fill can still use this item solely to
+    // publish a KWin blur shape, without stacking a second QML material.
+    property bool fallbackEnabled: AppearanceTokens.isMaterial
 
-    // The blur radius as an integer, shared by the region encoding AND the
-    // cardBody radius so the plugin's SDF mask and the QML drawn shape always
-    // coincide (a mismatch is what produced the visible double-edge aliasing).
-    readonly property int blurRadius: Math.max(1, Math.min(
-        Math.round(root.cardRadius),
-        Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
+    // Inert compatibility from the old per-window card; each card now draws its
+    // own glass, so these are retained only so existing instances compile.
+    property var coordinator: null
+    property real blurStrength: 1.0
+    property real liquidStrength: 0.0
+    property bool managedByCoordinator: true
 
-    property real blurStrength: AppearanceConfigService.effectiveBarBlur
-    property real liquidStrength: AppearanceConfigService.effectiveBarLiquid
-    readonly property real effectiveBlur: Math.max(0.0, Math.min(1.0, blurStrength))
-    readonly property real effectiveLiquid: Math.max(0.0, Math.min(1.0, liquidStrength))
+    // Marker for the single-block panel's positioning pass.
+    readonly property bool isControlCenterCard: true
+    // Host shows/hides a card (submenus and the session sheet toggle this).
+    property bool cardShown: true
 
-    // Blur region with the radius encoded explicitly, instead of
-    // RoundedBlurRegion's ellipse scanlines (whose top-row inset is corrupted
-    // by DPR scaling, making the plugin recover a smaller radius than QML
-    // draws). The top scanline starts at x=blurRadius - the plugin's
-    // smoothQuickshellCard reads exactly this inset as the corner radius.
-    // Everything below it is full-width so the card blurs completely and the
-    // SDF mask rounds the corners to blurRadius.
-    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
-        && (root.effectiveBlur > 0.005 || root.effectiveLiquid > 0.005))
-        ? cardBlurRegionHolder : null
+    // The item whose x/y are this card's position in the surface. Defaults to
+    // the card itself (fine when placed directly in the panel window, as
+    // ControlCenterPanel.placeCard does). A card embedded in an outer wrapper
+    // whose own x/y carry the surface offset (the desk widgets) must point this
+    // at that wrapper -- the glass fills this card at local (0,0), and
+    // RoundedBlurRegion reads item.x/y verbatim, so a zero-positioned card
+    // would misplace the blur region to the window origin.
+    property Item blurAnchor: root
 
-    Region {
-        id: cardBlurRegionHolder
-        x: root.blurRadius
-        y: 0
-        width: root.cardWidth - root.blurRadius
-        height: 1
-        Region {
-            x: 0
-            y: 1
-            width: root.cardWidth
-            height: root.cardHeight - 1
-        }
-    }
+    // Content's adaptive foreground ink, from this card's glass.
+    readonly property color materialForegroundColor: cardGlass.foregroundColor
+    readonly property color materialSecondaryForegroundColor:
+        cardGlass.secondaryForegroundColor
+    readonly property color materialTertiaryForegroundColor:
+        cardGlass.tertiaryForegroundColor
 
-    // Card surface: LiquidGlassSurface provides liquid finish, ambient wallpaper reflections,
-    // and responsive opacity tied to effectiveBlur and effectiveLiquid.
-    LiquidGlassSurface {
+    width: cardWidth
+    height: cardHeight
+    visible: root.cardShown
+
+    // This card's exact compositor shape, used by the panel to build the
+    // single window blur region (the union of all cards).
+    readonly property alias blurRegion: cardGlass.blurRegion
+
+    // The card's own KWin-backed glass. useKwinEffect publishes this card's
+    // SurfaceShape; the panel window's BackgroundEffect region is the union of
+    // these, so KWin blurs behind the cards and leaves the gaps crisp. A
+    // tonal/non-glass theme has no backdrop to sample, so it draws the QML
+    // surface instead of publishing a shape nothing would render -- the panel
+    // gates its region on the same token, which keeps the declared shape set and
+    // the region in step.
+    LiquidGlassPanel {
         id: cardGlass
         anchors.fill: parent
-        radius: root.blurRadius
+        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+        fallbackEnabled: root.fallbackEnabled
+        // The glass fills this card at local (0,0); its region must land where
+        // the card actually sits in the window, so anchor it to the positioned
+        // card Item (whose x/y carry the grid offset) instead of the glass.
+        // root.blurAnchor defaults to this card; a wrapper-embedded card (the
+        // desk widgets) overrides it to point at the wrapper that holds the
+        // true surface offset.
+        blurAnchor: root.blurAnchor
+        radius: Math.max(1, Math.min(
+            Math.round(root.cardRadius),
+            Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
+        cornerExponent: 2.0
         baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
-        blurStrength: root.effectiveBlur
-        liquidStrength: root.effectiveLiquid
+        // Same see-through scrim posture as the Dock: on, at the subtle level.
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        scrimLevel: root.cardScrimLevel
         ambientPrimary: WallpaperColorSource.primary
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "regular"
-        border.width: 1
-        border.color: root.cardBorderColor
-        scale: root.popupScale
-        transformOrigin: Item.TopRight
-        opacity: root.motionProgress
-        enabled: root.motionInteractive && !root.visuallySuppressed
-        transform: Translate {
-            y: (1 - root.motionProgress) * AppearanceTokens.motion.popupAnchorOffset
-        }
 
-        // Concrete card content (declared by the card instance).
-        default property alias content: contentHost.data
+        // Concrete card content (declared by the card instance), above the glass.
+        default property alias content: cardContent.data
         Item {
-            id: contentHost
+            id: cardContent
             anchors.fill: parent
+            visible: root.cardOpacity > 0.001
             scale: root.cardScale
         }
-
-    }
-
-    Component.onCompleted: {
-        if (root.managedByCoordinator) {
-            if (root.coordinator)
-                root.coordinator.register(root)
-        }
-    }
-
-    onCardShownChanged: {
-        if (!root.managedByCoordinator) {
-            if (root.cardShown)
-                ownMotion.open()
-            else
-                ownMotion.close()
-        }
-    }
-
-    property PopupMotion ownMotion: PopupMotion {
-        onClosed: root.motionClosed()
     }
 }

@@ -114,28 +114,17 @@ PanelWindow {
     // The custom KWin glass effect consumes this region for both backdrop
     // blur and liquid refraction. Keep publishing it when either channel is
     // active; gating only on blur makes a liquid-only Dock fully transparent.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.visible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? dockBlurRegionHolder : null
 
     Region {
         id: dockBlurRegionHolder
-        RoundedBlurRegion {
-            id: glassRegion
-            item: dockWrapper
-            radius: dockContainer.pillRadius
-        }
-        // The reveal bar's backdrop blur. visualBar is a direct child of the
-        // handle at the window origin, so its x/y are already surface coords.
-        // Radius matches the pill's own capsule so the frosted halo sits
-        // exactly under the visible bar (§6.4).
-        RoundedBlurRegion {
-            id: barRegion
-            item: revealHandle.visualBar
-            radius: Math.min(revealHandle.visualThickness,
-                revealHandle.barLength) / 2
-        }
+        // Each LiquidGlassPanel owns its own rounded blur mask and exact
+        // SurfaceShape. This window is only the compositor boundary: it
+        // combines the two independently shaped surfaces into one region.
+        regions: [pill.blurRegion, revealHandle.blurRegion]
     }
 
     // Stable, full-reveal position of the glass inside the surface. Always
@@ -200,16 +189,33 @@ PanelWindow {
             ? (root.position === "right" ? Item.Right : Item.Left)
             : Item.Bottom
 
-        // The active surface policy decides whether this is compositor-backed
-        // glass/acrylic or a QML tonal layer.
-        Rectangle {
+        // The dock's own glass, and the same component its popups already use.
+        //
+        // The panel owns both its rounded blur mask and its exact SurfaceShape.
+        // DockWindow only aggregates that declaration with the reveal handle
+        // above, then passes the result across the window/compositor boundary.
+        LiquidGlassPanel {
+            id: pill
             anchors.fill: parent
-            visible: !AppearanceTokens.surface.usesBackdrop
-            radius: dockContainer.pillRadius
-            color: AppearanceTokens.surface.dockFill
-            opacity: AppearanceTokens.surface.dockOpacity
-            border.width: 0
             z: -1
+            radius: dockContainer.pillRadius
+            // Soften the shell-wide squircle for this low-height capsule while
+            // retaining a little continuous-corner character.
+            cornerExponent: 2.35
+            baseColor: ThemeService.backgroundColor
+            surfaceOpacity: 1.0
+            // Compositor contrast scrim. The tint (black vs white) is owned by
+            // LiquidGlassPanel: it follows the appearance mode switch, with a
+            // black fallback when off. Tied to usesBackdrop so a tonal
+            // (non-glass) surface never draws a compositor scrim it was not
+            // asked for. The dock keeps its see-through character, so it takes
+            // the subtlest scrim level.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: "subtle"
+            // The card fills a positioned wrapper, so its own x/y read 0; anchor
+            // the published region to the wrapper, whose x/y carry the capsule's
+            // offset in this surface.
+            blurAnchor: dockWrapper
         }
 
         DockContainer {

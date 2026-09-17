@@ -148,10 +148,11 @@ Item {
             margins.bottom: root.dockHosted ? 0 : -6
         }
 
-        LiquidGlassSurface {
+        LiquidGlassPanel {
             id: detailsSurface
             anchors.fill: parent
             radius: 16
+            cornerExponent: AppearanceTokens.shape.cornerExponent
             // The blur region below supplies the real backdrop blur; this
             // richer translucent material adds the specular glass finish.
             baseColor: ThemeService.isDark
@@ -334,15 +335,8 @@ Item {
             }
         }
 
-        BackgroundEffect.blurRegion: detailsPopup.visible ? cpuDetailsBlurHolder : null
-
-        Region {
-            id: cpuDetailsBlurHolder
-            RoundedBlurRegion {
-                item: detailsSurface
-                radius: detailsSurface.radius
-            }
-        }
+        BackgroundEffect.blurRegion: detailsPopup.visible
+            ? detailsSurface.blurRegion : null
     }
 
     function formatBytes(value) {

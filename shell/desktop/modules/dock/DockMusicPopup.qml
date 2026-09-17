@@ -15,7 +15,8 @@ PopupWindow {
     property var player: DockMprisService.activePlayer
     readonly property url artworkSource: {
         const revision = DockMprisService.metadataRevision
-        return player?.trackArtUrl ? player.trackArtUrl : Qt.resolvedUrl("../../assets/defaultCover.png")
+        return player?.trackArtUrl
+            ? player.trackArtUrl : BundledIcons.source("default-cover")
     }
     property bool pointerInside: popupMouse.containsMouse
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
@@ -78,10 +79,11 @@ PopupWindow {
         source: popup.artworkSource
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         id: surface
         anchors.fill: parent
         radius: 18
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         // Keep the original Dock glass base. Cover colour is applied by the
         // explicit translucent gradient below, just like DockMusicPlayer.
         baseColor: ThemeService.backgroundColor
@@ -95,10 +97,14 @@ PopupWindow {
         // LiquidGlassSurface deliberately caps ambient pigment, which is too
         // subtle for music artwork. This is the same direct cover-gradient
         // strategy used by DockMusicPlayer, but with lower alpha so the
-        // Hyprglass blur remains visible through the full popup.
+        // Hyprglass blur remains visible through the full popup. The radius
+        // follows the panel, not the literal: with the mask on the panel is
+        // square and this rect has to be square too, otherwise its own circular
+        // corners stop short of the superelliptical silhouette and leave the
+        // panel corners untinted.
         Rectangle {
             anchors.fill: parent
-            radius: surface.radius
+            radius: surface.contentRadius
             color: "transparent"
             gradient: Gradient {
                 orientation: Gradient.Horizontal
@@ -407,13 +413,5 @@ PopupWindow {
         acceptedButtons: Qt.NoButton
     }
 
-    BackgroundEffect.blurRegion: popup.visible ? musicPopupBlurHolder : null
-
-    Region {
-        id: musicPopupBlurHolder
-        RoundedBlurRegion {
-            item: surface
-            radius: surface.radius
-        }
-    }
+    BackgroundEffect.blurRegion: popup.visible ? surface.blurRegion : null
 }

@@ -221,6 +221,30 @@ PanelWindow {
         return AppearanceTokens.colors.layer1
     }
 
+    // Per-card real glass. Every widget card publishes its own compositor
+    // SurfaceShape (blurRegion) through its ControlCenterCard; this window
+    // joins them into one union so KWin blurs behind the cards but not over
+    // the grid gaps -- hollow and frosted, one surface, no per-card QML
+    // simulation. Each blurRegion is a persistent KosRoundedBlurRegion whose
+    // geometry follows its card, so the union only needs to re-resolve when the
+    // card set itself changes (Repeater count). Gate on usesBackdrop so
+    // tonal/non-glass themes publish nothing.
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
+        && root.visible) ? widgetBlurHolder : null
+
+    Region {
+        id: widgetBlurHolder
+        regions: {
+            const arr = []
+            for (let i = 0; i < widgetRepeater.count; ++i) {
+                const card = widgetRepeater.itemAt(i)
+                if (card && card.blurRegion)
+                    arr.push(card.blurRegion)
+            }
+            return arr
+        }
+    }
+
     SystemClock {
         id: clock
         precision: SystemClock.Seconds
@@ -252,6 +276,7 @@ PanelWindow {
     }
 
     Repeater {
+        id: widgetRepeater
         model: root.widgetDefinitions
 
         delegate: DeskWidgetCard {
@@ -441,7 +466,7 @@ PanelWindow {
                         anchors.verticalCenterOffset: -1
                         width: 17
                         height: 17
-                        source: "../../assets/countdown.svg"
+                        source: BundledIcons.source("countdown")
                         sourceSize.width: 26
                         sourceSize.height: 26
                         fillMode: Image.PreserveAspectFit
@@ -716,7 +741,7 @@ PanelWindow {
                             height: parent.height * 0.36
                             y: 2
                             x: -width
-                            source: "../../assets/weather-cloud.svg"
+                            source: BundledIcons.source("weather-cloud")
                             fillMode: Image.PreserveAspectFit
 	                            smooth: true
 	                            layer.enabled: IconAppearanceService.mode !== "color"
@@ -731,7 +756,7 @@ PanelWindow {
                             height: parent.height * 0.29
                             y: parent.height * 0.18
                             x: parent.width
-                            source: "../../assets/weather-cloud-wide.svg"
+                            source: BundledIcons.source("weather-cloud-wide")
                             fillMode: Image.PreserveAspectFit
 	                            smooth: true
 	                            layer.enabled: IconAppearanceService.mode !== "color"
@@ -946,7 +971,7 @@ PanelWindow {
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
-                Image { anchors.fill: parent; source: "../../assets/defaultCover.png"; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                Image { anchors.fill: parent; source: BundledIcons.source("default-cover"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                     height: 28
@@ -994,7 +1019,7 @@ PanelWindow {
                     readonly property real storageValue: systemContent.metrics.diskTotalBytes > 0
                         ? systemContent.metrics.diskUsedBytes / systemContent.metrics.diskTotalBytes : 0
                     readonly property var labels: ["CPU", "内存", "存储"]
-                    readonly property var icons: ["", "󰍛", "󰋊"]
+                    readonly property var icons: ["cpu", "memory", "drive-harddisk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
 	                    readonly property var colors: AppearanceTokens.isMaterial
 	                        ? [AppearanceTokens.colors.primary.toString(),
@@ -1065,13 +1090,13 @@ PanelWindow {
                         anchors.centerIn: parent
                         visible: activityRings.hoveredMetric >= 0
                         spacing: -2
-                        Text {
+                        BundledIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: activityRings.hoveredMetric >= 0
+                            name: activityRings.hoveredMetric >= 0
                                 ? (activityRings.icons[activityRings.hoveredMetric] ?? "")
                                 : ""
-	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
-                            font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: Math.max(10, activityRings.width * 0.1) }
+                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
+                            size: Math.max(10, activityRings.width * 0.1)
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -1118,10 +1143,10 @@ PanelWindow {
                     Row {
                         anchors.centerIn: parent
                         spacing: Math.max(4, temperatureSummary.width * 0.04)
-                        Text {
-                            text: ""
-	                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
-                            font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: Math.max(12, temperatureSummary.height * 0.54) }
+                        BundledIcon {
+                            name: "temperature"
+                            color: systemContent.glassMode ? IconAppearanceService.glassContentColor() : "#7d7782"
+                            size: Math.max(12, temperatureSummary.height * 0.54)
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Column {
@@ -1431,7 +1456,8 @@ PanelWindow {
                 readonly property bool hasPlayer: player !== null
                 readonly property url artworkSource: {
                     const revision = DockMprisService.metadataRevision
-                    return player?.trackArtUrl ? player.trackArtUrl : Qt.resolvedUrl("../../assets/defaultCover.png")
+                    return player?.trackArtUrl
+                        ? player.trackArtUrl : BundledIcons.source("default-cover")
                 }
                 readonly property real safeLength: player?.lengthSupported && player.length > 0
                     ? player.length : 0
@@ -1776,11 +1802,36 @@ PanelWindow {
                                 "kos-todo", ["--view", "today"])
                         }
 
-                        Rectangle {
+                        // A parent Item's `clip` is rectangular, not rounded.
+                        // Draw the red band with its own top corners instead of
+                        // letting a rectangular child cover the card silhouette.
+                        Canvas {
+                            id: todoHeader
                             anchors { left: parent.left; right: parent.right; top: parent.top }
                             height: Math.min(42, parent.height * 0.28)
-                            color: "#ff5d66"
                             visible: !todoContent.glassMode
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                const corner = Math.min(card.radius, height)
+                                ctx.reset()
+                                if (!visible)
+                                    return
+                                ctx.fillStyle = "#ff5d66"
+                                ctx.beginPath()
+                                ctx.moveTo(0, height)
+                                ctx.lineTo(0, corner)
+                                ctx.quadraticCurveTo(0, 0, corner, 0)
+                                ctx.lineTo(width - corner, 0)
+                                ctx.quadraticCurveTo(width, 0, width, corner)
+                                ctx.lineTo(width, height)
+                                ctx.closePath()
+                                ctx.fill()
+                            }
+                            onVisibleChanged: requestPaint()
+                            Connections {
+                                target: IconAppearanceService
+                                function onModeChanged() { todoHeader.requestPaint() }
+                            }
                         }
                         Text {
                             anchors { left: parent.left; top: parent.top; margins: 14 }
@@ -2597,13 +2648,13 @@ PanelWindow {
         }
 
         function iconFor(kind) {
-            if (kind === "folder") return ""
-            if (kind === "image") return ""
-            if (kind === "pdf") return ""
-            if (kind === "code") return ""
-            if (kind === "text") return "󰈙"
-            if (kind === "launcher") return ""
-            return ""
+            if (kind === "folder") return "folder"
+            if (kind === "image") return "image-x-generic"
+            if (kind === "pdf") return "application-pdf"
+            if (kind === "code") return "text-x-script"
+            if (kind === "text") return "text-x-generic"
+            if (kind === "launcher") return "application-x-executable"
+            return "text-x-generic"
         }
 
         function canChooseOpenWith(entry) {
@@ -2706,13 +2757,13 @@ PanelWindow {
         // ── Liquid context-menu data + builder ──
 
         function _ctxSub(label, children, icon) {
-            return { icon: icon || "", label: label, children: children }
+            return { icon: icon || "placeholder-dot", label: label, children: children }
         }
         function _ctxAct(label, cmd, icon) {
-            return { icon: icon || "", label: label, cmd: cmd, enabled: true }
+            return { icon: icon || "placeholder-dot", label: label, cmd: cmd, enabled: true }
         }
         function _ctxCheck(label, cmd, value, checked, icon) {
-            return { icon: icon || "", label: label, cmd: cmd,
+            return { icon: icon || "placeholder-dot", label: label, cmd: cmd,
                 checkable: true, checked: checked, value: value, enabled: true }
         }
 
@@ -2736,26 +2787,26 @@ PanelWindow {
             const root = []
 
             if (e) {
-                root.push(_ctxAct(defaultOpenText(), "openEntry", ""))
+                root.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
                 if (selectedEntries().length === 1)
-                    root.push(_ctxAct("重命名", "rename", ""))
+                    root.push(_ctxAct("重命名", "rename", "edit-rename"))
 
                 // 自定义外观 applies to every desktop entry. The path-based
                 // storage retains the setting across filesystem snapshots.
                 const colorKids = FOLDER_COLORS.map(([label, val]) =>
-                    _ctxCheck(label, "setColor", val, curColor === val, ""))
-                const appearKids = [ _ctxSub("颜色", colorKids, "") ]
+                    _ctxCheck(label, "setColor", val, curColor === val, "color-picker"))
+                const appearKids = [ _ctxSub("颜色", colorKids, "color-picker") ]
                 for (const [catTitle, list] of EMOJI_CATS) {
-                    const rows = [_ctxCheck("无", "setEmoji", "", curEmoji === "", "")]
+                    const rows = [_ctxCheck("无", "setEmoji", "", curEmoji === "", "placeholder-dot")]
                         .concat(list.map(([label, em]) =>
-                            _ctxCheck(label, "setEmoji", em, curEmoji === em, "")))
-                    const categoryIcon = catTitle === "学习" ? ""
-                        : catTitle === "生活" ? ""
-                        : catTitle === "符号" ? "" : ""
+                            _ctxCheck(label, "setEmoji", em, curEmoji === em, "placeholder-dot")))
+                    const categoryIcon = catTitle === "学习" ? "bookmark"
+                        : catTitle === "生活" ? "home"
+                        : catTitle === "符号" ? "star" : "star"
                     appearKids.push(_ctxSub(catTitle, rows, categoryIcon))
                 }
-                appearKids.push(_ctxAct("移除自定义", "removeCustom", ""))
-                root.push(_ctxSub("自定义外观", appearKids, ""))
+                appearKids.push(_ctxAct("移除自定义", "removeCustom", "edit-clear"))
+                root.push(_ctxSub("自定义外观", appearKids, "customize-appearance"))
 
                 // 打开方式（动态）
                 if (canChooseOpenWith(e)) {
@@ -2763,35 +2814,35 @@ PanelWindow {
                     for (let i = 0; i < 6; i++) {
                         const id = openWithIdAt(i)
                         if (id)
-                            owKids.push({ icon: "", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
+                            owKids.push({ icon: "placeholder-dot", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
                     }
                     owKids.push(_ctxAct("其他应用程序…", "openWithMore", ""))
-                    root.push(_ctxSub("打开方式", owKids, ""))
+                    root.push(_ctxSub("打开方式", owKids, "open-with"))
                 }
 
-                root.push(_ctxAct("复制", "copy", ""))
-                root.push(_ctxAct("剪切", "cut", ""))
-                root.push(_ctxAct("移到废纸篓", "trash", ""))
-                root.push(_ctxAct("在文件管理器中打开", "open", ""))
+                root.push(_ctxAct("复制", "copy", "edit-copy"))
+                root.push(_ctxAct("剪切", "cut", "edit-cut"))
+                root.push(_ctxAct("移到废纸篓", "trash", "user-trash"))
+                root.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
             } else {
                 // desktop background
-                root.push(_ctxAct("新建文件", "newFile", ""))
-                root.push(_ctxAct("新建文件夹", "newFolder", ""))
-                root.push(_ctxAct("粘贴", "paste", ""))
+                root.push(_ctxAct("新建文件", "newFile", "document-new"))
+                root.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
+                root.push(_ctxAct("粘贴", "paste", "edit-paste"))
                 const arrange = [
-                    _ctxAct("按名称", "arrangeByName", ""), _ctxAct("按类型", "arrangeByType", ""),
-                    _ctxAct("按修改时间（最新）", "arrangeModifiedNew", ""),
-                    _ctxAct("按修改时间（最早）", "arrangeModifiedOld", "")
+                    _ctxAct("按名称", "arrangeByName", "sort-name"), _ctxAct("按类型", "arrangeByType", "sort-type"),
+                    _ctxAct("按修改时间（最新）", "arrangeModifiedNew", "clock"),
+                    _ctxAct("按修改时间（最早）", "arrangeModifiedOld", "clock")
                 ]
-                root.push(_ctxSub("整理方式", arrange, ""))
-                root.push(_ctxAct("重置图标排序", "resetLayout", ""))
+                root.push(_ctxSub("整理方式", arrange, "arrange"))
+                root.push(_ctxAct("重置图标排序", "resetLayout", "reset-layout"))
                 root.push(_ctxCheck("显示文件扩展名", "toggleExtensions", null,
-                    desktopLayout.showExtensions, ""))
+                    desktopLayout.showExtensions, "text-x-generic"))
                 const sizeKids = [[40, "小"], [56, "中"], [72, "大"]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
-                        iconSize === px, ""))
-                root.push(_ctxSub("图标大小", sizeKids, ""))
-                root.push(_ctxAct("刷新", "refresh", ""))
+                        iconSize === px, "placeholder-dot"))
+                root.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
+                root.push(_ctxAct("刷新", "refresh", "view-refresh"))
             }
             return root
         }
@@ -3050,13 +3101,24 @@ PanelWindow {
                         ParentChange { target: minimalDragIcon; parent: desktopFileView.contentItem }
                     }
 
-                    Text {
+                    // 文件类型图标走系统主题（freedesktop MIME 名）；主题缺这个
+                    // 图标时才退回自带的线条图案。
+                    IconImage {
+                        id: minimalDragThemeIcon
                         anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                        text: desktopFileGrid.iconFor(modelData.kind)
+                        width: desktopFileGrid.iconSize * 0.75
+                        height: width
+                        asynchronous: true
+                        source: SystemIconResolver.sourceFromCandidates(
+                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
+                    }
+                    BundledIcon {
+                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
+                        visible: minimalDragThemeIcon.status !== Image.Ready
+                        name: desktopFileGrid.iconFor(modelData.kind)
                         color: Qt.rgba(1, 1, 1, 0.88)
-                        style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.50)
-                        font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: desktopFileGrid.iconSize * 0.75 }
+                        size: desktopFileGrid.iconSize * 0.75
+                        outlined: true
                     }
                     Text {
                         anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: desktopFileGrid.iconSize + 12; leftMargin: 5; rightMargin: 5 }
@@ -3327,19 +3389,33 @@ PanelWindow {
                             font { family: "Noto Color Emoji"; pixelSize: desktopFileGrid.iconSize * 0.36 }
                         }
                     }
-                    Text {
+                    IconImage {
+                        id: desktopThemeIcon
+                        anchors.centerIn: parent
+                        width: desktopFileGrid.iconSize * 0.75
+                        height: width
+                        asynchronous: true
+                        source: SystemIconResolver.sourceFromCandidates(
+                            [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
+                        visible: source !== "" && status === Image.Ready
+                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
+                            && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
+                            && modelData.kind !== "folder"
+                    }
+                    BundledIcon {
                         anchors.centerIn: parent
                         // A broken or unsupported image still behaves like a
                         // normal desktop file instead of becoming invisible.
-                        // Folders are drawn by the Canvas Item above.
-                        visible: (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
+                        // Folders are drawn by the Canvas Item above. 主题没带
+                        // 这个类型图标时才由这里接手。
+                        visible: desktopThemeIcon.status !== Image.Ready
+                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
                             && (modelData.kind !== "launcher" || launcherIcon.status !== Image.Ready)
                             && modelData.kind !== "folder"
-                        text: desktopFileGrid.iconFor(modelData.kind)
+                        name: desktopFileGrid.iconFor(modelData.kind)
                         color: Qt.rgba(1, 1, 1, 0.88)
-                        style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.50)
-                        font { family: "LXGW WenKai Mono Nerd Font"; pixelSize: desktopFileGrid.iconSize * 0.75 }
+                        size: desktopFileGrid.iconSize * 0.75
+                        outlined: true
                     }
                 }
                 Text {

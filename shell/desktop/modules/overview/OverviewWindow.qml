@@ -64,14 +64,14 @@ PanelWindow {
     }
 
     // KWin compositor backdrop blur
-    BackgroundEffect.blurRegion: (root.visible && root.open) ? overviewBlurRegionHolder : null
+    BackgroundEffect.blurRegion: (root.visible && root.open) ? overviewBlurRegion : null
 
+    // This is a full-output backdrop, not a rounded liquid surface. It needs
+    // only an ordinary rectangular blur region and deliberately sends no
+    // SurfaceShape declaration.
     Region {
-        id: overviewBlurRegionHolder
-        RoundedBlurRegion {
-            item: backdrop
-            radius: 0
-        }
+        id: overviewBlurRegion
+        item: backdrop
     }
 
     Rectangle {
@@ -206,9 +206,9 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                Text {
-                                    text: "󰍹"
-                                    font.pixelSize: 13
+                                BundledIcon {
+                                    name: "window"
+                                    size: 13
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
@@ -459,10 +459,10 @@ PanelWindow {
                     anchors.centerIn: parent
                     spacing: 12
 
-                    Text {
+                    BundledIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "󰖲"
-                        font.pixelSize: 32
+                        name: "window"
+                        size: 32
                         color: Qt.rgba(1, 1, 1, 0.25)
                     }
 

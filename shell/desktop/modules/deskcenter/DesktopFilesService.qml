@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import Kos.SurfaceShape 1.0
 import qs.desktop.modules.platform
 
 // Presentation-facing desktop file model. All filesystem, MIME, clipboard,
@@ -13,10 +14,34 @@ QtObject {
     property string directory: ""
     property bool ready: false
     property string lastError: ""
+    // Launching an application is asynchronous: gio only confirms that it
+    // handed the request to the desktop system, not that the process already
+    // has a window. Keep the pointer over the originating entry busy for that
+    // gap, which is the conventional desktop launch acknowledgement.
+    property string openingPath: ""
     property bool desktopSubscriptionEnabled: true
     property var openWith: ({ loading: false, mime: "", defaultId: "", handlers: [] })
     property string clipboardMode: ""
     property var clipboardPaths: []
+
+    property Timer openingFeedbackTimer: Timer {
+        id: openingFeedbackTimer
+        interval: 2500
+        repeat: false
+        onTriggered: {
+            service.openingPath = ""
+            CursorOverride.busy = false
+        }
+    }
+
+    function beginOpening(entry) {
+        if (!entry?.path)
+            return false
+        openingPath = entry.path
+        CursorOverride.busy = true
+        openingFeedbackTimer.restart()
+        return true
+    }
 
     function _result(response, success, failure) {
         if (response?.ok) {
@@ -61,10 +86,20 @@ QtObject {
     }
 
     function openEntry(entry) {
-        if (!entry?.path)
+        if (!beginOpening(entry))
             return
-        _platform(entry.kind === "launcher" ? "file.launch" : "file.open",
-            entry.kind === "launcher" ? { desktopFile: entry.path } : { path: entry.path })
+        const path = entry.path
+        PlatformClient.request(entry.kind === "launcher" ? "file.launch" : "file.open",
+            entry.kind === "launcher" ? { desktopFile: path } : { path: path }, function(response) {
+                if (response?.ok)
+                    return
+                if (service.openingPath === path) {
+                    openingFeedbackTimer.stop()
+                    service.openingPath = ""
+                    CursorOverride.busy = false
+                }
+                service.lastError = response?.error?.message || "无法打开项目"
+            })
     }
 
     function emptyFileMimeFromSuffix(path) {
@@ -98,7 +133,7 @@ QtObject {
     }
 
     function launchWith(entry, desktopId) {
-        if (entry?.path && desktopId)
+        if (desktopId && beginOpening(entry))
             _platform("file.launch", { path: entry.path, desktopId: desktopId })
     }
 

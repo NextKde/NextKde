@@ -27,7 +27,7 @@ Item {
     readonly property url artworkSource: {
         const revision = DockMprisService.metadataRevision
         return player?.trackArtUrl ? player.trackArtUrl
-            : Qt.resolvedUrl("../../assets/defaultCover.png")
+            : BundledIcons.source("default-cover")
     }
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
     readonly property int availablePageCount: Number(hasMusic)

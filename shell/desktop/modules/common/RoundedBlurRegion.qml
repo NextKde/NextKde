@@ -8,14 +8,12 @@ Region {
     id: root
 
     required property Item item
-    // Most callers use a direct child of their window, but control-center
-    // cards can live several Row/Column levels down. Map those cards into the
-    // window's coordinate space before publishing the compositor blur region.
-    // Leaving this null preserves the original direct-child behavior.
-    property Item coordinateSpace: null
+    // Reads the item's x/y as surface coordinates. A panel nested inside a
+    // positioned wrapper reports 0 here, so callers point `item` at that
+    // wrapper (LiquidGlassPanel's blurAnchor) instead of at the panel itself.
     property real radius: Math.min(item.width, item.height) / 2
 
-    readonly property point itemPosition: coordinateSpace ? item.mapToItem(coordinateSpace, 0, 0) : Qt.point(item.x, item.y)
+    readonly property point itemPosition: Qt.point(item.x, item.y)
     readonly property int roundedRadius: Math.max(0, Math.min(Math.round(radius), Math.floor(Math.min(item.width, item.height) / 2)))
 
     // Vertical center of the rounded rectangle.

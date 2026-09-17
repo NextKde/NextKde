@@ -60,6 +60,10 @@ Item {
     readonly property alias visualBar: bar
     // The pill filler, exposed only for diagnostics.
     readonly property alias visualPill: pill
+    // The handle is a second liquid surface. Its panel owns the matching
+    // rounded blur mask and SurfaceShape; DockWindow only combines it with the
+    // main Dock surface when it publishes BackgroundEffect.blurRegion.
+    readonly property alias blurRegion: pill.blurRegion
 
     readonly property bool vertical: handle.position !== "bottom"
     readonly property real visualThickness: 6
@@ -139,14 +143,18 @@ Item {
         scale: targetHover.hovered ? 1.08 : 1.0
         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-        // The liquid-glass Home Indicator. LiquidGlassSurface gives the same
-        // base + specular + wallpaper-ambient material as the dock's panels
-        // (DockMusicPopup/DockWindowPreview) instead of a flat white pill; the
-        // owning window's backdrop blur (barRegion) still frosts what is behind.
-        LiquidGlassSurface {
+        // The liquid-glass Home Indicator is a second LiquidGlassPanel. It
+        // carries its own shaped compositor declaration, which DockWindow
+        // aggregates with the main Dock panel.
+        LiquidGlassPanel {
             id: pill
             anchors.fill: parent
             radius: Math.min(handle.visualThickness, handle.barLength) / 2
+            // Match the Dock's softened capsule profile.
+            cornerExponent: 2.35
+            // The pill fills its positioned crate; anchor the region to that
+            // crate so x/y carry the handle's offset in the surface.
+            blurAnchor: bar
             baseColor: handle.barBaseColor
             surfaceOpacity: 1.0
             ambientPrimary: handle.ambientPrimary

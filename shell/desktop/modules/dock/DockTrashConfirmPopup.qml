@@ -1,100 +1,143 @@
 import QtQuick
-import Quickshell
 import qs.desktop.modules.common
-import "../../../Kos/Ui"
 
-// iPadOS-style destructive confirmation, anchored to the trash icon instead
-// of interrupting the desktop with a conventional modal dialog.
-PopupWindow {
+// System-level destructive confirmation. It shares the same centered,
+// high-readability KWin glass contract as Wi-Fi credentials.
+KosFloatPanel {
     id: popup
 
-    property Item anchorItem: null
-
-    implicitWidth: 296
-    implicitHeight: 222
-    color: "transparent"
-    grabFocus: true
-
-    anchor {
-        item: popup.anchorItem
-        edges: Edges.Top
-        gravity: Edges.Top
-        margins.top: -12
-    }
+    modal: true
+    centerOnScreen: true
+    backdropMode: "dimBlur"
+    backdropTint: "black"
+    backdropOpacity: 0.28
+    dismissOnBackdrop: true
+    contentPadding: 0
+    radius: 24
+    materialTone: "dark"
+    fixedScrimTone: "graphite"
+    fixedScrimOpacity: 0.90
 
     function setDockPopupVisible(shouldOpen) {
-        visible = shouldOpen
+        if (shouldOpen)
+            popup.open()
+        else
+            popup.close()
     }
 
-    LiquidGlassSurface {
-        id: surface
-        anchors.fill: parent
-        radius: 22
-        baseColor: ThemeService.backgroundColor
-        ambientPrimary: Qt.rgba(0.95, 0.22, 0.28, 1)
-        ambientSecondary: WallpaperColorSource.secondary
-        ambientStrength: 0.32
-        materialDepth: 1.35
-        material: "thick"
-        adaptiveDarkScrim: true
+    Item {
+        width: Math.min(340, popup.width - 44)
+        height: 242
 
-        Column {
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
-            spacing: 8
+        Rectangle {
+            width: 58
+            height: 58
+            radius: 16
+            anchors { top: parent.top; topMargin: 24; horizontalCenter: parent.horizontalCenter }
+            color: Qt.rgba(0.92, 0.12, 0.18, 0.20)
+            border.width: 1
+            border.color: Qt.rgba(1, 0.36, 0.40, 0.34)
 
-            Rectangle {
-                width: 40; height: 40; radius: 20
-                anchors.horizontalCenter: parent.horizontalCenter
-                color: Qt.rgba(1.0, 0.24, 0.30, 0.18)
-                Text {
-                    anchors.centerIn: parent
-                    text: ""
-                    color: "#ff5d68"
-                    font { family: "Font Awesome 7 Free"; pixelSize: 18; weight: Font.Black }
-                }
+            BundledIcon {
+                anchors.centerIn: parent
+                name: "user-trash"
+                color: "#ff4d58"
+                size: 28
             }
+        }
+
+        Rectangle {
+            width: 24
+            height: 24
+            radius: 12
+            anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 14 }
+            color: Qt.rgba(1, 1, 1, 0.16)
             Text {
-                width: parent.width
-                text: "清空回收站？"
-                horizontalAlignment: Text.AlignHCenter
-                color: surface.foregroundColor
-                font { pixelSize: 16; weight: Font.Bold }
-            }
-            Text {
-                width: parent.width - 12
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "所有项目将被永久删除，且无法恢复。"
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                color: surface.secondaryForegroundColor
-                font.pixelSize: 11
+                anchors.centerIn: parent
+                text: "?"
+                color: popup.contentSecondaryColor
+                font { pixelSize: 14; weight: Font.Bold }
             }
         }
 
         Column {
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 12 }
+            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 94; leftMargin: 24; rightMargin: 24 }
             spacing: 7
+
+            Text {
+                width: parent.width
+                text: "确定要清空回收站吗？"
+                horizontalAlignment: Text.AlignHCenter
+                color: popup.contentForegroundColor
+                font { pixelSize: 17; weight: Font.Bold }
+            }
+
+            Text {
+                width: parent.width
+                text: "所有项目都将被永久删除。\n此操作无法撤销。"
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: popup.contentSecondaryColor
+                font.pixelSize: 13
+                lineHeight: 1.16
+            }
+        }
+
+        Row {
+            anchors {
+                right: parent.right
+                bottom: parent.bottom
+                left: parent.left
+                leftMargin: 16
+                rightMargin: 16
+                bottomMargin: 16
+            }
+            spacing: 8
+
             Rectangle {
-                width: parent.width; height: 36; radius: 12
-                color: Qt.rgba(1.0, 0.25, 0.31, 0.92)
-                Text { anchors.centerIn: parent; text: "清空回收站"; color: "white"; font { pixelSize: 12; weight: Font.Bold } }
+                width: (parent.width - parent.spacing) / 2
+                height: 34
+                radius: 9
+                color: Qt.rgba(1, 1, 1, 0.16)
+                border.width: 1
+                border.color: popup.contentControlBorder
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "取消"
+                    color: popup.contentForegroundColor
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: DockModelService.setDockPopupVisible(popup, false)
+                }
+            }
+
+            Rectangle {
+                width: (parent.width - parent.spacing) / 2
+                height: 34
+                radius: 9
+                color: DockTrashService.emptying ? "#c76a70" : "#d92f3d"
+
+                Text {
+                    anchors.centerIn: parent
+                    text: DockTrashService.emptying ? "正在清空…" : "清空回收站"
+                    color: "white"
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
+
                 MouseArea {
                     anchors.fill: parent
                     enabled: !DockTrashService.emptying
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
-                        // Call the action at the confirmation control itself.
-                        // This keeps the destructive operation independent of
-                        // popup visibility and menu-dismissal signal timing.
                         DockTrashService.empty()
                         DockModelService.setDockPopupVisible(popup, false)
                     }
                 }
-            }
-            Rectangle {
-                width: parent.width; height: 32; radius: 11
-                color: Qt.rgba(1, 1, 1, 0.10)
-                Text { anchors.centerIn: parent; text: "取消"; color: surface.foregroundColor; font { pixelSize: 12; weight: Font.DemiBold } }
-                MouseArea { anchors.fill: parent; onClicked: DockModelService.setDockPopupVisible(popup, false) }
             }
         }
     }

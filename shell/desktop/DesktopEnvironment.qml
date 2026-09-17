@@ -12,6 +12,7 @@ import qs.desktop.modules.overview
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
+import qs.desktop.modules.weather
 
 Item {
     id: shell
@@ -37,6 +38,10 @@ Item {
     Component.onCompleted: {
         IconThemeReloadService.initialize()
         ShortcutsService.applyToPlatform()
+        // Touch the lock screen feed so it exists on every shell start, not
+        // only when a widget happens to reference WeatherService: the lock
+        // screen cannot read anything the shell does not write out for it.
+        LockScreenFeedService.initialize()
         if (shell.barIntegratedWithDock)
             WorkspaceLayoutService.clearBar(ScreenLifecycle.activeScreen)
     }
@@ -126,6 +131,18 @@ Item {
             return JSON.stringify({
                 globalBlurStrength: AppearanceConfigService.globalBlurStrength,
                 globalLiquidStrength: AppearanceConfigService.globalLiquidStrength,
+                glassStyle: AppearanceConfigService.glassStyle,
+                // Every field of the active style's preset, because the Settings
+                // debug page is the editor for them: a raw kwinrc write there is
+                // reverted by the next effect sync. Preset units; Refraction is
+                // 0..1 and becomes RefractionStrength 0..20 on the way to kwinrc.
+                activePresetRefraction: AppearanceConfigService.activePresetRefraction,
+                activePresetEdgeSize: AppearanceConfigService.activePresetEdgeSize,
+                activePresetNormalPow: AppearanceConfigService.activePresetNormalPow,
+                activePresetRGBFringing: AppearanceConfigService.activePresetRGBFringing,
+                activePresetOffsetStrength: AppearanceConfigService.activePresetOffsetStrength,
+                activePresetSoftness: AppearanceConfigService.activePresetSoftness,
+                activePresetReflection: AppearanceConfigService.activePresetReflection,
                 effectiveDockBlur: AppearanceConfigService.effectiveDockBlur,
                 effectiveDockLiquid: AppearanceConfigService.effectiveDockLiquid,
                 effectiveBarBlur: AppearanceConfigService.effectiveBarBlur,
@@ -143,6 +160,8 @@ Item {
                 // the value as an object and fall back to its previous tint.
                 iconTintColor: IconAppearanceService.tintColor.toString(),
                 shellStyle: AppearanceConfigService.shellStyle,
+                glassFollowsAppearanceMode:
+                    AppearanceConfigService.glassFollowsAppearanceMode,
                 barIntegratedWithDock:
                     AppearanceConfigService.barIntegratedWithDock,
                 barVisibilityMode: AppearanceConfigService.barVisibilityMode,
@@ -160,6 +179,21 @@ Item {
 
         function updateGlobalLiquidStrength(value: real): string {
             AppearanceConfigService.updateGlobalLiquidStrength(value)
+            return snapshot()
+        }
+
+        function updateGlassStyle(style: string): string {
+            AppearanceConfigService.updateGlassStyle(style)
+            return snapshot()
+        }
+
+        function updateGlassPresetParameter(name: string, value: real): string {
+            AppearanceConfigService.updateGlassPresetParameter(name, value)
+            return snapshot()
+        }
+
+        function resetGlassPreset(style: string): string {
+            AppearanceConfigService.resetGlassPreset(style)
             return snapshot()
         }
 
@@ -195,6 +229,11 @@ Item {
 
         function updateBarIntegratedWithDock(enabled: bool): string {
             AppearanceConfigService.updateBarIntegratedWithDock(enabled)
+            return snapshot()
+        }
+
+        function updateGlassFollowsAppearanceMode(enabled: bool): string {
+            AppearanceConfigService.updateGlassFollowsAppearanceMode(enabled)
             return snapshot()
         }
 
@@ -327,7 +366,10 @@ Item {
         function toggle(): void { WindowService.toggleShowDesktop() }
         function show(): void { WindowService.toggleShowDesktop() }
     }
-    NotificationCenter {}
+    NotificationCenter {
+        id: notificationCenter
+    }
+
     DeskCenter {}
     // Do not briefly map the standalone Bar with the default setting and then
     // hide it while its tray delegates are still being constructed. Qt 6.11

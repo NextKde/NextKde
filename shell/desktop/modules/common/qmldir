@@ -1,24 +1,25 @@
 module qs.desktop.modules.common
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
-GlassSlider 1.0 GlassSlider.qml
-GlassToggle 1.0 GlassToggle.qml
 MaterialFlower 1.0 MaterialFlower.qml
 WavyProgress 1.0 WavyProgress.qml
 RoundedBlurRegion 1.0 RoundedBlurRegion.qml
+KosRoundedBlurRegion 1.0 KosRoundedBlurRegion.qml
+SquircleMask 1.0 SquircleMask.qml
 LiquidGlassSurface 1.0 LiquidGlassSurface.qml
-LiquidGlassControl 1.0 LiquidGlassControl.qml
+LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
-EnhancedGlassSurface 1.0 EnhancedGlassSurface.qml
 AppIcon 1.0 AppIcon.qml
-SystemIcon 1.0 SystemIcon.qml
 ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
+KosFloatPanel 1.0 KosFloatPanel.qml
+BundledIcon 1.0 BundledIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
 singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
+singleton BundledIcons 1.0 BundledIcons.qml
 singleton SystemIconResolver 1.0 SystemIconResolver.qml
 singleton TrayAttentionService 1.0 TrayAttentionService.qml
 singleton AppNotificationService 1.0 AppNotificationService.qml

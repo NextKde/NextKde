@@ -44,8 +44,23 @@ function changedFiles() {
 }
 
 function allFiles() {
+    // --others --exclude-standard is not optional: plain `git ls-files` lists
+    // tracked files only, so a file that has just been added -- the one most
+    // likely to be broken -- is silently skipped and the run still reports
+    // success. Measured on 2026-09-14: --all covered 152 files while 153 .qml
+    // files existed, the missing one being the new component under test.
+    //
+    // One consequence worth knowing before trusting the output: with the
+    // untracked files included, --all reports about 18 pre-existing files whose
+    // only "error" is a construct qmllint cannot parse without qmltypes --
+    // `pragma ComponentBehavior: Bound` and typed functions such as
+    // `function show(): void {}`. Both are valid Qt 6 QML, and the same silence
+    // happens whenever the sandbox denies qmllint its system imports (it then
+    // exits non-zero with no output at all). Treat a clean run as weak evidence,
+    // not proof; see the offscreen load test under tests/ for the real check.
     return execFileSync(
-        "git", ["ls-files", "shell", "shared", "apps"], { encoding: "utf8" })
+        "git", ["ls-files", "--cached", "--others", "--exclude-standard",
+            "shell", "shared", "apps"], { encoding: "utf8" })
         .split("\n")
         .filter(f => f.endsWith(".qml"));
 }

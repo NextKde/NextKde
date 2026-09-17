@@ -7,7 +7,6 @@ BarDateStatus 1.0 BarDateStatus.qml
 singleton AppMenuService 1.0 AppMenuService.qml
 GlobalMenu 1.0 GlobalMenu.qml
 BarStatusArea 1.0 BarStatusArea.qml
-DockStatusSvgIcon 1.0 DockStatusSvgIcon.qml
 Battery 1.0 Battery.qml
 CpuTemperature 1.0 CpuTemperature.qml
 NetworkStatus 1.0 NetworkStatus.qml

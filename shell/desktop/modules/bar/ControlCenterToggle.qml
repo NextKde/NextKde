@@ -4,8 +4,8 @@ import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
-// Resolve the familiar dual-slider control-centre mark from the active system
-// icon theme. This name is shared by Breeze, Oxygen, Fluent, Tela and Tahoe.
+// The dual-slider control-centre mark is project-owned artwork (BundledIcons),
+// so it renders identically on every machine regardless of the icon theme.
 Item {
     id: root
     signal panelToggleRequested()
@@ -20,12 +20,17 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
-    DockStatusSvgIcon {
+    BundledIcon {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        source: Qt.resolvedUrl("../../assets/control-center.svg")
-        opacity: root.panelOpen ? 1.0 : 0.88
+        name: "control-center"
+        color: IconAppearanceService.mode === "tint"
+            ? IconAppearanceService.styledSymbolicColor()
+            : ThemeService.foregroundColor
+        opacity: IconAppearanceService.mode !== "color"
+            ? IconAppearanceService.opacity * (root.panelOpen ? 1.0 : 0.88)
+            : (root.panelOpen ? 1.0 : 0.88)
     }
     MouseArea {
         id: hoverArea

@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "KOS"
+            }
+        ],
+        "Category": "Global Themes (Plasma 6)",
+        "Description": "KOS lock screen: an iPadOS-flavoured passcode lock drawn by kscreenlocker",
+        "Description[zh_CN]": "KOS 锁屏：由 kscreenlocker 渲染的 iPadOS 风格密码锁屏",
+        "Id": "org.kos.desktop",
+        "License": "GPL-2.0-or-later",
+        "Name": "KOS Lock Screen",
+        "Name[zh_CN]": "KOS 锁屏",
+        "ServiceTypes": [
+            "Plasma/LookAndFeel"
+        ]
+    },
+    "X-KPackage-Dependencies": [],
+    "X-Plasma-APIVersion": "2"
+}

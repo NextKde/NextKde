@@ -351,6 +351,18 @@ QtObject {
         })
         return true
     }
+    // Locking goes through the session, like every other action here.
+    //
+    // It used to stay in-process, on the argument that `loginctl lock-session`
+    // would put the Plasma greeter on top of the shell's own lock surface and
+    // leave two locks to get past. The shell's lock surface is gone: the skin
+    // under apps/lockscreen is the Plasma shell package now, so the greeter
+    // *is* the lock screen and there is nothing left to stack it on.
+    //
+    // It is also the only locking the compositor knows about. An in-process
+    // overlay is just a window -- a very large, very convincing one, with a
+    // real PAM conversation behind it, that the compositor will happily route
+    // global shortcuts past and drop when the process dies.
     function lockSession() { return _sessionAction("session.lock", "锁屏失败") }
     function suspendSystem() { return _sessionAction("session.suspend", "睡眠操作失败") }
     function hibernateSystem() { return _sessionAction("session.hibernate", "休眠操作失败") }

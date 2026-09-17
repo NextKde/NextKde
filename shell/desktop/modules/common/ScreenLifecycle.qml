@@ -12,6 +12,13 @@ QtObject {
     property var activeScreen: null
     property bool outputAvailable: false
 
+    // Every real output, refreshed on the same schedule as activeScreen.
+    // Surfaces that live on one chosen screen read activeScreen; surfaces that
+    // have to cover the whole session -- the lock is the only one -- build one
+    // window per entry here, so they inherit the settle delay below instead of
+    // racing Qt's placeholder screen with their own screen list.
+    property var usableScreens: []
+
     function _isUsableScreen(screen) {
         return screen !== null
             && screen !== undefined
@@ -36,6 +43,7 @@ QtObject {
             ? screens[1]
             : (screens.length > 0 ? screens[0] : null)
 
+        usableScreens = screens
         outputAvailable = nextScreen !== null
         if (nextScreen !== null)
             activeScreen = nextScreen
@@ -47,6 +55,7 @@ QtObject {
         // can notify bindings that still reach into a QQuickWindow item tree.
         outputAvailable = false
         activeScreen = null
+        usableScreens = []
         settleTimer.restart()
     }
 

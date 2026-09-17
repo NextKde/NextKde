@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // Theme-independent, high-contrast glyphs for the tiny Dock information
 // cards. Unlike a tinted themed icon, Canvas paints literal white pixels.
@@ -11,7 +12,7 @@ Item {
     Image {
         anchors.fill: parent
         visible: root.kind === "clock"
-        source: Qt.resolvedUrl("../../assets/time.svg")
+        source: BundledIcons.source("time")
         fillMode: Image.PreserveAspectFit
         smooth: true
     }
@@ -19,7 +20,7 @@ Item {
     Image {
         anchors.fill: parent
         visible: root.kind === "temperature"
-        source: Qt.resolvedUrl("../../assets/cpu-temperature.svg")
+        source: BundledIcons.source("cpu-temperature")
         fillMode: Image.PreserveAspectFit
         smooth: true
     }

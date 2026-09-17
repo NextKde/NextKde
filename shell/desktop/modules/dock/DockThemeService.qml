@@ -51,17 +51,20 @@ QtObject {
     // ═══════════════════════════════════════════════════
     readonly property color backgroundColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.layer0 : (isDark ? darkBg : lightBg)
-    // Liquid-glass chrome keeps one white-ink hierarchy in both system
-    // themes. The compositor material, rather than a black light-theme icon,
-    // establishes contrast against the live backdrop.
+    // Glass foreground follows the resolved appearance: clean dark ink on a
+    // light surface, and light ink on a dark surface. This role is shared by
+    // launcher labels, symbolic tray icons, Dock glyphs and status content.
     readonly property color foregroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceForeground : darkFg
+        ? AppearanceTokens.colors.surfaceForeground
+        : (isDark ? darkFg : lightFg)
     readonly property color secondaryForegroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceVariantForeground : darkSecondaryFg
+        ? AppearanceTokens.colors.surfaceVariantForeground
+        : (isDark ? darkSecondaryFg : lightSecondaryFg)
     readonly property color tertiaryForegroundColor: AppearanceTokens.isMaterial
         ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
             AppearanceTokens.colors.surfaceVariantForeground.g,
-            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70) : darkTertiaryFg
+            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70)
+        : (isDark ? darkTertiaryFg : lightTertiaryFg)
     readonly property color accentColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.primary : (isDark ? darkAccent : lightAccent)
     readonly property color dividerColor: AppearanceTokens.isMaterial

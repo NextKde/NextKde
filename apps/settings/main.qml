@@ -15,7 +15,7 @@ ApplicationWindow {
     title: "kos设置界面"
     color: theme.background
 
-    property int currentPage: 0
+    property int currentPage: 1
     property string searchText: ""
 
     // Qt updates SystemPalette when the desktop colour scheme changes. We use
@@ -58,6 +58,32 @@ ApplicationWindow {
         readonly property color previewDock: dark ? "#323540" : "#ffffff"
         readonly property color previewIcon: dark ? "#a0a4b0" : "#7c8290"
     }
+
+    // The one ordered list of 材质风格 glass styles. Both the 材质风格 row (which
+    // renders it) and the 玻璃调试 page (which names the preset it edits) read it
+    // here, so a new style is added in this list and nowhere else. The ids must
+    // stay in step with AppearanceConfigService.isValidGlassStyle.
+    QtObject {
+        id: glassStyles
+        readonly property var options: [
+            { id: "liquid", label: "液态玻璃" },
+            { id: "soft", label: "柔光玻璃" },
+            { id: "frosted", label: "磨砂玻璃" }
+        ]
+        function indexOf(rawStyle) {
+            const style = String(rawStyle)
+            for (let i = 0; i < options.length; ++i) {
+                if (options[i].id === style)
+                    return i
+            }
+            return -1
+        }
+        function labelOf(rawStyle) {
+            const index = indexOf(rawStyle)
+            return index >= 0 ? options[index].label : String(rawStyle)
+        }
+    }
+
     readonly property var contentByPage: [
         {
             subtitle: "显示",
@@ -85,6 +111,10 @@ ApplicationWindow {
         },
         {
             subtitle: "接入状态",
+            groups: []
+        },
+        {
+            subtitle: "玻璃调试",
             groups: []
         }
     ]
@@ -1353,10 +1383,18 @@ ApplicationWindow {
         Layout.fillWidth: true
         spacing: 7
 
+        property bool showSystemAppearance: true
+        property bool showGlassMaterial: true
+        property bool showIconAppearance: true
+
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property real blurStrength: 0.42
         property real liquidStrength: 1.0
+        property string glassStyle: "liquid"
+        property string shellStyle: "macos"
+        readonly property bool isMaterialDesign: shellStyle === "material"
+        property bool glassFollowsAppearanceMode: false
         property bool blurDirty: false
         property bool liquidDirty: false
         property string errorText: ""
@@ -1376,6 +1414,11 @@ ApplicationWindow {
                 return
             blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
             liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
+            const styleIndex = glassStyles.indexOf(state.glassStyle)
+            glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
+            shellStyle = String(state.shellStyle || "macos")
+            if (state.glassFollowsAppearanceMode !== undefined)
+                glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
             liquidDirty = false
             errorText = ""
@@ -1463,9 +1506,29 @@ ApplicationWindow {
             errorText = ""
         }
 
+        function setGlassStyle(index) {
+            if (!bridge)
+                return
+            const option = glassStyles.options[index]
+            if (!option)
+                return
+            applyState(bridge.updateGlassStyle(option.id))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveGlassFollowsAppearanceMode(checked) {
+            if (!bridge)
+                return
+            applyState(bridge.updateGlassFollowsAppearanceMode(checked))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
         Component.onCompleted: refresh()
 
         Text {
+            visible: displayPage.showSystemAppearance
             text: "系统外观".toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
@@ -1474,41 +1537,106 @@ ApplicationWindow {
         }
 
         Rectangle {
+            visible: displayPage.showSystemAppearance
             Layout.fillWidth: true
-            implicitHeight: 54
+            // The glass-follows-appearance row is a liquid-glass control and is
+            // absent under Material, so the card collapses to just the
+            // appearance-mode row instead of leaving a gap behind it.
+            implicitHeight: displayPage.isMaterialDesign ? 54 : 109
             radius: 18
             color: theme.card
 
-            RowLayout {
+            Column {
                 anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
 
-                SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
-                Text {
-                    text: "色彩模式"
-                    color: theme.primaryText
-                    font.pixelSize: 15
-                    font.weight: Font.DemiBold
+                Item {
+                    width: parent.width
+                    height: 54
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
+                        Text {
+                            text: "外观模式"
+                            color: theme.primaryText
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            id: systemAppearanceNavBar
+                            model: [
+                                { id: "light", label: "浅色" },
+                                { id: "dark", label: "深色" }
+                            ]
+                            currentIndex: theme.dark ? 1 : 0
+                            onSelectionChanged: function(index) {
+                                displayPage.setSystemAppearance(index)
+                            }
+                        }
+                    }
                 }
-                Item { Layout.fillWidth: true }
-                SettingsNavBar {
-                    id: systemAppearanceNavBar
-                    model: [
-                        { id: "light", label: "明亮" },
-                        { id: "dark", label: "暗色" }
-                    ]
-                    currentIndex: theme.dark ? 1 : 0
-                    onSelectionChanged: function(index) {
-                        displayPage.setSystemAppearance(index)
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    // Hidden together with the row below it: a separator with
+                    // no second row would draw a stray line under the mode
+                    // switch once the card collapses under Material.
+                    visible: !displayPage.isMaterialDesign
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    // Liquid glass only. Material has no liquid blur to follow
+                    // the appearance mode with, so the row is dropped rather
+                    // than shown disabled.
+                    visible: !displayPage.isMaterialDesign
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+
+                        SettingIcon { symbol: "◈"; tint: "#64d2ff" }
+                        Text {
+                            text: "液态玻璃跟随外观模式"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            id: glassFollowsAppearanceModeSwitch
+                            width: 64
+                            height: 25
+                            checked: displayPage.glassFollowsAppearanceMode
+                            accentColor: "#0a84ff"
+                            trackColor: theme.divider
+                            onToggled: function(checked) {
+                                displayPage.saveGlassFollowsAppearanceMode(checked)
+                                // The shared switch owns its checked state after
+                                // a click; put it back to the IPC-confirmed value.
+                                glassFollowsAppearanceModeSwitch.checked =
+                                    displayPage.glassFollowsAppearanceMode
+                            }
+                        }
                     }
                 }
             }
         }
 
         Text {
-            text: "液态玻璃".toUpperCase()
+            visible: displayPage.showGlassMaterial
+            text: (displayPage.isMaterialDesign ? "背景模糊" : "玻璃材质").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -1516,13 +1644,53 @@ ApplicationWindow {
         }
 
         Rectangle {
+            visible: displayPage.showGlassMaterial
             Layout.fillWidth: true
-            implicitHeight: 97
+            implicitHeight: displayPage.isMaterialDesign ? 48 : 145
             radius: 18
             color: theme.card
 
             Column {
                 anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 48
+                    visible: !displayPage.isMaterialDesign
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◇"; tint: "#64d2ff" }
+                        Text {
+                            text: "材质风格"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            Layout.preferredWidth: 264
+                            itemWidthOverride: 88
+                            model: glassStyles.options
+                            currentIndex: Math.max(0,
+                                glassStyles.indexOf(displayPage.glassStyle))
+                            onSelectionChanged: function(index) {
+                                displayPage.setGlassStyle(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    visible: !displayPage.isMaterialDesign
+                    color: theme.separator
+                }
 
                 Item {
                     width: parent.width
@@ -1565,12 +1733,14 @@ ApplicationWindow {
                     anchors.right: parent.right
                     anchors.leftMargin: 53
                     height: 1
+                    visible: !displayPage.isMaterialDesign
                     color: theme.separator
                 }
 
                 Item {
                     width: parent.width
                     height: 48
+                    visible: !displayPage.isMaterialDesign
 
                     RowLayout {
                         anchors.fill: parent
@@ -1607,6 +1777,7 @@ ApplicationWindow {
         }
 
         IconAppearanceSection {
+            visible: displayPage.showIconAppearance
             bridge: displayPage.bridge
         }
 
@@ -1619,6 +1790,253 @@ ApplicationWindow {
             color: "#ff453a"
             font.pixelSize: 12
             wrapMode: Text.Wrap
+        }
+    }
+
+    component GlassDebugPage: ColumnLayout {
+        id: glassDebugPage
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property var controls: []
+        property bool showAdvanced: false
+        property string errorText: ""
+        // Which glass style's preset the 材质 rows edit; the shell owns that preset
+        // and rewrites kwinrc from it on every appearance sync. The label comes
+        // from the same style list the 材质风格 row renders.
+        property string presetStyle: "liquid"
+        readonly property string presetStyleLabel: glassStyles.labelOf(presetStyle)
+        readonly property var visibleControls: controls.filter(function(control) {
+            if (showAdvanced)
+                return true
+            if (control.section === "色彩")
+                return ["Brightness", "Saturation", "Contrast"]
+                    .indexOf(control.key) >= 0
+            if (control.section !== "材质")
+                return false
+            // Keep only controls that visibly contribute to the selected
+            // material. Shader-development controls remain under 高级参数.
+            const keys = presetStyle === "soft"
+                ? ["RefractionStrength", "MaterialSoftness"]
+                : presetStyle === "frosted"
+                    ? ["MaterialSoftness", "MaterialReflectionStrength"]
+                    : ["RefractionStrength", "RefractionEdgeSize",
+                        "RefractionOffsetStrength"]
+            return keys.indexOf(control.key) >= 0
+        })
+        function refresh() {
+            if (!bridge) return
+            controls = bridge.glassDebugSnapshot()
+            presetStyle = bridge.glassPresetStyle()
+            errorText = bridge.lastError || ""
+        }
+        function updateValue(key, value) {
+            if (!bridge || !bridge.updateGlassDebugValue(key, value)) {
+                errorText = bridge ? (bridge.lastError || "写入 KWin 配置失败") : "设置桥不可用"
+                return
+            }
+            errorText = ""
+            // Re-read so the row shows what was actually stored: a preset-backed
+            // value passes through the shell's own clamping, and a style switch
+            // elsewhere may have exchanged the whole set under us.
+            refresh()
+        }
+
+        Component.onCompleted: refresh()
+        onVisibleChanged: {
+            if (visible)
+                refresh()
+        }
+
+        Text {
+            Layout.fillWidth: true
+            text: "「材质」分组就是当前材质风格（" + glassDebugPage.presetStyleLabel
+                + "）的预设值：改动写进该预设、立即生效并在重启后保留，切换材质风格会换用另一套。"
+                + "「折射强度」还会乘以顶部的「液态强度」，实际生效值 = 液态强度 × 该值。"
+                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，仍可能被普通预设覆盖。"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            Text {
+                Layout.fillWidth: true
+                text: glassDebugPage.showAdvanced
+                    ? "正在显示全部 KWin 参数" : "仅显示影响玻璃观感的核心参数"
+                color: theme.secondaryText
+                font.pixelSize: 12
+            }
+            Switch {
+                checked: glassDebugPage.showAdvanced
+                onToggled: glassDebugPage.showAdvanced = checked
+            }
+            Text {
+                text: "高级参数"
+                color: theme.primaryText
+                font.pixelSize: 12
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: debugRows.implicitHeight + 8
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: debugRows
+                width: parent.width
+                Repeater {
+                    model: glassDebugPage.visibleControls
+                    delegate: Item {
+                        required property var modelData
+                        required property int index
+                        // Outer modelData alias: the TintMode Repeater shadows
+                        // `modelData` with its own {value,label} items, so the
+                        // key-based write-back must reach the debug control's
+                        // spec through this name instead.
+                        readonly property var debugItem: modelData
+                        property real currentNumber: Number(modelData.value)
+                        property bool currentBool: modelData.value === true
+                            || String(modelData.value) === "true"
+                        property string currentText: String(modelData.value)
+                        width: debugRows.width
+                        height: 72
+                        Text {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 16
+                            anchors.top: parent.top
+                            anchors.topMargin: 4
+                            text: modelData.section
+                            visible: index === 0 || glassDebugPage.visibleControls[index - 1].section !== modelData.section
+                            color: theme.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                        RowLayout {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 52
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+                            spacing: 12
+                            Text { text: modelData.label; color: theme.primaryText; font.pixelSize: 13 }
+                            Text {
+                                // The rows the shell owns: their value is stored in
+                                // the active material preset, not in kwinrc.
+                                visible: modelData.presetBacked === true
+                                text: "预设"
+                                color: theme.secondaryText
+                                font.pixelSize: 10
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                visible: modelData.type !== "bool" && modelData.type !== "string"
+                                    && modelData.key !== "TintMode"
+                                text: modelData.type === "int" ? String(Math.round(currentNumber))
+                                    : currentNumber.toFixed(2)
+                                color: theme.secondaryText
+                                font.pixelSize: 12
+                                Layout.preferredWidth: 48
+                                horizontalAlignment: Text.AlignRight
+                            }
+                            LiquidControls.LiquidSlider {
+                                Layout.preferredWidth: 220
+                                visible: (modelData.type === "int" || modelData.type === "real")
+                                    && modelData.key !== "TintMode"
+                                value: (currentNumber - Number(modelData.min))
+                                    / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
+                                trackColor: theme.divider
+                                onPreviewChanged: function(position) {
+                                    const raw = Number(modelData.min) + position
+                                        * (Number(modelData.max) - Number(modelData.min))
+                                    currentNumber = modelData.type === "int" ? Math.round(raw)
+                                        : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
+                                }
+                                onCommitRequested: glassDebugPage.updateValue(modelData.key, currentNumber)
+                            }
+                            Row {
+                                visible: modelData.key === "TintMode"
+                                spacing: 6
+                                property var modes: [
+                                    { value: 0, label: "关闭" },
+                                    { value: 1, label: "恒暗" },
+                                    { value: 2, label: "跟随主题" }
+                                ]
+                                Repeater {
+                                    model: parent.modes
+                                    Rectangle {
+                                        required property var modelData
+                                        width: 74
+                                        height: 30
+                                        radius: 15
+                                        color: modelData.value === Math.round(currentNumber)
+                                            ? (theme.dark ? "#2a6fb0" : "#0066cc")
+                                            : theme.divider
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            color: modelData.value === Math.round(currentNumber)
+                                                ? "#ffffff" : theme.primaryText
+                                            font.pixelSize: 12
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                currentNumber = modelData.value
+                                                glassDebugPage.updateValue(debugItem.key, modelData.value)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Switch {
+                                visible: modelData.type === "bool"
+                                checked: currentBool
+                                onToggled: {
+                                    currentBool = checked
+                                    glassDebugPage.updateValue(modelData.key, checked)
+                                }
+                            }
+                            TextField {
+                                visible: modelData.type === "string"
+                                Layout.preferredWidth: 220
+                                text: currentText
+                                color: theme.primaryText
+                                onEditingFinished: {
+                                    currentText = text
+                                    glassDebugPage.updateValue(modelData.key, text)
+                                }
+                            }
+                        }
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 53
+                            anchors.bottom: parent.bottom
+                            height: 1
+                            color: theme.separator
+                            visible: index < glassDebugPage.visibleControls.length - 1
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            visible: glassDebugPage.errorText.length > 0
+            text: glassDebugPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
         }
     }
 
@@ -1830,20 +2248,16 @@ ApplicationWindow {
         property string errorText: ""
         readonly property var styles: [
             {
-                id: "windows12",
-                name: "Windows 12",
-                description: "居中任务栏、轻亚克力表面与紧凑圆角组件",
-                accent: "#3b82f6"
-            },
-            {
                 id: "macos",
                 name: "macOS",
+                feature: "LIQUID GLASS",
                 description: "悬浮 Dock、通透顶部栏与更柔和的大圆角组件",
                 accent: "#0a84ff"
             },
             {
                 id: "material",
                 name: "Material Design",
+                feature: "MONET TONAL",
                 description: "Tonal 表面、状态指示和标准化层级与动效",
                 accent: "#6750a4"
             }
@@ -1882,7 +2296,10 @@ ApplicationWindow {
                 errorText = bridge ? "未知的主题形态" : "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.updateShellStyle(style))
+            const state = bridge.updateShellStyle(style)
+            applyState(state)
+            themeMaterialSettings.applyState(state)
+            globalAppearanceSettings.applyState(state)
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1906,155 +2323,288 @@ ApplicationWindow {
             Layout.leftMargin: 13
         }
 
-        Repeater {
-            model: themePage.styles
+        Rectangle {
+            Layout.fillWidth: true
+            // The card is as tall as its contents: the style gallery, the
+            // divider, and the embedded appearance controls. Under Material
+            // that controls block is much shorter, so a fixed 550 would leave
+            // a dead band below it.
+            implicitHeight: 16 + styleGallery.height + 13 + 1 + 10
+                + themeMaterialSettings.implicitHeight + 16
+            Layout.preferredHeight: implicitHeight
+            radius: 26
+            color: theme.dark ? "#000000" : "#ffffff"
+            border.width: 1
+            border.color: theme.floatingBorder
+            clip: true
 
-            delegate: Rectangle {
-                id: styleCard
-                required property var modelData
+            Flickable {
+                id: styleGallery
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.margins: 16
+                height: 310
+                contentWidth: styleGalleryRow.width
+                contentHeight: styleGalleryRow.height
+                flickableDirection: Flickable.HorizontalFlick
+                boundsBehavior: Flickable.StopAtBounds
+                clip: true
 
-                Layout.fillWidth: true
-                implicitHeight: 148
-                radius: 22
-                color: theme.card
-                border.width: themePage.shellStyle === modelData.id ? 2 : 1
-                border.color: themePage.shellStyle === modelData.id
-                    ? modelData.accent : theme.floatingBorder
+                Row {
+                    id: styleGalleryRow
+                    width: childrenRect.width
+                    height: 310
+                    spacing: 14
 
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 16
+                    Repeater {
+                        model: themePage.styles
 
-                    Rectangle {
-                        Layout.preferredWidth: 156
-                        Layout.fillHeight: true
-                        radius: 14
-                        color: theme.previewPane
-                        clip: true
+                        delegate: Rectangle {
+                            id: styleCard
+                            required property var modelData
 
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            height: 14
-                            color: theme.previewBar
-                            visible: styleCard.modelData.id !== "windows12"
+                            // Only implemented styles are shown for now, so
+                            // both cards should be complete rather than look
+                            // accidentally clipped.
+                            width: Math.max(300,
+                                (styleGallery.width - styleGalleryRow.spacing) / 2)
+                            height: styleGalleryRow.height
+                            radius: 22
+                            color: theme.dark
+                                ? (themePage.shellStyle === modelData.id
+                                    ? "#34343a" : "#262629")
+                                : Qt.rgba(0, 0, 0, themePage.shellStyle === modelData.id ? 0.085 : 0.045)
+                            border.width: themePage.shellStyle === modelData.id ? 2 : 1
+                            border.color: themePage.shellStyle === modelData.id
+                                ? modelData.accent : theme.floatingBorder
 
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 14
-                                height: 4
-                                radius: 2
-                                color: styleCard.modelData.accent
-                            }
-                        }
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 13
+                                spacing: 10
 
-                        Rectangle {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: styleCard.modelData.id === "macos" ? 8 : 0
-                            width: styleCard.modelData.id === "windows12"
-                                ? parent.width : (styleCard.modelData.id === "macos" ? 112 : 92)
-                            height: styleCard.modelData.id === "windows12" ? 18 : 16
-                            radius: styleCard.modelData.id === "windows12"
-                                ? 0 : (styleCard.modelData.id === "macos" ? 8 : 4)
-                            color: styleCard.modelData.id === "windows12"
-                                ? theme.previewTaskbar : theme.previewDock
+                                Rectangle {
+                                    id: stylePreview
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 166
+                                    radius: 16
+                                    clip: true
+                                    gradient: Gradient {
+                                        orientation: Gradient.Horizontal
+                                        GradientStop {
+                                            position: 0
+                                            color: styleCard.modelData.id === "material"
+                                                ? "#d8c8f0" : (styleCard.modelData.id === "macos" ? "#789cc6" : "#b9d8ef")
+                                        }
+                                        GradientStop {
+                                            position: 1
+                                            color: styleCard.modelData.id === "material"
+                                                ? "#a8d5c6" : (styleCard.modelData.id === "macos" ? "#b786bd" : "#9ba9c3")
+                                        }
+                                    }
 
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 4
-
-                                Repeater {
-                                    model: 4
                                     Rectangle {
-                                        width: 8
-                                        height: 8
-                                        radius: styleCard.modelData.id === "macos" ? 4 : 2
-                                        color: index === 0
-                                            ? styleCard.modelData.accent : theme.previewIcon
+                                        x: 18; y: 32
+                                        width: parent.width * 0.46
+                                        height: 76
+                                        radius: styleCard.modelData.id === "material" ? 22 : 10
+                                        color: styleCard.modelData.id === "material"
+                                            ? Qt.rgba(0.96, 0.91, 1, 0.70) : Qt.rgba(1, 1, 1, 0.44)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.48)
+
+                                        Rectangle {
+                                            x: 12; y: 13; width: parent.width * 0.58; height: 7
+                                            radius: 4; color: Qt.rgba(0.18, 0.20, 0.28, 0.35)
+                                        }
+                                        Rectangle {
+                                            x: 12; y: 28; width: parent.width * 0.76; height: 5
+                                            radius: 3; color: Qt.rgba(0.18, 0.20, 0.28, 0.18)
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.top: parent.top
+                                        height: 22
+                                        color: Qt.rgba(1, 1, 1,
+                                            styleCard.modelData.id === "macos" ? 0.34 : 0.16)
+                                        visible: styleCard.modelData.id !== "windows12"
+
+                                        Row {
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 9
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            spacing: 4
+                                            Repeater {
+                                                model: 3
+                                                Rectangle {
+                                                    width: 6; height: 6; radius: 3
+                                                    color: index === 0 ? "#ff665d"
+                                                        : (index === 1 ? "#ffbd45" : "#28c941")
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 18
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: 45
+                                        width: 42; height: 42; radius: 21
+                                        visible: styleCard.modelData.id === "material"
+                                        color: "#72558f"
+                                        Text { anchors.centerIn: parent; text: "+"; color: "white"; font.pixelSize: 25 }
+                                    }
+
+                                    Rectangle {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: styleCard.modelData.id === "macos" ? 10 : 0
+                                        width: styleCard.modelData.id === "windows12"
+                                            ? parent.width : (styleCard.modelData.id === "macos" ? 206 : 222)
+                                        height: styleCard.modelData.id === "windows12" ? 34 : 42
+                                        radius: styleCard.modelData.id === "windows12"
+                                            ? 0 : (styleCard.modelData.id === "macos" ? 16 : 21)
+                                        color: styleCard.modelData.id === "material"
+                                            ? Qt.rgba(0.92, 0.84, 1, 0.88)
+                                            : Qt.rgba(0.92, 0.96, 1, styleCard.modelData.id === "macos" ? 0.47 : 0.76)
+                                        border.width: styleCard.modelData.id === "macos" ? 1 : 0
+                                        border.color: Qt.rgba(1, 1, 1, 0.80)
+
+                                        Rectangle {
+                                            visible: styleCard.modelData.id === "macos"
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 2
+                                            height: 8
+                                            radius: 7
+                                            color: Qt.rgba(1, 1, 1, 0.32)
+                                        }
+
+                                        Row {
+                                            anchors.centerIn: parent
+                                            spacing: styleCard.modelData.id === "material" ? 21 : 9
+                                            Repeater {
+                                                model: styleCard.modelData.id === "macos" ? 6 : 5
+                                                Rectangle {
+                                                    width: styleCard.modelData.id === "macos" ? 24 : 16
+                                                    height: width
+                                                    radius: styleCard.modelData.id === "macos" ? 7 : width / 2
+                                                    color: index === 0 ? styleCard.modelData.accent
+                                                        : (index % 3 === 1 ? "#f49e5c"
+                                                        : (index % 3 === 2 ? "#70b98c" : "#8b83ca"))
+                                                    border.width: styleCard.modelData.id === "macos" ? 1 : 0
+                                                    border.color: Qt.rgba(1, 1, 1, 0.55)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                    }
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 6
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
 
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: styleCard.modelData.feature
+                                            color: styleCard.modelData.accent
+                                            font.pixelSize: 10
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 0.8
+                                        }
+                                        Text {
+                                            text: styleCard.modelData.name
+                                            color: theme.primaryText
+                                            font.pixelSize: 18
+                                            font.weight: Font.Bold
+                                        }
+                                    }
 
-                            Text {
-                                text: styleCard.modelData.name
-                                color: theme.primaryText
-                                font.pixelSize: 17
-                                font.weight: Font.Bold
-                            }
-
-                            Rectangle {
-                                visible: themePage.shellStyle === styleCard.modelData.id
-                                Layout.preferredWidth: 46
-                                Layout.preferredHeight: 20
-                                radius: 10
-                                color: Qt.rgba(0.04, 0.52, 1, 0.16)
+                                    Rectangle {
+                                        visible: themePage.shellStyle === styleCard.modelData.id
+                                        Layout.preferredWidth: 46
+                                        Layout.preferredHeight: 22
+                                        radius: 11
+                                        color: Qt.rgba(0.04, 0.52, 1, 0.16)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "当前"
+                                            color: styleCard.modelData.accent
+                                            font.pixelSize: 11
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+                                }
 
                                 Text {
-                                    anchors.centerIn: parent
-                                    text: "当前"
-                                    color: styleCard.modelData.accent
-                                    font.pixelSize: 11
-                                    font.weight: Font.DemiBold
+                                    Layout.fillWidth: true
+                                    text: styleCard.modelData.description
+                                    color: theme.secondaryText
+                                    font.pixelSize: 12
+                                    wrapMode: Text.Wrap
                                 }
                             }
 
-                            Item { Layout.fillWidth: true }
-                        }
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: styleCard.modelData.description
-                            color: theme.secondaryText
-                            font.pixelSize: 13
-                            wrapMode: Text.Wrap
-                        }
-
-                        Item { Layout.fillHeight: true }
-
-                        Text {
-                            text: themePage.shellStyle === styleCard.modelData.id
-                                ? "已应用到桌面" : "点击切换此形态"
-                            color: themePage.shellStyle === styleCard.modelData.id
-                                ? styleCard.modelData.accent : theme.tertiaryText
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: themePage.selectStyle(styleCard.modelData.id)
+                            }
                         }
                     }
                 }
 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: themePage.selectStyle(styleCard.modelData.id)
-                }
+            }
+
+            Rectangle {
+                id: themeMaterialDivider
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: styleGallery.bottom
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
+                anchors.topMargin: 13
+                height: 1
+                color: theme.dark ? Qt.rgba(1, 1, 1, 0.18)
+                                  : Qt.rgba(0, 0, 0, 0.12)
+            }
+
+            DisplaySettingsPage {
+                id: themeMaterialSettings
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: themeMaterialDivider.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 10
+                showSystemAppearance: false
+                showGlassMaterial: true
+                showIconAppearance: false
             }
         }
 
-        Text {
+        Item {
             Layout.fillWidth: true
-            Layout.leftMargin: 13
-            Layout.rightMargin: 13
-            text: "选择界面形态会立即切换桌面组件的圆角、间距与表面质感规范。"
-            color: theme.secondaryText
-            font.pixelSize: 12
-            wrapMode: Text.Wrap
+            Layout.preferredHeight: 12
+        }
+
+        // Appearance controls belong to the selected theme. Keep the global
+        // blur control available for every shell style, including Material.
+        DisplaySettingsPage {
+            id: globalAppearanceSettings
+            Layout.fillWidth: true
+            showSystemAppearance: true
+            showGlassMaterial: false
+            showIconAppearance: true
         }
 
         Text {
@@ -2098,10 +2648,6 @@ ApplicationWindow {
                 SettingsNavBar {
                     Layout.preferredWidth: 148
                     Layout.preferredHeight: 30
-                    // LiquidNavBar delegates expect { id, label, icon }.
-                    // A string model leaves modelData.label undefined, so the
-                    // previous control had no visible text despite rendering
-                    // its track and thumb.
                     size: "tiny"
                     barHeight: 30
                     itemWidthOverride: 74
@@ -3283,15 +3829,6 @@ ApplicationWindow {
 
                 SidebarEntry {
                     Layout.fillWidth: true
-                    pageIndex: 0
-                    label: "显示"
-                    navSymbol: "▱"
-                    navTint: "#34c759"
-                }
-
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
                     pageIndex: 1
                     label: "主题"
                     navSymbol: "◈"
@@ -3343,6 +3880,15 @@ ApplicationWindow {
                     navTint: "#30d158"
                 }
 
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 7
+                    label: "玻璃调试"
+                    navSymbol: "⚙"
+                    navTint: "#64d2ff"
+                }
+
                 Item {
                     Layout.fillHeight: true
                 }
@@ -3385,7 +3931,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 6)
+                        model: (window.currentPage >= 0 && window.currentPage <= 7)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -3428,6 +3974,10 @@ ApplicationWindow {
                         visible: window.currentPage === 6
                     }
 
+                    GlassDebugPage {
+                        visible: window.currentPage === 7
+                    }
+
                     DockSettingsPage {
                         visible: window.currentPage === 3
                     }
@@ -3440,9 +3990,6 @@ ApplicationWindow {
                         visible: window.currentPage === 1
                     }
 
-                    DisplaySettingsPage {
-                        visible: window.currentPage === 0
-                    }
                 }
             }
         }

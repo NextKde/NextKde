@@ -12,7 +12,11 @@ const DEFAULT_PROPORTIONS = {
     hpad:       0.4,    // horizontal padding / iconSize (44→18, 24→10)
     spacing:    0.09,   // inter-icon gap / iconSize     (44→4,  24→2)
     divmargin:  0.20,   // divider side margin / iconSize(44→9,  24→5)
-    radius:     0.45,   // pill radius / dockHeight
+    // Mirror only: the live pill radius is DockContainer.pillRadius, which
+    // multiplies AppearanceTokens.dock.radiusRatio by the solved dock height.
+    // The returned `pillRadius` is not read by any consumer; this entry is
+    // kept in step so a stale number cannot be mistaken for the real one.
+    radius:     0.50,   // pill radius / dockHeight
     dividerWidth: 1,    // the ONLY fixed pixel value — a 1px hairline
 }
 const INFO_UNITS = 4        // shared music/weather slot width ≡ 4 icon squares

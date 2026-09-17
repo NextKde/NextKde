@@ -68,34 +68,6 @@ PanelWindow {
     readonly property color launcherForegroundColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.surfaceForeground : (isFullscreenMode
             ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor)
-    // KWin sees the exact live backdrop; QML cannot. The wallpaper palette is
-    // nevertheless a useful stable cue for the Launchpad's large scrim. Keep
-    // ordinary imagery translucent, and only protect against the low-contrast
-    // ends of the range (near white or black).
-    readonly property real wallpaperLuminance: WallpaperColorSource.primary.r * 0.2126
-        + WallpaperColorSource.primary.g * 0.7152
-        + WallpaperColorSource.primary.b * 0.0722
-    readonly property real launcherBackdropDistance: Math.min(
-        wallpaperLuminance, 1.0 - wallpaperLuminance)
-    // 1 at the two extremes, easing down to 0 for normal mid-tone imagery.
-    readonly property real launcherBackdropProtection: {
-        const t = Math.min(1.0, Math.max(0.0,
-            (launcherBackdropDistance - 0.08) / 0.30))
-        return 1.0 - t * t * (3.0 - 2.0 * t)
-    }
-    readonly property color launcherScrimColor: {
-        const lightMix = Math.min(1.0, Math.max(0.0,
-            (wallpaperLuminance - 0.30) / 0.40))
-        // A Launchpad is a large dark material in every environment. Bright
-        // backgrounds need more of this tint, but dark backgrounds must never
-        // flip to a white veil: that reads as grey plastic rather than glass.
-        const baseAlpha = 0.13 + 0.08 * lightMix
-        const extremeAlpha = (0.09 + 0.12 * lightMix)
-            * launcherBackdropProtection
-        const modeScale = isFullscreenMode ? 1.0 : 0.72
-        return Qt.rgba(0.018, 0.028, 0.052,
-            (baseAlpha + extremeAlpha) * modeScale)
-    }
     onFilteredApplicationsChanged: {
         root.cancelFullscreenPageTransition();
         _clampFullscreenPage();
@@ -377,9 +349,9 @@ PanelWindow {
         appContextMenu.application = app
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
-        appContextMenu.addItem("", "打开应用", "open")
-        appContextMenu.addItem("", "编辑应用", "edit")
-        appContextMenu.addItem("", "固定到 Dock", "pin")
+        appContextMenu.addItem("application-open", "打开应用", "open")
+        appContextMenu.addItem("edit-rename", "编辑应用", "edit")
+        appContextMenu.addItem("pin", "固定到 Dock", "pin")
         appContextMenu.show()
     }
 
@@ -1147,29 +1119,24 @@ PanelWindow {
                     : (AppearanceTokens.isMaterial
                         ? AppearanceTokens.shape.extraLarge : 28)
 
-                // KWin owns the launcher card's actual blur and refraction
-                // through BackgroundEffect below. Keeping this client-side
-                // layer transparent avoids a duplicate grey QML sheen.
-                Rectangle {
+                // The shared panel owns the rounded blur mask and exact corner
+                // declaration. BackgroundEffect below publishes that region;
+                // KWin alone renders the blur, refraction and highlights.
+                LiquidGlassPanel {
+                    id: launcherSurface
                     anchors.fill: parent
                     radius: background.radius
-                    // A launcher is a text-dense regular material. The scrim
-                    // stays light through ordinary imagery, then gradually
-                    // increases only near pure white or black backdrops.
-                    color: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.colors.layer1
-                        : root.launcherScrimColor
-                    opacity: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.glass.materialOpacity : 1
-                    Behavior on color {
-                        ColorAnimation { duration: 260; easing.type: Easing.InOutCubic }
-                    }
-                    border.width: AppearanceTokens.isMaterial
-                        ? 0 : (root.isFullscreenMode ? 0 : 1)
-                    border.color: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.colors.outline : (root.isDark
-                            ? Qt.rgba(1, 1, 1, 0.16)
-                            : Qt.rgba(1, 1, 1, 0.42))
+                    // The card is anchored centre/bottom inside the full-output
+                    // surface, so the panel's own x/y read 0. Anchor the region
+                    // to the clip that carries the card's real offset (the old
+                    // working declaration read this same container's x/y).
+                    blurAnchor: launcherRevealClip
+                    // Use the exact same surface profile as the Dock. The
+                    // launcher contributes geometry only; it has no private
+                    // material adjustment.
+                    cornerExponent: 2.35
+                    scrimEnabled: AppearanceTokens.surface.usesBackdrop
+                    scrimLevel: "balanced"
                 }
 
                 // This foreground layer deliberately excludes the backdrop
@@ -1317,11 +1284,10 @@ PanelWindow {
                                 height: 35
 
                                 placeholderText: "搜索应用"
-                                liquidFinish: !AppearanceTokens.isMaterial
-                                liquidStrength: AppearanceConfigService.effectiveLauncherLiquid
-                                ambientPrimary: WallpaperColorSource.primary
-                                ambientSecondary: WallpaperColorSource.secondary
-                                ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
+                                // This is an input affordance, not a second
+                                // liquid surface. KWin renders the launcher
+                                // material behind it; the field keeps only its
+                                // ordinary focus and contrast treatment.
                                 glassColor: AppearanceTokens.isMaterial
                                     ? AppearanceTokens.colors.layer4
                                     : Qt.rgba(1, 1, 1, 0.10)
@@ -2077,7 +2043,10 @@ PanelWindow {
                                         + dotActiveShare * (fullscreenPageDots.activeDotSize - fullscreenPageDots.dotSize)
                                     height: width
                                     radius: width / 2
-                                    color: Qt.rgba(1, 1, 1, 0.38 + 0.50 * dotActiveShare)
+                                    color: Qt.rgba(ThemeService.foregroundColor.r,
+                                        ThemeService.foregroundColor.g,
+                                        ThemeService.foregroundColor.b,
+                                        0.38 + 0.50 * dotActiveShare)
                                     MouseArea {
                                         anchors.fill: parent
                                         anchors.margins: -5
@@ -2241,7 +2210,9 @@ PanelWindow {
                                         top: folderNameInput.bottom
                                         topMargin: 3
                                     }
-                                    color: Qt.rgba(1, 1, 1, 0.68)
+                                    color: Qt.rgba(ThemeService.foregroundColor.r,
+                                        ThemeService.foregroundColor.g,
+                                        ThemeService.foregroundColor.b, 0.68)
                                 }
 
                                 Text {
@@ -2857,19 +2828,13 @@ PanelWindow {
         }
     }
 
-    // BackgroundEffect is a Wayland window attachment, so it belongs to this
-    // PanelWindow root. The blur region is fixed at full card size. It never
-    // scales or fades — only the foreground content animates on open.
-    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible
-        && (root.isFullscreenMode
-            || AppearanceConfigService.effectiveLauncherBlur > 0.005
-            || AppearanceConfigService.effectiveLauncherLiquid > 0.005))
-        ? launcherBlurRegion
+    // BackgroundEffect is a window attachment. Match the Dock's publishing
+    // policy exactly: no full-screen exception and no launcher-specific
+    // material controls. The shared glass configuration decides whether KWin
+    // renders blur or refraction for this declared surface.
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.visible
+        && (AppearanceConfigService.effectiveDockBlur > 0.005
+            || AppearanceConfigService.effectiveDockLiquid > 0.005))
+        ? launcherSurface.blurRegion
         : null
-
-    RoundedBlurRegion {
-        id: launcherBlurRegion
-        item: launcherRevealClip
-        radius: background.radius
-    }
 }

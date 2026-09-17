@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Service
+Version=1.0
+X-SDDM-ServiceTypes=Theme
+Name=KOS
+Comment=KOS sign-in screen
+X-KDE-PluginInfo-Name=kos
+X-KDE-PluginInfo-Author=KOS
+X-KDE-PluginInfo-License=GPL-2.0-or-later
+X-KDE-PluginInfo-Version=1.0

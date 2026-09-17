@@ -11,6 +11,7 @@ Scope {
     id: root
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
+
     NotificationServer {
         id: server
         bodySupported: true

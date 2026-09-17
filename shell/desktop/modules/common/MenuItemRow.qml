@@ -4,6 +4,9 @@ import qs.desktop.modules.dock
 // A row in a ContextMenu: icon + label, with optional checkmark (checkable),
 // submenu chevron, and a thin separator variant. Hover only changes the row's
 // visual highlight; navigation is owned by ContextMenu's click handler.
+//
+// `icon` 是 BundledIcons 的登记名（不是字形、不是路径，也不是主题图标名）。
+// 图案与数据都在那一张表里，渲染不查系统图标主题、不依赖任何字体。
 Item {
     id: row
 
@@ -16,6 +19,8 @@ Item {
     property bool checked: false
     property bool separator: false
     signal clicked()
+
+    readonly property bool _hasIcon: BundledIcons.has(row.icon)
 
     // Bind directly to MouseArea.containsMouse instead of maintaining a
     // transient flag.  Delegates are replaced when entering a submenu, and a
@@ -59,19 +64,24 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        spacing: row.icon.length > 0 ? 9 : 0
+        spacing: row._hasIcon ? 9 : 0
         visible: !row.separator
 
-        Text {
-            visible: row.icon.length > 0
+        // Shell-owned artwork, resolved through the single BundledIcons table.
+        // White-stroked SVG used as an alpha mask and projected onto the menu
+        // foreground colour, so the mark never depends on an installed icon
+        // theme or glyph font.
+        BundledIcon {
+            visible: row._hasIcon
             width: visible ? 18 : 0
-            text: row.icon
-            font.family: "Font Awesome 7 Free"
-            font.pixelSize: 13
+            height: 18
+            size: 18
+            name: row.icon
             color: row.foregroundColor
-            opacity: 0.85
             anchors.verticalCenter: parent.verticalCenter
+            opacity: row.itemEnabled ? 0.9 : 0.5
         }
+
         Text {
             text: row.label
             elide: Text.ElideRight
@@ -82,23 +92,28 @@ Item {
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(implicitWidth, (row.width - 24) - (row.icon.length > 0 ? 27 : 0) - ((row.checked || row.hasSubmenu) ? 24 : 0))
+            width: Math.min(implicitWidth, (row.width - 24) - (row._hasIcon ? 27 : 0) - ((row.checked || row.hasSubmenu) ? 24 : 0))
         }
     }
 
-    // Trailing checkmark or submenu chevron.
-    Text {
+    // Trailing checkmark or submenu chevron — bundled artwork, same contract
+    // as the leading icon (no glyph font, no icon theme).
+    Item {
         anchors.right: parent.right
         anchors.rightMargin: 10
         anchors.verticalCenter: parent.verticalCenter
+        width: 16
+        height: 16
         visible: !row.separator && (row.checked || row.hasSubmenu)
-        text: row.checked ? "✓" : "›"
-        color: row.checked ? row.foregroundColor
-            : Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
-                row.foregroundColor.b, 0.55)
-        font.pixelSize: row.checked ? 12 : 16
-        font.weight: Font.Bold
-        renderType: Text.NativeRendering
+
+        BundledIcon {
+            anchors.centerIn: parent
+            size: row.checked ? 14 : 16
+            name: row.checked ? "check" : "submenu"
+            color: row.checked ? row.foregroundColor
+                : Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
+                    row.foregroundColor.b, 0.55)
+        }
     }
 
     MouseArea {

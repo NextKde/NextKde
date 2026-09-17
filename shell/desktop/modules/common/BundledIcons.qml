@@ -1,0 +1,232 @@
+pragma Singleton
+
+import QtQuick
+
+// Shell 自带图标总目录 —— 菜单、面板、锁屏、桌面组件等处图标的唯一数据源。
+//
+// 契约（不要绕过）：
+//   * 任何登记在本文件里的图标，数据都内联在表里。渲染时不查系统图标主题、
+//     不依赖任何字体安装、不读任何外部文件，因此同一份 shell 在任何机器上
+//     都是同一套图案。不存在"装了某图标包 / 某字体才看得到"的情况。
+//   * 新增图标 = 往下面的表里加一行；调用方只写图标名，不写路径、不写码位。
+//   * 矢量图标存 SVG 源码（白色描边，由消费方当 alpha 遮罩着色）；位图存
+//     base64。两者经 source() 统一成 data URI，Image 一视同仁。
+//   * 例外（刻意不走本表）：
+//       - Dock 的启动器 logo：原作者位图在 shell/desktop/assets/applauncher.svg，
+//         内联降采样版在 Dock 尺寸下会糊，故直接读文件。
+//       - Dock 的回收站图标：跟随系统图标主题（SystemIconResolver）。
+//       - 应用图标（.desktop 自带）与 systray 图标由各应用提供，物理上无法统一。
+//
+// 语义角色（role）也在这里：roleName(role, state) 把 "lock" / "powerOff"
+// 这类角色翻成图标名——调用方拿到名字后交给 BundledIcon 渲染即可。以前这套
+// 映射在外面查 freedesktop 候选名 + 系统主题，现在只做查表，返回的都是上表里
+// 登记的自带图标。
+//
+// 用法：
+//     Image { source: BundledIcons.source("window-close") }
+//     BundledIcon { name: BundledIcons.roleName("lock") }
+
+QtObject {
+    id: registry
+
+    readonly property var svg: ({
+
+        // ── 窗口控制 ──
+        "window-close": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></g></svg>',
+        "window-minimize": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M7 16.5h10"/></g></svg>',
+        "window-restore": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="14" height="12" rx="2.5"/><path d="M7.5 7V5.5A2.5 2.5 0 0 1 10 3h8.5A2.5 2.5 0 0 1 21 5.5V14a2.5 2.5 0 0 1-2.5 2.5H17"/></g></svg>',
+        "window-new": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><path d="M12 8.5v7M8.5 12h7"/></g></svg>',
+        "window": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9.2h18"/></g></svg>',
+
+        // ── 动作 ──
+        "back": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.6 12H4.4"/><path d="M11.2 5.2 4.4 12l6.8 6.8"/></g></svg>',
+        "check": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 12.6 9.6 17.4 19.2 7.8"/></g></svg>',
+        "submenu": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 4.8 16.4 12l-7.2 7.2"/></g></svg>',
+        "view-refresh": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></g></svg>',
+        "reset-layout": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9c-2.52 0-4.93 1-6.74 2.74L3 8"/><path d="M3 3v5h5"/></g></svg>',
+        "screenshot": '<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><path fill="#ffffff" d="M687.869 900.828c-53.701 0-97.383-43.682-97.383-97.383s43.682-97.383 97.383-97.383 97.383 43.682 97.383 97.383-43.682 97.383-97.383 97.383zm0-133.242c-19.775 0-35.859 16.084-35.859 35.859s16.084 35.859 35.859 35.859 35.859-16.084 35.859-35.859-16.084-35.859-35.859-35.859zM337.01 900.828c-53.701 0-97.383-43.682-97.383-97.383s43.682-97.383 97.383-97.383 97.383 43.682 97.383 97.383-43.682 97.383-97.383 97.383zm0-133.242c-19.775 0-35.859 16.084-35.859 35.859s16.084 35.859 35.859 35.859 35.859-16.084 35.859-35.859-16.084-35.859-35.859-35.859z"/><path fill="#ffffff" d="M617.732 771.98c-8.965 0-18.018-3.428-24.873-10.283l-80.42-80.42-80.42 80.42c-13.711 13.711-35.947 13.711-49.746 0s-13.711-35.947 0-49.746l80.42-80.42-85.43-85.43c-13.711-13.711-13.711-35.947 0-49.746 13.711-13.711 35.947-13.711 49.746 0l85.43 85.43 85.43-85.43c13.711-13.711 35.947-13.711 49.746 0 13.711 13.711 13.711 35.947 0 49.746l-85.43 85.43 80.42 80.42c13.711 13.711 13.711 35.947 0 49.746-6.943 6.855-15.908 10.283-24.873 10.283zm161.279-89.824h-80.508c-19.424 0-35.156-15.732-35.156-35.156s15.732-35.156 35.156-35.156h80.508c14.502 0 26.367-11.865 26.367-26.367V276.453c0-14.502-11.865-26.367-26.367-26.367H244.109c-14.502 0-26.367 11.865-26.367 26.367v309.023c0 14.502 11.865 26.367 26.367 26.367h81.563c19.424 0 35.156 15.732 35.156 35.156s-15.732 35.156-35.156 35.156h-81.563c-53.35 0-96.68-43.33-96.68-96.68V276.453c0-53.35 43.33-96.68 96.68-96.68h534.902c53.35 0 96.68 43.33 96.68 96.68v309.023c0 53.262-43.418 96.68-96.68 96.68z"/></svg>',
+        "application-open": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 6.8 17.8 12 9.2 17.2Z"/></g></svg>',
+        "open-with": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3.5h6.5V10"/><path d="M20.5 3.5 12 12"/><path d="M18 14.5v4A2.5 2.5 0 0 1 15.5 21h-9A2.5 2.5 0 0 1 4 18.5v-9A2.5 2.5 0 0 1 6.5 7h4"/></g></svg>',
+
+        // ── 文件与类型 ──
+        "folder": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17V7.5A2.5 2.5 0 0 1 5.5 5h3.3l2 2H19a2.5 2.5 0 0 1 2.5 2.5V17a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 17Z"/></g></svg>',
+        "folder-open": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17V7.5A2.5 2.5 0 0 1 5.5 5h3.3l2 2H19a2.5 2.5 0 0 1 2.5 2.5v1.4"/><path d="M3 17l2-5.1a2.5 2.5 0 0 1 2.3-1.6h13a1.7 1.7 0 0 1 1.65 2.1l-1.55 5.2a2.5 2.5 0 0 1-2.4 1.8H5.5A2.5 2.5 0 0 1 3 17z"/></g></svg>',
+        "folder-new": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17V7.5A2.5 2.5 0 0 1 5.5 5h3.3l2 2H19a2.5 2.5 0 0 1 2.5 2.5V17a2.5 2.5 0 0 1-2.5 2.5H5.5A2.5 2.5 0 0 1 3 17Z"/><path d="M12 11v5M9.5 13.5h5"/></g></svg>',
+        "document-new": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.6 3.5H7.5A2.5 2.5 0 0 0 5 6v12A2.5 2.5 0 0 0 7.5 20.5h9A2.5 2.5 0 0 0 19 18V8.9Z"/><path d="M13.6 3.5V9H19"/><path d="M12 12.2v5M9.5 14.7h5"/></g></svg>',
+        "text-x-generic": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.6 3.5H7.5A2.5 2.5 0 0 0 5 6v12A2.5 2.5 0 0 0 7.5 20.5h9A2.5 2.5 0 0 0 19 18V8.9Z"/><path d="M13.6 3.5V9H19"/><path d="M8.5 12.5h7M8.5 15.5h7M8.5 18h4"/></g></svg>',
+        "text-x-script": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 8.5 5.7 12l3.5 3.5"/><path d="M14.8 8.5 18.3 12l-3.5 3.5"/><path d="M13.2 6.5l-2.4 11"/></g></svg>',
+        "image-x-generic": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M3.5 16.5l4.3-3.8 3.7 3.2 3-2.6 5 4.4"/></g></svg>',
+        "application-pdf": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.6 3.5H7.5A2.5 2.5 0 0 0 5 6v12A2.5 2.5 0 0 0 7.5 20.5h9A2.5 2.5 0 0 0 19 18V8.9Z"/><path d="M13.6 3.5V9H19"/><path d="M8.5 12.5h7"/><rect x="8.5" y="15.5" width="4" height="3" rx=".8"/></g></svg>',
+        "application-x-executable": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><path d="M3 9h18"/><path d="M11 12.2l3.6 2.3-3.6 2.3Z"/></g></svg>',
+
+        // ── 剪贴板 ──
+        "edit-copy": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 5.5A2.5 2.5 0 0 0 13 3H5.5A2.5 2.5 0 0 0 3 5.5V13a2.5 2.5 0 0 0 2.5 2.5"/></g></svg>',
+        "edit-cut": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M7.9 16.3 19.5 3.5"/><path d="M16.1 16.3 4.5 3.5"/></g></svg>',
+        "edit-paste": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4.5H7.5A2.5 2.5 0 0 0 5 7v11.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V7a2.5 2.5 0 0 0-2.5-2.5H15"/><rect x="9" y="2.5" width="6" height="4" rx="1.5"/></g></svg>',
+        "edit-clear": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></g></svg>',
+        "edit-rename": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l.9-4.1L15.9 4.9a2.3 2.3 0 0 1 3.2 3.2L8.1 19.1Z"/><path d="M14.9 5.9l3.2 3.2"/></g></svg>',
+
+        // ── 排列与外观 ──
+        "arrange": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></g></svg>',
+        "sort-name": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h10M4 12h8M4 17.5h6"/><path d="M17.5 20V5.5M14.5 8.5l3-3 3 3"/></g></svg>',
+        "sort-type": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h10M4 12h10M4 17.5h10"/><path d="M17.5 5.5v14M14.5 16.5l3 3 3-3"/></g></svg>',
+        "color-picker": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6C6.7 2.6 2.4 6.9 2.4 12.2S6.7 21.4 12 21.4c.9 0 1.6-.7 1.6-1.6 0-.4-.15-.8-.4-1.1a1.55 1.55 0 0 1 1.2-2.5h1.9a5.3 5.3 0 0 0 5.3-5.3c0-4.3-4.3-8.3-9.6-8.3Z"/><circle cx="7.2" cy="11.4" r="1.1"/><circle cx="9.6" cy="6.9" r="1.1"/><circle cx="14.4" cy="6.9" r="1.1"/><circle cx="17.4" cy="10.4" r="1.1"/></g></svg>',
+        "customize-appearance": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6.2 5.8 12 5.8 21.5 12 21.5 12 17.8 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3.2"/></g></svg>',
+        "theme-appearance": '<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="9" stroke="#ffffff" stroke-width="2"/><path d="M12 3a9 9 0 0 0 0 18V3Z" fill="#ffffff"/></svg>',
+        "align-bottom": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="12" rx="2"/><path d="M2.5 20.5h19"/></g></svg>',
+        "align-center": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><rect x="8" y="8" width="8" height="8" rx="1.5"/></g></svg>',
+        "align-fullscreen": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.2V5.5A1.5 1.5 0 0 1 5.5 4h3.7"/><path d="M14.8 4h3.7A1.5 1.5 0 0 1 20 5.5v3.7"/><path d="M20 14.8v3.7a1.5 1.5 0 0 1-1.5 1.5h-3.7"/><path d="M9.2 20H5.5A1.5 1.5 0 0 1 4 18.5v-3.7"/></g></svg>',
+
+        // ── 状态区 / 指标 ──
+        "control-center": '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg t="1785370510904" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2676" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="200"><path d="M745.472 89.088h-460.8C184.32 89.088 102.4 171.008 102.4 271.36v15.872c0 100.352 81.92 182.272 182.272 182.272H744.96c100.352 0 182.272-81.92 182.272-182.272V271.36c0.512-100.352-81.408-182.272-181.76-182.272zM290.304 396.8c-65.024 0-117.76-52.736-117.76-117.76s52.736-117.76 117.76-117.76 117.76 52.736 117.76 117.76-52.736 117.76-117.76 117.76zM737.28 547.328H292.864c-104.96 0-190.464 85.504-190.464 190.464 0 104.96 85.504 190.464 190.464 190.464H737.28c104.96 0 190.464-85.504 190.464-190.464 0-104.448-85.504-190.464-190.464-190.464z m-0.512 310.272c-65.024 0-117.76-52.736-117.76-117.76s52.736-117.76 117.76-117.76 117.76 52.736 117.76 117.76-52.736 117.76-117.76 117.76z" fill="#ffffff" p-id="2677"></path><path d="M290.304 279.552m-87.04 0a87.04 87.04 0 1 0 174.08 0 87.04 87.04 0 0 0-174.08 0Z" fill="#ffffff" p-id="2678"></path></svg>',
+        "status-settings": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2.05" stroke-linecap="round"><circle cx="12" cy="12" r="3.35"/><path d="M12 2.7v3M12 18.3v3M2.7 12h3M18.3 12h3 M5.42 5.42l2.12 2.12M16.46 16.46l2.12 2.12 M18.58 5.42l-2.12 2.12M7.54 16.46l-2.12 2.12"/></g></svg>',
+        "status-ethernet": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="11" rx="2.2"/><path d="M8 19.5h8M9.2 14.5v5M14.8 14.5v5"/></g></svg>',
+        "cpu": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><rect x="10" y="10" width="4" height="4" rx="1"/><path d="M9.5 3.2v3.3M14.5 3.2v3.3M9.5 17.5v3.3M14.5 17.5v3.3M3.2 9.5h3.3M3.2 14.5h3.3M17.5 9.5h3.3M17.5 14.5h3.3"/></g></svg>',
+        "cpu-temperature": '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><path d="M8 2v3m4-3v3m4-3v3M8 19v3m4-3v3m4-3v3M2 8h3m-3 4h3m-3 4h3m14-8h3m-3 4h3m-3 4h3" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><path d="M12 8v5.2" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="15" r="2" fill="#fff"/></svg>',
+        "memory": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="7" width="18.4" height="10" rx="2"/><path d="M7 10v4M10.3 10v4M13.7 10v4M17 10v4"/><path d="M6.5 17v2.5M12 17v2.5M17.5 17v2.5"/></g></svg>',
+        "drive-harddisk": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.5" rx="7.5" ry="3"/><path d="M4.5 6.5v11c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3v-11"/><path d="M4.5 12c0 1.66 3.36 3 7.5 3s7.5-1.34 7.5-3"/></g></svg>',
+        "temperature": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13.6V5.5a2 2 0 1 1 4 0v8.1a4.2 4.2 0 1 1-4 0Z"/><path d="M12 9.5v6.2"/></g></svg>',
+        "time": '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#fff" stroke-width="2"/><path d="M12 7v5l3.5 2" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        "clock": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.3V12l3.2 2"/></g></svg>',
+        "night-light": '<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4V2" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="M4.93 6.93L3.51 5.51" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="M19.07 6.93L20.49 5.51" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="M12 8a6 6 0 0 0-6 6h12a6 6 0 0 0-6-6z" fill="#ffffff"/><path d="M3 18h18" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/><path d="M6 21h12" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>',
+        "do-not-disturb": '<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 24 24" fill="#ffffff" xmlns="http://www.w3.org/2000/svg"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>',
+        "countdown": '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg t="1785480141719" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="6682" xmlns:xlink="http://www.w3.org/1999/xlink" width="200" height="200"><path d="M870.799806 391.43611c-19.614733-46.37419-47.689139-88.017636-83.444481-123.771954-35.755342-35.754319-77.397764-63.828724-123.770931-83.444481-48.027853-20.313651-99.027387-30.613228-151.586441-30.613228S408.438343 163.906024 360.412536 184.219675c-46.373167 19.61371-88.016613 47.689139-123.770931 83.444481-35.754319 35.755342-63.827701 77.397764-83.444481 123.771954-20.313651 48.024783-30.613228 99.027387-30.613228 151.585417 0 52.55803 10.299577 103.559611 30.613228 151.585417 19.614733 46.37419 47.689139 88.017636 83.444481 123.771955 35.755342 35.754319 77.397764 63.828724 123.770931 83.444481 48.027853 20.313651 99.027387 30.613228 151.586441 30.613228 52.559053 0 103.559611-10.299577 151.58644-30.613228 46.373167-19.61371 88.016613-47.689139 123.770931-83.444481 35.754319-35.755342 63.827701-77.397764 83.444481-123.771955 20.313651-48.025807 30.613228-99.027387 30.613228-151.585417-0.001023-52.559053-10.301623-103.560634-30.614251-151.585417zM511.997953 879.381252c-185.470155 0-336.360747-150.891615-336.360747-336.360748s150.890592-336.360747 336.360747-336.360747 336.360747 150.891615 336.360748 336.360747-150.890592 336.360747-336.360748 336.360748z" fill="#ffffff" p-id="6683"></path><path d="M695.364191 325.588403L561.741891 459.20968c-13.280468-7.202029-28.482705-11.296277-44.62229-11.296277-51.783387 0-93.912903 42.128493-93.912903 93.912903 0 51.783387 42.128493 93.912903 93.912903 93.912903 51.78441 0 93.913926-42.128493 93.913926-93.912903 0-16.391319-4.226255-31.813566-11.639084-45.240367L732.878596 363.102808c10.358929-10.358929 10.358929-27.155477 0-37.514405-10.356882-10.358929-27.154453-10.357905-37.514405 0zM517.120624 603.907223c-34.231639 0-62.079894-27.849278-62.079894-62.079894s27.849278-62.079894 62.079894-62.079894c34.232662 0 62.080917 27.849278 62.080917 62.079894s-27.849278 62.079894-62.080917 62.079894zM408.895761 115.276467h199.482287c14.650675 0 26.527167-11.876492 26.527166-26.527167s-11.876492-26.527167-26.527166-26.527167H408.895761c-14.650675 0-26.527167 11.876492-26.527167 26.527167s11.878538 26.527167 26.527167 26.527167z" fill="#ffffff" p-id="6684"></path></svg>',
+
+        // ── 电源与锁 ──
+        "lock": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.3" width="15" height="10.2" rx="2.5"/><path d="M8 10.3V7.6a4 4 0 0 1 8 0v2.7"/></g></svg>',
+        "power": '<?xml version="1.0" encoding="UTF-8"?><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><!-- Optical weight matches the neighbouring screenshot and theme glyphs. --><g fill="none" stroke="#ffffff" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"><path d="M512 96v360"/><path d="M330 198C195 270 112 411 125 563c17 197 184 350 387 350s370-153 387-350c13-152-70-293-205-365"/></g></svg>',
+        "system-log-out": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.4 3.6H7.2A3.6 3.6 0 0 0 3.6 7.2v9.6a3.6 3.6 0 0 0 3.6 3.6h2.2"/><path d="M15.4 7.8 19.6 12l-4.2 4.2"/><path d="M19.6 12h-9"/></g></svg>',
+        "system-reboot": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 4.4v5.4h-5.4"/><circle cx="12" cy="12" r="1.4"/></g></svg>',
+        "system-suspend": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.6A8.8 8.8 0 0 1 9.4 3.5a8.8 8.8 0 1 0 11.1 11.1Z"/></g></svg>',
+        "system-switch-user": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.2" cy="7.4" r="3.2"/><path d="M2.6 19.8v-1.4a5 5 0 0 1 5-5h1.2a5 5 0 0 1 5 5v1.4"/><path d="M15.6 4.6a3.2 3.2 0 0 1 0 5.6"/><path d="M17.4 13.6a5 5 0 0 1 4 4.8v1.4"/></g></svg>',
+
+        // ── 回收站（仅菜单项与确认弹窗用；Dock 上那个跟随系统主题）──
+        "user-trash": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16"/><path d="M9.5 6.5V4.8a1.3 1.3 0 0 1 1.3-1.3h2.4a1.3 1.3 0 0 1 1.3 1.3v1.7"/><path d="M6.2 6.5l1 13.2a2 2 0 0 0 2 1.8h5.6a2 2 0 0 0 2-1.8l1-13.2"/><path d="M10.3 10.5v7M13.7 10.5v7"/></g></svg>',
+
+        // ── 天气 ──
+        "weather-cloud": '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M979.180759 554.921339c-29.860191-37.160386-67.743498-61.067219-113.603222-71.729838 14.589183-22.403082 21.863226-46.935699 21.863227-73.597852 0-37.690902-13.335746-69.865561-39.992295-96.535186-26.662152-26.660284-58.83868-39.99603-96.529582-39.99603-34.130469 0-63.645077 11.023146-88.525145 33.069437-20.968448-50.488661-54.312484-91.377601-99.992878-122.666822-45.691603-31.281749-96.628586-46.933831-152.807215-46.933832-75.372464 0-139.731123 26.67336-193.064768 80.007005-53.337381 53.320569-79.997665 117.682963-79.997665 193.061032 0 5.335046 0.356791 12.973352 1.066636 22.929862-41.241995 19.201308-74.488894 48.265725-99.731357 87.210064C12.625901 558.661102 0 601.602989 0 648.53682c0 65.774613 23.381921 122.042906 70.132687 168.791804 46.752634 46.761974 103.020928 70.140159 168.797408 70.14016h580.272147c56.524211 0 104.788068-20.015761 144.793438-60.002452 39.999766-39.997898 60.002452-88.261755 60.002452-144.799043-0.005604-47.996731-14.945974-90.596772-44.817373-127.74595z" fill="#ffffff"/></svg>',
+        "weather-cloud-wide": '<?xml version="1.0" standalone="no"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd"><svg class="icon" viewBox="0 0 1902 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M10.707978 474.720372c0 0-62.661503 237.16189 132.065066 291.891557 194.329977 55.126259 360.898528-30.93416 419.990705-3.569326 59.092177 27.364833 301.806352 206.22773 430.302091 116.994578s83.284276-151.101472 48.78079-168.154919c-34.900077-17.053447-111.045701-6.74206-90.422928-3.569326 21.019365 3.569326 62.661503-72.179706 121.357088-27.364833 59.092177 44.814872 86.853602 168.154919 24.192099 212.969791-62.661503 44.814872-104.303641 72.179706-104.303641 72.179706s109.855926 49.970565 235.972115 56.712626c153.481022 7.931836 267.302866-49.573974 298.633617-190.364059s-45.211464-271.268784-135.2378-288.718823-149.118513 82.491092-149.118513 82.491092-3.569326-127.305964 72.972889-147.928737c76.542215-20.622773 277.614253 20.622773 301.806352 182.035631s10.311387 178.466305 10.311387 178.466305 204.641363-20.622773 256.991479-188.777692-83.284276-285.149497-201.468629-281.58017c0 0 65.834237-127.305964-83.284276-268.09605s-360.898528-109.855926-458.063517-41.245546c0 0 62.661503 58.298993 62.661503 116.994578S1117.595662 261.750581 1117.595662 261.750581s55.522851-199.089078-222.091402-182.035631-385.090627 243.90395-392.22928 336.706429c0 0-79.318358 154.274206-270.4756 167.758327C131.668474 590.921766 27.761425 594.887684 10.707978 474.720372z" fill="#ffffff"/></svg>',
+
+        // ── 分类与收藏 ──
+        "star": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6l2.55 5.2 5.75.83-4.16 4.05.98 5.72L12 16.7l-5.12 2.7.98-5.72L3.7 9.63l5.75-.83Z"/></g></svg>',
+        "bookmark": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.3 4.3h11.4a1 1 0 0 1 1 1v15.2l-6.7-4.1-6.7 4.1V5.3a1 1 0 0 1 1-1Z"/></g></svg>',
+        "home": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.6 12 4.2l8 6.4v8.1a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 18.7Z"/><path d="M9.6 20.3v-6.2h4.8v6.2"/></g></svg>',
+        "preferences-system": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.35"/><path d="M12 2.7v3M12 18.3v3M2.7 12h3M18.3 12h3M5.42 5.42l2.12 2.12M16.46 16.46l2.12 2.12M18.58 5.42l-2.12 2.12M7.54 16.46l-2.12 2.12"/></g></svg>',
+        "pin": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 3h5.6l-.75 2.3a3 3 0 0 0 .2 2.35l.5.9a2 2 0 0 1-1.7 3h-2.1a2 2 0 0 1-1.7-3l.5-.9a3 3 0 0 0 .2-2.35z"/><path d="M12 11.6V21"/></g></svg>',
+        "unpin": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.4 3h4.8l-.65 2a2.6 2.6 0 0 0 .18 2.05l.5.9a1.75 1.75 0 0 1-1.5 2.6h-1.5a1.75 1.75 0 0 1-1.5-2.6l.5-.9a2.6 2.6 0 0 0 .17-2.05z"/><path d="M10.8 10.6V18"/><path d="M4.5 4.5l15 15"/></g></svg>',
+        "placeholder-dot": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>',
+
+        // ── 项目自有应用 ──
+        "kos-calendar": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ff6b70"/><stop offset="1" stop-color="#e63c52"/></linearGradient></defs><rect x="10" y="10" width="108" height="108" rx="25" fill="#f7f7fa"/><path d="M10 35c0-14 11-25 25-25h58c14 0 25 11 25 25v18H10z" fill="url(#b)"/><path d="M35 6v18M93 6v18" stroke="#f7f7fa" stroke-width="8" stroke-linecap="round"/><text x="64" y="95" text-anchor="middle" font-family="sans-serif" font-size="48" font-weight="700" fill="#292932">15</text></svg>',
+        "kos-music": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff5f8a"/><stop offset=".52" stop-color="#c64ce5"/><stop offset="1" stop-color="#6658ef"/></linearGradient></defs><rect x="10" y="10" width="108" height="108" rx="27" fill="url(#b)"/><path d="M52 39v47c-5-3-13-2-19 2-8 5-10 13-6 19s13 6 21 1c6-4 9-9 9-15V55l38-8v30c-5-3-13-2-19 2-8 5-10 13-6 19s13 6 21 1c6-4 9-9 9-15V27z" fill="white"/></svg>',
+        "kos-todo": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#69a7ff"/><stop offset="1" stop-color="#3478f6"/></linearGradient></defs><rect x="10" y="10" width="108" height="108" rx="27" fill="url(#b)"/><path d="M34 43l8 8 16-18M34 69l8 8 16-18M34 95l8 8 16-18" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M68 45h27M68 71h27M68 97h20" stroke="white" stroke-opacity=".88" stroke-width="7" stroke-linecap="round"/></svg>',
+        "kos-weather": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><defs><linearGradient id="b" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#5ca9ff"/><stop offset="1" stop-color="#5860ca"/></linearGradient></defs><rect x="10" y="10" width="108" height="108" rx="27" fill="url(#b)"/><circle cx="78" cy="48" r="25" fill="#ffd45e"/><path d="M31 94h63c13 0 20-8 20-18s-8-18-19-18c-4-15-16-23-31-23-18 0-32 13-34 30-10 1-17 7-17 15 0 8 7 14 18 14z" fill="#f8fbff"/><path d="M31 94h63c11 0 18-6 20-14-8 4-20 5-33 5H18c3 6 7 9 13 9z" fill="#dce7f4"/></svg>',
+    })
+
+    readonly property var raster: ({
+        "default-cover": { type: "jpeg", data: "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" },
+    })
+
+    // ── 应用图标（项目自有 app，供 AppPresentationService 优先命中）──
+    readonly property var appIcons: ({
+        "kos-calendar": "kos-calendar",
+        "kos-music": "kos-music",
+        "kos-todo": "kos-todo",
+        "kos-weather": "kos-weather",
+    })
+
+    // data URI 按需拼一次就缓存：同一个图标名在多个位置复用时，
+    // Image 拿到的是同一个字符串，Qt 的图片缓存因此能命中。
+    readonly property var _encoded: ({})
+
+    function has(name) {
+        const key = String(name || "")
+        return Object.prototype.hasOwnProperty.call(registry.svg, key)
+            || Object.prototype.hasOwnProperty.call(registry.raster, key)
+    }
+
+    function source(name) {
+        const key = String(name || "")
+        if (Object.prototype.hasOwnProperty.call(registry.raster, key)) {
+            if (_encoded[key] === undefined)
+                _encoded[key] = "data:image/" + registry.raster[key].type
+                    + ";base64," + registry.raster[key].data
+            return _encoded[key]
+        }
+        if (!Object.prototype.hasOwnProperty.call(registry.svg, key))
+            return ""
+        if (_encoded[key] === undefined)
+            _encoded[key] = "data:image/svg+xml;utf8,"
+                + encodeURIComponent(registry.svg[key])
+        return _encoded[key]
+    }
+
+    // ── 语义角色 ──
+    // 角色表是本文件的一部分：图标从哪来只有一个地方可查。
+    readonly property var _roles: ({
+        "cpu|": "cpu",
+        "temperature|": "cpu-temperature",
+        "settings|": "preferences-system",
+        "controlCenter|": "control-center",
+        "open|": "folder-open",
+        "edit|": "document-new",
+        "pin|": "pin",
+        "unpin|": "unpin",
+        "activateWindow|": "window-restore",
+        "minimize|": "window-minimize",
+        "close|": "window-close",
+        "copy|": "edit-copy",
+        "cut|": "edit-cut",
+        "paste|": "edit-paste",
+        "folder|": "folder",
+        "newFile|": "document-new",
+        "newFolder|": "folder-new",
+        "refresh|": "view-refresh",
+        "rename|": "edit-rename",
+        "openWith|": "open-with",
+        "sort|": "sort-name",
+        "iconSize|": "arrange",
+        "appearance|": "theme-appearance",
+        "visibility|": "customize-appearance",
+        "reset|": "reset-layout",
+        "back|": "back",
+        "submenu|": "submenu",
+        "check|": "check",
+        "remove|": "edit-clear",
+        "lock|": "lock",
+        "suspend|": "system-suspend",
+        "sleep|": "system-suspend",
+        "hibernate|": "system-suspend",
+        "reboot|": "system-reboot",
+        "restart|": "system-reboot",
+        "powerOff|": "power",
+        "shutdown|": "power",
+        "switchUser|": "system-switch-user",
+        "logout|": "system-log-out",
+        "screenshot|": "screenshot",
+        "nightLight|": "night-light",
+        "doNotDisturb|": "do-not-disturb",
+        "countdown|": "countdown",
+        "radio|checked": "check",
+        "radio|": "placeholder-dot",
+    })
+
+    function roleName(role, state) {
+        const key = String(role || "") + "|" + String(state || "")
+        if (Object.prototype.hasOwnProperty.call(_roles, key))
+            return _roles[key]
+        return has(role) ? String(role) : "placeholder-dot"
+    }
+
+    // 项目自有应用（按 appId 命中）——返回空字符串表示"不归我管，走主题"。
+    function appIconSource(appId) {
+        const id = String(appId || "").toLowerCase()
+        const keys = Object.keys(appIcons)
+        for (let i = 0; i < keys.length; ++i) {
+            if (id === keys[i] || id.indexOf(keys[i]) === 0
+                || id.indexOf("." + keys[i]) >= 0)
+                return source(appIcons[keys[i]])
+        }
+        return ""
+    }
+}

@@ -329,8 +329,8 @@ Item {
         property bool hasBeenVisible: false
 
         Component.onCompleted: setItems([
-            { icon: "", label: "打开回收站", cmd: "open" },
-            { icon: "", label: "清空回收站", cmd: "empty" }
+            { icon: "folder-open", label: "打开回收站", cmd: "open" },
+            { icon: "user-trash", label: "清空回收站", cmd: "empty" }
         ])
 
         onAboutToShow: hasBeenVisible = true
@@ -365,28 +365,28 @@ Item {
         function rebuildItems() {
             setItems([
                 {
-                    icon: "",
+                    icon: "align-bottom",
                     label: "底部吸附",
                     cmd: "bottom",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottom"
                 },
                 {
-                    icon: "",
+                    icon: "align-center",
                     label: "屏幕居中",
                     cmd: "center",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "center"
                 },
                 {
-                    icon: "",
+                    icon: "align-fullscreen",
                     label: "全屏覆盖",
                     cmd: "fullscreen",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "fullscreen"
                 },
                 { separator: true },
-                { icon: "", label: "启动台设置…", cmd: "settings" }
+                { icon: "preferences-system", label: "启动台设置…", cmd: "settings" }
             ])
         }
 
@@ -475,6 +475,8 @@ Item {
             vertical: container.vertical
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
+            // 启动器 logo 是仓库里的位图原作（1024²），走文件而不是内联
+            // 降采样副本 —— 后者在 Dock 尺寸下明显发糊。
             iconSource: Qt.resolvedUrl("../../assets/applauncher.svg")
             displayName: "应用程序"
             showContextMenu: false
@@ -506,6 +508,7 @@ Item {
             vertical: container.vertical
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
+            // 回收站是这条统一链路的例外：图案跟随系统图标主题。
             iconSource: SystemIconResolver.source("trash",
                 DockTrashService.hasItems ? "full" : "empty")
             displayName: "回收站"

@@ -72,23 +72,10 @@ PanelWindow {
     // The transparent layout deliberately leaves only the content: it must not
     // register a backdrop region, otherwise KWin adds blur/refraction behind
     // it. Other Bar layouts still use the regular compositor glass pipeline.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && !root.transparentMode && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && !root.transparentMode && root.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
-        ? barBlurRegionHolder : null
-
-    Region {
-        id: barBlurRegionHolder
-        RoundedBlurRegion {
-            id: barBlurRegion
-            item: barWrapper
-            // The floating Bar keeps a full capsule corner equal to 50% of
-            // its height, so the curvature remains proportional when users
-            // choose a different Bar size.
-            radius: (AppearanceConfigService.barLayoutMode === "floating")
-                ? barWrapper.height * 0.5 : 0
-        }
-    }
+        ? barSurface.blurRegion : null
 
     // ── Visual Bar content ──
     Item {
@@ -99,6 +86,25 @@ PanelWindow {
         height: root.height
         opacity: hide.barOpacity
         visible: root.barEnabled && hide.revealProgress > 0.001
+
+        // The Bar is a glass surface too. Its QML Rectangle below remains the
+        // tonal-theme paint, while this panel owns the rounded compositor mask
+        // and exact corner declaration in backdrop themes.
+        LiquidGlassPanel {
+            id: barSurface
+            anchors.fill: parent
+            radius: AppearanceConfigService.barLayoutMode === "floating"
+                ? barWrapper.height * 0.5 : 0
+            cornerExponent: AppearanceTokens.shape.cornerExponent
+            // The bar hides by sliding in barWrapper.y; anchor the region to the
+            // wrapper so the published glass follows the slide (matching the
+            // Dock's dockWrapper anchor) instead of staying pinned at y=0.
+            blurAnchor: barWrapper
+            // BarWindow keeps its established tonal layer0 paint below. This
+            // panel exists here solely as the compositor surface declaration.
+            fallbackEnabled: false
+            z: -2
+        }
 
         Rectangle {
             anchors.fill: parent

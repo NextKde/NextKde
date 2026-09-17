@@ -21,8 +21,30 @@ import "../../../shared/qml/controls" as LiquidControls
 // exactly what is behind it (wallpaper AND open windows) and the gaps
 // between cards show the real desktop - the iOS "hollow" control center.
 // ControlCenterCoordinator owns the group so all cards open/close together.
-Item {
+PopupWindow {
     id: panel
+
+    // ── Single-block windowing ──
+    // One window, one glass block, cards laid out by simple anchors inside it.
+    // This replaces the per-card PopupWindow + ControlCenterCoordinator model.
+    implicitWidth: panel.controlCenterWidth
+    implicitHeight: panel.controlCenterHeight
+    color: "transparent"
+    grabFocus: true
+    anchor {
+        item: panel.anchorItem
+        edges: !panel.dockHosted ? Edges.Bottom
+            : panel.dockEdge === "left" ? Edges.Right
+            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
+        gravity: !panel.dockHosted ? Edges.Bottom
+            : panel.dockEdge === "left" ? Edges.Right
+            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
+        adjustment: PopupAdjustment.Slide
+        margins.top: 0
+        margins.bottom: panel.dockHosted ? 0 : -4
+        margins.left: 0
+        margins.right: 0
+    }
 
     property Item anchorItem: null
     property bool dockHosted: false
@@ -44,6 +66,7 @@ Item {
     readonly property int mainControlsOffsetY: notificationFirst ? 238 : 0
     signal networkRequested()
     signal bluetoothRequested()
+    signal wifiNetworkSelected(var network)
 
     function openSubmenu(name) {
         if (name === "session") {
@@ -72,8 +95,11 @@ Item {
         submenuOpen = false
         sessionModalVisible = false
         pendingConfirmAction = ""
-        // Keep the page identity and geometry stable through the close motion.
-        // onMotionClosed clears activeSubmenu and restores the primary cards.
+        // The current control center is one window with no outgoing submenu
+        // animation. Keeping the old page identity here makes the next toggle
+        // mistake an invisible panel for an open Wi-Fi submenu.
+        activeSubmenu = ""
+        coordinator.modalActive = false
     }
 
     function openSettingsModule(module) {
@@ -111,50 +137,93 @@ Item {
         height: width
     }
 
-    ControlCenterCoordinator {
+    // Stubbed coordinator: the single block replaces the N-card orchestration.
+    // Keeps the same surface (open/close/modal/cardAnchor) so existing call
+    // sites and card content compile; openAll/closeAll now just show/hide this
+    // one window.
+    QtObject {
         id: coordinator
-        cardAnchor: positioningAnchor
-        gridWidth: panel.controlCenterWidth
-        cardOffsetX: !panel.dockHosted ? 0
-            : panel.dockEdge === "left" ? -20
-            : panel.dockEdge === "right" ? 20 : 0
-        // Card offsets include a historical 20px top inset. Cancel it for the
-        // standalone Bar so the visible cards begin 4px below the Bar.
-        cardOffsetY: !panel.dockHosted ? -18
-            : (panel.dockEdge === "bottom" ? 20 : 0)
+        property bool open: panel.visible
+        property bool modalActive: false
+        property var cardAnchor: panel.anchorItem
+        function openAll() { panel.visible = true }
+        function closeAll(closingModal) { panel.visible = false }
     }
 
-    // Geometry oracle: it is anchored to the clicked control, which makes
-    // Quickshell select the correct output and clamp the group on every Dock
-    // edge. The visible cards use positioningAnchor as their common origin.
-    PopupWindow {
-        id: positioningPopup
-        visible: panel.anchorItem !== null
-        implicitWidth: panel.controlCenterWidth
-        implicitHeight: panel.controlCenterHeight
-        color: "transparent"
-        grabFocus: false
-        mask: Region { width: 0; height: 0 }
+    // No panel-wide glass slab: the window blur region is the UNION of every
+    // card's blurRegion, so KWin blurs behind the cards (real frosted glass)
+    // but not over the gaps between them -- hollow and frosted, in one window
+    // with no coordinator.
+    //
+    // Every card that publishes a SurfaceShape has to be in this list, and only
+    // while it is visible. The effect aligns the whole declared shape set with
+    // this region's top-left, so a shape that is declared but missing from the
+    // region -- or the reverse -- slides the glass of *every* card by the
+    // difference. The overlay cards used to be left out on the grounds that they
+    // cover the primary area, but the notification-first layout puts the primary
+    // cards at y=258 while the session sheet stays at y=20: with an empty
+    // notification history (slotCard8 hidden) that is a 238px shift of the whole
+    // panel's glass. Gating on visibility keeps the two sets equal in every
+    // state -- a hidden card publishes no shape and contributes no area, and an
+    // empty card would otherwise blur a lingering frosted slab.
+    Region { id: emptyRegion }
+    Region {
+        id: cardsBlurRegion
+        regions: [
+            wifiCard.visible ? wifiCard.blurRegion : emptyRegion,
+            bluetoothCard.visible ? bluetoothCard.blurRegion : emptyRegion,
+            mediaCard.visible ? mediaCard.blurRegion : emptyRegion,
+            slotCard1.visible ? slotCard1.blurRegion : emptyRegion,
+            slotCard2.visible ? slotCard2.blurRegion : emptyRegion,
+            slotCard3.visible ? slotCard3.blurRegion : emptyRegion,
+            slotCard4.visible ? slotCard4.blurRegion : emptyRegion,
+            slotCard5.visible ? slotCard5.blurRegion : emptyRegion,
+            slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
+            slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
+            slotCard8.visible ? slotCard8.blurRegion : emptyRegion,
+            sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
+            submenuCard.visible ? submenuCard.blurRegion : emptyRegion
+        ]
+    }
+    // A tonal/non-glass theme draws its own surface and publishes no shapes, so
+    // the window must not ask KWin for a backdrop either.
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && panel.visible)
+        ? cardsBlurRegion : null
 
-        anchor {
-            item: panel.anchorItem
-            edges: !panel.dockHosted ? Edges.Bottom
-                : panel.dockEdge === "left" ? Edges.Right
-                : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-            gravity: !panel.dockHosted ? Edges.Bottom
-                : panel.dockEdge === "left" ? Edges.Right
-                : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-            adjustment: PopupAdjustment.Slide
-            margins.top: 0
-            margins.bottom: panel.dockHosted ? 0 : -4
-            margins.left: 0
-            margins.right: 0
+    // Position the cards at their grid offsets (top-right origin). One pass on
+    // completion; the window owns layout. The submenu and session cards resize
+    // as the active page changes (wifi/brightness/sound are all different
+    // heights), and their offsetTop is a live binding on that cardHeight. Hand
+    // assigning x/y once here would freeze the submenu at the height it had
+    // when the panel finished loading, stranding it below its intended slot so
+    // the primary cards stay visible above it (the two-panel "overlay"). Bind
+    // the position so the submenu reflows into place whenever its geometry
+    // changes.
+    Component.onCompleted: {
+        for (let i = 0; i < panel.data.length; i++) {
+            const c = panel.data[i]
+            if (c && c.isControlCenterCard) {
+                // A submenu or session sheet REPLACES the primary cards, it does
+                // not float over them: every coordinator-managed card hides
+                // while one is open, so the two interfaces never stack on top
+                // of each other. sessionCard/submenuCard (managedByCoordinator
+                // false) own their own cardShown instead.
+                if (c.managedByCoordinator) {
+                    c.cardShown = Qt.binding(function() {
+                        return !panel.submenuOpen && !panel.sessionModalVisible
+                    })
+                }
+                panel.placeCard(c)
+            }
         }
-
-        Item {
-            id: positioningAnchor
-            anchors.fill: parent
-        }
+    }
+    function placeCard(c) {
+        c.x = Qt.binding(function() {
+            return panel.controlCenterWidth - c.offsetRight - c.width
+        })
+        c.y = Qt.binding(function() {
+            return c.offsetTop
+        })
     }
 
     property bool _internalTransition: false
@@ -209,8 +278,8 @@ Item {
         coordinator.closeAll(closingModal)
         sessionModalVisible = false
         submenuOpen = false
-        if (!closingSubmenu)
-            activeSubmenu = ""
+        activeSubmenu = ""
+        coordinator.modalActive = false
         pendingConfirmAction = ""
     }
 
@@ -221,31 +290,8 @@ Item {
         sessionModalVisible = true
     }
 
-    // Fullscreen transparent click-catcher window mapped ONLY while the control center is open.
-    // Clicking anywhere outside the control center cards instantly dismisses it.
-    PanelWindow {
-        id: dismissalBackdrop
-        screen: panel.targetScreen
-        visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
-            && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "quickshell-controlcenter-backdrop"
-
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            cursorShape: Qt.ArrowCursor
-            onPressed: panel.close()
-        }
-    }
+    // (Single-block: no extra full-screen dismissal window needed; Escape and
+    // WindowService's active-window change below close the control center.)
 
     Connections {
         target: WindowService
@@ -253,6 +299,23 @@ Item {
             if (!panel._internalTransition && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")) {
                 panel.close()
             }
+        }
+    }
+
+    // A context menu mapped over the control center would overlap it the same
+    // way the removed dismissal backdrop used to be the only thing keeping an
+    // outside right-click from showing one. The menu surfaces are layer-shell
+    // popups, so activating one does not change the active window and the
+    // handler above never fires. Watch the shared context-menu coordinator
+    // instead: whenever ANY menu opens (desktop, dock, launcher, bar), fold the
+    // control center away and let the menu stand alone.
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu
+                    && !panel._internalTransition
+                    && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== ""))
+                panel.close()
         }
     }
 
@@ -642,6 +705,7 @@ Item {
 
     // ── Card 4: Screenshot ───────────────────────────────────────────
     ControlCenterCard {
+        id: slotCard1
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 264
@@ -662,7 +726,7 @@ Item {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/screenshot.svg"
+            source: BundledIcons.source("screenshot")
             sourceSize.width: 46
             sourceSize.height: 46
             fillMode: Image.PreserveAspectFit
@@ -678,6 +742,7 @@ Item {
 
     // ── Card 5: Dark Mode / Theme Toggle ─────────────────────────────
     ControlCenterCard {
+        id: slotCard2
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 203
@@ -701,7 +766,7 @@ Item {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/theme-appearance.svg"
+            source: BundledIcons.source("theme-appearance")
             sourceSize.width: 48
             sourceSize.height: 48
             fillMode: Image.PreserveAspectFit
@@ -726,6 +791,7 @@ Item {
 
     // ── Card 6: Power & Session ──────────────────────────────────────
     ControlCenterCard {
+        id: slotCard3
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 142
@@ -746,7 +812,7 @@ Item {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/logout.svg"
+            source: BundledIcons.source("power")
             sourceSize.width: 48
             sourceSize.height: 48
             fillMode: Image.PreserveAspectFit
@@ -769,6 +835,7 @@ Item {
 
     // ── Card 7: Do Not Disturb ───────────────────────────────────────
     ControlCenterCard {
+        id: slotCard4
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 81
@@ -791,7 +858,7 @@ Item {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: "../../assets/do-not-disturb.svg"
+            source: BundledIcons.source("do-not-disturb")
             sourceSize.width: 44
             sourceSize.height: 44
             fillMode: Image.PreserveAspectFit
@@ -814,6 +881,7 @@ Item {
 
     // ── Card 8: Night Light ──────────────────────────────────────────
     ControlCenterCard {
+        id: slotCard5
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -837,7 +905,7 @@ Item {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: "../../assets/night-light.svg"
+            source: BundledIcons.source("night-light")
             sourceSize.width: 44
             sourceSize.height: 44
             fillMode: Image.PreserveAspectFit
@@ -859,6 +927,7 @@ Item {
 
     // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
+        id: slotCard6
         coordinator: coordinator
         offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -923,6 +992,7 @@ Item {
 
     // ── Card 8: Sound / volume ───────────────────────────────────────
     ControlCenterCard {
+        id: slotCard7
         coordinator: coordinator
         offsetTop: 282 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -1010,11 +1080,14 @@ Item {
     // notifications (which are never shown) land here. Each group header
     // carries the app icon/name, and every row has its own close button.
     ControlCenterCard {
+        id: slotCard8
         coordinator: coordinator
         // An empty history is not worth a permanently visible, permanently
         // empty card taking up the bottom of the panel; only occupy that
         // window/blur-region/hit-test space once there is something to show.
-        visible: coordinator.cardAnchor !== null
+        // cardShown (bound by the panel: hidden while a submenu/session sheet
+        // is open) is factored in here because this card overrides `visible`.
+        visible: cardShown && coordinator.cardAnchor !== null
             && ControlCenterService.historyGroups.length > 0
         offsetTop: panel.notificationFirst ? 20 : 347
         offsetRight: 20
@@ -1168,10 +1241,6 @@ Item {
         cardShown: panel.sessionModalVisible
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
-        onMotionClosed: {
-            if (!panel.sessionModalVisible && panel.activeSubmenu === "")
-                coordinator.modalActive = false
-        }
 
         // ── VIEW 1: 6-action Grid ──
         Item {
@@ -1205,11 +1274,12 @@ Item {
                         color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.06)
                         border.width: 1
                         border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10)
-                        SystemIcon {
+                        BundledIcon {
                             anchors.centerIn: parent
                             width: 16
                             height: 16
-                            role: "switchUser"
+                            name: BundledIcons.roleName("switchUser")
+                            color: ThemeService.foregroundColor
                         }
                     }
 
@@ -1300,10 +1370,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "lock"
+                            name: BundledIcons.roleName("lock")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1333,10 +1404,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "suspend"
+                            name: BundledIcons.roleName("suspend")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1366,10 +1438,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "switchUser"
+                            name: BundledIcons.roleName("switchUser")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1399,10 +1472,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "logout"
+                            name: BundledIcons.roleName("logout")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1429,10 +1503,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "reboot"
+                            name: BundledIcons.roleName("reboot")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1461,10 +1536,11 @@ Item {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "powerOff"
+                            name: BundledIcons.roleName("powerOff")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1499,12 +1575,14 @@ Item {
             anchors.fill: parent
             visible: panel.pendingConfirmAction !== ""
 
-            SystemIcon {
+            BundledIcon {
                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 16 }
                 width: 28
                 height: 28
-                role: panel.pendingConfirmAction === "poweroff" ? "powerOff"
-                    : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout")
+                name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
+                    ? "powerOff"
+                    : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
+                color: ThemeService.foregroundColor
             }
 
             GlassText {
@@ -1606,12 +1684,6 @@ Item {
             : (panel.activeSubmenu === "brightness" ? 280
             : (panel.activeSubmenu === "sound" ? 420 : 280)))
         cardShown: panel.submenuOpen
-        onMotionClosed: {
-            if (!panel.submenuOpen && !panel.sessionModalVisible) {
-                panel.activeSubmenu = ""
-                coordinator.modalActive = false
-            }
-        }
 
         // Navigation Header
         Item {
@@ -1940,9 +2012,19 @@ Item {
                                 if (modelData.active) return
                                 if (modelData.savedProfileUuid) {
                                     NetworkService.connectWifi(modelData.ssid, "", modelData.savedProfileUuid)
+                                } else if (!modelData.security || modelData.security === "none") {
+                                    NetworkService.connectWifi(modelData.ssid, "", "")
                                 } else {
+                                    // Copy the delegate value before closing;
+                                    // the ListView may destroy this delegate as
+                                    // soon as the control center is unloaded.
+                                    const network = Object.assign({}, modelData, {
+                                        secured: Boolean(modelData.secured
+                                            || (modelData.security
+                                                && modelData.security !== "none"))
+                                    })
                                     panel.close()
-                                    PlatformClient.request("settings.open", { module: "kcm_networkmanagement" })
+                                    panel.wifiNetworkSelected(network)
                                 }
                             }
                         }

@@ -255,15 +255,17 @@ Item {
     }
 
     function iconFor(kind) {
-        if (kind === "folder") return ""
-        if (kind === "image") return ""
-        if (kind === "pdf") return ""
-        if (kind === "code") return ""
-        if (kind === "text") return "󰈙"
-        if (kind === "launcher") return ""
-        return ""
+        if (kind === "folder") return "folder"
+        if (kind === "image") return "image-x-generic"
+        if (kind === "pdf") return "application-pdf"
+        if (kind === "code") return "text-x-script"
+        if (kind === "text") return "text-x-generic"
+        if (kind === "launcher") return "application-x-executable"
+        return "text-x-generic"
     }
 
+    // 文件类型图标走系统图标主题（freedesktop MIME 名）—— 这几个名字任何图标
+    // 主题都带着，所以桌面文件与系统文件管理器看起来一致。
     function themeIconName(kind) {
         if (kind === "folder") return "folder"
         if (kind === "pdf") return "application-pdf"
@@ -285,11 +287,8 @@ Item {
                 launcherId)
             return AppPresentationService.iconSource(override.icon || entry.icon)
         }
-        try {
-            return Quickshell.iconPath(themeIconName(entry.kind), true) || ""
-        } catch (_) {
-            return ""
-        }
+        return SystemIconResolver.sourceFromCandidates(
+            [themeIconName(entry.kind)], "text-x-generic")
     }
 
     function folderAtSlot(slot) {
@@ -1140,18 +1139,14 @@ Item {
                         visible: source !== "" && status === Image.Ready
                             && !delegateRoot.usesCustomFolderVisual
                     }
-                    Text {
+                    BundledIcon {
                         anchors.centerIn: parent
-                        text: root.iconFor(delegateRoot.entry ? delegateRoot.entry.kind : "")
+                        name: root.iconFor(delegateRoot.entry ? delegateRoot.entry.kind : "")
                         visible: !fileThumbnailFrame.visible && !fileThemeIcon.visible
                             && !delegateRoot.usesCustomFolderVisual
                         color: "white"
-                        style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.5)
-                        font {
-                            family: "LXGW WenKai Mono Nerd Font"
-                            pixelSize: root.iconVisualSize * 0.68
-                        }
+                        size: root.iconVisualSize * 0.68
+                        outlined: true
                     }
                     Text {
                         anchors {
@@ -1285,12 +1280,13 @@ Item {
                         id: hoverHandler
                         enabled: !dragHandler.active
                             && root.renamingId !== delegateRoot.itemId
-                        cursorShape: Qt.PointingHandCursor
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         enabled: root.renamingId !== delegateRoot.itemId
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
                         acceptedButtons: Qt.RightButton
                         onPressed: function(mouse) {
                             if (!root.isSelected(delegateRoot.itemId))

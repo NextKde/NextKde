@@ -22,9 +22,10 @@ PopupWindow {
         margins.top: -10
     }
 
-    LiquidGlassSurface {
+    LiquidGlassPanel {
         anchors.fill: parent
         radius: 18
+        cornerExponent: AppearanceTokens.shape.cornerExponent
         baseColor: ThemeService.backgroundColor
         ambientPrimary: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay).primary
         ambientSecondary: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay).secondary

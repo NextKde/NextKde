@@ -51,17 +51,26 @@ PanelWindow {
     }
 
     // Blur the list content area so KWin's glass effect renders real liquid
-    // glass behind each card. We track the real content height on a dedicated
-    // `blurTrack` item, but only let its height *grow* with a delay (so the
-    // glass fades in after a new card's entrance slide finishes, instead of
-    // landing before the text arrives). Shrinking is immediate so removed
-    // cards don't leave a lingering glass slab.
-    Item {
+    // glass behind each card. The track itself is a LiquidGlassPanel, so it
+    // owns its blur region and exact corner instead of a separate hand-written
+    // region. Its height only *grows* with a delay (so the glass fades in
+    // after a new card's entrance slide finishes, instead of landing before
+    // the text arrives); shrinking is immediate so removed cards don't leave a
+    // lingering glass slab.
+    LiquidGlassPanel {
         id: blurTrack
         anchors.top: notificationList.top
         anchors.left: notificationList.left
         width: notificationList.width
         height: blurTrackHeight.value
+        radius: 28
+        // Notifications need to stay readable over whatever is beneath, so the
+        // scrim fills in rather than stay see-through.
+        scrimEnabled: true
+        scrimLevel: "balanced"
+        // A tonal theme has no compositor glass, so the panel must neither
+        // paint a material strip (KWin owns the finish) nor publish a region.
+        visible: AppearanceTokens.surface.usesKwinBlur && blurTrackHeight.value > 0
 
         QtObject {
             id: blurTrackHeight
@@ -83,15 +92,9 @@ PanelWindow {
             }
         }
     }
-    BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0) ? notifBlurRegionHolder : null
-
-    Region {
-        id: notifBlurRegionHolder
-        RoundedBlurRegion {
-            item: blurTrack
-            radius: 28
-        }
-    }
+    BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0
+        && AppearanceTokens.surface.usesKwinBlur)
+        ? blurTrack.blurRegion : null
 
     ListView {
         id: notificationList
@@ -194,52 +197,63 @@ PanelWindow {
             radius: 28
             color: "transparent"
 
+            // Continuous (superelliptical) corners are the panel's job now: it
+            // owns the corner field, the mask and the outline, and publishes the
+            // same radius and exponent to the compositor as this surface's
+            // shape. The hand-rolled mask this card used to carry is gone with
+            // it, along with the child-radius plumbing it needed -- two masks
+            // would round the card twice, and the plumbing only existed because
+            // a Rectangle could not switch its own circular paint off.
+
             // ---- backgrounds ----
-            // Frosted liquid glass backdrop adapting to theme
-            LiquidGlassSurface {
+            // Frosted liquid glass backdrop adapting to theme. The urgency
+            // tints and the edge accents sit inside it so that the corner mask
+            // shapes them too instead of letting their own circular radius
+            // disagree with the silhouette.
+            LiquidGlassPanel {
+                id: panel
                 anchors.fill: parent
                 radius: card.radius
+                cornerExponent: AppearanceTokens.shape.cornerExponent
+                // Text sits directly on this card, so it carries a readable scrim over
+                // whatever backdrop it ends up on.
+                scrimEnabled: AppearanceTokens.surface.usesBackdrop
+                scrimLevel: "balanced"
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(0.08, 0.09, 0.12, 0.38)
                     : Qt.rgba(0.95, 0.95, 0.98, 0.55)
-                blurStrength: AppearanceTokens.glass.launcherBlur
-                liquidStrength: AppearanceTokens.glass.launcherLiquid
                 ambientPrimary: WallpaperColorSource.primary
                 ambientSecondary: WallpaperColorSource.secondary
                 ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-                border.width: 1
-                border.color: ThemeService.isDark
-                    ? Qt.rgba(1, 1, 1, 0.12)
-                    : Qt.rgba(0, 0, 0, 0.08)
-            }
 
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                visible: card.isCritical
-                color: Qt.rgba(0.55, 0.10, 0.08, 0.22)
-            }
-            Rectangle {
-                anchors.fill: parent
-                radius: parent.radius
-                visible: card.isLow
-                color: ThemeService.isDark
-                    ? Qt.rgba(0.04, 0.05, 0.08, 0.12)
-                    : Qt.rgba(0, 0, 0, 0.04)
-            }
-            Rectangle {
-                visible: card.isCritical
-                x: 4; y: parent.radius * 0.5
-                width: 3; height: parent.height - parent.radius
-                radius: 1.5
-                color: Qt.rgba(1.0, 0.27, 0.23, 0.95)
-            }
-            Rectangle {
-                x: Math.min(parent.width / 2, parent.radius + 2)
-                y: 0.6
-                width: Math.max(0, parent.width - x * 2)
-                height: 1
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06)
+                Rectangle {
+                    anchors.fill: parent
+                    radius: panel.contentRadius
+                    visible: card.isCritical
+                    color: Qt.rgba(0.55, 0.10, 0.08, 0.22)
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    radius: panel.contentRadius
+                    visible: card.isLow
+                    color: ThemeService.isDark
+                        ? Qt.rgba(0.04, 0.05, 0.08, 0.12)
+                        : Qt.rgba(0, 0, 0, 0.04)
+                }
+                Rectangle {
+                    visible: card.isCritical
+                    x: 4; y: panel.contentRadius * 0.5
+                    width: 3; height: panel.height - panel.contentRadius
+                    radius: 1.5
+                    color: Qt.rgba(1.0, 0.27, 0.23, 0.95)
+                }
+                Rectangle {
+                    x: Math.min(panel.width / 2, panel.contentRadius + 2)
+                    y: 0.6
+                    width: Math.max(0, panel.width - x * 2)
+                    height: 1
+                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06)
+                }
             }
 
             // ---- close + auto-expire ----

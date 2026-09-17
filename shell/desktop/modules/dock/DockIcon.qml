@@ -19,9 +19,6 @@ Item {
     // ═══════════════════════════════════════════════════════════
     property int    iconSize:    44
     property string iconSource:  ""
-    // Optional bundled-font glyph for shell controls. Unlike a themed icon
-    // name it is guaranteed to render even when the active KDE theme lacks it.
-    property string glyph:       ""
     property string displayName: ""
     property string appId:       ""
     property string windowId:    ""
@@ -208,6 +205,12 @@ Item {
         // private image provider, but it can read the underlying PNG.
         if (animationIconSource.startsWith("image://icon//"))
             animationIconSource = animationIconSource.substring("image://icon/".length)
+        // Bundled icons are inline data URIs. KWin reads that field as a file
+        // path, so send nothing (the effect falls back to EffectWindow::icon())
+        // rather than pushing kilobytes of base64 through the payload that is
+        // republished four times a second.
+        if (animationIconSource.startsWith("data:"))
+            animationIconSource = ""
         return {
             appId: icon.appId,
             windowId: icon.animationWindowId,
@@ -477,7 +480,6 @@ Item {
         height: icon.iconSize
         anchors.centerIn: parent
         active: icon._iconRendererActive
-        visible: !icon.glyph
         sourceComponent: Component {
             AppIcon {
                 width: icon.iconSize
@@ -599,7 +601,9 @@ Item {
                     width: runningIndicator.dotSize
                     height: width
                     radius: width / 2
-                    color: Qt.rgba(1, 1, 1, 0.95)
+                    color: Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g,
+                        ThemeService.foregroundColor.b, 0.95)
                 }
             }
         }
@@ -612,25 +616,6 @@ Item {
         }
     }
 
-    GlassText {
-        anchors.centerIn: parent
-        text: icon.glyph
-        visible: !!icon.glyph
-        rotation: icon.vertical ? -90 : 0
-        transformOrigin: Item.Center
-        color: Qt.rgba(1, 1, 1, 0.92)
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        font {
-            family: "Font Awesome 7 Free"
-            pixelSize: Math.round(icon.iconSize * 0.58)
-            weight: Font.Black
-        }
-        // Same cached-texture rationale as iconImage: glyph text is expensive
-        // to re-rasterize under scale animation.
-        layer.enabled: true
-        layer.smooth: true
-    }
     // The active/hover-style background already communicates the focused
     // running app, so no separate running marker is painted.
 
@@ -700,18 +685,18 @@ Item {
                 const pinned = icon.isPinnedItem || DockModelService.isAppPinned(icon.appId)
                 contextMenu.clear()
                 if (icon.isWindowItem) {
-                    contextMenu.addItem("", "激活窗口", "activate")
-                    contextMenu.addItem("", "最小化", "minimize")
-                    contextMenu.addItem("", "关闭窗口", "close")
-                    contextMenu.addItem("", "新建窗口", "new_window")
-                    contextMenu.addItem(pinned ? "" : "",
+                    contextMenu.addItem("window-restore", "激活窗口", "activate")
+                    contextMenu.addItem("window-minimize", "最小化", "minimize")
+                    contextMenu.addItem("window-close", "关闭窗口", "close")
+                    contextMenu.addItem("window-new", "新建窗口", "new_window")
+                    contextMenu.addItem(pinned ? "unpin" : "pin",
                         pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
                 } else {
-                    contextMenu.addItem("", "打开", "open")
-                    contextMenu.addItem("", "新建窗口", "new_window")
+                    contextMenu.addItem("folder-open", "打开", "open")
+                    contextMenu.addItem("window-new", "新建窗口", "new_window")
                     if (icon.isRunning)
-                        contextMenu.addItem("", "关闭所有窗口", "close_all")
-                    contextMenu.addItem(pinned ? "" : "",
+                        contextMenu.addItem("window-close", "关闭所有窗口", "close_all")
+                    contextMenu.addItem(pinned ? "unpin" : "pin",
                         pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
                 }
                 DockModelService.activeContextMenu = contextMenu

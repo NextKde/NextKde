@@ -73,14 +73,33 @@ Item {
     function _refreshQuantizerSource() {
         ready = false
         const sourceText = source.toString()
-        const remote = sourceText.match(/^https?:\/\//i)
         if (!sourceText) {
             quantizerSource = ""
             primary = fallbackPrimary
             secondary = fallbackSecondary
             return
         }
-        if (!remote) {
+        // Bundled artwork is an inline data URI (the default cover lives in
+        // BundledIcons). ColorQuantizer opens its source through QFile, so a
+        // data URI never loads: it logs "Failed to load image" and reports zero
+        // colours. Decode it into the same cache the remote path uses, then
+        // quantize that file.
+        if (sourceText.startsWith("data:")) {
+            const comma = sourceText.indexOf(",")
+            const base64 = comma > 0
+                && sourceText.slice(0, comma).includes(";base64")
+            if (!base64) {
+                // A percent-encoded inline SVG carries no usable palette.
+                quantizerSource = ""
+                primary = fallbackPrimary
+                secondary = fallbackSecondary
+                return
+            }
+            _cacheAndQuantize(sourceText, sourceText.slice(comma + 1),
+                "printf '%s' \"$3\" | base64 -d > \"$2.$$.tmp\"")
+            return
+        }
+        if (!/^https?:\/\//i.test(sourceText)) {
             // ColorQuantizer accepts URL sources. Plasma stores local
             // wallpapers as bare absolute paths, so normalize only paths that
             // do not already carry a URL scheme (file:, image:, qrc:, ...).
@@ -88,19 +107,28 @@ Item {
             quantizerSource = hasScheme ? source : "file://" + sourceText
             return
         }
-        const requestedSource = source.toString()
-        const cachePath = cacheDirectory + "/" + _cacheName(requestedSource)
+        _cacheAndQuantize(sourceText, sourceText,
+            "curl --fail --location --silent --show-error --max-time 15 --output \"$2.$$.tmp\" \"$3\"")
+    }
+
+    // Materializes artwork that is not a local file (remote URL, inline data
+    // URI) into the palette cache once, then points the quantizer at that file.
+    // `payload` is what the fetch command reads as $3; `expectedSource` guards
+    // against a slow fetch landing after the artwork already changed.
+    function _cacheAndQuantize(expectedSource, payload, fetchCommand) {
+        const cachePath = cacheDirectory + "/" + _cacheName(expectedSource)
         quantizerSource = ""
         const process = processFactory.createObject(root, {
             command: ["sh", "-c",
-                "mkdir -p \"$1\" && if [ ! -s \"$2\" ]; then curl --fail --location --silent --show-error --max-time 15 --output \"$2.$$.tmp\" \"$3\" && mv \"$2.$$.tmp\" \"$2\"; fi",
-                "artwork-palette-cache", cacheDirectory, cachePath, requestedSource]
+                "mkdir -p \"$1\" && if [ ! -s \"$2\" ]; then " + fetchCommand
+                    + " && mv \"$2.$$.tmp\" \"$2\"; fi",
+                "artwork-palette-cache", cacheDirectory, cachePath, payload]
         })
         _downloadProcess = process
         process.exited.connect(function(exitCode) {
             if (root._downloadProcess === process)
                 root._downloadProcess = null
-            if (exitCode === 0 && root.source.toString() === requestedSource)
+            if (exitCode === 0 && root.source.toString() === expectedSource)
                 root.quantizerSource = "file://" + cachePath
             process.destroy()
         })
