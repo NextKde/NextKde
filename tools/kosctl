@@ -90,7 +90,7 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install [lockscreen|sddm|apps]|start|sync|dev|run|uninstall [lockscreen|sddm]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|sync|dev|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
   git clone <repo> && cd Nextkde
@@ -99,12 +99,12 @@ NixOS remote install:
 
 Optional components are installed by naming them:
   ./tools/kosctl install lockscreen   # lock screen (user level, no root)
-  ./tools/kosctl install sddm         # SDDM sign-in theme (needs root)
   ./tools/kosctl install apps         # standalone apps (tools/install-apps.sh)
-  ./tools/kosctl uninstall lockscreen|sddm
+  ./tools/kosctl uninstall lockscreen
 
 Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
-screen, no SDDM theme.
+screen. The SDDM sign-in theme (apps/sddm) is not installed by kosctl while its
+greeter integration is being reworked; see the README for the status.
 
 Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_INSTALL_KWIN_DECORATION, GOPROXY
 
@@ -878,12 +878,18 @@ install_kwin_plugins() {
     fi
 }
 
-# ---- optional: lock screen and SDDM theme --------------------------------
+# ---- optional: lock screen and standalone apps ---------------------------
 #
-# They are installed by naming them (`install lockscreen`, `install sddm`)
+# They are installed by naming them (`install lockscreen`, `install apps`)
 # rather than by flags: a bare `install` covers the core desktop only, and an
 # optional system surface should not appear as a side effect of the command
 # someone runs every day.
+#
+# The SDDM theme (apps/sddm) has no installer here for now. It is a greeter
+# theme, so it writes to /usr/share/sddm/themes and the system config; that
+# path is disabled until the greeter integration is sorted out. The QML stays
+# in the tree and can still be previewed with
+# `sddm-greeter --test-mode --theme apps/sddm`.
 
 # The package goes under BOTH roots on purpose. The greeter resolves it under
 # plasma/shells/ -- look-and-feel/ is not searched for the lock screen at all,
@@ -922,29 +928,6 @@ install_lockscreen() {
     printf 'Lock screen installed (plasma/shells + look-and-feel, ShellPackage=org.kos.desktop).\n'
 }
 
-# SDDM themes live in the system prefix and the theme selection is a system
-# config file, so this is the one part of a KOS install that needs root. The
-# write is a single conf.d drop-in: removing that one file (from a TTY, if the
-# greeter ever misbehaves) puts SDDM back on whatever theme it used before.
-install_sddm_theme() {
-    if ! command -v sddm-greeter >/dev/null 2>&1; then
-        printf 'sddm is not installed; skipping the SDDM theme.\n'
-        return 0
-    fi
-    if ! command -v sudo >/dev/null 2>&1; then
-        printf 'sudo is unavailable; cannot install the SDDM theme.\n' >&2
-        return 1
-    fi
-    sudo mkdir -p /usr/share/sddm/themes/kos /etc/sddm.conf.d
-    sudo cp -a "$project_dir/apps/sddm/." /usr/share/sddm/themes/kos/
-    printf '[Theme]\nCurrent=kos\n' | sudo tee /etc/sddm.conf.d/kos-theme.conf >/dev/null
-    if [[ ! -f /usr/share/sddm/themes/kos/Main.qml ]]; then
-        printf 'SDDM theme copy failed; the theme selection was not changed.\n' >&2
-        return 1
-    fi
-    printf 'SDDM theme installed and selected (Current=kos). Takes effect at the next login screen.\n'
-}
-
 lockscreen_installed() {
     [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml" ]]
 }
@@ -957,20 +940,6 @@ remove_lockscreen() {
             --key ShellPackage --delete
     fi
     printf 'Lock screen removed (ShellPackage key deleted).\n'
-}
-
-remove_sddm_theme() {
-    if [[ ! -d /usr/share/sddm/themes/kos && ! -f /etc/sddm.conf.d/kos-theme.conf ]]; then
-        printf 'SDDM theme is not installed.\n'
-        return 0
-    fi
-    if ! command -v sudo >/dev/null 2>&1; then
-        printf 'sudo is unavailable; cannot remove the SDDM theme.\n' >&2
-        return 1
-    fi
-    sudo rm -rf /usr/share/sddm/themes/kos
-    sudo rm -f /etc/sddm.conf.d/kos-theme.conf
-    printf 'SDDM theme removed; SDDM falls back to its previous theme.\n'
 }
 
 # The standalone apps are built and installed by their own script: they carry
@@ -1099,7 +1068,13 @@ uninstall() {
     if lockscreen_installed; then
         remove_lockscreen
     fi
-    remove_sddm_theme
+    # An SDDM theme installed from this checkout by an earlier kosctl is left
+    # alone -- removing it needs root -- so report it instead of silently
+    # keeping it around.
+    if [[ -d /usr/share/sddm/themes/kos || -f /etc/sddm.conf.d/kos-theme.conf ]]; then
+        printf 'An SDDM theme from an earlier install is still present; remove it with:\n'
+        printf '  sudo rm -rf /usr/share/sddm/themes/kos /etc/sddm.conf.d/kos-theme.conf\n'
+    fi
     rm -f "$runtime_unit_dir/kos-shell.service" \
         "$runtime_unit_dir/kos-platform.service" \
         "$runtime_unit_dir/kos-data.service"
@@ -1229,7 +1204,6 @@ case "${1:-}" in
         case "${2:-}" in
             "") install_all ;;
             lockscreen) install_lockscreen ;;
-            sddm) install_sddm_theme ;;
             apps) install_apps ;;
             *) usage >&2; exit 2 ;;
         esac ;;
@@ -1241,7 +1215,6 @@ case "${1:-}" in
         case "${2:-}" in
             "") uninstall ;;
             lockscreen) remove_lockscreen ;;
-            sddm) remove_sddm_theme ;;
             *) usage >&2; exit 2 ;;
         esac ;;
     glass-settings) open_glass_settings ;;
