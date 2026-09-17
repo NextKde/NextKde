@@ -127,6 +127,7 @@ Item {
     // backdrop luminance. Encoded as decay 2 on the v3 wire request so an old
     // compositor safely degrades it to adaptive decay 1.
     property bool scrimFixed: false
+    property bool scrimGraphite: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
         : (AppearanceConfigService.glassFollowsAppearanceMode
@@ -193,7 +194,8 @@ Item {
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap
-        scrimDecay: root.scrimFixed ? 2.0 : root._effectiveScrimDecay
+        scrimDecay: root.scrimGraphite ? 3.0
+            : (root.scrimFixed ? 2.0 : root._effectiveScrimDecay)
     }
 
     LiquidGlassSurface {

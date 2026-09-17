@@ -15,6 +15,8 @@ KosFloatPanel {
     contentPadding: 0
     radius: 24
     materialTone: "dark"
+    fixedScrimTone: "graphite"
+    fixedScrimOpacity: 0.90
 
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen)
@@ -25,51 +27,59 @@ KosFloatPanel {
 
     Item {
         width: Math.min(340, popup.width - 44)
-        height: 196
+        height: 242
 
-        Row {
-            anchors {
-                left: parent.left
-                right: parent.right
-                top: parent.top
-                margins: 24
+        Rectangle {
+            width: 58
+            height: 58
+            radius: 16
+            anchors { top: parent.top; topMargin: 24; horizontalCenter: parent.horizontalCenter }
+            color: Qt.rgba(0.92, 0.12, 0.18, 0.20)
+            border.width: 1
+            border.color: Qt.rgba(1, 0.36, 0.40, 0.34)
+
+            BundledIcon {
+                anchors.centerIn: parent
+                name: "user-trash"
+                color: "#ff4d58"
+                size: 28
             }
-            spacing: 16
+        }
 
-            Rectangle {
-                width: 52
-                height: 52
-                radius: width / 2
-                color: Qt.rgba(1.0, 0.20, 0.25, 0.12)
+        Rectangle {
+            width: 24
+            height: 24
+            radius: 12
+            anchors { top: parent.top; right: parent.right; topMargin: 14; rightMargin: 14 }
+            color: Qt.rgba(1, 1, 1, 0.16)
+            Text {
+                anchors.centerIn: parent
+                text: "?"
+                color: popup.contentSecondaryColor
+                font { pixelSize: 14; weight: Font.Bold }
+            }
+        }
 
-                BundledIcon {
-                    anchors.centerIn: parent
-                    name: "user-trash"
-                    color: "#e02f3d"
-                    size: 24
-                }
+        Column {
+            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 94; leftMargin: 24; rightMargin: 24 }
+            spacing: 7
+
+            Text {
+                width: parent.width
+                text: "确定要清空回收站吗？"
+                horizontalAlignment: Text.AlignHCenter
+                color: popup.contentForegroundColor
+                font { pixelSize: 17; weight: Font.Bold }
             }
 
-            Column {
-                width: parent.width - 68
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 7
-
-                Text {
-                    width: parent.width
-                    text: "确定要清空回收站吗？"
-                    color: popup.contentForegroundColor
-                    font { pixelSize: 17; weight: Font.DemiBold }
-                }
-
-                Text {
-                    width: parent.width
-                    text: "回收站中的所有项目都将被永久删除。此操作无法撤销。"
-                    wrapMode: Text.WordWrap
-                    color: popup.contentSecondaryColor
-                    font.pixelSize: 13
-                    lineHeight: 1.18
-                }
+            Text {
+                width: parent.width
+                text: "所有项目都将被永久删除。\n此操作无法撤销。"
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                color: popup.contentSecondaryColor
+                font.pixelSize: 13
+                lineHeight: 1.16
             }
         }
 
@@ -77,16 +87,18 @@ KosFloatPanel {
             anchors {
                 right: parent.right
                 bottom: parent.bottom
-                rightMargin: 20
-                bottomMargin: 20
+                left: parent.left
+                leftMargin: 16
+                rightMargin: 16
+                bottomMargin: 16
             }
-            spacing: 10
+            spacing: 8
 
             Rectangle {
-                width: 82
-                height: 32
-                radius: height / 2
-                color: popup.contentControlFill
+                width: (parent.width - parent.spacing) / 2
+                height: 34
+                radius: 9
+                color: Qt.rgba(1, 1, 1, 0.16)
                 border.width: 1
                 border.color: popup.contentControlBorder
 
@@ -105,9 +117,9 @@ KosFloatPanel {
             }
 
             Rectangle {
-                width: 116
-                height: 32
-                radius: height / 2
+                width: (parent.width - parent.spacing) / 2
+                height: 34
+                radius: 9
                 color: DockTrashService.emptying ? "#c76a70" : "#d92f3d"
 
                 Text {

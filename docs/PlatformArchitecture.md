@@ -70,11 +70,12 @@ The manager and shape interfaces are version 3. `set_role` remains solely to
 keep the opcode layout compatible with v2 clients; KOS does not publish roles.
 `set_scrim` is sent only when the bound compositor advertises v3, so clients
 remain safe with an older effect. `cap` is the maximum scrim opacity, clamped
-to `0...1`. `decay` is clamped to `0...2`: a value at or below `1` scales the
-backdrop-derived ramp, and a value above `1` selects fixed mode, where `cap`
-is used as the exact opacity and the backdrop luminance is never sampled. The
-above-1 encoding lets a compositor that predates fixed mode clamp the request
-back to an adaptive decay of `1` instead of failing.
+to `0...1`. `decay` is clamped to `0...3` and picks the mode: at or below `1` it
+scales the backdrop-derived ramp; above `1` it selects fixed mode, where `cap`
+is the exact opacity and the backdrop luminance is never sampled; above `2` it
+selects the fixed neutral graphite material instead of the black/white tint.
+Each above-`1` encoding lets a compositor that predates that mode clamp the
+request back to the one below it instead of failing.
 
 One surface may hold any number of shapes, which is what keeps the multi-card
 case open. Three pieces implement it and all three build from this repository:
