@@ -18,6 +18,45 @@
 #include <QThread>
 #include <QVariantMap>
 
+namespace {
+
+// The 材质 group of the debug page is the editor for the shell's glass presets,
+// not for raw kwinrc values. The shell re-writes every one of those keys from
+// the active preset on each appearance sync (theme.sync-glass), so a direct
+// kwinrc write here is reverted the moment any blur/liquid/style control moves;
+// these rows therefore read and write the preset through the shell, which also
+// reconfigures the effect, keeping the live feedback a raw write used to give.
+//
+// `toKwinrc` converts preset units into kwinrc units. Only Refraction differs:
+// it lives as 0..1 in the preset and reaches kwinrc as RefractionStrength 0..20
+// through round(globalLiquidStrength * Refraction * 20).
+struct PresetDebugKey {
+    const char *key;
+    const char *parameter;
+    double toKwinrc;
+};
+
+const PresetDebugKey kPresetDebugKeys[] = {
+    {"RefractionStrength", "Refraction", 20.0},
+    {"RefractionEdgeSize", "EdgeSize", 1.0},
+    {"RefractionNormalPow", "NormalPow", 1.0},
+    {"RefractionRGBFringing", "RGBFringing", 1.0},
+    {"RefractionOffsetStrength", "OffsetStrength", 1.0},
+    {"MaterialSoftness", "Softness", 1.0},
+    {"MaterialReflectionStrength", "Reflection", 1.0},
+};
+
+const PresetDebugKey *presetDebugKey(const QString &key)
+{
+    for (const PresetDebugKey &candidate : kPresetDebugKeys) {
+        if (key == QLatin1String(candidate.key))
+            return &candidate;
+    }
+    return nullptr;
+}
+
+} // namespace
+
 class SettingsBridge final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -105,6 +144,35 @@ public:
     }
 
     Q_INVOKABLE QVariantList glassDebugSnapshot() {
+        // One round trip, shared: the 材质 rows below take their value from the
+        // active preset carried in this snapshot, and glassPresetStyle() names
+        // the style those values belong to. An unreachable shell leaves the
+        // snapshot empty, so those rows fall back to reading kwinrc and a write
+        // reports the shell error instead of silently doing nothing.
+        m_appearanceSnapshot = fetchAppearanceSnapshot();
+        return glassDebugSpecs();
+    }
+
+    // Which style's preset the debug page's 材质 rows edit, as of the last
+    // glassDebugSnapshot() call. Shown next to them so a tuned value is not
+    // mistaken for a global one.
+    Q_INVOKABLE QString glassPresetStyle() const {
+        return m_appearanceSnapshot.value(QStringLiteral("glassStyle"))
+            .toString(QStringLiteral("liquid"));
+    }
+
+    // Helpers for glassDebugSnapshot(); not Q_INVOKABLE, QML reaches them only
+    // through it.
+    QJsonObject fetchAppearanceSnapshot() {
+        const QByteArray payload = callAppearance({QStringLiteral("snapshot")}).toUtf8();
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject())
+            return {};
+        return document.object();
+    }
+
+    QVariantList glassDebugSpecs() const {
         const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
             + QStringLiteral("/kwinrc");
         QSettings config(path, QSettings::IniFormat);
@@ -113,13 +181,27 @@ public:
         const auto add = [&](const char *key, const char *label, const char *section,
                              const char *type, double minimum, double maximum,
                              double step, const QVariant &fallback) {
+            // Preset-backed rows report the preset's own value, converted into
+            // kwinrc units so the ranges below stay meaningful, and are marked so
+            // updateGlassDebugValue() knows to write the preset rather than kwinrc.
+            bool presetBacked = false;
+            QVariant value = config.value(QString::fromLatin1(key), fallback);
+            if (const PresetDebugKey *preset = presetDebugKey(QString::fromLatin1(key))) {
+                const QJsonValue stored = m_appearanceSnapshot.value(
+                    QStringLiteral("activePreset") + QString::fromLatin1(preset->parameter));
+                if (stored.isDouble()) {
+                    presetBacked = true;
+                    value = stored.toDouble() * preset->toKwinrc;
+                }
+            }
             result.append(QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)},
                 {QStringLiteral("label"), QString::fromUtf8(label)},
                 {QStringLiteral("section"), QString::fromUtf8(section)},
                 {QStringLiteral("type"), QString::fromLatin1(type)},
                 {QStringLiteral("min"), minimum}, {QStringLiteral("max"), maximum},
                 {QStringLiteral("step"), step},
-                {QStringLiteral("value"), config.value(QString::fromLatin1(key), fallback)}});
+                {QStringLiteral("presetBacked"), presetBacked},
+                {QStringLiteral("value"), value}});
         };
         add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
         add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
@@ -130,18 +212,13 @@ public:
         add("Saturation", "饱和度", "色彩", "real", 0, 3, .01, 1.0);
         add("Contrast", "对比度", "色彩", "real", 0, 2, .01, 1.0);
         add("OklabSaturation", "使用 OKLab 饱和度", "色彩", "bool", 0, 1, 1, false);
-        add("GlowColor", "辉光颜色（#AARRGGBB）", "色彩", "string", 0, 0, 0, QStringLiteral("#00000000"));
         add("RefractionStrength", "折射强度", "材质", "real", 0, 20, .1, 0.0);
         add("RefractionEdgeSize", "折射边缘范围", "材质", "real", 0, 50, .1, 20.0);
         add("RefractionNormalPow", "折射法线曲线", "材质", "real", .1, 10, .1, 2.0);
         add("RefractionRGBFringing", "RGB 色散", "材质", "real", 0, 20, .1, 1.0);
-        add("HighlightWidthPx", "高光宽度", "材质", "real", 0, 20, .1, 3.0);
+        add("RefractionOffsetStrength", "主体折射强度", "材质", "real", 0, 20, .1, 0.0);
         add("MaterialSoftness", "柔和度", "材质", "real", 0, 1, .01, 0.0);
-        add("MaterialHighlightStrength", "窄高光强度", "材质", "real", 0, 1, .01, 1.0);
         add("MaterialReflectionStrength", "宽反射强度", "材质", "real", 0, 1, .01, 0.0);
-        add("EdgeLighting", "边缘光", "适用范围", "bool", 0, 1, 1, false);
-        add("EdgeLightingDock", "Dock 边缘光", "适用范围", "bool", 0, 1, 1, false);
-        add("EdgeLightingTooltip", "Tooltip 边缘光", "适用范围", "bool", 0, 1, 1, false);
         add("ExcludeDecorations", "窗口装饰不应用染色", "适用范围", "bool", 0, 1, 1, false);
         add("MenuCornerRadius", "菜单圆角", "圆角", "real", 0, 100, 1, 0.0);
         add("DockCornerRadius", "Dock 圆角", "圆角", "real", 0, 100, 1, 0.0);
@@ -164,7 +241,10 @@ public:
     }
 
     Q_INVOKABLE bool updateGlassDebugValue(const QString &key, const QVariant &value) {
-        const QVariantList specs = glassDebugSnapshot();
+        // The spec table does not depend on the appearance snapshot, so this
+        // reuses whatever the last glassDebugSnapshot() cached instead of paying
+        // for another round trip per edit.
+        const QVariantList specs = glassDebugSpecs();
         QVariantMap match;
         for (const QVariant &item : specs) {
             const QVariantMap spec = item.toMap();
@@ -178,6 +258,16 @@ public:
             const double number = qBound(match.value(QStringLiteral("min")).toDouble(),
                 value.toDouble(), match.value(QStringLiteral("max")).toDouble());
             stored = type == QStringLiteral("int") ? QVariant(qRound(number)) : QVariant(number);
+        }
+        // A preset-backed key belongs to the shell: writing kwinrc directly would
+        // be undone by the next appearance sync. Hand it the value in preset units
+        // and let it persist the preset and reconfigure the effect; the reply is a
+        // full snapshot, so a rejected write (bad name, shell down) reports why.
+        if (const PresetDebugKey *preset = presetDebugKey(key)) {
+            const QString reply = callAppearance({QStringLiteral("updateGlassPresetParameter"),
+                QString::fromLatin1(preset->parameter),
+                QString::number(stored.toDouble() / preset->toKwinrc, 'f', 3)});
+            return !appearanceSnapshotFromReply(reply).isEmpty();
         }
         QSettings config(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
             + QStringLiteral("/kwinrc"), QSettings::IniFormat);
@@ -430,6 +520,10 @@ private:
         const QString barVisibility = object.value(QStringLiteral("barVisibilityMode")).toString(QStringLiteral("always"));
 
         setLastError({});
+        // Also the source glassDebugSpecs() reads the active preset from: this
+        // object carries every preset field, while the map below hand-picks the
+        // ones the appearance pages consume.
+        m_appearanceSnapshot = object;
         return {
             {QStringLiteral("globalBlurStrength"), globalBlur},
             {QStringLiteral("globalLiquidStrength"), globalLiquid},
@@ -439,8 +533,6 @@ private:
                 object.value(QStringLiteral("activePresetRefraction")).toDouble(1.0)},
             {QStringLiteral("activePresetSoftness"),
                 object.value(QStringLiteral("activePresetSoftness")).toDouble()},
-            {QStringLiteral("activePresetHighlight"),
-                object.value(QStringLiteral("activePresetHighlight")).toDouble(1.0)},
             {QStringLiteral("activePresetReflection"),
                 object.value(QStringLiteral("activePresetReflection")).toDouble()},
             {QStringLiteral("effectiveDockBlur"), globalBlur},
@@ -644,6 +736,10 @@ private:
     }
 
     QString m_lastError;
+    // Last appearance snapshot the shell sent. Kept for glassDebugSpecs(), which
+    // reads the active preset out of it, and refreshed on every glass debug
+    // snapshot so the style it names is the one being edited right now.
+    QJsonObject m_appearanceSnapshot;
 };
 
 int main(int argc, char *argv[]) {

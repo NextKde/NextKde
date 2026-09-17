@@ -84,6 +84,14 @@ QtObject {
             return ""
         if (_iconCache[requestedValue] !== undefined)
             return _iconCache[requestedValue]
+        // 项目自有应用（kos-calendar 等）的图标是我们自己的素材，直接走
+        // BundledIcons，不受别人的图标主题影响；其余应用的图标由各自
+        // .desktop 提供，物理上无法统一，仍走主题解析。
+        const bundled = BundledIcons.appIconSource(requestedValue)
+        if (bundled.length > 0) {
+            _iconCache[requestedValue] = bundled
+            return bundled
+        }
         // FairyWren's hwloc SVG contains path data that QtSvg rejects and the
         // Papirus variant can request an unbounded render buffer. lstopo is a
         // topology viewer, so a standard CPU icon is an accurate safe alias.
@@ -107,15 +115,12 @@ QtObject {
     }
 
     function genericIconSource() {
-        // Prefer a generic executable icon, but use system-run on themes that
-        // do not ship the freedesktop MIME icon.
-        try {
-            const name = Quickshell.hasThemeIcon("application-x-executable")
-                ? "application-x-executable" : "system-run"
-            return Quickshell.iconPath(name, true) || ""
-        } catch (e) {
-            return ""
-        }
+        // 主题优先：application-x-executable 是标准 freedesktop MIME 名，图标
+        // 主题一般都带着，个别主题没有就试 system-run；两者都缺才用自带的线条
+        // 图案，免得留下空白图标。
+        return SystemIconResolver.sourceFromCandidates(
+            ["application-x-executable", "system-run"], "application-x-executable")
+            || BundledIcons.source("application-x-executable")
     }
 
     function normalize(value) {

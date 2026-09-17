@@ -31,6 +31,9 @@ Item {
         ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
     property real cardOpacity: 1.0
     property real cardScale: 1.0
+    // Hosts with their own tonal fill can still use this item solely to
+    // publish a KWin blur shape, without stacking a second QML material.
+    property bool fallbackEnabled: AppearanceTokens.isMaterial
 
     // Inert compatibility from the old per-window card; each card now draws its
     // own glass, so these are retained only so existing instances compile.
@@ -68,13 +71,18 @@ Item {
     // single window blur region (the union of all cards).
     readonly property alias blurRegion: cardGlass.blurRegion
 
-    // The card's own KWin-backed glass. useKwinEffect:true publishes this
-    // card's SurfaceShape; the panel window's BackgroundEffect region is the
-    // union of these, so KWin blurs behind the cards and leaves the gaps crisp.
+    // The card's own KWin-backed glass. useKwinEffect publishes this card's
+    // SurfaceShape; the panel window's BackgroundEffect region is the union of
+    // these, so KWin blurs behind the cards and leaves the gaps crisp. A
+    // tonal/non-glass theme has no backdrop to sample, so it draws the QML
+    // surface instead of publishing a shape nothing would render -- the panel
+    // gates its region on the same token, which keeps the declared shape set and
+    // the region in step.
     LiquidGlassPanel {
         id: cardGlass
         anchors.fill: parent
-        useKwinEffect: true
+        useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+        fallbackEnabled: root.fallbackEnabled
         // The glass fills this card at local (0,0); its region must land where
         // the card actually sits in the window, so anchor it to the positioned
         // card Item (whose x/y carry the grid offset) instead of the glass.

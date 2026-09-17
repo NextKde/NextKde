@@ -72,7 +72,7 @@ PanelWindow {
     // The transparent layout deliberately leaves only the content: it must not
     // register a backdrop region, otherwise KWin adds blur/refraction behind
     // it. Other Bar layouts still use the regular compositor glass pipeline.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && !root.transparentMode && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && !root.transparentMode && root.visible
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? barSurface.blurRegion : null

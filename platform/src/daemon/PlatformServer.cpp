@@ -234,13 +234,26 @@ QString cleanCreatePath(const QString &path)
 
 QString resolveDesktopFile(const QString &id)
 {
-    if (id.isEmpty() || id.contains(QChar('/')))
+    if (id.isEmpty() || id.contains(QChar('\0')))
         return {};
-    if (QFileInfo(id).isAbsolute() && QFileInfo(id).isFile())
-        return QFileInfo(id).absoluteFilePath();
+    // Desktop icons hand over the absolute path of the .desktop file that sits
+    // in ~/Desktop, which is never inside an applications directory, so an
+    // absolute path is resolved directly instead of being rejected.
+    if (QFileInfo(id).isAbsolute()) {
+        const QFileInfo info(id);
+        if (!info.isFile()
+            || !info.fileName().endsWith(QStringLiteral(".desktop"), Qt::CaseInsensitive))
+            return {};
+        const QString canonical = info.canonicalFilePath();
+        return canonical.isEmpty() ? info.absoluteFilePath() : canonical;
+    }
+    if (id.contains(QChar('/')) || id.contains(QChar('\\')))
+        return {};
+    const QString name = id.endsWith(QStringLiteral(".desktop"), Qt::CaseInsensitive)
+        ? id : id + QStringLiteral(".desktop");
     const QStringList roots = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
     for (const QString &root : roots) {
-        const QString candidate = QDir(root).filePath(id);
+        const QString candidate = QDir(root).filePath(name);
         if (QFileInfo(candidate).isFile())
             return QFileInfo(candidate).absoluteFilePath();
     }
@@ -1740,7 +1753,11 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.launch")) {
-        const QString desktop = resolveDesktopFile(payload.value(QStringLiteral("desktopFile")).toString());
+        // "打开" on a desktop launcher sends desktopFile (an absolute path),
+        // "打开方式" only knows the installed storage id.
+        const QString requested = payload.value(QStringLiteral("desktopFile")).toString();
+        const QString desktop = resolveDesktopFile(requested.isEmpty()
+            ? payload.value(QStringLiteral("desktopId")).toString() : requested);
         const QString target = cleanPath(payload.value(QStringLiteral("path")).toString());
         if (desktop.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-desktop-file"),
@@ -2788,16 +2805,8 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             payload.value(QStringLiteral("refractionRGBFringing")).toDouble(5.4), 20.0);
         const double refractionOffsetStrength = qBound(0.0,
             payload.value(QStringLiteral("refractionOffsetStrength")).toDouble(8.0), 20.0);
-        const int refractionBevelIntensity = qBound(0,
-            payload.value(QStringLiteral("refractionBevelIntensity")).toInt(14), 100);
-        const double highlightWidthPx = qBound(0.0,
-            payload.value(QStringLiteral("highlightWidthPx")).toDouble(), 20.0);
-        const int highlightAngle = qBound(0,
-            payload.value(QStringLiteral("highlightAngle")).toInt(45), 360);
         const double materialSoftness = qBound(0.0,
             payload.value(QStringLiteral("materialSoftness")).toDouble(), 1.0);
-        const double materialHighlight = qBound(0.0,
-            payload.value(QStringLiteral("materialHighlightStrength")).toDouble(1.0), 1.0);
         const double materialReflection = qBound(0.0,
             payload.value(QStringLiteral("materialReflectionStrength")).toDouble(), 1.0);
         const double cornerExponent = qBound(2.0,
@@ -2830,19 +2839,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
              QStringLiteral("RefractionOffsetStrength"), QString::number(refractionOffsetStrength, 'f', 3)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("RefractionBevelIntensity"), QString::number(refractionBevelIntensity)},
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("HighlightWidthPx"), QString::number(highlightWidthPx, 'f', 3)},
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("HighlightAngle"), QString::number(highlightAngle)},
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("MaterialSoftness"), QString::number(materialSoftness, 'f', 3)},
-            {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
-             QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
-             QStringLiteral("MaterialHighlightStrength"), QString::number(materialHighlight, 'f', 3)},
             {QStringLiteral("--file"), QStringLiteral("kwinrc"), QStringLiteral("--group"),
              QStringLiteral("Effect-blurplus"), QStringLiteral("--key"),
              QStringLiteral("MaterialReflectionStrength"), QString::number(materialReflection, 'f', 3)},

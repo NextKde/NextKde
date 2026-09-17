@@ -10,14 +10,16 @@ LiquidGlassSurface 1.0 LiquidGlassSurface.qml
 LiquidGlassPanel 1.0 LiquidGlassPanel.qml
 PopupMotion 1.0 PopupMotion.qml
 AppIcon 1.0 AppIcon.qml
-SystemIcon 1.0 SystemIcon.qml
 ContextMenu 1.0 ContextMenu.qml
 MenuItemRow 1.0 MenuItemRow.qml
+KosFloatPanel 1.0 KosFloatPanel.qml
+BundledIcon 1.0 BundledIcon.qml
 singleton ContextMenuCoordinator 1.0 ContextMenuCoordinator.qml
 singleton AppPresentationService 1.0 AppPresentationService.qml
 singleton AppActionService 1.0 AppActionService.qml
 singleton MetricsService 1.0 MetricsService.qml
 singleton IconThemeReloadService 1.0 IconThemeReloadService.qml
+singleton BundledIcons 1.0 BundledIcons.qml
 singleton SystemIconResolver 1.0 SystemIconResolver.qml
 singleton TrayAttentionService 1.0 TrayAttentionService.qml
 singleton AppNotificationService 1.0 AppNotificationService.qml

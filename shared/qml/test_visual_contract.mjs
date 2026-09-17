@@ -89,9 +89,27 @@ for (const mode of ["dark", "light"]) {
         `${mode} tertiary shell text remains readable at small sizes`);
 }
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
+// GlassText keeps the root type Text so every Text property passes through
+// natively. Readability is now a two-way contract driven by the appearance
+// token: dark appearance keeps white type with a restrained outline, light
+// appearance drops to clean black type with no outline at all, and the chosen
+// ink is the token that decides both branches together.
+assert.match(glassTextSource, /^Text \{/m,
+    "glass text stays a Text so callers keep native Text properties");
 assert.match(glassTextSource,
-    /inkLuminance[\s\S]*styleColor:[\s\S]*inkLuminance\s*>=\s*0\.55/,
-    "glass text chooses an opposite-luminance outline without thickening the material");
+    /color:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*"#ffffff"[\s\S]*"#000000"/,
+    "glass text picks black-or-white ink from the appearance token");
+assert.match(glassTextSource,
+    /style:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Text\.Outline[\s\S]*Text\.Normal/,
+    "only the dark-appearance branch pays for an outline");
+assert.match(glassTextSource,
+    /styleColor:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Qt\.rgba\([\s\S]*"transparent"/,
+    "the light-appearance branch draws no outline at all");
+// The outline exists to hold white type over a bright backdrop; if the light
+// branch kept it, black type would gain an invisible halo and the two
+// appearances would stop being mirror images.
+assert.doesNotMatch(glassTextSource, /inkLuminance/,
+    "glass readability no longer depends on a sampled ink luminance");
 
 for (const button of ["KosButton", "KosToolButton", "KosRoundButton",
                       "KosSwitch", "KosSlider"]) {
@@ -158,6 +176,38 @@ assert.match(settingsDialog, /StandardKey\.Preferences/,
     "settings use the platform Preferences shortcut");
 assert.match(settingsDialog, /Accessible\.RadioButton[\s\S]*Accessible\.checked/,
     "accent swatches expose selection state to assistive technology");
+
+// The settings app shows two different glass sections depending on the shell
+// style. Under Material the liquid-only controls are absent, and each card's
+// height has to shrink by exactly the rows it drops -- a height that ignores
+// the hidden rows leaves a blank band where they used to be.
+const settingsApp = read("../../apps/settings/main.qml");
+assert.match(settingsApp,
+    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*54\s*:\s*109/,
+    "the appearance card drops the glass-follows-mode row under Material");
+assert.match(settingsApp,
+    /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*48\s*:\s*145/,
+    "the glass card keeps only the blur row under Material");
+// Both glass-follows-mode rows (the row and its separator) must hide together:
+// hiding only the row leaves a stray rule under the appearance-mode switch.
+const glassFollowsSlice = settingsApp.slice(
+    settingsApp.indexOf('text: "液态玻璃跟随外观模式"') - 900,
+    settingsApp.indexOf('text: "液态玻璃跟随外观模式"'));
+assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
+    || []).length >= 2,
+    "the glass-follows-mode row hides with its separator under Material");
+assert.match(settingsApp, /function saveGlassFollowsAppearanceMode/,
+    "the glass-follows-mode preference stays wired for non-Material styles");
+// The card that hosts the gallery and those controls must measure itself from
+// its contents. A literal height sized for the macOS layout leaves a dead band
+// under Material, where the embedded page is ~150px shorter.
+assert.match(settingsApp,
+    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,120}?themeMaterialSettings\.implicitHeight/,
+    "the theme card derives its height from the gallery and the embedded page");
+assert.match(settingsApp, /Layout\.preferredHeight:\s*implicitHeight/,
+    "the theme card feeds that derived height into the layout");
+assert.doesNotMatch(settingsApp, /Layout\.preferredHeight:\s*550\b/,
+    "the theme card no longer hardcodes the macOS-only height");
 
 const switchSource = read("./foundation/KosSwitch.qml");
 const segmentedSource = read("./controls/LiquidSegmentedControl.qml");
@@ -304,9 +354,16 @@ const globalMenuSource = read("../../shell/desktop/modules/bar/GlobalMenu.qml");
 assert.match(appLauncherWindow,
     /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
     "Launchpad and anchored popups consume the same entrance tokens");
+// The four-pixel separation from the Bar moved from a per-card offset into the
+// panel's own anchor margins when the panel became one window. The value and
+// the intent are unchanged: standalone the panel starts four pixels below the
+// Bar, dock-hosted it must keep its edge flush with the Dock.
 assert.match(controlCenterPanelSource,
-    /cardOffsetY:\s*!panel\.dockHosted\s*\?\s*-18[\s\S]{0,1800}margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
+    /margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
     "standalone Control Center starts four pixels below the Bar");
+assert.match(controlCenterPanelSource,
+    /adjustment:\s*PopupAdjustment\.Slide/,
+    "the Control Center still slides at screen edges instead of resizing");
 assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
     "application menus keep a four-pixel Bar gap");
 
@@ -385,12 +442,19 @@ const bluetoothSubmenuStart = controlCenterPanel.indexOf("id: bluetoothSubmenuVi
 const wifiSubmenu = controlCenterPanel.slice(wifiSubmenuStart, bluetoothSubmenuStart);
 assert.doesNotMatch(wifiSubmenu, /glyphColor:[^\n]*#000000/,
     "Wi-Fi list icons never switch to black");
+// The per-card coordinator suppression model is gone: the Control Center is
+// one window now, so a card can no longer be independently dimmed while a
+// sibling sheet finishes closing. What must survive is the simpler contract --
+// a card's visibility is exactly its `cardShown` flag, it publishes no opacity
+// veil of its own, and the leftover coordinator property stays inert so an old
+// instance still compiles.
+assert.match(controlCenterCard, /visible:\s*root\.cardShown\b/,
+    "a card's visibility is exactly its cardShown flag");
+assert.doesNotMatch(controlCenterCard, /visuallySuppressed/,
+    "cards no longer carry a suppression veil from the per-window model");
 assert.match(controlCenterCard,
-    /effectiveShown:[\s\S]{0,180}root\.managedByCoordinator[\s\S]{0,100}\?\s*root\.cardShown[\s\S]{0,140}!root\.visuallySuppressed/,
-    "the power sheet suppresses primary cards while independent sheets finish closing");
-assert.doesNotMatch(controlCenterCard,
-    /opacity:\s*root\.visuallySuppressed\s*\?\s*1\s*:\s*0/,
-    "hidden primary cards do not leave a dimmed visual veil");
+    /property bool managedByCoordinator:\s*true/,
+    "the retired coordinator property stays declared so old instances compile");
 assert.match(controlCenterPanel,
     /if\s*\(!coordinator\.open\)\s*\n\s*coordinator\.openAll\(\)/,
     "closing the power sheet can restore the primary Control Center state");
@@ -400,7 +464,14 @@ for (const marker of ["Card 4: Screenshot", "Card 5: Dark Mode", "Card 6: Power"
     assert.match(section, /width:\s*24[\s\S]{0,80}height:\s*24/,
         `${marker} uses a 24x24 icon container`);
 }
-const powerGlyph = read("../../shell/desktop/assets/logout.svg");
+// 图标自 2026-09-16 起内联在 BundledIcons.qml 里（例外只有两处：Dock 的启动器
+// logo 读 shell/desktop/assets/applauncher.svg，Dock 的回收站跟随系统图标主题），
+// 所以这里改从登记表里取那条数据来验证。
+const iconRegistry = read("../../shell/desktop/modules/common/BundledIcons.qml");
+// 注：登记名 "power" 画的是电源键（原先在 assets/logout.svg，现已内联）；"注销" 另画。
+const powerEntry = iconRegistry.match(/^\s*"power": '(.*)',$/m);
+assert.ok(powerEntry, "the power/logout icon is registered in BundledIcons");
+const powerGlyph = powerEntry[1];
 assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
     "the power glyph uses the same light outline weight as adjacent controls");
 assert.doesNotMatch(powerGlyph, /<path\s+fill=/,

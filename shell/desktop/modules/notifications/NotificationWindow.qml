@@ -70,7 +70,7 @@ PanelWindow {
         scrimLevel: "balanced"
         // A tonal theme has no compositor glass, so the panel must neither
         // paint a material strip (KWin owns the finish) nor publish a region.
-        visible: AppearanceTokens.surface.usesBackdrop && blurTrackHeight.value > 0
+        visible: AppearanceTokens.surface.usesKwinBlur && blurTrackHeight.value > 0
 
         QtObject {
             id: blurTrackHeight
@@ -93,7 +93,7 @@ PanelWindow {
         }
     }
     BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0
-        && AppearanceTokens.surface.usesBackdrop)
+        && AppearanceTokens.surface.usesKwinBlur)
         ? blurTrack.blurRegion : null
 
     ListView {

@@ -26,11 +26,18 @@ Item {
         Behavior on color { ColorAnimation { duration: 120 } }
     }
 
-    DockStatusSvgIcon {
+    // 外观（描边色 / 不透明度）来自 IconAppearanceService，与状态区其余
+    // 图标保持一致；图案本身来自 BundledIcons，不查系统主题。
+    BundledIcon {
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        source: Qt.resolvedUrl("../../assets/status-settings.svg")
+        name: "status-settings"
+        color: IconAppearanceService.mode === "tint"
+            ? IconAppearanceService.styledSymbolicColor()
+            : ThemeService.foregroundColor
+        opacity: IconAppearanceService.mode !== "color"
+            ? IconAppearanceService.opacity : 1.0
     }
 
     MouseArea {

@@ -20,8 +20,11 @@ session-D-Bus object is `org.kos.Platform` at `/Platform`; Shell never calls
 that object directly. KWin effects under `integrations/kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
 `integrations/kwin/decoration-liquid-glass` is a KDecoration3 plugin rather
-than an effect: it installs to the `org.kde.kdecoration3` plugin directory and
-kwinrc selects it with `[org.kde.kdecoration3] library=kos_liquid_glass`.
+than an effect: it installs to the `org.kde.kdecoration3` plugin directory.
+When explicitly installed with `KOS_INSTALL_KWIN_DECORATION=1`, `kosctl`
+selects it through `[org.kde.kdecoration2] library=kos_liquid_glass` in
+`kwinrc`. A normal install and `kosctl start` leave any existing decoration
+untouched.
 
 It is compiled C++ rather than a QML Aurorae theme for one reason:
 `KDecoration3::Decoration::setBorderRadius()` is the only way to make KWin clip
@@ -59,7 +62,19 @@ kos_surface_shape_manager_v1.get_shape(wl_surface) ──► kos_surface_shape_v
     set_geometry(x, y, width, height)   surface-local logical units
     set_corner(radius, exponent)        both wl_fixed
     set_enabled(enabled)
+    set_role(role)                      v2 compatibility no-op
+    set_scrim(enabled, tint, cap, decay) protocol v3; tint 0=black, 1=white
 ```
+
+The manager and shape interfaces are version 3. `set_role` remains solely to
+keep the opcode layout compatible with v2 clients; KOS does not publish roles.
+`set_scrim` is sent only when the bound compositor advertises v3, so clients
+remain safe with an older effect. `cap` is the maximum scrim opacity, clamped
+to `0...1`. `decay` is clamped to `0...2`: a value at or below `1` scales the
+backdrop-derived ramp, and a value above `1` selects fixed mode, where `cap`
+is used as the exact opacity and the backdrop luminance is never sampled. The
+above-1 encoding lets a compositor that predates fixed mode clamp the request
+back to an adaptive decay of `1` instead of failing.
 
 One surface may hold any number of shapes, which is what keeps the multi-card
 case open. Three pieces implement it and all three build from this repository:

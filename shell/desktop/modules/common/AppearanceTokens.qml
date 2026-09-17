@@ -23,12 +23,17 @@ QtObject {
         + systemPalette.window.g * 0.7152
         + systemPalette.window.b * 0.0722 < 0.5
     // Explicit light/dark choices must override KDE; only "system" follows
-    // SystemPalette. Material therefore selects the corresponding light or dark
-    // scheme instead of imposing one mode on both choices.
-    readonly property bool isDarkTheme:
+    // SystemPalette.
+    readonly property bool resolvedAppearanceIsDark:
         AppearanceConfigService.themeMode === "dark" ? true
         : AppearanceConfigService.themeMode === "light" ? false
         : systemIsDark
+    // Material always follows the selected appearance so its Monet tonal
+    // palette switches between distinct light and dark schemes. Glass can
+    // independently stay in its dark, high-contrast presentation.
+    readonly property bool isDarkTheme:
+        tokens.isMaterial || AppearanceConfigService.glassFollowsAppearanceMode
+            ? resolvedAppearanceIsDark : true
 
     // ────────────────────────────────────────────────────────────────
     // Wallpaper colour bridge
@@ -186,10 +191,12 @@ QtObject {
     // Every shell surface consumes this policy rather than treating Material as
     // the only special case. New themes add their visual treatment here; views
     // keep their structure and ask only whether they need a backdrop or a
-    // paint layer. Today only glass and tonal are implemented.
+    // paint layer. Material retains its tonal paint layer, and separately
+    // opts into a KWin blur region with no refraction.
     readonly property QtObject surface: QtObject {
         readonly property string treatment: tokens.isMaterial ? "tonal" : "glass"
         readonly property bool usesBackdrop: treatment !== "tonal"
+        readonly property bool usesKwinBlur: usesBackdrop || tokens.isMaterial
         readonly property bool usesTonalRoles: treatment === "tonal"
         readonly property color dockFill: usesTonalRoles
             ? tokens.colors.layer0 : "transparent"
@@ -199,7 +206,7 @@ QtObject {
         readonly property real barOpacity: usesTonalRoles ? 1.0 : 0.0
         readonly property color widgetFill: usesTonalRoles
             ? tokens.colors.layer1 : "transparent"
-        readonly property real widgetOpacity: usesTonalRoles ? 0.70 : 0.0
+        readonly property real widgetOpacity: usesTonalRoles ? 0.60 : 0.0
         readonly property color outline: usesTonalRoles
             ? tokens.colors.outlineVariant : "transparent"
     }
@@ -302,7 +309,9 @@ QtObject {
             : tokens.isMaterial ? 0.55 : 1.0
         readonly property real ambientMultiplier: tokens.isWindows12 ? 0.85
             : tokens.isMaterial ? 0.70 : 1.0
-        readonly property real materialOpacity: 1.0
+        // Keep Material surfaces visibly tonal while allowing the KWin blur to
+        // read through them. Full opacity would hide the backdrop completely.
+        readonly property real materialOpacity: tokens.isMaterial ? 0.60 : 1.0
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 

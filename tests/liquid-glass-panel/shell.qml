@@ -33,7 +33,6 @@ Item {
         width: 200
         height: 60
         radius: 18
-        outlineWidth: 1
 
         Text { anchors.centerIn: parent; text: "round" }
     }
@@ -48,7 +47,6 @@ Item {
         height: 60
         radius: 18
         cornerExponent: 4
-        outlineWidth: 1
 
         Text { anchors.centerIn: parent; text: "continuous" }
     }
@@ -123,7 +121,10 @@ Item {
         check("round stays unmasked", round.layer.enabled === false)
         check("round body keeps the radius", round.glass.radius === 18)
         check("round inset tracks radius", round.glass.cornerInset === 18)
-        check("round outline is a native border", round.glass.border.width === 1)
+        // The rim is KWin's job now: the panel zeroes the QML border in every
+        // corner mode so a client-side edge cannot double up on the liquid rim.
+        check("round outline is deferred to the compositor",
+            round.glass.border.width === 0)
 
         // Above 2 the mask takes over. The body has to render square or the two
         // arcs disagree near the corner, the inset lines still need the visual
@@ -132,7 +133,8 @@ Item {
         check("continuous body renders square", continuous.glass.radius === 0)
         check("continuous inset keeps the radius",
             continuous.glass.cornerInset === 18)
-        check("continuous native border off", continuous.glass.border.width === 0)
+        check("continuous keeps the same border posture",
+            continuous.glass.border.width === 0)
         check("caller content reaches the host", continuous.content.length === 1)
 
         // contentRadius is what a full-bleed child inside the panel needs: the

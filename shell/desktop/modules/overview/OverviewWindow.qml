@@ -206,9 +206,9 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 spacing: 6
 
-                                Text {
-                                    text: "󰍹"
-                                    font.pixelSize: 13
+                                BundledIcon {
+                                    name: "window"
+                                    size: 13
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.65)
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
@@ -459,10 +459,10 @@ PanelWindow {
                     anchors.centerIn: parent
                     spacing: 12
 
-                    Text {
+                    BundledIcon {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "󰖲"
-                        font.pixelSize: 32
+                        name: "window"
+                        size: 32
                         color: Qt.rgba(1, 1, 1, 0.25)
                     }
 

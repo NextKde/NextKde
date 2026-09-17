@@ -15,7 +15,8 @@ PopupWindow {
     property var player: DockMprisService.activePlayer
     readonly property url artworkSource: {
         const revision = DockMprisService.metadataRevision
-        return player?.trackArtUrl ? player.trackArtUrl : Qt.resolvedUrl("../../assets/defaultCover.png")
+        return player?.trackArtUrl
+            ? player.trackArtUrl : BundledIcons.source("default-cover")
     }
     property bool pointerInside: popupMouse.containsMouse
     readonly property bool monochrome: IconAppearanceService.mode !== "color"

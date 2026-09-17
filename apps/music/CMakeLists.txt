@@ -1,11 +1,22 @@
 find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent DBus QuickDialogs2 Sql)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET
-    gstreamer-1.0
-    gstreamer-audio-1.0
-    gstreamer-pbutils-1.0
-)
-pkg_check_modules(TAGLIB REQUIRED IMPORTED_TARGET taglib>=1.12)
+# The root project may already have resolved these (it does when it adds this
+# directory purely to reach the tests below). Reuse that result when present so
+# the version constraint is stated once and the two lookups cannot drift.
+if(NOT TARGET PkgConfig::KOS_MUSIC_GSTREAMER)
+    pkg_check_modules(KOS_MUSIC_GSTREAMER QUIET IMPORTED_TARGET
+        gstreamer-1.0
+        gstreamer-audio-1.0
+        gstreamer-pbutils-1.0
+    )
+endif()
+if(NOT TARGET PkgConfig::KOS_MUSIC_TAGLIB)
+    pkg_check_modules(KOS_MUSIC_TAGLIB QUIET IMPORTED_TARGET taglib>=1.12)
+endif()
+if(NOT (TARGET PkgConfig::KOS_MUSIC_GSTREAMER AND TARGET PkgConfig::KOS_MUSIC_TAGLIB))
+    message(FATAL_ERROR
+        "KOS Music needs gstreamer-1.0 (audio, pbutils) and taglib>=1.12")
+endif()
 
 set(KOS_MUSIC_CORE_SOURCES
     src/MetadataScanner.cpp
@@ -21,6 +32,12 @@ set(KOS_MUSIC_CORE_SOURCES
     src/Transcoder.h
 )
 
+# KOS_MUSIC_TESTS_ONLY is set by the root project when it descends here only to
+# build the test targets below. kos-music is a full QML application that links
+# Kos::Ui, which is itself gated behind the app flags, so building it from a
+# test-only descent would fail. Skipping it keeps the tests independent of the
+# application's own dependencies.
+if(NOT KOS_MUSIC_TESTS_ONLY)
 kos_add_application(kos-music
     URI Kos.Apps.Music
     DISPLAY_NAME "KOS Music"
@@ -45,13 +62,14 @@ kos_add_application(kos-music
         Qt6::DBus
         Qt6::QuickDialogs2
         Qt6::Sql
-        PkgConfig::GSTREAMER
-        PkgConfig::TAGLIB
+        PkgConfig::KOS_MUSIC_GSTREAMER
+        PkgConfig::KOS_MUSIC_TAGLIB
 )
 
 target_include_directories(kos-music PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+endif()
 
 if(BUILD_TESTING)
     qt_add_executable(kos-music-core-test
@@ -72,7 +90,7 @@ if(BUILD_TESTING)
         Qt6::Qml
         Qt6::Sql
         Qt6::Test
-        PkgConfig::TAGLIB
+        PkgConfig::KOS_MUSIC_TAGLIB
     )
     add_test(NAME kos-music.core COMMAND kos-music-core-test)
     set_tests_properties(kos-music.core PROPERTIES TIMEOUT 20)
@@ -93,8 +111,8 @@ if(BUILD_TESTING)
     target_link_libraries(kos-music-engine-test PRIVATE
         Qt6::Core
         Qt6::Test
-        PkgConfig::GSTREAMER
-        PkgConfig::TAGLIB
+        PkgConfig::KOS_MUSIC_GSTREAMER
+        PkgConfig::KOS_MUSIC_TAGLIB
     )
     add_test(NAME kos-music.engine COMMAND kos-music-engine-test)
     set_tests_properties(kos-music.engine PROPERTIES
@@ -122,8 +140,8 @@ if(BUILD_TESTING)
             Qt6::Qml
             Qt6::Sql
             Qt6::Test
-            PkgConfig::GSTREAMER
-            PkgConfig::TAGLIB
+            PkgConfig::KOS_MUSIC_GSTREAMER
+            PkgConfig::KOS_MUSIC_TAGLIB
         )
         add_test(NAME kos-music.mpris
             COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-music-mpris-test>

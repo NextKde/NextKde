@@ -1,3 +1,7 @@
+# KOS_WEATHER_TESTS_ONLY is set by the root project when it descends here only
+# for the tests below: kos-weather links Kos::Ui, which is gated behind the app
+# flags, so building the application from a test-only descent would fail.
+if(NOT KOS_WEATHER_TESTS_ONLY)
 kos_add_application(kos-weather
     URI Kos.Apps.Weather
     DISPLAY_NAME "KOS Weather"
@@ -24,12 +28,21 @@ add_dependencies(kos-weather kos-data-service-build)
 target_compile_definitions(kos-weather PRIVATE
     KOS_DATA_SERVICE_BUILD_PATH="${KOS_DATA_SERVICE_EXECUTABLE}"
 )
+endif()
 
 if(BUILD_TESTING)
-    set_property(TEST kos-weather.qml-smoke APPEND PROPERTY ENVIRONMENT
-        "KOS_WEATHER_DISABLE_SERVICE_AUTOSTART=1"
-    )
+    # kos-weather.qml-smoke is registered by kos_add_application, so it only
+    # exists when the application itself was configured.
+    if(TARGET kos-weather)
+        set_property(TEST kos-weather.qml-smoke APPEND PROPERTY ENVIRONMENT
+            "KOS_WEATHER_DISABLE_SERVICE_AUTOSTART=1"
+        )
+    endif()
 
+    # The client test recompiles WeatherClient.cpp and links nothing from the
+    # app, so it configures and runs even when KOS_BUILD_WEATHER is off. It is
+    # the only coverage WeatherClient has, so it must not sit behind the flag
+    # that gates the application.
     qt_add_executable(kos-weather-client-test
         tests/WeatherClientTest.cpp
         src/WeatherClient.cpp

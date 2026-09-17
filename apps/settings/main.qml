@@ -58,6 +58,32 @@ ApplicationWindow {
         readonly property color previewDock: dark ? "#323540" : "#ffffff"
         readonly property color previewIcon: dark ? "#a0a4b0" : "#7c8290"
     }
+
+    // The one ordered list of 材质风格 glass styles. Both the 材质风格 row (which
+    // renders it) and the 玻璃调试 page (which names the preset it edits) read it
+    // here, so a new style is added in this list and nowhere else. The ids must
+    // stay in step with AppearanceConfigService.isValidGlassStyle.
+    QtObject {
+        id: glassStyles
+        readonly property var options: [
+            { id: "liquid", label: "液态玻璃" },
+            { id: "soft", label: "柔光玻璃" },
+            { id: "frosted", label: "磨砂玻璃" }
+        ]
+        function indexOf(rawStyle) {
+            const style = String(rawStyle)
+            for (let i = 0; i < options.length; ++i) {
+                if (options[i].id === style)
+                    return i
+            }
+            return -1
+        }
+        function labelOf(rawStyle) {
+            const index = indexOf(rawStyle)
+            return index >= 0 ? options[index].label : String(rawStyle)
+        }
+    }
+
     readonly property var contentByPage: [
         {
             subtitle: "显示",
@@ -1366,7 +1392,9 @@ ApplicationWindow {
         property real blurStrength: 0.42
         property real liquidStrength: 1.0
         property string glassStyle: "liquid"
-        property bool glassFollowsAppearanceMode: true
+        property string shellStyle: "macos"
+        readonly property bool isMaterialDesign: shellStyle === "material"
+        property bool glassFollowsAppearanceMode: false
         property bool blurDirty: false
         property bool liquidDirty: false
         property string errorText: ""
@@ -1386,7 +1414,9 @@ ApplicationWindow {
                 return
             blurStrength = Math.max(0, Math.min(1, Number(rawBlur)))
             liquidStrength = Math.max(0, Math.min(1, Number(rawLiquid)))
-            glassStyle = state.glassStyle === "soft" ? "soft" : "liquid"
+            const styleIndex = glassStyles.indexOf(state.glassStyle)
+            glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
+            shellStyle = String(state.shellStyle || "macos")
             if (state.glassFollowsAppearanceMode !== undefined)
                 glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
@@ -1479,7 +1509,10 @@ ApplicationWindow {
         function setGlassStyle(index) {
             if (!bridge)
                 return
-            applyState(bridge.updateGlassStyle(index === 1 ? "soft" : "liquid"))
+            const option = glassStyles.options[index]
+            if (!option)
+                return
+            applyState(bridge.updateGlassStyle(option.id))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1506,7 +1539,10 @@ ApplicationWindow {
         Rectangle {
             visible: displayPage.showSystemAppearance
             Layout.fillWidth: true
-            implicitHeight: 109
+            // The glass-follows-appearance row is a liquid-glass control and is
+            // absent under Material, so the card collapses to just the
+            // appearance-mode row instead of leaving a gap behind it.
+            implicitHeight: displayPage.isMaterialDesign ? 54 : 109
             radius: 18
             color: theme.card
 
@@ -1550,12 +1586,20 @@ ApplicationWindow {
                     anchors.right: parent.right
                     anchors.leftMargin: 53
                     height: 1
+                    // Hidden together with the row below it: a separator with
+                    // no second row would draw a stray line under the mode
+                    // switch once the card collapses under Material.
+                    visible: !displayPage.isMaterialDesign
                     color: theme.separator
                 }
 
                 Item {
                     width: parent.width
                     height: 54
+                    // Liquid glass only. Material has no liquid blur to follow
+                    // the appearance mode with, so the row is dropped rather
+                    // than shown disabled.
+                    visible: !displayPage.isMaterialDesign
 
                     RowLayout {
                         anchors.fill: parent
@@ -1592,7 +1636,7 @@ ApplicationWindow {
 
         Text {
             visible: displayPage.showGlassMaterial
-            text: "玻璃材质".toUpperCase()
+            text: (displayPage.isMaterialDesign ? "背景模糊" : "玻璃材质").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -1602,7 +1646,7 @@ ApplicationWindow {
         Rectangle {
             visible: displayPage.showGlassMaterial
             Layout.fillWidth: true
-            implicitHeight: 145
+            implicitHeight: displayPage.isMaterialDesign ? 48 : 145
             radius: 18
             color: theme.card
 
@@ -1612,6 +1656,7 @@ ApplicationWindow {
                 Item {
                     width: parent.width
                     height: 48
+                    visible: !displayPage.isMaterialDesign
 
                     RowLayout {
                         anchors.fill: parent
@@ -1626,13 +1671,11 @@ ApplicationWindow {
                         }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
-                            Layout.preferredWidth: 176
+                            Layout.preferredWidth: 264
                             itemWidthOverride: 88
-                            model: [
-                                { id: "liquid", label: "液态玻璃" },
-                                { id: "soft", label: "柔光玻璃" }
-                            ]
-                            currentIndex: displayPage.glassStyle === "soft" ? 1 : 0
+                            model: glassStyles.options
+                            currentIndex: Math.max(0,
+                                glassStyles.indexOf(displayPage.glassStyle))
                             onSelectionChanged: function(index) {
                                 displayPage.setGlassStyle(index)
                             }
@@ -1645,6 +1688,7 @@ ApplicationWindow {
                     anchors.right: parent.right
                     anchors.leftMargin: 53
                     height: 1
+                    visible: !displayPage.isMaterialDesign
                     color: theme.separator
                 }
 
@@ -1689,12 +1733,14 @@ ApplicationWindow {
                     anchors.right: parent.right
                     anchors.leftMargin: 53
                     height: 1
+                    visible: !displayPage.isMaterialDesign
                     color: theme.separator
                 }
 
                 Item {
                     width: parent.width
                     height: 48
+                    visible: !displayPage.isMaterialDesign
 
                     RowLayout {
                         anchors.fill: parent
@@ -1756,14 +1802,33 @@ ApplicationWindow {
         property var controls: []
         property bool showAdvanced: false
         property string errorText: ""
+        // Which glass style's preset the 材质 rows edit; the shell owns that preset
+        // and rewrites kwinrc from it on every appearance sync. The label comes
+        // from the same style list the 材质风格 row renders.
+        property string presetStyle: "liquid"
+        readonly property string presetStyleLabel: glassStyles.labelOf(presetStyle)
         readonly property var visibleControls: controls.filter(function(control) {
-            return showAdvanced || control.section === "材质"
-                || (control.section === "色彩" && ["Brightness", "Saturation",
-                    "Contrast"].indexOf(control.key) >= 0)
+            if (showAdvanced)
+                return true
+            if (control.section === "色彩")
+                return ["Brightness", "Saturation", "Contrast"]
+                    .indexOf(control.key) >= 0
+            if (control.section !== "材质")
+                return false
+            // Keep only controls that visibly contribute to the selected
+            // material. Shader-development controls remain under 高级参数.
+            const keys = presetStyle === "soft"
+                ? ["RefractionStrength", "MaterialSoftness"]
+                : presetStyle === "frosted"
+                    ? ["MaterialSoftness", "MaterialReflectionStrength"]
+                    : ["RefractionStrength", "RefractionEdgeSize",
+                        "RefractionOffsetStrength"]
+            return keys.indexOf(control.key) >= 0
         })
         function refresh() {
             if (!bridge) return
             controls = bridge.glassDebugSnapshot()
+            presetStyle = bridge.glassPresetStyle()
             errorText = bridge.lastError || ""
         }
         function updateValue(key, value) {
@@ -1772,6 +1837,10 @@ ApplicationWindow {
                 return
             }
             errorText = ""
+            // Re-read so the row shows what was actually stored: a preset-backed
+            // value passes through the shell's own clamping, and a style switch
+            // elsewhere may have exchanged the whole set under us.
+            refresh()
         }
 
         Component.onCompleted: refresh()
@@ -1782,7 +1851,10 @@ ApplicationWindow {
 
         Text {
             Layout.fillWidth: true
-            text: "以下数值直接来自 kwinrc 的 [Effect-blurplus]，修改后立即重配 Glass。普通预设可能覆盖对应的模糊、折射和材质参数。"
+            text: "「材质」分组就是当前材质风格（" + glassDebugPage.presetStyleLabel
+                + "）的预设值：改动写进该预设、立即生效并在重启后保留，切换材质风格会换用另一套。"
+                + "「折射强度」还会乘以顶部的「液态强度」，实际生效值 = 液态强度 × 该值。"
+                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，仍可能被普通预设覆盖。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1857,6 +1929,14 @@ ApplicationWindow {
                             anchors.rightMargin: 16
                             spacing: 12
                             Text { text: modelData.label; color: theme.primaryText; font.pixelSize: 13 }
+                            Text {
+                                // The rows the shell owns: their value is stored in
+                                // the active material preset, not in kwinrc.
+                                visible: modelData.presetBacked === true
+                                text: "预设"
+                                color: theme.secondaryText
+                                font.pixelSize: 10
+                            }
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: modelData.type !== "bool" && modelData.type !== "string"
@@ -2216,7 +2296,10 @@ ApplicationWindow {
                 errorText = bridge ? "未知的主题形态" : "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.updateShellStyle(style))
+            const state = bridge.updateShellStyle(style)
+            applyState(state)
+            themeMaterialSettings.applyState(state)
+            globalAppearanceSettings.applyState(state)
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -2242,7 +2325,13 @@ ApplicationWindow {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: 550
+            // The card is as tall as its contents: the style gallery, the
+            // divider, and the embedded appearance controls. Under Material
+            // that controls block is much shorter, so a fixed 550 would leave
+            // a dead band below it.
+            implicitHeight: 16 + styleGallery.height + 13 + 1 + 10
+                + themeMaterialSettings.implicitHeight + 16
+            Layout.preferredHeight: implicitHeight
             radius: 26
             color: theme.dark ? "#000000" : "#ffffff"
             border.width: 1
@@ -2490,6 +2579,7 @@ ApplicationWindow {
             }
 
             DisplaySettingsPage {
+                id: themeMaterialSettings
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: themeMaterialDivider.bottom
@@ -2510,6 +2600,7 @@ ApplicationWindow {
         // Appearance controls belong to the selected theme. Keep the global
         // blur control available for every shell style, including Material.
         DisplaySettingsPage {
+            id: globalAppearanceSettings
             Layout.fillWidth: true
             showSystemAppearance: true
             showGlassMaterial: false

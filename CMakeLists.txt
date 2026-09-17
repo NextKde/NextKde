@@ -106,15 +106,8 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.liquid-glass-panel PROPERTIES TIMEOUT 15)
-            add_test(NAME kos-shell.lock-surface
-                COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/lock-surface/run.mjs
-                    ${KOS_QUICKSHELL_EXECUTABLE}
-            )
-            set_tests_properties(kos-shell.lock-surface PROPERTIES TIMEOUT 30)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
-                kos-shell.lock-surface
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         add_test(NAME kos-ui.page-cache-policy
@@ -122,6 +115,44 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_page_cache_policy.mjs
         )
         set_tests_properties(kos-ui.page-cache-policy PROPERTIES TIMEOUT 10)
+
+        # These four were written and passing but never added to the suite, so
+        # nothing ran them. They cover the Dock's adaptive layout and auto-hide
+        # math, the appearance configuration migration, and the platform
+        # window-placement rules -- all pure logic, no display or shell needed.
+        add_test(NAME kos-shell.appearance-config
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_appearance_config.mjs
+        )
+        set_tests_properties(kos-shell.appearance-config PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.dock-adaptive
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_adaptive.mjs
+        )
+        set_tests_properties(kos-shell.dock-adaptive PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.dock-autohide
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_autohide.mjs
+        )
+        set_tests_properties(kos-shell.dock-autohide PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-platform.window-placement
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_window_placement.mjs
+        )
+        set_tests_properties(kos-platform.window-placement PROPERTIES TIMEOUT 10)
+    endif()
+
+    # The platform contract test is dependency-free Python with its own
+    # __main__ entry point, so a plain interpreter is all it needs. It is the
+    # only check that keeps shared/contracts/platform.v1.md, ShortcutsService's
+    # default table and the daemon's generated handler in agreement.
+    find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
+    if(KOS_PYTHON_EXECUTABLE)
+        add_test(NAME kos-platform.contracts
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_contract.py
+        )
+        set_tests_properties(kos-platform.contracts PROPERTIES TIMEOUT 10)
     endif()
 endif()
 
@@ -173,6 +204,83 @@ if(KOS_BUILD_WEATHER)
 endif()
 
 include(KosApplication)
+
+# Every application ships behind an opt-in flag, but its tests must not: the
+# C++ suites that cover app-owned code are the only thing that exercises
+# ApplicationPreferences, WeatherClient, the music database and the PIM store,
+# and gating them behind their own app turned the whole layer into tests that
+# nothing ever ran. Each directory below configures and builds its test targets
+# without turning its application on -- the flags above still decide whether the
+# app itself is built.
+#
+#  - apps/common:      kos_app_core is a plain STATIC library holding no app
+#                      code, so the preference store test only needs this
+#                      directory.
+#  - apps/weather:     the client test compiles src/WeatherClient.cpp directly
+#                      rather than linking the app, so no data-service is
+#                      involved.
+#  - apps/music:       needs PkgConfig plus gstreamer/taglib; skipped when they
+#                      are missing so such a machine still configures the rest.
+#  - services/pim-service: the store/DBus tests link kos_pim_service_core, and
+#                      the two DBus tests also run the service binary, which
+#                      this directory builds unconditionally.
+#  - services/data-service: a bare `go test ./...`, independent of any C++.
+#
+# This block sits after include(KosApplication) because apps/music and
+# services/pim-service call kos_add_application, which that include defines.
+if(BUILD_TESTING)
+    if(NOT (KOS_BUILD_CALENDAR OR KOS_BUILD_TODO OR KOS_BUILD_WEATHER
+            OR KOS_BUILD_MUSIC))
+        add_subdirectory(apps/common)
+    endif()
+
+    if(NOT (KOS_BUILD_CALENDAR OR KOS_BUILD_TODO))
+        find_package(KF6CalendarCore 6.0 QUIET)
+        if(TARGET KF6::CalendarCore)
+            add_subdirectory(shared/pim)
+            add_subdirectory(services/pim-service)
+        endif()
+    endif()
+
+    if(NOT KOS_BUILD_WEATHER)
+        add_subdirectory(services/data-service)
+        # Tests only: KOS_WEATHER_TESTS_ONLY makes apps/weather skip
+        # kos_add_application, so the client test runs without Kos::Ui or the
+        # data-service build target the application would drag in.
+        set(KOS_WEATHER_TESTS_ONLY ON)
+        add_subdirectory(apps/weather)
+        unset(KOS_WEATHER_TESTS_ONLY)
+    endif()
+
+    if(NOT KOS_BUILD_MUSIC)
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(KOS_MUSIC_GSTREAMER QUIET IMPORTED_TARGET
+                gstreamer-1.0 gstreamer-audio-1.0 gstreamer-pbutils-1.0)
+            pkg_check_modules(KOS_MUSIC_TAGLIB QUIET IMPORTED_TARGET
+                taglib>=1.12)
+            if(TARGET PkgConfig::KOS_MUSIC_GSTREAMER
+                    AND TARGET PkgConfig::KOS_MUSIC_TAGLIB)
+                # Tests only: KOS_MUSIC_TESTS_ONLY makes this directory skip
+                # kos_add_application, so no app (and no Kos::Ui dependency)
+                # is pulled in.
+                set(KOS_MUSIC_TESTS_ONLY ON)
+                add_subdirectory(apps/music)
+                unset(KOS_MUSIC_TESTS_ONLY)
+            endif()
+        endif()
+    endif()
+
+    # apps/lockscreen is a data-only Plasma Look-and-Feel package: there is no
+    # target to build, so the check is a script. It compiles a throwaway probe
+    # against KF6::Package that reproduces the greeter's own skin selection --
+    # the trap it guards is invisible otherwise, because a metadata.json whose
+    # "X-Plasma-APIVersion" is nested inside "KPlugin" makes the greeter fall
+    # back to a KDE default skin without logging anything a locked session can
+    # show. The script exits 0 (skip) when the development headers are missing.
+    add_test(NAME kos-lockscreen.theme-resolution
+        COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/theme-resolution/run.sh")
+endif()
 
 if(KOS_BUILD_CALENDAR)
     add_subdirectory(apps/calendar)

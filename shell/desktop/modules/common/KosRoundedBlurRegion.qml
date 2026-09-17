@@ -13,10 +13,9 @@ RoundedBlurRegion {
     property real exponent: 2.0
     property bool shapeEnabled: true
 
-    // Contrast scrim forwarded to the compositor alongside the shape. tint
-    // 0 = black (for bright backdrops), 1 = white (for dark backdrops). cap is
-    // the absolute opacity ceiling; decay scales the auto-derived opacity so a
-    // surface can sit calmer than the default (a dock at 0.6, say).
+    // Contrast scrim forwarded to the compositor alongside the shape. Tint
+    // 0/1 is black/white. Decay 0..1 is adaptive; values above 1 select fixed
+    // mode, where cap is the exact opacity.
     property bool scrimEnabled: false
     property int scrimTint: 0
     property real scrimCap: 0.0

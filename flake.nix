@@ -41,6 +41,7 @@
           weather = {
             enable = lib.mkEnableOption "KOS Weather standalone application";
           };
+          decoration.enable = lib.mkEnableOption "the KOS Liquid Glass KWin window decoration";
         };
 
         config = lib.mkIf cfg.enable {
@@ -52,6 +53,7 @@
             kos.passthru.kwin-dock-window-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
+          ] ++ lib.optionals cfg.decoration.enable [
             kos.passthru.kwin-decoration-liquid-glass
           ] ++ lib.optionals cfg.weather.enable [
             kos.passthru.weather

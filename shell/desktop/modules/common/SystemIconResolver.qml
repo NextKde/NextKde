@@ -3,7 +3,10 @@ pragma Singleton
 import QtQuick
 import Quickshell
 
-// Semantic icon contract for shell chrome and menus.
+// 系统图标主题解析通道 —— **仅供明确要求跟随系统主题的图标使用**。
+//
+// 默认路径是 BundledIcons（shell 自带一套图案，任何机器上一致）。只有少数
+// 刻意要求"跟随用户图标主题"的地方才调本文件，当前调用点是 Dock 的回收站。
 //
 // Consumers ask for a role instead of embedding a Font Awesome glyph, an SVG
 // path, or a theme-specific filename. Candidate names follow the freedesktop /

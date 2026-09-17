@@ -95,7 +95,8 @@ PanelWindow {
                     kind: "clipboard",
                     title: entry.isImage ? "图片" : entry.preview,
                     subtitle: entry.isImage ? "图片剪贴板 · " + entry.preview.slice(2, -2) : "文本剪贴板 · 回车复制",
-                    icon: Quickshell.iconPath(entry.isImage ? "image-x-generic" : "edit-paste", true) || "",
+                    icon: BundledIcons.source(entry.isImage
+                        ? "image-x-generic" : "edit-paste"),
                     isImage: entry.isImage,
                     selectionRecord: entry.record
                 });

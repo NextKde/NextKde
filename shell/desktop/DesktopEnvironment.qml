@@ -10,9 +10,9 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
 import qs.desktop.modules.overview
 import qs.desktop.modules.common
-import qs.desktop.modules.lock
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
+import qs.desktop.modules.weather
 
 Item {
     id: shell
@@ -38,6 +38,10 @@ Item {
     Component.onCompleted: {
         IconThemeReloadService.initialize()
         ShortcutsService.applyToPlatform()
+        // Touch the lock screen feed so it exists on every shell start, not
+        // only when a widget happens to reference WeatherService: the lock
+        // screen cannot read anything the shell does not write out for it.
+        LockScreenFeedService.initialize()
         if (shell.barIntegratedWithDock)
             WorkspaceLayoutService.clearBar(ScreenLifecycle.activeScreen)
     }
@@ -128,9 +132,16 @@ Item {
                 globalBlurStrength: AppearanceConfigService.globalBlurStrength,
                 globalLiquidStrength: AppearanceConfigService.globalLiquidStrength,
                 glassStyle: AppearanceConfigService.glassStyle,
+                // Every field of the active style's preset, because the Settings
+                // debug page is the editor for them: a raw kwinrc write there is
+                // reverted by the next effect sync. Preset units; Refraction is
+                // 0..1 and becomes RefractionStrength 0..20 on the way to kwinrc.
                 activePresetRefraction: AppearanceConfigService.activePresetRefraction,
+                activePresetEdgeSize: AppearanceConfigService.activePresetEdgeSize,
+                activePresetNormalPow: AppearanceConfigService.activePresetNormalPow,
+                activePresetRGBFringing: AppearanceConfigService.activePresetRGBFringing,
+                activePresetOffsetStrength: AppearanceConfigService.activePresetOffsetStrength,
                 activePresetSoftness: AppearanceConfigService.activePresetSoftness,
-                activePresetHighlight: AppearanceConfigService.activePresetHighlight,
                 activePresetReflection: AppearanceConfigService.activePresetReflection,
                 effectiveDockBlur: AppearanceConfigService.effectiveDockBlur,
                 effectiveDockLiquid: AppearanceConfigService.effectiveDockLiquid,
@@ -357,13 +368,6 @@ Item {
     }
     NotificationCenter {
         id: notificationCenter
-    }
-
-    // The lock surface reads the unread set from the notification centre rather
-    // than importing that module: the lock owns no notifications, it only draws
-    // the ones the session already has.
-    LockScreen {
-        groupService: notificationCenter.groupService
     }
 
     DeskCenter {}

@@ -40,14 +40,15 @@ Item {
     readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
         ? IconAppearanceService.opacity : 1.0
 
-    DockStatusSvgIcon {
+    BundledIcon {
         id: networkGlyph
         visible: NetworkService.connectionType === "ethernet"
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize
-        source: Qt.resolvedUrl("../../assets/status-ethernet.svg")
-        opacity: root.connected ? 0.96 : 0.68
+        name: "status-ethernet"
+        color: root.statusIconColor
+        opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
     }
 
     WifiSignalIcon {

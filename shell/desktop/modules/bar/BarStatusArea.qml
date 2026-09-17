@@ -194,6 +194,10 @@ Item {
             ControlCenterPanel {
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
+                onWifiNetworkSelected: function(network) {
+                    networkPanel.showNetworkDialog(network)
+                    controlCenterUnloadTimer.restart()
+                }
             }
         }
     }

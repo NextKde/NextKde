@@ -66,6 +66,7 @@ PopupWindow {
     readonly property int mainControlsOffsetY: notificationFirst ? 238 : 0
     signal networkRequested()
     signal bluetoothRequested()
+    signal wifiNetworkSelected(var network)
 
     function openSubmenu(name) {
         if (name === "session") {
@@ -94,8 +95,11 @@ PopupWindow {
         submenuOpen = false
         sessionModalVisible = false
         pendingConfirmAction = ""
-        // Keep the page identity and geometry stable through the close motion.
-        // onMotionClosed clears activeSubmenu and restores the primary cards.
+        // The current control center is one window with no outgoing submenu
+        // animation. Keeping the old page identity here makes the next toggle
+        // mistake an invisible panel for an open Wi-Fi submenu.
+        activeSubmenu = ""
+        coordinator.modalActive = false
     }
 
     function openSettingsModule(module) {
@@ -147,44 +151,79 @@ PopupWindow {
     }
 
     // No panel-wide glass slab: the window blur region is the UNION of every
-    // primary card's blurRegion, so KWin blurs behind the cards (real frosted
-    // glass) but not over the gaps between them -- hollow and frosted, in one
-    // window with no coordinator. Overlay cards (session/submenu) are excluded;
-    // they cover the primary area when shown. The notification-history card
-    // (slotCard8) hides when its history is empty, so its footprint contributes
-    // to the union only while it is actually visible (an empty area would
-    // otherwise be blurred into a lingering frosted slab).
+    // card's blurRegion, so KWin blurs behind the cards (real frosted glass)
+    // but not over the gaps between them -- hollow and frosted, in one window
+    // with no coordinator.
+    //
+    // Every card that publishes a SurfaceShape has to be in this list, and only
+    // while it is visible. The effect aligns the whole declared shape set with
+    // this region's top-left, so a shape that is declared but missing from the
+    // region -- or the reverse -- slides the glass of *every* card by the
+    // difference. The overlay cards used to be left out on the grounds that they
+    // cover the primary area, but the notification-first layout puts the primary
+    // cards at y=258 while the session sheet stays at y=20: with an empty
+    // notification history (slotCard8 hidden) that is a 238px shift of the whole
+    // panel's glass. Gating on visibility keeps the two sets equal in every
+    // state -- a hidden card publishes no shape and contributes no area, and an
+    // empty card would otherwise blur a lingering frosted slab.
     Region { id: emptyRegion }
     Region {
         id: cardsBlurRegion
         regions: [
-            wifiCard.blurRegion,
-            bluetoothCard.blurRegion,
-            mediaCard.blurRegion,
-            slotCard1.blurRegion,
-            slotCard2.blurRegion,
-            slotCard3.blurRegion,
-            slotCard4.blurRegion,
-            slotCard5.blurRegion,
-            slotCard6.blurRegion,
-            slotCard7.blurRegion,
-            slotCard8.visible ? slotCard8.blurRegion : emptyRegion
+            wifiCard.visible ? wifiCard.blurRegion : emptyRegion,
+            bluetoothCard.visible ? bluetoothCard.blurRegion : emptyRegion,
+            mediaCard.visible ? mediaCard.blurRegion : emptyRegion,
+            slotCard1.visible ? slotCard1.blurRegion : emptyRegion,
+            slotCard2.visible ? slotCard2.blurRegion : emptyRegion,
+            slotCard3.visible ? slotCard3.blurRegion : emptyRegion,
+            slotCard4.visible ? slotCard4.blurRegion : emptyRegion,
+            slotCard5.visible ? slotCard5.blurRegion : emptyRegion,
+            slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
+            slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
+            slotCard8.visible ? slotCard8.blurRegion : emptyRegion,
+            sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
+            submenuCard.visible ? submenuCard.blurRegion : emptyRegion
         ]
     }
-    BackgroundEffect.blurRegion: cardsBlurRegion
+    // A tonal/non-glass theme draws its own surface and publishes no shapes, so
+    // the window must not ask KWin for a backdrop either.
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && panel.visible)
+        ? cardsBlurRegion : null
 
     // Position the cards at their grid offsets (top-right origin). One pass on
-    // completion; the window owns layout.
+    // completion; the window owns layout. The submenu and session cards resize
+    // as the active page changes (wifi/brightness/sound are all different
+    // heights), and their offsetTop is a live binding on that cardHeight. Hand
+    // assigning x/y once here would freeze the submenu at the height it had
+    // when the panel finished loading, stranding it below its intended slot so
+    // the primary cards stay visible above it (the two-panel "overlay"). Bind
+    // the position so the submenu reflows into place whenever its geometry
+    // changes.
     Component.onCompleted: {
         for (let i = 0; i < panel.data.length; i++) {
             const c = panel.data[i]
-            if (c && c.isControlCenterCard)
+            if (c && c.isControlCenterCard) {
+                // A submenu or session sheet REPLACES the primary cards, it does
+                // not float over them: every coordinator-managed card hides
+                // while one is open, so the two interfaces never stack on top
+                // of each other. sessionCard/submenuCard (managedByCoordinator
+                // false) own their own cardShown instead.
+                if (c.managedByCoordinator) {
+                    c.cardShown = Qt.binding(function() {
+                        return !panel.submenuOpen && !panel.sessionModalVisible
+                    })
+                }
                 panel.placeCard(c)
+            }
         }
     }
     function placeCard(c) {
-        c.x = panel.controlCenterWidth - c.offsetRight - c.width
-        c.y = c.offsetTop
+        c.x = Qt.binding(function() {
+            return panel.controlCenterWidth - c.offsetRight - c.width
+        })
+        c.y = Qt.binding(function() {
+            return c.offsetTop
+        })
     }
 
     property bool _internalTransition: false
@@ -239,8 +278,8 @@ PopupWindow {
         coordinator.closeAll(closingModal)
         sessionModalVisible = false
         submenuOpen = false
-        if (!closingSubmenu)
-            activeSubmenu = ""
+        activeSubmenu = ""
+        coordinator.modalActive = false
         pendingConfirmAction = ""
     }
 
@@ -260,6 +299,23 @@ PopupWindow {
             if (!panel._internalTransition && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")) {
                 panel.close()
             }
+        }
+    }
+
+    // A context menu mapped over the control center would overlap it the same
+    // way the removed dismissal backdrop used to be the only thing keeping an
+    // outside right-click from showing one. The menu surfaces are layer-shell
+    // popups, so activating one does not change the active window and the
+    // handler above never fires. Watch the shared context-menu coordinator
+    // instead: whenever ANY menu opens (desktop, dock, launcher, bar), fold the
+    // control center away and let the menu stand alone.
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu
+                    && !panel._internalTransition
+                    && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== ""))
+                panel.close()
         }
     }
 
@@ -670,7 +726,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/screenshot.svg"
+            source: BundledIcons.source("screenshot")
             sourceSize.width: 46
             sourceSize.height: 46
             fillMode: Image.PreserveAspectFit
@@ -710,7 +766,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/theme-appearance.svg"
+            source: BundledIcons.source("theme-appearance")
             sourceSize.width: 48
             sourceSize.height: 48
             fillMode: Image.PreserveAspectFit
@@ -756,7 +812,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 24
             height: 24
-            source: "../../assets/logout.svg"
+            source: BundledIcons.source("power")
             sourceSize.width: 48
             sourceSize.height: 48
             fillMode: Image.PreserveAspectFit
@@ -802,7 +858,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: "../../assets/do-not-disturb.svg"
+            source: BundledIcons.source("do-not-disturb")
             sourceSize.width: 44
             sourceSize.height: 44
             fillMode: Image.PreserveAspectFit
@@ -849,7 +905,7 @@ PopupWindow {
             anchors.centerIn: parent
             width: 22
             height: 22
-            source: "../../assets/night-light.svg"
+            source: BundledIcons.source("night-light")
             sourceSize.width: 44
             sourceSize.height: 44
             fillMode: Image.PreserveAspectFit
@@ -1029,7 +1085,9 @@ PopupWindow {
         // An empty history is not worth a permanently visible, permanently
         // empty card taking up the bottom of the panel; only occupy that
         // window/blur-region/hit-test space once there is something to show.
-        visible: coordinator.cardAnchor !== null
+        // cardShown (bound by the panel: hidden while a submenu/session sheet
+        // is open) is factored in here because this card overrides `visible`.
+        visible: cardShown && coordinator.cardAnchor !== null
             && ControlCenterService.historyGroups.length > 0
         offsetTop: panel.notificationFirst ? 20 : 347
         offsetRight: 20
@@ -1216,11 +1274,12 @@ PopupWindow {
                         color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.06)
                         border.width: 1
                         border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10)
-                        SystemIcon {
+                        BundledIcon {
                             anchors.centerIn: parent
                             width: 16
                             height: 16
-                            role: "switchUser"
+                            name: BundledIcons.roleName("switchUser")
+                            color: ThemeService.foregroundColor
                         }
                     }
 
@@ -1311,10 +1370,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "lock"
+                            name: BundledIcons.roleName("lock")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1344,10 +1404,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "suspend"
+                            name: BundledIcons.roleName("suspend")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1377,10 +1438,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "switchUser"
+                            name: BundledIcons.roleName("switchUser")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1410,10 +1472,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "logout"
+                            name: BundledIcons.roleName("logout")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1440,10 +1503,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "reboot"
+                            name: BundledIcons.roleName("reboot")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1472,10 +1536,11 @@ PopupWindow {
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
                         spacing: 8
-                        SystemIcon {
+                        BundledIcon {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 20; height: 20
-                            role: "powerOff"
+                            name: BundledIcons.roleName("powerOff")
+                            color: ThemeService.foregroundColor
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter
@@ -1510,12 +1575,14 @@ PopupWindow {
             anchors.fill: parent
             visible: panel.pendingConfirmAction !== ""
 
-            SystemIcon {
+            BundledIcon {
                 anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 16 }
                 width: 28
                 height: 28
-                role: panel.pendingConfirmAction === "poweroff" ? "powerOff"
-                    : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout")
+                name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
+                    ? "powerOff"
+                    : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
+                color: ThemeService.foregroundColor
             }
 
             GlassText {
@@ -1945,9 +2012,19 @@ PopupWindow {
                                 if (modelData.active) return
                                 if (modelData.savedProfileUuid) {
                                     NetworkService.connectWifi(modelData.ssid, "", modelData.savedProfileUuid)
+                                } else if (!modelData.security || modelData.security === "none") {
+                                    NetworkService.connectWifi(modelData.ssid, "", "")
                                 } else {
+                                    // Copy the delegate value before closing;
+                                    // the ListView may destroy this delegate as
+                                    // soon as the control center is unloaded.
+                                    const network = Object.assign({}, modelData, {
+                                        secured: Boolean(modelData.secured
+                                            || (modelData.security
+                                                && modelData.security !== "none"))
+                                    })
                                     panel.close()
-                                    PlatformClient.request("settings.open", { module: "kcm_networkmanagement" })
+                                    panel.wifiNetworkSelected(network)
                                 }
                             }
                         }

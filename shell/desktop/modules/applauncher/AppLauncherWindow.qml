@@ -349,9 +349,9 @@ PanelWindow {
         appContextMenu.application = app
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
-        appContextMenu.addItem("", "打开应用", "open")
-        appContextMenu.addItem("", "编辑应用", "edit")
-        appContextMenu.addItem("", "固定到 Dock", "pin")
+        appContextMenu.addItem("application-open", "打开应用", "open")
+        appContextMenu.addItem("edit-rename", "编辑应用", "edit")
+        appContextMenu.addItem("pin", "固定到 Dock", "pin")
         appContextMenu.show()
     }
 
@@ -2832,7 +2832,7 @@ PanelWindow {
     // policy exactly: no full-screen exception and no launcher-specific
     // material controls. The shared glass configuration decides whether KWin
     // renders blur or refraction for this declared surface.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.visible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? launcherSurface.blurRegion

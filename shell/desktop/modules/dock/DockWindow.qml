@@ -114,7 +114,7 @@ PanelWindow {
     // The custom KWin glass effect consumes this region for both backdrop
     // blur and liquid refraction. Keep publishing it when either channel is
     // active; gating only on blur makes a liquid-only Dock fully transparent.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesBackdrop && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.visible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? dockBlurRegionHolder : null

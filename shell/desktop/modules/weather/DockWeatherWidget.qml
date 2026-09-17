@@ -81,7 +81,7 @@ Item {
                 opacity: 0.16
                 Image {
                     anchors.fill: parent
-                    source: Qt.resolvedUrl("../../assets/weather-cloud.svg")
+                    source: BundledIcons.source("weather-cloud")
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                 }
@@ -95,7 +95,7 @@ Item {
                 opacity: 0.21
                 Image {
                     anchors.fill: parent
-                    source: Qt.resolvedUrl("../../assets/weather-cloud-wide.svg")
+                    source: BundledIcons.source("weather-cloud-wide")
                     fillMode: Image.PreserveAspectFit
                     smooth: true
                 }

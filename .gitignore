@@ -14,3 +14,14 @@ config/dock/config.json
 .build/
 apps/settings/build/
 /.workbuddy/memory
+
+# LockScreenFeedService writes the generated feed into the *installed* lock
+# screen package -- $HOME/.local/share/plasma/shells/org.kos.desktop for a
+# default kosctl install, which is GenericDataLocation, not this checkout. So
+# LockFeed.qml ships here as the default feed the lock screen shows before the
+# shell has written real data, and is tracked. Only the generator's temp file is
+# ignored, for the case where the checkout itself is the install prefix.
+apps/lockscreen/contents/lockscreen/LockFeed.qml.tmp
+
+# Rendered by apps/lockscreen/tests/headless/run.sh on every run.
+apps/lockscreen/tests/headless/lock.png

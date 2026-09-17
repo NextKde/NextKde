@@ -2,7 +2,6 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
-import qs.desktop.modules.lock
 import qs.desktop.modules.platform
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
@@ -352,17 +351,19 @@ QtObject {
         })
         return true
     }
-    // Locking is the one action in this group that stays in-process, and it is
-    // not routed through `session.lock` on purpose. That operation ends in
-    // `loginctl lock-session`, which on KDE ksmserver answers with its own
-    // locker -- the Plasma greeter would land on top of the shell's lock
-    // surface and there would be two locks to get past. LockService owns the
-    // lock state, so the button talks to it directly; the platform daemon still
-    // serves every other session operation unchanged.
-    function lockSession() {
-        LockService.lock()
-        return true
-    }
+    // Locking goes through the session, like every other action here.
+    //
+    // It used to stay in-process, on the argument that `loginctl lock-session`
+    // would put the Plasma greeter on top of the shell's own lock surface and
+    // leave two locks to get past. The shell's lock surface is gone: the skin
+    // under apps/lockscreen is the Plasma shell package now, so the greeter
+    // *is* the lock screen and there is nothing left to stack it on.
+    //
+    // It is also the only locking the compositor knows about. An in-process
+    // overlay is just a window -- a very large, very convincing one, with a
+    // real PAM conversation behind it, that the compositor will happily route
+    // global shortcuts past and drop when the process dies.
+    function lockSession() { return _sessionAction("session.lock", "锁屏失败") }
     function suspendSystem() { return _sessionAction("session.suspend", "睡眠操作失败") }
     function hibernateSystem() { return _sessionAction("session.hibernate", "休眠操作失败") }
     function rebootSystem() { return _sessionAction("session.reboot", "重启操作失败") }

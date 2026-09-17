@@ -47,6 +47,18 @@ kwin_plugins_enabled() {
     esac
 }
 
+kwin_decoration_requested() {
+    case "${KOS_INSTALL_KWIN_DECORATION:-0}" in
+        1|ON|on|TRUE|true|YES|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+kwin_decoration_installed() {
+    [[ -s "$kwin_manifest" ]] \
+        && grep -q '/kos_liquid_glass\.so$' "$kwin_manifest"
+}
+
 # KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
 # includes KWIN_PLUGIN_VERSION_STRING. Distribution upgrades can retain the
 # timestamps of installed headers, which means Ninja may incorrectly reuse
@@ -78,14 +90,26 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install|start|sync|dev|run|uninstall|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install [lockscreen|sddm|apps]|start|sync|dev|run|uninstall [lockscreen|sddm]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
   git clone <repo> && cd Nextkde
   ./tools/kosctl nix install      # build + deploy systemd services
   ./tools/kosctl start            # apply now
 
-Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
+Optional components are installed by naming them:
+  ./tools/kosctl install lockscreen   # lock screen (user level, no root)
+  ./tools/kosctl install sddm         # SDDM sign-in theme (needs root)
+  ./tools/kosctl install apps         # standalone apps (tools/install-apps.sh)
+  ./tools/kosctl uninstall lockscreen|sddm
+
+Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
+screen, no SDDM theme.
+
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_INSTALL_KWIN_DECORATION, GOPROXY
+
+The Liquid Glass window decoration is opt-in. To install and select it:
+  KOS_INSTALL_KWIN_DECORATION=1 ./tools/kosctl install
 EOF
 }
 
@@ -542,7 +566,6 @@ start_all() {
     systemctl --user enable --now "${kos_units[@]}"
     systemctl --user restart "${kos_units[@]}"
     enable_kwin_effects
-    enable_kos_decoration
     printf '\n'
     printf '  🚀 KOS 已启动（platform / data / shell）\n'
     printf '     KOS started — platform, data, and shell are running.\n'
@@ -577,6 +600,17 @@ sync_qml() {
     mkdir -p "$shell_config/shared/qml"
     rm -rf "$shell_config/shared/qml/controls"
     cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+    # The lock screen package rides along: it is pure QML too, and editing it
+    # is the same loop as editing the shell.
+    if lockscreen_installed; then
+        rm -rf "$prefix/share/plasma/shells/org.kos.desktop" \
+            "$prefix/share/plasma/look-and-feel/org.kos.desktop"
+        cp -a "$project_dir/apps/lockscreen" \
+            "$prefix/share/plasma/shells/org.kos.desktop"
+        cp -a "$project_dir/apps/lockscreen" \
+            "$prefix/share/plasma/look-and-feel/org.kos.desktop"
+        printf 'Synced lock screen package.\n'
+    fi
     printf 'Synced shell QML to %s; run ./tools/kosctl start to apply it.\n' "$shell_config"
 }
 
@@ -744,6 +778,11 @@ install_kwin_plugins() {
     rm -rf -- "$stage_dir"
     mkdir -p "$stage_dir" "$(dirname "$kwin_manifest")"
 
+    local prior_decoration_managed=0
+    if kwin_decoration_installed; then
+        prior_decoration_managed=1
+    fi
+
     # Keep the previous manifest so files this install no longer ships can be
     # removed. Without it a component that changes shape leaves orphans behind
     # in /usr -- the QML Aurorae package that preceded the compiled decoration
@@ -757,11 +796,23 @@ install_kwin_plugins() {
 
     DESTDIR="$stage_dir" cmake --install "$build_dir" \
         --prefix "$kwin_system_prefix" --component kwin_plugins
+    if kwin_decoration_requested; then
+        DESTDIR="$stage_dir" cmake --install "$build_dir" \
+            --prefix "$kwin_system_prefix" --component kwin_decoration
+    fi
     DESTDIR="$stage_dir" cmake --install "$glass_build_dir" \
         --prefix "$kwin_system_prefix"
 
     find "$stage_dir" \( -type f -o -type l \) -printf '/%P\n' \
         | sort -u > "$kwin_manifest"
+    # An opt-in decoration remains entirely opt-in: a later ordinary install
+    # must neither remove its binary nor take ownership of the user's current
+    # KWin decoration selection. Keep its manifest entry so it is not treated
+    # as stale below. Running the opt-in command again updates it explicitly.
+    if ! kwin_decoration_requested && (( prior_decoration_managed )); then
+        grep '/kos_liquid_glass\.so$' "$previous_manifest" >> "$kwin_manifest"
+        sort -u -o "$kwin_manifest" "$kwin_manifest"
+    fi
     if [[ ! -s "$kwin_manifest" ]]; then
         printf 'KWin plugin staging produced no files\n' >&2
         return 1
@@ -818,8 +869,116 @@ install_kwin_plugins() {
             | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
     fi
     enable_kwin_effects
-    enable_kos_decoration
-    printf 'Installed and enabled KOS Dock Animation, Context Menu Input, Glass, and Liquid Glass decoration.\n'
+    if kwin_decoration_requested; then
+        enable_kos_decoration
+        printf 'Installed and enabled KOS Dock Animation, Context Menu Input, Glass, and Liquid Glass decoration.\n'
+    else
+        printf 'Installed and enabled KOS Dock Animation, Context Menu Input, and Glass.\n'
+        printf 'Liquid Glass window decoration was left unchanged (opt in with KOS_INSTALL_KWIN_DECORATION=1 to install or update it).\n'
+    fi
+}
+
+# ---- optional: lock screen and SDDM theme --------------------------------
+#
+# They are installed by naming them (`install lockscreen`, `install sddm`)
+# rather than by flags: a bare `install` covers the core desktop only, and an
+# optional system surface should not appear as a side effect of the command
+# someone runs every day.
+
+# The package goes under BOTH roots on purpose. The greeter resolves it under
+# plasma/shells/ -- look-and-feel/ is not searched for the lock screen at all,
+# which is what apps/lockscreen/tests/theme-resolution proves -- while
+# plasma-apply-lookandfeel and the systemsettings page resolve under
+# look-and-feel/. Shipping only one of the two leaves half the integrations
+# pointing at a package that is not there.
+#
+# It is a copy, not a symlink, matching how deploy_artifacts ships the shell:
+# an installed layout must not depend on the checkout staying in place. QML
+# edits reach it through `kosctl sync`.
+install_lockscreen() {
+    local shells_dir="$prefix/share/plasma/shells/org.kos.desktop"
+    local laf_dir="$prefix/share/plasma/look-and-feel/org.kos.desktop"
+    mkdir -p "$(dirname "$shells_dir")" "$(dirname "$laf_dir")"
+    rm -rf "$shells_dir" "$laf_dir"
+    cp -a "$project_dir/apps/lockscreen" "$shells_dir"
+    cp -a "$project_dir/apps/lockscreen" "$laf_dir"
+
+    # The greeter takes the shell package name from plasmashellrc
+    # [Shell] ShellPackage (apps/lockscreen/tests/theme-resolution/pkgprobe.cpp
+    # reproduces its exact selection logic). This desktop replaces plasmashell
+    # with the Quickshell shell, so the key has no other consumer to disturb.
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        kwriteconfig6 --file plasmashellrc --group Shell \
+            --key ShellPackage org.kos.desktop
+    else
+        # No kwriteconfig6: append the key only if it is absent -- a duplicated
+        # key would leave which one wins to the parser.
+        local rc="${XDG_CONFIG_HOME:-$HOME/.config}/plasmashellrc"
+        if ! grep -qsE '^[[:space:]]*ShellPackage[[:space:]]*=' "$rc"; then
+            { [[ -s "$rc" ]] && printf '\n'
+              printf '[Shell]\nShellPackage=org.kos.desktop\n'; } >> "$rc"
+        fi
+    fi
+    printf 'Lock screen installed (plasma/shells + look-and-feel, ShellPackage=org.kos.desktop).\n'
+}
+
+# SDDM themes live in the system prefix and the theme selection is a system
+# config file, so this is the one part of a KOS install that needs root. The
+# write is a single conf.d drop-in: removing that one file (from a TTY, if the
+# greeter ever misbehaves) puts SDDM back on whatever theme it used before.
+install_sddm_theme() {
+    if ! command -v sddm-greeter >/dev/null 2>&1; then
+        printf 'sddm is not installed; skipping the SDDM theme.\n'
+        return 0
+    fi
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf 'sudo is unavailable; cannot install the SDDM theme.\n' >&2
+        return 1
+    fi
+    sudo mkdir -p /usr/share/sddm/themes/kos /etc/sddm.conf.d
+    sudo cp -a "$project_dir/apps/sddm/." /usr/share/sddm/themes/kos/
+    printf '[Theme]\nCurrent=kos\n' | sudo tee /etc/sddm.conf.d/kos-theme.conf >/dev/null
+    if [[ ! -f /usr/share/sddm/themes/kos/Main.qml ]]; then
+        printf 'SDDM theme copy failed; the theme selection was not changed.\n' >&2
+        return 1
+    fi
+    printf 'SDDM theme installed and selected (Current=kos). Takes effect at the next login screen.\n'
+}
+
+lockscreen_installed() {
+    [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml" ]]
+}
+
+remove_lockscreen() {
+    rm -rf "$prefix/share/plasma/shells/org.kos.desktop" \
+        "$prefix/share/plasma/look-and-feel/org.kos.desktop"
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        kwriteconfig6 --file plasmashellrc --group Shell \
+            --key ShellPackage --delete
+    fi
+    printf 'Lock screen removed (ShellPackage key deleted).\n'
+}
+
+remove_sddm_theme() {
+    if [[ ! -d /usr/share/sddm/themes/kos && ! -f /etc/sddm.conf.d/kos-theme.conf ]]; then
+        printf 'SDDM theme is not installed.\n'
+        return 0
+    fi
+    if ! command -v sudo >/dev/null 2>&1; then
+        printf 'sudo is unavailable; cannot remove the SDDM theme.\n' >&2
+        return 1
+    fi
+    sudo rm -rf /usr/share/sddm/themes/kos
+    sudo rm -f /etc/sddm.conf.d/kos-theme.conf
+    printf 'SDDM theme removed; SDDM falls back to its previous theme.\n'
+}
+
+# The standalone apps are built and installed by their own script: they carry
+# their own CMake presets, tests and service registration, and several of them
+# pull heavy optional dependencies. Naming them keeps that cost out of the
+# default install.
+install_apps() {
+    "$project_dir/tools/install-apps.sh"
 }
 
 install_all() {
@@ -934,6 +1093,13 @@ uninstall() {
     if ! is_nixos; then
         uninstall_kwin_plugins
     fi
+    # The optional surfaces are removed by what exists, not by what was asked
+    # for: an uninstall must clean up a component that was installed earlier
+    # even when no flag or argument names it now.
+    if lockscreen_installed; then
+        remove_lockscreen
+    fi
+    remove_sddm_theme
     rm -f "$runtime_unit_dir/kos-shell.service" \
         "$runtime_unit_dir/kos-platform.service" \
         "$runtime_unit_dir/kos-data.service"
@@ -1059,12 +1225,25 @@ nix_status() {
 case "${1:-}" in
     doctor) doctor ;;
     build) build ;;
-    install) install_all ;;
+    install)
+        case "${2:-}" in
+            "") install_all ;;
+            lockscreen) install_lockscreen ;;
+            sddm) install_sddm_theme ;;
+            apps) install_apps ;;
+            *) usage >&2; exit 2 ;;
+        esac ;;
     start) start_all ;;
     sync) sync_qml ;;
     dev) dev_all ;;
     run) run_shell "${2:-}" ;;
-    uninstall) uninstall ;;
+    uninstall)
+        case "${2:-}" in
+            "") uninstall ;;
+            lockscreen) remove_lockscreen ;;
+            sddm) remove_sddm_theme ;;
+            *) usage >&2; exit 2 ;;
+        esac ;;
     glass-settings) open_glass_settings ;;
     nix)
         [[ "${2:-}" == build || "${2:-}" == install || "${2:-}" == start || "${2:-}" == shell ]] || { usage >&2; exit 2; }

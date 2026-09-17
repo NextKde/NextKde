@@ -49,10 +49,11 @@ QtObject {
             console.warn("[AppAction] cannot launch without DesktopEntry app=" + appId)
             return false
         }
-        // DesktopEntry.execute() knows how to select the user's terminal. Keep
-        // that native path for terminal entries rather than guessing one here.
-        if (entry.runInTerminal)
-            return _executeDirect(entry, appId, "terminal-entry")
+        // Terminal entries (Terminal=true, e.g. nvim/htop) must NOT go through
+        // DesktopEntry.execute(): Quickshell spawns the bare command with no
+        // TTY and terminal apps die immediately. Route them through the
+        // platform daemon here; KIO::ApplicationLauncherJob wraps them in the
+        // user's configured terminal.
         if (!PlatformClient.socket.connected)
             return _executeDirect(entry, appId, "platform-unavailable")
         PlatformClient.request("application.launch", {

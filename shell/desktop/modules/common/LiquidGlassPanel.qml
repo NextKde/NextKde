@@ -111,6 +111,9 @@ Item {
     // The 0.06*cap floor keeps a scrim from collapsing fully to invisible on a
     // backdrop that already matches the tint; it scales with cap so see-through
     // levels stay nearly transparent while readable ones hold a faint presence.
+    // A scrim that reaches this floor on a matching backdrop reverses to a fixed
+    // 10% opposite tint (white -> black, black -> white); it never follows the
+    // curve upward after reversing.
     property real scrimCap: 0.5
     property real scrimDecay: 1.0
     // The tint is owned by the panel, not passed in by a host. It follows the
@@ -118,10 +121,17 @@ Item {
     // appearance picks a white tint (so dark content stays legible on a bright
     // backdrop) and a dark appearance a black tint; when the switch is off the
     // tint is fixed black.
-    readonly property int scrimTint:
-        AppearanceConfigService.glassFollowsAppearanceMode
+    // Override values: 0 = black, 1 = white.
+    property int scrimTintOverride: -1
+    // Fixed mode uses scrimCap as exact opacity and never samples/reverses for
+    // backdrop luminance. Encoded as decay 2 on the v3 wire request so an old
+    // compositor safely degrades it to adaptive decay 1.
+    property bool scrimFixed: false
+    readonly property int scrimTint: scrimTintOverride >= 0
+        ? scrimTintOverride
+        : (AppearanceConfigService.glassFollowsAppearanceMode
             ? (AppearanceTokens.isDarkTheme ? 0 : 1)
-            : 0 // 0 = black, 1 = white
+            : 0) // 0 = black, 1 = white
 
     // Named presets concretize the readability/transparency tradeoff as one
     // ceiling (cap) plus a per-surface calm factor (decay). "custom" ignores
@@ -129,7 +139,7 @@ Item {
     readonly property real _presetCap: scrimLevel === "readable" ? 0.72
         : scrimLevel === "balanced" ? 0.47
         : scrimLevel === "transparent" ? 0.22
-        : scrimLevel === "subtle" ? 0.12 : 0.5
+        : scrimLevel === "subtle" ? 0.15 : 0.5
     readonly property real _presetDecay: scrimLevel === "readable" ? 1.0
         : scrimLevel === "balanced" ? 0.75
         : scrimLevel === "transparent" ? 0.5
@@ -183,7 +193,7 @@ Item {
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap
-        scrimDecay: root._effectiveScrimDecay
+        scrimDecay: root.scrimFixed ? 2.0 : root._effectiveScrimDecay
     }
 
     LiquidGlassSurface {

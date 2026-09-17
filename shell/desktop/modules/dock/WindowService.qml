@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell.Wayland._ToplevelManagement
 import qs.desktop.modules.platform
+import qs.desktop.modules.common
 import "WindowRecordIndex.mjs" as WindowRecordIndex
 
 // WindowService — provider-neutral runtime window model.
@@ -161,6 +162,16 @@ QtObject {
         function onRevisionChanged() { svc._scheduleUpdate() }
     }
 
+    // A KDE icon-theme change must re-resolve live window icons too. Records
+    // were built against the themed `image://icon` source; walking the snapshot
+    // again on the theme revision flips any KWin-baked file:// path to that
+    // stable themed source. DockIcon recreates its renderer on the same
+    // revision, so the re-request paints against the newly active theme.
+    property Connections _iconThemeConnections: Connections {
+        target: IconThemeReloadService
+        function onRevisionChanged() { svc._scheduleUpdate() }
+    }
+
     function _scheduleUpdate() {
         _updateTimer.restart();
     }
@@ -283,15 +294,16 @@ QtObject {
             const old = useKwin ? oldRecords.kwin.get(handleId)
                 : oldRecords.foreign.get(toplevel);
             const identity = AppIdentityService.resolve(toplevel.appId);
-            // A user-selected icon is part of the app presentation contract
-            // and must win over every provider-derived value. Otherwise use
-            // KWin's absolute icon file for live tasks: resolving a themed
-            // image://icon URL in a Dock Repeater can enter KF6's icon engine
-            // during delegate creation and crash on some theme/Qt versions.
-            const iconSource = identity.hasIconOverride
-                ? identity.iconSource
-                : (useKwin && source.iconPath
-                   ? "file://" + source.iconPath : identity.iconSource);
+            // Prefer the shared themed presentation source (image://icon/<name>)
+            // for live tasks too, exactly like the launcher and pinned apps.
+            // DockIcon recreates its renderer on an icon-theme revision to
+            // re-request that stable URL, so a KDE theme change refreshes
+            // running-window icons. Fall back to KWin's absolute icon file only
+            // when theme lookup yields nothing.
+            const themedSource = identity.iconSource;
+            const iconSource = themedSource
+                || (useKwin && source.iconPath
+                    ? "file://" + source.iconPath : themedSource);
             // zwlr-foreign-toplevel does not require an urgency field, so
             // read it defensively. KWin's bridge always provides `urgent`.
             let foreignUrgent = false;

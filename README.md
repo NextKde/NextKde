@@ -92,10 +92,10 @@ sudo apt install \
 `qml6-module-qtquick-dialogs` 与 `libqt6sql6-sqlite` 是 QuickDialogs2 和
 数据服务的运行时依赖。
 
-Calendar、Todo、Weather 和 Music 是独立的可选应用，不由 `kosctl install` 构建；
-它们需要额外的 Qt/KF6、GStreamer、TagLib 或 Go 依赖。安装前请阅读
+Calendar、Todo、Weather 和 Music 是独立的可选应用，不由默认的 `kosctl install`
+构建；它们需要额外的 Qt/KF6、GStreamer、TagLib 或 Go 依赖。安装前请阅读
 [apps/README.zh-CN.md](apps/README.zh-CN.md) 及各应用目录的说明，再运行
-`./tools/install-apps.sh`。
+`./tools/kosctl install apps`（或 `./tools/install-apps.sh`）。
 
 其他发行版请安装对应软件包。Quickshell 的安装方式见
 [官方文档](https://quickshell.org/docs/)。
@@ -117,9 +117,59 @@ cd NextKde
 
 `doctor` 会检查命令、Arch 软件包及可选运行时集成。`install` 在 Arch 上会提示并
 安装缺少的必需构建包，然后编译安装 KOS；首次安装 KWin 插件时
-可能要求输入 sudo 密码。`start` 立即重启 KOS 服务，桌面界面会短暂刷新。
+可能要求输入 sudo 密码。默认只安装 KWin 特效，不会安装或选择液态玻璃窗口装饰器；
+此前已显式安装的装饰器也会保持不变。如需安装或更新液态玻璃窗口装饰器，请显式执行
+`KOS_INSTALL_KWIN_DECORATION=1 ./tools/kosctl install`。`start` 立即重启 KOS 服务，桌面界面会短暂刷新，
+不会更改当前窗口装饰器。
+NixOS 模块则需设置 `services.kos.decoration.enable = true;`；仅安装插件，仍由你在 KDE 设置中选择它。
 
 安装完成后，KOS 会在之后登录时自动启动。
+
+### 锁屏与登录界面（可选）
+
+KOS 的锁屏和 SDDM 登录主题是两个可选组件，默认**不安装**——可选组件通过子命令
+按需安装，不带参数的 `install` / `uninstall` 只覆盖核心桌面：
+
+```sh
+./tools/kosctl install lockscreen   # 锁屏（用户级，无需 root）
+./tools/kosctl install sddm         # 登录界面（需要 root）
+./tools/kosctl install apps         # 可选独立应用（等价 tools/install-apps.sh）
+
+./tools/kosctl uninstall lockscreen # 单独移除
+./tools/kosctl uninstall sddm
+```
+
+**锁屏**（`apps/lockscreen`，kscreenlocker 的皮肤包）会安装到
+`~/.local/share/plasma/shells/org.kos.desktop` 与
+`~/.local/share/plasma/look-and-feel/org.kos.desktop`，并把 `plasmashellrc` 的
+`[Shell] ShellPackage` 指向 `org.kos.desktop`。注意锁屏 greeter 是从
+`plasma/shells/` 解析皮肤包的，`look-and-feel/` 对它无效（原因与验证脚本见
+[apps/lockscreen/tests/theme-resolution](apps/lockscreen/tests/theme-resolution)），
+两个目录都放是为了让 `plasma-apply-lookandfeel` 与系统设置页也能解析到它。
+它是纯 QML 数据包：改完 QML 运行 `./tools/kosctl sync` 即可更新，不必重新
+`install`。
+
+**SDDM 登录主题**（`apps/sddm`）安装到 `/usr/share/sddm/themes/kos`，并通过
+`/etc/sddm.conf.d/kos-theme.conf`（`[Theme] Current=kos`）选择，下次注销或开机
+生效。主题目录在系统前缀里，所以这一步需要 root。
+
+**SDDM 出问题时的补救**：如果登录界面黑屏、报错或无法输入密码，按
+Ctrl+Alt+F2（或 F3/F4…）切到 TTY 登录，删除主题选择文件并重启显示管理器，
+即回到安装前的主题：
+
+```sh
+sudo rm /etc/sddm.conf.d/kos-theme.conf
+sudo systemctl restart sddm
+```
+
+要彻底移除主题本体：`sudo rm -rf /usr/share/sddm/themes/kos`（或直接运行
+`./tools/kosctl uninstall`，会把可选组件一并清掉）。预防措施：本主题只依赖
+纯 QtQuick 与 QtQuick.Controls，不依赖 Plasma/Kirigami 的 QML 插件（这是 SDDM
+主题最常见的翻车点）；切换前可先用
+`sddm-greeter --test-mode --theme apps/sddm` 预览，窗口能正常显示再切。
+
+`uninstall` 会把这两个可选组件一并移除（SDDM 部分需要 root），并删除
+`ShellPackage` 键。
 
 ### 4. 首次设置
 
@@ -175,6 +225,9 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 ```
 
 这会停止并移除 KOS 文件与服务；你的 Dock 固定项、外观等个人状态会保留。
+可选安装的锁屏与 SDDM 登录主题也会一并移除（SDDM 部分需要 root；移除
+`/etc/sddm.conf.d/kos-theme.conf` 后 SDDM 回到之前的主题）。也可以只移除其中一个：
+`./tools/kosctl uninstall lockscreen` / `./tools/kosctl uninstall sddm`。
 
 #### 对于NixOS，我们更推荐使用基于 Flake 的安装方法
 

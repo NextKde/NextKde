@@ -246,7 +246,7 @@ PopupWindow {
             MenuItemRow {
                 width: parent.width
                 visible: root.page.parents.length > 0
-                icon: "←"
+                icon: "back"
                 label: "返回"
                 foregroundColor: root.effectiveForegroundColor
                 onClicked: root.back()
