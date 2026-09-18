@@ -54,6 +54,7 @@ private:
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
+    bool handleInput(QLocalSocket *socket, const QJsonObject &request);
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
     void startClipboardHistoryWatcher(QProcess *&watcher,
                                       const QStringList &arguments);
@@ -61,6 +62,21 @@ private:
                             const QString &record);
     void runClipboardDelete(QLocalSocket *socket, const QJsonObject &request,
                             const QString &record);
+    // Runs `cliphist decode <record>` and hands the raw bytes back. Shared by
+    // the thumbnail renderer and the pin store, which both need the decoded
+    // payload rather than a copy into the clipboard.
+    void runCliphistDecode(const QString &record,
+                           std::function<void(bool, const QByteArray &)> done);
+    void runWlCopy(const QByteArray &payload, std::function<void(bool)> done);
+    void runClipboardThumb(QLocalSocket *socket, const QJsonObject &request,
+                           const QString &record);
+    void runClipboardPinnedList(QLocalSocket *socket, const QJsonObject &request);
+    void runClipboardPinnedAdd(QLocalSocket *socket, const QJsonObject &request,
+                               const QString &record, const QString &preview);
+    void runClipboardPinnedRemove(QLocalSocket *socket, const QJsonObject &request,
+                                  const QString &pinId);
+    void runClipboardPinnedCopy(QLocalSocket *socket, const QJsonObject &request,
+                                const QString &pinId);
 
     QLocalServer m_server;
     QString m_socketPath;

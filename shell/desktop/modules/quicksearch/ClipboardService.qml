@@ -14,6 +14,10 @@ QtObject {
     readonly property string configPath: configDir + "/config.json"
     property bool watchImages: true
     property int maxItems: 200
+    // Kill switch for the click-to-paste half: with it off every activation
+    // degrades to plain "copy", which isolates a broken paste to either the
+    // clipboard write or the key injection.
+    property bool pasteEnabled: true
 
     property var entries: []
     property int revision: 0
@@ -108,13 +112,185 @@ QtObject {
         })
     }
 
-    function copy(selectionRecord) {
-        PlatformClient.request("clipboard.history.copy",
-            { record: String(selectionRecord) }, function(response) {
-            if (!response?.ok)
-                console.warn("[Clipboard] failed to copy history entry: "
+    // ================================================================ pinned
+    // A pin is a copy the platform keeps on its own, so history rotation can
+    // never take it away. The panel only mirrors that store.
+    property var pinned: []
+    property int pinnedRevision: 0
+    readonly property int pinnedCount: pinned.length
+    property bool _pinnedInFlight: false
+
+    function refreshPinned() {
+        if (service._pinnedInFlight)
+            return
+        service._pinnedInFlight = true
+        PlatformClient.request("clipboard.pinned.list", {}, function(response) {
+            service._pinnedInFlight = false
+            if (response?.ok) {
+                service.pinned = response.result?.items ?? []
+                service.pinnedRevision += 1
+            } else {
+                console.warn("[Clipboard] pinned list failed: "
+                    + (response?.error?.message || "platform unavailable"))
+            }
+        })
+    }
+
+    function pinEntry(selectionRecord, preview) {
+        if (!selectionRecord)
+            return
+        PlatformClient.request("clipboard.pinned.add",
+            { record: String(selectionRecord), preview: String(preview ?? "") },
+            function(response) {
+            if (response?.ok)
+                service.refreshPinned()
+            else
+                console.warn("[Clipboard] pin failed: "
                     + (response?.error?.message || "platform unavailable"))
         })
+    }
+
+    // Unpinning is what frees the pinned payload and its preview file, so this
+    // is the call that keeps the state directory from accumulating entries the
+    // user has already dropped.
+    function unpinById(pinId) {
+        if (!pinId)
+            return
+        PlatformClient.request("clipboard.pinned.remove", { pinId: String(pinId) },
+            function(response) {
+            if (response?.ok) {
+                service.refreshPinned()
+                service.thumbnailRevision += 1
+            } else {
+                console.warn("[Clipboard] unpin failed: "
+                    + (response?.error?.message || "platform unavailable"))
+            }
+        })
+    }
+
+    // cliphist ids rotate with the history, so a pinned entry is matched by
+    // what the user actually sees: the preview text and its type.
+    function pinIdFor(entry) {
+        if (!entry)
+            return ""
+        for (let i = 0; i < service.pinned.length; i++) {
+            const item = service.pinned[i]
+            if (item.preview === entry.preview && item.isImage === entry.isImage)
+                return item.pinId
+        }
+        return ""
+    }
+
+    // ============================================================== previews
+    // record -> file:// URL of the rendered image preview. Failures are
+    // remembered too, so a row that decoded once never spawns a decoder again
+    // on every refresh.
+    property var thumbnails: ({})
+    property int thumbnailRevision: 0
+    property var _thumbFailed: ({})
+    property var _thumbPending: ({})
+
+    function thumbnailSourceFor(entry) {
+        if (!entry || !entry.isImage || !entry.record)
+            return ""
+        const cached = service.thumbnails[entry.record]
+        if (cached !== undefined)
+            return cached
+        if (service._thumbFailed[entry.record]
+            || service._thumbPending[entry.record])
+            return ""
+        // Requesting is a side effect, and the result-list binding reads both
+        // bookkeeping maps, so writing _thumbPending inline makes that binding
+        // invalidate itself — QML reports it as a binding loop and rebuilds
+        // every row once per image. Deferring to the next event-loop turn keeps
+        // the binding pure; the guard is re-checked there because several rows
+        // can be evaluated before the first deferred call runs.
+        Qt.callLater(service._requestThumbnail, String(entry.record))
+        return ""
+    }
+
+    function _requestThumbnail(record) {
+        if (service._thumbFailed[record] || service._thumbPending[record])
+            return
+        service._thumbPending[record] = true
+        PlatformClient.request("clipboard.thumb", { record: String(record) },
+            function(response) {
+            delete service._thumbPending[record]
+
+            const path = response?.ok ? (response.result?.path ?? "") : ""
+            if (path) {
+                const next = Object.assign({}, service.thumbnails)
+                next[record] = "file://" + path
+                service.thumbnails = next
+                service.thumbnailRevision += 1
+            } else {
+                // Remembered so a non-image row never re-spawns a decoder.
+                service._thumbFailed[record] = true
+            }
+        })
+    }
+
+    // The platform already deleted the file; this drops its cached URL so the
+    // delegate stops pointing at something that no longer exists.
+    function _forgetThumbnail(record) {
+        delete service._thumbFailed[record]
+        if (service.thumbnails[record] === undefined)
+            return
+        const next = Object.assign({}, service.thumbnails)
+        delete next[record]
+        service.thumbnails = next
+        service.thumbnailRevision += 1
+    }
+
+    // done(ok) is the only reliable "content is in place" edge: the platform
+    // replies after wl-copy has actually exited, so callers can chain work that
+    // must not run against a half-written clipboard.
+    function copy(selectionRecord, done) {
+        if (!selectionRecord) {
+            if (done)
+                done(false)
+            return
+        }
+        PlatformClient.request("clipboard.history.copy",
+            { record: String(selectionRecord) }, function(response) {
+            const ok = !!response?.ok
+            if (!ok)
+                console.warn("[Clipboard] failed to copy history entry: "
+                    + (response?.error?.message || "platform unavailable"))
+            if (done)
+                done(ok)
+        })
+    }
+
+    function copyPinned(pinId, done) {
+        if (!pinId) {
+            if (done)
+                done(false)
+            return
+        }
+        PlatformClient.request("clipboard.pinned.copy", { pinId: String(pinId) },
+            function(response) {
+            const ok = !!response?.ok
+            if (!ok)
+                console.warn("[Clipboard] pinned copy failed: "
+                    + (response?.error?.message || "platform unavailable"))
+            if (done)
+                done(ok)
+        })
+    }
+
+    // One entry point for "put this on the clipboard", whichever store the row
+    // came from, so the paste controller never has to know about pins.
+    function copyEntry(item, done) {
+        if (!item) {
+            if (done)
+                done(false)
+            return
+        }
+        if (item.pinId)
+            copyPinned(item.pinId, done)
+        else
+            copy(item.selectionRecord, done)
     }
 
     function deleteEntry(selectionRecord) {
@@ -122,11 +298,15 @@ QtObject {
             return
         PlatformClient.request("clipboard.history.delete",
             { record: String(selectionRecord) }, function(response) {
-            if (response?.ok)
+            if (response?.ok) {
+                // The platform removed the preview file with the entry; drop
+                // its cached URL so nothing points at a missing path.
+                service._forgetThumbnail(selectionRecord)
                 service.refresh()
-            else
+            } else {
                 console.warn("[Clipboard] failed to delete entry: "
                     + (response?.error?.message || "platform unavailable"))
+            }
         })
     }
 
@@ -135,6 +315,10 @@ QtObject {
             if (response?.ok) {
                 service.entries = []
                 service.revision += 1
+                // Every preview went with the history it described.
+                service.thumbnails = ({})
+                service._thumbFailed = ({})
+                service.thumbnailRevision += 1
                 service.refresh()
             } else {
                 console.warn("[Clipboard] failed to clear history: "
@@ -185,6 +369,7 @@ QtObject {
             if (connected) {
                 service._syncWatchImages()
                 service.refresh()
+                service.refreshPinned()
             }
         }
     }
@@ -192,6 +377,7 @@ QtObject {
     Component.onCompleted: {
         load()
         refresh()
+        refreshPinned()
     }
 
     property Component processFactory: Component {
