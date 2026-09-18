@@ -5,6 +5,10 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+// 剪贴板已经拆到独立面板，但这个面板的类型定义里仍保留着剪贴板分支
+// （mode === "clipboard" 永远不会被激活）。它们引用的 ClipboardService
+// 现在来自新模块。
+import qs.desktop.modules.clipboard
 
 // Focusable full-screen layer with a compact, centered window switcher.
 PanelWindow {

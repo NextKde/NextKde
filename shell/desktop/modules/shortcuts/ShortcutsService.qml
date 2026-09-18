@@ -34,7 +34,7 @@ QtObject {
         { id: "net.local.kos-overview", description: "工作区概览",
           target: "overview", action: "toggle", combo: "Meta+Tab" },
         { id: "net.local.kos-clipboard", description: "剪贴板历史",
-          target: "quicksearch", action: "toggle clipboard", combo: "Meta+V" },
+          target: "clipboard", action: "toggle", combo: "Meta+V" },
         { id: "net.local.kos-show-desktop", description: "显示/返回桌面",
           target: "desktop", action: "toggle", combo: "Meta+D" },
     ]

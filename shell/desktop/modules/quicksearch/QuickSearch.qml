@@ -4,6 +4,10 @@ import qs.desktop.modules.common
 
 // Global controller for the Spotlight-like window switcher. Its window stays
 // bound to ScreenLifecycle's last real output across suspend/resume churn.
+//
+// 剪贴板不归这里管：它已经拆成独立面板（Meta+V → qs.desktop.modules.clipboard），
+// 因为它的尺寸、分类页签和「单击即粘贴」语义都和窗口切换差得太远。
+// 本面板现在只在「窗口」和「应用」之间循环。
 Scope {
     id: root
 
@@ -13,12 +17,10 @@ Scope {
     readonly property var targetScreen: ScreenLifecycle.activeScreen
 
     function normalizeMode(value) {
-        return value === "app" || value === "clipboard" ? value : "window"
+        return value === "app" ? value : "window"
     }
     function show(modeName) {
         mode = normalizeMode(modeName)
-        if (mode === "clipboard")
-            ClipboardService.refresh()
         open = true
     }
     function hide() { open = false }
@@ -26,22 +28,16 @@ Scope {
         const nextMode = normalizeMode(modeName)
         if (!open) {
             mode = nextMode
-            if (mode === "clipboard")
-                ClipboardService.refresh()
             open = true
         } else if (mode === nextMode) {
             open = false
         } else {
             mode = nextMode
-            if (mode === "clipboard")
-                ClipboardService.refresh()
         }
     }
     function cycleMode() {
-        const modes = ["window", "app", "clipboard"]
+        const modes = ["window", "app"]
         mode = modes[(modes.indexOf(mode) + 1) % modes.length]
-        if (mode === "clipboard")
-            ClipboardService.refresh()
         open = true
     }
     function toggleViewMode() {
