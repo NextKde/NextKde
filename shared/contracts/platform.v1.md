@@ -28,6 +28,13 @@ Current operation groups are:
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
   `clipboard.history.delete`, `clipboard.history.clear`
+- `input.paste` (synthesise Ctrl+V into the focused window through the KWin
+  effect; a desktop-level injection, never a clipboard data operation)
+- `clipboard.thumb`, `clipboard.pinned.list`, `clipboard.pinned.add`,
+  `clipboard.pinned.remove`, `clipboard.pinned.copy` (entry previews and a pin
+  store under `$XDG_STATE_HOME/quickshell/<shell id>/clipboard`; every file is
+  content-addressed and removed together with the entry that owns it, so
+  deleting never leaves state behind)
 - `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
   `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
   `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,

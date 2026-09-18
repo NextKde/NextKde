@@ -4,6 +4,7 @@
 
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusArgument>
@@ -823,6 +824,120 @@ QStringList localClipboardPaths(const QMimeData *mime)
     return result;
 }
 
+// ---------------------------------------------------------------------------
+// Clipboard pin store and preview cache.
+//
+// cliphist owns the history, but it cannot keep an entry that must outlive
+// history rotation, and it cannot hand the Shell a rendered preview. Both are
+// kept under the state directory the Shell already owns, so nothing lands
+// outside $XDG_STATE_HOME.
+//
+// Everything here is content-addressed: a file name is a hash of the bytes (or
+// of the cliphist record) it belongs to. That is what makes deletion exact -- a
+// delete never has to guess which file to drop -- and it makes pinning the same
+// content twice an overwrite instead of a second copy.
+// ---------------------------------------------------------------------------
+
+QString clipboardStateDir()
+{
+    // Mirrors AppearanceConfig::configPath(): Quickshell.stateDir resolves to
+    // $XDG_STATE_HOME/quickshell/<shell id>, and this shell's id is "kos".
+    const QString stateDir = QStandardPaths::writableLocation(
+        QStandardPaths::GenericStateLocation);
+    return stateDir + QStringLiteral("/quickshell/kos/clipboard");
+}
+
+QString clipboardPinnedDir()
+{
+    return clipboardStateDir() + QStringLiteral("/pinned");
+}
+
+QString clipboardThumbsDir()
+{
+    return clipboardStateDir() + QStringLiteral("/thumbs");
+}
+
+QString clipboardTopic(const QString &record)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(record.toUtf8(),
+                                                        QCryptographicHash::Sha1)
+                                   .toHex());
+}
+
+QString clipboardPinId(const QByteArray &content)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(content,
+                                                        QCryptographicHash::Sha1)
+                                   .toHex()
+                                   .left(16));
+}
+
+// Pin ids travel through the Shell, so they are validated before ever being
+// joined onto a path.
+bool isClipboardPinId(const QString &pinId)
+{
+    static const QRegularExpression pattern(QStringLiteral("^[0-9a-f]{16}$"));
+    return pattern.match(pinId).hasMatch();
+}
+
+bool clipboardWriteFile(const QString &path, const QByteArray &bytes)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    file.write(bytes);
+    return file.commit();
+}
+
+// Renders a decoded payload into the shared preview size. Returns an empty
+// string when the bytes are not an image at all, which is how text pins avoid
+// getting a thumbnail file they would never use.
+QString clipboardWriteThumb(const QByteArray &content, const QString &path)
+{
+    QImage image;
+    if (!image.loadFromData(content))
+        return {};
+    // 192 px covers both places the panel draws an entry (list row and grid
+    // tile) at device pixel ratio 2, without keeping full screenshots around.
+    if (image.width() > 192 || image.height() > 192) {
+        image = image.scaled(192, 192, Qt::KeepAspectRatio,
+                             Qt::SmoothTransformation);
+    }
+    if (!image.save(path, "PNG"))
+        return {};
+    return path;
+}
+
+void clipboardRemoveThumb(const QString &record)
+{
+    if (record.isEmpty())
+        return;
+    QFile::remove(clipboardThumbsDir() + QLatin1Char('/') + clipboardTopic(record)
+                  + QStringLiteral(".png"));
+}
+
+// Drops every cached preview whose record is no longer in cliphist's output.
+// The list operation is the only place that knows the authoritative current
+// history, and it runs on every panel refresh, so eviction by cliphist itself
+// cannot leave previews behind.
+void clipboardPruneThumbs(const QByteArray &listOutput)
+{
+    QDir dir(clipboardThumbsDir());
+    if (!dir.exists())
+        return;
+    QSet<QString> keep;
+    const QStringList lines = QString::fromUtf8(listOutput).split(QChar('\n'));
+    for (const QString &line : lines) {
+        if (!line.isEmpty())
+            keep.insert(clipboardTopic(line));
+    }
+    const QStringList cached = dir.entryList({QStringLiteral("*.png")}, QDir::Files);
+    for (const QString &name : cached) {
+        if (!keep.contains(name.chopped(4)))
+            dir.remove(name);
+    }
+}
+
 } // namespace
 
 PlatformServer::PlatformServer(QObject *parent)
@@ -1449,16 +1564,22 @@ void PlatformServer::runClipboardDelete(QLocalSocket *socket,
         process->deleteLater();
     });
     connect(process, &QProcess::finished, this,
-            [this, socket, request, process, replied](int exitCode, QProcess::ExitStatus) {
+            [this, socket, request, process, record, replied](int exitCode,
+                                                              QProcess::ExitStatus) {
         if (*replied)
             return;
         *replied = true;
-        if (exitCode == 0)
+        if (exitCode == 0) {
+            // The cached preview belongs to the entry that just went away.
+            // Dropping it here is what keeps the state directory from growing
+            // a file per deleted entry.
+            clipboardRemoveThumb(record);
             respond(socket, request, true,
                     QJsonObject{{QStringLiteral("deleted"), true}});
-        else
+        } else {
             respond(socket, request, false, {}, QStringLiteral("clipboard-delete-failed"),
                     QStringLiteral("无法删除剪贴板记录"), true);
+        }
         process->deleteLater();
     });
     connect(process, &QProcess::started, this,
@@ -1468,6 +1589,253 @@ void PlatformServer::runClipboardDelete(QLocalSocket *socket,
         process->closeWriteChannel();
     });
     process->start();
+}
+
+void PlatformServer::runCliphistDecode(const QString &record,
+                                       std::function<void(bool, const QByteArray &)> done)
+{
+    auto *process = new QProcess(this);
+    process->setProgram(QStringLiteral("cliphist"));
+    process->setArguments({QStringLiteral("decode")});
+    const auto replied = std::make_shared<bool>(false);
+    connect(process, &QProcess::errorOccurred, this,
+            [process, replied, done](QProcess::ProcessError) {
+        if (*replied)
+            return;
+        *replied = true;
+        process->deleteLater();
+        done(false, {});
+    });
+    connect(process, &QProcess::finished, this,
+            [process, replied, done](int exitCode, QProcess::ExitStatus) {
+        if (*replied)
+            return;
+        *replied = true;
+        const QByteArray output = process->readAllStandardOutput();
+        process->deleteLater();
+        done(exitCode == 0, output);
+    });
+    connect(process, &QProcess::started, this,
+            [process, record] {
+        process->write(record.toUtf8());
+        process->write("\n");
+        process->closeWriteChannel();
+    });
+    process->start();
+}
+
+void PlatformServer::runWlCopy(const QByteArray &payload,
+                               std::function<void(bool)> done)
+{
+    auto *process = new QProcess(this);
+    process->setProgram(QStringLiteral("wl-copy"));
+    const auto replied = std::make_shared<bool>(false);
+    connect(process, &QProcess::errorOccurred, this,
+            [process, replied, done](QProcess::ProcessError) {
+        if (*replied)
+            return;
+        *replied = true;
+        process->deleteLater();
+        done(false);
+    });
+    connect(process, &QProcess::finished, this,
+            [process, replied, done](int exitCode, QProcess::ExitStatus) {
+        if (*replied)
+            return;
+        *replied = true;
+        process->deleteLater();
+        done(exitCode == 0);
+    });
+    connect(process, &QProcess::started, this,
+            [process, payload] {
+        process->write(payload);
+        process->closeWriteChannel();
+    });
+    process->start();
+}
+
+void PlatformServer::runClipboardThumb(QLocalSocket *socket,
+                                       const QJsonObject &request,
+                                       const QString &record)
+{
+    if (record.isEmpty()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-entry"),
+                QStringLiteral("剪贴板记录无效"), false);
+        return;
+    }
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    const QString path = clipboardThumbsDir() + QLatin1Char('/')
+        + clipboardTopic(record) + QStringLiteral(".png");
+    if (QFileInfo::exists(path)) {
+        respond(guardedSocket.data(), request, true,
+                QJsonObject{{QStringLiteral("path"), path}});
+        return;
+    }
+    runCliphistDecode(record, [this, guardedSocket, request, path](bool ok,
+                                                                 const QByteArray &content) {
+        if (!ok) {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-decode-failed"),
+                    QStringLiteral("无法恢复剪贴板记录"), true);
+            return;
+        }
+        if (!QDir().mkpath(clipboardThumbsDir())
+            || clipboardWriteThumb(content, path).isEmpty()) {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-image-unavailable"),
+                    QStringLiteral("剪贴板记录不是图片"), false);
+            return;
+        }
+        respond(guardedSocket.data(), request, true,
+                QJsonObject{{QStringLiteral("path"), path}});
+    });
+}
+
+void PlatformServer::runClipboardPinnedList(QLocalSocket *socket,
+                                            const QJsonObject &request)
+{
+    const QString pinnedDir = clipboardPinnedDir();
+    QJsonArray items;
+    const QStringList metas = QDir(pinnedDir).entryList({QStringLiteral("*.json")},
+                                                        QDir::Files, QDir::Name);
+    for (const QString &metaName : metas) {
+        const QString pinId = metaName.chopped(5); // ".json"
+        if (!isClipboardPinId(pinId))
+            continue;
+        QFile metaFile(pinnedDir + QLatin1Char('/') + metaName);
+        if (!metaFile.open(QIODevice::ReadOnly))
+            continue;
+        const QJsonObject meta = QJsonDocument::fromJson(metaFile.readAll()).object();
+        const bool isImage = meta.value(QStringLiteral("isImage")).toBool();
+        const QString thumbnailPath = pinnedDir + QLatin1Char('/') + pinId
+            + QStringLiteral(".png");
+        items.append(QJsonObject{
+            {QStringLiteral("pinId"), pinId},
+            {QStringLiteral("isImage"), isImage},
+            {QStringLiteral("preview"), meta.value(QStringLiteral("preview")).toString()},
+            {QStringLiteral("thumbnailPath"),
+             isImage && QFileInfo::exists(thumbnailPath) ? thumbnailPath : QString()},
+        });
+    }
+    respond(socket, request, true, QJsonObject{{QStringLiteral("items"), items}});
+}
+
+void PlatformServer::runClipboardPinnedAdd(QLocalSocket *socket,
+                                           const QJsonObject &request,
+                                           const QString &record,
+                                           const QString &preview)
+{
+    if (record.isEmpty()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-entry"),
+                QStringLiteral("剪贴板记录无效"), false);
+        return;
+    }
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    runCliphistDecode(record, [this, guardedSocket, request, preview](bool ok,
+                                                                     const QByteArray &content) {
+        if (!ok) {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-decode-failed"),
+                    QStringLiteral("无法恢复剪贴板记录"), true);
+            return;
+        }
+        const QString pinnedDir = clipboardPinnedDir();
+        // Content-addressed: pinning the same thing twice overwrites its own
+        // three files instead of producing a second copy.
+        const QString pinId = clipboardPinId(content);
+        const QString dataPath = pinnedDir + QLatin1Char('/') + pinId
+            + QStringLiteral(".data");
+        const QString metaPath = pinnedDir + QLatin1Char('/') + pinId
+            + QStringLiteral(".json");
+        const QString thumbPath = pinnedDir + QLatin1Char('/') + pinId
+            + QStringLiteral(".png");
+
+        if (!QDir().mkpath(pinnedDir) || !clipboardWriteFile(dataPath, content)) {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-pin-failed"),
+                    QStringLiteral("无法写入固定条目"), true);
+            return;
+        }
+
+        // The payload decides what this is, not the Shell's guess: a decodable
+        // image gets a rendered preview, anything else stays text-only.
+        QImage probe;
+        const bool isImage = probe.loadFromData(content);
+        if (isImage)
+            clipboardWriteThumb(content, thumbPath);
+
+        const QJsonObject meta{{QStringLiteral("preview"), preview},
+                               {QStringLiteral("isImage"), isImage}};
+        if (!clipboardWriteFile(metaPath,
+                                QJsonDocument(meta).toJson(QJsonDocument::Compact))) {
+            // Never leave a half-written pin behind.
+            QFile::remove(dataPath);
+            QFile::remove(thumbPath);
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-pin-failed"),
+                    QStringLiteral("无法写入固定条目"), true);
+            return;
+        }
+
+        respond(guardedSocket.data(), request, true,
+                QJsonObject{{QStringLiteral("pinId"), pinId},
+                            {QStringLiteral("isImage"), isImage},
+                            {QStringLiteral("preview"), preview},
+                            {QStringLiteral("thumbnailPath"),
+                             isImage ? thumbPath : QString()}});
+    });
+}
+
+void PlatformServer::runClipboardPinnedRemove(QLocalSocket *socket,
+                                              const QJsonObject &request,
+                                              const QString &pinId)
+{
+    if (!isClipboardPinId(pinId)) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-pin"),
+                QStringLiteral("固定条目标识无效"), false);
+        return;
+    }
+    const QString pinnedDir = clipboardPinnedDir();
+    bool removed = false;
+    const QStringList suffixes{QStringLiteral(".data"), QStringLiteral(".json"),
+                               QStringLiteral(".png")};
+    for (const QString &suffix : suffixes) {
+        removed = QFile::remove(pinnedDir + QLatin1Char('/') + pinId + suffix)
+            || removed;
+    }
+    respond(socket, request, true, QJsonObject{{QStringLiteral("removed"), removed}});
+}
+
+void PlatformServer::runClipboardPinnedCopy(QLocalSocket *socket,
+                                            const QJsonObject &request,
+                                            const QString &pinId)
+{
+    if (!isClipboardPinId(pinId)) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-pin"),
+                QStringLiteral("固定条目标识无效"), false);
+        return;
+    }
+    QFile file(clipboardPinnedDir() + QLatin1Char('/') + pinId
+               + QStringLiteral(".data"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        respond(socket, request, false, {}, QStringLiteral("clipboard-pin-missing"),
+                QStringLiteral("固定条目不存在"), false);
+        return;
+    }
+    const QByteArray content = file.readAll();
+    file.close();
+
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    runWlCopy(content, [this, guardedSocket, request](bool ok) {
+        if (ok) {
+            respond(guardedSocket.data(), request, true,
+                    QJsonObject{{QStringLiteral("copied"), true}});
+        } else {
+            respond(guardedSocket.data(), request, false, {},
+                    QStringLiteral("clipboard-copy-failed"),
+                    QStringLiteral("无法写入剪贴板"), true);
+        }
+    });
 }
 
 bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &request)
@@ -1573,7 +1941,15 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
     }
     if (op == QStringLiteral("clipboard.history.list")) {
         runCommand(socket, request, QStringLiteral("cliphist"),
-                   {QStringLiteral("list")});
+                   {QStringLiteral("list")},
+                   [](const QByteArray &output, int exitCode) {
+            // Every refresh is the authoritative "what still exists" moment, so
+            // it is also when previews evicted by cliphist itself get dropped.
+            // Without this the cache would only ever shrink on explicit
+            // deletes and would grow forever under normal history rotation.
+            clipboardPruneThumbs(output);
+            return parseOutput(output, exitCode);
+        });
         return true;
     }
     if (op == QStringLiteral("clipboard.history.copy")) {
@@ -1610,6 +1986,9 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
             if (exitCode == 0) {
                 if (auto *clipboard = QGuiApplication::clipboard())
                     clipboard->clear(QClipboard::Clipboard);
+                // Pinned entries survive a wipe by design; only the history
+                // preview cache is owned by the history that just disappeared.
+                QDir(clipboardThumbsDir()).removeRecursively();
                 respond(socket, request, true,
                         QJsonObject{{QStringLiteral("cleared"), true}});
             } else {
@@ -1619,6 +1998,33 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
             process->deleteLater();
         });
         process->start();
+        return true;
+    }
+    const QJsonObject clipboardPayload =
+        request.value(QStringLiteral("payload")).toObject();
+    if (op == QStringLiteral("clipboard.thumb")) {
+        runClipboardThumb(socket, request,
+                          clipboardPayload.value(QStringLiteral("record")).toString());
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.pinned.list")) {
+        runClipboardPinnedList(socket, request);
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.pinned.add")) {
+        runClipboardPinnedAdd(socket, request,
+                              clipboardPayload.value(QStringLiteral("record")).toString(),
+                              clipboardPayload.value(QStringLiteral("preview")).toString());
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.pinned.remove")) {
+        runClipboardPinnedRemove(socket, request,
+                                 clipboardPayload.value(QStringLiteral("pinId")).toString());
+        return true;
+    }
+    if (op == QStringLiteral("clipboard.pinned.copy")) {
+        runClipboardPinnedCopy(socket, request,
+                               clipboardPayload.value(QStringLiteral("pinId")).toString());
         return true;
     }
     return false;
@@ -2212,6 +2618,35 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
     }
     respond(socket, request, false, {}, QStringLiteral("unknown-appmenu-operation"),
             QStringLiteral("未知的应用菜单操作"), false);
+    return true;
+}
+
+bool PlatformServer::handleInput(QLocalSocket *socket, const QJsonObject &request)
+{
+    if (operation(request) != QStringLiteral("input.paste"))
+        return false;
+
+    // Only a compositor-side effect may synthesise a key without uinput
+    // privileges, so the chord is delegated to the KWin effect that already
+    // owns this session-bus endpoint. Keeping it here means the Shell never has
+    // to ship a separate injection helper.
+    QDBusInterface effect(QStringLiteral("org.kde.KWin"),
+                          QStringLiteral("/KOSContextMenuInput"),
+                          QStringLiteral("org.kos.KWin.ContextMenuInput"));
+    if (!effect.isValid()) {
+        respond(socket, request, false, {}, QStringLiteral("input-bridge-unavailable"),
+                QStringLiteral("按键注入桥接尚未加载"), true);
+        return true;
+    }
+
+    const QDBusMessage reply = effect.call(QStringLiteral("paste"));
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        respond(socket, request, false, {}, QStringLiteral("input-injection-failed"),
+                QStringLiteral("无法注入粘贴按键"), true);
+        return true;
+    }
+
+    respond(socket, request, true, QJsonObject{{QStringLiteral("injected"), true}});
     return true;
 }
 
@@ -2964,6 +3399,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
     if (handleClipboard(socket, request) || handleApplication(socket, request)
         || handleFileOperation(socket, request)
         || handleKWin(socket, request) || handleAppMenu(socket, request)
+        || handleInput(socket, request)
         || handleSystemOperation(socket, request))
         return;
     respond(socket, request, false, {}, QStringLiteral("unknown-operation"),

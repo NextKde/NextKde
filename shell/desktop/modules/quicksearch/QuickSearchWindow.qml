@@ -5,10 +5,6 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
-// 剪贴板已经拆到独立面板，但这个面板的类型定义里仍保留着剪贴板分支
-// （mode === "clipboard" 永远不会被激活）。它们引用的 ClipboardService
-// 现在来自新模块。
-import qs.desktop.modules.clipboard
 
 // Focusable full-screen layer with a compact, centered window switcher.
 PanelWindow {
@@ -39,6 +35,10 @@ PanelWindow {
     signal closeRequested
     signal modeCycleRequested
     signal viewModeToggleRequested
+    // The controller turns this into "copy, then inject Ctrl+V into the window
+    // that had focus before the panel opened". copyOnly stops after the copy.
+    // The item is passed whole so a pinned row and a history row share one path.
+    signal pasteRequested(var item, bool copyOnly)
 
     readonly property string modeTitle: mode === "app" ? "应用" : (mode === "clipboard" ? "剪贴板" : "窗口")
     readonly property string placeholder: mode === "app" ? "搜索已安装的应用" : (mode === "clipboard" ? "搜索剪贴板历史" : "搜索已打开的窗口")
@@ -89,12 +89,41 @@ PanelWindow {
     }
     readonly property var clipboardResults: {
         ClipboardService.revision;
+        ClipboardService.pinnedRevision;
+        ClipboardService.thumbnailRevision;
         const needle = query.trim().toLowerCase();
         const matches = [];
+
+        if (root.clipboardPinnedOnly) {
+            const pinned = ClipboardService.pinned || [];
+            for (let i = 0; i < pinned.length; i++) {
+                const item = pinned[i];
+                const title = item.isImage ? "图片" : item.preview;
+                if (needle && !title.toLowerCase().includes(needle))
+                    continue;
+                matches.push({
+                    kind: "clipboard",
+                    title: title,
+                    subtitle: item.isImage ? "固定图片 · 回车复制" : "固定文本 · 回车复制",
+                    icon: BundledIcons.source(item.isImage
+                        ? "image-x-generic" : "edit-paste"),
+                    isImage: item.isImage,
+                    preview: item.preview,
+                    selectionRecord: "",
+                    pinId: item.pinId,
+                    pinned: true,
+                    thumbnailSource: item.thumbnailPath
+                        ? "file://" + item.thumbnailPath : ""
+                });
+            }
+            return matches;
+        }
+
         const entries = ClipboardService.entries || [];
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (!needle || entry.preview.toLowerCase().includes(needle)) {
+                const pinId = ClipboardService.pinIdFor(entry);
                 matches.push({
                     kind: "clipboard",
                     title: entry.isImage ? "图片" : entry.preview,
@@ -102,7 +131,14 @@ PanelWindow {
                     icon: BundledIcons.source(entry.isImage
                         ? "image-x-generic" : "edit-paste"),
                     isImage: entry.isImage,
-                    selectionRecord: entry.record
+                    preview: entry.preview,
+                    selectionRecord: entry.record,
+                    pinId: pinId,
+                    pinned: pinId !== "",
+                    // Rendered on demand by the platform and cached there, so a
+                    // re-open costs nothing.
+                    thumbnailSource: entry.isImage
+                        ? ClipboardService.thumbnailSourceFor(entry) : ""
                 });
             }
         }
@@ -233,7 +269,8 @@ PanelWindow {
             anchors.fill: parent
             source: resultIcon.iconSource
             smooth: true
-            asynchronous: true
+            // Theme icon: synchronous, see AppIcon.qml.
+            asynchronous: false
             backer.cache: false
             visible: false
         }
@@ -252,10 +289,39 @@ PanelWindow {
     }
 
     property bool clipboardSettingsOpen: false
+    // Clipboard list is narrowed to the pin store.
+    property bool clipboardPinnedOnly: false
+
+    // Star toggles the pin; the platform owns both the payload and its preview
+    // file, so unpinning is also what deletes them from disk.
+    function togglePin(item) {
+        if (!item)
+            return;
+        if (item.pinId)
+            ClipboardService.unpinById(item.pinId);
+        else if (item.selectionRecord)
+            ClipboardService.pinEntry(item.selectionRecord, item.preview);
+    }
+
+    // Removing a row: in the pin view it drops the pin, in the history view it
+    // drops the history entry (the platform takes that entry's preview with
+    // it). A pinned history entry survives, which is what pinning promised.
+    function removeItem(item) {
+        if (!item)
+            return;
+        if (root.clipboardPinnedOnly) {
+            if (item.pinId)
+                ClipboardService.unpinById(item.pinId);
+            return;
+        }
+        if (item.selectionRecord)
+            ClipboardService.deleteEntry(item.selectionRecord);
+    }
 
     function reset() {
         query = "";
         clipboardSettingsOpen = false;
+        clipboardPinnedOnly = false;
         // Window mode opens with the most recently used window selected (the
         // first MRU result); Alt+Tab proposes the previous window immediately.
         selectedIndex = 0;
@@ -271,10 +337,7 @@ PanelWindow {
     function deleteCurrentSelection() {
         if (root.mode !== "clipboard" || root.selectedIndex < 0 || root.selectedIndex >= root.resultCount)
             return;
-        const result = root.results[root.selectedIndex];
-        if (result && result.selectionRecord) {
-            ClipboardService.deleteEntry(result.selectionRecord);
-        }
+        root.removeItem(root.results[root.selectedIndex]);
     }
 
     function moveSelection(delta) {
@@ -287,7 +350,7 @@ PanelWindow {
             resultView.positionViewAtIndex(selectedIndex, ListView.Contain);
     }
 
-    function activateSelection() {
+    function activateSelection(copyOnly) {
         if (selectedIndex < 0 || selectedIndex >= resultCount)
             return;
         const result = results[selectedIndex];
@@ -296,7 +359,9 @@ PanelWindow {
             // travelling before this focusable search layer closes.
             DockModelService.activateWindow(result.windowId);
         } else if (result.kind === "clipboard") {
-            ClipboardService.copy(result.selectionRecord);
+            // Closing is what hands keyboard focus back; the controller injects
+            // Ctrl+V once that has actually happened.
+            root.pasteRequested(result, copyOnly === true);
         } else {
             AppActionService.launch(result.entry);
         }
@@ -306,8 +371,10 @@ PanelWindow {
     onOpenChanged: {
         if (open) {
             reset();
-            if (mode === "clipboard")
+            if (mode === "clipboard") {
                 ClipboardService.refresh();
+                ClipboardService.refreshPinned();
+            }
         }
     }
     onModeChanged: {
@@ -546,7 +613,8 @@ PanelWindow {
                 spacing: 6
 
                 GlassText {
-                    text: root.modeTitle + (root.mode === "clipboard" ? " · 最新优先" : "") + " · Tab"
+                    text: root.modeTitle + (root.mode === "clipboard"
+                        ? (root.clipboardPinnedOnly ? " · 固定" : " · 最新优先") : "") + " · Tab"
                     color: Qt.rgba(1, 1, 1, 0.46)
                     font.pixelSize: 11
                     anchors.verticalCenter: parent.verticalCenter
@@ -587,6 +655,51 @@ PanelWindow {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: ClipboardService.clearAll()
+                    }
+                }
+
+                // Pinned-only filter. A chip rather than a second tab row keeps
+                // the palette height it already had.
+                Item {
+                    visible: root.mode === "clipboard"
+                    width: pinFilterText.implicitWidth + 12
+                    height: 22
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: root.clipboardPinnedOnly
+                            ? (ThemeService.isDark ? Qt.rgba(0.30, 0.56, 0.94, 0.32) : Qt.rgba(0.0, 0.50, 0.90, 0.18))
+                            : (pinFilterMouse.containsMouse
+                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08))
+                                : "transparent")
+                        border.width: root.clipboardPinnedOnly ? 1 : 0
+                        border.color: ThemeService.isDark
+                            ? Qt.rgba(0.66, 0.82, 1, 0.40) : Qt.rgba(0.0, 0.50, 0.90, 0.30)
+                    }
+
+                    GlassText {
+                        id: pinFilterText
+                        anchors.centerIn: parent
+                        text: "固定 " + ClipboardService.pinnedCount
+                        color: root.clipboardPinnedOnly
+                            ? (ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : "#0066cc")
+                            : Qt.rgba(1, 1, 1, 0.60)
+                        font.pixelSize: 11
+                        style: ThemeService.isDark ? Text.Outline : Text.Normal
+                        styleColor: dialog.textOutlineColor
+                    }
+
+                    MouseArea {
+                        id: pinFilterMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.clipboardPinnedOnly = !root.clipboardPinnedOnly;
+                            root.selectedIndex = 0;
+                        }
                     }
                 }
 
@@ -927,9 +1040,29 @@ PanelWindow {
                     color: Qt.rgba(0.30, 0.56, 0.94, 0.34)
                     border.width: 1
                     border.color: Qt.rgba(0.66, 0.82, 1, 0.42)
+
+                    // The platform's rendered preview. Inset by the frame
+                    // instead of corner-masked: a mask needs a captured backing
+                    // texture, which this panel cannot hold across its rapid
+                    // hide/show cycles (see the ResultIcon note below).
+                    Image {
+                        id: rowThumb
+                        anchors.centerIn: parent
+                        width: 26
+                        height: 26
+                        visible: (resultItem.modelData.thumbnailSource ?? "") !== ""
+                        source: resultItem.modelData.thumbnailSource ?? ""
+                        sourceSize.width: 52
+                        sourceSize.height: 52
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                        cache: false
+                    }
                 }
 
                 ResultIcon {
+                    visible: (resultItem.modelData.thumbnailSource ?? "") === ""
                     width: resultItem.modelData.isImage ? 20 : 30
                     height: width
                     anchors {
@@ -945,7 +1078,9 @@ PanelWindow {
                         left: parent.left
                         leftMargin: 54
                         right: parent.right
-                        rightMargin: root.mode === "clipboard" ? 72 : 12
+                        // Clipboard rows carry a star next to the delete button:
+                        // 12 margin + 38 (latest badge) + 6 + 28 + 6 + 28.
+                        rightMargin: root.mode === "clipboard" ? 118 : 12
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: 1
@@ -974,7 +1109,10 @@ PanelWindow {
                     }
                 }
 
-                // Right action badges
+                // Right action badges. z lifts the star and delete buttons over
+                // the row-wide MouseArea declared below: input is delivered
+                // topmost first, so without it the row swallows every press and
+                // the icons are decoration. Same trick as the grid delete button.
                 Row {
                     anchors {
                         right: parent.right
@@ -982,10 +1120,12 @@ PanelWindow {
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: 6
+                    z: 2
 
                     // Latest badge
                     Rectangle {
-                        visible: root.mode === "clipboard" && resultItem.index === 0
+                        visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
+                            && resultItem.index === 0
                         width: 38
                         height: 18
                         radius: 9
@@ -1005,17 +1145,72 @@ PanelWindow {
                         }
                     }
 
-                    // Delete single clipboard item button
+                    // Pin toggle. Stays visible while pinned so the state is
+                    // readable without hovering. The item is 28x28 around a
+                    // 22x22 chip: glyph and hover circle keep their size, only
+                    // the target grows, so a near miss lands on the star instead
+                    // of the row and never fires the paste.
                     Item {
                         visible: root.mode === "clipboard"
-                        width: 22
-                        height: 22
+                        width: 28
+                        height: 28
                         anchors.verticalCenter: parent.verticalCenter
-                        opacity: (resultMouse.containsMouse || resultItem.index === root.selectedIndex) ? 1.0 : 0.0
+                        // Own hover is part of the condition because the badge
+                        // sits above resultMouse: approaching from the screen
+                        // edge lands on the badge without the row ever seeing an
+                        // enter, and the icon must not be invisible-but-clickable.
+                        opacity: (resultItem.modelData.pinned ?? false)
+                            || pinButtonMouse.containsMouse
+                            || resultMouse.containsMouse
+                            || resultItem.index === root.selectedIndex ? 1.0 : 0.0
                         Behavior on opacity { NumberAnimation { duration: 100 } }
 
                         Rectangle {
+                            anchors.centerIn: parent
+                            width: 22
+                            height: 22
+                            radius: 11
+                            color: pinButtonMouse.containsMouse
+                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
+                                : "transparent"
+                        }
+
+                        GlassText {
+                            anchors.centerIn: parent
+                            text: (resultItem.modelData.pinned ?? false) ? "★" : "☆"
+                            color: (resultItem.modelData.pinned ?? false)
+                                ? (ThemeService.isDark ? "#ffd60a" : "#c08a00")
+                                : Qt.rgba(1, 1, 1, 0.68)
+                            font.pixelSize: 13
+                            style: ThemeService.isDark ? Text.Outline : Text.Normal
+                            styleColor: dialog.textOutlineColor
+                        }
+
+                        MouseArea {
+                            id: pinButtonMouse
                             anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.togglePin(resultItem.modelData)
+                        }
+                    }
+
+                    // Delete single clipboard item button. Same 28x28 target
+                    // around a 22x22 chip as the pin toggle.
+                    Item {
+                        visible: root.mode === "clipboard"
+                        width: 28
+                        height: 28
+                        anchors.verticalCenter: parent.verticalCenter
+                        opacity: deleteBtnMouse.containsMouse
+                            || resultMouse.containsMouse
+                            || resultItem.index === root.selectedIndex ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 100 } }
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 22
+                            height: 22
                             radius: 11
                             color: deleteBtnMouse.containsMouse
                                 ? (ThemeService.isDark ? Qt.rgba(1, 0.3, 0.3, 0.30) : Qt.rgba(1, 0.2, 0.2, 0.15))
@@ -1036,10 +1231,7 @@ PanelWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (resultItem.modelData.selectionRecord)
-                                    ClipboardService.deleteEntry(resultItem.modelData.selectionRecord);
-                            }
+                            onClicked: root.removeItem(resultItem.modelData)
                         }
                     }
                 }
@@ -1048,10 +1240,14 @@ PanelWindow {
                     id: resultMouse
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     onEntered: root.selectedIndex = resultItem.index
-                    onClicked: {
+                    onClicked: function (mouse) {
                         root.selectedIndex = resultItem.index;
-                        root.activateSelection();
+                        // Ctrl (or middle click) means "only put it on the
+                        // clipboard", for pasting somewhere else later.
+                        root.activateSelection((mouse.modifiers & Qt.ControlModifier) !== 0
+                            || mouse.button === Qt.MiddleButton);
                     }
                 }
             }
@@ -1092,7 +1288,8 @@ PanelWindow {
                 }
 
                 Rectangle {
-                    visible: root.mode === "clipboard" && gridResultItem.index === 0
+                    visible: root.mode === "clipboard" && !root.clipboardPinnedOnly
+                        && gridResultItem.index === 0
                     width: 34
                     height: 17
                     radius: 8.5
@@ -1115,21 +1312,25 @@ PanelWindow {
                     }
                 }
 
-                // Delete button on grid item
+                // Delete button on grid item. 28x28 target, 20x20 chip: the
+                // margins shrink by 4 so the chip keeps its old position while
+                // the clickable area grows around it.
                 Item {
                     visible: root.mode === "clipboard" && (gridMouse.containsMouse || gridResultItem.index === root.selectedIndex)
-                    width: 20
-                    height: 20
+                    width: 28
+                    height: 28
                     anchors {
                         left: parent.left
-                        leftMargin: 6
+                        leftMargin: 2
                         top: parent.top
-                        topMargin: 6
+                        topMargin: 2
                     }
                     z: 2
 
                     Rectangle {
-                        anchors.fill: parent
+                        anchors.centerIn: parent
+                        width: 20
+                        height: 20
                         radius: 10
                         color: gridDeleteMouse.containsMouse
                             ? (ThemeService.isDark ? Qt.rgba(1, 0.3, 0.3, 0.35) : Qt.rgba(1, 0.2, 0.2, 0.20))
@@ -1150,10 +1351,7 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (gridResultItem.modelData.selectionRecord)
-                                ClipboardService.deleteEntry(gridResultItem.modelData.selectionRecord);
-                        }
+                        onClicked: root.removeItem(gridResultItem.modelData)
                     }
                 }
 
@@ -1170,9 +1368,24 @@ PanelWindow {
                     color: Qt.rgba(0.30, 0.56, 0.94, 0.34)
                     border.width: 1
                     border.color: Qt.rgba(0.66, 0.82, 1, 0.42)
+
+                    Image {
+                        anchors.centerIn: parent
+                        width: 42
+                        height: 42
+                        visible: (gridResultItem.modelData.thumbnailSource ?? "") !== ""
+                        source: gridResultItem.modelData.thumbnailSource ?? ""
+                        sourceSize.width: 84
+                        sourceSize.height: 84
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                        cache: false
+                    }
                 }
 
                 ResultIcon {
+                    visible: (gridResultItem.modelData.thumbnailSource ?? "") === ""
                     width: gridResultItem.modelData.isImage ? 34 : 42
                     height: width
                     anchors {
@@ -1227,10 +1440,12 @@ PanelWindow {
                     id: gridMouse
                     anchors.fill: parent
                     hoverEnabled: true
+                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                     onEntered: root.selectedIndex = gridResultItem.index
-                    onClicked: {
+                    onClicked: function (mouse) {
                         root.selectedIndex = gridResultItem.index;
-                        root.activateSelection();
+                        root.activateSelection((mouse.modifiers & Qt.ControlModifier) !== 0
+                            || mouse.button === Qt.MiddleButton);
                     }
                 }
             }
@@ -1247,7 +1462,10 @@ PanelWindow {
             height: 40
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: root.mode === "app" ? "未找到匹配的应用" : (root.mode === "clipboard" ? "剪贴板历史为空" : "未找到匹配的窗口")
+            text: root.mode === "app" ? "未找到匹配的应用"
+                : (root.mode === "clipboard"
+                    ? (root.clipboardPinnedOnly ? "还没有固定任何内容" : "剪贴板历史为空")
+                    : "未找到匹配的窗口")
             color: Qt.rgba(1, 1, 1, 0.52)
             font.pixelSize: 13
             style: ThemeService.isDark ? Text.Outline : Text.Normal
