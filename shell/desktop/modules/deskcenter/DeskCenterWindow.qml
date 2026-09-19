@@ -1042,7 +1042,10 @@ PanelWindow {
                             const center = width / 2
                             const amount = Math.max(0, Math.min(1, value))
                             const start = -Math.PI / 2
-                            ctx.lineWidth = Math.max(5, width * 0.065)
+                            // Material's data rings are heavier than the glass
+                            // form's hairlines; both keep the round cap.
+                            ctx.lineWidth = AppearanceTokens.surface.pick(
+                                Math.max(6, width * 0.085), Math.max(5, width * 0.065))
                             ctx.lineCap = "round"
 	                            ctx.strokeStyle = AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant.toString(), AppearanceTokens.content.onBackdrop)
 	                                ? IconAppearanceService.glassContentColor(0.25).toString()
@@ -1700,9 +1703,18 @@ PanelWindow {
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData
-	                                color: AppearanceTokens.content.onBackdrop
-	                                    ? IconAppearanceService.glassContentColor(parent.controlEnabled ? 0.88 : 0.28)
-	                                    : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.88 : 0.28)
+                                // Material pairs a container with its own ink: the
+                                // play button sits on primaryContainer and the
+                                // skips on secondaryContainer, so each reads the
+                                // matching on-container role instead of the
+                                // generic surface ink. Glass keeps its light ink.
+                                color: AppearanceTokens.surface.pick(
+                                    index === 1
+                                        ? AppearanceTokens.colors.primaryContainerForeground
+                                        : AppearanceTokens.colors.secondaryContainerForeground,
+                                    AppearanceTokens.content.onBackdrop
+                                        ? IconAppearanceService.glassContentColor(parent.controlEnabled ? 0.88 : 0.28)
+                                        : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.88 : 0.28))
                                 font {
                                     family: "SF Pro Display"
                                     pixelSize: index === 1 ? 15 : 11
