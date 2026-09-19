@@ -172,7 +172,7 @@ Item {
 
                 OpacityMask {
                     anchors.fill: parent
-                    visible: AppearanceTokens.isMacos
+                    visible: AppearanceTokens.motion.drawsFormDecorations
                     source: refractedTexture
                     maskSource: glyphMask
                     opacity: 0.92
@@ -194,7 +194,7 @@ Item {
                 }
                 OpacityMask {
                     anchors.fill: parent
-                    visible: AppearanceTokens.isMacos
+                    visible: AppearanceTokens.motion.drawsFormDecorations
                     source: glyphSheen
                     maskSource: glyphMask
                     opacity: 0.72 * AppearanceTokens.glass.liquidStrength
@@ -205,12 +205,12 @@ Item {
                     anchors.centerIn: parent
                     width: parent.width
                     text: Qt.formatDateTime(clock.date, "HH:mm:ss")
-                    color: AppearanceTokens.isMacos
+                    color: AppearanceTokens.motion.drawsFormDecorations
                         ? Qt.rgba(1, 1, 1,
                             0.18 + 0.18 * AppearanceTokens.glass.liquidStrength)
                         : ThemeService.foregroundColor
                     style: Text.Outline
-                    styleColor: AppearanceTokens.isMacos
+                    styleColor: AppearanceTokens.motion.drawsFormDecorations
                         ? Qt.rgba(0.84, 0.97, 1.0,
                             0.72 * AppearanceTokens.glass.liquidStrength)
                         : Qt.rgba(0, 0, 0, 0.34)

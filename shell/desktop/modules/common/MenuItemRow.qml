@@ -27,12 +27,10 @@ Item {
     // flag set by onEntered/onExited can otherwise be stale or miss the first
     // hover event in a PopupWindow.
     readonly property bool _hover: pointer.containsMouse
-    readonly property color _hi: AppearanceTokens.isMaterial
-        ? (itemEnabled ? AppearanceTokens.state.hover
-            : AppearanceTokens.state.disabled)
-        : Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
+    readonly property color _hi: AppearanceTokens.surface.pick((itemEnabled ? AppearanceTokens.state.hover
+            : AppearanceTokens.state.disabled), Qt.rgba(row.foregroundColor.r, row.foregroundColor.g,
             row.foregroundColor.b,
-            itemEnabled ? (ThemeService.isDark ? 0.22 : 0.10) : 0.05)
+            itemEnabled ? (ThemeService.isDark ? 0.22 : 0.10) : 0.05))
 
     height: row.separator ? 1 : 38
     visible: row.separator || label.length > 0

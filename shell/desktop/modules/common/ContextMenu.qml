@@ -31,12 +31,11 @@ PopupWindow {
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
-    property real menuRadius: AppearanceTokens.isMaterial
-        ? AppearanceTokens.shape.large : 16
+    property real menuRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 16)
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
             return root.foregroundColor
-        return (AppearanceTokens.isMaterial || ThemeService.isDark)
+        return (AppearanceTokens.surface.paintInQml || ThemeService.isDark)
             ? glass.foregroundColor : ThemeService.foregroundColor
     }
     // Some anchors receive their opening press through the compositor's
@@ -202,8 +201,10 @@ PopupWindow {
         }
     }
 
-    BackgroundEffect.blurRegion: (!AppearanceTokens.isMaterial && root.visible)
-        ? glass.blurRegion : null
+    // Both forms publish this. A tonal menu wants the same backdrop frost a
+    // glass one does, and gets it without a SurfaceShape -- so there is nothing
+    // to exclude here.
+    BackgroundEffect.blurRegion: root.visible ? glass.blurRegion : null
 
     LiquidGlassPanel {
         id: glass

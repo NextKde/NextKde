@@ -321,20 +321,15 @@ PanelWindow {
                 width: sizeLabel.implicitWidth + 14
                 height: 24
                 radius: 12
-                color: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.colors.layer4
-                    : Qt.rgba(0, 0, 0, 0.52)
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(0, 0, 0, 0.52))
                 border.width: 1
-                border.color: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.colors.outlineVariant
-                    : Qt.rgba(1, 1, 1, 0.18)
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.18))
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
                     text: ({ small: "小", medium: "中", large: "大" })[
                         DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键切换"
-                    color: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.colors.surfaceForeground : "white"
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
                 }
             }
@@ -1021,11 +1016,9 @@ PanelWindow {
                     readonly property var labels: ["CPU", "内存", "存储"]
                     readonly property var icons: ["cpu", "memory", "drive-harddisk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
-	                    readonly property var colors: AppearanceTokens.isMaterial
-	                        ? [AppearanceTokens.colors.primary.toString(),
+	                    readonly property var colors: AppearanceTokens.surface.pick([AppearanceTokens.colors.primary.toString(),
 	                           AppearanceTokens.colors.tertiary.toString(),
-	                           AppearanceTokens.colors.secondary.toString()]
-	                        : AppearanceTokens.content.onBackdrop
+	                           AppearanceTokens.colors.secondary.toString()], AppearanceTokens.content.onBackdrop)
 	                        ? [IconAppearanceService.glassContentColor().toString(),
 	                           IconAppearanceService.glassContentColor().toString(),
 	                           IconAppearanceService.glassContentColor().toString()]
@@ -1051,9 +1044,7 @@ PanelWindow {
                             const start = -Math.PI / 2
                             ctx.lineWidth = Math.max(5, width * 0.065)
                             ctx.lineCap = "round"
-	                            ctx.strokeStyle = AppearanceTokens.isMaterial
-	                                ? AppearanceTokens.colors.outlineVariant.toString()
-	                                : AppearanceTokens.content.onBackdrop
+	                            ctx.strokeStyle = AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant.toString(), AppearanceTokens.content.onBackdrop)
 	                                ? IconAppearanceService.glassContentColor(0.25).toString()
 	                                : Qt.rgba(0.19, 0.17, 0.2, 0.12)
                             ctx.beginPath()
@@ -1527,9 +1518,7 @@ PanelWindow {
                             readonly property var offsets: [4, 34, 54]
                             x: offsets[index]
                             text: modelData
-                            color: AppearanceTokens.isMaterial
-                                ? AppearanceTokens.colors.tertiary
-                                : Qt.rgba(1, 1, 1, 0.60)
+                            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.tertiary, Qt.rgba(1, 1, 1, 0.60))
                             font { family: "SF Pro Display"; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
                             SequentialAnimation on y {
                                 running: musicNotes.running
@@ -1703,13 +1692,11 @@ PanelWindow {
                             height: width
                             y: (parent.height - height) / 2
                             radius: width / 2
-                            color: AppearanceTokens.isMaterial
-                                ? (index === 1
+                            color: AppearanceTokens.surface.pick((index === 1
                                     ? AppearanceTokens.colors.primaryContainer
-                                    : AppearanceTokens.colors.secondaryContainer)
-                                : (index === 1
+                                    : AppearanceTokens.colors.secondaryContainer), (index === 1
                                     ? Qt.rgba(1, 1, 1, controlEnabled ? 0.24 : 0.10)
-                                    : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055))
+                                    : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055)))
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData
@@ -1999,8 +1986,7 @@ PanelWindow {
                     anchors.centerIn: calendarHeader
                     text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
                     horizontalAlignment: Text.AlignHCenter
-                    color: AppearanceTokens.isMaterial
-                        ? AppearanceTokens.colors.surfaceForeground : "white"
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 15; weight: Font.Bold }
                 }
                 Text {
@@ -2026,8 +2012,7 @@ PanelWindow {
                             required property var modelData
                             width: parent.width
                             text: "• " + String(PimWidgetService.value(modelData, "title", "日程"))
-                            color: AppearanceTokens.isMaterial
-                                ? AppearanceTokens.colors.surfaceVariantForeground : "#4d4d55"
+                            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, "#4d4d55")
                             elide: Text.ElideRight
                             font.pixelSize: 9
                         }
@@ -2078,8 +2063,8 @@ PanelWindow {
                                     height: 16
                                     radius: 8
 	                                    color: parent.today
-	                                        ? (AppearanceTokens.isMaterial ? AppearanceTokens.colors.primary :
-	                                            (AppearanceTokens.content.ink("#ef5661", 0.22)))
+	                                        ? AppearanceTokens.surface.pick(AppearanceTokens.colors.primary,
+	                                            AppearanceTokens.content.ink("#ef5661", 0.22))
 	                                        : "transparent"
                                 }
                                 Text {

@@ -215,6 +215,11 @@ PanelWindow {
                 anchors.fill: parent
                 radius: card.radius
                 cornerExponent: AppearanceTokens.shape.cornerExponent
+                // The track above already owns the blur region and the corner of
+                // this glass: the card is content on it, not a surface of its
+                // own. Left on, the tonal form paints a second fill over the
+                // track's frost and the card reads as two stacked finishes.
+                fallbackEnabled: false
                 // Text sits directly on this card, so it carries a readable scrim over
                 // whatever backdrop it ends up on.
                 scrimEnabled: AppearanceTokens.surface.usesBackdrop

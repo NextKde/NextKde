@@ -595,7 +595,11 @@ QML 只决定几何与漆，合成器只决定材质。卡片和窗口都不判�
 | 墨色 / 带透明度的墨色 | `AppearanceTokens.content.ink("#7d7782")`、`ink("#7d7782", 0.72)` |
 | 语义强调色：Material 用主题角色，其它形态用墨或 widget 自己的色 | `AppearanceTokens.content.accent(AppearanceTokens.colors.tertiary, "#30d158")` |
 
-这三个在两种形态下与原三元表达式**逐字段等价**（`content.onBackdrop` 就是原来各 widget 自己重复声明的 `glassMode`），所以把 `glassMode ? … : …` 换成它们不会改观感。`DeskCenterWindow` 里原本 109 处形态判断，其中 71 处收进了这三个出口（`ink` 44、`onBackdrop` 20、`accent` 7）；剩下的十余处是**真实的设计差异**（比如两张卡在 Material 下用主题色画表盘、在玻璃形态下显示另一套布局），不属于被迫的形态知识。
+这三个在两种形态下与原三元表达式**逐字段等价**（`content.onBackdrop` 就是原来各 widget 自己重复声明的 `glassMode`），所以把 `glassMode ? … : …` 换成它们不会改观感。`DeskCenterWindow` 里原本 109 处形态判断，其中 81 处收进了 token（`ink` 44、`onBackdrop` 20、`accent` 7、`pick` 10）。
+
+**这套契约覆盖整个 shell，不只是桌面卡片。** 所有面板与弹层 —— Dock、Bar、控制中心、WiFi / 蓝牙列表、通知、右键菜单、启动器、快速搜索、Overview、天气弹层 —— 都通过 `LiquidGlassPanel` 取表面，而它在 tonal 形态下**保留模糊区域、去掉 `SurfaceShape` 声明**（`shapeEnabled: … && !root.tonal`）。这一行让 23 个消费者同时从液态玻璃切到纯磨砂，各自的 `blurRegion` 出口不变；面板族的其它形态差异（颜色、圆角、弹出动效、Dock 时钟的装饰面）由 `surface.pick(tonal, glass)`、`content.*` 和 `motion.popupAnimatesOnShow` / `motion.drawsFormDecorations` 表达。
+
+于是**全仓只有两个地方还认识形态名**：`AppearanceConfigService`（形态与预设的定义处）和 `AppearanceTokens`（policy 本身）。除此之外仅剩 `DeskCenterWindow` 的 7 处语句/布局分支（Material 与玻璃是两套设计，例如表盘配色与列表布局）和 `IconAppearanceService.glassContentColor`（墨色的实现点）。
 
 `MaterialCardSurface` 同时提供**漆层**和**轮廓区域**，七张卡共用一套参数：同一个 `fillColor`（`layer1`）、同一个 `fillOpacity`（`widgetOpacity`）、同样 `border.width: 0`、同样没有描边。时钟只是把轮廓换成花瓣——填充色、不透明度、磨砂与其它卡逐字段相同，**形状是唯一的差别**。花瓣之外直接透出壁纸（没有任何矩形材质板），磨砂只裁剪花瓣内容区。宿主用 `DeskWidgetCard.flowerShapedSurface: true` 声明这一点（`DeskCenterWindow` 只对 `clock` 传），组件里不写死任何 widget 名字。
 

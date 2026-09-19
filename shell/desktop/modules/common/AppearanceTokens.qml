@@ -289,6 +289,13 @@ QtObject {
             ? tokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.78)
         readonly property color outline: usesTonalRoles
             ? tokens.colors.outlineVariant : "transparent"
+
+        // One role, two forms. Views hand over the pair instead of testing which
+        // form is active, so the choice lives here with the rest of the policy --
+        // `pick(tonal, glass)`.
+        function pick(tonalValue, glassValue) {
+            return tokens.isMaterial ? tonalValue : glassValue
+        }
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -437,6 +444,12 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
+        // Whether a popup plays its entrance at all. Currently the macOS form's
+        // trait; a host asks this instead of naming the style.
+        readonly property bool popupAnimatesOnShow: tokens.isMacos
+        // Whether the shell draws the extra faces a form brings with it -- the
+        // Dock clock's dial, for instance. Same reason as above.
+        readonly property bool drawsFormDecorations: tokens.isMacos
         // Anchored popups share Launchpad's entrance rhythm: a short cubic
         // settle from 0.96 scale with a directional fade/translation.
         readonly property int popupOpenDuration: 150

@@ -433,8 +433,7 @@ PanelWindow {
             top: parent.top
             topMargin: Math.round(parent.height * 0.16)
         }
-        radius: AppearanceTokens.isMaterial
-            ? AppearanceTokens.shape.extraLarge : 28
+        radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28)
         color: "transparent"
         opacity: root.revealProgress
 
@@ -481,8 +480,7 @@ PanelWindow {
                     top: parent.top
                     bottom: parent.bottom
                 }
-                radius: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.shape.medium : height / 2
+                radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.medium, height / 2)
                 cornerExponent: AppearanceTokens.shape.cornerExponent
                 baseColor: ThemeService.isDark
                     ? Qt.rgba(1, 1, 1, 0.07)
