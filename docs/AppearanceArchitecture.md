@@ -91,10 +91,8 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 | `shared/qml/colorize/JapaneseColors.mjs` | 纯数据表：228 个日本传统色（色名 + hex） |
 | `shared/qml/colorize/Cam16Hct.mjs` | CAM16/HCT 色彩外观模型。MCU 的 `hct/*.ts`、`viewing_conditions.ts`、`hct_solver.ts` 移植版，对外提供 `hexToHct` / `hctToHex` |
 | `shell/desktop/modules/common/IconAppearanceService.qml` | 全局图标模式、不透明度、染色与旧 Dock 配置迁移 |
-| `shell/desktop/modules/common/MaterialCardSurface.qml` | Material 形态的卡片表面：七张卡共用的漆层（`fillColor` / `fillOpacity`，无描边）+ 各自轮廓的 blur region（圆角矩形或形状库里的任一轮廓）；不经过 `LiquidGlassPanel`、不声明 `SurfaceShape`，所以合成器只给磨砂、不给液态材质 |
-| `shell/desktop/modules/common/MaterialShape.mjs` | Material 形态的形状几何：AndroidX `MaterialShapes` 的 27 个形状（`circle` / `cookie9` / `flower` / `puffy`…）以采样多边形返回，含深度混合 `shapeOutline(name, strength)`、扫描线 `spansAt()`、内容量尺 `inscribedRect()` 与卡片分配表 `CARD_OUTLINES`；`test_material_shape.mjs` 逐条量测 |
-| `shell/desktop/modules/common/MaterialShape.qml` | 形状画笔：把 `MaterialShape.mjs` 的轮廓按调用者的方框分轴缩放后绘制（`ShapePath` + `PathPolyline`） |
-| `shell/desktop/modules/common/MaterialShapeBlurRegion.qml` | 形状轮廓的模糊区域：同一份轮廓的扫描线填充，24 行 × 4 槽位共 96 个静态 `Region`；供 Material 表面里「表面即轮廓」的卡片使用 |
+| `shell/desktop/modules/common/MaterialCardSurface.qml` | Material 形态的卡片表面：七张卡共用的漆层（`fillColor` / `fillOpacity`，无描边）+ 各自轮廓的 blur region（圆角矩形或花瓣）；不经过 `LiquidGlassPanel`、不声明 `SurfaceShape`，所以合成器只给磨砂、不给液态材质 |
+| `shell/desktop/modules/common/FlowerBlurRegion.qml` | 花瓣形状的模糊区域：对 MaterialFlower 的极坐标轮廓做扫描线填充，32 行 × 2 槽位共 64 个静态 `Region`；供 Material 表面里「表面即形状」的卡片（时钟）使用 |
 | `shell/desktop/modules/common/qmldir` | 注册公共组件与 singleton |
 | `shell/desktop/modules/common/BundledIcons.qml` | Shell 自带图案的登记表，并为少数系统主题图标提供回退解析 |
 | `shell/desktop/modules/common/BundledIcon.qml` | 统一渲染已登记的 Shell 图案 |
@@ -559,7 +557,7 @@ container 的搜索由**明度主导**（先满足 tone，再比色相，彩度�
 
 **已知限制。** 传统色没有官方明暗对偶表：`*_fixed*` 按「两模式同色」处理（与 M3 的 fixed 语义一致）。设置页只显示主色的色名；色卡稀疏导致回退时显示「已回退莫奈」。
 
-### 10.6 Material 的卡片表面与形状轮廓
+### 10.6 Material 的卡片表面与花瓣轮廓
 
 Material 形态有自己的一套卡片表面组件 `MaterialCardSurface`，桌面七张卡全部走它；液态玻璃形态继续走 `ControlCenterCard` + `LiquidGlassPanel`。两者对 KWin 的索取完全不同：
 
@@ -567,7 +565,7 @@ Material 形态有自己的一套卡片表面组件 `MaterialCardSurface`，桌�
 | --- | --- | --- |
 | 卡片表面 | KWin 画（`LiquidGlassPanel`，`fallbackEnabled: false`） | 卡片自己画（QML tonal 填充） |
 | 向 KWin 声明 | 每张卡一个 `SurfaceShape` | **一个都不声明** |
-| blur region | 面板的圆角矩形区域 | **每张卡各自的轮廓**（圆角矩形，或形状库里的一个形状） |
+| blur region | 面板的圆角矩形区域 | **每张卡各自的轮廓**（圆角矩形 / 花瓣） |
 | 合成器效果 | 液态材质：模糊 + 折射 + glints + noise | 普通 blur 管线：纯磨砂 |
 
 **液态材质的开关是「有没有声明形状」，不是「是不是 Quickshell 窗口」**——`blur.cpp` 里：
@@ -603,45 +601,22 @@ QML 只决定几何与漆，合成器只决定材质。卡片和窗口都不判�
 
 于是**全仓只有两个地方还认识形态名**：`AppearanceConfigService`（形态与预设的定义处）和 `AppearanceTokens`（policy 本身）。除此之外仅剩 `DeskCenterWindow` 的 7 处语句/布局分支（Material 与玻璃是两套设计，例如表盘配色与列表布局）和 `IconAppearanceService.glassContentColor`（墨色的实现点）。
 
-`MaterialCardSurface` 同时提供**漆层**和**轮廓区域**，七张卡共用一套参数：同一个 `fillColor`（`layer1`）、同一个 `fillOpacity`（`widgetOpacity`）、同样 `border.width: 0`、同样没有描边。各卡的差别只有轮廓——填充色、不透明度、磨砂逐字段相同，**形状是唯一的差别**。轮廓之外直接透出壁纸（没有任何矩形材质板），磨砂只裁剪轮廓内容区。宿主用 `DeskWidgetCard.surfaceShape` 声明轮廓名，`DeskCenterWindow` 向 `AppearanceTokens.widget.outline(id)` 要这个名字（组件里不写死任何 widget 名字）。
+`MaterialCardSurface` 同时提供**漆层**和**轮廓区域**，七张卡共用一套参数：同一个 `fillColor`（`layer1`）、同一个 `fillOpacity`（`widgetOpacity`）、同样 `border.width: 0`、同样没有描边。时钟只是把轮廓换成花瓣——填充色、不透明度、磨砂与其它卡逐字段相同，**形状是唯一的差别**。花瓣之外直接透出壁纸（没有任何矩形材质板），磨砂只裁剪花瓣内容区。宿主用 `DeskWidgetCard.flowerShapedSurface: true` 声明这一点（`DeskCenterWindow` 只对 `clock` 传），组件里不写死任何 widget 名字。
 
-漆层与时钟的表盘是两层：`MaterialCardSurface` 画表面（轮廓填充 + 轮廓区域），`DeskCenterWindow` 的内容层只加表盘与倒计时。时钟**不在内容层再画一遍花瓣**——那正是它此前看起来是另一张卡的原因（自己的颜色、自己的 0.34 不透明度、自己的 1px 描边）。
+漆层与时钟的表盘是两层：`MaterialCardSurface` 画表面（花瓣填充 + 花瓣区域），`DeskCenterWindow` 的内容层只加表盘与倒计时。时钟**不在内容层再画一遍花瓣**——那正是它此前看起来是另一张卡的原因（自己的颜色、自己的 0.34 不透明度、自己的 1px 描边）。
 
-#### 10.6.1 形状库：为什么是参数，而不是一个手画的花瓣
-
-`MaterialShape.mjs` 把 AndroidX `MaterialShapes`（`RoundedPolygon` / `star` / `customPolygon`）的参数逐条搬过来，共 27 个形状。保留原参数是刻意的：形状库是一组**比例**，自己发明一个「像花的东西」只会做出一个摆在真货旁边的意外。两处有意的差别：
-
-- 形状一律以**采样多边形**返回。QML 的 `ShapePath` 要它来填充，合成器的 blur region 是同一轮廓的扫描线填充——一份几何、两个消费者，磨砂边缘和画出来的边因此不可能错开。
-- 归一化到 `[-1,1]` 的方框后由消费者**分轴**缩放（x 乘半宽、y 乘半高），所以宽卡片得到的是横向展开的花瓣，而不是一个四周留白的圆。
-
-Material 形态下每张桌面卡各戴一个形状（`MaterialShape.mjs` 的 `CARD_OUTLINES`），这是两种形态一眼可辨的地方——颜色之外，轮廓本身就在说话：
-
-| widget | 轮廓 | 深度 | 留下的中心矩形 |
-| --- | --- | --- | --- |
-| clock | `flower`（八瓣） | 1.0 | 63% × 61% |
-| weather | `cookie12`（十二浅弧） | 0.35 | 86% × 86% |
-| calendar | `cookie9` | 0.50 | 82% × 80% |
-| todo | `cookie6` | 0.55 | 84% × 64% |
-| system | `cookie12` | 0.60 | 74% × 77% |
-| activity | `puffy`（不规则团块） | 0.45 | 77% × 80% |
-| music | `cookie7` | 0.55 | 79% × 77% |
-
-**深度是这套设计里真正让位的一方。** widget 的内容按像素排布（固定内边距、固定字号、固定行高），把内容框缩小不会让它适配，只会让它溢出自己的卡片——实测过：内容层缩到轮廓的内接矩形后，日历的大日期、系统的三环都跑到了卡片外的壁纸上。所以让位的是轮廓：`shapeOutline(name, strength)` 把每个点沿自己的射线推向方框，`strength` 1 是原形状、0 就是方框，落在方框上的点不动——混合只会**填平凹口**，绝不放大形状。`test_material_shape.mjs` 对 `CARD_OUTLINES` 的每一行做同一件事：混合后测中心矩形，低于半盒的 58% 就失败，而不是等某张卡的内容掉到壁纸上。
-
-`MaterialShapeBlurRegion` 的路径选择：
+`FlowerBlurRegion` 的路径选择：
 
 | 方案 | 结论 |
 | --- | --- |
-| 若干个 `RegionShape.Ellipse` 摆成花瓣 | **不可行**。`Ellipse` 是轴对齐的，而形状是径向或重复结构，摆不出来；用内切圆代替则模糊范围小得多 |
+| 若干个 `RegionShape.Ellipse` 摆成花瓣 | **不可行**。`Ellipse` 是轴对齐的，而十二个瓣是径向分布的，摆不出这个形状；用内切圆代替则模糊范围比花瓣小得多 |
 | 用 `Intersection`（Combine / Subtract / Intersect / Xor）拿圆拼出正弦瓣 | **不可行**。正弦瓣不是任何有限圆组合的结果 |
 | JS 动态生成矩形列表塞进 `Region.regions` | **不可行**。`regions` 是 `readonly` 的 `list<PendingRegion>`，只能靠声明子项填充 |
-| 扫描线填充 + 固定槽位 | **采用**。`Region` 的 `defaultProperty` 就是 `regions`，所以静态声明 96 个 `Region` 子项（24 行 × 4 段），每个绑定到预算好的扫描线段 |
+| 扫描线填充 + 固定槽位 | **采用**。`Region` 的 `defaultProperty` 就是 `regions`，所以静态声明 64 个 `Region` 子项，每个绑定到预算好的扫描线段 |
 
-几何只有一个来源：`MaterialShape.mjs` 的采样多边形。画笔用 `PathPolyline` 走这批点，区域用同一批点做扫描线，两个组件都只是它的消费者。
+几何与 `MaterialFlower` 同源：`r(θ) = R · (1 − A + A·sin(lobes·θ))`，`R` 由 `(min(w,h) − inset) / 2 − outlineInset` 得出；`inset: 18` 必须与 `MaterialCardSurface` 画花瓣时留的边距一致，否则磨砂边缘落不到轮廓上。
 
-每行的段数上限是**测出来的**：`rowSpanCount(name, rows)` 把库里的每个形状按 24 行走一遍，`CARD_SHAPES` 里没有一个超过 4 段（更尖的 `burst` 是 3 段，`boom` 到 6、`softBoom` 到 5，它们也因此不在卡片白名单里）。改 `sliceCount` 或槽位数时必须重新生成那 96 个子项：槽位是静态声明的，多出来的段会静默丢失而不是报错。
-
-播放器的三个控件也戴形状（同一套库、同一张策略表之外的名字）：播放键是 `softBurst`（十瓣花），前后切歌是 `cookie6`。**这个尺寸决定了选哪个形状**——30px 下 `clover4` 的四个深凹口读起来是一颗星，而不是花瓣，所以小控件只挑凹口浅、瓣数多的形状。玻璃形态下这个请求为空字符串，控件照旧画圆。
+每行最多两次穿越——最小半径是 `R·(1−2A) = 0.85R > 0`，形状中心恒为实心——所以「每行 2 槽位」是**精确**表达而非近似。实测区域覆盖轮廓面积的 **100.18%**，缺口只来自行的量化。改 `sliceCount` 时必须重新生成那 64 个子项：槽位是静态声明的，行会静默丢失而不是报错。
 
 ## 11. 验证清单
 

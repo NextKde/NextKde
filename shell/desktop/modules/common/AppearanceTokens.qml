@@ -1,7 +1,6 @@
 pragma Singleton
 import QtQuick
 import "../../../Kos/Ui"
-import "MaterialShape.mjs" as MaterialGeometry
 
 // Semantic shell-shape values. Consumers should depend on these roles instead
 // of branching on shellStyle themselves. Values describe geometry and motion;
@@ -414,41 +413,6 @@ QtObject {
             ? tokens.colors.surfaceContainer : "transparent"
         readonly property color elevatedSurfaceColor: tokens.isMaterial
             ? tokens.colors.surfaceContainerHigh : "transparent"
-
-        // ── The cards' outlines ─────────────────────────────────────────
-        //
-        // The desktop cards are the largest surfaces the shell owns, and giving
-        // them a silhouette is the Material form's move: each widget wears its
-        // own shape from MaterialShape.mjs instead of the rounded rectangle
-        // every other form draws -- a flower for the clock, a sun for the
-        // weather, a cookie for the list. Colour alone never carried that
-        // difference; the outline is what makes one form look unlike the other
-        // from across the room.
-        //
-        // Every name below is in that module's CARD_SHAPES list, which
-        // test_material_shape.mjs measures rather than trusts: a shape there
-        // must fit the compositor region's four slots per row and leave a
-        // centred rectangle big enough to hold the card's content.
-        //
-        // Views ask here, by widget id. Nothing outside this function decides
-        // which card is which shape, so the vocabulary is one table.
-        function outline(id) {
-            if (!tokens.isMaterial)
-                return ""
-            const entry = MaterialGeometry.cardOutline(id)
-            return entry ? entry.shape : ""
-        }
-
-        // How much of that outline survives. A widget's content cannot shrink
-        // with the card -- it is laid out in pixels -- so the outline's notches
-        // are what give way: the table in MaterialShape.mjs lowers this until
-        // they clear the content, and the geometry tests measure the result.
-        function outlineStrength(id) {
-            if (!tokens.isMaterial)
-                return 1
-            const entry = MaterialGeometry.cardOutline(id)
-            return entry ? entry.strength : 1
-        }
     }
 
     readonly property QtObject glass: QtObject {
