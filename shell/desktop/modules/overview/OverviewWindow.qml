@@ -327,6 +327,8 @@ PanelWindow {
                                                 height: 20
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 source: modelData.iconSource || ""
+                                                // Theme icon: synchronous, see AppIcon.qml.
+                                                asynchronous: false
                                             }
 
                                             Text {
@@ -415,6 +417,8 @@ PanelWindow {
                                                     width: 44
                                                     height: 44
                                                     source: modelData.iconSource || ""
+                                                    // Theme icon: synchronous, see AppIcon.qml.
+                                                    asynchronous: false
                                                 }
 
                                                 Text {

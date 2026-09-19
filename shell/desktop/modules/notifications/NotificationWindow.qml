@@ -326,7 +326,8 @@ PanelWindow {
                     IconImage {
                         anchors.fill: parent
                         source: card.iconSource
-                        asynchronous: true
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
                         smooth: true
                     }
                 }
