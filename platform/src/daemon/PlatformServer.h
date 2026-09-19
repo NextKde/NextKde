@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QDBusObjectPath>
 #include <QHash>
 #include <QJsonObject>
 #include <QLocalServer>
@@ -8,6 +9,7 @@
 #include <QPointer>
 #include <QProcess>
 #include <QSet>
+#include <QVariantMap>
 
 #include <optional>
 
@@ -29,6 +31,19 @@ private slots:
     void acceptConnections();
     void readClient();
     void clientDisconnected();
+    // Every D-Bus property watch below funnels into reply-cache
+    // invalidation: a change notification means the next request for that
+    // domain must observe fresh state instead of the cached snapshot.
+    void nmPropertiesChanged(const QString &interface, const QVariantMap &changed,
+                             const QStringList &invalidated);
+    void bluezPropertiesChanged(const QString &interface, const QVariantMap &changed,
+                                const QStringList &invalidated);
+    void bluezInterfacesAdded(const QDBusObjectPath &path, const QVariantMap &interfaces);
+    void bluezInterfacesRemoved(const QDBusObjectPath &path, const QStringList &interfaces);
+    void brightnessPropertiesChanged(const QString &interface, const QVariantMap &changed,
+                                     const QStringList &invalidated);
+    void nightLightPropertiesChanged(const QString &interface, const QVariantMap &changed,
+                                     const QStringList &invalidated);
 
 private:
     void handleRequest(QLocalSocket *socket, const QJsonObject &request);
@@ -38,7 +53,9 @@ private:
                  bool retryable = false);
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
-                    std::function<QJsonObject(const QByteArray &, int)> parser = {});
+                    std::function<QJsonObject(const QByteArray &, int)> parser = {},
+                    int timeoutMs = -1,
+                    const QString &cacheKey = QString(), int cacheTtlMs = 0);
     void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
                           bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
@@ -48,6 +65,45 @@ private:
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
     QString operation(const QJsonObject &request) const;
+
+    // Reply cache shared by the periodically polled read operations. Entries
+    // are keyed by operation (plus device for network.details) and expire on
+    // a TTL or on a matching D-Bus change notification, whichever comes
+    // first. Writes invalidate their domain's keys before spawning so the
+    // settle-polling the Shell does after a toggle never reads stale state.
+    struct CachedReply {
+        bool ok = false;
+        QJsonObject result;
+        QString code;
+        QString message;
+        bool retryable = true;
+        qint64 expiresAt = 0;
+    };
+    struct PendingReply {
+        QPointer<QLocalSocket> socket;
+        QJsonObject request;
+    };
+    bool serveCachedReply(QLocalSocket *socket, const QJsonObject &request,
+                          const QString &key);
+    void storeReply(const QString &key, int ttlMs, bool ok,
+                    const QJsonObject &result = {}, const QString &code = {},
+                    const QString &message = {}, bool retryable = false);
+    void invalidateReplies(const QString &keyPrefix);
+    // Returns true when a fetch for `key` is already running and this request
+    // was queued onto it; false means the caller must start the fetch itself
+    // and finish it with completeInFlight().
+    bool queueIfInFlight(const QString &key, QLocalSocket *socket,
+                         const QJsonObject &request);
+    void completeInFlight(const QString &key, bool ok,
+                          const QJsonObject &result = {},
+                          const QString &code = {}, const QString &message = {},
+                          bool retryable = false, int ttlMs = 0);
+    void watchNmPath(const QString &path);
+    void watchBluezManager();
+    void watchBluezPath(const QString &path);
+    void watchBrightnessPath(const QString &service, const QString &path);
+    void watchNightLight();
+    void startAudioEventWatcher(const QString &pactl);
 
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
     bool handleApplication(QLocalSocket *socket, const QJsonObject &request);
@@ -94,6 +150,16 @@ private:
     // current compositor session (KWin does not hot-reload NightColor Active).
     std::optional<quint32> m_nightLightInhibitionCookie;
     bool m_watchImages = true;
+    QHash<QString, CachedReply> m_replyCache;
+    QHash<QString, QList<PendingReply>> m_inFlightReplies;
+    QSet<QString> m_nmWatchedPaths;
+    QSet<QString> m_bluezWatchedPaths;
+    // "service path" pairs: the KDE brightness service name differs between
+    // powerdevil generations, so the watch key carries the resolved service.
+    QSet<QString> m_brightnessWatched;
+    bool m_bluezManagerWatched = false;
+    bool m_nightLightWatched = false;
+    QProcess *m_audioEventWatcher = nullptr;
 };
 
 } // namespace KosPlatform
