@@ -221,17 +221,17 @@ PanelWindow {
         return AppearanceTokens.colors.layer1
     }
 
-    // Per-card compositor frost. A card publishes a blur region only when it
-    // wants frost -- today that is the flower-shaped clock and nothing else --
+    // Per-card compositor frost. Every card publishes a blur region -- the
+    // rounded rectangle for a plain card, the outline itself for a shaped one --
     // and this window joins those regions into one union, so KWin frosts exactly
     // the card outlines and not the grid gaps. Each region follows its own
     // card's geometry, so the union only needs to re-resolve when the card set
     // itself changes (Repeater count).
     //
-    // Cards that publish nothing are deliberate: a surface with no SurfaceShape
-    // declaration has its *material* drawn from this union, so any card that
-    // joined it would come back as glass. Material cards paint themselves and
-    // stay out of it.
+    // A region is not a material request: a surface with no SurfaceShape
+    // declaration has its *material* drawn from this union, and the Material
+    // cards declare none. That is why they can join it (for the frost) without
+    // coming back as glass.
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
         && root.visible) ? widgetBlurHolder : null
 
@@ -287,11 +287,13 @@ PanelWindow {
             required property var modelData
             readonly property var placement: root.placementFor(modelData.id)
             visible: placement !== null
-            // The clock is the one card whose glass outline is a shape rather
-            // than a rectangle: it draws MaterialFlower, so its surface has to
-            // be the flower itself — no card fill, no rectangular KWin material,
-            // and frost clipped to the petal outline.
-            flowerShapedSurface: modelData.id === "clock"
+            // Which silhouette this card wears. The Material form gives every
+            // widget its own outline (see AppearanceTokens.widget.outline); the
+            // other forms answer with an empty string and keep the rounded
+            // rectangle, so this stays one declaration rather than a branch.
+            surfaceShape: AppearanceTokens.widget.outline(modelData.id)
+            surfaceShapeStrength:
+                AppearanceTokens.widget.outlineStrength(modelData.id)
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
@@ -339,6 +341,14 @@ PanelWindow {
             // card even though only one could be shown.
             Item {
                 id: widgetContentLayer
+                // Content fills the card. It is NOT shrunk to the outline's
+                // inscribed rectangle: the widgets lay themselves out in pixels
+                // (fixed paddings, fixed type), so handing them a smaller box
+                // does not make them fit -- it makes them overflow the box. The
+                // outline's depth is what gives way instead: see
+                // AppearanceTokens.widget.outlineStrength, which blends a card's
+                // shape towards the rectangle far enough that its notches cannot
+                // reach the content.
                 anchors.fill: parent
                 // Both monochrome modes use white/gray content. Tint belongs
                 // to the card material, never to the widget foreground.
@@ -1684,7 +1694,7 @@ PanelWindow {
                             spacing: 14
                             Repeater {
                                 model: ["⏮", musicContent.player?.isPlaying ? "⏸" : "▶", "⏭"]
-                                delegate: Rectangle {
+                                delegate: Item {
                             required property var modelData
                             required property int index
                             readonly property bool controlEnabled: musicContent.hasPlayer
@@ -1693,13 +1703,40 @@ PanelWindow {
                                     : (musicContent.player?.canTogglePlaying ?? false))
                             width: index === 1 ? 30 : 24
                             height: width
+                            // Row positions horizontally only; the smaller skip
+                            // buttons centre themselves in the row's height.
                             y: (parent.height - height) / 2
-                            radius: width / 2
-                            color: AppearanceTokens.surface.pick((index === 1
+                            // The controls' own silhouettes. Material 3's
+                            // buttons are not discs: the play button is a
+                            // ten-petal bloom and the skips a soft six-lobed
+                            // tile, the same expressive vocabulary the cards
+                            // wear. Both names come from the geometry library
+                            // and are picked for legibility at these sizes --
+                            // a shape with fewer, deeper notches (clover4)
+                            // reads as a star rather than a petal at 30px. The
+                            // glass forms keep the plain disc, so the outline
+                            // request is empty there and the Rectangle below is
+                            // what draws.
+                            readonly property string outline: AppearanceTokens.surface.pick(
+                                index === 1 ? "softBurst" : "cookie6", "")
+                            readonly property color controlColor: AppearanceTokens.surface.pick((index === 1
                                     ? AppearanceTokens.colors.primaryContainer
                                     : AppearanceTokens.colors.secondaryContainer), (index === 1
                                     ? Qt.rgba(1, 1, 1, controlEnabled ? 0.24 : 0.10)
                                     : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055)))
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: parent.outline.length === 0
+                                radius: width / 2
+                                color: parent.controlColor
+                            }
+                            MaterialShape {
+                                anchors.fill: parent
+                                visible: parent.outline.length > 0
+                                shape: parent.outline
+                                fillColor: parent.controlColor
+                                outlineWidth: 0
+                            }
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData

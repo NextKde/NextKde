@@ -23,11 +23,13 @@ Item {
     id: root
 
     property string title: ""
-    // Host declaration: this card's surface outline is MaterialFlower's flower
-    // silhouette instead of the rounded rectangle every other card uses. It is a
+    // Host declaration: this card's surface outline, a name from
+    // MaterialShape.mjs or an empty string for the rounded rectangle. It is a
     // request, not a form of its own -- the tonal backend paints the same paint
-    // in a different shape, same colour, same opacity.
-    property bool flowerShapedSurface: false
+    // in a different outline, same colour, same opacity, and the glass backend
+    // ignores it entirely (a glass card hands its finish to the compositor).
+    property string surfaceShape: ""
+    property real surfaceShapeStrength: 1
     property color startColor: "transparent"
     property color endColor: "transparent"
     property bool showSurface: true
@@ -41,7 +43,13 @@ Item {
     readonly property bool tonalSurface: root.surface.paintInQml
     // A shape request only means something to the backend that paints the card.
     readonly property bool shapedSurface:
-        root.flowerShapedSurface && root.tonalSurface
+        root.surfaceShape.length > 0 && root.tonalSurface
+    // The outline the card is actually wearing, and the centred rectangle it
+    // leaves for content. Hosts lay their content out in that rectangle rather
+    // than in the full card, because the paint stops at the outline: text drawn
+    // past a petal's notch would sit on the wallpaper.
+    readonly property string activeShape: root.shapedSurface
+        ? root.surfaceShape : ""
 
     // `Item.clip` below only clips to a rectangle. Colour-artwork widgets can
     // contain their own full-bleed header or artwork, so mask their composed
@@ -64,12 +72,13 @@ Item {
             // The surface fills this card at local (0,0); both regions read the
             // anchor's x/y verbatim as surface coordinates, so point them at THIS
             // wrapper (whose x/y carry the grid offset the delegate assigned)
-            // instead of the surface, or the region lands at the window origin.
+            // instead of at the surface, or the region lands at the window origin.
             blurAnchor: root
             radius: root.radius
             fillColor: root.materialSurfaceColor
             fillOpacity: AppearanceTokens.surface.widgetOpacity
-            flowerShaped: root.shapedSurface
+            shape: root.activeShape
+            shapeStrength: root.surfaceShapeStrength
         }
     }
 

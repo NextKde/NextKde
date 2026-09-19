@@ -1,10 +1,10 @@
 module qs.desktop.modules.common
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
-MaterialFlower 1.0 MaterialFlower.qml
 WavyProgress 1.0 WavyProgress.qml
 MaterialCardSurface 1.0 MaterialCardSurface.qml
-FlowerBlurRegion 1.0 FlowerBlurRegion.qml
+MaterialShape 1.0 MaterialShape.qml
+MaterialShapeBlurRegion 1.0 MaterialShapeBlurRegion.qml
 RoundedBlurRegion 1.0 RoundedBlurRegion.qml
 KosRoundedBlurRegion 1.0 KosRoundedBlurRegion.qml
 SquircleMask 1.0 SquircleMask.qml
