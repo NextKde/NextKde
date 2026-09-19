@@ -2083,9 +2083,14 @@ PanelWindow {
                                     anchors.centerIn: parent
                                     visible: parent.day > 0 && parent.day <= calendarContent.daysInMonth
                                     text: parent.day
-	                                    color: AppearanceTokens.isMaterial && parent.today
-	                                        ? AppearanceTokens.colors.primaryForeground
-	                                        : AppearanceTokens.content.ink((parent.today ? "white" : "#29292f"))
+	                                    // Today's numeral sits on the scheme's primary
+	                                    // circle, so it takes the matching on-colour --
+	                                    // through the same policy exit as the circle itself
+	                                    // rather than a second style test.
+	                                    color: parent.today
+	                                        ? AppearanceTokens.surface.pick(
+	                                            AppearanceTokens.colors.primaryForeground, "white")
+	                                        : AppearanceTokens.content.ink("#29292f")
                                     font { pixelSize: 10; weight: parent.today ? Font.Bold : Font.DemiBold }
                                 }
                             }
