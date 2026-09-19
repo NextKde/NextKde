@@ -21,6 +21,13 @@ RoundedBlurRegion {
     property real scrimCap: 0.0
     property real scrimDecay: 1.0
 
+    // Per-shape blur override forwarded to the compositor (protocol v4).
+    // Disabled keeps the shape on the window's default blur pipeline;
+    // blurLevel is the compositor blur level 1..15, the same scale the global
+    // kos-settings blur writes through.
+    property bool blurEnabled: false
+    property int blurLevel: 1
+
     // This object must not be placed in Region's default `regions` list: it
     // is protocol state, not an additional geometric primitive.
     property var surfaceShape: SurfaceShape {
@@ -32,5 +39,7 @@ RoundedBlurRegion {
         scrimTint: root.scrimTint
         scrimCap: root.scrimCap
         scrimDecay: root.scrimDecay
+        blurEnabled: root.blurEnabled
+        blurLevel: root.blurLevel
     }
 }
