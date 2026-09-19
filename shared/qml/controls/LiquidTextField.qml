@@ -23,6 +23,11 @@ TextField {
     property color mutedTextColor: "#98989d"
     // Opt-in material finish for glass surfaces that already have compositor
     // backdrop sampling. Keep it off for ordinary application text fields.
+    // A tonal host draws the Material 3 search field: a filled container with an
+    // outline that strengthens on focus, and no lens. The liquid finish (hover
+    // lift, specular rims, ambient pickup) is the glass form's, so it is off
+    // here rather than blended. Follows the application-wide form by default.
+    property bool materialForm: ControlForm.materialForm
     property bool liquidFinish: false
     property real liquidStrength: 1.0
     property color ambientPrimary: "transparent"
@@ -34,7 +39,7 @@ TextField {
 
     // Liquid focus expansion, matching the reference's
     // cubic-bezier(0.25, 0.8, 0.25, 1) over 300ms.
-    scale: activeFocus ? 1.02 : 1.0
+    scale: root.activeFocus && !root.materialForm ? 1.02 : 1.0
     Behavior on scale {
         NumberAnimation {
             duration: 300
@@ -61,7 +66,7 @@ TextField {
                          Math.min(1.0, root.glassColor.a + 0.035))
                : root.glassColor)
         border.width: 1
-        border.color: root.liquidFinish
+        border.color: root.liquidFinish && !root.materialForm
             ? (root.activeFocus ? Qt.rgba(1, 1, 1, 0.38)
                 : Qt.rgba(1, 1, 1, hover.hovered ? 0.25 : 0.19))
             : (root.activeFocus ? root.focusedOutlineColor : root.outlineColor)
@@ -72,7 +77,7 @@ TextField {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
-            visible: root.liquidFinish
+            visible: root.liquidFinish && !root.materialForm
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, root.activeFocus ? 0.16 : 0.10) }
@@ -88,7 +93,7 @@ TextField {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
-            visible: root.liquidFinish
+            visible: root.liquidFinish && !root.materialForm
             opacity: Math.max(0.0, Math.min(1.0, root.liquidStrength))
             gradient: Gradient {
                 orientation: Gradient.Vertical
@@ -103,7 +108,7 @@ TextField {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
-            visible: root.liquidFinish && root.ambientStrength > 0
+            visible: root.liquidFinish && !root.materialForm && root.ambientStrength > 0
             opacity: Math.max(0.0, Math.min(1.0, root.liquidStrength))
             gradient: Gradient {
                 orientation: Gradient.Horizontal
@@ -114,7 +119,7 @@ TextField {
         }
 
         Rectangle {
-            visible: root.liquidFinish
+            visible: root.liquidFinish && !root.materialForm
             x: Math.min(parent.width / 2, parent.radius + 3)
             y: 0.8
             width: Math.max(0, parent.width - x * 2)
@@ -130,7 +135,7 @@ TextField {
         }
 
         Rectangle {
-            visible: root.liquidFinish
+            visible: root.liquidFinish && !root.materialForm
             x: Math.min(parent.width / 2, parent.radius + 3)
             y: parent.height - 1.5
             width: Math.max(0, parent.width - x * 2)
