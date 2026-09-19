@@ -59,5 +59,15 @@ QtObject {
         onTriggered: service.refresh()
     }
 
+    property Connections platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected)
+                service.refresh()
+            else
+                service.requestPending = false
+        }
+    }
+
     Component.onCompleted: refresh()
 }

@@ -462,6 +462,19 @@ QtObject {
         onTriggered: service._syncDockWindowAnimationEffect()
     }
 
+    // theme.sync-* are absolute-state writes, so they are not queued while
+    // the daemon is down — re-push the desired effect configuration on every
+    // reconnect or a change made mid-outage would silently never apply.
+    property Connections platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected) {
+                service.effectSyncTimer.restart()
+                service.dockAnimationEffectSyncTimer.restart()
+            }
+        }
+    }
+
     property Component processFactory: Component {
         Process {
             stdout: StdioCollector {}

@@ -335,8 +335,8 @@ Item {
         function snapshot(): string {
             return JSON.stringify({
                 shellReady: true,
-                platformConnected: PlatformClient.socket.connected,
-                dataConnected: DataClient.socket.connected,
+                platformConnected: PlatformClient.connected,
+                dataConnected: DataClient.connected,
                 outputAvailable: ScreenLifecycle.outputAvailable,
                 desktopWidgetsVisible: ScreenLifecycle.outputAvailable
                     && ScreenLifecycle.activeScreen !== null,

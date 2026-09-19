@@ -54,7 +54,7 @@ QtObject {
         // TTY and terminal apps die immediately. Route them through the
         // platform daemon here; KIO::ApplicationLauncherJob wraps them in the
         // user's configured terminal.
-        if (!PlatformClient.socket.connected)
+        if (!PlatformClient.connected)
             return _executeDirect(entry, appId, "platform-unavailable")
         PlatformClient.request("application.launch", {
             desktopId: appId,

@@ -224,8 +224,14 @@ QtObject {
                 service.thumbnails = next
                 service.thumbnailRevision += 1
             } else {
-                // Remembered so a non-image row never re-spawns a decoder.
-                service._thumbFailed[record] = true
+                // Remembered so a non-image row never re-spawns a decoder —
+                // but only for a genuine daemon-side failure. A transport
+                // error means the record was never even decoded, so leave it
+                // retryable or every preview would go blank after a restart.
+                const code = String(response?.error?.code || "")
+                if (code !== "disconnected" && code !== "timeout"
+                        && code !== "queue-overflow")
+                    service._thumbFailed[record] = true
             }
         })
     }
@@ -370,6 +376,11 @@ QtObject {
                 service._syncWatchImages()
                 service.refresh()
                 service.refreshPinned()
+            } else {
+                // Outstanding callbacks are failed by the client; reset the
+                // guards too so the panel can never be stuck "refreshing".
+                service._listProcess = null
+                service._pinnedInFlight = false
             }
         }
     }

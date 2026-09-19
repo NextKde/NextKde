@@ -155,6 +155,16 @@ Item {
         }
     }
 
+    Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            // A dropped transport fails the outstanding sample's callback,
+            // but clear the guard as well so sampling always resumes.
+            if (!connected)
+                root._samplePending = false
+        }
+    }
+
     Timer {
         interval: 1000
         repeat: true
