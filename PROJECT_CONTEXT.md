@@ -60,6 +60,30 @@ An existing atomic write of module-owned configuration under
 `Quickshell.stateDir` is a narrow legacy exception; keep it limited to local
 state persistence and track its service-owned replacement separately.
 
+## Privileged system writes
+
+`tools/kosctl` stages the system-prefix payload under `$build_dir` (inside
+`$HOME`) and then copies it into `/usr` with `sudo cp`. Two rules protect that
+boundary:
+
+- Never let a copy carry the source's SELinux label across it. `cp -a` restores
+  `security.selinux` through the xattr it copies, so a tree staged under `$HOME`
+  (labelled `user_home_t`) relabels `/usr`, `/usr/lib64` and `/usr/share`.
+  Confined helpers such as `unix_chkpwd` (sudo's password check) and
+  `pkla-check-authorization` (polkit) then cannot read their own libraries,
+  every privilege-escalation path fails, and the machine is only recoverable
+  from a rescue environment. Pass `-Z` so `cp` applies the destination's default
+  context, and pass it only when SELinux is active (`getenforce` exists and does
+  not report `Disabled`), because `cp` on non-SELinux systems is built without
+  that flag. `--no-preserve=context` is not enough on its own: `-a` copies the
+  xattr as well. A machine that already received the wrong labels is repaired
+  with `sudo restorecon -R /usr` from a TTY or rescue environment.
+
+- Never install anything the invoking user could have rewritten after the check
+  that inspected it. Verify ownership and modes on the staged tree, then copy
+  with `--no-preserve=ownership` so the installed files land root-owned; see
+  `install_kwin_plugins`.
+
 ## Build and operations
 
 Use the root entry point:
