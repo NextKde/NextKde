@@ -283,6 +283,21 @@ ensure_build_dependencies() {
     fi
 }
 
+# The vendored glass tree produces three warnings that are nobody's here to fix:
+# `blur_config.ui` declares duplicate Designer object names (uic renames them to
+# widget1..widget6 by itself) and connections to kcfg_* widgets that only exist
+# once KConfigDialogManager injects them at runtime, and reconfigure() has to keep
+# the flags parameter that KWin's virtual signature declares. Drop those lines so
+# the build output only carries things a contributor can act on. `|| true` is
+# required because grep exits 1 when every line was filtered; with `pipefail` in
+# effect the pipeline still reports the build's own status.
+filter_vendored_warnings() {
+    grep -v -e 'blur_config\.ui: Warning: The name' \
+            -e 'blur_config\.ui: Warning: Invalid signal/slot connection' \
+            -e 'unused-parameter' \
+        || true
+}
+
 build_kwin_glass() {
     local build_type=${KOS_BUILD_TYPE:-Debug}
     prepare_cmake_build_dir "$glass_build_dir" \
@@ -297,7 +312,8 @@ build_kwin_glass() {
         cmake --build "$glass_build_dir" --target clean
     fi
     cmake --build "$glass_build_dir" \
-        --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+        --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}" 2>&1 \
+        | filter_vendored_warnings
 }
 
 build() {
