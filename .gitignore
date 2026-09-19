@@ -25,3 +25,8 @@ apps/lockscreen/contents/lockscreen/LockFeed.qml.tmp
 
 # Rendered by apps/lockscreen/tests/headless/run.sh on every run.
 apps/lockscreen/tests/headless/lock.png
+
+# Reasonix agent runtime state: captured attachments and the local permission
+# config it writes into the checkout.
+.reasonix/
+reasonix.toml
