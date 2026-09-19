@@ -21,6 +21,10 @@ PopupWindow {
     property var customAnchorEdges: null
     property var customGravity: null
     property var customMarginsTop: null
+    // Full margin override ({top, bottom, left, right}) for anchors that
+    // open in a direction the `position` shorthand cannot express, e.g.
+    // tray popups attached to a side dock.
+    property var customMargins: null
     property color baseColor: ThemeService.backgroundColor
     property color foregroundColor: ThemeService.foregroundColor
     property bool adaptiveForeground: true
@@ -137,9 +141,14 @@ PopupWindow {
             addRow(38)
         for (let i = 0; i < items.length; ++i) {
             const item = items[i]
-            if (item?.separator)
+            // Items may carry a live QsMenuEntry handle; read through it so
+            // height follows in-place property updates (e.g. separators).
+            const entry = item?.entry ?? null
+            const isSeparator = entry ? entry.isSeparator : !!item?.separator
+            const label = entry ? (entry.text || "") : (item?.label || "")
+            if (isSeparator)
                 addRow(1)
-            else if ((item?.label || "").length > 0)
+            else if (label.length > 0)
                 addRow(38)
         }
         return total
@@ -167,10 +176,14 @@ PopupWindow {
             : Edges.Right)
         adjustment: root.centerBelowAnchor ? PopupAdjustment.Slide
             : (PopupAdjustment.Flip | PopupAdjustment.Slide)
-        margins.top: root.customMarginsTop !== null ? root.customMarginsTop : (root.centerBelowAnchor ? 0
-            : (root.position === "bottom" ? -8 : 0))
-        margins.right: root.position === "right" ? -8 : 8
-        margins.left: root.position === "left" ? 8 : 0
+        margins.top: root.customMargins !== null ? (root.customMargins.top ?? 0)
+            : (root.customMarginsTop !== null ? root.customMarginsTop : (root.centerBelowAnchor ? 0
+            : (root.position === "bottom" ? -8 : 0)))
+        margins.bottom: root.customMargins !== null ? (root.customMargins.bottom ?? 0) : 0
+        margins.right: root.customMargins !== null ? (root.customMargins.right ?? 0)
+            : (root.position === "right" ? -8 : 8)
+        margins.left: root.customMargins !== null ? (root.customMargins.left ?? 0)
+            : (root.position === "left" ? 8 : 0)
     }
 
     onVisibleChanged: {
@@ -257,21 +270,28 @@ PopupWindow {
                 model: root.page.items
                 delegate: MenuItemRow {
                     required property var modelData
+                    // Items may carry a live QsMenuEntry (DBusMenu tray
+                    // menus). Binding through it keeps label/icon/check
+                    // state current while the menu is open.
+                    readonly property var entry: modelData.entry ?? null
                     readonly property var submenuItems: root.childrenFor(modelData)
                     width: parent.width
                     foregroundColor: root.effectiveForegroundColor
                     icon: modelData.icon || ""
-                    label: modelData.label || ""
-                    separator: !!modelData.separator
+                    iconSource: entry ? (entry.icon || "") : (modelData.iconSource || "")
+                    label: entry ? (entry.text || "") : (modelData.label || "")
+                    separator: entry ? entry.isSeparator : !!modelData.separator
                     hasSubmenu: submenuItems.length > 0
-                    checkable: !!modelData.checkable
-                    checked: !!modelData.checked
-                    itemEnabled: modelData.enabled !== false
+                    checkable: entry ? (entry.buttonType !== QsMenuButtonType.None)
+                        : !!modelData.checkable
+                    checked: entry ? (entry.checkState !== Qt.Unchecked)
+                        : !!modelData.checked
+                    itemEnabled: entry ? entry.enabled : modelData.enabled !== false
                     onClicked: {
                         if (submenuItems.length > 0)
                             root.enter(submenuItems)
                         else {
-                            root.action(modelData.cmd, modelData)
+                            root.action(modelData.cmd || "", modelData)
                             root.hide()
                         }
                     }

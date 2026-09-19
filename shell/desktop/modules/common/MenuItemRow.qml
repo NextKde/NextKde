@@ -12,6 +12,10 @@ Item {
 
     property string label: ""
     property string icon: ""
+    // Image URL for entries whose icon does not come from BundledIcons
+    // (e.g. DBusMenu-provided tray menu icons). Only used when `icon` is
+    // not a registered bundled name.
+    property string iconSource: ""
     property color foregroundColor: "#ffffff"
     property bool itemEnabled: true
     property bool hasSubmenu: false
@@ -21,6 +25,7 @@ Item {
     signal clicked()
 
     readonly property bool _hasIcon: BundledIcons.has(row.icon)
+        || row.iconSource.length > 0
 
     // Bind directly to MouseArea.containsMouse instead of maintaining a
     // transient flag.  Delegates are replaced when entering a submenu, and a
@@ -72,12 +77,27 @@ Item {
         // foreground colour, so the mark never depends on an installed icon
         // theme or glyph font.
         BundledIcon {
-            visible: row._hasIcon
+            visible: BundledIcons.has(row.icon)
             width: visible ? 18 : 0
             height: 18
             size: 18
             name: row.icon
             color: row.foregroundColor
+            anchors.verticalCenter: parent.verticalCenter
+            opacity: row.itemEnabled ? 0.9 : 0.5
+        }
+
+        // External icon (URL or image-provider path) for items such as
+        // DBusMenu tray entries. Stays synchronous on purpose: the icon
+        // provider can reach KIconEngine, which is not thread-safe.
+        Image {
+            visible: !BundledIcons.has(row.icon) && row.iconSource.length > 0
+            width: visible ? 18 : 0
+            height: 18
+            source: row.iconSource
+            asynchronous: false
+            sourceSize.width: 18
+            sourceSize.height: 18
             anchors.verticalCenter: parent.verticalCenter
             opacity: row.itemEnabled ? 0.9 : 0.5
         }
