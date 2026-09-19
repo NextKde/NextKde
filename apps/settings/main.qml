@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
+import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
 
 ApplicationWindow {
     id: window
@@ -17,6 +18,27 @@ ApplicationWindow {
 
     property int currentPage: 1
     property string searchText: ""
+
+    // The shell owns the style; the pages read it from here and so does this
+    // window's own palette. `materialSeed` is the accent the shell derived from
+    // the wallpaper, which is enough for the shared implementation to rebuild
+    // the same Material 3 roles the shell is using instead of this window
+    // hard-coding a second, drifting palette.
+    property string shellStyle: "macos"
+    readonly property bool materialForm: shellStyle === "material"
+    property string materialSeed: ""
+    // Material 3 palette, rebuilt from that accent by the same implementation
+    // the shell derives its own with. The shared colorize singleton cannot be
+    // used here: it pulls in Quickshell, and this application is plain Qt.
+    //
+    // Known limit: only the Monet branch is reproduced. If the shell is set to a
+    // traditional colour source, its swatches are table colours and this window
+    // falls back to Monet's derivation of the same accent.
+    readonly property var materialPalette: {
+        if (!materialForm || materialSeed === "")
+            return ({})
+        return Mcu.buildScheme(materialSeed, { dark: theme.dark })
+    }
 
     // Qt updates SystemPalette when the desktop colour scheme changes. We use
     // it only to select the system appearance, then apply the matching iPadOS
@@ -33,23 +55,33 @@ ApplicationWindow {
             const color = systemPalette.window
             return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
         }
-        readonly property color background: dark ? "#000000" : "#f2f2f7"
-        readonly property color sidebar: dark ? "#1c1c1e" : "#fafbff"
-        readonly property color contentSurface: dark ? "#000000" : "#fafbff"
-        readonly property color primaryText: dark ? "#f5f5f7" : "#1c1c1e"
-        readonly property color secondaryText: dark ? "#98989d" : "#6d6d72"
-        readonly property color tertiaryText: dark ? "#8e8e93" : "#8e8e93"
-        readonly property color card: dark ? "#1c1c1e" : "#ffffff"
-        readonly property color separator: dark ? "#38383a" : "#e5e5ea"
-        readonly property color divider: dark ? "#2c2c2e" : "#d1d1d6"
-        readonly property color searchField: dark ? "#2c2c2e" : "#e3e3e8"
-        readonly property color selected: dark ? "#0a84ff" : "#d9e9ff"
-        readonly property color sidebarHover: dark
-            ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045)
-        readonly property color chevron: dark ? "#636366" : "#c7c7cc"
-        readonly property color iconForeground: "#ffffff"
-        readonly property color floatingBorder: dark
-            ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055)
+        // One role, two forms. The tonal form takes the shared Material 3 scheme
+        // (rebuilt from the accent the shell sent); the iPadOS form keeps exactly
+        // the literal this window was designed with -- switching the shell style
+        // repaints the whole app, and nothing drifts in between.
+        function role(name, iPadOSValue) {
+            if (!window.materialForm)
+                return iPadOSValue
+            const value = window.materialPalette[name]
+            return value === undefined ? iPadOSValue : value
+        }
+        readonly property color background: role("surface", dark ? "#000000" : "#f2f2f7")
+        readonly property color sidebar: role("surfaceContainerLow", dark ? "#1c1c1e" : "#fafbff")
+        readonly property color contentSurface: role("surface", dark ? "#000000" : "#fafbff")
+        readonly property color primaryText: role("onSurface", dark ? "#f5f5f7" : "#1c1c1e")
+        readonly property color secondaryText: role("onSurfaceVariant", dark ? "#98989d" : "#6d6d72")
+        readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
+        readonly property color card: role("surfaceContainer", dark ? "#1c1c1e" : "#ffffff")
+        readonly property color separator: role("outlineVariant", dark ? "#38383a" : "#e5e5ea")
+        readonly property color divider: role("outlineVariant", dark ? "#2c2c2e" : "#d1d1d6")
+        readonly property color searchField: role("surfaceContainerHigh", dark ? "#2c2c2e" : "#e3e3e8")
+        readonly property color selected: role("primary", dark ? "#0a84ff" : "#d9e9ff")
+        readonly property color sidebarHover: role("surfaceContainerHigh", dark
+            ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045))
+        readonly property color chevron: role("outline", dark ? "#636366" : "#c7c7cc")
+        readonly property color iconForeground: role("onSurface", "#ffffff")
+        readonly property color floatingBorder: role("outline", dark
+            ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055))
         readonly property color floatingShadow: dark
             ? Qt.rgba(0, 0, 0, 0.42) : Qt.rgba(0.17, 0.21, 0.30, 0.16)
         readonly property color previewPane: dark ? "#14151a" : "#eef2f7"
@@ -1418,6 +1450,8 @@ ApplicationWindow {
             glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
             shellStyle = String(state.shellStyle || "macos")
             LiquidControls.ControlForm.materialForm = isMaterialDesign
+                        // The window palette follows the same style.
+            window.shellStyle = shellStyle
             if (state.glassFollowsAppearanceMode !== undefined)
                 glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
@@ -2306,6 +2340,8 @@ ApplicationWindow {
             shellStyle = state.shellStyle
             // The shared controls draw in the shape the shell is using.
             LiquidControls.ControlForm.materialForm = isMaterialDesign
+                        // The window palette follows the same style.
+            window.shellStyle = shellStyle
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
             if (isValidMaterialColorScheme(state.materialColorScheme))
@@ -2328,6 +2364,10 @@ ApplicationWindow {
                 console.warn("[Settings] colour swatches unreadable: " + error)
             }
             colorSchemes = parsed
+            // The accent the shell derived from the wallpaper is enough to
+            // rebuild the same Material 3 roles in this window.
+            window.materialSeed = parsed.length > 0 && parsed[0].colors
+                && parsed[0].colors.length > 0 ? String(parsed[0].colors[0]) : ""
             errorText = ""
         }
 
