@@ -66,6 +66,19 @@ QtObject {
     // against the tonal dock layer. Glass branches use the indicator inks above.
     readonly property color indicatorColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isDark ? darkIndicator : lightIndicator))
     readonly property color borderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, (isDark ? darkBorder : lightBorder))
+    // ── Control-centre tiles ─────────────────────────────────────────────
+    // A tile is a container, not a glass card: in the tonal form it takes the
+    // scheme's container fills and the ink that reads on them. Each role keeps
+    // exactly the literal the tiles were drawn with as its glass value, so the
+    // glass form is byte-identical and only the tonal form changes.
+    readonly property color tileGlyph: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.surfaceVariantForeground, "white")
+    readonly property color tileActiveGlyph: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primaryContainerForeground, "white")
+    readonly property color tileAccent: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primary, "#0a84ff")
+    readonly property color tileDanger: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.error, "#ff453a")
     readonly property color highlightColor: AppearanceTokens.surface.pick(Qt.rgba(AppearanceTokens.colors.primary.r,
             AppearanceTokens.colors.primary.g,
             AppearanceTokens.colors.primary.b, 0.22), (isDark ? darkHighlight : lightHighlight))
