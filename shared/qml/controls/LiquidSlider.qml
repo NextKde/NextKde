@@ -36,8 +36,9 @@ Item {
     // under the pointer. The iOS form below (glass lens, chromatic aberration,
     // hover lift) is the liquid finish this form must not have, so it is hidden
     // rather than blended with it. Hosts set this instead of picking a
-    // different control, so both forms share one interaction.
-    property bool materialForm: false
+    // different control, so both forms share one interaction. It follows the
+    // application-wide form by default.
+    property bool materialForm: ControlForm.materialForm
 
     // Internal state
     property bool _pressed: false

@@ -1417,6 +1417,7 @@ ApplicationWindow {
             const styleIndex = glassStyles.indexOf(state.glassStyle)
             glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
             shellStyle = String(state.shellStyle || "macos")
+            LiquidControls.ControlForm.materialForm = isMaterialDesign
             if (state.glassFollowsAppearanceMode !== undefined)
                 glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
@@ -2303,6 +2304,8 @@ ApplicationWindow {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
+            // The shared controls draw in the shape the shell is using.
+            LiquidControls.ControlForm.materialForm = isMaterialDesign
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
             if (isValidMaterialColorScheme(state.materialColorScheme))

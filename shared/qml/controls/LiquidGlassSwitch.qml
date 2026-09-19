@@ -13,6 +13,17 @@ Item {
     property bool enabled: true
     property color accentColor: "#0a84ff"
     property color trackColor: Qt.rgba(0.5, 0.5, 0.55, 0.35)
+    // ── Form ──────────────────────────────────────────────────────────────
+    // A tonal host draws the Material 3 switch: a pill track that takes the
+    // accent when on, and a handle that is 16dp off / 24dp on. The iOS track,
+    // shadow and glass lens below are the liquid finish this form must not have,
+    // so they are hidden rather than blended with it. It follows the
+    // application-wide form by default.
+    property bool materialForm: ControlForm.materialForm
+    // Material 3 handle colours: the accent's foreground when on, a neutral
+    // outline when off. The glass form ignores both -- its thumb is the lens.
+    property color handleOnColor: "#ffffff"
+    property color handleOffColor: Qt.rgba(0.47, 0.47, 0.47, 1)
     signal toggled(bool checked)
 
     // Geometry
@@ -295,6 +306,53 @@ Item {
             radius: height / 2
             color: root.accentColor
             opacity: 0.10 * root._expansion
+        }
+    }
+
+    // ── Material 3 form ───────────────────────────────────────────────────
+    // Metrics scale with whatever height a host gives the switch, so a 25px row
+    // stays compact while a 32px row is the Material spec exactly.
+    Item {
+        id: materialLayer
+        anchors.fill: parent
+        visible: root.materialForm
+
+        readonly property real m3Scale: Math.min(1, root.height / 32)
+        readonly property real handleSize: (root.checked ? 24 : 16) * m3Scale
+        readonly property real inset: Math.max(1, 4 * m3Scale)
+        readonly property real handleX: inset
+            + (root.checked ? Math.max(1, root.width - inset * 2 - handleSize) : 0)
+
+        // Track: accent when on, surface variant when off.
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: root.checked ? root.accentColor : root.trackColor
+            Behavior on color { ColorAnimation { duration: 150 } }
+        }
+
+        // State layer: 10% on hover, 16% pressed, centred on the handle.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: materialLayer.handleX + materialLayer.handleSize / 2 - width / 2
+            width: Math.min(root.height, 40 * materialLayer.m3Scale)
+            height: width
+            radius: width / 2
+            color: root.accentColor
+            opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+
+        // Handle: a circle that grows into the "on" size, not the iOS lens.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: materialLayer.handleX
+            width: materialLayer.handleSize
+            height: materialLayer.handleSize
+            radius: width / 2
+            color: root.checked ? root.handleOnColor : root.handleOffColor
+            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on width { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
         }
     }
 
