@@ -856,8 +856,25 @@ install_kwin_plugins() {
     # group/other write from the staged tree and copy without preserving
     # ownership, so every installed file lands root-owned with the modes the
     # build intended and the system directories keep 0755.
+    #
+    # `cp -a` also carries the SELinux context over -- through its `context`
+    # attribute and through the `security.selinux` xattr. The staged tree is
+    # built under $HOME, so its files are labelled user_home_t; applying that
+    # to /usr relabels the system prefix, and confined helpers (unix_chkpwd
+    # used by sudo, pkla-check-authorization used by polkit) can no longer
+    # read their libraries. The user is then locked out of every way to regain
+    # root and can only recover from a rescue environment. Asking cp for the
+    # destination's default context fixes it; `--no-preserve=context` alone
+    # does not, because the xattr copy restores the label again (verified on
+    # coreutils 9.10). Only pass the flag when SELinux is active, since cp on
+    # non-SELinux systems is built without it and warns about the ignored one.
+    local -a selinux_context=()
+    if command -v getenforce >/dev/null 2>&1 &&
+        [[ "$(getenforce)" != Disabled ]]; then
+        selinux_context=(-Z)
+    fi
     find "$stage_dir$kwin_system_prefix" -exec chmod go-w {} +
-    sudo cp -a --no-preserve=ownership \
+    sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
