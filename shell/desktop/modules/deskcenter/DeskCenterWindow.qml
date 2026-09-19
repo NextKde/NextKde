@@ -1684,22 +1684,72 @@ PanelWindow {
                             spacing: 14
                             Repeater {
                                 model: ["⏮", musicContent.player?.isPlaying ? "⏸" : "▶", "⏭"]
-                                delegate: Rectangle {
+                                delegate: Item {
                             required property var modelData
                             required property int index
                             readonly property bool controlEnabled: musicContent.hasPlayer
                                 && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                     : index === 2 ? (musicContent.player?.canGoNext ?? false)
                                     : (musicContent.player?.canTogglePlaying ?? false))
-                            width: index === 1 ? 30 : 24
+                            readonly property bool isPlay: index === 1
+                            width: isPlay ? 32 : 26
                             height: width
                             y: (parent.height - height) / 2
-                            radius: width / 2
-                            color: AppearanceTokens.surface.pick((index === 1
-                                    ? AppearanceTokens.colors.primaryContainer
-                                    : AppearanceTokens.colors.secondaryContainer), (index === 1
-                                    ? Qt.rgba(1, 1, 1, controlEnabled ? 0.24 : 0.10)
-                                    : Qt.rgba(1, 1, 1, controlEnabled ? 0.12 : 0.055)))
+
+                            // A Material icon button, which is a shape before it
+                            // is a colour: a circle at rest that squeezes into a
+                            // squircle while held, and scales down with it. That
+                            // press morph is the recognisable half of the form --
+                            // the filled variety for play (primary container), the
+                            // standard one for the skips (secondary container).
+                            // The glass forms keep the plain disc: the morph is
+                            // gated on the tonal form, not on the press alone.
+                            Rectangle {
+                                id: buttonFace
+                                anchors.fill: parent
+                                readonly property bool held: controlArea.pressed
+                                    && controlArea.containsMouse
+                                radius: AppearanceTokens.isMaterial && buttonFace.held
+                                    ? width * 0.3 : width / 2
+                                color: {
+                                    const base = AppearanceTokens.surface.pick(
+                                        parent.isPlay
+                                            ? AppearanceTokens.colors.primaryContainer
+                                            : AppearanceTokens.colors.secondaryContainer,
+                                        parent.isPlay
+                                            ? Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.24 : 0.10)
+                                            : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.12 : 0.055))
+                                    // Material's state layer: the container is
+                                    // overlaid with its own ink, 8% on hover and
+                                    // 12% while held, instead of changing colour.
+                                    if (!AppearanceTokens.isMaterial)
+                                        return base
+                                    const ink = parent.isPlay
+                                        ? AppearanceTokens.colors.primaryContainerForeground
+                                        : AppearanceTokens.colors.secondaryContainerForeground
+                                    const layer = buttonFace.held ? 0.12
+                                        : (controlArea.containsMouse ? 0.08 : 0.0)
+                                    return Qt.rgba(base.r + (ink.r - base.r) * layer,
+                                        base.g + (ink.g - base.g) * layer,
+                                        base.b + (ink.b - base.b) * layer, base.a)
+                                }
+                                scale: AppearanceTokens.isMaterial && buttonFace.held ? 0.90 : 1.0
+                                Behavior on radius {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.fastDuration
+                                        easing.type: AppearanceTokens.motion.standardEasing
+                                    }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.fastDuration
+                                        easing.type: AppearanceTokens.motion.standardEasing
+                                    }
+                                }
+                                Behavior on color {
+                                    ColorAnimation { duration: AppearanceTokens.motion.fastDuration }
+                                }
+                            }
                             Text {
                                 anchors.centerIn: parent
                                 text: modelData
@@ -1722,8 +1772,10 @@ PanelWindow {
                                 }
                             }
                             MouseArea {
+                                id: controlArea
                                 anchors.fill: parent
                                 enabled: parent.controlEnabled
+                                hoverEnabled: AppearanceTokens.isMaterial
                                 cursorShape: parent.controlEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
                                     if (index === 0) DockMprisService.previous()

@@ -401,8 +401,12 @@ QtObject {
     }
 
     readonly property QtObject widget: QtObject {
+        // The Material form's cards wear the scale's extra-large corner, which
+        // is what makes a desktop card read as Material rather than as macOS:
+        // the corner radius is a *scale* shared by every container, not a
+        // shape per card. Its neighbours stay where they were.
         readonly property int radius: tokens.isWindows12 ? 12
-            : tokens.shape.large
+            : tokens.isMaterial ? tokens.shape.extraLarge : tokens.shape.large
         readonly property int gap: tokens.isWindows12 ? 8
             : tokens.isMaterial ? 12 : 10
         readonly property int elevation: tokens.isWindows12 ? 2
