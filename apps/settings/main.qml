@@ -76,6 +76,10 @@ ApplicationWindow {
         readonly property color divider: role("outlineVariant", dark ? "#2c2c2e" : "#d1d1d6")
         readonly property color searchField: role("surfaceContainerHigh", dark ? "#2c2c2e" : "#e3e3e8")
         readonly property color selected: role("primary", dark ? "#0a84ff" : "#d9e9ff")
+        // The container a selected item sits in. M3 carries selection with
+        // secondaryContainer; the iPadOS form keeps the translucent wash.
+        readonly property color selectedContainer: role("secondaryContainer", dark
+            ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.06))
         readonly property color sidebarHover: role("surfaceContainerHigh", dark
             ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045))
         readonly property color chevron: role("outline", dark ? "#636366" : "#c7c7cc")
@@ -214,7 +218,7 @@ ApplicationWindow {
     // rows only provide model/currentIndex and content-driven width overrides.
     component SettingsNavBar: LiquidControls.LiquidNavBar {
         size: "tiny"
-        accentColor: theme.dark ? "#64b5ff" : "#0066cc"
+        accentColor: theme.role("primary", theme.dark ? "#64b5ff" : "#0066cc")
         itemColor: theme.dark ? "#ffffff" : "#1c1c1e"
         trackColor: theme.dark
             ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"
@@ -906,7 +910,7 @@ ApplicationWindow {
                 LiquidControls.LiquidGlassSwitch {
                     id: windowGroupingSwitch
                     checked: dockPage.windowGroupingIndex === 0
-                    accentColor: "#0a84ff"
+                    accentColor: theme.role("primary", "#0a84ff")
                     trackColor: theme.divider
                     onToggled: function(checked) {
                         const requestedIndex = checked ? 0 : 1
@@ -1309,7 +1313,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: dockPage.dockBlurInherit
-                            accentColor: "#30d158"
+                            accentColor: theme.role("primary", "#30d158")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 dockPage.setDockBlurInherit(checked)
@@ -1654,7 +1658,7 @@ ApplicationWindow {
                             width: 64
                             height: 25
                             checked: displayPage.glassFollowsAppearanceMode
-                            accentColor: "#0a84ff"
+                            accentColor: theme.role("primary", "#0a84ff")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 displayPage.saveGlassFollowsAppearanceMode(checked)
@@ -2769,13 +2773,16 @@ ApplicationWindow {
 
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                radius: 12
+                                // A selected tile is a filled container in the
+                                // tonal form, not an outlined one; the iPadOS form
+                                // keeps the wash and the scheme's own accent rim.
+                                radius: window.materialForm ? 16 : 12
                                 color: schemeTile.chosen
-                                    ? (theme.dark ? Qt.rgba(1, 1, 1, 0.14)
-                                                  : Qt.rgba(0, 0, 0, 0.06))
+                                    ? theme.selectedContainer
                                     : (theme.dark ? Qt.rgba(1, 1, 1, 0.05)
                                                   : Qt.rgba(0, 0, 0, 0.025))
-                                border.width: schemeTile.chosen ? 2 : 1
+                                border.width: window.materialForm
+                                    ? 0 : (schemeTile.chosen ? 2 : 1)
                                 border.color: schemeTile.chosen
                                     ? themePage.schemeAccent(schemeTile.modelData.id)
                                     : theme.floatingBorder
@@ -2788,7 +2795,7 @@ ApplicationWindow {
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 24
-                                        radius: 6
+                                        radius: window.materialForm ? 8 : 6
                                         color: schemeTile.swatches.length > 0
                                             ? schemeTile.swatches[0] : "transparent"
                                     }
@@ -3229,7 +3236,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: barPage.barIntegratedWithDock
-                            accentColor: "#0a84ff"
+                            accentColor: theme.role("primary", "#0a84ff")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 barPage.setBarIntegratedWithDock(checked)
@@ -3288,7 +3295,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: barPage.barBlurInherit
-                            accentColor: "#30d158"
+                            accentColor: theme.role("primary", "#30d158")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 barPage.setBarBlurInherit(checked)
