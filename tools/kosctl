@@ -207,11 +207,34 @@ doctor() {
     return "$failed"
 }
 
+# Runs cmake configure only when it is actually needed.
+#
+# Re-running `cmake -S -B` on every build rewrites moc_predefs.h, and its mtime
+# then lands a few microseconds after AUTOMOC's timestamp. ninja reads that as
+# "the autogen step is stale", regenerates mocs_compilation.cpp and rebuilds 65
+# objects plus 21 links on every single build — the cached build never converges.
+# Skipping the redundant configure hands the job to ninja's own RERUN_CMAKE rule,
+# which still reconfigures when a CMakeLists.txt changes. The stamp carries the
+# KOS_BUILD_* inputs that ninja cannot see, so changing them reconfigures too.
+configure_if_needed() {
+    local source_dir=$1 target_dir=$2
+    shift 2
+
+    local stamp="$target_dir/kos-configure-inputs"
+    local inputs="$source_dir|$*"
+    if [[ -f "$target_dir/CMakeCache.txt" && -f "$stamp" \
+            && "$(<"$stamp")" == "$inputs" ]]; then
+        return 0
+    fi
+    cmake -S "$source_dir" -B "$target_dir" -G Ninja "$@"
+    printf '%s\n' "$inputs" > "$stamp"
+}
+
 configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Debug}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
     prepare_cmake_build_dir "$build_dir" "$project_dir"
-    cmake -S "$project_dir" -B "$build_dir" -G Ninja \
+    configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
         -DKOS_BUILD_KWIN_PLUGINS="$plugins"
@@ -302,8 +325,8 @@ build_kwin_glass() {
     local build_type=${KOS_BUILD_TYPE:-Debug}
     prepare_cmake_build_dir "$glass_build_dir" \
         "$project_dir/vendor/kwin-effects-glass"
-    cmake -S "$project_dir/vendor/kwin-effects-glass" \
-        -B "$glass_build_dir" -G Ninja \
+    configure_if_needed "$project_dir/vendor/kwin-effects-glass" \
+        "$glass_build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
         -DGLASS_WAYLAND=ON \
