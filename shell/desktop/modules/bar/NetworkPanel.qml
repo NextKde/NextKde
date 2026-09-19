@@ -541,20 +541,17 @@ PopupWindow {
         }
     }
 
-    // Important credentials use the shell-wide modal primitive. Its backdrop
-    // is a separate lower surface, so KWin's glass samples a deterministic
-    // opposite-tone field rather than the arbitrary wallpaper/list beneath it.
+    // Important credentials use the shell-wide modal primitive. Its card samples
+    // the desktop beneath it and readability is carried by the card's own fixed
+    // KWin scrim, so this dialog wants no desktop wash: `modal` alone already
+    // provides hit testing, focus and stacking.
     KosFloatPanel {
         id: networkDialogOverlay
         modal: true
         centerOnScreen: true
-        backdropMode: "dim"
-        // Keep modal hit testing, focus and stacking without tinting the whole
-        // desktop. Readability is owned by the card's strong KWin scrim.
-        backdropOpacity: 0
+        backdropMode: "none"
         dismissOnBackdrop: false
         contentPadding: 0
-        radius: 21
         onBackdropClicked: panel.closeNetworkDialog()
 
         Item {

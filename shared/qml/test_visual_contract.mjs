@@ -87,6 +87,9 @@ for (const mode of ["dark", "light"]) {
         `${mode} secondary shell text reaches AA contrast`);
     assert.ok(contrast(composite(tertiary, background), background) >= 4.5,
         `${mode} tertiary shell text remains readable at small sizes`);
+    const indicator = rgbaProperty(shellThemeSource, `${mode}Indicator`);
+    assert.ok(contrast(composite(indicator, background), background) >= 4.5,
+        `${mode} dock indicator reaches AA contrast against dock background`);
 }
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
 // GlassText keeps the root type Text so every Text property passes through

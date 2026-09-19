@@ -22,11 +22,10 @@ Item {
     property real cardRadius: AppearanceTokens.isMaterial
         ? AppearanceTokens.shape.large : 19
     property color cardColor: ThemeService.backgroundColor
-    // Readability scrim for this card's glass. The control center stays as
-    // see-through as the Dock, so it defaults to the subtlest level; widgets
-    // hosting white content can raise it (widgets use "readable") so text
-    // holds over a bright backdrop.
-    property string cardScrimLevel: "subtle"
+    // Readability scrim for this card's glass: one step above the Dock, which
+    // sits at "subtle". Widgets hosting white content can raise it further
+    // (widgets use "readable") so text holds over a bright backdrop.
+    property string cardScrimLevel: "transparent"
     property color cardBorderColor: AppearanceTokens.isMaterial
         ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
     property real cardOpacity: 1.0

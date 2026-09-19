@@ -1135,7 +1135,8 @@ Item {
                         anchors.fill: parent
                         anchors.margins: 4
                         source: root.themeIconSource(delegateRoot.entry)
-                        asynchronous: true
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
                         visible: source !== "" && status === Image.Ready
                             && !delegateRoot.usesCustomFolderVisual
                     }

@@ -1362,7 +1362,8 @@ PanelWindow {
                                         height: 12
                                         source: modelData.icon || ""
                                         smooth: true
-	                                        asynchronous: true
+                                        // Theme icon: synchronous, see AppIcon.qml.
+                                        asynchronous: false
 	                                        anchors { left: appUsageRow.left; verticalCenter: appUsageRow.verticalCenter }
 	                                        layer.enabled: IconAppearanceService.mode !== "color"
 	                                        layer.effect: MultiEffect {
@@ -3108,7 +3109,8 @@ PanelWindow {
                         anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
                         width: desktopFileGrid.iconSize * 0.75
                         height: width
-                        asynchronous: true
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
                         source: SystemIconResolver.sourceFromCandidates(
                             [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
                     }
@@ -3270,7 +3272,8 @@ PanelWindow {
                         anchors.fill: parent
                         source: modelData.kind === "launcher"
                             ? AppPresentationService.iconSource(modelData.icon) : ""
-                        asynchronous: true
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
                         visible: source !== "" && status === Image.Ready
                     }
                     // Folder icon: a unified Canvas-drawn folder shape used
@@ -3394,7 +3397,8 @@ PanelWindow {
                         anchors.centerIn: parent
                         width: desktopFileGrid.iconSize * 0.75
                         height: width
-                        asynchronous: true
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
                         source: SystemIconResolver.sourceFromCandidates(
                             [desktopFileGrid.iconFor(modelData.kind)], "text-x-generic")
                         visible: source !== "" && status === Image.Ready

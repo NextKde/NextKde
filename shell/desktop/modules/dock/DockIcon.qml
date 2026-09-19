@@ -604,6 +604,10 @@ Item {
                     color: Qt.rgba(ThemeService.foregroundColor.r,
                         ThemeService.foregroundColor.g,
                         ThemeService.foregroundColor.b, 0.95)
+                    Behavior on color {
+                        enabled: runningIndicator.opacity > 0.01
+                        ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+                    }
                 }
             }
         }
@@ -613,6 +617,10 @@ Item {
             visible: !icon.dotIndicator
             radius: width / 2
             color: ThemeService.accentColor
+            Behavior on color {
+                enabled: visible
+                ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+            }
         }
     }
 

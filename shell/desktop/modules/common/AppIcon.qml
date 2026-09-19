@@ -14,8 +14,16 @@ Item {
     property real   saturation:        1.0
     property real   tintEnabled:       0.0
     property color  tintColor:         "#a855f7"
-    property bool   asynchronous:      true
     property bool   smooth:            true
+
+    // Icon loads must stay on the GUI thread. QIcon::fromTheme() hands back
+    // QIcons from a process-wide cache, and under the KDE platform theme every
+    // one of them holds a KF6 KIconEngine, which is not thread-safe.
+    // Asynchronous loading makes Qt run Quickshell's image provider on its
+    // pixmap-reader thread, which then races the GUI thread's own icon lookups
+    // and segfaults inside KIconEngine::createPixmap. Only enable this for
+    // sources that never reach the icon provider (plain files, bundled assets).
+    property bool   asynchronous:      false
 
     IconImage {
         id: iconImage

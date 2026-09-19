@@ -4,9 +4,13 @@ import Quickshell.Wayland
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
-// Reusable important-interaction surface. Backdrop and card deliberately live
-// in separate layer-shell surfaces, so KWin samples a controlled backdrop below
-// the upper card while retaining real blur, refraction and liquid edges.
+// Reusable important-interaction surface. One layer-shell surface carries both
+// the backdrop underlay and the card. KWin only samples the surfaces *below* a
+// blur, so a second surface would have supplied a sampling field rather than a
+// visual layer -- and both consumers of this panel already carry their
+// readability contract on the card's own fixed scrim. Staying in-surface also
+// keeps one full-screen surface, and its damage, out of every open/close
+// animation.
 Scope {
     id: root
 
@@ -18,19 +22,57 @@ Scope {
     property bool centerOnScreen: false
     property bool modal: false
     property int floatOffset: 12
+    // "none" | "dim" | "dimBlur". The underlay shares this panel's single
+    // surface, so the card's own blur cannot sample it -- KWin only samples the
+    // surfaces below a blur. "dimBlur" therefore widens this surface's blur
+    // region to the whole screen instead of stacking a dimmed field under the
+    // glass, and it cannot be combined with a per-card blur region.
     property string backdropMode: "none"
+    readonly property bool backdropVisible: root.modal
+        && root.backdropMode !== "none"
+    readonly property bool backdropBlurActive: root.backdropVisible
+        && root.backdropMode === "dimBlur"
     property real backdropOpacity: -1
-    property color backdropTint: AppearanceTokens.resolvedAppearanceIsDark
-        ? "white" : "black"
+    // A wash exists to push the desktop back, so it is dark in both appearances
+    // rather than polarized against the final glass tone.
+    property color backdropTint: "black"
+    // An explicit backdropOpacity wins; otherwise the wash is lighter where the
+    // screen it covers is already dark.
+    readonly property real backdropEffectiveOpacity: root.backdropOpacity >= 0
+        ? Math.min(1, root.backdropOpacity)
+        : (AppearanceTokens.resolvedAppearanceIsDark ? 0.38 : 0.48)
     property bool dismissOnBackdrop: true
-    property real radius: AppearanceTokens.shape.extraLarge
+    // Important dialogs are a fixed-content, fixed-size family, so their corner
+    // is a literal rather than a shape token: it holds still if the token scale
+    // moves, and it is deliberately rounder than shape.extraLarge (26/30).
+    property real radius: 32
     property real cornerExponent: AppearanceTokens.shape.cornerExponent
+    // Outer shadow. It is cast entirely outside the card's outline (see
+    // KosCardShadow): a translucent card cannot carry a shadow underneath
+    // itself, because the glass would show that darkening through the material.
+    property bool shadowEnabled: true
+    property real shadowOffsetX: 12
+    property real shadowOffsetY: 16
+    property real shadowSoftness: 18
+    property color shadowColor: Qt.rgba(0.5, 0.5, 0.5, 0.30)
+    // 0 = real shadow. 1/2/3 paint the diagnostics described in KosCardShadow --
+    // a probe is the only way to tell a clipped surface apart from a
+    // mis-shaped or mis-wired one without guessing.
+    property real shadowDebugMode: 0
     property int materialDepth: 1
     // "auto" follows appearance; important destructive prompts may request a
     // stable light or dark material independent of the desktop theme.
     property string materialTone: "auto" // "auto" | "light" | "dark"
-    property string fixedScrimTone: "theme" // "theme" | "graphite"
-    property real fixedScrimOpacity: -1
+    // Shared important-dialog material: neutral graphite in dark appearance,
+    // warm pearl in light appearance. Individual dialogs may still override.
+    property string fixedScrimTone: finalGlassIsDark ? "graphite" : "pearl"
+    // One value for both appearances. Not fully opaque: the glass underneath is
+    // part of the material, so the desktop reads through as a hint.
+    property real fixedScrimOpacity: 0.8
+    // The blur strength this panel asks the compositor for, published per shape
+    // through protocol v4 set_blur instead of following the global kwinrc
+    // BlurStrength -- a dialog wants less blur than the desktop surfaces do.
+    property real blurStrength: 0.3
     readonly property bool finalGlassIsDark: materialTone === "dark" ? true
         : materialTone === "light" ? false
         : AppearanceTokens.resolvedAppearanceIsDark
@@ -70,7 +112,6 @@ Scope {
     function show() {
         if (root.anchorItem && !root._centered)
             root._placeAnchored()
-        backdropWindow.visible = root.modal && root.backdropMode !== "none"
         cardWindow.visible = true
         if (root.animateOnShow && !popupMotion.mapped)
             popupMotion.open()
@@ -81,7 +122,6 @@ Scope {
             return
         }
         cardWindow.visible = false
-        backdropWindow.visible = false
     }
     function open() { root.show() }
     function close() { root.hide() }
@@ -96,49 +136,29 @@ Scope {
                                    - cardPanel.height - root.floatOffset)
     }
 
-    // The underlay is visual-only. Its tone is deliberately opposite to the
-    // appearance's final glass tone, providing deterministic input to KWin's
-    // one-polarity adaptive scrim.
-    PanelWindow {
-        id: backdropWindow
-        screen: root.targetScreen
-        color: "transparent"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "quickshell-kosfloatpanel-backdrop"
-        anchors { top: true; left: true; right: true; bottom: true }
-        exclusionMode: ExclusionMode.Ignore
-        mask: Region {}
-        visible: false
-
-        Rectangle {
-            id: backdrop
-            anchors.fill: parent
-            color: root.backdropOpacity >= 0
-                ? Qt.rgba(root.backdropTint.r, root.backdropTint.g,
-                    root.backdropTint.b, Math.min(1, root.backdropOpacity))
-                : (AppearanceTokens.resolvedAppearanceIsDark
-                    ? Qt.rgba(1, 1, 1, 0.38)
-                    : Qt.rgba(0, 0, 0, 0.48))
-            Behavior on color { ColorAnimation { duration: 140 } }
-        }
-
-        Region { id: backdropBlurRegion; item: backdrop }
-        BackgroundEffect.blurRegion: (backdropWindow.visible
-                                      && root.backdropMode === "dimBlur")
-            ? backdropBlurRegion : null
-    }
-
     PanelWindow {
         id: cardWindow
         screen: root.targetScreen
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "quickshell-kosfloatpanel-card"
+        WlrLayershell.namespace: "quickshell-kosfloatpanel-overlay"
         WlrLayershell.keyboardFocus: root.modal
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors { top: true; left: true; right: true; bottom: true }
         exclusionMode: ExclusionMode.Ignore
         visible: false
+
+        // The underlay is drawn below the card in this same surface, so it is a
+        // plain dim over the desktop rather than a field the card's glass
+        // samples: KWin only samples the surfaces below a blur.
+        Rectangle {
+            id: backdrop
+            anchors.fill: parent
+            visible: root.backdropVisible
+            color: Qt.rgba(root.backdropTint.r, root.backdropTint.g,
+                root.backdropTint.b, root.backdropEffectiveOpacity)
+            Behavior on color { ColorAnimation { duration: 140 } }
+        }
 
         MouseArea {
             anchors.fill: parent
@@ -148,6 +168,39 @@ Scope {
                 if (root.dismissOnBackdrop)
                     root.close()
             }
+        }
+
+        // The card's shadow: a sibling *below* the card, never a backdrop for
+        // it. Geometry mirrors the card exactly, motion included -- the same
+        // scale and translate are re-stated here with the scale origin moved to
+        // the card's top-left corner, which sits `margin` into this item.
+        KosCardShadow {
+            id: cardShadow
+            castEnabled: root.shadowEnabled
+            cardWidth: cardPanel.width
+            cardHeight: cardPanel.height
+            cornerRadius: cardPanel.radius
+            cornerExponent: cardPanel.cornerExponent
+            offsetX: root.shadowOffsetX
+            offsetY: root.shadowOffsetY
+            softness: root.shadowSoftness
+            shadowColor: root.shadowColor
+            debugMode: root.shadowDebugMode
+            x: cardPanel.x - margin
+            y: cardPanel.y - margin
+            opacity: cardPanel.opacity
+            transform: [
+                Scale {
+                    origin.x: cardShadow.margin
+                    origin.y: cardShadow.margin
+                    xScale: cardPanel.scale
+                    yScale: cardPanel.scale
+                },
+                Translate {
+                    y: (root.animateOnShow && popupMotion.progress < 0.999)
+                        ? Math.round((1 - popupMotion.progress) * root.anchorOffset) : 0
+                }
+            ]
         }
 
         LiquidGlassPanel {
@@ -163,17 +216,21 @@ Scope {
             ambientSecondary: root.ambientSecondary
             ambientStrength: root.ambientStrength
             useKwinEffect: true
+            // Publish our own blur level to the compositor (protocol v4 set_blur);
+            // no other surface in the shell opts in, so dialogs stop inheriting the
+            // global BlurStrength while everything else keeps following it.
+            blurOverrideEnabled: true
+            blurStrength: root.blurStrength
             scrimEnabled: true
             scrimLevel: "custom"
             // Important interactions prioritize legibility. The host may make
             // the full-screen backdrop completely transparent; a strong
             // theme-polarized KWin scrim then carries the contrast contract.
-            scrimCap: root.fixedScrimOpacity >= 0
-                ? root.fixedScrimOpacity
-                : (root.finalGlassIsDark ? 0.88 : 0.94)
+            scrimCap: root.fixedScrimOpacity
             scrimDecay: 1.0
             scrimFixed: true
             scrimGraphite: root.fixedScrimTone === "graphite"
+            scrimPearl: root.fixedScrimTone === "pearl"
             scrimTintOverride: root.finalGlassIsDark ? 0 : 1
 
             width: cardHost.width + root.contentPadding * 2
@@ -203,19 +260,21 @@ Scope {
 
         mask: root.modal ? null : cardRegion
         Region { id: cardRegion; item: cardPanel }
+        Region { id: backdropBlurRegion; item: backdrop }
+        // One surface carries one blur region, so "dimBlur" widens this one to
+        // the whole screen -- which already covers the card.
         BackgroundEffect.blurRegion: (cardWindow.visible
                                       && !AppearanceTokens.isMaterial
                                       && cardPanel.useKwinEffect)
-            ? cardPanel.blurRegion : null
+            ? (root.backdropBlurActive ? backdropBlurRegion : cardPanel.blurRegion)
+            : null
     }
 
     PopupMotion {
         id: popupMotion
         onClosed: {
-            if (!popupMotion.requestedOpen) {
+            if (!popupMotion.requestedOpen)
                 cardWindow.visible = false
-                backdropWindow.visible = false
-            }
         }
     }
 

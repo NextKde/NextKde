@@ -243,9 +243,9 @@ PopupWindow {
     onSessionModalVisibleChanged: {
         _triggerTransitionGuard()
         if (panel.sessionModalVisible) {
-            // The session sheet is a second layer of the Control Center. Keep
-            // every primary card mapped behind it even if an external caller
-            // requests the sheet while the opening transition is still live.
+            // The menu is a card of this same surface, so the panel has to be
+            // mapped for it to have anywhere to sit -- but nothing else about the
+            // Control Center changes, and the primary cards stay mapped behind it.
             if (!coordinator.open)
                 coordinator.openAll()
             coordinator.modalActive = true
@@ -255,6 +255,22 @@ PopupWindow {
             if (panel.activeSubmenu === "")
                 coordinator.modalActive = false
         }
+    }
+
+    // The confirmation dialog is the shared modal primitive, driven exactly the
+    // way the other dialogs drive it: open()/close(), never a `visible` binding.
+    // Its own show path is what starts PopupMotion, and the card's opacity is that
+    // animation's progress -- bound directly, it would sit at zero forever.
+    onPendingConfirmActionChanged: {
+        // The dialog is its own focusable surface, so mapping it changes KWin's
+        // active window; the guard keeps that from being read as "the user clicked
+        // away" and closing the Control Center (which would clear this property
+        // again, making the dialog flash).
+        _triggerTransitionGuard()
+        if (panel.pendingConfirmAction === "")
+            sessionConfirm.close()
+        else
+            sessionConfirm.open()
     }
 
     function toggle(item) {
@@ -283,6 +299,23 @@ PopupWindow {
         pendingConfirmAction = ""
     }
 
+    // The session list dispatches through here rather than each row carrying its
+    // own handler: the three destructive entries ask first (inside the same
+    // card), everything else acts immediately and closes the Control Center.
+    function runSessionAction(action) {
+        if (action === "logout" || action === "reboot" || action === "poweroff") {
+            panel.pendingConfirmAction = action
+            return
+        }
+        panel.close()
+        if (action === "lock")
+            ControlCenterService.lockSession()
+        else if (action === "suspend")
+            ControlCenterService.suspendSystem()
+        else if (action === "switch")
+            ControlCenterService.switchUser()
+    }
+
     function openSessionPanel() {
         pendingConfirmAction = ""
         submenuOpen = false
@@ -296,6 +329,12 @@ PopupWindow {
     Connections {
         target: WindowService
         function onActiveWindowIdChanged() {
+            // A confirmation dialog being up is not "the user moved to another
+            // window": the dialog's own surface takes focus when it maps, and
+            // closing the Control Center here would clear pendingConfirmAction and
+            // make the dialog flash away.
+            if (panel.pendingConfirmAction !== "")
+                return
             if (!panel._internalTransition && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")) {
                 panel.close()
             }
@@ -1151,7 +1190,8 @@ PopupWindow {
                         IconImage {
                             width: 12; height: 12
                             source: modelData.appIcon || ""
-                            asynchronous: true
+                            // Theme icon: synchronous, see AppIcon.qml.
+                            asynchronous: false
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         GlassText {
@@ -1225,20 +1265,27 @@ PopupWindow {
     }
 
     // ── Card 10 (Sub-panel): Power & Session Management ──────────────
-    // Overlays the 9 dimmed, non-interactive main cards with a dedicated power
-    // & session sheet covering Lock, Suspend, Switch User, Logout, Reboot and
-    // Power Off.
+    // The power/session page: Lock, Suspend, Switch User, Logout, Reboot and
+    // Power Off in one list. It uses the same slot and the same card material as
+    // the Wi-Fi/Bluetooth pages -- the coordinator-managed cards hide while it is
+    // open, so the two interfaces never stack on top of each other.
     ControlCenterCard {
         id: sessionCard
         coordinator: coordinator
         managedByCoordinator: false
-        offsetTop: 20
+        // Same slot as the Wi-Fi/Bluetooth submenu, so the session list is one
+        // more page of the Control Center instead of a panel of its own.
+        offsetTop: panel.notificationFirst
+            ? panel.controlCenterHeight - 20 - sessionCard.cardHeight
+            : 20
         offsetRight: 20
         cardRadius: 22
         cardWidth: 296
-        cardHeight: panel.pendingConfirmAction === "" ? 278 : 180
+        cardHeight: 340
         cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
-        cardShown: panel.sessionModalVisible
+        // Hidden while a confirmation is up: the dialog owns the screen then, and
+        // leaving the list card mapped would strand an empty glass slab behind it.
+        cardShown: panel.sessionModalVisible && panel.pendingConfirmAction === ""
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1247,7 +1294,8 @@ PopupWindow {
             anchors.fill: parent
             visible: panel.pendingConfirmAction === ""
 
-            // Header
+            // Header: same shape as the Wi-Fi/Bluetooth pages -- back button on the
+            // left, identity on the right -- instead of a title with a close box.
             Item {
                 id: sessionHeader
                 anchors {
@@ -1255,17 +1303,56 @@ PopupWindow {
                     left: parent.left
                     right: parent.right
                     topMargin: 12
-                    leftMargin: 14
-                    rightMargin: 14
+                    leftMargin: 12
+                    rightMargin: 12
                 }
-                height: 32
+                height: 28
+
+                Rectangle {
+                    id: sessionBackBtn
+                    width: 26
+                    height: 26
+                    radius: 13
+                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                    color: sessionBackMouse.pressed
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0, 0, 0, 0.14))
+                        : (sessionBackMouse.containsMouse
+                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
+                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+                    border.width: 1
+                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
+                    Behavior on color { ColorAnimation { duration: 110 } }
+
+                    GlassText {
+                        anchors.centerIn: parent
+                        anchors.horizontalCenterOffset: -1
+                        text: "‹"
+                        color: "white"
+                        font { pixelSize: 18; weight: Font.Bold }
+                    }
+
+                    MouseArea {
+                        id: sessionBackMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: panel.closeSubmenu()
+                    }
+                }
 
                 Row {
                     anchors {
-                        left: parent.left
+                        right: parent.right
                         verticalCenter: parent.verticalCenter
                     }
                     spacing: 8
+
+                    GlassText {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: ControlCenterService.currentUserName
+                        color: ThemeService.foregroundColor
+                        font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                    }
 
                     Rectangle {
                         width: 28
@@ -1274,6 +1361,7 @@ PopupWindow {
                         color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.06)
                         border.width: 1
                         border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10)
+
                         BundledIcon {
                             anchors.centerIn: parent
                             width: 16
@@ -1281,53 +1369,6 @@ PopupWindow {
                             name: BundledIcons.roleName("switchUser")
                             color: ThemeService.foregroundColor
                         }
-                    }
-
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 0
-
-                        GlassText {
-                            text: ControlCenterService.currentUserName
-                            color: ThemeService.foregroundColor
-                            font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
-                        }
-                        GlassText {
-                            text: "电源与会话管理"
-                            color: ThemeService.foregroundColor
-                            opacity: 0.60
-                            font { pixelSize: 9; family: "Noto Sans CJK SC" }
-                        }
-                    }
-                }
-
-                // Close Button "×"
-                Rectangle {
-                    anchors {
-                        right: parent.right
-                        verticalCenter: parent.verticalCenter
-                    }
-                    width: 24
-                    height: 24
-                    radius: 12
-                    color: closeMouse.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.12))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
-
-                    GlassText {
-                        anchors.centerIn: parent
-                        text: "×"
-                        color: "white"
-                        font { pixelSize: 15; weight: Font.Bold }
-                    }
-                    MouseArea {
-                        id: closeMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: panel.sessionModalVisible = false
                     }
                 }
             }
@@ -1347,211 +1388,82 @@ PopupWindow {
                 color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
             }
 
-            // 2-column Grid of Action Buttons
-            Grid {
-                id: actionsGrid
+            // A plain list, the same shape as the Wi-Fi/Bluetooth pages: one row
+            // per action, the whole row highlights on hover, and the destructive
+            // three sit at the bottom in dark red.
+            Column {
+                id: actionsList
                 anchors {
                     top: sessionDivider.bottom
-                    topMargin: 10
-                    horizontalCenter: parent.horizontalCenter
-                }
-                columns: 2
-                spacing: 8
-
-                // 1. 锁屏 (Lock Screen)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: lockArea.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("lock")
-                            color: ThemeService.foregroundColor
-                        }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "锁屏"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "锁定屏幕"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: lockArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            panel.close()
-                            ControlCenterService.lockSession()
-                        }
-                    }
+                    topMargin: 4
+                    left: parent.left
+                    right: parent.right
+                    leftMargin: 6
+                    rightMargin: 6
                 }
 
-                // 2. 睡眠 (Sleep / Suspend)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: sleepArea.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
+                Repeater {
+                    model: [
+                        { icon: "lock", label: "锁定屏幕", danger: false, action: "lock" },
+                        { icon: "suspend", label: "睡眠", danger: false, action: "suspend" },
+                        { icon: "switchUser", label: "切换用户", danger: false, action: "switch" },
+                        { icon: "logout", label: "注销", danger: true, action: "logout" },
+                        { icon: "reboot", label: "重新启动", danger: true, action: "reboot" },
+                        { icon: "powerOff", label: "关机", danger: true, action: "poweroff" }
+                    ]
 
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("suspend")
-                            color: ThemeService.foregroundColor
-                        }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "睡眠"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "挂起系统"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: sleepArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            panel.close()
-                            ControlCenterService.suspendSystem()
-                        }
-                    }
-                }
+                    delegate: Item {
+                        required property var modelData
+                        width: actionsList.width
+                        height: 44
 
-                // 3. 切换用户 (Switch User)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: switchUserArea.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            radius: 9
+                            color: sessionRow.containsMouse
+                                ? (modelData.danger
+                                    ? Qt.rgba(1.0, 0.23, 0.19, 0.14)
+                                    : (ThemeService.isDark
+                                        ? Qt.rgba(1, 1, 1, 0.10)
+                                        : Qt.rgba(0, 0, 0, 0.06)))
+                                : "transparent"
+                            Behavior on color { ColorAnimation { duration: 110 } }
+                        }
 
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("switchUser")
-                            color: ThemeService.foregroundColor
-                        }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "切换用户"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "保留会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: switchUserArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            panel.close()
-                            ControlCenterService.switchUser()
-                        }
-                    }
-                }
+                        Row {
+                            anchors {
+                                left: parent.left
+                                leftMargin: 12
+                                verticalCenter: parent.verticalCenter
+                            }
+                            spacing: 10
 
-                // 4. 注销 (Log Out)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: logoutArea.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
+                            BundledIcon {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 20
+                                height: 20
+                                name: BundledIcons.roleName(modelData.icon)
+                                color: modelData.danger
+                                    ? "#ff3b30" : ThemeService.foregroundColor
+                            }
 
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("logout")
-                            color: ThemeService.foregroundColor
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.label
+                                color: modelData.danger
+                                    ? "#ff3b30" : ThemeService.foregroundColor
+                                font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
+                            }
                         }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "注销"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "结束当前会话"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: logoutArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: panel.pendingConfirmAction = "logout"
-                    }
-                }
 
-                // 5. 重启 (Restart)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: rebootArea.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("reboot")
-                            color: ThemeService.foregroundColor
+                        MouseArea {
+                            id: sessionRow
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: panel.runSessionAction(modelData.action)
                         }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "重启"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "重新启动电脑"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: rebootArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: panel.pendingConfirmAction = "reboot"
-                    }
-                }
-
-                // 6. 关机 (Power Off)
-                Rectangle {
-                    width: 132; height: 56; radius: 14
-                    color: powerOffArea.containsMouse
-                        ? Qt.rgba(255, 69, 58, 0.22)
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                    border.width: 1
-                    border.color: powerOffArea.containsMouse
-                        ? Qt.rgba(255, 69, 58, 0.50)
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08))
-
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-                        BundledIcon {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 20; height: 20
-                            name: BundledIcons.roleName("powerOff")
-                            color: ThemeService.foregroundColor
-                        }
-                        Column {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: 1
-                            GlassText { text: "关机"; color: ThemeService.foregroundColor; font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" } }
-                            GlassText { text: "关闭电脑电源"; color: ThemeService.foregroundColor; opacity: 0.55; font { pixelSize: 9; family: "Noto Sans CJK SC" } }
-                        }
-                    }
-                    MouseArea {
-                        id: powerOffArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: panel.pendingConfirmAction = "poweroff"
                     }
                 }
             }
@@ -1570,58 +1482,104 @@ PopupWindow {
             }
         }
 
-        // ── VIEW 2: Confirmation Dialog ──
-        Item {
-            anchors.fill: parent
-            visible: panel.pendingConfirmAction !== ""
+    }
 
-            BundledIcon {
-                anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 16 }
-                width: 28
-                height: 28
-                name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
-                    ? "powerOff"
-                    : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
-                color: ThemeService.foregroundColor
+    // Session confirmations (log out / restart / shut down) are important
+    // interactions, so they use the shared modal dialog primitive instead of a
+    // page of the Control Center: centred, with the strong readable scrim and the
+    // card shadow the other important dialogs already have.
+    KosFloatPanel {
+        id: sessionConfirm
+        centerOnScreen: true
+        modal: true
+        backdropMode: "none"
+        dismissOnBackdrop: false
+        contentPadding: 0
+        radius: 24
+        onBackdropClicked: panel.pendingConfirmAction = ""
+
+        Item {
+            width: 300
+            height: 204
+
+            Rectangle {
+                width: 56
+                height: 56
+                radius: width / 2
+                anchors {
+                    top: parent.top
+                    topMargin: 20
+                    horizontalCenter: parent.horizontalCenter
+                }
+                color: Qt.rgba(sessionConfirm.contentForegroundColor.r,
+                    sessionConfirm.contentForegroundColor.g,
+                    sessionConfirm.contentForegroundColor.b, 0.08)
+                border.width: 1
+                border.color: Qt.rgba(sessionConfirm.contentForegroundColor.r,
+                    sessionConfirm.contentForegroundColor.g,
+                    sessionConfirm.contentForegroundColor.b, 0.34)
+
+                BundledIcon {
+                    anchors.centerIn: parent
+                    width: 26
+                    height: 26
+                    name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
+                        ? "powerOff"
+                        : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
+                    color: sessionConfirm.contentForegroundColor
+                }
             }
 
-            GlassText {
-                anchors { top: parent.top; topMargin: 50; horizontalCenter: parent.horizontalCenter }
+            Text {
+                anchors {
+                    top: parent.top
+                    topMargin: 88
+                    left: parent.left
+                    right: parent.right
+                }
+                horizontalAlignment: Text.AlignHCenter
                 text: panel.pendingConfirmAction === "poweroff" ? "确定要关机吗？"
                     : (panel.pendingConfirmAction === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
-                color: ThemeService.foregroundColor
-                font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                color: sessionConfirm.contentForegroundColor
+                font { pixelSize: 16; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
 
-            GlassText {
-                anchors { top: parent.top; topMargin: 72; horizontalCenter: parent.horizontalCenter }
+            Text {
+                anchors {
+                    top: parent.top
+                    topMargin: 114
+                    left: parent.left
+                    right: parent.right
+                }
+                horizontalAlignment: Text.AlignHCenter
                 text: "未保存的工作可能会丢失"
-                color: ThemeService.foregroundColor
-                opacity: 0.66
-                font { pixelSize: 10; family: "Noto Sans CJK SC" }
+                color: sessionConfirm.contentSecondaryColor
+                font { pixelSize: 12; family: "Noto Sans CJK SC" }
             }
 
             Row {
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
+                anchors {
+                    right: parent.right
+                    bottom: parent.bottom
+                    rightMargin: 18
+                    bottomMargin: 18
+                }
                 spacing: 12
 
                 Rectangle {
-                    width: 100
-                    height: 34
-                    radius: 17
-                    color: cancelConfirmMouse.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.10))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.05))
-                    border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(0, 0, 0, 0.10)
-                    GlassText {
+                    width: 88
+                    height: 32
+                    radius: height / 2
+                    color: sessionConfirm.contentControlFill
+
+                    Text {
                         anchors.centerIn: parent
                         text: "取消"
-                        color: ThemeService.foregroundColor
-                        font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                        color: sessionConfirm.contentForegroundColor
+                        font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
+
                     MouseArea {
-                        id: cancelConfirmMouse
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
@@ -1630,19 +1588,20 @@ PopupWindow {
                 }
 
                 Rectangle {
-                    width: 100
-                    height: 34
-                    radius: 17
-                    color: executeConfirmMouse.containsMouse ? Qt.rgba(255, 69, 58, 0.35) : Qt.rgba(255, 69, 58, 0.20)
-                    border.width: 1
-                    border.color: "#ff453a"
-                    GlassText {
+                    width: 104
+                    height: 32
+                    radius: height / 2
+                    // Same face as the neutral button, red label only.
+                    color: sessionConfirm.contentControlFill
+
+                    Text {
                         anchors.centerIn: parent
                         text: panel.pendingConfirmAction === "poweroff" ? "关机"
                             : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
-                        color: ThemeService.foregroundColor
-                        font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
+                        color: "#ff3b30"
+                        font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
+
                     MouseArea {
                         id: executeConfirmMouse
                         anchors.fill: parent
@@ -1650,14 +1609,14 @@ PopupWindow {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             const action = panel.pendingConfirmAction
+                            panel.pendingConfirmAction = ""
                             panel.close()
-                            if (action === "poweroff") {
+                            if (action === "poweroff")
                                 ControlCenterService.powerOffSystem()
-                            } else if (action === "reboot") {
+                            else if (action === "reboot")
                                 ControlCenterService.rebootSystem()
-                            } else if (action === "logout") {
+                            else if (action === "logout")
                                 ControlCenterService.logoutCurrentSession()
-                            }
                         }
                     }
                 }

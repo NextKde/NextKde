@@ -188,7 +188,10 @@ QtObject {
     // compositor's 15-step range.  A perceptual response keeps the middle of
     // the settings slider clear and refractive, while preserving both end
     // points for users who explicitly want no blur or maximum frosting.
-    function _compositorBlurLevel(strength) {
+    // Public: per-component blur overrides (LiquidGlassPanel.blurStrength) map
+    // through this same curve so a panel that follows the global value renders
+    // identically whether it is overridden or not.
+    function compositorBlurLevel(strength) {
         const value = _normalized(strength)
         return Number.isFinite(value)
             ? Math.round(1 + Math.pow(value, 1.5) * 14) : 1
@@ -538,7 +541,7 @@ QtObject {
     }
 
     function _syncGlassEffect() {
-        const contentBlurLevel = service._compositorBlurLevel(
+        const contentBlurLevel = service.compositorBlurLevel(
             service.globalBlurStrength)
         const materialBlurOnly = service.shellStyle === "material"
         const refractionLevel = materialBlurOnly ? 0

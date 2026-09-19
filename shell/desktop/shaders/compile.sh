@@ -32,4 +32,11 @@ qsb --qt6 -o icon_effect.frag.qsb icon_effect.frag
 echo "Compiling squircle fragment shader..."
 qsb --qt6 -o squircle.frag.qsb squircle.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb"
+echo "Compiling card shadow shaders..."
+# Both stages are baked here: the shadow has no source item, so its vertex
+# stage computes the item-local coordinate itself instead of relying on
+# qt_MultiTexCoord0, which a sourceless ShaderEffect is not guaranteed to get.
+qsb --qt6 -o card_shadow.vert.qsb card_shadow.vert
+qsb --qt6 -o card_shadow.frag.qsb card_shadow.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb"

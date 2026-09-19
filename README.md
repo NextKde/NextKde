@@ -125,18 +125,16 @@ NixOS 模块则需设置 `services.kos.decoration.enable = true;`；仅安装插
 
 安装完成后，KOS 会在之后登录时自动启动。
 
-### 锁屏与登录界面（可选）
+### 锁屏（可选）
 
-KOS 的锁屏和 SDDM 登录主题是两个可选组件，默认**不安装**——可选组件通过子命令
-按需安装，不带参数的 `install` / `uninstall` 只覆盖核心桌面：
+KOS 的锁屏是可选的，默认**不安装**——可选组件通过子命令按需安装，不带参数的
+`install` / `uninstall` 只覆盖核心桌面：
 
 ```sh
 ./tools/kosctl install lockscreen   # 锁屏（用户级，无需 root）
-./tools/kosctl install sddm         # 登录界面（需要 root）
 ./tools/kosctl install apps         # 可选独立应用（等价 tools/install-apps.sh）
 
 ./tools/kosctl uninstall lockscreen # 单独移除
-./tools/kosctl uninstall sddm
 ```
 
 **锁屏**（`apps/lockscreen`，kscreenlocker 的皮肤包）会安装到
@@ -149,27 +147,33 @@ KOS 的锁屏和 SDDM 登录主题是两个可选组件，默认**不安装**—
 它是纯 QML 数据包：改完 QML 运行 `./tools/kosctl sync` 即可更新，不必重新
 `install`。
 
-**SDDM 登录主题**（`apps/sddm`）安装到 `/usr/share/sddm/themes/kos`，并通过
-`/etc/sddm.conf.d/kos-theme.conf`（`[Theme] Current=kos`）选择，下次注销或开机
-生效。主题目录在系统前缀里，所以这一步需要 root。
+`uninstall` 会移除锁屏并删除 `ShellPackage` 键。
 
-**SDDM 出问题时的补救**：如果登录界面黑屏、报错或无法输入密码，按
-Ctrl+Alt+F2（或 F3/F4…）切到 TTY 登录，删除主题选择文件并重启显示管理器，
-即回到安装前的主题：
+### SDDM 登录界面：暂时不提供
+
+`apps/sddm` 是 KOS 的 SDDM 登录主题，但 `kosctl install sddm` 因为登录器集成
+还有问题，**已暂时移除**：现在没有安装入口，主题源码留在仓库里，等修好后再挂
+回来。
+
+它原本做两件事：把主题复制到 `/usr/share/sddm/themes/kos`，并写入
+`/etc/sddm.conf.d/kos-theme.conf`（`[Theme] Current=kos`）选中它——两者都在系统
+前缀里，所以需要 root。要预览它只能手动跑：
+
+```sh
+sddm-greeter --test-mode --theme apps/sddm   # 窗口能正常显示，再考虑恢复安装
+```
+
+如果之前用旧版 kosctl 装过这个主题，卸载时不再自动清理（那需要 root），但
+`./tools/kosctl uninstall` 检测到残留会提示。登录界面黑屏或无法输入密码时，按
+Ctrl+Alt+F2（或 F3/F4…）切到 TTY 登录，删掉主题选择文件并重启显示管理器即可
+回到安装前的主题：
 
 ```sh
 sudo rm /etc/sddm.conf.d/kos-theme.conf
 sudo systemctl restart sddm
 ```
 
-要彻底移除主题本体：`sudo rm -rf /usr/share/sddm/themes/kos`（或直接运行
-`./tools/kosctl uninstall`，会把可选组件一并清掉）。预防措施：本主题只依赖
-纯 QtQuick 与 QtQuick.Controls，不依赖 Plasma/Kirigami 的 QML 插件（这是 SDDM
-主题最常见的翻车点）；切换前可先用
-`sddm-greeter --test-mode --theme apps/sddm` 预览，窗口能正常显示再切。
-
-`uninstall` 会把这两个可选组件一并移除（SDDM 部分需要 root），并删除
-`ShellPackage` 键。
+彻底移除主题本体：`sudo rm -rf /usr/share/sddm/themes/kos`。
 
 ### 4. 首次设置
 
@@ -225,9 +229,9 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 ```
 
 这会停止并移除 KOS 文件与服务；你的 Dock 固定项、外观等个人状态会保留。
-可选安装的锁屏与 SDDM 登录主题也会一并移除（SDDM 部分需要 root；移除
-`/etc/sddm.conf.d/kos-theme.conf` 后 SDDM 回到之前的主题）。也可以只移除其中一个：
-`./tools/kosctl uninstall lockscreen` / `./tools/kosctl uninstall sddm`。
+可选安装的锁屏也会一并移除。也可以只移除锁屏：`./tools/kosctl uninstall lockscreen`。
+若检测到旧版 kosctl 装过的 SDDM 主题，卸载时会提示手动删除的命令（见上文
+「SDDM 登录界面：暂时不提供」一节）。
 
 #### 对于NixOS，我们更推荐使用基于 Flake 的安装方法
 

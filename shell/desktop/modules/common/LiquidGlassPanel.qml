@@ -61,6 +61,15 @@ Item {
     // glass inside a shared surface -- the desk-center widgets -- uses this,
     // because per-item compositor blur is not present on that surface.
     property bool useKwinEffect: true
+    // Opt-in: publish this panel's own blur strength to the compositor (protocol
+    // v4 set_blur) instead of following the global kwinrc BlurStrength. Off by
+    // default, so every existing surface keeps the global level and renders
+    // exactly as it did before.
+    property bool blurOverrideEnabled: false
+    // The level asked for when the override is on. It defaults to the shell-wide
+    // value, so an override that follows the global setting renders identically to
+    // no override at all.
+    property real blurStrength: AppearanceConfigService.effectiveDockBlur
 
     // The edge is owned by KWin's liquid rim, which adapts its light colour
     // (white over dark, dark gold over bright) per backdrop. No client-side
@@ -128,6 +137,7 @@ Item {
     // compositor safely degrades it to adaptive decay 1.
     property bool scrimFixed: false
     property bool scrimGraphite: false
+    property bool scrimPearl: false
     readonly property int scrimTint: scrimTintOverride >= 0
         ? scrimTintOverride
         : (AppearanceConfigService.glassFollowsAppearanceMode
@@ -194,8 +204,14 @@ Item {
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap
-        scrimDecay: root.scrimGraphite ? 3.0
+        scrimDecay: root.scrimPearl ? 4.0
+            : (root.scrimGraphite ? 3.0
             : (root.scrimFixed ? 2.0 : root._effectiveScrimDecay)
+            )
+        // Per-surface blur strength (protocol v4 set_blur). Silent unless the host
+        // opts in, which is why every existing caller renders unchanged.
+        blurEnabled: root.blurOverrideEnabled && root.useKwinEffect
+        blurLevel: AppearanceConfigService.compositorBlurLevel(root.blurStrength)
     }
 
     LiquidGlassSurface {
