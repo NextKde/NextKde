@@ -17,4 +17,5 @@ ArtworkColorSource 1.0 colorize/ArtworkColorSource.qml
 Cam16Hct 1.0 colorize/Cam16Hct.mjs
 singleton ColorScheme 1.0 colorize/ColorScheme.qml
 MaterialColorScheme 1.0 colorize/MaterialColorScheme.mjs
+TraditionalColorScheme 1.0 colorize/TraditionalColorScheme.mjs
 singleton WallpaperColorSource 1.0 colorize/WallpaperColorSource.qml

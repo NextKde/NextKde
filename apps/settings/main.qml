@@ -2245,6 +2245,16 @@ ApplicationWindow {
             ? settingsBridge : null
         property string shellStyle: "macos"
         property string dockWindowAnimationStyle: "scale"
+        // Material's colour source, mirrored from the Shell so the segmented
+        // control reflects what is actually applied.
+        property string materialColorScheme: "monet"
+        // Name of the traditional swatch the accent resolved to, shown as
+        // feedback so "中国传统色" is legible rather than abstract.
+        property string materialAccentName: ""
+        // Representative swatches per colour source, straight from the Shell
+        // (materialColorSwatches on the snapshot). Each entry is
+        // {id, colors: [#rrggbb, ...]}; empty until a wallpaper seed exists.
+        property var colorSchemes: []
         property string errorText: ""
         readonly property var styles: [
             {
@@ -2272,12 +2282,49 @@ ApplicationWindow {
             return style === "scale" || style === "genie"
         }
 
+        function isValidMaterialColorScheme(scheme) {
+            return scheme === "monet" || scheme === "chinese"
+                || scheme === "japanese"
+        }
+
+        function schemeName(id) {
+            return id === "chinese" ? "中国传统色"
+                : (id === "japanese" ? "日系配色" : "莫奈色")
+        }
+
+        // One accent per source, so the selected card reads at a glance the way
+        // the style gallery's cards do.
+        function schemeAccent(id) {
+            return id === "chinese" ? "#c3272b"
+                : (id === "japanese" ? "#bc64a4" : "#6750a4")
+        }
+
         function applyState(state) {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
+            if (isValidMaterialColorScheme(state.materialColorScheme))
+                materialColorScheme = state.materialColorScheme
+            materialAccentName = String(state.materialAccentName ?? "")
+            // The Shell owns the scheme and sends previews; the page never
+            // evaluates colours itself.
+            //
+            // Deliberately NOT Array.isArray(): the value crosses the C++ bridge
+            // as a QVariantList, which QML hands over as an array-like object
+            // that Array.isArray() reports as false. Gating on it silently
+            // emptied the picker — the block rendered with no tiles at all.
+            // JSON string: see the Shell side for why. Parsing here keeps the
+            // bridge free of nested-type conversion.
+            let parsed = []
+            try {
+                parsed = JSON.parse(state.materialColorSwatches || "[]")
+            } catch (error) {
+                parsed = []
+                console.warn("[Settings] colour swatches unreadable: " + error)
+            }
+            colorSchemes = parsed
             errorText = ""
         }
 
@@ -2313,6 +2360,19 @@ ApplicationWindow {
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
+
+        // Only the Material shell style reads the colour source; switching it
+        // is still sent for every style so the stored preference survives a
+        // detour through macOS or Windows 12.
+        function selectMaterialColorScheme(scheme) {
+            if (!bridge || !isValidMaterialColorScheme(scheme)) {
+                errorText = bridge ? "未知的配色来源" : "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateMaterialColorScheme(scheme))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
         Component.onCompleted: refresh()
 
         Text {
@@ -2326,10 +2386,13 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             // The card is as tall as its contents: the style gallery, the
-            // divider, and the embedded appearance controls. Under Material
-            // that controls block is much shorter, so a fixed 550 would leave
-            // a dead band below it.
+            // divider, the Material colour-source control (only present while
+            // Material is selected) and the embedded appearance controls. Under
+            // Material that controls block is much shorter, so a fixed 550
+            // would leave a dead band below it.
             implicitHeight: 16 + styleGallery.height + 13 + 1 + 10
+                + (themeColorSchemeCard.visible
+                    ? themeColorSchemeCard.implicitHeight + 10 : 0)
                 + themeMaterialSettings.implicitHeight + 16
             Layout.preferredHeight: implicitHeight
             radius: 26
@@ -2578,11 +2641,167 @@ ApplicationWindow {
                                   : Qt.rgba(0, 0, 0, 0.12)
             }
 
+            // Material's colour source. Only shown while the Material card is
+            // selected: the choice has no effect on the glass styles, and a
+            // control that does nothing is worse than an absent one.
+            Rectangle {
+                id: themeColorSchemeCard
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: themeMaterialDivider.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 10
+                implicitHeight: 136
+                visible: themePage.shellStyle === "material"
+                radius: 18
+                color: theme.card
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 11
+
+                        SettingIcon { symbol: "◐"; tint: "#8d6e63" }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "主题色系"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: {
+                                    if (themePage.materialColorScheme === "monet")
+                                        return "Material You：按壁纸色相推导整套色调"
+                                    if (themePage.materialAccentName)
+                                        return "当前主色：" + themePage.materialAccentName
+                                    return "壁纸主色没有足够接近的传统色，已回退莫奈"
+                                }
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // Each source is drawn from the Shell's own preview colours,
+                    // so the cards show what this wallpaper actually becomes
+                    // rather than three labels. The big top swatch is the
+                    // accent — the colour a user recognises as theirs — and the
+                    // strip below it carries the companions and both surfaces.
+                    // Never leave the block blank: an empty swatch list means the
+                    // Shell has no wallpaper seed yet, which is a state worth
+                    // naming rather than rendering as nothing.
+                    Text {
+                        Layout.fillWidth: true
+                        visible: themePage.colorSchemes.length === 0
+                        text: "正在等待壁纸取色，稍后这里会出现三张色卡"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 62
+                        visible: themePage.colorSchemes.length > 0
+                        spacing: 10
+
+                        Repeater {
+                            model: themePage.colorSchemes
+
+                            delegate: Rectangle {
+                                id: schemeTile
+                                required property var modelData
+                                readonly property bool chosen:
+                                    themePage.materialColorScheme === modelData.id
+                                readonly property var swatches: modelData.colors
+
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                radius: 12
+                                color: schemeTile.chosen
+                                    ? (theme.dark ? Qt.rgba(1, 1, 1, 0.14)
+                                                  : Qt.rgba(0, 0, 0, 0.06))
+                                    : (theme.dark ? Qt.rgba(1, 1, 1, 0.05)
+                                                  : Qt.rgba(0, 0, 0, 0.025))
+                                border.width: schemeTile.chosen ? 2 : 1
+                                border.color: schemeTile.chosen
+                                    ? themePage.schemeAccent(schemeTile.modelData.id)
+                                    : theme.floatingBorder
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 7
+                                    spacing: 5
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 24
+                                        radius: 6
+                                        color: schemeTile.swatches.length > 0
+                                            ? schemeTile.swatches[0] : "transparent"
+                                    }
+
+                                    Row {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 10
+                                        spacing: 2
+
+                                        Repeater {
+                                            model: schemeTile.swatches.slice(1)
+
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: Math.max(2,
+                                                    (parent.width - 8) / 5)
+                                                height: parent.height
+                                                radius: 3
+                                                color: modelData
+                                            }
+                                        }
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: themePage.schemeName(
+                                            schemeTile.modelData.id)
+                                        color: schemeTile.chosen
+                                            ? theme.primaryText : theme.secondaryText
+                                        font.pixelSize: 11
+                                        font.weight: schemeTile.chosen
+                                            ? Font.DemiBold : Font.Normal
+                                        horizontalAlignment: Text.AlignHCenter
+                                        elide: Text.ElideRight
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: themePage.selectMaterialColorScheme(
+                                        schemeTile.modelData.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             DisplaySettingsPage {
                 id: themeMaterialSettings
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: themeMaterialDivider.bottom
+                anchors.top: themeColorSchemeCard.visible
+                    ? themeColorSchemeCard.bottom : themeMaterialDivider.bottom
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 anchors.topMargin: 10

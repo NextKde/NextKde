@@ -1,13 +1,13 @@
 # 全局外观系统架构
 
-> 状态：Dock 形态、Bar 布局/隐藏、全局图标外观、Glass 预设/同步、Dock 窗口动画与 Material 3 配色已实现（更新至 2026-09-17）。本文是后续开发和 AI 接续工作的规范来源。
+> 状态：Dock 形态、Bar 布局/隐藏、全局图标外观、Glass 预设/同步、Dock 窗口动画与 Material 3 配色（莫奈 / 中国传统色 / 日系配色三种来源）已实现（更新至 2026-09-19）。本文是后续开发和 AI 接续工作的规范来源。
 
 ## 1. 当前能力与边界
 
 外观设置分为彼此正交的维度：
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
-- **Material 3 配色**：壁纸主色作为种子，在进程内生成全套 M3 角色色。算法是 matugen `scheme-vibrant` 的纯 JS 移植，**不需要安装 matugen、Python 或 ImageMagick**。配合 Quickshell 内置 `ColorQuantizer` 完成取色，全链路无外部进程。详见第 10 节。
+- **Material 3 配色**：壁纸主色作为种子，在进程内生成全套 M3 角色色。默认算法是 matugen `scheme-vibrant` 的纯 JS 移植；另有两套传统色方案（`chinese` / `japanese`）把种子吸附到命名色卡，以便主色保留壁纸自身的明度而不是被 Monet 强制到固定色调——三者在 `material` 形态下由设置页切换。**都不需要安装 matugen、Python 或 ImageMagick**，配合 Quickshell 内置 `ColorQuantizer` 完成取色，全链路无外部进程。详见第 10 节。
 - **玻璃材质**：`liquid`、`soft`、`frosted` 三套预设各自保存模糊、液态强度与受限光学参数；当前样式的 `blurStrength` 与 `liquidStrength`（均为 `0.0...1.0`）同步给自定义 KWin `glass` effect，不会修改 KDE 自带的 `Effect-blur`。Quickshell 显式 Blur Region 结合全局 `CornerExponent` 与 per-surface shape/scrim；普通窗口只走同一模糊管线，不执行折射、染色、高光、噪点或圆角裁切。没有 Dock、Bar 或启动器的独立强度接口。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
 - **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入形态 Token。Bar 不随形态分叉。
@@ -84,10 +84,15 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 | `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token；同时托管壁纸取色与 shell 配置之间的两个 `Connections` 适配器 |
 | `shared/qml/colorize/WallpaperColorSource.qml` | 单例。读 Plasma 壁纸配置，解析壁纸包（按屏幕宽高比选图），对外只暴露 `darkMode` 注入与 `paletteChanged` / `paletteCleared` 信号 |
 | `shared/qml/colorize/ArtworkColorSource.qml` | `Item`。用 Quickshell `ColorQuantizer` 从图像抽两个可区分的主色；MPRIS 封面与本地壁纸通用 |
-| `shared/qml/colorize/ColorScheme.qml` | 单例。接收种子色，产出 49 个 M3 角色 × light/dark。纯同步计算，不启动任何进程 |
+| `shared/qml/colorize/ColorScheme.qml` | 单例。接收种子色，按 `scheme` 分派给莫奈 / 中国传统色 / 日系配色，产出 49 个角色 × light/dark。纯同步计算，不启动任何进程 |
 | `shared/qml/colorize/MaterialColorScheme.mjs` | 角色→色族/色调映射、各族随色调变化的色度曲线、变体（vibrant / tonal-spot）的色相旋转表 |
+| `shared/qml/colorize/TraditionalColorScheme.mjs` | 传统色方案：把种子色吸附到色卡最近邻（保真），围绕它派生其余角色，对比度不足时调整前景而不是色调；色卡无法表达时整体回退莫奈 |
+| `shared/qml/colorize/ChineseColors.mjs` | 纯数据表：526 个中国传统色（色名 + hex） |
+| `shared/qml/colorize/JapaneseColors.mjs` | 纯数据表：228 个日本传统色（色名 + hex） |
 | `shared/qml/colorize/Cam16Hct.mjs` | CAM16/HCT 色彩外观模型。MCU 的 `hct/*.ts`、`viewing_conditions.ts`、`hct_solver.ts` 移植版，对外提供 `hexToHct` / `hctToHex` |
 | `shell/desktop/modules/common/IconAppearanceService.qml` | 全局图标模式、不透明度、染色与旧 Dock 配置迁移 |
+| `shell/desktop/modules/common/MaterialCardSurface.qml` | Material 形态的卡片表面：七张卡共用的漆层（`fillColor` / `fillOpacity`，无描边）+ 各自轮廓的 blur region（圆角矩形或花瓣）；不经过 `LiquidGlassPanel`、不声明 `SurfaceShape`，所以合成器只给磨砂、不给液态材质 |
+| `shell/desktop/modules/common/FlowerBlurRegion.qml` | 花瓣形状的模糊区域：对 MaterialFlower 的极坐标轮廓做扫描线填充，32 行 × 2 槽位共 64 个静态 `Region`；供 Material 表面里「表面即形状」的卡片（时钟）使用 |
 | `shell/desktop/modules/common/qmldir` | 注册公共组件与 singleton |
 | `shell/desktop/modules/common/BundledIcons.qml` | Shell 自带图案的登记表，并为少数系统主题图标提供回退解析 |
 | `shell/desktop/modules/common/BundledIcon.qml` | 统一渲染已登记的 Shell 图案 |
@@ -128,11 +133,11 @@ Shell 自带图案由 `BundledIcons` 的稳定名称登记，消费者使用
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 26：
+schema 27：
 
 ```json
 {
-  "version": 26,
+  "version": 27,
   "globalBlurStrength": 0.0,
   "globalLiquidStrength": 1.0,
   "materialPresetBlurStrength": 0.1,
@@ -149,6 +154,7 @@ schema 26：
   "liquidStrength": 1.0,
   "shellStyle": "macos",
   "themeMode": "system",
+  "materialColorScheme": "monet",
   "glassFollowsAppearanceMode": false,
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
@@ -159,8 +165,8 @@ schema 26：
 
 - 每个玻璃预设还持久化 `Refraction`、`EdgeSize`、`NormalPow`、`RGBFringing`、`OffsetStrength`、`Softness` 和 `Reflection`；示例只列出代表字段。预设参数均由范围表校验，不能以手改配置绕过设置页的有效范围。
 - 默认 `glassStyle` 为 `liquid`，`shellStyle` 为 `macos`，`barLayoutMode` 为 `transparent`，`themeMode` 为 `system`（合法值 `system` / `light` / `dark`）。切换玻璃样式会应用该样式的完整预设；Material 使用独立的模糊预设且禁用液态折射。
-- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0。读取旧文件后会写回 schema 26。
-- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法或缺失的 `themeMode` 回退为 `system`；非法强度不会覆盖内存默认值。
+- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0，v27 增加 Material 配色来源。读取旧文件后会写回 schema 27。
+- 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法或缺失的 `themeMode` 回退为 `system`；非法或缺失的 `materialColorScheme` 回退为 `monet`（v27 之前写出的文件因此保持原有莫奈配色，升级不会改变观感）；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
 - 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
 - `resetStrengths()` 只恢复 `0.42 / 1.0`，不重置主题形态或 Dock 数据。
@@ -182,6 +188,7 @@ target：`appearance-settings`。所有更新都返回完整 JSON snapshot。
 | `updateGlobalIconOpacity` | real | 更新非彩色图标不透明度 |
 | `updateGlobalIconTintColor` | string | 更新全局染色颜色（`#rrggbb`） |
 | `updateShellStyle` | string | 更新 Shell 形态 |
+| `updateMaterialColorScheme` | `monet` / `chinese` / `japanese` | 更新 Material 风格的配色来源（仅 `material` 形态消费） |
 | `updateGlassFollowsAppearanceMode` | bool | 控制 per-surface 对比 scrim 是否随明暗外观切换 |
 | `updateBarIntegratedWithDock` | bool | 更新 Bar/Dock 宿主策略 |
 | `updateBarVisibilityMode` | string | 更新 Bar 显示方式（`always`/`smart`/`persistent`） |
@@ -210,6 +217,8 @@ snapshot 示例：
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
   "shellStyle": "macos",
+  "materialColorScheme": "monet",
+  "materialAccentName": "",
   "glassFollowsAppearanceMode": false,
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
@@ -335,6 +344,8 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 - 侧栏顺序为：显示 → 主题 → 顶栏 → Dock → 启动台 → 快捷键 → 接入状态。
 - “显示”保留系统明暗与玻璃强度；“主题”只选择 Shell 形态，避免把配色与形态耦合。
 - 三张卡片展示 Bar、Dock 和桌面卡片的形态缩略图；点击后同步调用 IPC，成功响应决定最终选中态。
+- 选择 Material 形态后，卡片下方出现“主题色系”：三张色卡并列（莫奈色 / 中国传统色 / 日系配色），每张用**该方案在当前壁纸下的真实颜色**画出（主色大块 + 伴随色与两种外观的表面色条），选中态用各自的强调色描边，并显示当前吸附到的传统色名。换成其它形态时这一块连同其高度一起消失，因为玻璃形态不消费这个设置；切换仍写入配置，所以在形态之间往返不会丢失选择。
+- 色卡的颜色由 Shell 计算并经 snapshot 的 `materialColorSwatches` 下发（`ColorScheme.previewSwatches()`）。设置页是独立进程，不评估配色，也不为了取预览而反复切换 `scheme`——那会让整个 shell 每个 snapshot 重绘三次。
 - 桌面 Shell 未运行、IPC 超时或响应不完整时，页面显示 `SettingsBridge.lastError`，不得伪造保存成功。
 - Dock、启动台、快速搜索、Bar 与 DeskCenter 已接入全局图标外观；DeskCenter 的形态 Token 仍待后续阶段接入。
 
@@ -446,9 +457,162 @@ QML/JS 里完全可以承受：单次生成整套 49×2 角色耗时在毫秒级
 5. `ColorScheme.qml` 保留 `color(role, darkMode, fallback)` 签名以兼容既有消费点，
    但 `AppearanceTokens` 已不再传 fallback：调色板在单例加载时就会用
    `AppearanceTokens.seedColor`（KDE 强调色）预置，壁纸取色完成后替换。
-6. `.mjs` 必须列在 `shared/qml/CMakeLists.txt` 的 `QML_FILES` 中，否则不会打进
-   `Kos.Ui` 模块资源。`MaterialColorScheme.mjs` 依赖 `Cam16Hct.mjs`，**两个都要
-   列出**（相对 import 在打包后由 QML 模块解析，漏一个会在运行时才炸）。
+6. `.mjs` 并没有进编译版 `Kos.Ui`。本节此前声称它们必须列在
+   `shared/qml/CMakeLists.txt` 的 `QML_FILES` 中——**这个说法与现状不符**：
+   该列表里只有 `foundation/` 和 `controls/`，整个 `colorize/` 目录都不在编译
+   模块内。目前不构成故障，因为 `apps/` 只用 `foundation/AppTheme.qml`，而 shell
+   走源码运行（`shell/Kos/Ui/qmldir` + 符号链接），由 QML 的相对 import 解析
+   `.mjs`。新增文件时因此有两件事要做、一件不要指望：
+   - 必须：确认相对 import 的依赖文件都在同目录（`TraditionalColorScheme.mjs`
+     依赖 `ChineseColors.mjs`、`JapaneseColors.mjs`、`Cam16Hct.mjs`、
+     `MaterialColorScheme.mjs`，漏一个只会在运行时炸）。
+   - 必须：`shell/Kos/Ui/qmldir` 同步加条目，否则源码运行找不到类型。
+   - 不要指望：加了 `.mjs` 就自动进编译模块。真要给 `apps/` 用，得先把整个
+     `colorize/` 目录补进 `QML_FILES`。
+   `tests/traditional-color/run.mjs` 用符号链接树在真实 Quickshell 下加载这些
+   模块，正是为了覆盖「Node 能跑、QML 加载不了」这一类失败。
+
+### 10.5 中国传统色 / 日系配色
+
+`shellStyle === "material"` 时，设置页在风格卡片下面提供三个配色来源（`materialColorScheme`）：
+
+| 值 | 算法 | 色卡 |
+| --- | --- | --- |
+| `monet`（默认） | Material You / Monet，见 10.1–10.4 | — |
+| `chinese` | `TraditionalColorScheme.mjs` | 526 个中国传统色 |
+| `japanese` | 同一算法 | 228 个日本传统色 |
+
+**为什么需要它。** Monet 保色相、不保色调。用本仓库的实现实测：主色与种子的色相
+偏差全部 < 1°，但明度被强制改写——浅色模式固定压到 tone 40（实测压暗 23–46 个
+tone），深色模式固定抬到 tone 80（抬亮 32–64）。`#1a2847`（深藏青）在深色模式
+变成 `#b0c6ff`，Δ明度 63.6；表面色一律被去彩到 chroma ~2，不同壁纸拿到同一套
+灰。用户感到的「跟我壁纸完全不是一个色」几乎全部来自这里，而不是色相。
+
+**做法。** 种子色在 HCT 空间吸附到色卡最近邻，基准色直接取该色卡色本身，不再
+重新上色调：
+
+1. **是否比较色相只看种子**（`NEUTRAL_CUTOFF = 2.5`）。早先版本改成「任一侧近
+   中性就丢弃色相项」，等于给色卡里的灰色免考：`#1a2847`（chroma 5.9）因此匹配
+   到色相 3° 的低彩度灰，而不是色相 269° 的 钢青（距离 0.084 对 0.141）。改成
+   只看种子后，低彩度色卡色仍要站在色环正确的位置上。
+2. **色相项权重 4.0 对彩度 1.0。** 权重低时 `#7fecad` 会为 2.5 的彩度差放弃 6°
+   的色相优势，去选 16° 之外的色。
+3. **`primary` 两个模式都用该色卡色**，`on_primary` 按该色**真实明度**在两个
+   方向试探，直到满足 4.5:1，而不是套用 M3 固定的 100/20——传统色可以是
+   tone 8（墨）也可以是 tone 95（月白），固定前景必然有读不清的组合。
+4. `secondary` / `tertiary` / `error` 同样保真；容器与 `on_*_container` 由基准色
+   的色相彩度派生。曾经只让 `primary` 保真、其余走 M3 色调，结果 `on_secondary`
+   落在 `secondary` 上只有 1.70:1。
+5. **表面角色从色卡的低彩度色（chroma < 6）里按色调取**，浅色主题因此落在
+   象牙白/月白系、深色主题落在玄/墨系；同一色调恒定映射到同一色，`surface` 与
+   `background` 不会因为调用先后而分叉。
+6. **色卡无法表达种子时整套回退莫奈**（色相差 > 42°、明度差 > 22、或彩度落差
+   > 34），`variant` 一并转发，输出与直接调用 `MaterialColorScheme` 逐字节相同。
+
+**实测**（600 个覆盖 HCT 空间的种子；`tests/traditional-color/test_traditional_color.mjs` 锁定这些数字）：
+
+| 指标 | 传统色 | 莫奈 |
+| --- | --- | --- |
+| 主色与种子的 Δ明度（平均） | **1.4** | 17.6 |
+| 匹配色相误差 p50 / p90 | 5.3° / 14.3° | — |
+| 前景对比度不达标次数 | **0** | — |
+| 回退莫奈比例 | 0/500 | — |
+
+回退率接近 0 是因为色卡在色相上几乎连续。兜底条件仍被测试**直接驱动**（注入一张
+单色色卡）——否则它会悄悄变成死代码。
+
+另有一条实测事实值得记住：sRGB 在 HCT 空间的彩度上限约 27（tone 50 时 hue 0 为
+24.8、hue 180 为 10.7），而两份色卡也在 0–27 内，所以「彩度落差过大」这一条在现
+有色卡下永不触发。保留它是为了色卡或色彩空间放宽时仍然正确。
+
+**表面着色（让切换看得见）。** 只让 `primary` 保真是不够的：`material` 形态的大面积表面来自 `layer0..4`，而它们原先在浅色模式下几乎不着色（`layer0` 只混 1%，`layer1..4` 完全不混），深色模式也只混 7–12%。实测后果是切换配色来源时 Dock 底色从 `#eefafe` 变到 `#ecf5f0`——两个都是近白，用户完全看不出区别。
+
+现在 `layer0..4` 在两种外观下都按主色着色：`layer0` 为浅色 0.20 / 深色 0.30，逐级递减到 `layer4` 的 0.11 / 0.18。这些数字是定标出来的，不是拍的——在 200 个种子 × 2 方案 × 2 模式上最差的正文对比度是 5.71:1（要求 4.5:1），再上一档（0.40）掉到 4.0:1 因此被否掉。`tests/traditional-color/test_traditional_color.mjs` 会**从 `AppearanceTokens.qml` 源码读出这些比例**再复算对比度，并断言一次配色来源切换至少能把 Dock 底色移动 8/255（中位数实测 14/255），防止再次出现「数值合法但看不见」的情况。
+
+Dock 以 `dockOpacity 0.50` 绘制，屏幕上只留下一半着色——这是着色值必须高于「看起来合理」的原因。Bar 融合进 Dock（`barIntegratedWithDock`）时同理。
+
+这些比例必须声明在 `AppearanceTokens` **singleton 自身**上，不能放进嵌套的 `colors` 对象。曾经把它们定义在 `colors` 内部、却用 `tokens._layerTint0` 引用（正确路径是 `tokens.colors._layerTint0`），路径解析成 `undefined`，`_mix` 里 `(tint.r - base.r) * undefined` 得到 NaN，于是 `layer0..4` 全部变成 `Qt.rgba(NaN, NaN, NaN, 1)`。无效颜色渲染为黑：**卡片文字立刻不可读**；而同一个坏值在任何配色来源下都相同，所以**切换看起来毫无作用**，只有直接用 `primary` 的 DeskCenter 圆环还在正常变色——三个症状同源。`tests/traditional-color/run.mjs` 现在会真正实例化 `AppearanceTokens`（而不仅是 `ColorScheme`），断言这些比例可解析、五个 layer 都是有效颜色、且随配色来源变化。
+
+**Canvas 消费者需要一个统一信号。** 逐帧读取配色的组件（DeskCenter 的时钟指针、CPU/内存圆环）只在显式 `requestPaint()` 时重绘，而它们原来的重绘清单只覆盖日期、指标和图标染色——切形态（material → macos）或切配色来源时，指针与圆环会停在旧颜色上。因此 `ColorScheme` 暴露 `revision`（每次重建递增），`AppearanceTokens` 转发为 `colorRevision`，Canvas 只需监听这一个信号。`tests/traditional-color/shell.qml` 断言它确实递增。
+
+**色卡来源与许可。** `ChineseColors.mjs` 取自 zhongguose.com 的公开色表；
+`JapaneseColors.mjs` 取自维基百科 *Traditional colors of Japan*（CC BY-SA 4.0，
+再分发需署名）。两份都只保留「色名 + hex」并做同色值去重，是纯数据——换表、裁剪
+表都不需要改算法。
+
+**原色与派生（实测每个模式 49 个角色）。** 约 **27 个是色卡原色**（有色名可查），其余围绕它们派生；两种模式合计原色占比：中文 **56.3%**、日系 **46.7%**：
+
+| 角色 | 来源 |
+| --- | --- |
+| `primary` / `secondary` / `tertiary` / `error` 及对应 `*_fixed` | **色卡原色**——灰蓝 / 沙鱼灰 / 牛角灰 / 殷红 |
+| `*_container` | **色卡原色**——云峰白 / 淡藤萝紫 / 淡肉色（色相跟随基准色，明度落在 90 / 30） |
+| `surface*` / `background` / `on_surface` / `outline*` / `surface_variant` / `inverse_*` | **色卡低彩度原色**——月白 / 银白 / 艾背绿 / 云峰白 / 嫩灰 |
+| 全部 `on_*` 前景、`*_fixed_dim`、`inverse_primary`、`surface_tint` | 派生：由基准色的色相与彩度算出，hex 不在色卡中 |
+
+container 的搜索由**明度主导**（先满足 tone，再比色相，彩度只用于打破平局）——这个角色一旦偏离自己的层级就会破坏 surface 排序；色卡里找不到接近落点时退回派生。实测 container 与 primary 的色相差 < 2.1°，同族关系没有因为改取原色而变松。`on_*_container` 的前景跟随 container 的**实际**颜色计算对比度，与 accent 的处理一致。
+
+派生不是偷懒。M3 的 49 个角色之间存在层级与对比度约束，而色卡是 526 个离散色，不可能为每个角色都提供位置合适的色；基准色保真、其余派生，才能同时满足「贴壁纸」与「container 与 primary 同族、`on_*` 对底色达标」。
+
+> **修正记录：** `error` 一度全部是派生的。原因是我把它的请求彩度写成 M3 的 60，而 sRGB 在 HCT 中最大彩度约 27，`acceptMatch` 因此拒绝了每一个候选并静默退回派生。改成 25 后它解析为 殷红 / 丽春红 这类真实传统红，原色占比从 46.9% 升到 49.0%。
+
+**已知限制。** 传统色没有官方明暗对偶表：`*_fixed*` 按「两模式同色」处理（与 M3 的 fixed 语义一致）。设置页只显示主色的色名；色卡稀疏导致回退时显示「已回退莫奈」。
+
+### 10.6 Material 的卡片表面与花瓣轮廓
+
+Material 形态有自己的一套卡片表面组件 `MaterialCardSurface`，桌面七张卡全部走它；液态玻璃形态继续走 `ControlCenterCard` + `LiquidGlassPanel`。两者对 KWin 的索取完全不同：
+
+| | glass（macos / windows12） | Material |
+| --- | --- | --- |
+| 卡片表面 | KWin 画（`LiquidGlassPanel`，`fallbackEnabled: false`） | 卡片自己画（QML tonal 填充） |
+| 向 KWin 声明 | 每张卡一个 `SurfaceShape` | **一个都不声明** |
+| blur region | 面板的圆角矩形区域 | **每张卡各自的轮廓**（圆角矩形 / 花瓣） |
+| 合成器效果 | 液态材质：模糊 + 折射 + glints + noise | 普通 blur 管线：纯磨砂 |
+
+**液态材质的开关是「有没有声明形状」，不是「是不是 Quickshell 窗口」**——`blur.cpp` 里：
+
+```cpp
+const bool usesGlobalQuickshellMaterial = isQuickshellWindowSurface
+    && !declaredSurfaceShapes.isEmpty();
+```
+
+Material 卡一律不声明 `SurfaceShape`：`DeskWidgetCard` 只实例化**当前形态的后端**（`Loader`），Material 下根本不创建 `ControlCenterCard`，所以窗口一份声明都没有，KWin 在 `shapesFor()` 里也就没有这个 surface。整个窗口于是退回普通 blur 管线——没有折射、没有 glints、没有 liquid noise。这就是两种形态观感差异的来源：同一个 `DeskCenterWindow`，glass 下每张卡都声明形状、整窗走液态材质；Material 下一张都不声明、整窗只有模糊。
+
+**两张形态是怎么统一的。** 全链路只有三处知道形态，而且边界不重叠：
+
+| 层 | 职责 | 位置 |
+| --- | --- | --- |
+| 形态策略 | 要不要背景、用哪个后端、谁画漆 | `AppearanceTokens.surface`：`treatment` / `cardBackend` / `paintInQml`。加一种形态就是在这里加一行映射 |
+| 表面出口 | 每个后端只承诺一个 `blurRegion` | `DeskWidgetCard`（`Loader` 选后端）→ `DeskCenterWindow`（七张卡的 region union 成一个窗口 `BackgroundEffect`） |
+| 合成器材质 | 声明了形状 → 液态；一个都没声明 → 磨砂 | `blur.cpp` 的 `usesGlobalQuickshellMaterial` |
+
+QML 只决定几何与漆，合成器只决定材质。卡片和窗口都不判断当前是哪种形态——`DeskWidgetCard` 里 `AppearanceTokens.isMaterial` 出现次数为 **0**。
+
+**画内容的人只需要认识一个出口。** widget 内部的绘制也不判断形态，而是问 `AppearanceTokens.content`：
+
+| 需求 | 写法 |
+| --- | --- |
+| 卡片背后有没有背板（墨色能不能直接压在壁纸上） | `AppearanceTokens.content.onBackdrop` |
+| 墨色 / 带透明度的墨色 | `AppearanceTokens.content.ink("#7d7782")`、`ink("#7d7782", 0.72)` |
+| 语义强调色：Material 用主题角色，其它形态用墨或 widget 自己的色 | `AppearanceTokens.content.accent(AppearanceTokens.colors.tertiary, "#30d158")` |
+
+这三个在两种形态下与原三元表达式**逐字段等价**（`content.onBackdrop` 就是原来各 widget 自己重复声明的 `glassMode`），所以把 `glassMode ? … : …` 换成它们不会改观感。`DeskCenterWindow` 里原本 109 处形态判断，其中 71 处收进了这三个出口（`ink` 44、`onBackdrop` 20、`accent` 7）；剩下的十余处是**真实的设计差异**（比如两张卡在 Material 下用主题色画表盘、在玻璃形态下显示另一套布局），不属于被迫的形态知识。
+
+`MaterialCardSurface` 同时提供**漆层**和**轮廓区域**，七张卡共用一套参数：同一个 `fillColor`（`layer1`）、同一个 `fillOpacity`（`widgetOpacity`）、同样 `border.width: 0`、同样没有描边。时钟只是把轮廓换成花瓣——填充色、不透明度、磨砂与其它卡逐字段相同，**形状是唯一的差别**。花瓣之外直接透出壁纸（没有任何矩形材质板），磨砂只裁剪花瓣内容区。宿主用 `DeskWidgetCard.flowerShapedSurface: true` 声明这一点（`DeskCenterWindow` 只对 `clock` 传），组件里不写死任何 widget 名字。
+
+漆层与时钟的表盘是两层：`MaterialCardSurface` 画表面（花瓣填充 + 花瓣区域），`DeskCenterWindow` 的内容层只加表盘与倒计时。时钟**不在内容层再画一遍花瓣**——那正是它此前看起来是另一张卡的原因（自己的颜色、自己的 0.34 不透明度、自己的 1px 描边）。
+
+`FlowerBlurRegion` 的路径选择：
+
+| 方案 | 结论 |
+| --- | --- |
+| 若干个 `RegionShape.Ellipse` 摆成花瓣 | **不可行**。`Ellipse` 是轴对齐的，而十二个瓣是径向分布的，摆不出这个形状；用内切圆代替则模糊范围比花瓣小得多 |
+| 用 `Intersection`（Combine / Subtract / Intersect / Xor）拿圆拼出正弦瓣 | **不可行**。正弦瓣不是任何有限圆组合的结果 |
+| JS 动态生成矩形列表塞进 `Region.regions` | **不可行**。`regions` 是 `readonly` 的 `list<PendingRegion>`，只能靠声明子项填充 |
+| 扫描线填充 + 固定槽位 | **采用**。`Region` 的 `defaultProperty` 就是 `regions`，所以静态声明 64 个 `Region` 子项，每个绑定到预算好的扫描线段 |
+
+几何与 `MaterialFlower` 同源：`r(θ) = R · (1 − A + A·sin(lobes·θ))`，`R` 由 `(min(w,h) − inset) / 2 − outlineInset` 得出；`inset: 18` 必须与 `MaterialCardSurface` 画花瓣时留的边距一致，否则磨砂边缘落不到轮廓上。
+
+每行最多两次穿越——最小半径是 `R·(1−2A) = 0.85R > 0`，形状中心恒为实心——所以「每行 2 槽位」是**精确**表达而非近似。实测区域覆盖轮廓面积的 **100.18%**，缺口只来自行的量化。改 `sliceCount` 时必须重新生成那 64 个子项：槽位是静态声明的，行会静默丢失而不是报错。
 
 ## 11. 验证清单
 
@@ -459,6 +623,8 @@ qmllint -I shared/qml -I shell -I . \
   shell/desktop/modules/common/AppearanceTokens.qml \
   shared/qml/colorize/ColorScheme.qml
 node tests/color-scheme/test_color_scheme.mjs
+node tests/traditional-color/test_traditional_color.mjs
+node tests/traditional-color/run.mjs
 node shell/desktop/modules/dock/test_wallpaper_color_source.mjs
 node shell/desktop/modules/dock/test_adaptive.mjs
 node shell/desktop/modules/dock/test_autohide.mjs

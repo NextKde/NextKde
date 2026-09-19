@@ -138,6 +138,13 @@ QtObject {
     // settings page historically persisted this value in DockConfigService;
     // that service mirrors the legacy value here during migration.
     property string themeMode: "system" // "system" | "light" | "dark"
+    // Which colour source the Material 3 scheme derives its palette from.
+    // "monet" is Material You and stays the default. "chinese" (中国传统色) and
+    // "japanese" (日本の伝統色) snap the wallpaper seed to the nearest named
+    // swatch so the accent keeps the wallpaper's own tone instead of being
+    // forced to Monet's; both fall back to Monet for seeds the table cannot
+    // express. Only the "material" shell style reads this.
+    property string materialColorScheme: "monet"
     // AppearanceTokens' wallpaper bridge persists this once the shared
     // WallpaperColorSource reports a sampled seed; AppearanceTokens falls back
     // to the KDE accent until then.
@@ -159,6 +166,11 @@ QtObject {
 
     function isValidThemeMode(value) {
         return value === "system" || value === "light" || value === "dark"
+    }
+
+    function isValidMaterialColorScheme(value) {
+        return value === "monet" || value === "chinese"
+            || value === "japanese"
     }
 
     function isValidBarVisibilityMode(value) {
@@ -374,6 +386,16 @@ QtObject {
         return true
     }
 
+    function updateMaterialColorScheme(rawScheme) {
+        const scheme = String(rawScheme)
+        if (!isValidMaterialColorScheme(scheme)
+                || materialColorScheme === scheme)
+            return false
+        materialColorScheme = scheme
+        saveTimer.restart()
+        return true
+    }
+
     function updateBarIntegratedWithDock(rawValue) {
         const value = _toBool(rawValue)
         if (barIntegratedWithDock === value)
@@ -480,7 +502,7 @@ QtObject {
 
     function _save() {
         const payload = JSON.stringify({
-            version: 26,
+            version: 27,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -516,6 +538,7 @@ QtObject {
             liquidStrength: service.globalLiquidStrength,
             shellStyle: service.shellStyle,
             themeMode: service.themeMode,
+            materialColorScheme: service.materialColorScheme,
             glassFollowsAppearanceMode: service.glassFollowsAppearanceMode,
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
@@ -612,6 +635,7 @@ QtObject {
                         ?? object.liquidStrength ?? object.dockLiquidStrength)
                     const style = String(object.shellStyle ?? "")
                     const themeMode = String(object.themeMode ?? "")
+                    const colorScheme = String(object.materialColorScheme ?? "")
                     const hasBarIntegration = typeof object.barIntegratedWithDock === "boolean"
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
@@ -638,6 +662,11 @@ QtObject {
                         service.shellStyle = style
                     if (service.isValidThemeMode(themeMode))
                         service.themeMode = themeMode
+                    // v27 adds the Material colour source. Files written before
+                    // it keep the "monet" default, which is exactly the
+                    // behaviour those installations already had.
+                    if (service.isValidMaterialColorScheme(colorScheme))
+                        service.materialColorScheme = colorScheme
                     if (hasBarIntegration)
                         service.barIntegratedWithDock = object.barIntegratedWithDock
                     if (hasGlassFollows)
@@ -751,9 +780,10 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 26
+                    if (Number(object.version) !== 27
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
+                            || !service.isValidMaterialColorScheme(colorScheme)
                             || !hasBarIntegration
                             || !hasGlassFollows
                             || !service.isValidBarVisibilityMode(barVisibility)
