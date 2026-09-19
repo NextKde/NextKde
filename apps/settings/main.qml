@@ -59,6 +59,12 @@ ApplicationWindow {
         // (rebuilt from the accent the shell sent); the iPadOS form keeps exactly
         // the literal this window was designed with -- switching the shell style
         // repaints the whole app, and nothing drifts in between.
+        // Role names are the shared implementation's own (ROLE_SPEC keys: 
+        // surface_container_low, on_surface_variant, ...), not camelCase. They
+        // have to be spelled the way MaterialColorScheme.mjs builds them: a name
+        // it does not emit resolves to undefined, and every one of those used to
+        // fall back to the iPadOS literal, which left the whole window looking
+        // like the other form while claiming to be Material.
         function role(name, iPadOSValue) {
             if (!window.materialForm)
                 return iPadOSValue
@@ -66,24 +72,32 @@ ApplicationWindow {
             return value === undefined ? iPadOSValue : value
         }
         readonly property color background: role("surface", dark ? "#000000" : "#f2f2f7")
-        readonly property color sidebar: role("surfaceContainerLow", dark ? "#1c1c1e" : "#fafbff")
+        readonly property color sidebar: role("surface_container_low", dark ? "#1c1c1e" : "#fafbff")
         readonly property color contentSurface: role("surface", dark ? "#000000" : "#fafbff")
-        readonly property color primaryText: role("onSurface", dark ? "#f5f5f7" : "#1c1c1e")
-        readonly property color secondaryText: role("onSurfaceVariant", dark ? "#98989d" : "#6d6d72")
+        readonly property color primaryText: role("on_surface", dark ? "#f5f5f7" : "#1c1c1e")
+        readonly property color secondaryText: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
         readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
-        readonly property color card: role("surfaceContainer", dark ? "#1c1c1e" : "#ffffff")
-        readonly property color separator: role("outlineVariant", dark ? "#38383a" : "#e5e5ea")
-        readonly property color divider: role("outlineVariant", dark ? "#2c2c2e" : "#d1d1d6")
-        readonly property color searchField: role("surfaceContainerHigh", dark ? "#2c2c2e" : "#e3e3e8")
+        readonly property color card: role("surface_container", dark ? "#1c1c1e" : "#ffffff")
+        readonly property color separator: role("outline_variant", dark ? "#38383a" : "#e5e5ea")
+        readonly property color divider: role("outline_variant", dark ? "#2c2c2e" : "#d1d1d6")
+        readonly property color searchField: role("surface_container_high", dark ? "#2c2c2e" : "#e3e3e8")
         readonly property color selected: role("primary", dark ? "#0a84ff" : "#d9e9ff")
         // The container a selected item sits in. M3 carries selection with
         // secondaryContainer; the iPadOS form keeps the translucent wash.
-        readonly property color selectedContainer: role("secondaryContainer", dark
+        readonly property color selectedContainer: role("secondary_container", dark
             ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.06))
-        readonly property color sidebarHover: role("surfaceContainerHigh", dark
+        readonly property color sidebarHover: role("surface_container_high", dark
             ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045))
         readonly property color chevron: role("outline", dark ? "#636366" : "#c7c7cc")
-        readonly property color iconForeground: role("onSurface", "#ffffff")
+        readonly property color iconForeground: role("on_surface", "#ffffff")
+        // M3's navigation drawer carries a selected item as a secondaryContainer
+        // pill with onSecondaryContainer ink, and leaves unselected icons
+        // monochrome -- the coloured chip under each icon is the iPadOS form's
+        // own furniture, so it only exists there.
+        readonly property color iconMuted: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
+        readonly property color selectedForeground: role("on_secondary_container", dark ? "#ffffff" : "#00325b")
+        // Controls that take a single accent (sliders, switches) read this.
+        readonly property color accent: role("primary", "#0a84ff")
         readonly property color floatingBorder: role("outline", dark
             ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055))
         readonly property color floatingShadow: dark
@@ -158,17 +172,21 @@ ApplicationWindow {
     component SettingIcon: Rectangle {
         required property string symbol
         required property color tint
+        property bool highlighted: false
+        readonly property bool flat: window.materialForm
         width: 29
         height: 29
-        radius: 10
-        color: tint
+        radius: flat ? 0 : 10
+        color: flat ? "transparent" : tint
         Text {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: -0.5
             text: symbol
-            color: theme.iconForeground
+            color: parent.flat
+                ? (parent.highlighted ? theme.selectedForeground : theme.iconMuted)
+                : theme.iconForeground
             font.pixelSize: 14
-            font.weight: Font.DemiBold
+            font.weight: parent.flat ? Font.Medium : Font.DemiBold
         }
     }
 
@@ -185,8 +203,12 @@ ApplicationWindow {
         visible: window.searchText.length === 0
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
-            radius: 18
-            color: parent.highlighted ? theme.selected
+            // M3's drawer items are full-round pills that carry selection in
+            // secondaryContainer; the iPadOS form keeps its squircle of tinted
+            // wash.
+            radius: window.materialForm ? height / 2 : 18
+            color: parent.highlighted
+                ? (window.materialForm ? theme.selectedContainer : theme.selected)
                 : (parent.hovered ? theme.sidebarHover : "transparent")
         }
         contentItem: Item {
@@ -197,6 +219,7 @@ ApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 symbol: navSymbol
                 tint: navTint
+                highlighted: window.currentPage === pageIndex
             }
             Text {
                 anchors.left: sidebarIcon.right
@@ -204,10 +227,12 @@ ApplicationWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: label
-                color: theme.primaryText
+                color: window.currentPage === pageIndex
+                    && window.materialForm ? theme.selectedForeground : theme.primaryText
                 font.pixelSize: 13
-                font.weight: window.currentPage === pageIndex
-                    ? Font.DemiBold : Font.Normal
+                font.weight: window.materialForm
+                    ? (window.currentPage === pageIndex ? Font.Medium : Font.Normal)
+                    : (window.currentPage === pageIndex ? Font.DemiBold : Font.Normal)
                 elide: Text.ElideRight
             }
         }
@@ -866,6 +891,10 @@ ApplicationWindow {
                             font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: (dockPage.dockHeight - 40) / 60
                             trackColor: theme.divider
@@ -1103,6 +1132,10 @@ ApplicationWindow {
                             font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.iconOpacity
                             trackColor: theme.divider
@@ -1355,6 +1388,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.dockBlurStrength
                             trackColor: theme.divider
@@ -1399,6 +1436,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.dockLiquidStrength
                             trackColor: theme.divider
@@ -1658,7 +1699,11 @@ ApplicationWindow {
                             width: 64
                             height: 25
                             checked: displayPage.glassFollowsAppearanceMode
-                            accentColor: theme.role("primary", "#0a84ff")
+                            // The shared controls carry the host's palette, so the
+                            // Material form hands them the Material accent: their
+                            // own default is the iPadOS blue this window was
+                            // designed with.
+                            accentColor: theme.accent
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 displayPage.saveGlassFollowsAppearanceMode(checked)
@@ -1756,6 +1801,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: displayPage.blurStrength
                             trackColor: theme.divider
@@ -1802,6 +1851,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: displayPage.liquidStrength
                             trackColor: theme.divider
@@ -1988,6 +2041,10 @@ ApplicationWindow {
                                 horizontalAlignment: Text.AlignRight
                             }
                             LiquidControls.LiquidSlider {
+                                // The shared controls carry the host's palette, so the
+                                // Material form has to hand them the Material accent: their own
+                                // default is the iPadOS blue this window was designed with.
+                                accentColor: theme.accent
                                 Layout.preferredWidth: 220
                                 visible: (modelData.type === "int" || modelData.type === "real")
                                     && modelData.key !== "TintMode"
@@ -2217,6 +2274,10 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         Text { text: Math.round(iconAppearance.iconOpacity * 100) + "%"; color: theme.secondaryText; font.pixelSize: 12 }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190; value: iconAppearance.iconOpacity; trackColor: theme.divider
                             onPreviewChanged: function(position) { iconAppearance.iconOpacity = Math.max(0.1, position); iconAppearance.opacityDirty = true }
                             onCommitRequested: iconAppearance.commitOpacity()
@@ -2342,8 +2403,11 @@ ApplicationWindow {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
-            // The shared controls draw in the shape the shell is using.
-            LiquidControls.ControlForm.materialForm = isMaterialDesign
+            // The shared controls draw in the shape the shell is using. This
+            // object has no isMaterialDesign of its own -- reading the window's
+            // state is what keeps the assignment from throwing a ReferenceError
+            // and taking the rest of applyState() down with it.
+            LiquidControls.ControlForm.materialForm = window.materialForm
                         // The window palette follows the same style.
             window.shellStyle = shellStyle
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
@@ -3337,6 +3401,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: barPage.barBlurStrength
                             trackColor: theme.divider
@@ -3381,6 +3449,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: barPage.barLiquidStrength
                             trackColor: theme.divider
