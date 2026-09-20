@@ -306,10 +306,11 @@ import { JAPANESE_COLORS } from "../../shared/qml/colorize/JapaneseColors.mjs";
 }
 
 // ── layer tint readability ────────────────────────────────────────────────
-// Every Material surface is its role tinted with the accent, and the Dock then
-// paints layer0 through dockOpacity 0.50 — so only half of any tint survives on
-// screen. Raising the tint is what makes a colour-source switch visible at all;
-// raising it too far makes label text unreadable.
+// Every Material surface is its role tinted with the accent, and the tonal
+// plate then paints layer1 through panelOpacity 0.60 — so two fifths of any
+// tint is replaced by the blurred backdrop. Raising the tint is what makes a
+// colour-source switch visible at all; raising it too far makes label text
+// unreadable.
 //
 // The ratios live in AppearanceTokens.qml and are read from the source here
 // rather than duplicated, so editing the QML is editing what this test checks.
@@ -434,6 +435,68 @@ import { JAPANESE_COLORS } from "../../shared/qml/colorize/JapaneseColors.mjs";
         + median + "/255 across " + seeds.length + " seeds");
     console.log("tint visibility: ok (colour-source switch moves the Dock "
         + "background by a median of " + median + "/255)");
+}
+
+// ── one tonal plate, not one per host ─────────────────────────────────────
+// The Dock's pill paints through LiquidGlassSurface while the standalone Bar
+// paints a plain Rectangle, and the two used to carry their own numbers:
+// layer1 at 0.60 against layer0 at 1.00. Same Material role, visibly different
+// plate — so a Bar rendered the fused material only while it was fused into the
+// Dock, and went solid the moment it was not. Both now read one pair of tokens,
+// and this asserts the wiring rather than the numbers: a later edit may change
+// the fill or the opacity, but it cannot fork them per host again.
+{
+    const read = function (relative) {
+        return readFileSync(new URL(relative, import.meta.url), "utf8");
+    };
+    const tokens = read(
+        "../../shell/desktop/modules/common/AppearanceTokens.qml");
+    const glass = read(
+        "../../shell/desktop/modules/common/LiquidGlassSurface.qml");
+    const panel = read(
+        "../../shell/desktop/modules/common/LiquidGlassPanel.qml");
+    const floatPanel = read(
+        "../../shell/desktop/modules/common/KosFloatPanel.qml");
+
+    assert.match(tokens,
+        /readonly property color panelFill:\s*tokens\.colors\.layer1/,
+        "surface.panelFill must stay the tonal plate's single fill (layer1)");
+    assert.match(tokens,
+        /readonly property real panelOpacity:\s*tokens\.glass\.materialOpacity/,
+        "surface.panelOpacity must stay the tonal plate's single opacity");
+    assert.match(tokens,
+        /readonly property color barFill:\s*usesTonalRoles\s*\n\s*\?\s*panelFill/,
+        "the Bar must paint panelFill rather than a layer of its own");
+    assert.match(tokens,
+        /readonly property real barOpacity:\s*usesTonalRoles \? panelOpacity : 0\.0/,
+        "the Bar must paint panelOpacity; a hardcoded 1.0 is opaque while the "
+        + "Dock is not");
+    assert.match(tokens,
+        /readonly property color widgetFill:\s*usesTonalRoles\s*\n\s*\?\s*panelFill/,
+        "widget cards must paint the same plate as the Bar and the Dock");
+    assert.match(glass, /AppearanceTokens\.surface\.panelFill/,
+        "LiquidGlassSurface's tonal branch must read the shared plate fill");
+    assert.match(glass, /AppearanceTokens\.surface\.panelOpacity/,
+        "LiquidGlassSurface's tonal branch must read the shared plate opacity");
+    // A host may opt out of translucency, but only by asking: the override is
+    // per-instance and defaults to the shared token, so every other surface
+    // still renders through one pair.
+    assert.match(glass, /property real tonalOpacity: -1/,
+        "the tonal opacity override must default to the shared token");
+    assert.match(glass,
+        /readonly property real tonalPlateOpacity: tonalOpacity >= 0\s*\n\s*\?\s*Math\.min\(1\.0, tonalOpacity\) : AppearanceTokens\.surface\.panelOpacity/,
+        "the override must be the only way to move the plate's alpha");
+    assert.match(glass, /materialSurfaceColor\.b, tonalPlateOpacity\)/,
+        "the tonal fill must read that alpha rather than a literal -- a "
+        + "hardcoded number is what made every host's surfaceOpacity dead");
+    assert.match(panel, /tonalOpacity: root\.tonalOpacity/,
+        "LiquidGlassPanel must forward the override to the surface");
+    // One family asked for it: a confirmation dialog's contrast must not
+    // depend on the wallpaper behind it.
+    assert.match(floatPanel, /tonalOpacity: 1\.0/,
+        "KosFloatPanel must opt into a fully opaque plate");
+    console.log("tonal plate: ok (Bar, Dock pill and widget cards share one "
+        + "fill/opacity pair; dialogs opt out per surface)");
 }
 
 // ── swatch coverage ───────────────────────────────────────────────────────

@@ -175,8 +175,9 @@ QtObject {
         // Layer ladder: each surface is its Material role tinted with the
         // accent. The tint is what makes the shell read as *this wallpaper*
         // rather than generic grey, and it has to be large enough to survive
-        // the compositor: the Dock paints layer0 at dockOpacity 0.50, so half
-        // of any tint on it is replaced by the blurred backdrop.
+        // the compositor: a tonal plate paints panelFill (layer1) at
+        // panelOpacity 0.60, so 40% of any tint on it is replaced by the
+        // blurred backdrop.
         //
         // These numbers were measured, not picked. At layer0 = 0.30 (dark) the
         // worst text contrast across 200 seeds x 2 schemes x 2 modes is 5.71:1,
@@ -274,15 +275,27 @@ QtObject {
         // frost). Changing one without the other makes the two forms drift.
         readonly property string cardBackend: usesTonalRoles ? "tonal" : "glass"
         readonly property bool paintInQml: usesTonalRoles
-        readonly property color dockFill: usesTonalRoles
-            ? tokens.colors.layer0 : "transparent"
-        readonly property real dockOpacity: usesTonalRoles ? 0.50 : 0.0
+        // ── The tonal plate: one fill and one opacity ───────────────────────
+        //
+        // A tonal surface is a single plate, so every host has to agree on
+        // both numbers or one role renders as two materials. It did: the
+        // Dock's pill paints through LiquidGlassSurface (layer1 at 0.60) while
+        // the standalone Bar hardcoded opacity 1.0 over layer0 -- so the Bar
+        // matched the Dock exactly when it was fused into it, and stopped
+        // matching the moment it was not. The pair is declared once here and
+        // read by the Bar, the widget cards and the glass surface alike.
+        //
+        // Below 1.0 on purpose: a Material surface stays tonal *and*
+        // translucent so the KWin blur behind it still reads through. At 1.0
+        // the backdrop is hidden completely, which is what the Bar used to do.
+        readonly property color panelFill: tokens.colors.layer1
+        readonly property real panelOpacity: tokens.glass.materialOpacity
         readonly property color barFill: usesTonalRoles
-            ? tokens.colors.layer0 : "transparent"
-        readonly property real barOpacity: usesTonalRoles ? 1.0 : 0.0
+            ? panelFill : "transparent"
+        readonly property real barOpacity: usesTonalRoles ? panelOpacity : 0.0
         readonly property color widgetFill: usesTonalRoles
-            ? tokens.colors.layer1 : "transparent"
-        readonly property real widgetOpacity: usesTonalRoles ? 0.60 : 0.0
+            ? panelFill : "transparent"
+        readonly property real widgetOpacity: usesTonalRoles ? panelOpacity : 0.0
         // Card ink. A tonal card is a light plate and takes the scheme's own
         // foreground; a glass card is dark and takes white.
         readonly property color widgetForeground: usesTonalRoles

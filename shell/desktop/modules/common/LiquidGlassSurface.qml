@@ -22,6 +22,13 @@ Rectangle {
     // readability intent, never a fixed light/dark paint colour.
     property string material: "regular" // "clear", "regular", "thick"
     property real surfaceOpacity: 1.0
+    // Per-surface override of the tonal plate's alpha; -1 keeps the shared
+    // token. It exists because `surfaceOpacity` above never reaches the plate:
+    // the tonal branch is self-painted and reads panelOpacity directly, so
+    // every Material host's surfaceOpacity is dead. Editing the token instead
+    // would flatten the Bar, the Dock pill and every widget card with it.
+    // Ignored by the glass form, where the compositor owns the material.
+    property real tonalOpacity: -1
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
@@ -160,10 +167,14 @@ Rectangle {
     }
 
     readonly property color materialSurfaceColor: material === "thick"
-        ? AppearanceTokens.colors.layer2 : AppearanceTokens.colors.layer1
+        ? AppearanceTokens.colors.layer2 : AppearanceTokens.surface.panelFill
+    // The plate's effective alpha: the shared token unless the host overrode
+    // it. Kept as one expression so the fill and its alpha cannot drift apart.
+    readonly property real tonalPlateOpacity: tonalOpacity >= 0
+        ? Math.min(1.0, tonalOpacity) : AppearanceTokens.surface.panelOpacity
     color: usesMaterialSurface
         ? Qt.rgba(materialSurfaceColor.r, materialSurfaceColor.g,
-            materialSurfaceColor.b, AppearanceTokens.glass.materialOpacity)
+            materialSurfaceColor.b, tonalPlateOpacity)
         : Qt.rgba(
             baseColor.r * (1.0 - ambientBaseMix) + _displayAmbientPrimary.r * ambientBaseMix,
             baseColor.g * (1.0 - ambientBaseMix) + _displayAmbientPrimary.g * ambientBaseMix,

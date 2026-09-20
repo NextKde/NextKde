@@ -209,6 +209,13 @@ Scope {
             material: "thick"
             baseColor: root.baseColor
             surfaceOpacity: root.surfaceOpacity
+            // A dialog is a decision surface: a table of buttons over the
+            // desktop, not a window onto it. In a tonal shell the plate is the
+            // only thing the desktop could read through, and the tonal branch
+            // ignores the `surfaceOpacity` above -- this is the knob that
+            // reaches it. The compositor scrim stays wired and is simply
+            // covered: KWin draws the backdrop before the client content.
+            tonalOpacity: 1.0
             ambientPrimary: root.ambientPrimary
             ambientSecondary: root.ambientSecondary
             ambientStrength: root.ambientStrength

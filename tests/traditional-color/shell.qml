@@ -146,7 +146,47 @@ Item {
                 layersMonet[i] !== layersChinese[i])
         }
 
-        //         // ── wallpaper config parsing ─────────────────────────────────────
+        // ── the tonal plate ──────────────────────────────────────────────
+        // The Bar paints a plain Rectangle while the Dock's pill paints through
+        // LiquidGlassSurface, so the two hosts reach the plate by different
+        // code paths. They have to land on the same fill and the same opacity,
+        // or fusing the Bar into the Dock changes the Bar's colour. That is
+        // what shipped: the Dock painted layer1 at 0.60, the Bar layer0 at
+        // 1.00, so a Bar matched the Dock only while it was fused into it.
+        const previousStyle = AppearanceConfigService.shellStyle
+        AppearanceConfigService.shellStyle = "material"
+        check("Material resolves as the tonal treatment",
+            AppearanceTokens.surface.usesTonalRoles === true)
+        check("the Bar and the Dock share one plate fill",
+            String(AppearanceTokens.surface.barFill)
+                === String(AppearanceTokens.surface.panelFill))
+        check("the Bar and the Dock share one plate opacity",
+            AppearanceTokens.surface.barOpacity
+                === AppearanceTokens.surface.panelOpacity)
+        check("widget cards share the same plate",
+            String(AppearanceTokens.surface.widgetFill)
+                === String(AppearanceTokens.surface.panelFill)
+            && AppearanceTokens.surface.widgetOpacity
+                === AppearanceTokens.surface.panelOpacity)
+        check("the plate is the tinted container role, not a bare surface",
+            String(AppearanceTokens.surface.panelFill)
+                === String(AppearanceTokens.colors.layer1))
+        // Translucent on purpose: at 1.0 the KWin blur behind a Material
+        // surface is hidden completely, which is what the Bar used to do.
+        check("the plate stays translucent ("
+            + AppearanceTokens.surface.panelOpacity + ")",
+            AppearanceTokens.surface.panelOpacity > 0
+            && AppearanceTokens.surface.panelOpacity < 1)
+
+        // Glass forms keep their own treatment: no plate at all, so a Bar in a
+        // glass style stays as transparent as the layout asks for.
+        AppearanceConfigService.shellStyle = "macos"
+        check("a glass form paints no plate for the Bar",
+            AppearanceTokens.surface.barOpacity === 0
+            && AppearanceTokens.surface.barFill.a === 0)
+        AppearanceConfigService.shellStyle = previousStyle
+
+        // ── wallpaper config parsing ─────────────────────────────────────
         // The wallpaper URL sits upstream of every colour asserted above: if it
         // stops moving, the seed stops moving and all three colour sources
         // freeze together — which is exactly how it shipped. Plasma keeps one
