@@ -65,17 +65,27 @@ type SensorReading struct {
 
 const temperaturePeakWindow = 5 * time.Minute
 
+// uptimeDayLimit bounds the per-day uptime ledger. Keys are ISO calendar
+// dates, so lexical order is chronological and the map can be trimmed by
+// keeping the newest keys.
+const uptimeDayLimit = 90
+
 type AppUsage struct {
 	Name    string  `json:"name,omitempty"`
 	Icon    string  `json:"icon,omitempty"`
 	Seconds float64 `json:"seconds"`
 }
 type Activity struct {
-	Active        bool                `json:"active"`
-	ActiveApp     string              `json:"activeApp,omitempty"`
-	TodayApps     map[string]AppUsage `json:"todayApps"`
-	UptimeByDay   map[string]float64  `json:"uptimeByDay"`
-	JournalSeeded bool                `json:"journalSeeded"`
+	Active    bool                `json:"active"`
+	ActiveApp string              `json:"activeApp,omitempty"`
+	TodayApps map[string]AppUsage `json:"todayApps"`
+	// TodayAppsDay records which calendar day TodayApps was accumulated for;
+	// without it a restarted service cannot tell stale rows from today's.
+	TodayAppsDay string             `json:"todayAppsDay,omitempty"`
+	UptimeByDay  map[string]float64 `json:"uptimeByDay"`
+	// JournalSeeded marks that journald boot history was already folded into
+	// UptimeByDay, so seeding never runs twice.
+	JournalSeeded bool `json:"journalSeeded"`
 }
 type DesktopEntry struct {
 	Name       string `json:"name"`
@@ -170,6 +180,9 @@ func newService() *Service {
 		s.state.Activity.UptimeByDay = map[string]float64{}
 	}
 	normalizeWeatherState(&s.state.Weather)
+	// State written before the day boundary was tracked may carry rows from
+	// many days in TodayApps and an unbounded uptime ledger.
+	s.rollDay(time.Now())
 	return s
 }
 
@@ -789,7 +802,7 @@ func (s *Service) seedJournalHistory() {
 			continue
 		}
 		s.mu.Lock()
-		s.addInterval(first*1000, last*1000, "")
+		s.addInterval(first*1000, last*1000)
 		s.mu.Unlock()
 	}
 	s.mu.Lock()
@@ -798,18 +811,16 @@ func (s *Service) seedJournalHistory() {
 }
 
 // addInterval credits seconds between start and end (epoch millis) to the
-// matching calendar day. App attribution is empty for online time only.
-func (s *Service) addInterval(start, end float64, appID string) {
+// matching calendar day's uptime bucket. Per-app attribution lives in
+// settle(), which only ever credits the current day.
+func (s *Service) addInterval(start, end float64) {
 	if end <= start {
 		return
 	}
-	// State written by early versions and focused test fixtures may omit these
-	// maps. Recreate them before settling time so persistence cannot panic.
+	// State written by early versions and focused test fixtures may omit this
+	// map. Recreate it before settling time so persistence cannot panic.
 	if s.state.Activity.UptimeByDay == nil {
 		s.state.Activity.UptimeByDay = map[string]float64{}
-	}
-	if s.state.Activity.TodayApps == nil {
-		s.state.Activity.TodayApps = map[string]AppUsage{}
 	}
 	for cursor := start; cursor < end; {
 		date := time.UnixMilli(int64(cursor))
@@ -817,16 +828,44 @@ func (s *Service) addInterval(start, end float64, appID string) {
 		segmentEnd := math.Min(end, float64(tomorrow.UnixMilli()))
 		seconds := (segmentEnd - cursor) / 1000
 		if seconds > 0 {
-			key := day(date)
-			if appID == "" {
-				s.state.Activity.UptimeByDay[key] += seconds
-			} else {
-				app := s.state.Activity.TodayApps[appID]
-				app.Seconds += seconds
-				s.state.Activity.TodayApps[appID] = app
-			}
+			s.state.Activity.UptimeByDay[day(date)] += seconds
 		}
 		cursor = segmentEnd
+	}
+}
+
+// rollDay performs the two calendar-day maintenance steps: TodayApps is a
+// per-day view that must not carry yesterday's rows forward, and UptimeByDay
+// is trimmed to a bounded trailing window so the persisted ledger cannot
+// grow with every recorded day. It is cheap on the steady path — an equal
+// day key and a ledger inside the limit return without allocating.
+func (s *Service) rollDay(now time.Time) {
+	today := day(now)
+	if s.state.Activity.TodayAppsDay != today {
+		s.state.Activity.TodayAppsDay = today
+		// The still-foreground app re-enters with zeroed seconds but keeps
+		// its name and icon, or the usage card renders a blank row until the
+		// next focus change re-announces it.
+		carry, existed := s.state.Activity.TodayApps[s.state.Activity.ActiveApp]
+		s.state.Activity.TodayApps = map[string]AppUsage{}
+		if existed && s.state.Activity.Active {
+			s.state.Activity.TodayApps[s.state.Activity.ActiveApp] =
+				AppUsage{Name: carry.Name, Icon: carry.Icon}
+		}
+	}
+	if s.state.Activity.TodayApps == nil {
+		s.state.Activity.TodayApps = map[string]AppUsage{}
+	}
+	if len(s.state.Activity.UptimeByDay) <= uptimeDayLimit {
+		return
+	}
+	keys := make([]string, 0, len(s.state.Activity.UptimeByDay))
+	for key := range s.state.Activity.UptimeByDay {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys[:len(keys)-uptimeDayLimit] {
+		delete(s.state.Activity.UptimeByDay, key)
 	}
 }
 
@@ -834,9 +873,10 @@ func (s *Service) addInterval(start, end float64, appID string) {
 // uptime bucket and, while a foreground app is tracked, that app's session
 // total. The sub-120s guard ignores long pauses (suspend, clock jumps).
 func (s *Service) settle(now time.Time) {
+	s.rollDay(now)
 	seconds := now.Sub(s.last).Seconds()
 	if seconds > 0 && seconds < 120 {
-		s.addInterval(float64(s.last.UnixMilli()), float64(now.UnixMilli()), "")
+		s.addInterval(float64(s.last.UnixMilli()), float64(now.UnixMilli()))
 		if s.state.Activity.Active && s.state.Activity.ActiveApp != "" {
 			app := s.state.Activity.TodayApps[s.state.Activity.ActiveApp]
 			app.Seconds += seconds

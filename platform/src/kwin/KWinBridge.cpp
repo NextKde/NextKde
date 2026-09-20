@@ -136,6 +136,11 @@ public slots:
         }
 
         m_commands.enqueue(command);
+        // The KWin Script drains this queue through TakeCommand; when it is
+        // absent (script unloaded or KWin restarting) the queue would grow
+        // without bound. Drop the oldest intents so the newest still apply.
+        while (m_commands.size() > 256)
+            m_commands.dequeue();
     }
 
     QString Ping() const
