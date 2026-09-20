@@ -308,5 +308,11 @@ if(KOS_BUILD_PLATFORM)
     install(DIRECTORY shell/ DESTINATION share/kos/shell)
     install(DIRECTORY shared/ DESTINATION share/kos/shared)
     # apps/settings/main.qml is also runnable directly from an installed prefix.
-    install(DIRECTORY shared/qml/controls/ DESTINATION share/shared/qml/controls)
+    # It resolves `import "../../shared/qml/<dir>"` against its own installed
+    # location, so the whole tree has to be deployed beside it: shipping only
+    # controls/ left the colorize/ import unresolvable and the window died in
+    # QQmlApplicationEngine before it was ever shown.
+    install(DIRECTORY shared/qml/ DESTINATION share/shared/qml
+            PATTERN "CMakeLists.txt" EXCLUDE
+            PATTERN "test_*.mjs" EXCLUDE)
 endif()

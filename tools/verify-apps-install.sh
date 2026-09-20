@@ -19,6 +19,22 @@ for app in calendar todo weather music; do
     QT_QPA_PLATFORM=offscreen "$binary" --version >/dev/null || failed=1
 done
 
+# apps/settings/main.qml runs as its own process and resolves
+# `import "../../shared/qml/<dir>"` against its installed location
+# ($prefix/share/kos/settings), so every import target has to exist under
+# $prefix/share/shared/qml. controls/ once shipped alone, and the binary --
+# installed, executable, and passing every check above -- exited 1 inside
+# QQmlApplicationEngine before a window existed, which nothing else here saw.
+settings_qml="$prefix/share/kos/settings/main.qml"
+if test -f "$settings_qml"; then
+    for target in $(sed -n 's/.*import "\.\.\/\.\.\/shared\/qml\/\([^"]*\)".*/\1/p' "$settings_qml"); do
+        if test ! -e "$prefix/share/shared/qml/$target"; then
+            echo "Settings import target is not installed: shared/qml/$target" >&2
+            failed=1
+        fi
+    done
+fi
+
 for metadata in "$prefix"/share/metainfo/org.nextkde.Kos.*.metainfo.xml; do
     test -f "$metadata" || continue
     if command -v appstreamcli >/dev/null 2>&1; then

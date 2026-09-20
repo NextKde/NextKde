@@ -445,12 +445,22 @@ deploy_artifacts() {
         install -m 0644 "$project_dir/apps/settings/main.qml" \
             "$prefix/share/kos/settings/main.qml"
     fi
-    rm -rf "$prefix/share/shared/qml/controls"
-    if is_nixos; then
-        cp -a "$artifact_root/share/shared/qml/controls" "$prefix/share/shared/qml/"
-    else
-        cp -a "$project_dir/shared/qml/controls" "$prefix/share/shared/qml/"
+    # The Settings window is a *separate process*, and it resolves its relative
+    # imports against its own installed directory, $prefix/share/kos/settings.
+    # So every shared/qml subdirectory it can reach has to land in
+    # $prefix/share/shared/qml, not just the ones the shell happens to use:
+    # deploying controls/ alone left apps/settings/main.qml's
+    # `import "../../shared/qml/colorize/MaterialColorScheme.mjs"` unresolvable,
+    # and the window died inside QQmlApplicationEngine before it was shown —
+    # clicking Settings simply did nothing. Copy the whole tree so a new
+    # subdirectory never needs another edit here.
+    local shared_qml_src="$project_dir/shared/qml"
+    if is_nixos && [[ -d "$artifact_root/share/shared/qml" ]]; then
+        shared_qml_src="$artifact_root/share/shared/qml"
     fi
+    rm -rf "$prefix/share/shared/qml"
+    mkdir -p "$prefix/share/shared/qml"
+    cp -a "$shared_qml_src/." "$prefix/share/shared/qml/"
 
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
@@ -1143,7 +1153,7 @@ uninstall() {
         "$prefix/share/applications/kos-settings.desktop" \
         "$prefix/share/applications/org.kos.Platform.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
-    rm -rf "$prefix/share/shared/qml/controls"
+    rm -rf "$prefix/share/shared/qml"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
     if is_nixos; then
