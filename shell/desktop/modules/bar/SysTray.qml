@@ -1,6 +1,5 @@
 import Quickshell
 import Quickshell.Services.SystemTray
-import Quickshell.Widgets
 import QtQuick
 import QtQuick.Effects
 import qs.desktop.modules.common
@@ -191,7 +190,16 @@ Item {
                     function onTooltipTitleChanged() { root.notifyTrayChanged() }
                 }
                 Component.onCompleted: root.notifyTrayChanged()
-                Component.onDestruction: root.notifyTrayChanged()
+                Component.onDestruction: {
+                    root.notifyTrayChanged()
+                    if (trayMenu.anchorItem === trayItem) {
+                        // hide() alone is a no-op while a show is still
+                        // pending (visible is already false), so release
+                        // the opener state explicitly.
+                        trayMenu.hide()
+                        root.closeTrayMenuState()
+                    }
+                }
 
                 // Shift by exactly one slot when another item's live drag
                 // insertion point is passing over this item's resting slot.
@@ -247,15 +255,7 @@ Item {
                 function openMenu() {
                     if (!modelData.hasMenu)
                         return
-
-                    // QsMenuAnchor owns a native Qt menu. Release any
-                    // self-drawn desktop popup first, then let it finish
-                    // unmapping before Qt calculates this menu's anchor.
-                    ContextMenuCoordinator.closeActive()
-                    Qt.callLater(function() {
-                        if (trayItem.modelData && trayItem.modelData.hasMenu)
-                            trayMenu.open()
-                    })
+                    root.openTrayMenu(trayItem)
                 }
 
                 function activatePrimary() {
@@ -269,7 +269,8 @@ Item {
                     anchors.fill: parent
                     radius: 5
                     color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)
-                    visible: trayMouse.containsMouse || trayMenu.visible
+                    visible: trayMouse.containsMouse
+                        || (trayMenu.visible && trayMenu.anchorItem === trayItem)
                 }
 
                 AppIcon {
@@ -336,23 +337,6 @@ Item {
                             return
                         root.dragTranslationX = translation.x
                         root.dragTranslationY = translation.y
-                    }
-                }
-
-                QsMenuAnchor {
-                    id: trayMenu
-                    menu: trayItem.modelData.menu
-                    anchor {
-                        item: trayItem
-                        edges: root.popupEdge
-                        gravity: root.popupEdge
-                        margins.top: root.dockHosted
-                            && root.dockEdge === "bottom" ? -4 : 0
-                        margins.bottom: root.dockHosted ? 0 : -4
-                        margins.left: root.dockHosted
-                            && root.dockEdge === "right" ? -4 : 0
-                        margins.right: root.dockHosted
-                            && root.dockEdge === "left" ? -4 : 0
                     }
                 }
 
@@ -501,6 +485,222 @@ Item {
                 }
             }
         }
+    }
+
+    // ── Tray context menu ────────────────────────────────────────────
+    // Self-drawn liquid-glass menu instead of QsMenuAnchor's native QMenu:
+    // the native path creates its window before the Breeze style polish
+    // applies WA_TranslucentBackground, so pixels outside the rounded
+    // corners composite as opaque black (same class of bug as KDE 385311).
+    // One ContextMenu is shared by every tray icon; a QsMenuOpener bridge
+    // exposes the item's DBusMenu tree as rows.
+    property var _traySubmenuOpeners: []
+    property var _trayMenuEmptyModel: null
+    property bool _trayMenuPendingShow: false
+    property bool _rebuildingTrayMenu: false
+
+    Component.onCompleted: root._trayMenuEmptyModel = trayMenuOpener.children
+
+    QsMenuOpener {
+        id: trayMenuOpener
+        onMenuChanged: {
+            // The owning StatusNotifierItem dropped its menu handle while
+            // the popup was open (or closeTrayMenu released it).
+            if (trayMenuOpener.menu === null && trayMenu.visible)
+                trayMenu.hide()
+        }
+        onChildrenChanged: root.rebuildTrayMenu()
+    }
+
+    Connections {
+        target: trayMenuOpener.children
+        function onValuesChanged() { root.rebuildTrayMenu() }
+    }
+
+    Component {
+        id: traySubmenuOpenerFactory
+        QsMenuOpener {
+            id: sub
+            property Connections _watch: Connections {
+                target: sub.children
+                function onValuesChanged() { root.rebuildTrayMenu() }
+            }
+            // children-display can flip on an already-listed entry without
+            // a structural change, so follow hasChildrenChanged too.
+            property Connections _entryWatch: Connections {
+                target: sub.menu
+                function onHasChildrenChanged() { root.rebuildTrayMenu() }
+            }
+            onChildrenChanged: root.rebuildTrayMenu()
+        }
+    }
+
+    Timer {
+        id: trayMenuShowFallback
+        interval: 400
+        repeat: false
+        // The DBusMenu layout normally arrives within a few ms; if it does
+        // not, still map the popup so a slow app does not swallow the click.
+        onTriggered: {
+            if (!root._trayMenuPendingShow)
+                return
+            root._trayMenuPendingShow = false
+            trayMenu.show()
+        }
+    }
+
+    function openTrayMenu(anchor) {
+        if (!anchor || !anchor.modelData || !anchor.modelData.hasMenu)
+            return
+        if (trayMenu.visible)
+            trayMenu.hide()
+        closeTrayMenuState()
+        trayMenu.anchorItem = anchor
+        root._trayMenuPendingShow = true
+        trayMenuOpener.menu = anchor.modelData.menu
+        if (trayMenuOpener.menu === null) {
+            root._trayMenuPendingShow = false
+            return
+        }
+        rebuildTrayMenu()
+        trayMenuShowFallback.restart()
+    }
+
+    function closeTrayMenuState() {
+        trayMenuShowFallback.stop()
+        root._trayMenuPendingShow = false
+        // Drop the delegates' entry references before the handles release
+        // the DBusMenu tree and its entries are deleted.
+        trayMenu.clear()
+        for (const rec of root._traySubmenuOpeners)
+            rec.opener.destroy()
+        root._traySubmenuOpeners = []
+        trayMenuOpener.menu = null
+    }
+
+    function _trayMenuValues(opener) {
+        const values = opener.children ? opener.children.values : null
+        const out = []
+        if (!values)
+            return out
+        for (let i = 0; i < values.length; ++i)
+            out.push(values[i])
+        return out
+    }
+
+    // Submenu children are enumerated through a dedicated QsMenuOpener per
+    // entry: setting its menu refs the entry, which is also what sends the
+    // DBusMenu "opened" event to the owning application.
+    function _traySubmenuOpenerFor(entry) {
+        for (let i = 0; i < root._traySubmenuOpeners.length; ++i) {
+            if (root._traySubmenuOpeners[i].entry === entry)
+                return root._traySubmenuOpeners[i].opener
+        }
+        const opener = traySubmenuOpenerFactory.createObject(root, { menu: entry })
+        root._traySubmenuOpeners.push({ entry: entry, opener: opener })
+        return opener
+    }
+
+    function _trayMenuItemFor(entry) {
+        const item = { entry: entry }
+        if (entry.hasChildren) {
+            const opener = _traySubmenuOpenerFor(entry)
+            item.children = root._trayMenuValues(opener).map(root._trayMenuItemFor)
+        }
+        return item
+    }
+
+    function _sameEntryList(items, entries) {
+        if (items.length !== entries.length)
+            return false
+        for (let i = 0; i < items.length; ++i)
+            if (items[i].entry !== entries[i])
+                return false
+        return true
+    }
+
+    function rebuildTrayMenu() {
+        if (root._rebuildingTrayMenu)
+            return
+        if (trayMenuOpener.menu === null)
+            return
+        root._rebuildingTrayMenu = true
+
+        try {
+            // Snapshot the current navigation so a live layout update
+            // re-enters the same submenu instead of kicking the user back
+            // to page one.
+            const oldPages = trayMenu.page.parents.concat([trayMenu.page.items])
+            const oldEntryLists = oldPages.map(list => (list || [])
+                .map(item => item ? item.entry : null))
+
+            const rootItems = root._trayMenuValues(trayMenuOpener)
+                .map(root._trayMenuItemFor)
+
+            // Release openers whose entry disappeared from the menu tree;
+            // destroying the opener unrefs the entry and sends "closed".
+            const used = []
+            const collect = function(items) {
+                for (const item of items) {
+                    if (item.entry)
+                        used.push(item.entry)
+                    if (item.children)
+                        collect(item.children)
+                }
+            }
+            collect(rootItems)
+            root._traySubmenuOpeners = root._traySubmenuOpeners.filter(rec => {
+                if (used.indexOf(rec.entry) >= 0)
+                    return true
+                rec.opener.destroy()
+                return false
+            })
+
+            let level = rootItems
+            const parents = []
+            for (let k = 1; k < oldEntryLists.length; ++k) {
+                const wanted = oldEntryLists[k]
+                const parentItem = level.find(item => item.children
+                    && root._sameEntryList(item.children, wanted))
+                if (!parentItem)
+                    break
+                parents.push(level)
+                level = parentItem.children
+            }
+
+            trayMenu.rootItems = rootItems
+            trayMenu.page = ({ items: level, parents: parents })
+        } finally {
+            root._rebuildingTrayMenu = false
+        }
+
+        // children is the shared empty ObjectModel until the menu's first
+        // layout arrives; a different object means the tree is loaded.
+        if (root._trayMenuPendingShow
+                && trayMenuOpener.children !== root._trayMenuEmptyModel) {
+            root._trayMenuPendingShow = false
+            trayMenuShowFallback.stop()
+            trayMenu.show()
+        }
+    }
+
+    ContextMenu {
+        id: trayMenu
+        customAnchorEdges: root.popupEdge
+        customGravity: root.popupEdge
+        customMargins: ({
+            top: root.popupEdge === Edges.Top ? -4 : 0,
+            bottom: root.popupEdge === Edges.Bottom ? -4 : 0,
+            left: root.popupEdge === Edges.Left ? -4 : 0,
+            right: root.popupEdge === Edges.Right ? -4 : 0
+        })
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
+        onAction: function(cmd, item) {
+            if (item && item.entry)
+                item.entry.triggered()
+        }
+        onAboutToHide: root.closeTrayMenuState()
     }
 
     function trailingItem(index) {
