@@ -15,6 +15,10 @@ config/dock/config.json
 apps/settings/build/
 /.workbuddy/memory
 
+# Sandboxed tooling rewrites `rm` into a trash move, so anything deleted from
+# inside the checkout lands in a .Trash-0/ directory at its root. Throwaway.
+.Trash-0/
+
 # LockScreenFeedService writes the generated feed into the *installed* lock
 # screen package -- $HOME/.local/share/plasma/shells/org.kos.desktop for a
 # default kosctl install, which is GenericDataLocation, not this checkout. So
