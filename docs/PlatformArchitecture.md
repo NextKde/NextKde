@@ -35,24 +35,29 @@ window's bottom two corners stay square no matter what the QML says.
 
 The frosted material is likewise not painted here. The decoration publishes its
 title bar via `setBlurRegion()` and the Glass effect blurs what is behind it.
-Glass deliberately has two rendering paths: Quickshell surfaces receive the
-full liquid/soft material, while ordinary application windows receive only the
-blur result. The latter path does not refract, tint, highlight, add noise, or
-apply an SDF corner mask; application content and decoration remain responsible
-for their own shape. The vendored effect also subtracts opaque client content,
-which prevents transparent layer-shell windows from blurring unused space and
-avoids painting behind opaque application content.
+Glass deliberately has two rendering paths. A surface that declares a shape
+receives the full liquid/soft material; every other window receives only the
+blur result, Quickshell surfaces that declare nothing included -- which is how
+the Material form reads as frost. That path does not refract, tint, highlight or
+add noise, and the SDF mask it is cut with takes KWin's own window radius rather
+than a declared shape: client and decoration remain responsible for their own
+shape. The vendored effect also subtracts opaque client content, which prevents
+transparent layer-shell windows from blurring unused space and avoids painting
+behind opaque application content.
 
 ## Per-surface glass shape protocol
 
 `ext-background-effect` carries only a union of integer rectangles. There is no
-radius or corner field, so the effect infers the mask by reading the top-row
-inset of the published region. That is enough for exactly one card per surface
-and only for a circular corner; it cannot describe the superellipse, and it
-cannot hold two shapes in one surface (the Dock pill and its Home Indicator, or
-several control-centre cards). Re-drawing the outline on the QML side does not
-close the gap either: once the region looks like a single rounded card the
-effect discards the client region and substitutes its own SDF.
+radius or corner field, so the region can say which background pixels are
+captured but not what shape the material drawn over them has. The radius would
+have to be guessed from the region's own outline, and that guess describes at
+best one circular card on one surface: it cannot express the superellipse, and
+it cannot hold two shapes in one surface (the Dock pill and its Home Indicator,
+or several control-centre cards). Glass no longer guesses. The shape is declared
+explicitly over `kos-surface-shape-v1`, and the region-driven path that remains
+for a surface declaring nothing feeds the SDF KWin's own window radius -- the
+same value the ordinary-window path has always used -- so there is one source of
+rounding rather than one source plus an inference.
 
 `protocols/kos-surface-shape-v1.xml` is a project-local protocol that carries the
 missing fields. It is deliberately not a Quickshell fork:
@@ -88,23 +93,35 @@ case open. Three pieces implement it and all three build from this repository:
 
 `LiquidGlassPanel` owns the only declaration today; one is created per panel, so
 each popup's shape objects are independent. Where a surface declares shapes the
-effect replaces its region-reconstructed content geometry with one draw per
-shape, re-uploading `box`, `cornerRadius` and `cornerExponent` between draws; the
-noise pass is per shape as well. Blur Region still decides which background
-pixels are captured, and surfaces that declare nothing keep the plain path
-described above.
+effect drops the region-derived content geometry and draws one shape per card
+instead, re-uploading `box`, `cornerRadius` and `cornerExponent` between draws --
+`cornerRadius` and `cornerExponent` straight from `set_corner()`, so the SDF
+outline is the client's rather than the compositor's; the noise pass is per shape
+as well. Blur Region still decides which background pixels are captured.
 
-The replacement is all-or-nothing, and it excludes the effect's other geometry
-substitution. A surface whose published region reads as one smooth card also
-gets its content geometry rewritten to the whole background rectangle; letting
-that run after the shapes have been accepted leaves each shape's recorded
-vertex range describing a buffer layout that no longer exists, and the shape
-material is then painted over rectangles that do not belong to it -- the pill
-loses its glass while stray edges keep the refraction. So the smooth-card path
-is skipped whenever shapes were accepted, and a declared shape that turns out
-not to be drawable (zero-sized, clipped away, off-screen) abandons the whole
-swap instead of the surface's glass: the region geometry it was meant to refine
-is what remains.
+A surface that declares nothing is unglassed, not unshaped. Its material keeps
+following the region: the effect adopts the region's own geometry as the material
+shape and floors its blur strength at level 6, because a region-only surface has
+no `set_blur` level to carry and would otherwise render at the single-pass
+`BlurStrength` kwinrc asks for -- a tinted plate rather than frost. The floor is
+gated on the surface being a KOS surface (`isQuickshellSurface`: a Quickshell
+window, or one that declared a shape), so an ordinary blurred window with a
+region and no shape still follows kwinrc exactly. The desk clock's gear is the
+case it exists for.
+
+The swap is all-or-nothing, and it is committed only once at least one shape
+became geometry to draw. A shape that is off-screen, clipped away or zero-sized
+must not take the surface's whole glass with it: the region geometry it was meant
+to refine is then the only thing left, and dropping it leaves the window
+unblurred until something else damages those pixels -- "the middle of the Dock
+has no glass" rather than a missing shape. The same rule covers a declared set
+that does not describe this surface's region. Alignment between the two is a
+single translation, so a set that is a strict subset or superset of the region
+slides every shape by the difference -- a card panel whose overlay sheet was left
+out of the union moved its glass 238px. When the declared bounds do not match the
+region's, the draws are dropped and the region supplies both geometry and blur
+level, which is what a region shaped by one of its own cards (the desk clock's
+gear) relies on.
 
 Three properties of this arrangement are load-bearing:
 
