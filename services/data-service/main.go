@@ -933,29 +933,44 @@ func dataError(request DataRequest, code, message string, retryable bool) DataRe
 		Error: &DataError{Code: code, Message: message, Retryable: retryable}}
 }
 
+// snapshotResult marshals a state section while still holding s.mu so the
+// encoder never iterates maps or slices that settle/rollDay/sample/weather
+// writes mutate under the same lock, then unmarshals into a private copy so
+// callers marshal the response after the lock without touching shared state.
+// The wire format is unchanged: Result is still map[string]interface{}{key:
+// value} exactly like the former shallow-copy snapshot responses.
+func snapshotResult[T any](s *Service, request DataRequest, key string, read func() T) DataResponse {
+	s.mu.Lock()
+	raw, err := json.Marshal(read())
+	s.mu.Unlock()
+	if err != nil {
+		return dataError(request, "marshal-failed", err.Error(), false)
+	}
+	var value T
+	if err = json.Unmarshal(raw, &value); err != nil {
+		return dataError(request, "marshal-failed", err.Error(), false)
+	}
+	return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+		Result: map[string]interface{}{key: value}}
+}
+
 func (s *Service) handleRequest(request DataRequest) DataResponse {
 	if request.Version != 0 && request.Version != 1 {
 		return dataError(request, "unsupported-version", "不支持的协议版本", false)
 	}
 	switch request.Operation {
 	case "metrics.snapshot":
-		s.mu.Lock()
-		metrics := s.state.Metrics
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"metrics": metrics}}
+		return snapshotResult(s, request, "metrics", func() Metrics {
+			return s.state.Metrics
+		})
 	case "activity.snapshot":
-		s.mu.Lock()
-		activity := s.state.Activity
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"activity": activity}}
+		return snapshotResult(s, request, "activity", func() Activity {
+			return s.state.Activity
+		})
 	case "desktop.snapshot":
-		s.mu.Lock()
-		desktop := s.state.Desktop
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"desktop": desktop}}
+		return snapshotResult(s, request, "desktop", func() Desktop {
+			return s.state.Desktop
+		})
 	case "desktop.refresh":
 		if s.refreshDesktop() {
 			s.persist()
@@ -964,11 +979,9 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
 			Result: map[string]interface{}{"refreshed": true}}
 	case "weather.snapshot":
-		s.mu.Lock()
-		weather := s.state.Weather
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"weather": weather}}
+		return snapshotResult(s, request, "weather", func() WeatherState {
+			return s.state.Weather
+		})
 	case "weather.search":
 		query, _ := request.Payload["query"].(string)
 		language, _ := request.Payload["language"].(string)
