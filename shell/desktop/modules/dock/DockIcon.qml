@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
@@ -93,6 +94,10 @@ Item {
     // Side-dock layout: the whole row is rotated 90 degrees; the icon image
     // counter-rotates so the artwork stays upright.
     property bool   vertical: false
+    // Pointer input is kept in DockContainer's local coordinate space. This
+    // avoids scene-coordinate mismatches on Wayland layer-shell surfaces.
+    property Item magnificationRoot: null
+    property point magnificationPointer: Qt.point(-10000, -10000)
     // Which screen edge the dock is attached to: "bottom", "left" or
     // "right". The running dot sits on the icon edge facing that edge —
     // below the icon on a bottom dock, on the screen-edge side of side docks.
@@ -247,9 +252,42 @@ Item {
     // ═══════════════════════════════════════════════════════════
     // Scale model
     // ═══════════════════════════════════════════════════════════
-    // Final scale: 1.0 (or larger on hover).
-    property real _targetScale: _hovering
-        ? AppearanceTokens.dock.hoverScale : 1.0
+    // Distance-based magnification. The Item's width/height remain the fixed
+    // layout slot; only its visual transform changes.
+    readonly property bool _distanceMagnificationEnabled:
+        AppearanceTokens.dock.magnificationEnabled
+        && magnificationRoot !== null
+        && magnificationPointer.x > -9999
+        && magnificationPointer.y > -9999
+    readonly property real _magnificationInfluence: {
+        if (!_distanceMagnificationEnabled || !visible)
+            return 0.0
+        const center = icon.mapToItem(magnificationRoot,
+            icon.width / 2, icon.height / 2)
+        const iconAxis = vertical ? center.y : center.x
+        const pointerAxis = vertical ? magnificationPointer.y
+                                     : magnificationPointer.x
+        const radius = Math.max(icon.iconSize * 2.0,
+            AppearanceTokens.dock.magnificationRadius)
+        if (!Number.isFinite(iconAxis) || !Number.isFinite(pointerAxis)
+                || radius <= 0)
+            return 0.0
+        const normalized = Math.max(0.0, Math.min(1.0,
+            1.0 - Math.abs(iconAxis - pointerAxis) / radius))
+        return normalized * normalized * (3.0 - 2.0 * normalized)
+    }
+    readonly property real _magnificationScale:
+        1.0 + _magnificationInfluence
+            * (AppearanceTokens.dock.magnificationMaxScale - 1.0)
+    readonly property real _magnificationLift:
+        -Math.round(icon.iconSize
+            * AppearanceTokens.dock.magnificationLiftRatio
+            * _magnificationInfluence)
+    // The distance curve already includes the hovered icon. Keep the original
+    // one-icon fallback for non-macOS shell styles.
+    readonly property real _hoverScale:
+        !_distanceMagnificationEnabled && _hovering
+            ? AppearanceTokens.dock.hoverScale : 1.0
     // Lift non-focused tasks to make pointer feedback unmistakable. The active
     // task keeps its shared background vertically stable, while scale alone
     // still makes its hover state clear.
@@ -260,17 +298,18 @@ Item {
     property real _attentionScale: 1.0
     property real _attentionLift: 0
     property real _attentionGlow: 0
-    scale: _targetScale * _attentionScale
+    scale: _hoverScale * _magnificationScale * _attentionScale
     // The icon artwork is cached in `iconRenderer`/`GlassText` below instead of
     // on this whole item: an offscreen texture is sized to the item's bounds
     // and clips overflow, which would hide the running/status indicators
     // that deliberately extend past the icon edge.
     transform: Translate {
-        y: icon._hoverLift + icon._attentionLift
+        y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
         Behavior on y {
-            NumberAnimation {
-                duration: DockAnimation.iconHoverDuration
-                easing.type: DockAnimation.iconHoverEasing
+            SpringAnimation {
+                spring: DockAnimation.iconSpring
+                damping: DockAnimation.iconDamping
+                mass: DockAnimation.iconMass
             }
         }
     }
@@ -311,16 +350,18 @@ Item {
     readonly property string _previewWindowId: _hasWindows ? _appWindows[0].windowId : (icon.windowId || "")
 
     Behavior on scale {
-        NumberAnimation {
-            duration: DockAnimation.iconHoverDuration
-            easing.type: DockAnimation.iconHoverEasing
+        SpringAnimation {
+            spring: DockAnimation.iconSpring
+            damping: DockAnimation.iconDamping
+            mass: DockAnimation.iconMass
         }
     }
 
     Timer {
         id: previewDelay
-        // Previews dwell time: 600ms responsive hover
-        interval: 600
+        // Short, deliberate dwell so a real hover feels immediate without
+        // opening previews during a quick pointer pass.
+        interval: DockAnimation.windowPreviewDelay
         repeat: false
         onTriggered: {
             if (icon._hovering && icon._hasWindows && !icon.editMode
@@ -345,11 +386,60 @@ Item {
     // the preview smoothly without premature dismissal.
     Timer {
         id: previewCloseDelay
-        interval: 480
+        interval: DockAnimation.windowPreviewCloseDelay
         repeat: false
         onTriggered: {
             if (!icon._hovering && !preview.pointerInside)
                 DockModelService.setDockPopupVisible(preview, false)
+        }
+    }
+
+    // A pinned app with no live window has no thumbnail to show. Use a small
+    // edge-aware label instead of opening an empty preview surface.
+    PopupWindow {
+        id: appNameTooltip
+        readonly property bool shouldShow:
+            icon._hovering
+            && !icon._hasWindows
+            && !icon.isRunning
+            && icon.displayName.trim().length > 0
+            && !icon.editMode
+            && !DockModelService.activeContextMenu
+
+        visible: shouldShow
+        implicitWidth: appNameText.implicitWidth + 16
+        implicitHeight: appNameText.implicitHeight + 10
+        color: "transparent"
+
+        anchor {
+            item: icon
+            edges: icon.dockEdge === "bottom" ? Edges.Top
+                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
+            gravity: icon.dockEdge === "bottom" ? Edges.Top
+                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
+            margins.top: icon.dockEdge === "bottom" ? -6 : 0
+            margins.left: icon.dockEdge === "right" ? -6 : 0
+            margins.right: icon.dockEdge === "left" ? -6 : 0
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 6
+            color: ThemeService.tooltipBackground
+            border.width: 1
+            border.color: ThemeService.borderColor
+
+            Text {
+                id: appNameText
+                anchors.centerIn: parent
+                text: icon.displayName
+                color: ThemeService.foregroundColor
+                font {
+                    family: "Noto Sans CJK SC, sans-serif"
+                    pixelSize: 11
+                    weight: Font.DemiBold
+                }
+            }
         }
     }
 
@@ -776,10 +866,12 @@ Item {
         id: preview
         anchorItem: icon
         onPointerInsideChanged: {
-            if (pointerInside)
+            if (pointerInside) {
                 previewCloseDelay.stop()
-            else if (!icon._hovering)
+                preview.cancelClosing()
+            } else if (!icon._hovering) {
                 previewCloseDelay.restart()
+            }
         }
         onActivateRequested: {
             DockModelService.activateWindow(preview.windowId)

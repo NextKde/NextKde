@@ -37,10 +37,10 @@ PopupWindow {
     }
 
     readonly property int windowCount: effectiveWindows.length
-    readonly property real cardWidth: 220
-    readonly property real cardHeight: 160
-    readonly property real rowPadding: 8
-    readonly property real rowSpacing: 8
+    readonly property real cardWidth: 174
+    readonly property real cardHeight: 124
+    readonly property real rowPadding: 7
+    readonly property real rowSpacing: 6
 
     readonly property real calculatedWidth: rowPadding * 2
         + (windowCount > 0
@@ -54,7 +54,7 @@ PopupWindow {
 
     implicitWidth: Math.min(maxAllowedWidth, Math.max(cardWidth + rowPadding * 2, calculatedWidth))
     // The secondary action has its own toolbar row above the thumbnails.
-    implicitHeight: 204
+    implicitHeight: 166
     color: "transparent"
     grabFocus: false
 
@@ -82,7 +82,19 @@ PopupWindow {
 
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen) {
+            // Returning from the preview to its Dock icon should not restart
+            // the glass surface from zero. Keep the current reveal state and
+            // recover it with a tiny hand-off animation instead.
+            if (preview.visible && !preview.closing)
+                return
+            if (preview.visible && preview.closing) {
+                previewExit.stop()
+                closing = false
+                previewHandoff.restart()
+                return
+            }
             previewExit.stop()
+            previewHandoff.stop()
             closing = false
             preview.visible = true
             revealProgress = 0.0
@@ -98,6 +110,7 @@ PopupWindow {
     function dismissDockPopupImmediately() {
         previewRevealStart.stop()
         previewEntrance.stop()
+        previewHandoff.stop()
         previewExit.stop()
         closing = false
         revealProgress = 0.0
@@ -123,13 +136,22 @@ PopupWindow {
         easing.type: DockAnimation.elementEnterEasing
     }
 
+    NumberAnimation {
+        id: previewHandoff
+        target: preview
+        property: "revealProgress"
+        to: 1.0
+        duration: DockAnimation.windowPreviewHandoffDuration
+        easing.type: DockAnimation.elementEnterEasing
+    }
+
     SequentialAnimation {
         id: previewExit
         NumberAnimation {
             target: preview
             property: "revealProgress"
             to: 0.0
-            duration: 90
+            duration: DockAnimation.windowPreviewExitDuration
             easing.type: DockAnimation.elementExitEasing
         }
         ScriptAction {
@@ -151,6 +173,12 @@ PopupWindow {
         id: background
         anchors.fill: parent
         opacity: preview.revealProgress
+        // A compact macOS-like retreat: the preview fades and contracts back
+        // toward the Dock instead of vanishing as a hard cut.
+        scale: DockAnimation.windowPreviewExitScale
+            + (1.0 - DockAnimation.windowPreviewExitScale)
+                * preview.revealProgress
+        transformOrigin: Item.Bottom
         transform: Translate {
             y: (1.0 - preview.revealProgress) * 7
         }
@@ -449,5 +477,17 @@ PopupWindow {
 
         }
 
-    BackgroundEffect.blurRegion: preview.visible ? background.blurRegion : null
+    // Do not activate the compositor blur during the one-frame pre-roll after
+    // the popup becomes visible. The glass should follow the actual preview
+    // reveal, otherwise a fast hover can produce a brief blur flash.
+    BackgroundEffect.blurRegion: preview.visible && preview.revealProgress > 0.01
+        ? background.blurRegion : null
+
+    function cancelClosing() {
+        if (!preview.visible || !preview.closing)
+            return
+        previewExit.stop()
+        preview.closing = false
+        previewHandoff.restart()
+    }
 }

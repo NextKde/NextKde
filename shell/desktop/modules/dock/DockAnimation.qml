@@ -31,6 +31,12 @@ QtObject {
     readonly property real  iconHoverScale:     AppearanceTokens.dock.hoverScale
     readonly property var   iconHoverEasing:    AppearanceTokens.motion.standardEasing
 
+    // A lightly damped spring follows the pointer without the hard stop of a
+    // fixed-duration animation. It is used only for visual transforms.
+    readonly property real  iconSpring:         6.0
+    readonly property real  iconDamping:        0.84
+    readonly property real  iconMass:           0.45
+
     // ═══════════════════════════════════════════════════════════
     // Music player expand / collapse
     // ═══════════════════════════════════════════════════════════
@@ -70,6 +76,15 @@ QtObject {
     readonly property int   smartHideBootWaitLimit:    450   // max wait for config+KWin snapshot
     readonly property int   smartHideMinRemaining:      70   // floor for reversible animation
     readonly property int   smartHideUrgentRevealMs:   2200  // §5.8 temporary reveal for an urgent window
+    // Window previews should feel like a direct hover affordance, while still
+    // ignoring brief pointer passes across neighbouring Dock icons.
+    readonly property int   windowPreviewDelay:         90
+    // Leave enough hand-off time to move from the Dock icon into the separate
+    // preview surface, while keeping the preview responsive when abandoned.
+    readonly property int   windowPreviewCloseDelay:     130
+    readonly property int   windowPreviewHandoffDuration: 30
+    readonly property int   windowPreviewExitDuration:   110
+    readonly property real  windowPreviewExitScale:      0.94
     // A transparent 1px layer-shell margins reparenting of the dock content to
     // the true screen edge: the white reveal handle sits this far (dp) from the
     // physical edge whereas the dock glass keeps edgeMargin-1 breathing room.
