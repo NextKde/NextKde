@@ -14,6 +14,9 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property int widthUnits: 4
+    // DockInfoCarousel sets this false while another page is shown so the
+    // glyph-mask ShaderEffectSource stops re-sampling every frame.
+    property bool pageActive: true
     readonly property real backgroundGap: iconSize * 0.1
     readonly property real contentWidth: iconSize * widthUnits
     readonly property bool compact: iconSize < 32
@@ -145,7 +148,7 @@ Item {
                     sourceItem: clockBackground
                     sourceRect: Qt.rect(0, 0,
                         clockBackground.width, clockBackground.height)
-                    live: true
+                    live: widget.pageActive
                     hideSource: false
                     smooth: true
                 }

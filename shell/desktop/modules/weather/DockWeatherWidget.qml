@@ -7,6 +7,8 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property int widthUnits: 4
+    // Set by DockInfoCarousel; decoration layers follow page visibility.
+    property bool pageActive: true
     readonly property real backgroundGap: iconSize * 0.1
     readonly property real contentWidth: iconSize * widthUnits
     readonly property bool compact: iconSize < 32
@@ -68,9 +70,10 @@ Item {
             id: cloudLayer
             anchors.fill: parent
             clip: true
-            visible: WeatherService.weatherCode === 1 || WeatherService.weatherCode === 2
+            visible: widget.pageActive
+                && (WeatherService.weatherCode === 1 || WeatherService.weatherCode === 2
                 || WeatherService.weatherCode === 3 || WeatherService.weatherCode === 45
-                || WeatherService.weatherCode === 48
+                || WeatherService.weatherCode === 48)
 
             Item {
                 id: cloudBack
@@ -105,7 +108,8 @@ Item {
         Item {
             id: sunLayer
             anchors.fill: parent
-            visible: WeatherService.weatherCode === 0 && WeatherService.isDay
+            visible: widget.pageActive
+                && WeatherService.weatherCode === 0 && WeatherService.isDay
             opacity: 0.24
             Item {
                 id: sunRays
@@ -133,8 +137,9 @@ Item {
             id: rainLayer
             anchors.fill: parent
             clip: true
-            visible: (WeatherService.weatherCode >= 51 && WeatherService.weatherCode <= 67)
-                || (WeatherService.weatherCode >= 80 && WeatherService.weatherCode <= 82)
+            visible: widget.pageActive
+                && ((WeatherService.weatherCode >= 51 && WeatherService.weatherCode <= 67)
+                || (WeatherService.weatherCode >= 80 && WeatherService.weatherCode <= 82))
             opacity: 0.32
             Repeater {
                 model: 7

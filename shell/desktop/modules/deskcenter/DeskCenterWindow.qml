@@ -348,7 +348,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "clock"
+                active: card.visible && card.modelData.id === "clock"
                 sourceComponent: Component {
 	                    Item {
 	                anchors.fill: parent
@@ -649,7 +649,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-	                active: card.modelData.id === "date"
+	                active: card.visible && card.modelData.id === "date"
 	                sourceComponent: Component {
 	                    Item {
 	                anchors.fill: parent
@@ -677,7 +677,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-	                active: card.modelData.id === "weather"
+	                active: card.visible && card.modelData.id === "weather"
 	                sourceComponent: Component {
 	                    Item {
 	                anchors.fill: parent
@@ -918,7 +918,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "status"
+                active: card.visible && card.modelData.id === "status"
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
@@ -967,7 +967,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "photo"
+                active: card.visible && card.modelData.id === "photo"
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
@@ -989,7 +989,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "system"
+                active: card.visible && card.modelData.id === "system"
                 sourceComponent: Component {
                     Item {
 	                id: systemContent
@@ -1261,7 +1261,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "activity"
+                active: card.visible && card.modelData.id === "activity"
                 sourceComponent: Component {
                     Item {
                 id: activityContent
@@ -1397,7 +1397,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "notes"
+                active: card.visible && card.modelData.id === "notes"
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
@@ -1424,7 +1424,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "overview"
+                active: card.visible && card.modelData.id === "overview"
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
@@ -1447,7 +1447,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "music"
+                active: card.visible && card.modelData.id === "music"
                 sourceComponent: Component {
                     Item {
                 id: musicContent
@@ -1482,7 +1482,7 @@ PanelWindow {
                 Timer {
                     interval: 250
                     repeat: true
-                    running: musicContent.visible
+                    running: musicContent.visible && card.visible
                         && !!musicContent.player?.isPlaying
                     onTriggered: {
                         if (musicContent.player)
@@ -1514,7 +1514,8 @@ PanelWindow {
                     height: 62
                     clip: true
                     z: 2
-                    readonly property bool running: musicContent.player?.isPlaying ?? false
+                    readonly property bool running: (musicContent.player?.isPlaying ?? false)
+                        && card.visible
                     visible: running
                     Repeater {
                         model: ["♪", "♫", "♪"]
@@ -1740,7 +1741,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "shortcuts"
+                active: card.visible && card.modelData.id === "shortcuts"
                 sourceComponent: Component {
                     Item {
                 anchors.fill: parent
@@ -1779,7 +1780,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "todo"
+                active: card.visible && card.modelData.id === "todo"
                 sourceComponent: Component {
                     Item {
                         id: todoContent
@@ -1925,7 +1926,7 @@ PanelWindow {
 
             Loader {
                 anchors.fill: parent
-                active: card.modelData.id === "calendar"
+                active: card.visible && card.modelData.id === "calendar"
                 sourceComponent: Component {
                     Item {
 	                id: calendarContent

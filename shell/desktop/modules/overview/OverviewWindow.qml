@@ -398,6 +398,7 @@ PanelWindow {
                                             anchors.fill: parent
                                             visible: !!parent.thumbUrl
                                             source: parent.thumbUrl
+                                            asynchronous: true
                                             sourceSize: Qt.size(600, 400)
                                             fillMode: Image.PreserveAspectCrop
                                             smooth: true
@@ -444,7 +445,6 @@ PanelWindow {
                                     const windowId = modelData.windowId
                                     WindowService.activateWindow(windowId)
                                     root.closeRequested()
-                                    WindowService.requestThumbnail(windowId)
                                 }
                             }
                         }
@@ -481,15 +481,49 @@ PanelWindow {
         }
     }
 
+    // Thumbnail requests are paced instead of fired in one burst so opening
+    // the overview does not fan out N KWin captures at once. WindowService
+    // already deduplicates per window via its pending map; this timer only
+    // spreads the capture work across frames. No completion signal is needed:
+    // a failed request simply leaves its placeholder until the next open.
+    property var _thumbRequestQueue: []
+
+    Timer {
+        id: thumbRequestPacer
+        interval: 80
+        repeat: true
+        onTriggered: {
+            if (!root.open || root._thumbRequestQueue.length === 0) {
+                stop()
+                return
+            }
+            // Up to three captures per tick keeps the bridge busy without
+            // a burst that stalls the daemon or the overview's own reveal.
+            for (let i = 0; i < 3 && root._thumbRequestQueue.length > 0; i++)
+                WindowService.requestThumbnail(root._thumbRequestQueue.shift())
+        }
+    }
+
     onOpenChanged: {
         if (open) {
             selectedDesktopIndex = Math.max(0, root.currentDesktopIndex)
             selectedWindowIndex = 0
-            // Request thumbnails for all current desktop windows
+            // Request thumbnails for all current desktop windows, paced.
             const windows = root.currentWindows
+            const seen = ({})
+            const queue = []
             for (let i = 0; i < windows.length; i++) {
-                WindowService.requestThumbnail(windows[i].windowId)
+                const id = windows[i].windowId
+                if (!seen[id]) {
+                    seen[id] = true
+                    queue.push(id)
+                }
             }
+            root._thumbRequestQueue = queue
+            thumbRequestPacer.restart()
+        } else {
+            thumbRequestPacer.stop()
+            root._thumbRequestQueue = []
         }
     }
 }
