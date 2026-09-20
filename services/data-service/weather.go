@@ -27,6 +27,11 @@ const (
 	weatherStaleInterval   = 2 * time.Hour
 	weatherRequestTimeout  = 20 * time.Second
 	weatherMaximumBodySize = 2 << 20
+	// Failure backoff doubles per consecutive fetch failure starting at one
+	// minute and caps at half an hour, so an offline machine retries every
+	// 30min instead of spawning an HTTP request on every 10s tick.
+	weatherBackoffBase = time.Minute
+	weatherBackoffMax  = 30 * time.Minute
 )
 
 type WeatherLocation struct {
@@ -450,6 +455,7 @@ func (s *Service) setWeatherLocation(location WeatherLocation) error {
 	}
 	s.mu.Lock()
 	s.weatherRequestSerial++
+	s.weatherFailStreak = 0
 	s.state.Weather.Location = normalized
 	found := false
 	for index := range s.state.Weather.Locations {
@@ -490,6 +496,7 @@ func (s *Service) setWeatherUnits(units string) error {
 		return nil
 	}
 	s.weatherRequestSerial++
+	s.weatherFailStreak = 0
 	s.state.Weather.Units = units
 	s.state.Weather.Status = weatherStatusIdle
 	s.state.Weather.Error = ""
@@ -515,7 +522,11 @@ func (s *Service) startWeatherRefresh(force bool) bool {
 		s.mu.Unlock()
 		return false
 	}
-	if !force && weather.Current != nil && weather.NextRefreshAt > now.UnixMilli() {
+	// NextRefreshAt gates automatic refreshes regardless of whether cached
+	// conditions exist: after a success it is +1h, after a failure it is the
+	// exponential backoff. A user-initiated refresh (force) bypasses it, and
+	// location/units changes reset it to 0.
+	if !force && weather.NextRefreshAt > now.UnixMilli() {
 		s.mu.Unlock()
 		return false
 	}
@@ -535,6 +546,24 @@ func (s *Service) startWeatherRefresh(force bool) bool {
 	return true
 }
 
+// weatherBackoff returns the delay before the next automatic refresh after
+// the given number of consecutive failures: 1min, 2min, 4min, ... capped at
+// 30min. The shift is clamped so a long outage can never overflow.
+func weatherBackoff(streak int) time.Duration {
+	if streak < 1 {
+		streak = 1
+	}
+	shift := streak - 1
+	if shift > 9 {
+		shift = 9
+	}
+	backoff := weatherBackoffBase << shift
+	if backoff > weatherBackoffMax {
+		backoff = weatherBackoffMax
+	}
+	return backoff
+}
+
 func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location WeatherLocation, units string) {
 	ctx, cancel := context.WithTimeout(context.Background(), weatherRequestTimeout)
 	defer cancel()
@@ -547,14 +576,26 @@ func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location
 		return
 	}
 	weather := &s.state.Weather
+	unchanged := false
 	if err != nil {
+		s.weatherFailStreak++
+		previousStatus, previousError := weather.Status, weather.Error
 		weather.Error = weatherErrorMessage(err)
 		if weather.Current != nil {
 			weather.Status = weatherStatusReady
 		} else {
 			weather.Status = weatherStatusError
 		}
+		// Back off the next automatic retry exponentially. Persisting the new
+		// NextRefreshAt is what makes the backoff durable across restarts.
+		weather.NextRefreshAt = now.Add(weatherBackoff(s.weatherFailStreak)).UnixMilli()
+		// The publish only tells consumers to re-read the weather snapshot; if
+		// the user-visible fields did not change (still failing with the same
+		// status and message), skip the broadcast wake. Persist still runs so
+		// the growing backoff survives restarts.
+		unchanged = weather.Status == previousStatus && weather.Error == previousError
 	} else {
+		s.weatherFailStreak = 0
 		weather.Status = weatherStatusReady
 		weather.Error = ""
 		weather.Current = forecast.Current
@@ -569,7 +610,9 @@ func (s *Service) fetchWeather(serial uint64, provider WeatherProvider, location
 	}
 	s.mu.Unlock()
 	s.persist()
-	s.publishWeather()
+	if !unchanged {
+		s.publishWeather()
+	}
 }
 
 func (s *Service) searchWeather(query, language string, count int) ([]WeatherLocation, error) {

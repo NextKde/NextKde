@@ -421,3 +421,29 @@ func TestPublishDesktopDoesNotBlockOnUnreadConn(t *testing.T) {
 	}
 	<-subscribed
 }
+
+// readDisk reports the root filesystem's statfs counters without forking df:
+// total is nonzero on any machine that can run this test and used never
+// exceeds total.
+func TestReadDiskReportsRootFilesystem(t *testing.T) {
+	used, total := readDisk()
+	if total <= 0 {
+		t.Skip("root filesystem statfs unavailable")
+	}
+	if used < 0 || used > total {
+		t.Fatalf("readDisk = (%v, %v); want 0 <= used <= total", used, total)
+	}
+}
+
+// readTemperature enumerates sensors lazily and caches them; a second call
+// must return the same probe set instead of re-globbing sysfs.
+func TestReadTemperatureCachesSensorEnumeration(t *testing.T) {
+	service := &Service{}
+	_, first := service.readTemperature()
+	probes := service.sensors
+	_, second := service.readTemperature()
+	if len(first) != len(second) || len(second) != len(probes) {
+		t.Fatalf("cached enumeration changed between calls: %d vs %d probes %d",
+			len(first), len(second), len(probes))
+	}
+}

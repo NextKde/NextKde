@@ -163,16 +163,27 @@ func (c *subscriberConn) writeLine(raw []byte, timeout time.Duration) error {
 }
 
 type Service struct {
-	mu                        sync.Mutex
-	desktopSubscribersMu      sync.Mutex
-	desktopSubscribers        map[*subscriberConn]struct{}
-	state                     State
-	statePath, snapshotPath   string
-	desktopDirectory          string
-	weatherProvider           WeatherProvider
-	weatherRequestSerial      uint64
-	last                      time.Time
+	mu                      sync.Mutex
+	desktopSubscribersMu    sync.Mutex
+	desktopSubscribers      map[*subscriberConn]struct{}
+	state                   State
+	statePath, snapshotPath string
+	desktopDirectory        string
+	weatherProvider         WeatherProvider
+	weatherRequestSerial    uint64
+	// weatherFailStreak counts consecutive forecast fetch failures and drives
+	// the exponential retry backoff. Guarded by s.mu.
+	weatherFailStreak int
+	last              time.Time
+	// prevCPUTotal/prevCPUIdle are only touched by readCPU, which runs only
+	// from sample() (the main goroutine's startup call and 10s tick), so they
+	// stay race-free even though sampling happens outside s.mu.
 	prevCPUTotal, prevCPUIdle float64
+	// sensors caches the one-time thermal/hwmon enumeration: sysfs device
+	// topology and labels do not change at runtime, so only the input values
+	// are re-read on every sample.
+	sensorsOnce sync.Once
+	sensors     []sensorProbe
 }
 
 func day(t time.Time) string { return t.Format("2006-01-02") }
@@ -213,23 +224,23 @@ func newService() *Service {
 	return s
 }
 
-func writeJSON(path string, value any) error {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+func writeJSONBytes(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err = os.WriteFile(tmp, raw, 0644); err != nil {
+	if err := os.WriteFile(tmp, raw, 0644); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
 }
+
+// persist marshals state.json and snapshot.json under s.mu — the same
+// sanctioned pattern as snapshotResult — so the encoder never iterates maps
+// or slices that concurrent writers mutate, then performs the actual disk
+// writes after releasing the lock so no blocking IO stalls state updates.
 func (s *Service) persist() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.settle(time.Now())
 	snapshot := Snapshot{
 		SchemaVersion: 1,
@@ -239,8 +250,17 @@ func (s *Service) persist() {
 		Desktop:       s.state.Desktop,
 		Weather:       s.state.Weather,
 	}
-	_ = writeJSON(s.statePath, s.state)
-	_ = writeJSON(s.snapshotPath, snapshot)
+	stateRaw, stateErr := json.Marshal(s.state)
+	snapshotRaw, snapshotErr := json.Marshal(snapshot)
+	s.mu.Unlock()
+	if stateErr == nil {
+		_ = writeJSONBytes(s.statePath, stateRaw)
+	}
+	// snapshot.json stays written for backward compatibility: the external
+	// kos-weather app reads it as its offline fallback.
+	if snapshotErr == nil {
+		_ = writeJSONBytes(s.snapshotPath, snapshotRaw)
+	}
 }
 
 // subscribeDesktop turns the existing local event socket into a small
@@ -576,29 +596,17 @@ func readMem() (used, total float64) {
 	return used * 1024, memTotal * 1024
 }
 
+// readDisk reports used/total bytes of the root filesystem via statfs — the
+// same counters df -B1 prints — without forking a process per sample.
 func readDisk() (used, total float64) {
-	raw, err := os.ReadFile("/proc/mounts")
-	if err != nil {
+	var stat unix.Statfs_t
+	if err := unix.Statfs("/", &stat); err != nil || stat.Bsize <= 0 || stat.Blocks == 0 {
 		return 0, 0
 	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[1] != "/" {
-			continue
-		}
-		if out, err := exec.Command("df", "-B1", "--output=used,size", "/").Output(); err == nil {
-			if rows := strings.Split(strings.TrimSpace(string(out)), "\n"); len(rows) >= 2 {
-				values := strings.Fields(rows[1])
-				if len(values) == 2 {
-					used, _ = strconv.ParseFloat(values[0], 64)
-					total, _ = strconv.ParseFloat(values[1], 64)
-					return used, total
-				}
-			}
-		}
-		break
-	}
-	return 0, 0
+	bsize := uint64(stat.Bsize)
+	total = float64(stat.Blocks * bsize)
+	used = float64((stat.Blocks - stat.Bfree) * bsize)
+	return used, total
 }
 
 func readFrequency() float64 {
@@ -685,7 +693,21 @@ func selectCurrentCPUTemperature(readings []SensorReading) float64 {
 	return current
 }
 
-func readTemperature() (current float64, readings []SensorReading) {
+// sensorProbe is one enumerated temperature input. Probes are collected once
+// per service lifetime (see Service.sensorsOnce): sysfs hwmon/thermal device
+// topology and labels do not meaningfully change at runtime, so re-globbing
+// and re-reading label/name files on every 10s sample would be pure waste.
+// Only inputPath — the live value — is read per sample.
+type sensorProbe struct {
+	source    string
+	device    string
+	label     string
+	inputPath string
+}
+
+// enumerateSensors performs the one-time thermal-zone/hwmon walk.
+func enumerateSensors() []sensorProbe {
+	var probes []sensorProbe
 	zones, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/type")
 	for _, t := range zones {
 		label := strings.TrimSpace(string(readRaw(t)))
@@ -695,9 +717,9 @@ func readTemperature() (current float64, readings []SensorReading) {
 			!strings.Contains(strings.ToLower(label), "pkg") {
 			continue
 		}
-		value := parseF64("/sys/class/thermal/thermal_zone" + index + "/temp")
-		readings = append(readings, SensorReading{
-			Source: "thermal", Device: "kernel", Label: label, MilliC: value,
+		probes = append(probes, sensorProbe{
+			source: "thermal", device: "kernel", label: label,
+			inputPath: "/sys/class/thermal/thermal_zone" + index + "/temp",
 		})
 	}
 	hwmons, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
@@ -711,10 +733,21 @@ func readTemperature() (current float64, readings []SensorReading) {
 			if label == "" {
 				label = "Temperature " + index
 			}
-			readings = append(readings, SensorReading{
-				Source: "hwmon", Device: device, Label: label, MilliC: parseF64(input),
+			probes = append(probes, sensorProbe{
+				source: "hwmon", device: device, label: label, inputPath: input,
 			})
 		}
+	}
+	return probes
+}
+
+func (s *Service) readTemperature() (current float64, readings []SensorReading) {
+	s.sensorsOnce.Do(func() { s.sensors = enumerateSensors() })
+	for _, probe := range s.sensors {
+		readings = append(readings, SensorReading{
+			Source: probe.source, Device: probe.device,
+			Label: probe.label, MilliC: parseF64(probe.inputPath),
+		})
 	}
 	return selectCurrentCPUTemperature(readings), readings
 }
@@ -921,15 +954,21 @@ func (s *Service) settle(now time.Time) {
 	s.last = now
 }
 
+// sample performs every sysfs/proc read before taking s.mu: the probes take
+// 5-15ms and would otherwise stall settle/snapshot/persist writers on every
+// 10s tick. s.mu is held only for the state mutation and History append.
+// Callers are serialized on the main goroutine (startup + tick select), so
+// the prevCPU counters in readCPU and the sensorsOnce cache stay race-free.
 func (s *Service) sample() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
-	current, readings := readTemperature()
+	current, readings := s.readTemperature()
 	memUsed, memTotal := readMem()
 	diskUsed, diskTotal := readDisk()
 	cpu := s.readCPU()
 	frequency := readFrequency()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.state.Metrics.CPU = cpu
 	// Ratios must stay finite: a failed probe yields NaN, which json.Marshal
 	// rejects and would silently kill the whole snapshot write.
@@ -963,6 +1002,7 @@ func (s *Service) sample() {
 	s.state.Metrics.AverageMilliC = current
 	s.state.Metrics.MaximumMilliC = maximum5Minute
 }
+
 func dataError(request DataRequest, code, message string, retryable bool) DataResponse {
 	return DataResponse{Version: 1, RequestID: request.RequestID, OK: false,
 		Error: &DataError{Code: code, Message: message, Retryable: retryable}}
