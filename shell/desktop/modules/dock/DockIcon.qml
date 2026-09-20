@@ -357,6 +357,96 @@ Item {
         }
     }
 
+    // Lazily instantiated popups. Creating a PopupWindow allocates a real
+    // QWindow (and its scene-graph resources) even when never shown, so the
+    // context menu and window preview only exist after the first request.
+    property var _contextMenuInstance: null
+    property var _previewInstance: null
+    property Component _contextMenuComponent: Component {
+        ContextMenu {
+            property bool hasBeenVisible: false
+            anchorItem: icon
+            position: ConfigService.position
+            baseColor: ThemeService.backgroundColor
+            foregroundColor: ThemeService.foregroundColor
+            onAboutToShow: hasBeenVisible = true
+            onAboutToHide: {
+                if (hasBeenVisible) {
+                    hasBeenVisible = false
+                    if (DockModelService.activeContextMenu === this)
+                        DockModelService.activeContextMenu = null
+                    DockModelService.releaseDockPopup(this)
+                }
+            }
+            onAction: function(name) {
+                switch (name) {
+                case "open":
+                    DockModelService.activateApp(icon.appId)
+                    break
+                case "new_window":
+                    DockModelService.launchNewWindow(icon.appId)
+                    break
+                case "close_all":
+                    const wins = WindowService.windowsForApp(icon.appId)
+                    for (let i = 0; i < wins.length; i++)
+                        WindowService.closeWindow(wins[i].windowId)
+                    break
+                case "unpin":
+                    AppActionService.unpin(icon.appId)
+                    break
+                case "activate":
+                    DockModelService.activateWindow(icon.windowId)
+                    break
+                case "minimize":
+                    DockModelService.minimizeWindow(icon.windowId)
+                    break
+                case "close":
+                    DockModelService.closeWindow(icon.windowId)
+                    break
+                case "pin":
+                    AppActionService.pin(icon.appId)
+                    break
+                }
+            }
+        }
+    }
+    property Component _previewComponent: Component {
+        DockWindowPreview {
+            id: preview
+            anchorItem: icon
+            onPointerInsideChanged: {
+                // Re-entering the preview while it is closing must cancel the
+                // close and hand off, not restart the glass from zero.
+                if (pointerInside) {
+                    previewCloseDelay.stop()
+                    preview.cancelClosing()
+                } else if (!icon._hovering) {
+                    previewCloseDelay.restart()
+                }
+            }
+            onActivateRequested: {
+                DockModelService.activateWindow(windowId)
+                DockModelService.setDockPopupVisible(this, false)
+            }
+            onVisibleChanged: {
+                if (!visible)
+                    DockModelService.releaseDockPopup(this)
+            }
+        }
+    }
+    function ensureContextMenuLoaded() {
+        if (!_contextMenuInstance)
+            _contextMenuInstance = _contextMenuComponent.createObject(icon)
+        return _contextMenuInstance
+    }
+    function ensurePreviewLoaded() {
+        if (!_previewInstance)
+            _previewInstance = _previewComponent.createObject(icon)
+        return _previewInstance
+    }
+    readonly property var contextMenu: _contextMenuInstance
+    readonly property var preview: _previewInstance
+
     Timer {
         id: previewDelay
         // Short, deliberate dwell so a real hover feels immediate without
@@ -366,14 +456,15 @@ Item {
         onTriggered: {
             if (icon._hovering && icon._hasWindows && !icon.editMode
                     && !DockModelService.activeContextMenu) {
+                const p = ensurePreviewLoaded()
                 console.log("[DockIcon] preview request app=" + icon.appId
                     + " windowCount=" + icon._appWindows.length);
-                preview.appId = icon.appId
-                preview.windowId = icon._previewWindowId
-                preview.title = WindowService.windowById(icon._previewWindowId)?.title
+                p.appId = icon.appId
+                p.windowId = icon._previewWindowId
+                p.title = WindowService.windowById(icon._previewWindowId)?.title
                     ?? icon.displayName
-                preview.windows = icon._appWindows
-                DockModelService.openDockPopup(preview)
+                p.windows = icon._appWindows
+                DockModelService.openDockPopup(p)
             } else if (icon._hovering && icon.isRunning) {
                 console.log("[DockIcon] preview skipped app=" + icon.appId
                     + " no window record")
@@ -389,8 +480,8 @@ Item {
         interval: DockAnimation.windowPreviewCloseDelay
         repeat: false
         onTriggered: {
-            if (!icon._hovering && !preview.pointerInside)
-                DockModelService.setDockPopupVisible(preview, false)
+            if (!icon._hovering && !(icon.preview && icon.preview.pointerInside))
+                DockModelService.setDockPopupVisible(icon.preview, false)
         }
     }
 
@@ -770,8 +861,9 @@ Item {
                 // Right-click is a distinct interaction and must own the
                 // shared popup coordinator until the menu is dismissed.
                 previewDelay.stop()
+                const menu = ensureContextMenuLoaded()
                 if (DockModelService.activeContextMenu
-                        && DockModelService.activeContextMenu !== contextMenu) {
+                        && DockModelService.activeContextMenu !== menu) {
                     if (DockModelService.activeContextMenu.visible)
                         DockModelService.dismissDockPopupImmediately(
                             DockModelService.activeContextMenu)
@@ -781,24 +873,24 @@ Item {
                 // Rebuild items from the icon's current state (window task vs
                 // pinned launcher, persisted pin state), then open.
                 const pinned = icon.isPinnedItem || DockModelService.isAppPinned(icon.appId)
-                contextMenu.clear()
+                menu.clear()
                 if (icon.isWindowItem) {
-                    contextMenu.addItem("window-restore", "激活窗口", "activate")
-                    contextMenu.addItem("window-minimize", "最小化", "minimize")
-                    contextMenu.addItem("window-close", "关闭窗口", "close")
-                    contextMenu.addItem("window-new", "新建窗口", "new_window")
-                    contextMenu.addItem(pinned ? "unpin" : "pin",
+                    menu.addItem("window-restore", "激活窗口", "activate")
+                    menu.addItem("window-minimize", "最小化", "minimize")
+                    menu.addItem("window-close", "关闭窗口", "close")
+                    menu.addItem("window-new", "新建窗口", "new_window")
+                    menu.addItem(pinned ? "unpin" : "pin",
                         pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
                 } else {
-                    contextMenu.addItem("folder-open", "打开", "open")
-                    contextMenu.addItem("window-new", "新建窗口", "new_window")
+                    menu.addItem("folder-open", "打开", "open")
+                    menu.addItem("window-new", "新建窗口", "new_window")
                     if (icon.isRunning)
-                        contextMenu.addItem("window-close", "关闭所有窗口", "close_all")
-                    contextMenu.addItem(pinned ? "unpin" : "pin",
+                        menu.addItem("window-close", "关闭所有窗口", "close_all")
+                    menu.addItem(pinned ? "unpin" : "pin",
                         pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
                 }
-                DockModelService.activeContextMenu = contextMenu
-                DockModelService.openDockPopup(contextMenu)
+                DockModelService.activeContextMenu = menu
+                DockModelService.openDockPopup(menu)
             } else if (!icon._heldForEdit) {
                 icon.activate()
             }
@@ -811,75 +903,6 @@ Item {
         onExited: {
             previewDelay.stop()
             previewCloseDelay.restart()
-        }
-    }
-
-    ContextMenu {
-        id: contextMenu
-        property bool hasBeenVisible: false
-        anchorItem: icon
-        position: ConfigService.position
-        baseColor: ThemeService.backgroundColor
-        foregroundColor: ThemeService.foregroundColor
-        onAboutToShow: hasBeenVisible = true
-        onAboutToHide: {
-            if (hasBeenVisible) {
-                hasBeenVisible = false
-                if (DockModelService.activeContextMenu === contextMenu)
-                    DockModelService.activeContextMenu = null
-                DockModelService.releaseDockPopup(contextMenu)
-            }
-        }
-        onAction: function(name) {
-            switch (name) {
-            case "open":
-                DockModelService.activateApp(icon.appId)
-                break
-            case "new_window":
-                DockModelService.launchNewWindow(icon.appId)
-                break
-            case "close_all":
-                const wins = WindowService.windowsForApp(icon.appId)
-                for (let i = 0; i < wins.length; i++)
-                    WindowService.closeWindow(wins[i].windowId)
-                break
-            case "unpin":
-                AppActionService.unpin(icon.appId)
-                break
-            case "activate":
-                DockModelService.activateWindow(icon.windowId)
-                break
-            case "minimize":
-                DockModelService.minimizeWindow(icon.windowId)
-                break
-            case "close":
-                DockModelService.closeWindow(icon.windowId)
-                break
-            case "pin":
-                AppActionService.pin(icon.appId)
-                break
-            }
-        }
-    }
-
-    DockWindowPreview {
-        id: preview
-        anchorItem: icon
-        onPointerInsideChanged: {
-            if (pointerInside) {
-                previewCloseDelay.stop()
-                preview.cancelClosing()
-            } else if (!icon._hovering) {
-                previewCloseDelay.restart()
-            }
-        }
-        onActivateRequested: {
-            DockModelService.activateWindow(preview.windowId)
-            DockModelService.setDockPopupVisible(preview, false)
-        }
-        onVisibleChanged: {
-            if (!visible)
-                DockModelService.releaseDockPopup(preview)
         }
     }
 

@@ -350,7 +350,14 @@ PopupWindow {
                                     source: cardDelegate.thumbUrl
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: true
-                                    cache: false
+                                    // Decode once at display resolution; the
+                                    // 2x factor keeps the downscaled texture
+                                    // sharp on high-density outputs without
+                                    // paying full-window-size decode cost.
+                                    sourceSize.width: Math.max(1,
+                                        Math.round(thumbnailBox.width * 2))
+                                    sourceSize.height: Math.max(1,
+                                        Math.round(thumbnailBox.height * 2))
                                     opacity: 0
                                 }
 
@@ -378,7 +385,10 @@ PopupWindow {
                                         source: cardDelegate.thumbUrl
                                         fillMode: Image.Stretch
                                         asynchronous: true
-                                        cache: false
+                                        sourceSize.width: Math.max(1,
+                                            Math.round(thumbnailBox.width * 2))
+                                        sourceSize.height: Math.max(1,
+                                            Math.round(thumbnailBox.height * 2))
                                     }
                                 }
 

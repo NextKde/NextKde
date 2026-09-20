@@ -132,6 +132,7 @@ Item {
         widthUnits: carousel.widthUnits
         visible: carousel.hasMusic
         enabled: carousel.page === carousel.musicPage
+        pageActive: carousel.page === carousel.musicPage && carousel.hasMusic
         x: carousel.pageX(carousel.musicPage, width)
         opacity: enabled ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -145,6 +146,7 @@ Item {
         widthUnits: carousel.widthUnits
         visible: carousel.hasWeather
         enabled: carousel.page === carousel.weatherPage
+        pageActive: carousel.page === carousel.weatherPage && carousel.hasWeather
         x: carousel.pageX(carousel.weatherPage, width)
         opacity: enabled ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -158,6 +160,7 @@ Item {
         widthUnits: carousel.widthUnits
         visible: carousel.showClock
         enabled: carousel.page === carousel.clockPage
+        pageActive: carousel.page === carousel.clockPage && carousel.showClock
         x: carousel.pageX(carousel.clockPage, width)
         opacity: enabled ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -171,6 +174,7 @@ Item {
         widthUnits: carousel.widthUnits
         visible: carousel.showTemperature
         enabled: carousel.page === carousel.temperaturePage
+        pageActive: carousel.page === carousel.temperaturePage && carousel.showTemperature
         x: carousel.pageX(carousel.temperaturePage, width)
         opacity: enabled ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }

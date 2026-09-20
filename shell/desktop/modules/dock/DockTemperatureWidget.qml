@@ -11,6 +11,8 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property int widthUnits: 4
+    // Set by DockInfoCarousel; the activity Canvas only repaints while shown.
+    property bool pageActive: true
     readonly property real backgroundGap: iconSize * 0.1
     readonly property real contentWidth: iconSize * widthUnits
     readonly property bool compact: iconSize < 32
@@ -222,9 +224,10 @@ Item {
                     onHeightChanged: requestPaint()
                     Connections {
                         target: widget
-                        function onCpuValueChanged() { activityCanvas.requestPaint() }
-                        function onMemoryValueChanged() { activityCanvas.requestPaint() }
-                        function onStorageValueChanged() { activityCanvas.requestPaint() }
+                        function onCpuValueChanged() { if (widget.pageActive) activityCanvas.requestPaint() }
+                        function onMemoryValueChanged() { if (widget.pageActive) activityCanvas.requestPaint() }
+                        function onStorageValueChanged() { if (widget.pageActive) activityCanvas.requestPaint() }
+                        function onPageActiveChanged() { if (widget.pageActive) activityCanvas.requestPaint() }
                     }
                 }
             }

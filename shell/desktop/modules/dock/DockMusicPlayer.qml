@@ -21,6 +21,9 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property int widthUnits: 4
+    // Set by DockInfoCarousel: true only while this page is the visible one.
+    // Inactive pages keep their transitions but stop self-driven animation.
+    property bool pageActive: true
 
     // ── Derived ──
     readonly property real artSize: Math.min(iconSize, dockHeight - widget.vPadding * 2)
@@ -265,7 +268,7 @@ Item {
                         id: trackScroll
                         // Avoid continuous full-scene rendering while the
                         // Dock is idle. Long metadata scrolls on demand.
-                        running: widget.detailsHovered
+                        running: widget.pageActive && widget.detailsHovered
                             && trackMarquee.width > trackViewport.width
                         loops: Animation.Infinite
 
@@ -360,7 +363,7 @@ Item {
 
                 SequentialAnimation on scrollOffset {
                     id: compactTrackScroll
-                    running: widget.isCompact
+                    running: widget.pageActive && widget.isCompact
                         && compactTrackTitle.width > compactTrackViewport.width
                     loops: Animation.Infinite
 
