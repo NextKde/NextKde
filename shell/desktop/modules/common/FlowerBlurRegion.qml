@@ -13,12 +13,15 @@ import QtQuick
 //
 // Geometry is the same polar curve MaterialFlower draws:
 //     r(theta) = R * (1 - amplitude + amplitude * sin(lobes * theta))
-// and bands are produced by a scanline fill of that polygon. Every horizontal
-// line crosses the shape at most twice (the smallest radius is
-// R * (1 - 2*amplitude), so the centre stays solid), which is what makes a
-// fixed two-slots-per-row layout exact rather than approximate. The region is
-// the flower's own content area, so the frost edge lands on the outline that is
-// actually drawn and never spills past it.
+// and bands are produced by a scanline fill of that polygon. The fixed
+// two-slots-per-row layout assumes a scanline meets at most two intervals,
+// which holds while the silhouette stays close to a circle (12 lobes,
+// amplitude 0.075): the centre always stays solid because the smallest radius
+// is R * (1 - 2*amplitude), so a scanline can only dip out of the shape
+// between neighbouring lobes. Deeper lobes could produce a third interval;
+// the fill drops it and warns rather than pretending to be exact. The region
+// is the flower's own content area, so the frost edge lands on the outline
+// that is actually drawn and never spills past it.
 //
 // Coordinates are surface coordinates, exactly like RoundedBlurRegion: `item`
 // must be the positioned wrapper whose x/y are the card's surface position.
@@ -30,10 +33,16 @@ Region {
     property real amplitude: 0.075
     // Rows in the scanline fill. More rows means a finer stair on the lobes;
     // 32 keeps the region under 64 rectangles, which KWin handles comfortably.
+    // Clamped to 32: the slot declarations below are fixed at 64 (32 rows x 2),
+    // and a larger count would silently truncate.
     property int sliceCount: 32
+    readonly property int rows: Math.max(1, Math.min(32, sliceCount))
     // Set false to publish nothing (the component is kept alive but yields an
     // empty region).
     property bool active: true
+    // One-shot flag for the interval guard in `bands`; written during binding
+    // evaluation but never read by it, so it cannot loop.
+    property bool _intervalOverflowWarned: false
 
     readonly property real outlineInset: 1
     // MaterialFlower is centred in its parent and 18px smaller than the card's
@@ -58,15 +67,15 @@ Region {
         return points
     }
 
-    // Scanline fill: sliceCount rows x 2 slots, empty slots are null.
+    // Scanline fill: rows x 2 slots, empty slots are null.
     readonly property var bands: {
         if (!active || radius <= 0)
             return []
         const points = outline()
-        const step = radius * 2 / sliceCount
+        const step = radius * 2 / rows
         const top = item.y + item.height / 2 - radius
         const out = []
-        for (let row = 0; row < sliceCount; ++row) {
+        for (let row = 0; row < rows; ++row) {
             const scanY = top + (row + 0.5) * step
             const crossings = []
             for (let index = 0; index < points.length - 1; ++index) {
@@ -78,6 +87,13 @@ Region {
                 }
             }
             crossings.sort(function (left, right) { return left - right })
+            if (crossings.length > 4 && !root._intervalOverflowWarned) {
+                root._intervalOverflowWarned = true
+                console.warn("[FlowerBlurRegion] a scanline met more than two "
+                    + "intervals; the two-slots-per-row layout only holds for "
+                    + "shallow lobes (12 lobes, amplitude <= 0.075). Dropping "
+                    + "the extras.")
+            }
             out.push(band(crossings, 0, scanY - step / 2, step))
             out.push(band(crossings, 1, scanY - step / 2, step))
         }
@@ -101,7 +117,8 @@ Region {
     }
 
     // Two slots per scanline row. `Region.regions` is a readonly list, so these
-    // have to be declared; the count must stay at sliceCount * 2.
+    // have to be declared; the count must stay at 32 rows x 2. `rows` is
+    // clamped to that, and slots past the end of `bands` yield empty regions.
     Region { x: root.slot(0, "x"); y: root.slot(0, "y"); width: root.slot(0, "width"); height: root.slot(0, "height") }
     Region { x: root.slot(1, "x"); y: root.slot(1, "y"); width: root.slot(1, "width"); height: root.slot(1, "height") }
     Region { x: root.slot(2, "x"); y: root.slot(2, "y"); width: root.slot(2, "width"); height: root.slot(2, "height") }
