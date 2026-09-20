@@ -391,7 +391,7 @@ PopupWindow {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
-                ? "#0a84ff"
+                ? ThemeService.tileActiveFill
                 : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05)))
             opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
             scale: wifiTogglePointer.pressed ? 0.92
@@ -521,7 +521,7 @@ PopupWindow {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
-                ? "#0a84ff"
+                ? ThemeService.tileActiveFill
                 : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05)))
             opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
             scale: bluetoothTogglePointer.pressed ? 0.92

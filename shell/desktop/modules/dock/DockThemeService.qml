@@ -75,6 +75,11 @@ QtObject {
         AppearanceTokens.colors.surfaceVariantForeground, "white")
     readonly property color tileActiveGlyph: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primaryContainerForeground, "white")
+    // The fill `tileActiveGlyph` is cut for: an enabled toggle reads as a
+    // primaryContainer tile carrying its own on-container ink, not as the
+    // accent with a borrowed foreground.
+    readonly property color tileActiveFill: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primaryContainer, "#0a84ff")
     readonly property color tileAccent: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primary, "#0a84ff")
     readonly property color tileDanger: AppearanceTokens.surface.pick(
