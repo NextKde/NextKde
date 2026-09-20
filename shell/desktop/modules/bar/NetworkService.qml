@@ -207,10 +207,23 @@ QtObject {
         return true
     }
 
+    // Network state still comes from polling: the daemon's PropertiesChanged
+    // watches only invalidate its reply cache, they never push to the shell.
+    // Poll fast while a status panel is showing the data and drop to a
+    // once-a-minute floor otherwise, so the tray icon still tracks
+    // connectivity changes without a constant 3s churn.
+    readonly property bool _panelOpen: ControlCenterService.anyPanelOpen
+    property Connections _panelState: Connections {
+        target: ControlCenterService
+        function onAnyPanelOpenChanged() {
+            if (ControlCenterService.anyPanelOpen)
+                service.refresh()
+        }
+    }
     property Timer refreshTimer: Timer {
-        interval: 3000
+        interval: service._panelOpen ? 3000 : 60000
         repeat: true
-        running: true
+        running: PlatformClient.socket.connected
         onTriggered: service.refresh()
     }
     property Timer wifiEnableScanTimer: Timer {

@@ -48,6 +48,18 @@ QtObject {
     property bool nightLightChangeInProgress: false
     signal toggleRequested()
 
+    // Every surface that shows this service's live data (network/bluetooth
+    // quick panels, the control centre itself) registers while it is open.
+    // The fast poll only runs while someone can see the result; a slow floor
+    // keeps the always-on consumers (DeskCenter card, first-open paint) from
+    // going fully stale at a fraction of the idle cost.
+    property int _openPanelCount: 0
+    readonly property bool anyPanelOpen: _openPanelCount > 0
+    function notePanelOpen(open) {
+        _openPanelCount = Math.max(0, _openPanelCount + (open ? 1 : -1))
+    }
+    onAnyPanelOpenChanged: if (anyPanelOpen) refresh()
+
     function rebuildHistoryGroups() {
         const groups = []
         const groupIndex = ({})
@@ -409,15 +421,18 @@ QtObject {
     }
 
     property Timer refreshTimer: Timer {
-        interval: 3000
+        interval: service.anyPanelOpen ? 3000 : 120000
         repeat: true
-        running: true
+        running: PlatformClient.socket.connected
         onTriggered: service.refresh()
     }
+    // The per-application mixer list is only visible inside the control
+    // centre, so it gets no floor of its own; refresh() repopulates it on
+    // open and on each slow fallback tick.
     property Timer audioApplicationsTimer: Timer {
         interval: 1800
         repeat: true
-        running: true
+        running: PlatformClient.socket.connected && service.anyPanelOpen
         onTriggered: service.refreshAudioApplications()
     }
     property Connections platformTransport: Connections {

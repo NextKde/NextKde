@@ -25,6 +25,22 @@ Item {
     readonly property bool anyPanelOpen: (networkPanel?.visible ?? false)
         || (bluetoothPanel?.visible ?? false) || root.controlCenterOpen
 
+    // Report panel visibility into the service singleton so its fast refresh
+    // only runs while a panel is actually showing the data. A count (not a
+    // flag) keeps multiple BarStatusArea instances — standalone Bar plus
+    // Dock host, or several outputs — from releasing each other's panels.
+    property bool _panelOpenRegistered: false
+    onAnyPanelOpenChanged: {
+        if (anyPanelOpen === _panelOpenRegistered)
+            return
+        _panelOpenRegistered = anyPanelOpen
+        ControlCenterService.notePanelOpen(anyPanelOpen)
+    }
+    Component.onDestruction: {
+        if (_panelOpenRegistered)
+            ControlCenterService.notePanelOpen(false)
+    }
+
     function toggleControlCenter(anchorItem) {
         controlCenterUnloadTimer.stop()
         if (controlCenterOpen) {
