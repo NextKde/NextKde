@@ -14,6 +14,11 @@ ExecStart=%h/.local/libexec/kos-platform daemon
 Environment=KOS_PLATFORM_KWIN_SCRIPT=%h/.local/share/kos/platform/kwin/window-bridge.js
 Restart=on-failure
 RestartSec=2
+# This daemon is resident for the whole session and every descriptor-holding
+# thread costs one fd (a Qt thread that runs an event loop allocates an
+# eventfd). systemd's default soft limit is 1024; reaching it aborts the
+# process inside glib instead of failing a single capture, so keep headroom.
+LimitNOFILE=8192
 
 [Install]
 WantedBy=graphical-session.target
