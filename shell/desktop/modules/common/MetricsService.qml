@@ -37,11 +37,13 @@ QtObject {
     }
 
     // Keep the same ten-second cadence as the service sampler with a little
-    // slack so the reloads never synchronize with its writes.
+    // slack so the reloads never synchronize with its writes. The bar's
+    // temperature readout is always visible, so there is no idle gate here —
+    // only the transport gate, which stops dead-service queue churn.
     property Timer refreshTimer: Timer {
         interval: 10000
         repeat: true
-        running: true
+        running: DataClient.socket.connected
         triggeredOnStart: true
         onTriggered: service.reload()
     }

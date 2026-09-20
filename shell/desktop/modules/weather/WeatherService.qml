@@ -150,10 +150,12 @@ QtObject {
         }
     }
 
+    // weather.changed events already drive reloads; this timer is only a
+    // floor for a missed event, so five minutes is plenty.
     property Timer fallbackReload: Timer {
-        interval: 10000
+        interval: 300000
         repeat: true
-        running: true
+        running: DataClient.socket.connected
         triggeredOnStart: true
         onTriggered: service.reload()
     }
