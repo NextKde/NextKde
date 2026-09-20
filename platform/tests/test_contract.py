@@ -99,8 +99,13 @@ def assert_thumbnail_fd_ownership(source: str) -> None:
     """
     body = source[source.index("void captureThumbnail("):]
     body = body[:body.index("static QString normalizeName(")]
-    before_call = body[:body.index("screenshot.call(")]
-    after_call = body[body.index("screenshot.call("):]
+    # The capture is dispatched with asyncCall() so a stalled or slow KWin reply
+    # cannot block every other bridge request. The message is still marshalled
+    # and sent before the call returns (NoBlock defers the reply, not the send),
+    # which is what lets the duplicated write end go back at that point.
+    call_site = body.index("screenshot.asyncCall(")
+    before_call = body[:call_site]
+    after_call = body[call_site:]
 
     assert body.count("::dup(pipeFds[1])") == 1, "one local write end, no more"
     # The failed-dup exit is the only place this side may close either pipe end.
