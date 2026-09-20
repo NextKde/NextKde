@@ -2403,12 +2403,11 @@ ApplicationWindow {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
-            // The shared controls draw in the shape the shell is using. This
-            // object has no isMaterialDesign of its own -- reading the window's
-            // state is what keeps the assignment from throwing a ReferenceError
-            // and taking the rest of applyState() down with it.
-            LiquidControls.ControlForm.materialForm = window.materialForm
-                        // The window palette follows the same style.
+            // The window palette follows the same style. ControlForm is NOT
+            // assigned here: reading window.materialForm before this line would
+            // hand the shared controls the previous style. Both
+            // DisplaySettingsPage instances re-apply the form from their own
+            // fresh isMaterialDesign, and selectStyle() calls them right after.
             window.shellStyle = shellStyle
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
@@ -2416,13 +2415,8 @@ ApplicationWindow {
                 materialColorScheme = state.materialColorScheme
             materialAccentName = String(state.materialAccentName ?? "")
             // The Shell owns the scheme and sends previews; the page never
-            // evaluates colours itself.
-            //
-            // Deliberately NOT Array.isArray(): the value crosses the C++ bridge
-            // as a QVariantList, which QML hands over as an array-like object
-            // that Array.isArray() reports as false. Gating on it silently
-            // emptied the picker — the block rendered with no tiles at all.
-            // JSON string: see the Shell side for why. Parsing here keeps the
+            // evaluates colours itself. The swatches cross the C++ bridge as a
+            // JSON string (see the Shell side for why); parsing here keeps the
             // bridge free of nested-type conversion.
             let parsed = []
             try {
@@ -2763,7 +2757,10 @@ ApplicationWindow {
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 anchors.topMargin: 10
-                implicitHeight: 136
+                // Tall enough for the tile row below: the header column (39),
+                // the 10px gap and the 74px tiles, plus the 14px margins.
+                // The old 136 cut 3px off that and squeezed the tiles.
+                implicitHeight: 152
                 visible: themePage.shellStyle === "material"
                 radius: 18
                 color: theme.card
@@ -2821,7 +2818,9 @@ ApplicationWindow {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 62
+                        // 7 + accent 24 + 5 + strip 10 + 5 + label 16 + 7. At 62
+                        // the label had no room and hung 8px out of the tile.
+                        Layout.preferredHeight: 74
                         visible: themePage.colorSchemes.length > 0
                         spacing: 10
 
@@ -2883,17 +2882,47 @@ ApplicationWindow {
                                         }
                                     }
 
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: themePage.schemeName(
-                                            schemeTile.modelData.id)
-                                        color: schemeTile.chosen
-                                            ? theme.primaryText : theme.secondaryText
-                                        font.pixelSize: 11
-                                        font.weight: schemeTile.chosen
-                                            ? Font.DemiBold : Font.Normal
-                                        horizontalAlignment: Text.AlignHCenter
-                                        elide: Text.ElideRight
+                                    // A leading radio is the loudest cue the tile
+                                    // has: the container tint alone read as noise
+                                    // next to three coloured swatches. Kept at
+                                    // 14px so it stays inside the label's own
+                                    // 16px line box -- the card height above is
+                                    // sized around that line and cannot grow.
+                                    RowLayout {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        spacing: 6
+
+                                        Rectangle {
+                                            id: schemeRadio
+                                            implicitWidth: 14
+                                            implicitHeight: 14
+                                            Layout.alignment: Qt.AlignVCenter
+                                            radius: width / 2
+                                            color: "transparent"
+                                            border.width: 1.5
+                                            border.color: schemeTile.chosen
+                                                ? theme.accent : theme.secondaryText
+
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: 6
+                                                height: 6
+                                                radius: 3
+                                                visible: schemeTile.chosen
+                                                color: schemeRadio.border.color
+                                            }
+                                        }
+
+                                        Text {
+                                            text: themePage.schemeName(
+                                                schemeTile.modelData.id)
+                                            color: schemeTile.chosen
+                                                ? theme.primaryText : theme.secondaryText
+                                            font.pixelSize: 11
+                                            font.weight: schemeTile.chosen
+                                                ? Font.DemiBold : Font.Normal
+                                            elide: Text.ElideRight
+                                        }
                                     }
                                 }
 
