@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -52,14 +53,14 @@ func TestRollingTemperatureMaximumUsesFiveMinuteWindow(t *testing.T) {
 }
 
 func TestDesktopSubscriptionImmediatelyAnnouncesSnapshot(t *testing.T) {
-	service := &Service{desktopSubscribers: map[net.Conn]struct{}{}}
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
 	server, client := net.Pipe()
 	defer server.Close()
 	defer client.Close()
 
 	done := make(chan struct{})
 	go func() {
-		service.subscribeDesktop(server)
+		service.subscribeDesktop(&subscriberConn{Conn: server})
 		close(done)
 	}()
 	line, err := bufio.NewReader(client).ReadString('\n')
@@ -322,4 +323,101 @@ func TestWeatherSnapshotConcurrentWithLocationWrites(t *testing.T) {
 		}
 	}
 	<-done
+}
+
+// Regression test for the JSONL interleave/deadlock class: broadcasts and
+// request-response writes share each conn, and before per-conn write mutexes
+// their bytes could interleave mid-line while racing deadline ops could arm
+// (or clear) a deadline under another writer. Now every writer goes through
+// writeLine, so each line the client reads must be exactly one JSON value.
+func TestBroadcastDoesNotInterleaveWithResponses(t *testing.T) {
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	const broadcasts, responses = 30, 30
+
+	readDone := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(client)
+		// One subscribe announcement + all broadcasts + all responses.
+		for i := 0; i < 1+broadcasts+responses; i++ {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				readDone <- err
+				return
+			}
+			var value map[string]interface{}
+			if err := json.Unmarshal(line, &value); err != nil {
+				readDone <- err
+				return
+			}
+		}
+		readDone <- nil
+	}()
+
+	conn := &subscriberConn{Conn: server}
+	service.subscribeDesktop(conn)
+	defer service.unsubscribeDesktop(conn)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < broadcasts; i++ {
+			service.publishDesktop()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < responses; i++ {
+			response, _ := json.Marshal(DataResponse{Version: 1, OK: true})
+			if err := conn.writeLine(append(response, '\n'), 2*time.Second); err != nil {
+				t.Errorf("response write failed: %v", err)
+				return
+			}
+		}
+	}()
+	wg.Wait()
+
+	select {
+	case err := <-readDone:
+		if err != nil {
+			t.Fatalf("client read an interleaved/corrupt line: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out reading broadcast/response lines")
+	}
+}
+
+// A subscriber that never reads must not stall publishes: the write deadline
+// bounds each broadcast write and the conn is dropped after it expires, so
+// publishDesktop returns quickly instead of blocking the event system.
+func TestPublishDesktopDoesNotBlockOnUnreadConn(t *testing.T) {
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	conn := &subscriberConn{Conn: server}
+	// Never read on client: the subscribe announcement write itself blocks
+	// until the deadline, so it must run off the test goroutine.
+	subscribed := make(chan struct{})
+	go func() {
+		service.subscribeDesktop(conn)
+		close(subscribed)
+	}()
+	defer service.unsubscribeDesktop(conn)
+	// Never read on client: every write blocks until the 100ms deadline,
+	// so the conn is removed after the first publish and later publishes
+	// have no subscribers at all.
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		service.publishDesktop()
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("publishes took %v; a stalled subscriber must not block them", elapsed)
+	}
+	<-subscribed
 }
