@@ -53,5 +53,19 @@ QtObject {
         depositReceived()
     }
 
+    property Connections platformTransport: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected) {
+                service.refreshContentState()
+            } else {
+                // Outstanding callbacks are failed by the client; reset the
+                // guards too so Empty can never stay wedged after a restart.
+                service._stateRequestPending = false
+                service.emptying = false
+            }
+        }
+    }
+
     Component.onCompleted: refreshContentState()
 }

@@ -226,8 +226,18 @@ QtObject {
     property Connections platformTransport: Connections {
         target: PlatformClient
         function onTransportChanged(connected) {
-            if (connected)
+            if (connected) {
                 service.refresh()
+            } else {
+                // The client fails every outstanding callback on disconnect,
+                // which already clears these; reset defensively so a Wi-Fi
+                // control can never stay wedged by a lost response.
+                wifiScanInProgress = false
+                wifiConnectInProgress = false
+                wifiDisconnectInProgress = false
+                wifiForgetInProgress = false
+                wifiToggleInProgress = false
+            }
         }
     }
     Component.onCompleted: refresh()

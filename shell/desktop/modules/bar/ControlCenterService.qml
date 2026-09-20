@@ -423,8 +423,25 @@ QtObject {
     property Connections platformTransport: Connections {
         target: PlatformClient
         function onTransportChanged(connected) {
-            if (connected)
+            if (connected) {
                 service.refresh()
+            } else {
+                // The client fails every outstanding callback on disconnect,
+                // which already clears these; reset defensively so no tile or
+                // session button can stay wedged by a lost response.
+                audioApplicationsRefreshInProgress = false
+                volumeChangeInProgress = false
+                brightnessChangeInProgress = false
+                bluetoothChangeInProgress = false
+                bluetoothDevicesRefreshInProgress = false
+                bluetoothDeviceChangeInProgress = false
+                bluetoothChangingAddress = ""
+                screenshotInProgress = false
+                sessionActionInProgress = false
+                themeChangeInProgress = false
+                nightLightChangeInProgress = false
+                _bluetoothPollTimer.stop()
+            }
         }
     }
     Component.onCompleted: refresh()

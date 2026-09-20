@@ -90,6 +90,12 @@ QtObject {
                 svc._kwinWindows = []
                 svc.desktops = []
                 svc.currentDesktopId = ""
+                // Thumbnails resolve through events, not request responses,
+                // so a dropped transport can never release them. New handles
+                // arrive with the next snapshot anyway; forget both the
+                // pending marks and the now-dead PNG paths.
+                svc._thumbnailPendingByHandle = ({})
+                svc._thumbnailUrlsByHandle = ({})
                 svc._rebuild()
             }
         }
@@ -622,9 +628,19 @@ QtObject {
 
     function _sendKwinCommand(command) {
         PlatformClient.request("kwin.command", command, function(response) {
-            if (!response?.ok)
+            if (!response?.ok) {
                 console.warn("[WindowService] KWin command failed: "
                     + (response?.error?.message || "platform unavailable"))
+                // A rejected thumbnail request never produces a thumbnail
+                // event, so release the pending mark here or the handle is
+                // stuck until the next disconnect.
+                if (command.action === "thumbnail"
+                        && svc._thumbnailPendingByHandle[command.id]) {
+                    const pending = Object.assign({}, svc._thumbnailPendingByHandle)
+                    delete pending[command.id]
+                    svc._thumbnailPendingByHandle = pending
+                }
+            }
         })
     }
 

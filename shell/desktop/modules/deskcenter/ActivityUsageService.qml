@@ -95,8 +95,13 @@ QtObject {
     property Connections dataTransport: Connections {
         target: DataClient
         function onTransportChanged(connected) {
-            if (connected)
+            if (connected) {
                 service.reload()
+                // active-app is a fire-and-forget write that fails fast while
+                // disconnected; re-report the foreground app or attribution
+                // stays stale until the next focus change.
+                service.sendActiveApp()
+            }
         }
     }
     Component.onCompleted: reload()

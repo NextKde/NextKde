@@ -113,9 +113,10 @@ QtObject {
         return "qs --path " + Quickshell.shellDir + " " + args
     }
 
-    // Publish the effective set to kos-platform. Applies at startup (the
-    // request queues until the daemon connects) and after every change, so
-    // a missing or stale kglobalaccel entry self-heals on every Shell start.
+    // Publish the effective set to kos-platform. Applies at startup and after
+    // every change — the request fails fast while the daemon is down and the
+    // transportChanged handler re-sends on reconnect — so a missing or stale
+    // kglobalaccel entry self-heals on every Shell start.
     function applyToPlatform() {
         const shortcuts = effectiveShortcuts().map(item => ({
             id: item.id,
