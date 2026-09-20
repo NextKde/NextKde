@@ -300,6 +300,11 @@ public:
             QStringLiteral("updateShellStyle"), style}));
     }
 
+    Q_INVOKABLE QVariantMap updateMaterialColorScheme(const QString &scheme) {
+        return appearanceSnapshotFromReply(callAppearance({
+            QStringLiteral("updateMaterialColorScheme"), scheme}));
+    }
+
     Q_INVOKABLE QVariantMap updateBarIntegratedWithDock(bool enabled) {
         return appearanceSnapshotFromReply(callAppearance({
             QStringLiteral("updateBarIntegratedWithDock"),
@@ -547,6 +552,15 @@ private:
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble(0.5)},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString(QStringLiteral("#a855f7"))},
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
+            {QStringLiteral("materialColorScheme"),
+                object.value(QStringLiteral("materialColorScheme")).toString(QStringLiteral("monet"))},
+            {QStringLiteral("materialAccentName"),
+                object.value(QStringLiteral("materialAccentName")).toString()},
+            // Swatch previews for the colour-source picker, as a JSON string.
+            // The QML side parses it; passing the nested structure through
+            // QVariantList/QVariantMap instead left the picker empty.
+            {QStringLiteral("materialColorSwatches"),
+                object.value(QStringLiteral("materialColorSwatches")).toString()},
             {QStringLiteral("barIntegratedWithDock"),
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
             {QStringLiteral("glassFollowsAppearanceMode"),

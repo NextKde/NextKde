@@ -19,20 +19,18 @@ Item {
     property int offsetRight: 0
     property int cardWidth: 296
     property int cardHeight: 59
-    property real cardRadius: AppearanceTokens.isMaterial
-        ? AppearanceTokens.shape.large : 19
+    property real cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 19)
     property color cardColor: ThemeService.backgroundColor
     // Readability scrim for this card's glass: one step above the Dock, which
     // sits at "subtle". Widgets hosting white content can raise it further
     // (widgets use "readable") so text holds over a bright backdrop.
     property string cardScrimLevel: "transparent"
-    property color cardBorderColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.outline : Qt.rgba(1, 1, 1, 0.20)
+    property color cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, Qt.rgba(1, 1, 1, 0.20))
     property real cardOpacity: 1.0
     property real cardScale: 1.0
     // Hosts with their own tonal fill can still use this item solely to
     // publish a KWin blur shape, without stacking a second QML material.
-    property bool fallbackEnabled: AppearanceTokens.isMaterial
+    property bool fallbackEnabled: AppearanceTokens.surface.paintInQml
 
     // Inert compatibility from the old per-window card; each card now draws its
     // own glass, so these are retained only so existing instances compile.

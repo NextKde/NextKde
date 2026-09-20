@@ -160,6 +160,15 @@ Item {
                 // the value as an object and fall back to its previous tint.
                 iconTintColor: IconAppearanceService.tintColor.toString(),
                 shellStyle: AppearanceConfigService.shellStyle,
+                materialColorScheme:
+                    AppearanceConfigService.materialColorScheme,
+                materialAccentName: AppearanceTokens.materialAccentName,
+                // Serialised here, not passed as a nested structure: the
+                // settings bridge is a C++ QVariantMap with a hand-written
+                // whitelist, and a plain string crosses it with no conversion
+                // left to get wrong.
+                materialColorSwatches:
+                    JSON.stringify(AppearanceTokens.colorSchemeSwatches),
                 glassFollowsAppearanceMode:
                     AppearanceConfigService.glassFollowsAppearanceMode,
                 barIntegratedWithDock:
@@ -224,6 +233,11 @@ Item {
 
         function updateShellStyle(style: string): string {
             AppearanceConfigService.updateShellStyle(style)
+            return snapshot()
+        }
+
+        function updateMaterialColorScheme(scheme: string): string {
+            AppearanceConfigService.updateMaterialColorScheme(scheme)
             return snapshot()
         }
 

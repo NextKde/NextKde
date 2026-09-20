@@ -86,6 +86,51 @@ def test_bridge_trace_is_opt_in() -> None:
     assert publish.index("if (traceEvents)") < publish.index("QJsonDocument(event).toJson")
 
 
+def assert_thumbnail_fd_ownership(source: str) -> None:
+    """Both ends of the screenshot pipe must have exactly one owner.
+
+    Measured against the shipped binary before this was fixed: every capture
+    leaked two descriptors - the drain's read end, and the local write end that
+    was duplicated for QDBusUnixFileDescriptor and then never closed (that
+    class duplicates what it is handed: Qt 6 setFileDescriptor() calls
+    qt_safe_dup()). Two per capture reached RLIMIT_NOFILE after a few hundred
+    thumbnails, and glib then aborted the whole daemon on the next thread that
+    needed a wakeup pipe.
+    """
+    body = source[source.index("void captureThumbnail("):]
+    body = body[:body.index("static QString normalizeName(")]
+    before_call = body[:body.index("screenshot.call(")]
+    after_call = body[body.index("screenshot.call("):]
+
+    assert body.count("::dup(pipeFds[1])") == 1, "one local write end, no more"
+    # The failed-dup exit is the only place this side may close either pipe end.
+    assert before_call.count("::close(pipeFds[0])") == 1, "failed-dup exit closes the read end"
+    assert before_call.count("::close(pipeFds[1])") == 1, "failed-dup exit closes the write end"
+    assert "::close(dbusWriteFd)" not in before_call, \
+        "the descriptor handed to D-Bus must outlive the call"
+    # After the call both of our write ends go back: the pipe end, and the
+    # duplicate we made for QDBusUnixFileDescriptor, which only copies it.
+    assert after_call.count("::close(pipeFds[1])") == 1, "the pipe write end needs one owner"
+    assert after_call.count("::close(dbusWriteFd)") == 1, \
+        "the duplicated write end needs one owner"
+
+
+def test_thumbnail_drain_owns_the_read_descriptor() -> None:
+    source = (ROOT / "platform/src/kwin/KWinBridge.cpp").read_text()
+    drain = source[source.index("auto pixelsFuture = QtConcurrent::run("):]
+    drain = drain[:drain.index("QVariantMap options;")]
+    # The loop returns from four branches. Hand-closing the read end on two of
+    # them leaked one descriptor per capture, which eventually exhausted
+    # RLIMIT_NOFILE and made glib abort the daemon inside a new thread.
+    assert drain.count("::close(readFd)") == 1, "the read fd needs exactly one owner"
+    assert drain.index("qScopeGuard") < drain.index("return"), "install the guard first"
+    assert "::close(readFd);\n                return" not in drain, "no hand-closed exit"
+
+
+def test_thumbnail_capture_closes_every_descriptor_it_opens() -> None:
+    assert_thumbnail_fd_ownership((ROOT / "platform/src/kwin/KWinBridge.cpp").read_text())
+
+
 def test_brightness_targets_one_kde_display() -> None:
     source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
     assert "openScreenBrightness" in source
@@ -110,5 +155,7 @@ if __name__ == "__main__":
     test_theme_toggle_uses_the_safe_palette_path()
     test_nightlight_toggle_only_changes_persistent_master_switch()
     test_bridge_trace_is_opt_in()
+    test_thumbnail_drain_owns_the_read_descriptor()
+    test_thumbnail_capture_closes_every_descriptor_it_opens()
     test_brightness_targets_one_kde_display()
     print("platform contracts: ok")

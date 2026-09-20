@@ -17,6 +17,12 @@ Item {
     property color selectionColor: AppTheme.cardHover
     property color textColor: AppTheme.text
     property color mutedTextColor: AppTheme.mutedText
+    // A tonal host draws the Material 3 segmented button: a full-radius outline
+    // container with a filled, shadowless selection. The liquid lens below
+    // (shadow, gradient, hairline rim) is the glass finish this form must not
+    // have, so its layers are hidden rather than blended. Follows the
+    // application-wide form by default.
+    property bool materialForm: ControlForm.materialForm
     property int _pressedIndex: -1
     property int _visualIndex: 0
     property int _pendingIndex: -1
@@ -78,7 +84,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: height * 0.38
+        radius: root.materialForm ? height / 2 : height * 0.38
         color: root.backgroundColor
         border.width: 1
         border.color: AppTheme.border
@@ -86,6 +92,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
+            visible: !root.materialForm
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.04) }
@@ -101,6 +108,7 @@ Item {
         width: lens.width
         height: lens.height
         radius: lens.radius
+        visible: !root.materialForm
         color: Qt.rgba(0, 0, 0, AppTheme.dark ? 0.24 : 0.10)
         Behavior on x { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutQuint } }
     }
@@ -111,9 +119,9 @@ Item {
         y: 2
         width: root.segmentWidth
         height: root.height - 4
-        radius: height * 0.42
+        radius: root.materialForm ? height / 2 : height * 0.42
         color: root.selectionColor
-        border.width: 1
+        border.width: root.materialForm ? 0 : 1
         border.color: Qt.rgba(1, 1, 1, 0.16)
 
         Behavior on x { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutQuint } }
@@ -121,6 +129,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
+            visible: !root.materialForm
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.09) }

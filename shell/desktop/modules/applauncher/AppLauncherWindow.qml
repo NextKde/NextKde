@@ -65,9 +65,8 @@ PanelWindow {
     readonly property int fullscreenPageOffset: isFullscreenMode
         ? fullscreenPage * fullscreenPageSize : 0
     readonly property real gridIconSize: configIconSize
-    readonly property color launcherForegroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceForeground : (isFullscreenMode
-            ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor)
+    readonly property color launcherForegroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isFullscreenMode
+            ? Qt.rgba(1, 1, 1, 0.94) : AppLauncherService.dockForegroundColor))
     onFilteredApplicationsChanged: {
         root.cancelFullscreenPageTransition();
         _clampFullscreenPage();
@@ -1116,8 +1115,7 @@ PanelWindow {
                 id: background
                 anchors.fill: parent
                 property real radius: root.isFullscreenMode ? 0
-                    : (AppearanceTokens.isMaterial
-                        ? AppearanceTokens.shape.extraLarge : 28)
+                    : (AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28))
 
                 // The shared panel owns the rounded blur mask and exact corner
                 // declaration. BackgroundEffect below publishes that region;
@@ -1288,17 +1286,10 @@ PanelWindow {
                                 // liquid surface. KWin renders the launcher
                                 // material behind it; the field keeps only its
                                 // ordinary focus and contrast treatment.
-                                glassColor: AppearanceTokens.isMaterial
-                                    ? AppearanceTokens.colors.layer4
-                                    : Qt.rgba(1, 1, 1, 0.10)
-                                cornerRadius: AppearanceTokens.isMaterial
-                                    ? AppearanceTokens.shape.medium : height
-                                outlineColor: AppearanceTokens.isMaterial
-                                    ? AppearanceTokens.colors.outlineVariant
-                                    : Qt.rgba(1, 1, 1, 0.08)
-                                focusedOutlineColor: AppearanceTokens.isMaterial
-                                    ? AppearanceTokens.colors.primary
-                                    : Qt.rgba(1, 1, 1, 0.24)
+                                glassColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(1, 1, 1, 0.10))
+                                cornerRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.medium, height)
+                                outlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.08))
+                                focusedOutlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, Qt.rgba(1, 1, 1, 0.24))
                                 textColor: root.launcherForegroundColor
                                 mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
                                     root.launcherForegroundColor.g,

@@ -1,17 +1,26 @@
 pragma Singleton
 import QtQuick
 import "MaterialColorScheme.mjs" as Mcu
+import "TraditionalColorScheme.mjs" as Traditional
 
 // Material 3 colour scheme for Kos.Ui.
 //
-// The scheme is computed in-process from a seed colour by
-// `MaterialColorScheme.mjs`, a real CAM16/HCT implementation of Material's
-// algorithm (see that file for why Lab was not good enough). Nothing is
-// spawned: no matugen, no python, no ImageMagick. The seed itself is supplied
-// by the caller, which already owns an image sampler (`ArtworkColorSource`),
-// so no second quantisation pass is needed either.
+// Three colour sources feed the same 49-role palette:
 //
-// Accuracy against matugen 4.2.0, 12 seeds x 49 roles x 2 modes:
+//   "monet"    — Material's own algorithm (MaterialColorScheme.mjs), a real
+//                CAM16/HCT implementation. Faithful to the wallpaper's HUE but
+//                not to its tone: measured on this code, the light-mode accent
+//                lands 24.8 tone steps from the seed on average and the dark
+//                one further.
+//   "chinese"  — 中国传统色 (TraditionalColorScheme.mjs). The seed snaps to the
+//                nearest named colour in a 526-entry table and the accent keeps
+//                that colour's real tone, which is what makes the result read as
+//                the wallpaper's colour: 1.4 tone steps from the seed on
+//                average. Falls back to Monet when no swatch is close enough.
+//   "japanese" — 日本の伝統色, same algorithm, 228-entry table.
+//
+// Accuracies against matugen 4.2.0 for the monet branch, 12 seeds x 49 roles x
+// 2 modes:
 //
 //   vibrant     76.4% of roles byte-exact, 97.5% within the imperceptible band
 //   tonal-spot  60.8% byte-exact
@@ -27,14 +36,32 @@ QtObject {
     // `setSeed()`; an empty value clears the palette.
     property string seed: ""
     property bool ready: false
-    // Scheme variant. "vibrant" matches what the shell was previously fed
-    // through matugen, and it is also the variant with the higher measured
-    // fidelity, so it stays the default. "tonal-spot" is matugen's own default
-    // and is calmer; it is fully modelled too, just less precisely.
+    // Which colour source produces the palette. See the header. "monet" keeps
+    // the previous behaviour and is the default, so an upgrade does not
+    // restyle an existing installation.
+    property string scheme: "monet"
+    // Scheme variant, used by the "monet" source only. "vibrant" matches what
+    // the shell was previously fed through matugen, and it is also the variant
+    // with the higher measured fidelity, so it stays the default.
+    // "tonal-spot" is matugen's own default and is calmer; it is fully modelled
+    // too, just less precisely.
     property string variant: "vibrant"
     // role -> { light: { color }, dark: { color } }, matching the shape the
     // previous matugen-backed implementation exposed so consumers are unaffected.
     property var palette: ({})
+    // Bumped on every palette rebuild. Canvas-based consumers only read the
+    // scheme when they actually paint, so they need one signal that covers every
+    // way the palette can move — a shell-style switch, a colour-source switch, a
+    // new wallpaper seed — instead of subscribing to each role they happen to
+    // draw with. Without it the DeskCenter clock hands and the CPU/memory rings
+    // kept the previous theme's colours after a switch.
+    property int revision: 0
+    // Name of the traditional swatch the accent came from, e.g. "朱砂". Empty
+    // for the "monet" scheme and for seeds that fell back to Monet. Shown in
+    // the settings UI so the choice is legible rather than a swatch.
+    readonly property string accentName: _accentName
+
+    property string _accentName: ""
 
     function color(role, darkMode, fallback) {
         const entry = palette && palette[role]
@@ -79,17 +106,58 @@ QtObject {
         rebuild()
     }
 
+    function isValidScheme(value) {
+        return value === "monet" || value === "chinese"
+            || value === "japanese"
+    }
+
+    // Representative swatches for one colour source, for the settings page to
+    // draw its picker from. Deliberately does NOT touch the active palette: the
+    // page needs all three side by side, and switching `scheme` to measure them
+    // would repaint the entire shell three times per snapshot.
+    //
+    // The set is chosen to show what actually differs between the sources — the
+    // accent, its two companions, a container, and both appearances' surfaces.
+    function previewSwatches(target) {
+        if (!seed || !isValidScheme(target))
+            return []
+        const pair = target === "monet"
+            ? Mcu.buildSchemePair(seed, { variant: variant })
+            : Traditional.buildSchemePair(seed, { table: target })
+        return [
+            pair.light.primary,
+            pair.light.tertiary,
+            pair.light.secondary,
+            pair.light.primary_container,
+            pair.light.surface_container,
+            pair.dark.surface_container,
+        ]
+    }
+
+    function setScheme(value) {
+        const next = String(value)
+        if (!isValidScheme(next) || next === scheme)
+            return
+        scheme = next
+        rebuild()
+    }
+
     function rebuild() {
         if (!seed) {
             palette = ({})
+            _accentName = ""
             ready = false
+            revision++
             return
         }
         try {
-            // The module returns { light: {role: hex}, dark: {role: hex} }.
+            // Both sources return { light: {role: hex}, dark: {role: hex} } with
+            // the same 49 role names, so only the call differs here.
+            const pair = scheme === "monet"
+                ? Mcu.buildSchemePair(seed, { variant: variant })
+                : Traditional.buildSchemePair(seed, { table: scheme })
             // Reshape to matugen's colors[role][mode].color so that consumers
             // written against the previous matugen-backed version keep working.
-            const pair = Mcu.buildSchemePair(seed, { variant: variant })
             const out = ({})
             for (const mode of ["light", "dark"]) {
                 for (const role of Object.keys(pair[mode])) {
@@ -99,11 +167,19 @@ QtObject {
                 }
             }
             palette = out
+            revision++
+            // A seed whose nearest swatch was too far away produces Monet's
+            // palette, and reporting a traditional name for it would be a lie.
+            const match = scheme === "monet" ? null
+                : Traditional.nearestNamed(seed, { table: scheme })
+            _accentName = match && match.accepted ? match.name : ""
             ready = Object.keys(palette).length > 0
         } catch (error) {
             console.warn("[ColorScheme] failed to build scheme for " + seed + ": " + error)
             palette = ({})
+            _accentName = ""
             ready = false
+            revision++
         }
     }
 }

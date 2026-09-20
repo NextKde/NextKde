@@ -17,6 +17,7 @@
 #include <QJsonParseError>
 #include <QQueue>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QSettings>
@@ -196,7 +197,9 @@ private:
             return;
         }
         // Keep one local write descriptor so we can close it deterministically
-        // after the D-Bus call. QDBusUnixFileDescriptor owns a duplicate.
+        // after the D-Bus call. QDBusUnixFileDescriptor duplicates whatever it
+        // is handed (Qt 6 setFileDescriptor() -> qt_safe_dup()), so this local
+        // descriptor is ours to close: it used to be leaked on every capture.
         const int dbusWriteFd = ::dup(pipeFds[1]);
         if (dbusWriteFd == -1) {
             ::close(pipeFds[0]);
@@ -213,11 +216,14 @@ private:
         const auto expectedBytes = std::make_shared<std::atomic<qint64>>(-1);
         const auto deadlineMs = std::make_shared<std::atomic<qint64>>(-1);
         auto pixelsFuture = QtConcurrent::run([readFd = pipeFds[0], expectedBytes, deadlineMs] {
+            // The drain loop leaves through four different branches. Hand-closing
+            // the read end on only two of them leaked one descriptor per capture,
+            // and a long session eventually reached EMFILE: glib then aborts the
+            // whole daemon when a new thread cannot create its wakeup pipe.
+            const auto closeReadFd = qScopeGuard([readFd] { ::close(readFd); });
             const int flags = ::fcntl(readFd, F_GETFL);
-            if (flags == -1 || ::fcntl(readFd, F_SETFL, flags | O_NONBLOCK) == -1) {
-                ::close(readFd);
+            if (flags == -1 || ::fcntl(readFd, F_SETFL, flags | O_NONBLOCK) == -1)
                 return QByteArray{};
-            }
             QByteArray bytes;
             std::array<char, 64 * 1024> buffer;
             for (;;) {
@@ -239,7 +245,6 @@ private:
                 }
                 if (bytesRead == -1 && (errno == EAGAIN || errno == EINTR))
                     continue;
-                ::close(readFd);
                 if (bytesRead <= 0)
                     return bytes;
             }
@@ -261,6 +266,11 @@ private:
         // Without this close, our own write end keeps the reader's readAll()
         // waiting forever after KWin has finished writing the frame.
         ::close(pipeFds[1]);
+        // QDBusUnixFileDescriptor duplicated dbusWriteFd for the message and
+        // released its copy with the scope above; the original is still open
+        // here and belongs to us. Omitting this leaked one descriptor per
+        // capture on top of the drain leak below.
+        ::close(dbusWriteFd);
         publishThumbnailDebug(id, reply.isValid()
             ? QStringLiteral("dbus-reply")
             : QStringLiteral("dbus-error"));

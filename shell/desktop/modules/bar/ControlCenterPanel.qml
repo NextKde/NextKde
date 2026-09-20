@@ -391,8 +391,8 @@ PopupWindow {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: NetworkService.wifiEnabled
-                ? "#0a84ff"
-                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+                ? ThemeService.tileActiveFill
+                : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05)))
             opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
             scale: wifiTogglePointer.pressed ? 0.92
                 : (wifiTogglePointer.containsMouse ? 1.04 : 1.0)
@@ -407,8 +407,8 @@ PopupWindow {
                 connected: NetworkService.deviceState === "connected"
                     && NetworkService.connectionType === "wifi"
                 signalStrength: NetworkService.signalStrength
-                glyphColor: NetworkService.wifiEnabled ? "#ffffff"
-                    : "white"
+                glyphColor: NetworkService.wifiEnabled
+                    ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
             }
             // Toggling NetworkManager's radio is not instant either; mirror
             // the Bluetooth disc's busy arc so both read as "working", not
@@ -424,7 +424,7 @@ PopupWindow {
                 Canvas {
                     id: wifiBusyArc
                     anchors.fill: parent
-                    property color glyphColor: "white"
+                    property color glyphColor: ThemeService.tileGlyph
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -521,8 +521,8 @@ PopupWindow {
             width: 39; height: 39; radius: width / 2
             anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
             color: ControlCenterService.bluetoothPowered
-                ? "#0a84ff"
-                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+                ? ThemeService.tileActiveFill
+                : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05)))
             opacity: ControlCenterService.bluetoothChangeInProgress ? 0.55 : 1.0
             scale: bluetoothTogglePointer.pressed ? 0.92
                 : (bluetoothTogglePointer.containsMouse ? 1.04 : 1.0)
@@ -533,7 +533,7 @@ PopupWindow {
                 anchors.centerIn: parent
                 width: 21; height: 21
                 property bool active: ControlCenterService.bluetoothPowered
-                property color glyphColor: "white"
+                property color glyphColor: ThemeService.tileGlyph
                 opacity: ControlCenterService.bluetoothChangeInProgress ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 140 } }
                 onActiveChanged: requestPaint()
@@ -577,7 +577,7 @@ PopupWindow {
                 Canvas {
                     id: bluetoothBusyArc
                     anchors.fill: parent
-                    property color glyphColor: "white"
+                    property color glyphColor: ThemeService.tileGlyph
                     onGlyphColorChanged: requestPaint()
                     onPaint: {
                         const ctx = getContext("2d")
@@ -657,7 +657,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 20 + panel.mainControlsOffsetY
         offsetRight: 20
-        cardRadius: 25
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 25)
         cardWidth: 151
         cardHeight: 127
         blurStrength: panel.effectiveBlur
@@ -667,7 +667,7 @@ PopupWindow {
             id: artwork
             width: 43; height: 43; radius: 13
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 13 }
-            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
+            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
             GlassText {
                 anchors.centerIn: parent
                 text: "♫"
@@ -748,7 +748,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 264
-        cardRadius: 26
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardWidth: 52
         cardHeight: 52
 
@@ -756,7 +756,7 @@ PopupWindow {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 26
+            radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -785,7 +785,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 203
-        cardRadius: 26
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardWidth: 52
         cardHeight: 52
 
@@ -793,7 +793,7 @@ PopupWindow {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 26
+            radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark
                 ? "#ffffff"
                 : Qt.rgba(1, 1, 1, 0.45)
@@ -834,7 +834,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 142
-        cardRadius: 26
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardWidth: 52
         cardHeight: 52
 
@@ -842,7 +842,7 @@ PopupWindow {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 26
+            radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
@@ -878,7 +878,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 81
-        cardRadius: 26
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardWidth: 52
         cardHeight: 52
 
@@ -886,7 +886,7 @@ PopupWindow {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 26
+            radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ControlCenterService.doNotDisturbEnabled
                 ? (ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18))
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
@@ -924,7 +924,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
-        cardRadius: 26
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardWidth: 52
         cardHeight: 52
 
@@ -932,7 +932,7 @@ PopupWindow {
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
         Rectangle {
             anchors.fill: parent
-            radius: 26
+            radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ControlCenterService.nightLightActive
                 ? "#ffcc00"
                 : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
@@ -970,10 +970,10 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
-        cardRadius: 19
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
         cardHeight: 57
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1035,7 +1035,7 @@ PopupWindow {
         coordinator: coordinator
         offsetTop: 282 + panel.mainControlsOffsetY
         offsetRight: 20
-        cardRadius: 19
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
         cardHeight: 57
         cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.93, 1, 0.27) : Qt.rgba(0, 0, 0, 0.10)
@@ -1076,7 +1076,7 @@ PopupWindow {
             anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
             width: 15
             height: 15
-            property color glyphColor: "white"
+            property color glyphColor: ThemeService.tileGlyph
             onGlyphColorChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
@@ -1130,10 +1130,10 @@ PopupWindow {
             && ControlCenterService.historyGroups.length > 0
         offsetTop: panel.notificationFirst ? 20 : 347
         offsetRight: 20
-        cardRadius: 19
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
         cardHeight: 230
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10)
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1149,7 +1149,7 @@ PopupWindow {
             }
             GlassText {
                 text: "清空"
-                color: clearMouse.containsMouse ? "#0a84ff" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.45))
+                color: clearMouse.containsMouse ? "#0a84ff" : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0, 0, 0, 0.45)))
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
                 anchors { right: parent.right; top: parent.top }
                 MouseArea {
@@ -1238,7 +1238,7 @@ PopupWindow {
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "×"
-                                    color: removeMouse.containsMouse ? "#ff453a" : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.42) : Qt.rgba(0, 0, 0, 0.35))
+                                    color: removeMouse.containsMouse ? "#ff453a" : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.42) : Qt.rgba(0, 0, 0, 0.35)))
                                     font { pixelSize: 13; weight: Font.Bold }
                                     MouseArea {
                                         id: removeMouse
@@ -1279,10 +1279,10 @@ PopupWindow {
             ? panel.controlCenterHeight - 20 - sessionCard.cardHeight
             : 20
         offsetRight: 20
-        cardRadius: 22
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
         cardWidth: 296
         cardHeight: 340
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10)
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10))
         // Hidden while a confirmation is up: the dialog owns the screen then, and
         // leaving the list card mapped would strand an empty glass slab behind it.
         cardShown: panel.sessionModalVisible && panel.pendingConfirmAction === ""
@@ -1312,22 +1312,22 @@ PopupWindow {
                     id: sessionBackBtn
                     width: 26
                     height: 26
-                    radius: 13
+                    radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 13)
                     anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                     color: sessionBackMouse.pressed
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0, 0, 0, 0.14))
+                        ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0, 0, 0, 0.14)))
                         : (sessionBackMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
-                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+                            ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09)))
+                            : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))))
                     border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
+                    border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
                     Behavior on color { ColorAnimation { duration: 110 } }
 
                     GlassText {
                         anchors.centerIn: parent
                         anchors.horizontalCenterOffset: -1
                         text: "‹"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 18; weight: Font.Bold }
                     }
 
@@ -1357,10 +1357,10 @@ PopupWindow {
                     Rectangle {
                         width: 28
                         height: 28
-                        radius: 14
-                        color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.06)
+                        radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 14)
+                        color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.06))
                         border.width: 1
-                        border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10)
+                        border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10))
 
                         BundledIcon {
                             anchors.centerIn: parent
@@ -1385,7 +1385,7 @@ PopupWindow {
                     rightMargin: 12
                 }
                 height: 1
-                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08))
             }
 
             // A plain list, the same shape as the Wi-Fi/Bluetooth pages: one row
@@ -1495,7 +1495,7 @@ PopupWindow {
         backdropMode: "none"
         dismissOnBackdrop: false
         contentPadding: 0
-        radius: 24
+        radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 24)
         onBackdropClicked: panel.pendingConfirmAction = ""
 
         Item {
@@ -1636,7 +1636,7 @@ PopupWindow {
             ? panel.controlCenterHeight - 20 - submenuCard.cardHeight
             : 20
         offsetRight: 20
-        cardRadius: 22
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
         cardWidth: 296
         cardHeight: panel.activeSubmenu === "wifi" ? 360
             : (panel.activeSubmenu === "bluetooth" ? 340
@@ -1662,22 +1662,22 @@ PopupWindow {
                 id: submenuBackBtn
                 width: 26
                 height: 26
-                radius: 13
+                radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 13)
                 anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                 color: submenuBackMouse.pressed
-                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0, 0, 0, 0.14))
+                    ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.26) : Qt.rgba(0, 0, 0, 0.14)))
                     : (submenuBackMouse.containsMouse
-                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09))
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+                        ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.09)))
+                        : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))))
                 border.width: 1
-                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08)
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.08))
                 Behavior on color { ColorAnimation { duration: 110 } }
 
                 GlassText {
                     anchors.centerIn: parent
                     anchors.horizontalCenterOffset: -1
                     text: "‹"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 18; weight: Font.Bold }
                 }
 
@@ -1701,7 +1701,7 @@ PopupWindow {
                     : (panel.activeSubmenu === "bluetooth" ? "蓝牙"
                     : (panel.activeSubmenu === "brightness" ? "显示亮度"
                     : (panel.activeSubmenu === "sound" ? "声音" : "")))
-                color: "white"
+                color: AppearanceTokens.content.ink("white")
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
 
@@ -1723,7 +1723,7 @@ PopupWindow {
 
                 color: isChecked
                     ? "#0a84ff"
-                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.14))
+                    : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.14)))
                 opacity: inProgress ? 0.6 : 1.0
                 Behavior on color { ColorAnimation { duration: 160 } }
 
@@ -1764,7 +1764,7 @@ PopupWindow {
                 rightMargin: 12
             }
             height: 1
-            color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08)
+            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.08))
         }
 
         // ── View A: Wi-Fi ──
@@ -1790,13 +1790,13 @@ PopupWindow {
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "Wi‑Fi 已关闭"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "在上方开启开关以查看附近网络"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -1821,7 +1821,7 @@ PopupWindow {
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         text: "附近网络"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 11; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
 
@@ -1829,7 +1829,7 @@ PopupWindow {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: NetworkService.wifiScanInProgress
                         text: "正在扫描…"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -1860,7 +1860,7 @@ PopupWindow {
                         height: 42
                         radius: 10
                         color: wifiRowMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                            ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)))
                             : "transparent"
                         Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -1868,7 +1868,7 @@ PopupWindow {
                             visible: !!modelData.active
                             anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                             text: "✓"
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 13; weight: Font.Bold }
                         }
 
@@ -1883,7 +1883,7 @@ PopupWindow {
                             wifiEnabled: true
                             connected: !!modelData.active
                             signalStrength: modelData.signalStrength !== undefined ? modelData.signalStrength : 70
-                            glyphColor: modelData.active ? "#0a84ff" : "white"
+                            glyphColor: modelData.active ? ThemeService.tileAccent : ThemeService.tileGlyph
                         }
 
                         GlassText {
@@ -1896,7 +1896,7 @@ PopupWindow {
                             }
                             text: modelData.ssid || "隐藏网络"
                             elide: Text.ElideRight
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font {
                                 pixelSize: 12
                                 weight: modelData.active ? Font.Bold : Font.DemiBold
@@ -1945,13 +1945,13 @@ PopupWindow {
                                 width: 38
                                 height: 20
                                 radius: 10
-                                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)
+                                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08))
                                 border.width: 1
-                                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10)
+                                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
                                 GlassText {
                                     anchors.centerIn: parent
                                     text: "断开"
-                                    color: "white"
+                                    color: AppearanceTokens.content.ink("white")
                                     font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                                 }
                                 MouseArea {
@@ -1993,7 +1993,7 @@ PopupWindow {
                         anchors.centerIn: parent
                         visible: submenuWifiList.count === 0 && !NetworkService.wifiScanInProgress
                         text: "未搜索到 Wi‑Fi 网络"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2007,20 +2007,20 @@ PopupWindow {
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
                     height: 1
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                 }
 
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "网络设置…"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                 }
 
                 GlassText {
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "›"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
@@ -2056,13 +2056,13 @@ PopupWindow {
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "蓝牙已关闭"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "在上方开启开关以连接设备"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2086,7 +2086,7 @@ PopupWindow {
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
                         text: "设备"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
 
@@ -2094,7 +2094,7 @@ PopupWindow {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: ControlCenterService.bluetoothDevicesRefreshInProgress
                         text: "正在刷新…"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 9; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2124,7 +2124,7 @@ PopupWindow {
                         height: 42
                         radius: 10
                         color: btRowMouse.containsMouse
-                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                            ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)))
                             : "transparent"
                         Behavior on color { ColorAnimation { duration: 100 } }
 
@@ -2132,7 +2132,7 @@ PopupWindow {
                             visible: !!modelData.connected
                             anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
                             text: "✓"
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 13; weight: Font.Bold }
                         }
 
@@ -2180,13 +2180,13 @@ PopupWindow {
                                 width: parent.width
                                 text: modelData.name || "未知设备"
                                 elide: Text.ElideRight
-                                color: "white"
+                                color: AppearanceTokens.content.ink("white")
                                 font { pixelSize: 11; weight: modelData.connected ? Font.DemiBold : Font.Normal; family: "Noto Sans CJK SC" }
                             }
 
                             GlassText {
                                 text: modelData.connected ? "已连接" : "未连接"
-                                color: "white"
+                                color: AppearanceTokens.content.ink("white")
                                 font { pixelSize: 9; family: "Noto Sans CJK SC" }
                             }
                         }
@@ -2202,7 +2202,7 @@ PopupWindow {
                                 id: btBatteryText
                                 anchors.centerIn: parent
                                 text: (modelData.battery || 0) + "%"
-                                color: "white"
+                                color: AppearanceTokens.content.ink("white")
                                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
                             }
                         }
@@ -2221,7 +2221,7 @@ PopupWindow {
                         anchors.centerIn: parent
                         visible: submenuBtList.count === 0 && !ControlCenterService.bluetoothDevicesRefreshInProgress
                         text: "未发现已配对设备"
-                        color: "white"
+                        color: AppearanceTokens.content.ink("white")
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
                 }
@@ -2235,20 +2235,20 @@ PopupWindow {
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
                     height: 1
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                 }
 
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "蓝牙设置…"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
 
                 GlassText {
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "›"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
@@ -2300,20 +2300,20 @@ PopupWindow {
                             anchors { left: parent.left; right: displayBrightnessPercent.left; top: parent.top; rightMargin: 8 }
                             text: modelData.label || modelData.id || "显示器"
                             elide: Text.ElideRight
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                         }
                         GlassText {
                             id: displayBrightnessPercent
                             anchors { right: parent.right; top: parent.top }
                             text: Math.round(displayBrightnessRow.preview) + "%"
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 10; family: "Noto Sans CJK SC" }
                         }
                         GlassText {
                             anchors { left: parent.left; top: parent.top; topMargin: 20 }
                             text: modelData.isInternal ? "内置屏幕" : "外接显示器"
-                            color: "white"
+                            color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 9; family: "Noto Sans CJK SC" }
                         }
                         ControlCenterSlider {
@@ -2335,7 +2335,7 @@ PopupWindow {
                 anchors.centerIn: parent
                 visible: ControlCenterService.brightnessDisplays.length === 0
                 text: "未发现可调节亮度的显示器"
-                color: "white"
+                color: AppearanceTokens.content.ink("white")
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
             }
 
@@ -2345,18 +2345,18 @@ PopupWindow {
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
                     height: 1
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                 }
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "显示设置…"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
                 GlassText {
                     anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
                     text: "›"
-                    color: "white"
+                    color: AppearanceTokens.content.ink("white")
                     font { pixelSize: 13; weight: Font.Bold }
                 }
                 MouseArea {
@@ -2542,9 +2542,9 @@ PopupWindow {
                         bottom: parent.bottom
                     }
                     radius: 10
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))
                     border.width: 1
-                    border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.08)
+                    border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.08))
 
                     Row {
                         anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
@@ -2629,7 +2629,7 @@ PopupWindow {
                                 anchors.fill: parent
                                 radius: 8
                                 color: appVolumeHover.hovered
-                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055))
+                                    ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.055)))
                                     : "transparent"
                                 Behavior on color { ColorAnimation { duration: 100 } }
                             }
@@ -2642,7 +2642,7 @@ PopupWindow {
                                 radius: 8
                                 color: appVolumeRow.muted
                                     ? Qt.rgba(1.0, 0.27, 0.23, ThemeService.isDark ? 0.30 : 0.18)
-                                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07))
+                                    : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.07)))
 
                                 GlassText {
                                     anchors.centerIn: parent
@@ -2728,7 +2728,7 @@ PopupWindow {
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12 }
                     height: 1
-                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                 }
 
                 GlassText {

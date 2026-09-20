@@ -30,6 +30,16 @@ Item {
     property real thumbWidth: 36
     property real thumbHeight: 18
 
+    // ── Form ──────────────────────────────────────────────────────────────
+    // A tonal shell draws the Material 3 slider: a 4dp inactive track, a 16dp
+    // active track that reaches the handle, a 4x44dp handle, and a state layer
+    // under the pointer. The iOS form below (glass lens, chromatic aberration,
+    // hover lift) is the liquid finish this form must not have, so it is hidden
+    // rather than blended with it. Hosts set this instead of picking a
+    // different control, so both forms share one interaction. It follows the
+    // application-wide form by default.
+    property bool materialForm: ControlForm.materialForm
+
     // Internal state
     property bool _pressed: false
     property bool _hovered: false
@@ -87,6 +97,7 @@ Item {
     Item {
         id: trackContainer
         anchors.fill: parent
+        visible: !root.materialForm
 
         // Track background
         Rectangle {
@@ -144,6 +155,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: root.thumbWidth
         height: root.thumbHeight
+        visible: !root.materialForm
 
         transform: Scale {
             origin.x: root.thumbWidth / 2
@@ -301,6 +313,65 @@ Item {
         }
     }
 
+    // ── Material 3 form ───────────────────────────────────────────────────
+    // Metrics scale with whatever height a host gives the slider, so a 30px
+    // control centre row keeps the desktop's compact rhythm while a 44px row is
+    // the Material spec exactly.
+    Item {
+        id: materialLayer
+        anchors.fill: parent
+        visible: root.materialForm
+
+        readonly property real m3Scale: Math.min(1, root.height / 44)
+        readonly property real inactiveTrack: Math.max(2, 4 * m3Scale)
+        readonly property real activeTrack: Math.max(6, 16 * m3Scale)
+        readonly property real handleWidth: Math.max(3, 4 * m3Scale)
+        readonly property real handleHeight: Math.min(root.height, 44 * m3Scale)
+        readonly property real handleX: root.thumbCenterX - handleWidth / 2
+
+        // Inactive track: one thin capsule across the travel.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: root.edgeInset
+            width: Math.max(0, root.width - root.edgeInset * 2)
+            height: materialLayer.inactiveTrack
+            radius: height / 2
+            color: root.trackColor
+        }
+
+        // Active track: thicker, and it stops at the handle.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: root.edgeInset
+            width: Math.max(0, materialLayer.handleX - root.edgeInset)
+            height: materialLayer.activeTrack
+            radius: height / 2
+            color: root.accentColor
+        }
+
+        // State layer: M3 shows a halo at 10% on hover and 16% while pressed.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: materialLayer.handleX + materialLayer.handleWidth / 2 - width / 2
+            width: height
+            height: Math.min(root.height, 40 * materialLayer.m3Scale)
+            radius: height / 2
+            color: root.accentColor
+            opacity: root._pressed ? 0.16 : (root._hovered ? 0.10 : 0.0)
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+
+        // Handle: a vertical capsule, not the iOS lens.
+        Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            x: materialLayer.handleX
+            width: materialLayer.handleWidth
+            height: materialLayer.handleHeight
+            radius: width / 2
+            color: root.accentColor
+        }
+    }
+
     // Mouse interaction
     MouseArea {
         anchors.fill: parent
@@ -315,7 +386,7 @@ Item {
         // macOS's slider feel; press still drives the full lens expansion.
         onEntered: {
             root._hovered = true
-            if (!root._pressed)
+            if (!root._pressed && !root.materialForm)
                 root._expansion = 0.35
         }
         onExited: {

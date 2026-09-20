@@ -6,3 +6,4 @@ LiquidNavBar 1.0 LiquidNavBar.qml
 LiquidSegmentedControl 1.0 LiquidSegmentedControl.qml
 LiquidSlider 1.0 LiquidSlider.qml
 LiquidTextField 1.0 LiquidTextField.qml
+singleton ControlForm 1.0 ControlForm.qml

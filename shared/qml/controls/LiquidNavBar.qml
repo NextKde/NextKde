@@ -32,6 +32,13 @@ Item {
     property real labelFontPixelSize: 0 // 0 = use the selected size preset
     property int labelFontWeight: Font.Normal
     property bool alwaysShowGlass: false
+    // ── Form ──────────────────────────────────────────────────────────────
+    // A tonal host draws the Material 3 navigation: one flat container colour in
+    // the selected pill, a hairline-free track, and no lens. The glass lens and
+    // the vertical washes below are the liquid finish this form must not have, so
+    // they are switched off rather than blended. Follows the application-wide
+    // form by default.
+    property bool materialForm: ControlForm.materialForm
 
     signal selectionChanged(int index)
 
@@ -83,7 +90,8 @@ Item {
     Behavior on _displayScaleX { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
     Behavior on _displayScaleY { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
 
-    readonly property bool _isActive: alwaysShowGlass || _glassVisible
+    readonly property bool _isActive: !root.materialForm
+        && (alwaysShowGlass || _glassVisible)
 
     // Thumb base scale: 1 at rest, thumbScale preset while active. It feeds
     // the display layer, so the visible growth is eased like the CSS
@@ -206,6 +214,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
+            visible: !root.materialForm
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.10) }
@@ -297,16 +306,17 @@ Item {
             id: thumbBase
             anchors.fill: parent
             radius: height / 2
-            color: "#ffffff"
+            color: root.materialForm ? root.accentColor : "#ffffff"
             opacity: root._isActive ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: 100 } }
 
-            // Subtle gradient + top highlight, same as the switch base pill
+            // Flat container colour in the tonal form; the iPadOS form keeps its
+            // vertical wash, so the same pill carries both finishes.
             gradient: Gradient {
                 orientation: Gradient.Vertical
-                GradientStop { position: 0; color: "#ffffff" }
-                GradientStop { position: 0.5; color: "#f5f5f7" }
-                GradientStop { position: 1; color: "#e8e8ed" }
+                GradientStop { position: 0; color: root.materialForm ? root.accentColor : "#ffffff" }
+                GradientStop { position: 0.5; color: root.materialForm ? root.accentColor : "#f5f5f7" }
+                GradientStop { position: 1; color: root.materialForm ? root.accentColor : "#e8e8ed" }
             }
             Rectangle {
                 anchors.top: parent.top
@@ -315,6 +325,7 @@ Item {
                 width: parent.width * 0.5
                 height: parent.height * 0.35
                 radius: width / 2
+                visible: !root.materialForm
                 gradient: Gradient {
                     orientation: Gradient.Vertical
                     GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.7) }

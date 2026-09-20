@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
+import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
 
 ApplicationWindow {
     id: window
@@ -17,6 +18,27 @@ ApplicationWindow {
 
     property int currentPage: 1
     property string searchText: ""
+
+    // The shell owns the style; the pages read it from here and so does this
+    // window's own palette. `materialSeed` is the accent the shell derived from
+    // the wallpaper, which is enough for the shared implementation to rebuild
+    // the same Material 3 roles the shell is using instead of this window
+    // hard-coding a second, drifting palette.
+    property string shellStyle: "macos"
+    readonly property bool materialForm: shellStyle === "material"
+    property string materialSeed: ""
+    // Material 3 palette, rebuilt from that accent by the same implementation
+    // the shell derives its own with. The shared colorize singleton cannot be
+    // used here: it pulls in Quickshell, and this application is plain Qt.
+    //
+    // Known limit: only the Monet branch is reproduced. If the shell is set to a
+    // traditional colour source, its swatches are table colours and this window
+    // falls back to Monet's derivation of the same accent.
+    readonly property var materialPalette: {
+        if (!materialForm || materialSeed === "")
+            return ({})
+        return Mcu.buildScheme(materialSeed, { dark: theme.dark })
+    }
 
     // Qt updates SystemPalette when the desktop colour scheme changes. We use
     // it only to select the system appearance, then apply the matching iPadOS
@@ -33,23 +55,51 @@ ApplicationWindow {
             const color = systemPalette.window
             return color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722 < 0.5
         }
-        readonly property color background: dark ? "#000000" : "#f2f2f7"
-        readonly property color sidebar: dark ? "#1c1c1e" : "#fafbff"
-        readonly property color contentSurface: dark ? "#000000" : "#fafbff"
-        readonly property color primaryText: dark ? "#f5f5f7" : "#1c1c1e"
-        readonly property color secondaryText: dark ? "#98989d" : "#6d6d72"
-        readonly property color tertiaryText: dark ? "#8e8e93" : "#8e8e93"
-        readonly property color card: dark ? "#1c1c1e" : "#ffffff"
-        readonly property color separator: dark ? "#38383a" : "#e5e5ea"
-        readonly property color divider: dark ? "#2c2c2e" : "#d1d1d6"
-        readonly property color searchField: dark ? "#2c2c2e" : "#e3e3e8"
-        readonly property color selected: dark ? "#0a84ff" : "#d9e9ff"
-        readonly property color sidebarHover: dark
-            ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045)
-        readonly property color chevron: dark ? "#636366" : "#c7c7cc"
-        readonly property color iconForeground: "#ffffff"
-        readonly property color floatingBorder: dark
-            ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055)
+        // One role, two forms. The tonal form takes the shared Material 3 scheme
+        // (rebuilt from the accent the shell sent); the iPadOS form keeps exactly
+        // the literal this window was designed with -- switching the shell style
+        // repaints the whole app, and nothing drifts in between.
+        // Role names are the shared implementation's own (ROLE_SPEC keys: 
+        // surface_container_low, on_surface_variant, ...), not camelCase. They
+        // have to be spelled the way MaterialColorScheme.mjs builds them: a name
+        // it does not emit resolves to undefined, and every one of those used to
+        // fall back to the iPadOS literal, which left the whole window looking
+        // like the other form while claiming to be Material.
+        function role(name, iPadOSValue) {
+            if (!window.materialForm)
+                return iPadOSValue
+            const value = window.materialPalette[name]
+            return value === undefined ? iPadOSValue : value
+        }
+        readonly property color background: role("surface", dark ? "#000000" : "#f2f2f7")
+        readonly property color sidebar: role("surface_container_low", dark ? "#1c1c1e" : "#fafbff")
+        readonly property color contentSurface: role("surface", dark ? "#000000" : "#fafbff")
+        readonly property color primaryText: role("on_surface", dark ? "#f5f5f7" : "#1c1c1e")
+        readonly property color secondaryText: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
+        readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
+        readonly property color card: role("surface_container", dark ? "#1c1c1e" : "#ffffff")
+        readonly property color separator: role("outline_variant", dark ? "#38383a" : "#e5e5ea")
+        readonly property color divider: role("outline_variant", dark ? "#2c2c2e" : "#d1d1d6")
+        readonly property color searchField: role("surface_container_high", dark ? "#2c2c2e" : "#e3e3e8")
+        readonly property color selected: role("primary", dark ? "#0a84ff" : "#d9e9ff")
+        // The container a selected item sits in. M3 carries selection with
+        // secondaryContainer; the iPadOS form keeps the translucent wash.
+        readonly property color selectedContainer: role("secondary_container", dark
+            ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.06))
+        readonly property color sidebarHover: role("surface_container_high", dark
+            ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.045))
+        readonly property color chevron: role("outline", dark ? "#636366" : "#c7c7cc")
+        readonly property color iconForeground: role("on_surface", "#ffffff")
+        // M3's navigation drawer carries a selected item as a secondaryContainer
+        // pill with onSecondaryContainer ink, and leaves unselected icons
+        // monochrome -- the coloured chip under each icon is the iPadOS form's
+        // own furniture, so it only exists there.
+        readonly property color iconMuted: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
+        readonly property color selectedForeground: role("on_secondary_container", dark ? "#ffffff" : "#00325b")
+        // Controls that take a single accent (sliders, switches) read this.
+        readonly property color accent: role("primary", "#0a84ff")
+        readonly property color floatingBorder: role("outline", dark
+            ? Qt.rgba(1, 1, 1, 0.075) : Qt.rgba(0, 0, 0, 0.055))
         readonly property color floatingShadow: dark
             ? Qt.rgba(0, 0, 0, 0.42) : Qt.rgba(0.17, 0.21, 0.30, 0.16)
         readonly property color previewPane: dark ? "#14151a" : "#eef2f7"
@@ -122,17 +172,21 @@ ApplicationWindow {
     component SettingIcon: Rectangle {
         required property string symbol
         required property color tint
+        property bool highlighted: false
+        readonly property bool flat: window.materialForm
         width: 29
         height: 29
-        radius: 10
-        color: tint
+        radius: flat ? 0 : 10
+        color: flat ? "transparent" : tint
         Text {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: -0.5
             text: symbol
-            color: theme.iconForeground
+            color: parent.flat
+                ? (parent.highlighted ? theme.selectedForeground : theme.iconMuted)
+                : theme.iconForeground
             font.pixelSize: 14
-            font.weight: Font.DemiBold
+            font.weight: parent.flat ? Font.Medium : Font.DemiBold
         }
     }
 
@@ -149,8 +203,12 @@ ApplicationWindow {
         visible: window.searchText.length === 0
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
-            radius: 18
-            color: parent.highlighted ? theme.selected
+            // M3's drawer items are full-round pills that carry selection in
+            // secondaryContainer; the iPadOS form keeps its squircle of tinted
+            // wash.
+            radius: window.materialForm ? height / 2 : 18
+            color: parent.highlighted
+                ? (window.materialForm ? theme.selectedContainer : theme.selected)
                 : (parent.hovered ? theme.sidebarHover : "transparent")
         }
         contentItem: Item {
@@ -161,6 +219,7 @@ ApplicationWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 symbol: navSymbol
                 tint: navTint
+                highlighted: window.currentPage === pageIndex
             }
             Text {
                 anchors.left: sidebarIcon.right
@@ -168,10 +227,12 @@ ApplicationWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: label
-                color: theme.primaryText
+                color: window.currentPage === pageIndex
+                    && window.materialForm ? theme.selectedForeground : theme.primaryText
                 font.pixelSize: 13
-                font.weight: window.currentPage === pageIndex
-                    ? Font.DemiBold : Font.Normal
+                font.weight: window.materialForm
+                    ? (window.currentPage === pageIndex ? Font.Medium : Font.Normal)
+                    : (window.currentPage === pageIndex ? Font.DemiBold : Font.Normal)
                 elide: Text.ElideRight
             }
         }
@@ -182,7 +243,7 @@ ApplicationWindow {
     // rows only provide model/currentIndex and content-driven width overrides.
     component SettingsNavBar: LiquidControls.LiquidNavBar {
         size: "tiny"
-        accentColor: theme.dark ? "#64b5ff" : "#0066cc"
+        accentColor: theme.role("primary", theme.dark ? "#64b5ff" : "#0066cc")
         itemColor: theme.dark ? "#ffffff" : "#1c1c1e"
         trackColor: theme.dark
             ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"
@@ -830,6 +891,10 @@ ApplicationWindow {
                             font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: (dockPage.dockHeight - 40) / 60
                             trackColor: theme.divider
@@ -874,7 +939,7 @@ ApplicationWindow {
                 LiquidControls.LiquidGlassSwitch {
                     id: windowGroupingSwitch
                     checked: dockPage.windowGroupingIndex === 0
-                    accentColor: "#0a84ff"
+                    accentColor: theme.role("primary", "#0a84ff")
                     trackColor: theme.divider
                     onToggled: function(checked) {
                         const requestedIndex = checked ? 0 : 1
@@ -1067,6 +1132,10 @@ ApplicationWindow {
                             font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.iconOpacity
                             trackColor: theme.divider
@@ -1277,7 +1346,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: dockPage.dockBlurInherit
-                            accentColor: "#30d158"
+                            accentColor: theme.role("primary", "#30d158")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 dockPage.setDockBlurInherit(checked)
@@ -1319,6 +1388,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.dockBlurStrength
                             trackColor: theme.divider
@@ -1363,6 +1436,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: dockPage.dockLiquidStrength
                             trackColor: theme.divider
@@ -1417,6 +1494,9 @@ ApplicationWindow {
             const styleIndex = glassStyles.indexOf(state.glassStyle)
             glassStyle = styleIndex >= 0 ? String(state.glassStyle) : "liquid"
             shellStyle = String(state.shellStyle || "macos")
+            LiquidControls.ControlForm.materialForm = isMaterialDesign
+                        // The window palette follows the same style.
+            window.shellStyle = shellStyle
             if (state.glassFollowsAppearanceMode !== undefined)
                 glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
             blurDirty = false
@@ -1619,7 +1699,11 @@ ApplicationWindow {
                             width: 64
                             height: 25
                             checked: displayPage.glassFollowsAppearanceMode
-                            accentColor: "#0a84ff"
+                            // The shared controls carry the host's palette, so the
+                            // Material form hands them the Material accent: their
+                            // own default is the iPadOS blue this window was
+                            // designed with.
+                            accentColor: theme.accent
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 displayPage.saveGlassFollowsAppearanceMode(checked)
@@ -1717,6 +1801,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: displayPage.blurStrength
                             trackColor: theme.divider
@@ -1763,6 +1851,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: displayPage.liquidStrength
                             trackColor: theme.divider
@@ -1949,6 +2041,10 @@ ApplicationWindow {
                                 horizontalAlignment: Text.AlignRight
                             }
                             LiquidControls.LiquidSlider {
+                                // The shared controls carry the host's palette, so the
+                                // Material form has to hand them the Material accent: their own
+                                // default is the iPadOS blue this window was designed with.
+                                accentColor: theme.accent
                                 Layout.preferredWidth: 220
                                 visible: (modelData.type === "int" || modelData.type === "real")
                                     && modelData.key !== "TintMode"
@@ -2178,6 +2274,10 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         Text { text: Math.round(iconAppearance.iconOpacity * 100) + "%"; color: theme.secondaryText; font.pixelSize: 12 }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190; value: iconAppearance.iconOpacity; trackColor: theme.divider
                             onPreviewChanged: function(position) { iconAppearance.iconOpacity = Math.max(0.1, position); iconAppearance.opacityDirty = true }
                             onCommitRequested: iconAppearance.commitOpacity()
@@ -2245,6 +2345,16 @@ ApplicationWindow {
             ? settingsBridge : null
         property string shellStyle: "macos"
         property string dockWindowAnimationStyle: "scale"
+        // Material's colour source, mirrored from the Shell so the segmented
+        // control reflects what is actually applied.
+        property string materialColorScheme: "monet"
+        // Name of the traditional swatch the accent resolved to, shown as
+        // feedback so "中国传统色" is legible rather than abstract.
+        property string materialAccentName: ""
+        // Representative swatches per colour source, straight from the Shell
+        // (materialColorSwatches on the snapshot). Each entry is
+        // {id, colors: [#rrggbb, ...]}; empty until a wallpaper seed exists.
+        property var colorSchemes: []
         property string errorText: ""
         readonly property var styles: [
             {
@@ -2272,12 +2382,54 @@ ApplicationWindow {
             return style === "scale" || style === "genie"
         }
 
+        function isValidMaterialColorScheme(scheme) {
+            return scheme === "monet" || scheme === "chinese"
+                || scheme === "japanese"
+        }
+
+        function schemeName(id) {
+            return id === "chinese" ? "中国传统色"
+                : (id === "japanese" ? "日系配色" : "莫奈色")
+        }
+
+        // One accent per source, so the selected card reads at a glance the way
+        // the style gallery's cards do.
+        function schemeAccent(id) {
+            return id === "chinese" ? "#c3272b"
+                : (id === "japanese" ? "#bc64a4" : "#6750a4")
+        }
+
         function applyState(state) {
             if (!state || !isValidStyle(state.shellStyle))
                 return
             shellStyle = state.shellStyle
+            // The window palette follows the same style. ControlForm is NOT
+            // assigned here: reading window.materialForm before this line would
+            // hand the shared controls the previous style. Both
+            // DisplaySettingsPage instances re-apply the form from their own
+            // fresh isMaterialDesign, and selectStyle() calls them right after.
+            window.shellStyle = shellStyle
             if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
                 dockWindowAnimationStyle = state.dockWindowAnimationStyle
+            if (isValidMaterialColorScheme(state.materialColorScheme))
+                materialColorScheme = state.materialColorScheme
+            materialAccentName = String(state.materialAccentName ?? "")
+            // The Shell owns the scheme and sends previews; the page never
+            // evaluates colours itself. The swatches cross the C++ bridge as a
+            // JSON string (see the Shell side for why); parsing here keeps the
+            // bridge free of nested-type conversion.
+            let parsed = []
+            try {
+                parsed = JSON.parse(state.materialColorSwatches || "[]")
+            } catch (error) {
+                parsed = []
+                console.warn("[Settings] colour swatches unreadable: " + error)
+            }
+            colorSchemes = parsed
+            // The accent the shell derived from the wallpaper is enough to
+            // rebuild the same Material 3 roles in this window.
+            window.materialSeed = parsed.length > 0 && parsed[0].colors
+                && parsed[0].colors.length > 0 ? String(parsed[0].colors[0]) : ""
             errorText = ""
         }
 
@@ -2313,6 +2465,19 @@ ApplicationWindow {
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
+
+        // Only the Material shell style reads the colour source; switching it
+        // is still sent for every style so the stored preference survives a
+        // detour through macOS or Windows 12.
+        function selectMaterialColorScheme(scheme) {
+            if (!bridge || !isValidMaterialColorScheme(scheme)) {
+                errorText = bridge ? "未知的配色来源" : "尚未构建 Settings 桥接程序"
+                return
+            }
+            applyState(bridge.updateMaterialColorScheme(scheme))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
         Component.onCompleted: refresh()
 
         Text {
@@ -2326,10 +2491,13 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             // The card is as tall as its contents: the style gallery, the
-            // divider, and the embedded appearance controls. Under Material
-            // that controls block is much shorter, so a fixed 550 would leave
-            // a dead band below it.
+            // divider, the Material colour-source control (only present while
+            // Material is selected) and the embedded appearance controls. Under
+            // Material that controls block is much shorter, so a fixed 550
+            // would leave a dead band below it.
             implicitHeight: 16 + styleGallery.height + 13 + 1 + 10
+                + (themeColorSchemeCard.visible
+                    ? themeColorSchemeCard.implicitHeight + 10 : 0)
                 + themeMaterialSettings.implicitHeight + 16
             Layout.preferredHeight: implicitHeight
             radius: 26
@@ -2578,11 +2746,205 @@ ApplicationWindow {
                                   : Qt.rgba(0, 0, 0, 0.12)
             }
 
+            // Material's colour source. Only shown while the Material card is
+            // selected: the choice has no effect on the glass styles, and a
+            // control that does nothing is worse than an absent one.
+            Rectangle {
+                id: themeColorSchemeCard
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: themeMaterialDivider.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 10
+                // Tall enough for the tile row below: the header column (39),
+                // the 10px gap and the 74px tiles, plus the 14px margins.
+                // The old 136 cut 3px off that and squeezed the tiles.
+                implicitHeight: 152
+                visible: themePage.shellStyle === "material"
+                radius: 18
+                color: theme.card
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    spacing: 10
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 11
+
+                        SettingIcon { symbol: "◐"; tint: "#8d6e63" }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "主题色系"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: {
+                                    if (themePage.materialColorScheme === "monet")
+                                        return "Material You：按壁纸色相推导整套色调"
+                                    if (themePage.materialAccentName)
+                                        return "当前主色：" + themePage.materialAccentName
+                                    return "壁纸主色没有足够接近的传统色，已回退莫奈"
+                                }
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    // Each source is drawn from the Shell's own preview colours,
+                    // so the cards show what this wallpaper actually becomes
+                    // rather than three labels. The big top swatch is the
+                    // accent — the colour a user recognises as theirs — and the
+                    // strip below it carries the companions and both surfaces.
+                    // Never leave the block blank: an empty swatch list means the
+                    // Shell has no wallpaper seed yet, which is a state worth
+                    // naming rather than rendering as nothing.
+                    Text {
+                        Layout.fillWidth: true
+                        visible: themePage.colorSchemes.length === 0
+                        text: "正在等待壁纸取色，稍后这里会出现三张色卡"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        // 7 + accent 24 + 5 + strip 10 + 5 + label 16 + 7. At 62
+                        // the label had no room and hung 8px out of the tile.
+                        Layout.preferredHeight: 74
+                        visible: themePage.colorSchemes.length > 0
+                        spacing: 10
+
+                        Repeater {
+                            model: themePage.colorSchemes
+
+                            delegate: Rectangle {
+                                id: schemeTile
+                                required property var modelData
+                                readonly property bool chosen:
+                                    themePage.materialColorScheme === modelData.id
+                                readonly property var swatches: modelData.colors
+
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                // A selected tile is a filled container in the
+                                // tonal form, not an outlined one; the iPadOS form
+                                // keeps the wash and the scheme's own accent rim.
+                                radius: window.materialForm ? 16 : 12
+                                color: schemeTile.chosen
+                                    ? theme.selectedContainer
+                                    : (theme.dark ? Qt.rgba(1, 1, 1, 0.05)
+                                                  : Qt.rgba(0, 0, 0, 0.025))
+                                border.width: window.materialForm
+                                    ? 0 : (schemeTile.chosen ? 2 : 1)
+                                border.color: schemeTile.chosen
+                                    ? themePage.schemeAccent(schemeTile.modelData.id)
+                                    : theme.floatingBorder
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 7
+                                    spacing: 5
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 24
+                                        radius: window.materialForm ? 8 : 6
+                                        color: schemeTile.swatches.length > 0
+                                            ? schemeTile.swatches[0] : "transparent"
+                                    }
+
+                                    Row {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 10
+                                        spacing: 2
+
+                                        Repeater {
+                                            model: schemeTile.swatches.slice(1)
+
+                                            delegate: Rectangle {
+                                                required property var modelData
+                                                width: Math.max(2,
+                                                    (parent.width - 8) / 5)
+                                                height: parent.height
+                                                radius: 3
+                                                color: modelData
+                                            }
+                                        }
+                                    }
+
+                                    // A leading radio is the loudest cue the tile
+                                    // has: the container tint alone read as noise
+                                    // next to three coloured swatches. Kept at
+                                    // 14px so it stays inside the label's own
+                                    // 16px line box -- the card height above is
+                                    // sized around that line and cannot grow.
+                                    RowLayout {
+                                        Layout.alignment: Qt.AlignHCenter
+                                        spacing: 6
+
+                                        Rectangle {
+                                            id: schemeRadio
+                                            implicitWidth: 14
+                                            implicitHeight: 14
+                                            Layout.alignment: Qt.AlignVCenter
+                                            radius: width / 2
+                                            color: "transparent"
+                                            border.width: 1.5
+                                            border.color: schemeTile.chosen
+                                                ? theme.accent : theme.secondaryText
+
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: 6
+                                                height: 6
+                                                radius: 3
+                                                visible: schemeTile.chosen
+                                                color: schemeRadio.border.color
+                                            }
+                                        }
+
+                                        Text {
+                                            text: themePage.schemeName(
+                                                schemeTile.modelData.id)
+                                            color: schemeTile.chosen
+                                                ? theme.primaryText : theme.secondaryText
+                                            font.pixelSize: 11
+                                            font.weight: schemeTile.chosen
+                                                ? Font.DemiBold : Font.Normal
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: themePage.selectMaterialColorScheme(
+                                        schemeTile.modelData.id)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             DisplaySettingsPage {
                 id: themeMaterialSettings
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.top: themeMaterialDivider.bottom
+                anchors.top: themeColorSchemeCard.visible
+                    ? themeColorSchemeCard.bottom : themeMaterialDivider.bottom
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 anchors.topMargin: 10
@@ -2967,7 +3329,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: barPage.barIntegratedWithDock
-                            accentColor: "#0a84ff"
+                            accentColor: theme.role("primary", "#0a84ff")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 barPage.setBarIntegratedWithDock(checked)
@@ -3026,7 +3388,7 @@ ApplicationWindow {
                         }
                         LiquidControls.LiquidGlassSwitch {
                             checked: barPage.barBlurInherit
-                            accentColor: "#30d158"
+                            accentColor: theme.role("primary", "#30d158")
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 barPage.setBarBlurInherit(checked)
@@ -3068,6 +3430,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: barPage.barBlurStrength
                             trackColor: theme.divider
@@ -3112,6 +3478,10 @@ ApplicationWindow {
                             horizontalAlignment: Text.AlignRight
                         }
                         LiquidControls.LiquidSlider {
+                            // The shared controls carry the host's palette, so the
+                            // Material form has to hand them the Material accent: their own
+                            // default is the iPadOS blue this window was designed with.
+                            accentColor: theme.accent
                             Layout.preferredWidth: 190
                             value: barPage.barLiquidStrength
                             trackColor: theme.divider

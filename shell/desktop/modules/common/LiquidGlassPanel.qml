@@ -76,10 +76,16 @@ Item {
     // outline is drawn here, so there is no separate border to drift from the
     // glass silhouette.
 
-    // A tonal theme has no compositor glass treatment, so it keeps a plain
-    // QML surface. In every glass theme this panel paints no material at all:
-    // KWin is the sole owner of blur, refraction and highlights.
-    property bool fallbackEnabled: AppearanceTokens.isMaterial
+    // Which form this panel belongs to, from the surface policy. A tonal form
+    // paints its own card and asks the compositor only for the backdrop frost;
+    // a glass form hands the whole finish to KWin. Nothing below branches on the
+    // shell style itself.
+    readonly property bool tonal: AppearanceTokens.surface.paintInQml
+
+    // A tonal form has no compositor glass treatment, so it keeps a plain QML
+    // surface. In every glass form this panel paints no material at all: KWin is
+    // the sole owner of blur, refraction and highlights.
+    property bool fallbackEnabled: AppearanceTokens.surface.paintInQml
 
     // ---- material -------------------------------------------------------
 
@@ -92,6 +98,9 @@ Item {
     // 0 = dock/base surface, 1 = popup, 2 = contextual foreground menu.
     property real materialDepth: 0.0
     property real surfaceOpacity: 1.0
+    // Forwarded verbatim to LiquidGlassSurface.tonalOpacity; -1 keeps the
+    // shared token, so panels that say nothing render exactly as before.
+    property real tonalOpacity: -1
     property bool adaptiveDarkScrim: false
     // Contrast scrim owned by the compositor: a black or white tint whose
     // opacity the glass scales to the backdrop it sits on, so light text over
@@ -200,7 +209,12 @@ Item {
         item: root.blurAnchor
         radius: root.radius
         exponent: root.cornerExponent
-        shapeEnabled: root.visible && root.useKwinEffect
+        // A tonal form publishes no SurfaceShape. The declaration can only
+        // describe a rectangle with rounded corners, and KWin paints a surface's
+        // material from it -- so leaving it on hands a self-painted card the
+        // liquid finish it exists without. Dropping it leaves only the blur
+        // region above, which is exactly the frost a tonal card asks for.
+        shapeEnabled: root.visible && root.useKwinEffect && !root.tonal
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap
@@ -243,6 +257,7 @@ Item {
         material: root.material
         materialDepth: root.materialDepth
         surfaceOpacity: root.surfaceOpacity
+        tonalOpacity: root.tonalOpacity
         adaptiveDarkScrim: root.adaptiveDarkScrim
         bottomEdgeVisible: root.bottomEdgeVisible
         bottomShadeVisible: root.bottomShadeVisible

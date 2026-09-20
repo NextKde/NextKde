@@ -76,11 +76,8 @@ Scope {
     readonly property bool finalGlassIsDark: materialTone === "dark" ? true
         : materialTone === "light" ? false
         : AppearanceTokens.resolvedAppearanceIsDark
-    property color baseColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceContainer
-        : (finalGlassIsDark ? "black" : "white")
-    property real surfaceOpacity: AppearanceTokens.isMaterial
-        ? AppearanceTokens.glass.materialOpacity : 1.0
+    property color baseColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainer, (finalGlassIsDark ? "black" : "white"))
+    property real surfaceOpacity: AppearanceTokens.surface.pick(AppearanceTokens.glass.materialOpacity, 1.0)
     property color ambientPrimary: WallpaperColorSource.primary
     property color ambientSecondary: WallpaperColorSource.secondary
     property real ambientStrength: 0.30 * AppearanceTokens.glass.ambientMultiplier
@@ -96,7 +93,7 @@ Scope {
         ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.075)
     readonly property color contentControlBorder: finalGlassIsDark
         ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.14)
-    property bool animateOnShow: AppearanceTokens.isMacos
+    property bool animateOnShow: AppearanceTokens.motion.popupAnimatesOnShow
     property real startScale: AppearanceTokens.motion.popupStartScale
     property real anchorOffset: AppearanceTokens.motion.popupAnchorOffset
 
@@ -212,6 +209,13 @@ Scope {
             material: "thick"
             baseColor: root.baseColor
             surfaceOpacity: root.surfaceOpacity
+            // A dialog is a decision surface: a table of buttons over the
+            // desktop, not a window onto it. In a tonal shell the plate is the
+            // only thing the desktop could read through, and the tonal branch
+            // ignores the `surfaceOpacity` above -- this is the knob that
+            // reaches it. The compositor scrim stays wired and is simply
+            // covered: KWin draws the backdrop before the client content.
+            tonalOpacity: 1.0
             ambientPrimary: root.ambientPrimary
             ambientSecondary: root.ambientSecondary
             ambientStrength: root.ambientStrength
@@ -263,8 +267,9 @@ Scope {
         Region { id: backdropBlurRegion; item: backdrop }
         // One surface carries one blur region, so "dimBlur" widens this one to
         // the whole screen -- which already covers the card.
+        // No form is excluded: a tonal card asks the compositor for the same
+        // frost and publishes no SurfaceShape to go with it.
         BackgroundEffect.blurRegion: (cardWindow.visible
-                                      && !AppearanceTokens.isMaterial
                                       && cardPanel.useKwinEffect)
             ? (root.backdropBlurActive ? backdropBlurRegion : cardPanel.blurRegion)
             : null

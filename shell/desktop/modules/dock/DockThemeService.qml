@@ -49,39 +49,42 @@ QtObject {
     // ═══════════════════════════════════════════════════
     // Exposed (reactively toggled)
     // ═══════════════════════════════════════════════════
-    readonly property color backgroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.layer0 : (isDark ? darkBg : lightBg)
+    readonly property color backgroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer0, (isDark ? darkBg : lightBg))
     // Glass foreground follows the resolved appearance: clean dark ink on a
     // light surface, and light ink on a dark surface. This role is shared by
     // launcher labels, symbolic tray icons, Dock glyphs and status content.
-    readonly property color foregroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceForeground
-        : (isDark ? darkFg : lightFg)
-    readonly property color secondaryForegroundColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceVariantForeground
-        : (isDark ? darkSecondaryFg : lightSecondaryFg)
-    readonly property color tertiaryForegroundColor: AppearanceTokens.isMaterial
-        ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
+    readonly property color foregroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isDark ? darkFg : lightFg))
+    readonly property color secondaryForegroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, (isDark ? darkSecondaryFg : lightSecondaryFg))
+    readonly property color tertiaryForegroundColor: AppearanceTokens.surface.pick(Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
             AppearanceTokens.colors.surfaceVariantForeground.g,
-            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70)
-        : (isDark ? darkTertiaryFg : lightTertiaryFg)
-    readonly property color accentColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.primary : (isDark ? darkAccent : lightAccent)
-    readonly property color dividerColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.outline : (isDark ? darkDivider : lightDivider)
-    readonly property color tooltipBackground: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.layer3
-        : (isDark ? darkTooltipBg : lightTooltipBg)
+            AppearanceTokens.colors.surfaceVariantForeground.b, 0.70), (isDark ? darkTertiaryFg : lightTertiaryFg))
+    readonly property color accentColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, (isDark ? darkAccent : lightAccent))
+    readonly property color dividerColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, (isDark ? darkDivider : lightDivider))
+    readonly property color tooltipBackground: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer3, (isDark ? darkTooltipBg : lightTooltipBg))
     // Material keeps the running dot on the high-contrast on-surface ink so it
     // never falls back to a seed-driven primary that may not reach AA contrast
     // against the tonal dock layer. Glass branches use the indicator inks above.
-    readonly property color indicatorColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.surfaceForeground : (isDark ? darkIndicator : lightIndicator)
-    readonly property color borderColor: AppearanceTokens.isMaterial
-        ? AppearanceTokens.colors.outline : (isDark ? darkBorder : lightBorder)
-    readonly property color highlightColor: AppearanceTokens.isMaterial
-        ? Qt.rgba(AppearanceTokens.colors.primary.r,
+    readonly property color indicatorColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isDark ? darkIndicator : lightIndicator))
+    readonly property color borderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, (isDark ? darkBorder : lightBorder))
+    // ── Control-centre tiles ─────────────────────────────────────────────
+    // A tile is a container, not a glass card: in the tonal form it takes the
+    // scheme's container fills and the ink that reads on them. Each role keeps
+    // exactly the literal the tiles were drawn with as its glass value, so the
+    // glass form is byte-identical and only the tonal form changes.
+    readonly property color tileGlyph: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.surfaceVariantForeground, "white")
+    readonly property color tileActiveGlyph: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primaryContainerForeground, "white")
+    // The fill `tileActiveGlyph` is cut for: an enabled toggle reads as a
+    // primaryContainer tile carrying its own on-container ink, not as the
+    // accent with a borrowed foreground.
+    readonly property color tileActiveFill: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primaryContainer, "#0a84ff")
+    readonly property color tileAccent: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primary, "#0a84ff")
+    readonly property color tileDanger: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.error, "#ff453a")
+    readonly property color highlightColor: AppearanceTokens.surface.pick(Qt.rgba(AppearanceTokens.colors.primary.r,
             AppearanceTokens.colors.primary.g,
-            AppearanceTokens.colors.primary.b, 0.22)
-        : (isDark ? darkHighlight : lightHighlight)
+            AppearanceTokens.colors.primary.b, 0.22), (isDark ? darkHighlight : lightHighlight))
 }
