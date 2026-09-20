@@ -420,6 +420,41 @@ QtObject {
         // Add/remove, minimization and desktop membership also affect
         // collision eligibility, so presentation updates notify both lanes.
         svc.placementRevision++;
+        svc._pruneThumbnails(nextRecords);
+    }
+
+    // Thumbnail state is keyed by KWin's window handle, which dies with the
+    // window. Without this sweep a closed window would leave its PNG URL and
+    // any pending mark behind forever; a late thumbnail event for a dead
+    // handle is dropped again on the next rebuild.
+    function _pruneThumbnails(nextRecords) {
+        const live = {};
+        for (let i = 0; i < nextRecords.length; i++) {
+            if (nextRecords[i].handleId)
+                live[nextRecords[i].handleId] = true;
+        }
+        let evicted = false;
+        const urls = {};
+        for (const handle in svc._thumbnailUrlsByHandle) {
+            if (live[handle])
+                urls[handle] = svc._thumbnailUrlsByHandle[handle];
+            else
+                evicted = true;
+        }
+        if (evicted) {
+            svc._thumbnailUrlsByHandle = urls;
+            svc.thumbnailRevision++;
+        }
+        let pendingChanged = false;
+        const pending = {};
+        for (const handle in svc._thumbnailPendingByHandle) {
+            if (live[handle])
+                pending[handle] = svc._thumbnailPendingByHandle[handle];
+            else
+                pendingChanged = true;
+        }
+        if (pendingChanged)
+            svc._thumbnailPendingByHandle = pending;
     }
 
     // ── Virtual desktops (KWin D-Bus, via the bridge) ──
@@ -587,7 +622,13 @@ QtObject {
                         const pending = Object.assign({}, svc._thumbnailPendingByHandle);
                         delete pending[event.id];
                         svc._thumbnailPendingByHandle = pending;
-                        if (event.path) {
+                        // A capture requested just before its window closed
+                        // resolves after the handle was pruned; storing it
+                        // would resurrect a dead key until the next
+                        // presentation rebuild.
+                        const live = svc.records.some(
+                            record => record.handleId === event.id);
+                        if (event.path && live) {
                             const urls = Object.assign({}, svc._thumbnailUrlsByHandle);
                             urls[event.id] = "file://" + event.path;
                             svc._thumbnailUrlsByHandle = urls;

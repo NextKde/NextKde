@@ -324,6 +324,7 @@ QtObject {
                 // Every preview went with the history it described.
                 service.thumbnails = ({})
                 service._thumbFailed = ({})
+                service._thumbPending = ({})
                 service.thumbnailRevision += 1
                 service.refresh()
             } else {
@@ -367,6 +368,34 @@ QtObject {
         }
         entries = parsed
         revision += 1
+        service._pruneThumbnails()
+    }
+
+    // Thumbnail bookkeeping is keyed by record, and records die with history
+    // rotation. Rebuilding the maps against the live entry list keeps them
+    // bounded; a stale in-flight reply for a dead record is simply pruned
+    // again on the next refresh. Pinned rows render item.thumbnailPath from
+    // the pinned list itself, so they never need an entry in these maps.
+    function _pruneThumbnails() {
+        const live = {}
+        for (let i = 0; i < entries.length; i++)
+            live[entries[i].record] = true
+        let evicted = false
+        const nextThumbs = {}
+        for (const record in service.thumbnails) {
+            if (live[record])
+                nextThumbs[record] = service.thumbnails[record]
+            else
+                evicted = true
+        }
+        if (evicted) {
+            service.thumbnails = nextThumbs
+            service.thumbnailRevision += 1
+        }
+        for (const record in service._thumbFailed)
+            if (!live[record]) delete service._thumbFailed[record]
+        for (const record in service._thumbPending)
+            if (!live[record]) delete service._thumbPending[record]
     }
 
     property Connections platformTransport: Connections {

@@ -18,6 +18,22 @@ QtObject {
     // last notification key -> timestamp
     property var _lastSent: ({})
 
+    // Entries only matter while they are younger than the dedupe window, so
+    // sweeping expired keys keeps the map bounded on long sessions where tray
+    // items churn through many distinct summaries.
+    property Timer _dedupeSweep: Timer {
+        interval: 60000
+        repeat: true
+        running: true
+        onTriggered: {
+            const cutoff = root._now() - root.dedupeIntervalMs
+            for (const key in root._lastSent) {
+                if (root._lastSent[key] < cutoff)
+                    delete root._lastSent[key]
+            }
+        }
+    }
+
     // Reusable process for sending notifications.
     property Process _sender: Process {
         stdout: StdioCollector {}

@@ -103,6 +103,69 @@ func TestRefreshDesktopReconcilesCompleteDirectory(t *testing.T) {
 	}
 }
 
+func TestRollDayResetsTodayAppsOnDayChange(t *testing.T) {
+	service := &Service{}
+	service.state.Activity.TodayAppsDay = "2026-09-19"
+	service.state.Activity.TodayApps = map[string]AppUsage{
+		"firefox": {Name: "Firefox", Seconds: 300},
+	}
+	service.state.Activity.UptimeByDay = map[string]float64{"2026-09-19": 3600}
+
+	service.rollDay(time.Date(2026, 9, 20, 8, 0, 0, 0, time.Local))
+
+	if len(service.state.Activity.TodayApps) != 0 {
+		t.Fatalf("TodayApps was not reset on day change: %#v", service.state.Activity.TodayApps)
+	}
+	if service.state.Activity.TodayAppsDay != "2026-09-20" {
+		t.Fatalf("TodayAppsDay = %q, want 2026-09-20", service.state.Activity.TodayAppsDay)
+	}
+	if service.state.Activity.UptimeByDay["2026-09-19"] != 3600 {
+		t.Fatal("uptime history must survive the day rollover")
+	}
+}
+
+func TestRollDayKeepsTodayAppsWithinSameDay(t *testing.T) {
+	service := &Service{}
+	service.state.Activity.TodayAppsDay = "2026-09-20"
+	service.state.Activity.TodayApps = map[string]AppUsage{
+		"firefox": {Name: "Firefox", Seconds: 300},
+	}
+
+	service.rollDay(time.Date(2026, 9, 20, 23, 0, 0, 0, time.Local))
+
+	if service.state.Activity.TodayApps["firefox"].Seconds != 300 {
+		t.Fatal("same-day rollDay must keep TodayApps")
+	}
+}
+
+func TestRollDayTrimsUptimeByDayToLimit(t *testing.T) {
+	service := &Service{}
+	service.state.Activity.TodayAppsDay = "2026-09-20"
+	service.state.Activity.UptimeByDay = map[string]float64{}
+	for i := 0; i < uptimeDayLimit+10; i++ {
+		key := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).
+			AddDate(0, 0, i).Format("2006-01-02")
+		service.state.Activity.UptimeByDay[key] = float64(i)
+	}
+
+	service.rollDay(time.Date(2026, 9, 20, 8, 0, 0, 0, time.Local))
+
+	if len(service.state.Activity.UptimeByDay) != uptimeDayLimit {
+		t.Fatalf("UptimeByDay keys = %d, want %d",
+			len(service.state.Activity.UptimeByDay), uptimeDayLimit)
+	}
+	// The newest keys must be the ones that survive the trim.
+	newest := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).
+		AddDate(0, 0, uptimeDayLimit+9).Format("2006-01-02")
+	if _, ok := service.state.Activity.UptimeByDay[newest]; !ok {
+		t.Fatalf("newest key %q was trimmed", newest)
+	}
+	oldest := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	if _, ok := service.state.Activity.UptimeByDay[oldest]; ok {
+		t.Fatalf("oldest key %q survived the trim", oldest)
+	}
+}
+
 func TestAcquireInstanceLockIsExclusive(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "kos-data.sock")
 	first, err := acquireInstanceLock(socketPath)
