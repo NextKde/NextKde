@@ -35,11 +35,14 @@ Item {
         repeat: false
         onTriggered: icon._iconRendererActive = true
     }
+    function _reloadIconRenderer() {
+        icon._iconRendererActive = false
+        icon._iconRendererReloadTimer.restart()
+    }
     property Connections _iconThemeConnections: Connections {
         target: IconThemeReloadService
         function onRevisionChanged() {
-            icon._iconRendererActive = false
-            icon._iconRendererReloadTimer.restart()
+            icon._reloadIconRenderer()
         }
     }
     // The owning DockWindow supplies its real layer-surface origin. QWindow's
@@ -138,39 +141,22 @@ Item {
     signal requestEditExit()
     signal contextRequested()
     property bool _heldForEdit: false
-    property real _windowHandoffOpacity: 1.0
-    opacity: _windowHandoffOpacity
 
+    // When the compositor's window-to-icon animation finishes, the redirected
+    // window texture disappears and the Dock must already show the real icon.
+    // Previously the whole icon blinked (opacity 1 -> 0 -> 1) to mask that
+    // seam; that read as a flicker on every minimize/restore. Now the icon
+    // stays fully opaque and only the AppIcon image is recycled exactly when
+    // the animation completes, so the handoff has no visible flash.
     function playWindowToIconHandoff(durationMs) {
-        windowHandoffOpacity.stop()
-        _windowHandoffOpacity = 1.0
-        windowHandoffPause.duration = Math.max(0, Number(durationMs) - 210)
-        windowHandoffOpacity.start()
+        windowHandoffTimer.interval = Math.max(0, Number(durationMs) - 60)
+        windowHandoffTimer.restart()
     }
 
-    SequentialAnimation {
-        id: windowHandoffOpacity
-        PauseAnimation {
-            id: windowHandoffPause
-            duration: 270
-        }
-        NumberAnimation {
-            target: icon
-            property: "_windowHandoffOpacity"
-            from: 1.0
-            to: 0.0
-            duration: 50
-            easing.type: Easing.Linear
-        }
-        PauseAnimation { duration: 150 }
-        NumberAnimation {
-            target: icon
-            property: "_windowHandoffOpacity"
-            from: 0.0
-            to: 1.0
-            duration: 10
-            easing.type: Easing.Linear
-        }
+    property Timer windowHandoffTimer: Timer {
+        interval: 240
+        repeat: false
+        onTriggered: icon._reloadIconRenderer()
     }
 
     // KWin's private KOS Effect consumes compositor-global icon rectangles.
