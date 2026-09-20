@@ -168,6 +168,11 @@ Item {
     // the cursor is over the glass. passive because DockIcon, music controls,
     // drag gestures and MouseAreas still win their own events.
     readonly property bool pointerInside: _dockPointerHover.hovered
+    // Keep the pointer in DockContainer coordinates. Mapping each icon back to
+    // this same Item is safe for both bottom and rotated side Docks.
+    readonly property point magnificationPointer: _dockPointerHover.hovered
+        ? _dockPointerHover.point.position
+        : Qt.point(-10000, -10000)
     HoverHandler {
         id: _dockPointerHover
         enabled: true
@@ -469,6 +474,8 @@ Item {
         // immutable with respect to pinned-app ordering.
         DockIcon {
             id: appLauncherIcon
+            magnificationRoot: container
+            magnificationPointer: container.magnificationPointer
             targetScreen: container.targetScreen
             surfaceOriginX: container.surfaceOriginX
             surfaceOriginY: container.surfaceOriginY
@@ -502,6 +509,8 @@ Item {
         // intentionally outside the pinned-app model and its drag ordering.
         DockIcon {
             id: trashIcon
+            magnificationRoot: container
+            magnificationPointer: container.magnificationPointer
             targetScreen: container.targetScreen
             surfaceOriginX: container.surfaceOriginX
             surfaceOriginY: container.surfaceOriginY
@@ -699,6 +708,8 @@ Item {
                             spacing: container.itemSpacing
 
                             DockIcon {
+                                magnificationRoot: container
+                                magnificationPointer: container.magnificationPointer
                                 targetScreen: container.targetScreen
                                 surfaceOriginX: container.surfaceOriginX
                                 surfaceOriginY: container.surfaceOriginY
@@ -733,6 +744,8 @@ Item {
                                 model: pinnedItemLoader.itemData.extraWindows ?? []
                                 delegate: DockIcon {
                                     required property var modelData
+                                    magnificationRoot: container
+                                    magnificationPointer: container.magnificationPointer
                                     targetScreen: container.targetScreen
                                     surfaceOriginX: container.surfaceOriginX
                                     surfaceOriginY: container.surfaceOriginY
@@ -781,6 +794,8 @@ Item {
             id: windowsRepeater
             model: DockModelService.windowModel
             delegate: DockIcon {
+                magnificationRoot: container
+                magnificationPointer: container.magnificationPointer
                 targetScreen: container.targetScreen
                 surfaceOriginX: container.surfaceOriginX
                 surfaceOriginY: container.surfaceOriginY

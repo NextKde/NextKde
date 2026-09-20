@@ -268,6 +268,12 @@ QtObject {
         readonly property bool magnificationEnabled: tokens.isMacos
         readonly property real hoverScale: tokens.isMacos ? 1.20 : 1.0
         readonly property real hoverLiftRatio: tokens.isMacos ? 0.08 : 0.0
+        // The pointer influence is intentionally wider than one icon. Each
+        // icon scales visually inside a fixed slot, so magnification never
+        // changes the Dock's measured width.
+        readonly property real magnificationRadius: tokens.isMacos ? 140 : 0
+        readonly property real magnificationMaxScale: tokens.isMacos ? 1.19 : 1.0
+        readonly property real magnificationLiftRatio: tokens.isMacos ? 0.04 : 0.0
     }
 
     readonly property QtObject bar: QtObject {
