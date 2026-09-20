@@ -146,6 +146,112 @@ Item {
                 layersMonet[i] !== layersChinese[i])
         }
 
+        //         // ── wallpaper config parsing ─────────────────────────────────────
+        // The wallpaper URL sits upstream of every colour asserted above: if it
+        // stops moving, the seed stops moving and all three colour sources
+        // freeze together — which is exactly how it shipped. Plasma keeps one
+        // `[Wallpaper][<plugin>][General]` block per plugin that has ever been
+        // configured, and the retired ones keep their keys. A parser that does
+        // not reset its cursor on unrecognised headers attributes the slideshow
+        // plugin's `Image=` to the image block and overwrites the real
+        // wallpaper, so the resolved URL never changes.
+        const plasmaConfig = [
+            "[Containments][55]",
+            "lastScreen=0",
+            "wallpaperplugin=org.kde.image",
+            "",
+            "[Containments][55][Wallpaper][org.kde.image][General]",
+            "Image=/home/user/wallpapers/real.jpeg",
+            "SlidePaths=/usr/share/wallpapers/",
+            "",
+            "[Containments][55][Wallpaper][org.kde.potd][General]",
+            "FillMode=1",
+            "",
+            "[Containments][55][Wallpaper][org.kde.slideshow][General]",
+            "Image=file:///home/user/wallpapers/stale.jpg",
+            "",
+            "[Containments][89]",
+            "lastScreen=1",
+            "wallpaperplugin=org.kde.image",
+            "",
+            "[Containments][89][Wallpaper][org.kde.image][General]",
+            "Image=/home/user/wallpapers/second.jpeg",
+            "",
+        ].join("\n")
+
+        const parsed = WallpaperColorSource._parseWallpaperConfig(plasmaConfig)
+        const imageBlock = parsed.wallpapers["55"] || ({})
+        check("the image block keeps its own wallpaper ("
+            + imageBlock["org.kde.image"] + ")",
+            imageBlock["org.kde.image"] === "/home/user/wallpapers/real.jpeg")
+        check("the slideshow block keeps its own wallpaper",
+            imageBlock["org.kde.slideshow"]
+                === "file:///home/user/wallpapers/stale.jpg")
+        check("an unrecognised block keeps nothing",
+            imageBlock["org.kde.potd"] === undefined)
+        check("screen 0 resolves to the image plugin's wallpaper",
+            WallpaperColorSource._pickWallpaperUrl(parsed, 0)
+                === "/home/user/wallpapers/real.jpeg")
+        check("screen 1 resolves to its own containment",
+            WallpaperColorSource._pickWallpaperUrl(parsed, 1)
+                === "/home/user/wallpapers/second.jpeg")
+
+        // The user-visible symptom: pick a new wallpaper, get the same colours
+        // because this string never changed.
+        const afterChange = plasmaConfig.replace(
+            "/home/user/wallpapers/real.jpeg", "/home/user/wallpapers/new.png")
+        check("changing the wallpaper changes the resolved URL",
+            WallpaperColorSource._pickWallpaperUrl(
+                WallpaperColorSource._parseWallpaperConfig(afterChange), 0)
+                === "/home/user/wallpapers/new.png")
+
+        // Switching plugins must follow the plugin, not the hardcoded name.
+        const slideshowActive = plasmaConfig.replace(
+            "wallpaperplugin=org.kde.image", "wallpaperplugin=org.kde.slideshow")
+        check("an active slideshow plugin resolves to its own image",
+            WallpaperColorSource._pickWallpaperUrl(
+                WallpaperColorSource._parseWallpaperConfig(slideshowActive), 0)
+                === "file:///home/user/wallpapers/stale.jpg")
+
+        // ── which applets config is live ─────────────────────────────────
+        // Fixing the parser above is not enough on its own: the *file* the
+        // parser reads is not a constant either. Plasma names it after the
+        // session's shell package (`plasmashellrc [Shell] ShellPackage`), and
+        // the KOS lock screen makes `kosctl` point that key at its own package.
+        // The desktop wallpapers then move to `plasma-org.kos.desktop-appletsrc`
+        // and the hardcoded KDE filename becomes a file nobody writes — the URL
+        // stays put, nothing is re-sampled, all three sources freeze again.
+        check("ShellPackage is read from the [Shell] group",
+            WallpaperColorSource._parseShellPackage(
+                "[PlasmaViews][Panel 122]\nShellPackage=org.kde.plasma.desktop\n"
+                + "[Shell]\nShellPackage=org.kos.desktop\n") === "org.kos.desktop")
+        check("a ShellPackage key outside [Shell] is ignored",
+            WallpaperColorSource._parseShellPackage(
+                "[Other]\nShellPackage=org.example\n") === "")
+        check("a missing ShellPackage parses as empty",
+            WallpaperColorSource._parseShellPackage("[Shell]\n") === "")
+
+        const configDirectory = WallpaperColorSource.configDirectory
+        const kdeConfigPath = configDirectory
+            + "/plasma-org.kde.plasma.desktop-appletsrc"
+        WallpaperColorSource._applyShellPackage("org.kos.desktop")
+        check("the session's shell package wins the applets config ("
+            + WallpaperColorSource.configPath + ")",
+            WallpaperColorSource.configPath
+                === configDirectory + "/plasma-org.kos.desktop-appletsrc")
+        check("the KDE config stays as the fallback candidate",
+            WallpaperColorSource.configCandidates.length === 2
+            && WallpaperColorSource.configCandidates[1] === kdeConfigPath)
+        WallpaperColorSource._fallBackToNextConfig("missing")
+        check("a named config that is not there yet falls through",
+            WallpaperColorSource.configPath === kdeConfigPath
+            && WallpaperColorSource.configCandidateIndex === 1)
+        // The uninstall path: kosctl deletes the key, so the KDE file returns.
+        WallpaperColorSource._applyShellPackage("")
+        check("no shell package leaves the KDE config in charge",
+            WallpaperColorSource.configPath === kdeConfigPath
+            && WallpaperColorSource.configCandidates.length === 1)
+
         // Back to the default so the assertions above cannot have left the
         // singleton in a state the next load would inherit.
         ColorScheme.setScheme("monet")

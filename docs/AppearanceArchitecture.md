@@ -62,6 +62,8 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
                                         AppearanceTokens.seedColor ──► colors.*
 ```
 
+链路的第一段（「Plasma 配置」是哪个文件）**不是常量**。Plasma 用会话的 shell 包名给 applets 配置命名：`plasmashellrc` 的 `[Shell] ShellPackage` → `~/.config/plasma-<包名>-appletsrc`。KOS 装锁屏时 `kosctl` 会把该键指向自己的包（`org.kos.desktop`），于是**桌面壁纸配置随之搬到 `plasma-org.kos.desktop-appletsrc`**，`plasma-org.kde.plasma.desktop-appletsrc` 就变成没人再写的旧文件——壁纸 URL 永不变化，三套色系一起冻结，而 `_parseWallpaperConfig` 修得再对也没用。`WallpaperColorSource` 因此读 `plasmashellrc` 解析文件名（`_parseShellPackage` / `_applyShellPackage`），KDE 那个文件名只作为兜底候选（会话没选过 shell 包、或包名对应的文件尚未生成时）。`plasma-org.kde.plasma.desktop-appletsrc` 是硬编码路径的历史遗留，新增任何读 Plasma 壁纸的代码都要走同一套解析。
+
 职责约束：
 
 1. `AppearanceConfigService` 是形态、Glass、Bar 与窗口动画配置的所有者；`IconAppearanceService` 单独拥有全局图标外观。
@@ -82,7 +84,7 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 | --- | --- |
 | `shell/desktop/modules/common/AppearanceConfigService.qml` | schema、校验、迁移、保存、Glass effect 同步 |
 | `shell/desktop/modules/common/AppearanceTokens.qml` | 五组只读语义 Token；同时托管壁纸取色与 shell 配置之间的两个 `Connections` 适配器 |
-| `shared/qml/colorize/WallpaperColorSource.qml` | 单例。读 Plasma 壁纸配置，解析壁纸包（按屏幕宽高比选图），对外只暴露 `darkMode` 注入与 `paletteChanged` / `paletteCleared` 信号 |
+| `shared/qml/colorize/WallpaperColorSource.qml` | 单例。读 Plasma 壁纸配置（文件名经 `plasmashellrc` 的 shell 包名解析，见第 2 节数据流），解析壁纸包（按屏幕宽高比选图），对外只暴露 `darkMode` 注入与 `paletteChanged` / `paletteCleared` 信号 |
 | `shared/qml/colorize/ArtworkColorSource.qml` | `Item`。用 Quickshell `ColorQuantizer` 从图像抽两个可区分的主色；MPRIS 封面与本地壁纸通用 |
 | `shared/qml/colorize/ColorScheme.qml` | 单例。接收种子色，按 `scheme` 分派给莫奈 / 中国传统色 / 日系配色，产出 49 个角色 × light/dark。纯同步计算，不启动任何进程 |
 | `shared/qml/colorize/MaterialColorScheme.mjs` | 角色→色族/色调映射、各族随色调变化的色度曲线、变体（vibrant / tonal-spot）的色相旋转表 |
@@ -529,7 +531,7 @@ tone），深色模式固定抬到 tone 80（抬亮 32–64）。`#1a2847`（深
 
 现在 `layer0..4` 在两种外观下都按主色着色：`layer0` 为浅色 0.20 / 深色 0.30，逐级递减到 `layer4` 的 0.11 / 0.18。这些数字是定标出来的，不是拍的——在 200 个种子 × 2 方案 × 2 模式上最差的正文对比度是 5.71:1（要求 4.5:1），再上一档（0.40）掉到 4.0:1 因此被否掉。`tests/traditional-color/test_traditional_color.mjs` 会**从 `AppearanceTokens.qml` 源码读出这些比例**再复算对比度，并断言一次配色来源切换至少能把 Dock 底色移动 8/255（中位数实测 14/255），防止再次出现「数值合法但看不见」的情况。
 
-Dock 以 `dockOpacity 0.50` 绘制，屏幕上只留下一半着色——这是着色值必须高于「看起来合理」的原因。Bar 融合进 Dock（`barIntegratedWithDock`）时同理。
+tonal 板面以 `panelOpacity 0.60` 绘制（`panelFill`，即 `layer1`），屏幕上只留下六成着色、四成被磨砂底透掉——这是着色值必须高于「看起来合理」的原因。这一对值由 `AppearanceTokens.surface` 单点声明，独立 Bar、Dock 胶囊与桌面卡片共用：`barIntegratedWithDock` 打开与否，Bar 走的都是同一块板面，只有容器形状和圆角不同。
 
 这些比例必须声明在 `AppearanceTokens` **singleton 自身**上，不能放进嵌套的 `colors` 对象。曾经把它们定义在 `colors` 内部、却用 `tokens._layerTint0` 引用（正确路径是 `tokens.colors._layerTint0`），路径解析成 `undefined`，`_mix` 里 `(tint.r - base.r) * undefined` 得到 NaN，于是 `layer0..4` 全部变成 `Qt.rgba(NaN, NaN, NaN, 1)`。无效颜色渲染为黑：**卡片文字立刻不可读**；而同一个坏值在任何配色来源下都相同，所以**切换看起来毫无作用**，只有直接用 `primary` 的 DeskCenter 圆环还在正常变色——三个症状同源。`tests/traditional-color/run.mjs` 现在会真正实例化 `AppearanceTokens`（而不仅是 `ColorScheme`），断言这些比例可解析、五个 layer 都是有效颜色、且随配色来源变化。
 
