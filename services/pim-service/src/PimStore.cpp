@@ -17,6 +17,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -236,19 +237,37 @@ QString linkedEventId(const KCalendarCore::Todo::Ptr &todo)
     return customId.isEmpty() ? todo->relatedTo() : customId;
 }
 
+// event uid -> todo uid for every todo that back-references an event. The
+// reverse direction is not stored on the event when the link was created
+// from the todo side, so bulk serializers build this once instead of
+// scanning rawTodos() per event (which made snapshot() O(events x todos)).
+QHash<QString, QString> todoIdsByLinkedEvent(
+    const KCalendarCore::MemoryCalendar *calendar)
+{
+    QHash<QString, QString> result;
+    if (!calendar)
+        return result;
+    for (const KCalendarCore::Todo::Ptr &todo : calendar->rawTodos()) {
+        const QString eventId = linkedEventId(todo);
+        if (!eventId.isEmpty() && !result.contains(eventId))
+            result.insert(eventId, todo->uid());
+    }
+    return result;
+}
+
 QString linkedTodoId(const KCalendarCore::Event::Ptr &event,
-                     const KCalendarCore::MemoryCalendar *calendar)
+                     const KCalendarCore::MemoryCalendar *calendar,
+                     const QHash<QString, QString> *todoByEvent = nullptr)
 {
     const QString customId = event->customProperty(customApp, keyLinkedTodoId);
     if (!customId.isEmpty() && (!calendar || calendar->todo(customId)))
         return customId;
     if (!calendar)
         return customId;
-    for (const KCalendarCore::Todo::Ptr &todo : calendar->rawTodos()) {
-        if (linkedEventId(todo) == event->uid())
-            return todo->uid();
-    }
-    return {};
+    if (todoByEvent)
+        return todoByEvent->value(event->uid());
+    const QHash<QString, QString> resolved = todoIdsByLinkedEvent(calendar);
+    return resolved.value(event->uid());
 }
 
 void linkEventAndTodo(const KCalendarCore::Event::Ptr &event,
@@ -344,11 +363,12 @@ QJsonObject eventObject(const KCalendarCore::Event::Ptr &event,
                         const QDateTime &occurrenceStart = {},
                         const QDateTime &occurrenceEnd = {},
                         const QDateTime &recurrenceId = {},
-                        const KCalendarCore::MemoryCalendar *calendar = nullptr)
+                        const KCalendarCore::MemoryCalendar *calendar = nullptr,
+                        const QHash<QString, QString> *todoByEvent = nullptr)
 {
     const QDateTime start = occurrenceStart.isValid() ? occurrenceStart : event->dtStart();
     const QDateTime end = occurrenceEnd.isValid() ? occurrenceEnd : event->dtEnd();
-    const QString todoId = linkedTodoId(event, calendar);
+    const QString todoId = linkedTodoId(event, calendar, todoByEvent);
     const KCalendarCore::Todo::Ptr linkedTodo = calendar && !todoId.isEmpty()
         ? calendar->todo(todoId) : KCalendarCore::Todo::Ptr{};
     return {
@@ -451,6 +471,13 @@ public:
     {
     }
 
+    ~Private()
+    {
+        // A store destroyed inside the debounce window must not drop the
+        // last mutation; the flush stays atomic through QSaveFile.
+        flushSave();
+    }
+
     bool hasList(const QString &id) const
     {
         return std::any_of(lists.begin(), lists.end(), [&id](const QJsonValue &entry) {
@@ -467,7 +494,40 @@ public:
         return -1;
     }
 
-    bool save(QString *message)
+    // Mutations coalesce their writes through a short debounce: serializing
+    // the whole calendar to iCalendar plus two QSaveFile commits per edit
+    // made a burst of N edits cost N full write cycles. A flush still goes
+    // through writeAtomic(), so crash safety is unchanged, and ~Private
+    // plus the dirty flag bound what a crash inside the window can lose.
+    static constexpr int saveDebounceMs = 150;
+
+    void scheduleSave()
+    {
+        dirty = true;
+        if (saveTimer) {
+            saveTimer->start();
+        } else if (flushSave()) {
+            // Match the timer path and flush(): a synchronous save is also
+            // followed by a widget snapshot refresh.
+            q->writeWidgetSnapshot();
+        }
+    }
+
+    bool flushSave()
+    {
+        if (!dirty)
+            return true;
+        QString message;
+        const bool written = writeState(&message);
+        if (!written)
+            qWarning() << "Unable to persist PIM state:" << message;
+        // Even a failed flush clears the flag: the in-memory model stays
+        // authoritative and the next mutation retries the write.
+        dirty = false;
+        return written;
+    }
+
+    bool writeState(QString *message)
     {
         if (!QDir().mkpath(storageDirectory)) {
             *message = QStringLiteral("Unable to create PIM storage directory");
@@ -530,6 +590,9 @@ public:
     bool writable = true;
     QString storageError;
     QTimer *reminderTimer = nullptr;
+    QTimer *saveTimer = nullptr;
+    PimStore *q = nullptr;
+    bool dirty = false;
     QSet<QString> deliveredReminders;
 };
 
@@ -537,15 +600,23 @@ PimStore::PimStore(const QString &storageDirectory, QObject *parent)
     : QObject(parent)
     , d(std::make_unique<Private>(storageDirectory))
 {
+    d->q = this;
     d->load();
+    d->saveTimer = new QTimer(this);
+    d->saveTimer->setSingleShot(true);
+    d->saveTimer->setInterval(Private::saveDebounceMs);
+    connect(d->saveTimer, &QTimer::timeout, this, [this] {
+        // A failed save must not advance the widget file ahead of the state
+        // actually committed to disk.
+        if (d->flushSave())
+            writeWidgetSnapshot();
+    });
     d->reminderTimer = new QTimer(this);
     d->reminderTimer->setSingleShot(true);
     connect(d->reminderTimer, &QTimer::timeout,
             this, &PimStore::deliverDueReminders);
     connect(this, &PimStore::changed,
             this, &PimStore::scheduleNextReminder);
-    connect(this, &PimStore::changed,
-            this, &PimStore::writeWidgetSnapshot);
     QTimer::singleShot(0, this, &PimStore::scheduleNextReminder);
     QTimer::singleShot(0, this, &PimStore::writeWidgetSnapshot);
 
@@ -556,7 +627,19 @@ PimStore::PimStore(const QString &storageDirectory, QObject *parent)
     widgetRefreshTimer->start();
 }
 
-PimStore::~PimStore() = default;
+PimStore::~PimStore()
+{
+    // Persist whatever the debounce window still holds: a store destroyed
+    // before the timer fires must not drop its last mutations.
+    flush();
+}
+
+void PimStore::flush()
+{
+    d->saveTimer->stop();
+    d->flushSave();
+    writeWidgetSnapshot();
+}
 
 void PimStore::scheduleNextReminder()
 {
@@ -639,30 +722,51 @@ void PimStore::deliverDueReminders()
 void PimStore::writeWidgetSnapshot()
 {
     const QDate today = QDate::currentDate();
-    QJsonParseError parseError;
-    const QJsonObject full = QJsonDocument::fromJson(
-        snapshot().toUtf8(), &parseError).object();
-    if (parseError.error != QJsonParseError::NoError)
-        return;
-    const QJsonObject range = QJsonDocument::fromJson(
-        eventsForRange(today.toString(Qt::ISODate),
-                       today.addDays(7).toString(Qt::ISODate)).toUtf8(),
-        &parseError).object();
-    if (parseError.error != QJsonParseError::NoError)
-        return;
+
+    // Build the widget payload straight from the in-memory model. Routing
+    // this through snapshot()+eventsForRange() serialized the whole store to
+    // JSON twice and parsed it back just to keep a 16-item subset.
+    const QHash<QString, QString> todoByEvent =
+        todoIdsByLinkedEvent(d->calendar.data());
 
     QJsonArray events;
-    const QJsonArray occurrences = range.value(QStringLiteral("occurrences")).toArray();
-    for (qsizetype index = 0; index < occurrences.size() && index < 16; ++index)
-        events.append(occurrences.at(index));
+    const QTimeZone zone = d->calendar->timeZone();
+    KCalendarCore::OccurrenceIterator iterator(
+        *d->calendar, QDateTime(today, QTime(0, 0), zone),
+        QDateTime(today.addDays(8), QTime(0, 0), zone).addMSecs(-1));
+    while (iterator.hasNext() && events.size() < 16) {
+        iterator.next();
+        const auto event = qSharedPointerDynamicCast<KCalendarCore::Event>(
+            iterator.incidence());
+        if (event) {
+            events.append(eventObject(event, iterator.occurrenceStartDate(),
+                                      iterator.occurrenceEndDate(),
+                                      iterator.recurrenceId(), d->calendar.data(),
+                                      &todoByEvent));
+        }
+    }
 
+    QList<KCalendarCore::Todo::Ptr> openTodos;
+    for (const KCalendarCore::Todo::Ptr &todo : d->calendar->rawTodos()) {
+        if (!todo->isCompleted())
+            openTodos.append(todo);
+    }
+    // Same ordering the full snapshot applies to its todo section once the
+    // completed items are filtered out.
+    std::sort(openTodos.begin(), openTodos.end(),
+              [](const KCalendarCore::Todo::Ptr &left,
+                 const KCalendarCore::Todo::Ptr &right) {
+        const double leftOrder = left->customProperty(customApp, keyOrder)
+                                     .toDouble();
+        const double rightOrder = right->customProperty(customApp, keyOrder)
+                                      .toDouble();
+        if (leftOrder != rightOrder)
+            return leftOrder < rightOrder;
+        return left->summary() < right->summary();
+    });
     QJsonArray todos;
-    const QJsonArray allTodos = full.value(QStringLiteral("todos")).toArray();
-    for (const QJsonValue &value : allTodos) {
-        const QJsonObject todo = value.toObject();
-        if (todo.value(QStringLiteral("completed")).toBool())
-            continue;
-        todos.append(todo);
+    for (const KCalendarCore::Todo::Ptr &todo : std::as_const(openTodos)) {
+        todos.append(todoObject(todo));
         if (todos.size() >= 16)
             break;
     }
@@ -690,10 +794,13 @@ void PimStore::writeWidgetSnapshot()
 
 QString PimStore::snapshot() const
 {
+    const QHash<QString, QString> todoByEvent =
+        todoIdsByLinkedEvent(d->calendar.data());
     QJsonArray events;
     QList<QJsonObject> sortedEvents;
     for (const KCalendarCore::Event::Ptr &event : d->calendar->rawEvents())
-        sortedEvents.append(eventObject(event, {}, {}, {}, d->calendar.data()));
+        sortedEvents.append(eventObject(event, {}, {}, {}, d->calendar.data(),
+                                        &todoByEvent));
     std::sort(sortedEvents.begin(), sortedEvents.end(), [](const QJsonObject &left,
                                                             const QJsonObject &right) {
         return left.value(QStringLiteral("start")).toString()
@@ -743,6 +850,8 @@ QString PimStore::eventsForRange(const QString &startDate, const QString &endDat
         return errorResponse(QStringLiteral("invalid_range"),
                              QStringLiteral("Event range must cover 0 to 730 days"));
     const QTimeZone zone = d->calendar->timeZone();
+    const QHash<QString, QString> todoByEvent =
+        todoIdsByLinkedEvent(d->calendar.data());
     KCalendarCore::OccurrenceIterator iterator(
         *d->calendar, QDateTime(start, QTime(0, 0), zone),
         QDateTime(end.addDays(1), QTime(0, 0), zone).addMSecs(-1));
@@ -756,7 +865,8 @@ QString PimStore::eventsForRange(const QString &startDate, const QString &endDat
         if (event) {
             occurrences.append(eventObject(event, iterator.occurrenceStartDate(),
                                            iterator.occurrenceEndDate(),
-                                           iterator.recurrenceId(), d->calendar.data()));
+                                           iterator.recurrenceId(), d->calendar.data(),
+                                           &todoByEvent));
             continue;
         }
         const auto todo = qSharedPointerDynamicCast<KCalendarCore::Todo>(
@@ -844,8 +954,8 @@ QString PimStore::createEvent(const QString &payload)
                              QStringLiteral("Unable to add the linked todo"));
     }
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision,
                            eventObject(event, {}, {}, {}, d->calendar.data()));
@@ -962,8 +1072,8 @@ QString PimStore::updateEvent(const QString &uid, const QString &payload)
                              QStringLiteral("Unable to update the linked todo"));
     }
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision,
                            eventObject(updated, {}, {}, {}, d->calendar.data()));
@@ -998,9 +1108,8 @@ QString PimStore::removeEvent(const QString &uid)
                              QStringLiteral("Unable to unlink the related todo"));
     }
     ++d->revision;
-    QString message;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision);
 }
@@ -1055,8 +1164,8 @@ QString PimStore::createTodo(const QString &payload)
         return errorResponse(QStringLiteral("calendar_error"),
                              QStringLiteral("Unable to add todo"));
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision, todoObject(todo));
 }
@@ -1155,8 +1264,8 @@ QString PimStore::updateTodo(const QString &uid, const QString &payload)
                              QStringLiteral("Unable to update the linked event"));
     }
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision, todoObject(updated));
 }
@@ -1193,9 +1302,8 @@ QString PimStore::removeTodo(const QString &uid)
             candidate->removeCustomProperty(customApp, keyParentId);
     }
     ++d->revision;
-    QString message;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision);
 }
@@ -1222,8 +1330,8 @@ QString PimStore::createList(const QString &payload)
     };
     d->lists.append(list);
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision, list);
 }
@@ -1254,8 +1362,8 @@ QString PimStore::updateList(const QString &id, const QString &payload)
         list.insert(QStringLiteral("position"), input.value(QStringLiteral("position")).toInt());
     d->lists.replace(index, list);
     ++d->revision;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision, list);
 }
@@ -1276,9 +1384,8 @@ QString PimStore::removeList(const QString &id)
             todo->setCustomProperty(customApp, keyListId, QStringLiteral("inbox"));
     }
     ++d->revision;
-    QString message;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return successResponse(d->revision);
 }
@@ -1316,9 +1423,8 @@ QString PimStore::importIcalendar(const QString &path, bool replaceExisting)
         }
     }
     ++d->revision;
-    QString message;
-    if (!d->save(&message))
-        return errorResponse(QStringLiteral("storage_error"), message);
+    // The write is debounced; a storage failure is reported by flushSave().
+    d->scheduleSave();
     emit changed(d->revision);
     return compactJson({
         {QStringLiteral("ok"), true},

@@ -65,6 +65,9 @@ void PimStoreTest::eventPersistsAcrossRestart()
         uid = response.value(QStringLiteral("item")).toObject()
                   .value(QStringLiteral("id")).toString();
         QVERIFY(!uid.isEmpty());
+        // Writes are debounced, so the file appears only after flush()
+        // (or, outside tests, after the debounce timer fires).
+        store.flush();
         QVERIFY(QFileInfo::exists(directory.filePath(QStringLiteral("calendar.ics"))));
     }
 
@@ -88,6 +91,7 @@ void PimStoreTest::widgetSnapshotRefreshesAfterMutation()
              .toString(Qt::ISODate)},
     })));
     QVERIFY(created.value(QStringLiteral("ok")).toBool());
+    store.flush();
 
     QFile snapshotFile(directory.filePath(QStringLiteral("widget-snapshot.json")));
     QVERIFY(snapshotFile.open(QIODevice::ReadOnly));
@@ -146,6 +150,7 @@ void PimStoreTest::todoListsAndCompletionPersist()
         {QStringLiteral("completed"), true},
     })));
     QVERIFY(updateResponse.value(QStringLiteral("ok")).toBool());
+    store.flush();
 
     PimStore reloaded(directory.path());
     const QJsonObject snapshot = parseObject(reloaded.snapshot());
@@ -173,6 +178,7 @@ void PimStoreTest::recurringTodoCanUseDueDate()
     const QJsonObject item = created.value(QStringLiteral("item")).toObject();
     QCOMPARE(item.value(QStringLiteral("recurrence")).toString(), QStringLiteral("daily"));
     QCOMPARE(item.value(QStringLiteral("reminderMinutes")).toInt(), 15);
+    store.flush();
 
     PimStore reloaded(directory.path());
     const QJsonArray todos = parseObject(reloaded.snapshot())
