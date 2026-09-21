@@ -41,3 +41,25 @@ install(TARGETS kos-platform
 install(FILES kwin/window-bridge.js
     DESTINATION share/kos/platform/kwin
 )
+
+# Startup smoke for the daemon itself: run the freshly built binary on a
+# private session bus, wait for its READY line, answer-check platform.ping
+# and confirm SIGTERM stops it cleanly. It needs an interpreter and
+# dbus-run-session, so it registers only when both exist.
+if(BUILD_TESTING)
+    if(NOT KOS_PYTHON_EXECUTABLE)
+        find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
+    endif()
+    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+    if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
+        add_test(NAME kos-platform.startup
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_platform_startup.py
+                $<TARGET_FILE:kos-platform>
+        )
+        set_tests_properties(kos-platform.startup PROPERTIES
+            LABELS platform
+            TIMEOUT 60
+        )
+    endif()
+endif()

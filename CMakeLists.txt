@@ -106,15 +106,53 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.liquid-glass-panel PROPERTIES TIMEOUT 15)
+            add_test(NAME kos-shell.traditional-color-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.traditional-color-runtime PROPERTIES TIMEOUT 15)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
+        find_program(KOS_WESTON_EXECUTABLE NAMES weston)
+        if(KOS_QUICKSHELL_EXECUTABLE AND KOS_WESTON_EXECUTABLE)
+            # The whole shell on a real compositor: tests/shell-startup drives
+            # headless weston and waits for quickshell to report
+            # "Configuration Loaded". It needs both binaries, so it only ever
+            # registers on a machine that can actually run it.
+            add_test(NAME kos-shell.startup
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/shell-startup/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE} ${KOS_WESTON_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.startup PROPERTIES
+                LABELS ui
+                TIMEOUT 180
+            )
+        endif()
+
         add_test(NAME kos-ui.page-cache-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_page_cache_policy.mjs
         )
         set_tests_properties(kos-ui.page-cache-policy PROPERTIES TIMEOUT 10)
+
+        # These two were passing but were never added to the suite, so nothing
+        # ran them: the settings app's Material palette resolution and the
+        # traditional colour scheme contract. Pure node, no display needed --
+        # which is also why they carry the logic label below, not ui.
+        add_test(NAME kos-ui.settings-material
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/settings-material/run.mjs
+        )
+        set_tests_properties(kos-ui.settings-material PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-ui.traditional-color
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/test_traditional_color.mjs
+        )
+        set_tests_properties(kos-ui.traditional-color PROPERTIES TIMEOUT 10)
 
         # These four were written and passing but never added to the suite, so
         # nothing ran them. They cover the Dock's adaptive layout and auto-hide
@@ -181,10 +219,10 @@ if(BUILD_TESTING)
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.appearance-config kos-shell.dock-adaptive
             kos-shell.dock-autohide
+            kos-ui.visual-contract kos-ui.color-scheme
+            kos-ui.page-cache-policy kos-ui.settings-material
+            kos-ui.traditional-color
             PROPERTIES LABELS logic)
-        set_tests_properties(kos-ui.visual-contract kos-ui.color-scheme
-            kos-ui.page-cache-policy
-            PROPERTIES LABELS ui)
         set_tests_properties(kos-platform.window-placement PROPERTIES LABELS platform)
     endif()
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
@@ -192,7 +230,7 @@ if(BUILD_TESTING)
     endif()
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
-            kos-shell.liquid-glass-panel
+            kos-shell.liquid-glass-panel kos-shell.traditional-color-runtime
             PROPERTIES LABELS ui)
     endif()
     if(KOS_PYTHON_EXECUTABLE)
@@ -351,17 +389,8 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/decoration-liquid-glass)
 endif()
 
-if(KOS_BUILD_PLATFORM)
-    # Quickshell loads this tree at runtime; CMake copies the complete source
-    # tree and does not attempt to compile QML into the platform binary.
-    install(DIRECTORY shell/ DESTINATION share/kos/shell)
-    install(DIRECTORY shared/ DESTINATION share/kos/shared)
-    # apps/settings/main.qml is also runnable directly from an installed prefix.
-    # It resolves `import "../../shared/qml/<dir>"` against its own installed
-    # location, so the whole tree has to be deployed beside it: shipping only
-    # controls/ left the colorize/ import unresolvable and the window died in
-    # QQmlApplicationEngine before it was ever shown.
-    install(DIRECTORY shared/qml/ DESTINATION share/shared/qml
-            PATTERN "CMakeLists.txt" EXCLUDE
-            PATTERN "test_*.mjs" EXCLUDE)
-endif()
+# No install() rules for the shell and shared QML trees, on purpose: user-side
+# deployment is owned by tools/kosctl (deploy_artifacts) and Nix's own
+# installPhase, which both copy from the source tree. Rules here would be a
+# second, drifting copy of the same file list -- and nothing in this repo ever
+# ran `cmake --install` for them anyway.

@@ -27,3 +27,18 @@ target_compile_definitions(kos-settings PRIVATE
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
 install(FILES main.qml DESTINATION share/kos/settings)
+
+if(BUILD_TESTING)
+    # The settings window ships in the core configuration, so it is not built
+    # through kos_add_application and its smoke test lives here. --smoke-test
+    # loads main.qml offscreen -- a real load, for one event loop turn -- and
+    # turns a QML tree that no longer instantiates into a failed test instead
+    # of a window that silently never appears.
+    add_test(NAME kos-settings.qml-smoke COMMAND kos-settings --smoke-test)
+    set_tests_properties(kos-settings.qml-smoke PROPERTIES
+        ENVIRONMENT
+            "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QSG_RHI_BACKEND=software"
+        LABELS ui
+        TIMEOUT 15
+    )
+endif()

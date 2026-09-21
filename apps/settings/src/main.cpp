@@ -16,6 +16,7 @@
 #include <QStandardPaths>
 #include <QSettings>
 #include <QThread>
+#include <QTimer>
 #include <QVariantMap>
 
 namespace {
@@ -777,6 +778,11 @@ int main(int argc, char *argv[]) {
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;
+    // --smoke-test is the build-side check that the settings window loads:
+    // run one event loop turn (as ApplicationRunner does for the apps) and
+    // exit, so CI can prove main.qml instantiates without a display.
+    if (application.arguments().contains(QStringLiteral("--smoke-test")))
+        QTimer::singleShot(250, &application, &QCoreApplication::quit);
     return application.exec();
 }
 

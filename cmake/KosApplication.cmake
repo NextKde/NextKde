@@ -76,6 +76,7 @@ function(kos_add_application target)
         add_test(NAME ${target}.version COMMAND ${target} --version)
         set_tests_properties(${target}.version PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+            LABELS ui
             TIMEOUT 10
         )
 
@@ -83,6 +84,7 @@ function(kos_add_application target)
         set_tests_properties(${target}.qml-smoke PROPERTIES
             ENVIRONMENT
                 "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QSG_RHI_BACKEND=software"
+            LABELS ui
             TIMEOUT 10
         )
     endif()
