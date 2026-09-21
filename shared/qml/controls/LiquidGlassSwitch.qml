@@ -35,9 +35,12 @@ Item {
     property bool _hovered: false
     property real _thumbX: checked ? travel : 0
 
-    // 整个开关按圆角药丸裁剪（iOS 真实做法）：玻璃透镜按下时放大溢出轨道、
-    // 阴影等任何内部元素，都会被外层圆角裁掉，不会露出超出圆角的蒙层
-    layer.enabled: true
+    // 整个开关按圆角药丸裁剪（iOS 真实做法）：仅玻璃透镜按下放大溢出轨道、
+    // 或 disabled 整组半透明合成时才需要 FBO+OpacityMask；静止时所有内容
+    // 都在 pill 内（顶部高光已改为自带 pill 圆角的渐变矩形），直通渲染，
+    // 省掉常驻的源+mask 两个 FBO。_expansion 变非零与透镜开始溢出发生在
+    // 同一帧，门控不会产生未裁剪的穿帮帧。
+    layer.enabled: root._expansion > 0 || root.opacity < 1
     layer.effect: OpacityMask {
         maskSource: Rectangle {
             width: root.width
@@ -119,17 +122,17 @@ Item {
             }
         }
 
-        // Track highlight (subtle top sheen)
+        // Track highlight (subtle top sheen). A full-pill rounded rect whose
+        // gradient fades out by 40% height renders identically to the old
+        // flat-topped strip clipped by the root OpacityMask, but its own
+        // radius keeps it inside the arc -- no mask needed at rest.
         Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: parent.height * 0.4
+            anchors.fill: parent
             radius: parent.radius
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.12) }
-                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
+                GradientStop { position: 0.4; color: Qt.rgba(1, 1, 1, 0.0) }
             }
         }
     }
