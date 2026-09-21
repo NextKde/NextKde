@@ -78,6 +78,16 @@ PanelWindow {
     property bool timerRunning: false
     property bool timerHasStarted: false
     property bool timerView: false
+    property bool editMode: false
+    property bool widgetLibraryOpen: false
+    readonly property var widgetLabels: ({
+        clock: "时钟", weather: "天气", calendar: "日历", todo: "待办",
+        system: "系统", activity: "活动", music: "音乐"
+    })
+    readonly property var widgetSymbols: ({
+        clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
+        system: "⌁", activity: "◌", music: "♫"
+    })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
     readonly property var activityUsage: ActivityUsageService
@@ -196,7 +206,7 @@ PanelWindow {
         // Settings page take effect without a reload: assigning the array
         // re-evaluates this property, and `placements` packs whatever is left.
         const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
-        return [
+        const definitions = [
             configuredWidget("clock", 100, "#536783", "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
             configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
@@ -204,7 +214,16 @@ PanelWindow {
             configuredWidget("system", 70, "#f5f8fc", "#e6edf6"),
             configuredWidget("activity", 60, "#40506a", "#29364e"),
             configuredWidget("music", 50, "#51415d", "#332a3d")
-        ].filter(widget => hidden.indexOf(widget.id) < 0)
+        ]
+        const byId = ({})
+        for (const widget of definitions)
+            byId[widget.id] = widget
+        const ordered = []
+        for (const id of DeskCenterConfigService.orderedIds()) {
+            if (byId[id] && hidden.indexOf(id) < 0)
+                ordered.push(byId[id])
+        }
+        return ordered
     }
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
@@ -281,6 +300,131 @@ PanelWindow {
             }
             desktopFileGrid.clearDesktopSelection()
         }
+        onPressAndHold: {
+            root.widgetLibraryOpen = false
+            root.editMode = true
+        }
+    }
+
+    Row {
+        id: widgetEditToolbar
+        z: 200
+        visible: root.editMode
+        anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
+        spacing: 8
+
+        Repeater {
+            model: [
+                { id: "add", label: "+ 组件" },
+                { id: "done", label: "完成" }
+            ]
+            delegate: Rectangle {
+                required property var modelData
+                width: toolbarText.implicitWidth + 24
+                height: 32
+                radius: AppearanceTokens.isMaterial ? 16 : 11
+                color: AppearanceTokens.surface.pick(
+                    modelData.id === "done"
+                        ? AppearanceTokens.colors.primaryContainer
+                        : AppearanceTokens.colors.surfaceContainerHigh,
+                    ThemeService.isDark ? Qt.rgba(0.10, 0.10, 0.12, 0.90)
+                        : Qt.rgba(1, 1, 1, 0.92))
+                border.width: 1
+                border.color: AppearanceTokens.surface.pick(
+                    AppearanceTokens.colors.outlineVariant,
+                    Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g,
+                        ThemeService.foregroundColor.b, 0.16))
+                Text {
+                    id: toolbarText
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    color: ThemeService.foregroundColor
+                    font { pixelSize: 11; weight: Font.DemiBold }
+                }
+                TapHandler {
+                    onTapped: {
+                        if (modelData.id === "add")
+                            root.widgetLibraryOpen = !root.widgetLibraryOpen
+                        else {
+                            root.widgetLibraryOpen = false
+                            root.editMode = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: widgetLibrary
+        z: 190
+        visible: root.editMode && root.widgetLibraryOpen
+        anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
+        width: 430
+        height: 116
+        radius: AppearanceTokens.isMaterial ? 24 : 18
+        color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.surfaceContainer,
+            ThemeService.isDark ? Qt.rgba(0.07, 0.07, 0.09, 0.94)
+                : Qt.rgba(1, 1, 1, 0.94))
+        border.width: 1
+        border.color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.outlineVariant,
+            Qt.rgba(ThemeService.foregroundColor.r,
+                ThemeService.foregroundColor.g,
+                ThemeService.foregroundColor.b, 0.16))
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 6
+            Repeater {
+                model: DeskCenterConfigService.defaultOrder
+                delegate: Rectangle {
+                    required property string modelData
+                    readonly property bool active:
+                        !AppearanceConfigService.isDeskCenterWidgetHidden(modelData)
+                    width: 54; height: 82
+                    radius: AppearanceTokens.isMaterial ? 16 : 12
+                    color: active
+                        ? AppearanceTokens.surface.pick(
+                            AppearanceTokens.colors.secondaryContainer,
+                            Qt.rgba(ThemeService.foregroundColor.r,
+                                ThemeService.foregroundColor.g,
+                                ThemeService.foregroundColor.b, 0.10))
+                        : "transparent"
+                    border.width: 1
+                    border.color: active ? AppearanceTokens.colors.primary
+                        : AppearanceTokens.colors.outlineVariant
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 5
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: root.widgetSymbols[modelData]
+                            color: ThemeService.foregroundColor
+                            font.pixelSize: 20
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: root.widgetLabels[modelData]
+                            color: ThemeService.foregroundColor
+                            font { pixelSize: 9; weight: Font.DemiBold }
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: active ? "−" : "+"
+                            color: active ? "#ff453a" : ThemeService.accentColor
+                            font { pixelSize: 14; weight: Font.Bold }
+                        }
+                    }
+                    TapHandler {
+                        onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
+                            modelData, !active)
+                    }
+                }
+            }
+        }
     }
 
     Repeater {
@@ -290,8 +434,13 @@ PanelWindow {
         delegate: DeskWidgetCard {
             id: card
             required property var modelData
+            property real dragOffsetX: 0
+            property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
             visible: placement !== null
+            z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
+            transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
+            scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
             // be the flower itself — no card fill, no rectangular KWin material,
@@ -310,18 +459,59 @@ PanelWindow {
             Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
             Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
             Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+                onTapped: {
+                    root.widgetLibraryOpen = false
+                    root.editMode = true
+                }
+            }
+
+            DragHandler {
+                id: widgetDrag
+                target: null
+                enabled: root.editMode
+                acceptedButtons: Qt.LeftButton
+                onTranslationChanged: {
+                    if (!active)
+                        return
+                    card.dragOffsetX = translation.x
+                    card.dragOffsetY = translation.y
+                }
+                onActiveChanged: {
+                    if (active)
+                        return
+                    const centerX = card.x + card.width / 2 + card.dragOffsetX
+                    const centerY = card.y + card.height / 2 + card.dragOffsetY
+                    let nearestId = card.modelData.id
+                    let nearestDistance = Number.POSITIVE_INFINITY
+                    for (let i = 0; i < widgetRepeater.count; ++i) {
+                        const candidate = widgetRepeater.itemAt(i)
+                        if (!candidate)
+                            continue
+                        const dx = centerX - (candidate.x + candidate.width / 2)
+                        const dy = centerY - (candidate.y + candidate.height / 2)
+                        const distance = dx * dx + dy * dy
+                        if (distance < nearestDistance) {
+                            nearestDistance = distance
+                            nearestId = candidate.modelData.id
+                        }
+                    }
+                    const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
+                    DeskCenterConfigService.moveWidget(card.modelData.id, targetIndex)
+                    card.dragOffsetX = 0
+                    card.dragOffsetY = 0
+                }
             }
 
             HoverHandler { id: widgetHover }
 
             Rectangle {
                 z: 50
-                visible: widgetHover.hovered
+                visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
                 width: sizeLabel.implicitWidth + 14
                 height: 24
@@ -333,9 +523,51 @@ PanelWindow {
                     id: sizeLabel
                     anchors.centerIn: parent
                     text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键切换"
+                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键编辑"
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
+                }
+            }
+
+            Rectangle {
+                z: 80
+                visible: root.editMode
+                anchors { top: parent.top; left: parent.left; margins: 8 }
+                width: 26; height: 26; radius: 13
+                color: "#ff453a"
+                Text {
+                    anchors.centerIn: parent
+                    text: "−"
+                    color: "white"
+                    font { pixelSize: 18; weight: Font.Bold }
+                }
+                TapHandler {
+                    onTapped: AppearanceConfigService.setDeskCenterWidgetVisible(
+                        card.modelData.id, false)
+                }
+            }
+
+            Rectangle {
+                z: 80
+                visible: root.editMode
+                anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
+                width: editSizeText.implicitWidth + 16
+                height: 26
+                radius: AppearanceTokens.isMaterial ? 13 : 9
+                color: AppearanceTokens.surface.pick(
+                    AppearanceTokens.colors.primaryContainer,
+                    Qt.rgba(0, 0, 0, 0.56))
+                Text {
+                    id: editSizeText
+                    anchors.centerIn: parent
+                    text: ({ small: "小", medium: "中", large: "大" })[
+                        DeskCenterConfigService.sizeFor(card.modelData.id)]
+                    color: AppearanceTokens.surface.pick(
+                        AppearanceTokens.colors.primaryContainerForeground, "white")
+                    font { pixelSize: 10; weight: Font.DemiBold }
+                }
+                TapHandler {
+                    onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
                 }
             }
 
