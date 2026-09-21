@@ -177,6 +177,21 @@ Item {
                 barLayoutMode: AppearanceConfigService.barLayoutMode,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
+                // Same reason as materialColorSwatches above: these are arrays,
+                // and a plain JSON string crosses the hand-written C++ whitelist
+                // with no conversion left to get wrong. They carry the *hidden*
+                // ids, so an id absent from the list means "visible".
+                hiddenDeskCenterWidgets: JSON.stringify(
+                    AppearanceConfigService.hiddenDeskCenterWidgets),
+                hiddenStatusCells: JSON.stringify(
+                    AppearanceConfigService.hiddenStatusCells),
+                // The known id sets, so the Settings page builds its switches
+                // from the Shell's own list instead of a second hardcoded copy
+                // that can drift from the surfaces the shell actually creates.
+                deskCenterWidgetIds: JSON.stringify(
+                    AppearanceConfigService.deskCenterWidgetIds),
+                statusCellIds: JSON.stringify(
+                    AppearanceConfigService.statusCellIds),
                 tokenVersion: AppearanceTokens.version,
             })
         }
@@ -263,6 +278,18 @@ Item {
 
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
+            return snapshot()
+        }
+
+        // Per-surface visibility. `visible` is the wanted state, so the switch
+        // in the Settings page holds the same value it displays.
+        function updateDeskCenterWidgetVisibility(id: string, visible: bool): string {
+            AppearanceConfigService.setDeskCenterWidgetVisible(id, visible)
+            return snapshot()
+        }
+
+        function updateStatusCellVisibility(id: string, visible: bool): string {
+            AppearanceConfigService.setStatusCellVisible(id, visible)
             return snapshot()
         }
 

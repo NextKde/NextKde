@@ -706,4 +706,13 @@ Item {
         const wrapper = trailingRepeater.itemAt(index)
         return wrapper?.loader?.item ?? null
     }
+
+    // Looks a trailing cell up by its stable key instead of its rendered
+    // position. The StatusArea's panels anchor to these cells, and a hidden
+    // cell shifts every later index, so an index-based lookup would silently
+    // anchor a panel to the wrong icon once visibility is configurable.
+    function trailingItemForKey(key) {
+        const index = root.trailingKeys.indexOf(String(key))
+        return index >= 0 ? trailingItem(index) : null
+    }
 }

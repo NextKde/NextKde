@@ -192,6 +192,10 @@ PanelWindow {
     readonly property var widgetDefinitions: {
         // Make the binding depend on persisted configuration changes.
         const revision = DeskCenterConfigService.revision
+        // Reading the visibility list here is what makes the switch in the
+        // Settings page take effect without a reload: assigning the array
+        // re-evaluates this property, and `placements` packs whatever is left.
+        const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
         return [
             configuredWidget("clock", 100, "#536783", "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
@@ -200,7 +204,7 @@ PanelWindow {
             configuredWidget("system", 70, "#f5f8fc", "#e6edf6"),
             configuredWidget("activity", 60, "#40506a", "#29364e"),
             configuredWidget("music", 50, "#51415d", "#332a3d")
-        ]
+        ].filter(widget => hidden.indexOf(widget.id) < 0)
     }
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
