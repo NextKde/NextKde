@@ -680,66 +680,92 @@ private:
                          QStringLiteral("接入状态请求失败"));
     }
 
-    static QString shellDirectory() {
+    static QString installedShellDirectory() {
+        return QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+            + QStringLiteral("/quickshell/kos");
+    }
+
+    // Candidate Shell directories, most specific first. A Settings window is
+    // started from two different places and only one of them can pass the
+    // environment down: the Shell's own Settings entry goes through the
+    // platform daemon, which exports KOS_SHELL_DIR for the session it belongs
+    // to, while a .desktop launch (app grid, KRunner, menu) inherits nothing.
+    // The list is therefore a preference order, not a decision -- callShell
+    // falls through to the next entry when one names a Shell that is not
+    // running, so an installed session still works with a source tree left on
+    // disk, and vice versa.
+    static QStringList shellDirectories() {
+        QStringList directories;
         const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
         if (!configured.isEmpty())
-            return configured;
+            directories.append(configured);
 
         // Development desktop entries do not inherit the Shell environment.
         // Prefer the compile-time source tree when it still exists; this is
         // the same tree a locally built settings binary was compiled for.
-        const QString source = QStringLiteral(SETTINGS_SHELL_DIR);
-        if (QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
-            return source;
+        // Resolved before use: the literal carries `..` segments
+        // (apps/settings/../../shell) and Quickshell matches IPC targets by the
+        // directory it registered, so the resolved form is the one that hits.
+        const QString source = QFileInfo(QStringLiteral(SETTINGS_SHELL_DIR))
+                                   .canonicalFilePath();
+        if (!source.isEmpty()
+            && QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
+            directories.append(source);
 
-        const QString installed = QStandardPaths::writableLocation(
-            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
-        return installed;
+        directories.append(installedShellDirectory());
+        directories.removeDuplicates();
+        return directories;
+    }
+
+    // Quickshell tracks instances by how they identify their config: a Shell
+    // launched as `-c kos` is NOT matched by `--path <same dir>`. The installed
+    // session runs as `-c kos`, so address it by name; development sessions
+    // (`-p <dir>`) take the explicit path.
+    static QStringList connectArgsFor(const QString &shellPath) {
+        if (shellPath == installedShellDirectory())
+            return {QStringLiteral("-c"), QStringLiteral("kos")};
+        return {QStringLiteral("--path"), shellPath};
     }
 
     QString callShell(const QString &target, const QStringList &arguments,
                       const QString &fallbackError) {
-        const QString shellPath = shellDirectory();
+        const QStringList shellPaths = shellDirectories();
         QString failure;
-        // Quickshell tracks instances by how they identify their config: a
-        // Shell launched as `-c kos` is NOT matched by `--path <same dir>`.
-        // The installed session runs as `-c kos`, so address it by name;
-        // development sessions (`-p <dir>`) take the explicit path.
-        const QString installed = QStandardPaths::writableLocation(
-            QStandardPaths::ConfigLocation) + QStringLiteral("/quickshell/kos");
-        QStringList connectArgs;
-        if (shellPath == installed)
-            connectArgs = {QStringLiteral("-c"), QStringLiteral("kos")};
-        else
-            connectArgs = {QStringLiteral("--path"), shellPath};
-        // The Shell can still be registering IPC targets during the first
-        // moments of a development launch. Retry once instead of turning that
-        // brief race into a permanent, opaque Settings error.
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            QProcess process;
-            QStringList command = connectArgs;
-            command << QStringLiteral("ipc") << QStringLiteral("call") << target;
-            command.append(arguments);
-            process.start(QStringLiteral("quickshell"), command);
-            if (!process.waitForStarted(1500)) {
-                failure = QStringLiteral("无法启动 Quickshell IPC");
-            } else if (!process.waitForFinished(5000)) {
-                process.kill();
-                process.waitForFinished();
-                failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
-            } else if (process.exitStatus() == QProcess::NormalExit
-                       && process.exitCode() == 0) {
-                return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
-            } else {
-                failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
-                if (failure.isEmpty())
-                    failure = fallbackError;
+        QString attemptedShell;
+        for (int index = 0; index < shellPaths.size(); ++index) {
+            const QString shellPath = shellPaths.at(index);
+            attemptedShell = shellPath;
+            // The Shell can still be registering IPC targets during the first
+            // moments of a development launch, so the preferred candidate gets
+            // one retry. Later candidates are fallbacks for a Shell that is
+            // simply not the running one, where a second attempt buys nothing.
+            const int attempts = index == 0 ? 2 : 1;
+            for (int attempt = 0; attempt < attempts; ++attempt) {
+                QProcess process;
+                QStringList command = connectArgsFor(shellPath);
+                command << QStringLiteral("ipc") << QStringLiteral("call") << target;
+                command.append(arguments);
+                process.start(QStringLiteral("quickshell"), command);
+                if (!process.waitForStarted(1500)) {
+                    failure = QStringLiteral("无法启动 Quickshell IPC");
+                } else if (!process.waitForFinished(5000)) {
+                    process.kill();
+                    process.waitForFinished();
+                    failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+                } else if (process.exitStatus() == QProcess::NormalExit
+                           && process.exitCode() == 0) {
+                    return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+                } else {
+                    failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
+                    if (failure.isEmpty())
+                        failure = fallbackError;
+                }
+                if (attempt + 1 < attempts)
+                    QThread::msleep(120);
             }
-            if (attempt == 0)
-                QThread::msleep(120);
         }
         setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
-                         .arg(failure, target, shellPath));
+                         .arg(failure, target, attemptedShell));
         return {};
     }
 

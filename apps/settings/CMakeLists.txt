@@ -20,9 +20,15 @@ target_link_libraries(kos-settings PRIVATE
 )
 
 # Development host: released packages will embed or install this QML tree.
+# SETTINGS_SHELL_DIR must be the directory that *contains* shell.qml: the
+# binary hands it to `quickshell ipc --path <dir>` to reach the Shell it was
+# built for, and main.cpp only accepts it after finding shell.qml inside.
+# Pointing at the repository root made that check fail, so every .desktop
+# launch (app grid, KRunner, menu) fell through to the installed
+# ~/.config/quickshell/kos session and reported "外观设置请求失败".
 target_compile_definitions(kos-settings PRIVATE
     SETTINGS_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
-    SETTINGS_SHELL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../.."
+    SETTINGS_SHELL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shell"
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
