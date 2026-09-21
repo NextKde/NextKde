@@ -37,6 +37,19 @@ QtObject {
     property real   baseHeight:   60
     property string theme:        "system"
     property string position:     "bottom"
+    // Where the glass rests along its edge. "start" | "center" | "end" — on a
+    // bottom dock that reads as left/centre/right, on a side dock as
+    // top/centre/bottom. One enum covers both because the two axes are the
+    // same problem: the dock keeps its content-driven length and only its
+    // offset along the edge changes.
+    property string alignment:    "center"
+    // Product-level presentation. Geometry details are derived from this one
+    // choice so settings cannot create a stretched-but-floating hybrid.
+    property string dockStyle:    "floating"
+    // Internal compatibility projections while renderers consume the concise
+    // product model. They are derived, never persisted or exposed in settings.
+    readonly property string widthMode: dockStyle === "taskbar" ? "stretch" : "auto"
+    readonly property bool stretchFloating: false
     // Reserved strip of the top status bar. Side docks subtract it from the
     // screen height so their column cap never overlaps the bar. The bar reads
     // this value too, keeping one source of truth; a future bar-visibility
@@ -173,6 +186,120 @@ QtObject {
         position = nextPosition
         scheduleSave()
         return true
+    }
+
+    function isValidAlignment(value) {
+        return value === "start" || value === "center" || value === "end"
+    }
+
+    function updateAlignment(rawAlignment) {
+        const nextAlignment = String(rawAlignment)
+        if (!isValidAlignment(nextAlignment))
+            return false
+        if (alignment === nextAlignment)
+            return false
+        alignment = nextAlignment
+        scheduleSave()
+        return true
+    }
+
+    function isValidDockStyle(value) {
+        return value === "floating" || value === "taskbar"
+    }
+
+    function updateDockStyle(rawStyle) {
+        const nextStyle = String(rawStyle)
+        if (!isValidDockStyle(nextStyle))
+            return false
+        if (dockStyle === nextStyle)
+            return false
+        dockStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    // ── Information cards (music / weather / clock / metrics) ──
+    // "carousel" keeps the historical single shared slot that rotates through
+    // the enabled cards; "expanded" gives every enabled card its own place in
+    // the row so nothing rotates any more.
+    property string infoCardMode: "carousel"
+    readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
+    // One ordered list is the whole component model. Zero items hides the
+    // region, one is naturally fixed, and multiple items rotate or expand.
+    property var infoCardOrder: ["music", "weather", "clock", "metrics"]
+    readonly property bool infoCardMusic: infoCardOrder.indexOf("music") >= 0
+    readonly property bool infoCardWeather: infoCardOrder.indexOf("weather") >= 0
+    readonly property bool infoCardClock: infoCardOrder.indexOf("clock") >= 0
+    readonly property bool infoCardMetrics: infoCardOrder.indexOf("metrics") >= 0
+    readonly property bool infoClockSeconds: true
+    readonly property bool infoClockDate: true
+    readonly property bool infoClockSolar: true
+    readonly property bool infoMetricAverage: true
+    readonly property bool infoMetricPeak: true
+    readonly property bool infoMetricCpu: true
+    readonly property bool infoMetricMemory: true
+    readonly property bool infoMetricStorage: true
+
+    function isValidInfoCardMode(value) {
+        return value === "carousel" || value === "expanded"
+    }
+
+    function updateInfoCardMode(rawMode) {
+        const nextMode = String(rawMode)
+        if (!isValidInfoCardMode(nextMode))
+            return false
+        if (infoCardMode === nextMode)
+            return false
+        infoCardMode = nextMode
+        scheduleSave()
+        return true
+    }
+
+    function normalizedInfoCardOrder(rawOrder) {
+        const input = Array.isArray(rawOrder) ? rawOrder : []
+        const result = []
+        for (const rawId of input) {
+            const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
+            if (knownInfoCardIds.indexOf(id) < 0 || result.indexOf(id) >= 0)
+                continue
+            result.push(id)
+        }
+        return result
+    }
+
+    function updateInfoCardOrder(rawOrder) {
+        const next = normalizedInfoCardOrder(rawOrder)
+        if (JSON.stringify(next) === JSON.stringify(infoCardOrder))
+            return false
+        infoCardOrder = next
+        scheduleSave()
+        return true
+    }
+
+    function addInfoCard(rawId, rawIndex) {
+        const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
+        if (knownInfoCardIds.indexOf(id) < 0 || infoCardOrder.indexOf(id) >= 0)
+            return false
+        const next = infoCardOrder.slice()
+        const index = Math.max(0, Math.min(next.length,
+            Number.isFinite(Number(rawIndex)) ? Number(rawIndex) : next.length))
+        next.splice(index, 0, id)
+        return updateInfoCardOrder(next)
+    }
+
+    function removeInfoCard(rawId) {
+        const id = String(rawId)
+        return updateInfoCardOrder(infoCardOrder.filter(candidate => candidate !== id))
+    }
+
+    function moveInfoCard(rawId, rawIndex) {
+        const id = String(rawId)
+        const next = infoCardOrder.filter(candidate => candidate !== id)
+        if (next.length === infoCardOrder.length)
+            return false
+        const index = Math.max(0, Math.min(next.length, Number(rawIndex)))
+        next.splice(index, 0, id)
+        return updateInfoCardOrder(next)
     }
 
     function updateTheme(rawTheme) {
@@ -368,10 +495,13 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 3,
+            version: 6,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
+            // Product-level layout (v6)
+            alignment:     svc.alignment,
+            dockStyle:     svc.dockStyle,
             barHeight:     svc.barHeight,
             iconOverrides: svc.iconOverrides,
             dockItems:     svc.dockItems,
@@ -386,6 +516,9 @@ QtObject {
             visibilityMode: svc.visibilityMode,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
+            // Information cards (v6)
+            infoCardMode: svc.infoCardMode,
+            infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
         console.log("[DockConfig] save requested path=" + svc.configPath
@@ -425,6 +558,59 @@ QtObject {
                 scheduleSave()
             }
         }
+        // v6 productises both experimental PR schemas. A stretched dock or a
+        // zero-margin edge dock becomes the taskbar preset; all other legacy
+        // configurations keep the historical floating presentation.
+        if (obj.alignment !== undefined) {
+            if (isValidAlignment(obj.alignment)) {
+                svc.alignment = obj.alignment
+            } else {
+                console.warn("[DockConfig] invalid alignment ignored")
+                scheduleSave()
+            }
+        }
+        if (obj.dockStyle !== undefined) {
+            if (isValidDockStyle(obj.dockStyle)) {
+                svc.dockStyle = obj.dockStyle
+            } else {
+                console.warn("[DockConfig] invalid dockStyle ignored")
+                scheduleSave()
+            }
+        } else if (obj.widthMode === "stretch" || Number(obj.edgeMargin) === 0) {
+            svc.dockStyle = "taskbar"
+        }
+
+        // Accept both proposed PR card schemas, then persist only the ordered
+        // component model. Missing keys retain the historical four cards.
+        if (obj.infoCardMode !== undefined) {
+            if (isValidInfoCardMode(obj.infoCardMode)) {
+                svc.infoCardMode = obj.infoCardMode
+            } else {
+                console.warn("[DockConfig] invalid infoCardMode ignored")
+                scheduleSave()
+            }
+        }
+        if (Array.isArray(obj.infoCardOrder)) {
+            svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
+        } else if (obj.showWidgets === false) {
+            svc.infoCardOrder = []
+        } else if (obj.widgetMode === "fixed" && obj.fixedWidget !== undefined) {
+            svc.infoCardOrder = normalizedInfoCardOrder([obj.fixedWidget])
+        } else if (obj.enabledWidgets && typeof obj.enabledWidgets === "object") {
+            svc.infoCardOrder = normalizedInfoCardOrder(knownInfoCardIds.filter(id => {
+                const legacyId = id === "metrics" ? "temperature" : id
+                return Boolean(obj.enabledWidgets[legacyId])
+            }))
+        } else if (obj.infoCardMusic !== undefined || obj.infoCardWeather !== undefined
+                || obj.infoCardClock !== undefined || obj.infoCardMetrics !== undefined) {
+            svc.infoCardOrder = normalizedInfoCardOrder([
+                obj.infoCardMusic === false ? "" : "music",
+                obj.infoCardWeather === false ? "" : "weather",
+                obj.infoCardClock === false ? "" : "clock",
+                obj.infoCardMetrics === false ? "" : "metrics"
+            ])
+        }
+
         if (obj.barHeight !== undefined) {
             const barHeight = Math.max(0, Math.min(100, Number(obj.barHeight)))
             if (Number.isFinite(barHeight))

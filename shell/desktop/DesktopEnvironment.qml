@@ -67,10 +67,20 @@ Item {
                 ? ConfigService.visibilityMode : "always"
             const windowGrouping = ConfigService.isValidWindowGrouping(ConfigService.windowGrouping)
                 ? ConfigService.windowGrouping : "grouped"
+            const alignment = ConfigService.isValidAlignment(ConfigService.alignment)
+                ? ConfigService.alignment : "center"
+            const dockStyle = ConfigService.isValidDockStyle(ConfigService.dockStyle)
+                ? ConfigService.dockStyle : "floating"
+            const infoCardMode = ConfigService.isValidInfoCardMode(ConfigService.infoCardMode)
+                ? ConfigService.infoCardMode : "carousel"
             return JSON.stringify({
                 baseHeight: ConfigService.baseHeight,
                 theme: theme,
                 position: position,
+                alignment: alignment,
+                dockStyle: dockStyle,
+                infoCardMode: infoCardMode,
+                infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
                 iconMode: iconMode,
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
@@ -86,6 +96,30 @@ Item {
 
         function updatePosition(newPosition: string): string {
             ConfigService.updatePosition(newPosition)
+            return snapshot()
+        }
+
+        function updateAlignment(newAlignment: string): string {
+            ConfigService.updateAlignment(newAlignment)
+            return snapshot()
+        }
+
+        function updateDockStyle(newStyle: string): string {
+            ConfigService.updateDockStyle(newStyle)
+            return snapshot()
+        }
+
+        function updateInfoCardMode(mode: string): string {
+            ConfigService.updateInfoCardMode(mode)
+            return snapshot()
+        }
+
+        function updateInfoCardOrder(orderJson: string): string {
+            try {
+                ConfigService.updateInfoCardOrder(JSON.parse(orderJson))
+            } catch (error) {
+                console.warn("[DockSettings] invalid info card order: " + error)
+            }
             return snapshot()
         }
 
