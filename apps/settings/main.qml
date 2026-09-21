@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
 import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
@@ -523,129 +522,15 @@ ApplicationWindow {
         property real dockHeight: 60
         property int dockPositionIndex: 0
         readonly property var dockPositions: ["bottom", "left", "right"]
-        property int iconModeIndex: 0
-        readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0
         readonly property var windowGroupings: ["grouped", "separate"]
-        property real iconOpacity: 0.5
-        property string iconTintColor: "#a855f7"
-        readonly property var tintPresets: [
-            { label: "紫色", color: "#a855f7" },
-            { label: "红色", color: "#ef4444" },
-            { label: "蓝色", color: "#3b82f6" },
-            { label: "橙色", color: "#f97316" }
-        ]
-        property real tintHuePosition: 0.75
-        property real tintTonePosition: 0.5
-        readonly property color pureTintHue: Qt.hsva(tintHuePosition, 1, 1, 1)
-        readonly property color selectedTintColor: toneColor(tintTonePosition)
-        readonly property var hueRamp: [
-            Qt.hsva(0 / 6, 1, 1, 1), Qt.hsva(1 / 6, 1, 1, 1),
-            Qt.hsva(2 / 6, 1, 1, 1), Qt.hsva(3 / 6, 1, 1, 1),
-            Qt.hsva(4 / 6, 1, 1, 1), Qt.hsva(5 / 6, 1, 1, 1),
-            Qt.hsva(6 / 6, 1, 1, 1)
-        ]
-        readonly property var toneRamp: [
-            Qt.rgba(1, 1, 1, 1), blend(Qt.rgba(1, 1, 1, 1), pureTintHue, 1 / 3),
-            blend(Qt.rgba(1, 1, 1, 1), pureTintHue, 2 / 3), pureTintHue,
-            blend(pureTintHue, Qt.rgba(0, 0, 0, 1), 1 / 3),
-            blend(pureTintHue, Qt.rgba(0, 0, 0, 1), 2 / 3), Qt.rgba(0, 0, 0, 1)
-        ]
-        property bool iconOpacityDirty: false
         property string errorText: ""
         property bool layoutDirty: false
 
-        property bool dockBlurInherit: true
-        property real dockBlurStrength: 0.42
-        property real dockLiquidStrength: 1.0
-        property bool dockBlurDirty: false
-        property bool dockLiquidDirty: false
-
-        function percentage(value) {
-            return Math.round(value * 100) + "%"
-        }
-
-        function setDockBlurInherit(enabled) {
-            if (!bridge) return
-            bridge.updateDockBlurInherit(enabled)
-        }
-
-        Timer {
-            id: liveDockBlurDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (dockPage.bridge && dockPage.dockBlurDirty) {
-                    dockPage.bridge.updateDockBlurStrength(dockPage.dockBlurStrength)
-                }
-            }
-        }
-
-        Timer {
-            id: liveDockLiquidDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (dockPage.bridge && dockPage.dockLiquidDirty) {
-                    dockPage.bridge.updateDockLiquidStrength(dockPage.dockLiquidStrength)
-                }
-            }
-        }
-
-        function previewDockBlur(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(dockBlurStrength - clamped) < 0.005)
-                return
-            dockBlurStrength = clamped
-            dockBlurDirty = true
-            liveDockBlurDebounce.restart()
-        }
-
-        function commitDockBlur() {
-            liveDockBlurDebounce.stop()
-            if (!dockBlurDirty || !bridge)
-                return
-            dockBlurDirty = false
-            bridge.updateDockBlurStrength(dockBlurStrength)
-        }
-
-        function previewDockLiquid(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(dockLiquidStrength - clamped) < 0.005)
-                return
-            dockLiquidStrength = clamped
-            dockLiquidDirty = true
-            liveDockLiquidDebounce.restart()
-        }
-
-        function commitDockLiquid() {
-            liveDockLiquidDebounce.stop()
-            if (!dockLiquidDirty || !bridge)
-                return
-            dockLiquidDirty = false
-            bridge.updateDockLiquidStrength(dockLiquidStrength)
-        }
-
-        function applyAppearanceState(state) {
-            if (!state) return
-            dockBlurInherit = state.dockBlurInherit !== undefined ? Boolean(state.dockBlurInherit) : true
-            dockBlurStrength = Number.isFinite(Number(state.dockBlurStrength)) ? Number(state.dockBlurStrength) : 0.42
-            dockLiquidStrength = Number.isFinite(Number(state.dockLiquidStrength)) ? Number(state.dockLiquidStrength) : 1.0
-            dockBlurDirty = false
-            dockLiquidDirty = false
-        }
-
         function positionIndexFromString(position) {
             const idx = dockPositions.indexOf(position)
-            return idx >= 0 ? idx : 0
-        }
-
-        function iconModeIndexFromString(mode) {
-            if (mode === "duotone")
-                mode = "tint"
-            const idx = iconModes.indexOf(mode)
             return idx >= 0 ? idx : 0
         }
 
@@ -659,100 +544,13 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
-        function colorHex(color) {
-            function channel(value) {
-                return Math.round(value * 255).toString(16).padStart(2, "0")
-            }
-            return "#" + channel(color.r) + channel(color.g) + channel(color.b)
-        }
-
-        function colorFromHex(value) {
-            const hex = String(value).replace("#", "")
-            if (hex.length !== 6)
-                return Qt.rgba(0.66, 0.33, 0.97, 1)
-            return Qt.rgba(
-                parseInt(hex.slice(0, 2), 16) / 255,
-                parseInt(hex.slice(2, 4), 16) / 255,
-                parseInt(hex.slice(4, 6), 16) / 255,
-                1)
-        }
-
-        function blend(first, second, amount) {
-            return Qt.rgba(
-                first.r + (second.r - first.r) * amount,
-                first.g + (second.g - first.g) * amount,
-                first.b + (second.b - first.b) * amount,
-                1)
-        }
-
-        function toneColor(position) {
-            if (position <= 0.5)
-                return blend(Qt.rgba(1, 1, 1, 1), pureTintHue, position * 2)
-            return blend(pureTintHue, Qt.rgba(0, 0, 0, 1), (position - 0.5) * 2)
-        }
-
-        function hueForColor(color) {
-            const maximum = Math.max(color.r, color.g, color.b)
-            const minimum = Math.min(color.r, color.g, color.b)
-            const delta = maximum - minimum
-            if (delta < 0.0001)
-                return tintHuePosition
-            let hue = 0
-            if (maximum === color.r)
-                hue = ((color.g - color.b) / delta) % 6
-            else if (maximum === color.g)
-                hue = (color.b - color.r) / delta + 2
-            else
-                hue = (color.r - color.g) / delta + 4
-            return ((hue / 6) + 1) % 1
-        }
-
-        function nearestToneForColor(color) {
-            let closestPosition = 0.5
-            let closestDistance = Number.MAX_VALUE
-            for (let step = 0; step <= 200; step++) {
-                const position = step / 200
-                const candidate = toneColor(position)
-                const distance = Math.pow(candidate.r - color.r, 2)
-                    + Math.pow(candidate.g - color.g, 2)
-                    + Math.pow(candidate.b - color.b, 2)
-                if (distance < closestDistance) {
-                    closestDistance = distance
-                    closestPosition = position
-                }
-            }
-            return closestPosition
-        }
-
-        function syncTintControls(color) {
-            tintHuePosition = hueForColor(color)
-            tintTonePosition = nearestToneForColor(color)
-        }
-
-        function presetMatches(preset) {
-            return preset.color === iconTintColor
-        }
-
-        function tintPresetIndex() {
-            for (let index = 0; index < tintPresets.length; index++) {
-                if (presetMatches(tintPresets[index]))
-                    return index
-            }
-            return 0
-        }
-
         function applyState(state) {
             if (!state || state.baseHeight === undefined)
                 return
             dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
-            iconModeIndex = iconModeIndexFromString(state.iconMode)
-            iconOpacity = Number(state.iconOpacity)
-            iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
-            syncTintControls(colorFromHex(iconTintColor))
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
-            iconOpacityDirty = false
             layoutDirty = false
             errorText = ""
         }
@@ -763,20 +561,6 @@ ApplicationWindow {
             const position = dockPositions[index]
             bridge.updateDockPosition(position)
         }
-
-        function saveIconMode(index) {
-            if (!bridge)
-                return
-            const mode = iconModes[index]
-            bridge.updateDockIconMode(mode)
-        }
-
-        function saveTintColor(color) {
-            if (!bridge)
-                return
-            bridge.updateDockIconTintColor(color)
-        }
-
         function saveVisibilityMode(index) {
             if (!bridge)
                 return
@@ -790,20 +574,12 @@ ApplicationWindow {
             const mode = windowGroupings[index]
             bridge.updateDockWindowGrouping(mode)
         }
-
-        function applyTintPreset(index) {
-            saveTintColor(tintPresets[index].color)
-        }
-
         function refresh() {
             if (!bridge) {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            // Both snapshots arrive on the signals below; nothing is read
-            // synchronously here.
             bridge.dockSnapshot()
-            bridge.appearanceSnapshot()
         }
 
         function saveLayout() {
@@ -826,32 +602,11 @@ ApplicationWindow {
             layoutDirty = false
             saveLayout()
         }
-
-        function previewIconOpacity(position) {
-            const nextOpacity = Math.max(0.1, Math.round(position * 100) / 100)
-            if (Math.abs(iconOpacity - nextOpacity) < 0.001)
-                return
-            iconOpacity = nextOpacity
-            iconOpacityDirty = true
-        }
-
-        function commitIconOpacity() {
-            if (!iconOpacityDirty || !bridge)
-                return
-            iconOpacityDirty = false
-            bridge.updateDockIconOpacity(iconOpacity)
-        }
-
         Connections {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
                 dockPage.applyState(state)
-                if (dockPage.bridge.lastError)
-                    dockPage.errorText = dockPage.bridge.lastError
-            }
-            function onAppearanceSnapshotChanged(state) {
-                dockPage.applyAppearanceState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = dockPage.bridge.lastError
             }
@@ -1050,414 +805,6 @@ ApplicationWindow {
             }
         }
 
-        Text {
-            text: "图标风格".toUpperCase()
-            visible: false
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 14
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            visible: false
-            color: theme.card
-            radius: 18
-            implicitHeight: iconOpacityColumn.implicitHeight
-
-            Column {
-                id: iconOpacityColumn
-                anchors.fill: parent
-
-                Item {
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◐"; tint: "#af52de" }
-                        Text {
-                            text: "Dock 颜色"
-                            color: theme.primaryText
-                            font.pixelSize: 15
-                            font.weight: Font.DemiBold
-                        }
-                        Item { Layout.fillWidth: true }
-                        SettingsNavBar {
-                            id: iconModeNavBar
-                            model: [
-                                { id: "color", label: "彩色" },
-                                { id: "grayscale", label: "黑白" },
-                                { id: "tint", label: "染色" }
-                            ]
-                            currentIndex: dockPage.iconModeIndex
-
-                            Connections {
-                                target: iconModeNavBar
-                                function onSelectionChanged(index) {
-                                    dockPage.saveIconMode(index)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                    visible: dockPage.iconModeIndex > 0
-                }
-
-                Item {
-                    id: iconOpacityRow
-                    width: parent.width
-                    height: dockPage.iconModeIndex > 0 ? 48 : 0
-                    visible: dockPage.iconModeIndex > 0
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◔"; tint: "#5ac8fa" }
-                        Text {
-                            text: "不透明度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: Math.round(dockPage.iconOpacity * 100) + "%"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                        }
-                        LiquidControls.LiquidSlider {
-                            // The shared controls carry the host's palette, so the
-                            // Material form has to hand them the Material accent: their own
-                            // default is the iPadOS blue this window was designed with.
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 190
-                            value: dockPage.iconOpacity
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                dockPage.previewIconOpacity(position)
-                            }
-                            onCommitRequested: dockPage.commitIconOpacity()
-                        }
-                    }
-                }
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                    visible: dockPage.iconModeIndex === 2
-                }
-
-                Item {
-                    width: parent.width
-                    height: dockPage.iconModeIndex === 2 ? 58 : 0
-                    visible: dockPage.iconModeIndex === 2
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 8
-                        SettingIcon { symbol: "▦"; tint: "#ff9f0a" }
-                        Text {
-                            text: "快速方案"
-                            color: theme.primaryText
-                            font.pixelSize: 15
-                            font.weight: Font.DemiBold
-                        }
-                        Item { Layout.fillWidth: true }
-                        SettingsNavBar {
-                            id: tintPresetNavBar
-                            model: [
-                                { id: "purple", label: "紫色" },
-                                { id: "red", label: "红色" },
-                                { id: "blue", label: "蓝色" },
-                                { id: "orange", label: "橙色" }
-                            ]
-                            currentIndex: dockPage.tintPresetIndex()
-                            onSelectionChanged: function(index) {
-                                dockPage.applyTintPreset(index)
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                    visible: dockPage.iconModeIndex === 2
-                }
-
-                Item {
-                    width: parent.width
-                    height: dockPage.iconModeIndex === 2 ? 48 : 0
-                    visible: dockPage.iconModeIndex === 2
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 9
-                        SettingIcon { symbol: "●"; tint: dockPage.iconTintColor }
-                        Text {
-                            text: "自定义颜色"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Rectangle {
-                            id: tintPreview
-                            width: 28
-                            height: 28
-                            radius: 9
-                            color: dockPage.iconTintColor
-                            border.width: 1
-                            border.color: theme.dark ? "#55ffffff" : "#22000000"
-                        }
-                        Text {
-                            text: "›"
-                            color: theme.chevron
-                            font.pixelSize: 24
-                            font.weight: Font.Light
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                    visible: dockPage.iconModeIndex === 2
-                }
-
-                Item {
-                    width: parent.width
-                    height: dockPage.iconModeIndex === 2 ? 48 : 0
-                    visible: dockPage.iconModeIndex === 2
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        Item { Layout.fillWidth: true }
-                        LiquidControls.ColorRampSlider {
-                            Layout.preferredWidth: 190
-                            value: dockPage.tintHuePosition
-                            rampColors: dockPage.hueRamp
-                            thumbColor: dockPage.pureTintHue
-                            onPreviewChanged: function(position) {
-                                dockPage.tintHuePosition = position
-                            }
-                            onCommitRequested: dockPage.saveTintColor(
-                                dockPage.colorHex(dockPage.selectedTintColor))
-                        }
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                    visible: dockPage.iconModeIndex === 2
-                }
-
-                Item {
-                    width: parent.width
-                    height: dockPage.iconModeIndex === 2 ? 48 : 0
-                    visible: dockPage.iconModeIndex === 2
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        Item { Layout.fillWidth: true }
-                        LiquidControls.ColorRampSlider {
-                            Layout.preferredWidth: 190
-                            value: dockPage.tintTonePosition
-                            rampColors: dockPage.toneRamp
-                            thumbColor: dockPage.selectedTintColor
-                            onPreviewChanged: function(position) {
-                                dockPage.tintTonePosition = position
-                            }
-                            onCommitRequested: dockPage.saveTintColor(
-                                dockPage.colorHex(dockPage.selectedTintColor))
-                        }
-                    }
-                }
-
-            }
-        }
-
-        Text {
-            text: "外观与模糊效果".toUpperCase()
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 14
-            visible: false
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: dockBlurCol.implicitHeight
-            visible: false
-            radius: 18
-            color: theme.card
-
-            Column {
-                id: dockBlurCol
-                anchors.left: parent.left
-                anchors.right: parent.right
-
-                Item {
-                    width: parent.width
-                    height: 54
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Text {
-                                text: "跟随显示设置"
-                                color: theme.primaryText
-                                font.pixelSize: 14
-                                font.weight: Font.DemiBold
-                            }
-                            Text {
-                                text: "关闭后可为 Dock 单独自定义背景模糊与液态强度"
-                                color: theme.secondaryText
-                                font.pixelSize: 11
-                            }
-                        }
-                        LiquidControls.LiquidGlassSwitch {
-                            checked: dockPage.dockBlurInherit
-                            accentColor: theme.role("primary", "#30d158")
-                            trackColor: theme.divider
-                            onToggled: function(checked) {
-                                dockPage.setDockBlurInherit(checked)
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !dockPage.dockBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !dockPage.dockBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
-                        Text {
-                            text: "Dock 模糊强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: dockPage.percentage(dockPage.dockBlurStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            // The shared controls carry the host's palette, so the
-                            // Material form has to hand them the Material accent: their own
-                            // default is the iPadOS blue this window was designed with.
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 190
-                            value: dockPage.dockBlurStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                dockPage.previewDockBlur(position)
-                            }
-                            onCommitRequested: dockPage.commitDockBlur()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !dockPage.dockBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !dockPage.dockBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "≈"; tint: "#af52de" }
-                        Text {
-                            text: "Dock 液态强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: dockPage.percentage(dockPage.dockLiquidStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            // The shared controls carry the host's palette, so the
-                            // Material form has to hand them the Material accent: their own
-                            // default is the iPadOS blue this window was designed with.
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 190
-                            value: dockPage.dockLiquidStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                dockPage.previewDockLiquid(position)
-                            }
-                            onCommitRequested: dockPage.commitDockLiquid()
-                        }
-                    }
-                }
-            }
-        }
     }
 
     component DisplaySettingsPage: ColumnLayout {
@@ -3087,16 +2434,7 @@ ApplicationWindow {
         readonly property var barVisibilityModes: ["always", "smart", "persistent"]
         property int barLayoutModeIndex: 2
         readonly property var barLayoutModes: ["full", "floating", "transparent"]
-        property bool barBlurInherit: true
-        property real barBlurStrength: 0.42
-        property real barLiquidStrength: 1.0
-        property bool barBlurDirty: false
-        property bool barLiquidDirty: false
         property string errorText: ""
-
-        function percentage(value) {
-            return Math.round(value * 100) + "%"
-        }
 
         function barVisibilityModeIndexFromString(mode) {
             const idx = barVisibilityModes.indexOf(mode)
@@ -3113,13 +2451,6 @@ ApplicationWindow {
             barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
             barVisibilityModeIndex = barVisibilityModeIndexFromString(state.barVisibilityMode)
             barLayoutModeIndex = barLayoutModeIndexFromString(state.barLayoutMode)
-            barBlurInherit = state.barBlurInherit !== undefined
-                ? Boolean(state.barBlurInherit)
-                : (state.barBlurInheritDock !== undefined ? Boolean(state.barBlurInheritDock) : true)
-            barBlurStrength = Number.isFinite(Number(state.barBlurStrength)) ? Number(state.barBlurStrength) : 0.42
-            barLiquidStrength = Number.isFinite(Number(state.barLiquidStrength)) ? Number(state.barLiquidStrength) : 1.0
-            barBlurDirty = false
-            barLiquidDirty = false
             errorText = ""
         }
 
@@ -3152,68 +2483,6 @@ ApplicationWindow {
             const mode = barLayoutModes[index]
             bridge.updateBarLayoutMode(mode)
         }
-
-        function setBarBlurInherit(enabled) {
-            if (!bridge) return
-            bridge.updateBarBlurInherit(enabled)
-        }
-
-        Timer {
-            id: liveBarBlurDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (barPage.bridge && barPage.barBlurDirty) {
-                    barPage.bridge.updateBarBlurStrength(barPage.barBlurStrength)
-                }
-            }
-        }
-
-        Timer {
-            id: liveBarLiquidDebounce
-            interval: 60
-            repeat: false
-            onTriggered: {
-                if (barPage.bridge && barPage.barLiquidDirty) {
-                    barPage.bridge.updateBarLiquidStrength(barPage.barLiquidStrength)
-                }
-            }
-        }
-
-        function previewBarBlur(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(barBlurStrength - clamped) < 0.005)
-                return
-            barBlurStrength = clamped
-            barBlurDirty = true
-            liveBarBlurDebounce.restart()
-        }
-
-        function commitBarBlur() {
-            liveBarBlurDebounce.stop()
-            if (!barBlurDirty || !bridge)
-                return
-            barBlurDirty = false
-            bridge.updateBarBlurStrength(barBlurStrength)
-        }
-
-        function previewBarLiquid(value) {
-            const clamped = Math.max(0, Math.min(1, value))
-            if (Math.abs(barLiquidStrength - clamped) < 0.005)
-                return
-            barLiquidStrength = clamped
-            barLiquidDirty = true
-            liveBarLiquidDebounce.restart()
-        }
-
-        function commitBarLiquid() {
-            liveBarLiquidDebounce.stop()
-            if (!barLiquidDirty || !bridge)
-                return
-            barLiquidDirty = false
-            bridge.updateBarLiquidStrength(barLiquidStrength)
-        }
-
         Connections {
             target: barPage.bridge
             enabled: barPage.bridge !== null
@@ -3360,172 +2629,6 @@ ApplicationWindow {
                     }
                 }
             }
-        }
-
-        Text {
-            text: "外观与模糊效果".toUpperCase()
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 4
-            visible: false
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: barBlurCol.implicitHeight
-            visible: false
-            radius: 18
-            color: theme.card
-
-            Column {
-                id: barBlurCol
-                anchors.left: parent.left
-                anchors.right: parent.right
-
-                Item {
-                    width: parent.width
-                    height: 54
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "⎘"; tint: "#30d158" }
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Text {
-                                text: "跟随显示设置"
-                                color: theme.primaryText
-                                font.pixelSize: 14
-                                font.weight: Font.DemiBold
-                            }
-                            Text {
-                                text: "关闭后可为顶栏及控制中心单独自定义背景模糊与液态强度"
-                                color: theme.secondaryText
-                                font.pixelSize: 11
-                            }
-                        }
-                        LiquidControls.LiquidGlassSwitch {
-                            checked: barPage.barBlurInherit
-                            accentColor: theme.role("primary", "#30d158")
-                            trackColor: theme.divider
-                            onToggled: function(checked) {
-                                barPage.setBarBlurInherit(checked)
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !barPage.barBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !barPage.barBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
-                        Text {
-                            text: "顶栏模糊强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: barPage.percentage(barPage.barBlurStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            // The shared controls carry the host's palette, so the
-                            // Material form has to hand them the Material accent: their own
-                            // default is the iPadOS blue this window was designed with.
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 190
-                            value: barPage.barBlurStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                barPage.previewBarBlur(position)
-                            }
-                            onCommitRequested: barPage.commitBarBlur()
-                        }
-                    }
-                }
-
-                Rectangle {
-                    visible: !barPage.barBlurInherit
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
-                }
-
-                Item {
-                    visible: !barPage.barBlurInherit
-                    width: parent.width
-                    height: 48
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "≈"; tint: "#af52de" }
-                        Text {
-                            text: "顶栏液态强度"
-                            color: theme.primaryText
-                            font.pixelSize: 14
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: barPage.percentage(barPage.barLiquidStrength)
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignRight
-                        }
-                        LiquidControls.LiquidSlider {
-                            // The shared controls carry the host's palette, so the
-                            // Material form has to hand them the Material accent: their own
-                            // default is the iPadOS blue this window was designed with.
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 190
-                            value: barPage.barLiquidStrength
-                            trackColor: theme.divider
-                            onPreviewChanged: function(position) {
-                                barPage.previewBarLiquid(position)
-                            }
-                            onCommitRequested: barPage.commitBarLiquid()
-                        }
-                    }
-                }
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            Layout.leftMargin: 13
-            Layout.rightMargin: 13
-            text: "Bar 保持通透液态外观，可在上方选择跟随 Dock 模糊基准或在此独立定制。"
-            visible: false
-            color: theme.secondaryText
-            font.pixelSize: 12
-            wrapMode: Text.Wrap
         }
 
         Text {
