@@ -15,12 +15,23 @@ Item {
     readonly property int weatherPage: 1
     readonly property int clockPage: 2
     readonly property int temperaturePage: 3
+    property var cardOrder: ["music", "weather", "clock", "metrics"]
+    readonly property var pageOrder: {
+        const pages = []
+        for (const id of cardOrder) {
+            const candidate = pageForId(id)
+            if (candidate >= 0 && pages.indexOf(candidate) < 0)
+                pages.push(candidate)
+        }
+        return pages
+    }
 
     property int iconSize: 44
     property int dockHeight: 60
     property real widthUnits: 2
     property bool showClock: false
     property bool showTemperature: true
+    property bool expanded: false
     readonly property bool hasMusic: DockMprisService.hasPlayingPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property var player: DockMprisService.activePlayer
@@ -30,17 +41,29 @@ Item {
             : BundledIcons.source("default-cover")
     }
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
-    readonly property int availablePageCount: Number(hasMusic)
-        + Number(hasWeather) + Number(showClock) + Number(showTemperature)
+    readonly property int availablePageCount: availablePages().length
+    readonly property real cardSpacing: Math.max(4, Math.round(iconSize * 0.14))
+    readonly property real collapsedWidth: iconSize * widthUnits + iconSize * 0.2
     property int page: clockPage
 
-    width: iconSize * widthUnits + iconSize * 0.2
+    width: expanded
+        ? availablePageCount * collapsedWidth
+            + Math.max(0, availablePageCount - 1) * cardSpacing
+        : collapsedWidth
     height: iconSize * 1.2
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     SystemClock {
         id: clock
         precision: SystemClock.Minutes
+    }
+
+    function pageForId(id) {
+        if (id === "music") return musicPage
+        if (id === "weather") return weatherPage
+        if (id === "clock") return clockPage
+        if (id === "metrics" || id === "temperature") return temperaturePage
+        return -1
     }
 
     function pageAvailable(candidate) {
@@ -55,10 +78,10 @@ Item {
 
     function availablePages() {
         const pages = []
-        if (hasMusic) pages.push(musicPage)
-        if (hasWeather) pages.push(weatherPage)
-        if (showClock) pages.push(clockPage)
-        if (showTemperature) pages.push(temperaturePage)
+        for (const candidate of pageOrder) {
+            if (pageAvailable(candidate))
+                pages.push(candidate)
+        }
         return pages
     }
 
@@ -80,12 +103,12 @@ Item {
         page = pages[(index + step + pages.length) % pages.length]
     }
 
-    function pageText() {
-        if (page === musicPage)
+    function pageText(candidate) {
+        if (candidate === musicPage)
             return "音乐"
-        if (page === weatherPage)
+        if (candidate === weatherPage)
             return WeatherService.temperature
-        if (page === temperaturePage) {
+        if (candidate === temperaturePage) {
             const value = MetricsService.currentMilliC >= 0
                 ? Math.round(MetricsService.currentMilliC / 1000) + "°" : "--°"
             return value
@@ -148,36 +171,36 @@ Item {
             cool.b + (warm.b - cool.b) * value, alpha))
     }
 
-    function backgroundStart() {
-        if (page === musicPage)
+    function backgroundStart(candidate) {
+        if (candidate === musicPage)
             return artworkTint(artworkPalette.primary, 0.82)
-        if (page === weatherPage)
+        if (candidate === weatherPage)
             return IconAppearanceService.styledColor(weatherStart(
                 WeatherService.weatherCode, WeatherService.isDay))
-        if (page === temperaturePage)
+        if (candidate === temperaturePage)
             return thermalColor(Qt.rgba(0.16, 0.38, 0.62, 1),
                 Qt.rgba(0.68, 0.22, 0.18, 1), 0.68)
         return ambientColor(WallpaperColorSource.primary, 0.74)
     }
 
-    function backgroundMiddle() {
-        if (page === musicPage)
+    function backgroundMiddle(candidate) {
+        if (candidate === musicPage)
             return artworkTint(artworkPalette.secondary, 0.64)
-        if (page === clockPage)
+        if (candidate === clockPage)
             return ambientColor(Qt.rgba(
                 (WallpaperColorSource.primary.r + WallpaperColorSource.secondary.r) / 2,
                 (WallpaperColorSource.primary.g + WallpaperColorSource.secondary.g) / 2,
                 (WallpaperColorSource.primary.b + WallpaperColorSource.secondary.b) / 2, 1), 0.66)
-        return backgroundStart()
+        return backgroundStart(candidate)
     }
 
-    function backgroundEnd() {
-        if (page === musicPage)
+    function backgroundEnd(candidate) {
+        if (candidate === musicPage)
             return artworkTint(artworkPalette.primary, 0.38)
-        if (page === weatherPage)
+        if (candidate === weatherPage)
             return IconAppearanceService.styledColor(weatherEnd(
                 WeatherService.weatherCode, WeatherService.isDay))
-        if (page === temperaturePage)
+        if (candidate === temperaturePage)
             return thermalColor(Qt.rgba(0.20, 0.56, 0.68, 1),
                 Qt.rgba(0.96, 0.52, 0.18, 1), 0.54)
         return ambientColor(WallpaperColorSource.secondary, 0.58)
@@ -188,6 +211,7 @@ Item {
     onHasWeatherChanged: ensureValidPage()
     onShowClockChanged: ensureValidPage()
     onShowTemperatureChanged: ensureValidPage()
+    onCardOrderChanged: ensureValidPage()
 
     ArtworkColorSource {
         id: artworkPalette
@@ -196,7 +220,7 @@ Item {
 
     Timer {
         interval: 30000
-        running: carousel.availablePageCount > 1
+        running: !carousel.expanded && carousel.availablePageCount > 1
         repeat: true
         onTriggered: {
             carousel.switchPage(1)
@@ -214,6 +238,8 @@ Item {
         z: 10
         acceptedButtons: Qt.NoButton
         onWheel: function(wheel) {
+            if (carousel.expanded)
+                return
             const delta = wheel.angleDelta.y + wheel.pixelDelta.y
             if (delta === 0 || wheelCooldown.running)
                 return
@@ -223,86 +249,100 @@ Item {
         }
     }
 
-    Item {
-        id: readablePanel
-        anchors.centerIn: parent
-        width: carousel.height
-        height: carousel.width
-        rotation: -90
+    Row {
+        anchors.fill: parent
+        spacing: carousel.expanded ? carousel.cardSpacing : 0
 
-        Rectangle {
-            anchors.fill: parent
-            radius: Math.max(4, carousel.iconSize * 0.30)
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: carousel.backgroundStart() }
-                GradientStop { position: 0.52; color: carousel.backgroundMiddle() }
-                GradientStop { position: 1.0; color: carousel.backgroundEnd() }
-            }
-        }
+        Repeater {
+            model: carousel.expanded ? carousel.availablePages() : [carousel.page]
 
-        Column {
-            anchors.centerIn: parent
-            width: parent.width
-            // Keep the icon and its value as one compact visual group instead
-            // of distributing them across the full two-unit card height.
-            height: parent.height * 0.62
-            spacing: 0
+            delegate: Item {
+                id: sideSlot
+                required property int modelData
+                width: carousel.collapsedWidth
+                height: carousel.height
 
-            Item {
-                width: parent.width
-                height: parent.height * 0.50
-
-                Text {
+                Item {
+                    id: readablePanel
                     anchors.centerIn: parent
-                    visible: carousel.page === carousel.musicPage
-                    text: "♫"
-                    color: "white"
-                    font.pixelSize: Math.max(10,
-                        Math.round(carousel.iconSize * 0.54))
-                }
-                Text {
-                    anchors.centerIn: parent
-                    visible: carousel.page === carousel.weatherPage
-                    text: WeatherService.conditionSymbol(WeatherService.weatherCode,
-                                                         WeatherService.isDay)
-                    color: "white"
-                    font.pixelSize: Math.max(10,
-                        Math.round(carousel.iconSize * 0.54))
-                }
-                DockMetricGlyph {
-                    width: Math.max(10, Math.round(carousel.iconSize * 0.48))
-                    height: width
-                    anchors.centerIn: parent
-                    visible: carousel.page === carousel.clockPage
-                    kind: "clock"
-                    glyphColor: "white"
-                }
-                DockMetricGlyph {
-                    width: Math.max(10, Math.round(carousel.iconSize * 0.52))
-                    height: width
-                    anchors.centerIn: parent
-                    visible: carousel.page === carousel.temperaturePage
-                    kind: "temperature"
-                    glyphColor: "white"
-                }
-            }
+                    width: sideSlot.height
+                    height: sideSlot.width
+                    rotation: -90
 
-            Text {
-                width: parent.width - carousel.iconSize * 0.12
-                height: parent.height * 0.50
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: carousel.pageText()
-                color: "white"
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-                fontSizeMode: Text.HorizontalFit
-                minimumPixelSize: 5
-                font {
-                    family: "SF Pro Display"
-                    pixelSize: Math.max(8,
-                        Math.round(carousel.iconSize * 0.42))
-                    weight: Font.DemiBold
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Math.max(4, carousel.iconSize * 0.30)
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0.0; color: carousel.backgroundStart(sideSlot.modelData) }
+                            GradientStop { position: 0.52; color: carousel.backgroundMiddle(sideSlot.modelData) }
+                            GradientStop { position: 1.0; color: carousel.backgroundEnd(sideSlot.modelData) }
+                        }
+                    }
+
+                    Column {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        height: parent.height * 0.62
+                        spacing: 0
+
+                        Item {
+                            width: parent.width
+                            height: parent.height * 0.50
+
+                            Text {
+                                anchors.centerIn: parent
+                                visible: sideSlot.modelData === carousel.musicPage
+                                text: "♫"
+                                color: "white"
+                                font.pixelSize: Math.max(10,
+                                    Math.round(carousel.iconSize * 0.54))
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                visible: sideSlot.modelData === carousel.weatherPage
+                                text: WeatherService.conditionSymbol(
+                                    WeatherService.weatherCode, WeatherService.isDay)
+                                color: "white"
+                                font.pixelSize: Math.max(10,
+                                    Math.round(carousel.iconSize * 0.54))
+                            }
+                            DockMetricGlyph {
+                                width: Math.max(10, Math.round(carousel.iconSize * 0.48))
+                                height: width
+                                anchors.centerIn: parent
+                                visible: sideSlot.modelData === carousel.clockPage
+                                kind: "clock"
+                                glyphColor: "white"
+                            }
+                            DockMetricGlyph {
+                                width: Math.max(10, Math.round(carousel.iconSize * 0.52))
+                                height: width
+                                anchors.centerIn: parent
+                                visible: sideSlot.modelData === carousel.temperaturePage
+                                kind: "temperature"
+                                glyphColor: "white"
+                            }
+                        }
+
+                        Text {
+                            width: parent.width - carousel.iconSize * 0.12
+                            height: parent.height * 0.50
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: carousel.pageText(sideSlot.modelData)
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            fontSizeMode: Text.HorizontalFit
+                            minimumPixelSize: 5
+                            font {
+                                family: "SF Pro Display"
+                                pixelSize: Math.max(8,
+                                    Math.round(carousel.iconSize * 0.42))
+                                weight: Font.DemiBold
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -40,14 +40,20 @@ Item {
     // drag-reordering or persistence.
     readonly property int pinnedCount: DockModelService.pinnedCount + 2
     readonly property int windowCount: DockModelService.windowCount
-    readonly property bool hasPlayingMusic: DockMprisService.hasPlayingPlayer
-    readonly property bool hasWeather: WeatherService.available
+    function infoCardSelected(id) {
+        return ConfigService.infoCardOrder.indexOf(id) >= 0
+    }
+    readonly property bool hasPlayingMusic: infoCardSelected("music")
+        && DockMprisService.hasPlayingPlayer
+    readonly property bool hasWeather: infoCardSelected("weather")
+        && WeatherService.available
     // Side Dock Stack information keeps its clock page. The separate
     // top-of-Dock clock is intentionally not injected by DesktopEnvironment.
-    readonly property bool hasClock: clockInInfoCarousel || vertical
+    readonly property bool hasClock: infoCardSelected("clock")
+        && (clockInInfoCarousel || vertical)
     // Temperature is a permanent horizontal Dock page. MetricsService may
     // still be loading its first snapshot; the card remains and shows "--".
-    readonly property bool hasTemperature: true
+    readonly property bool hasTemperature: infoCardSelected("metrics")
     readonly property bool hasAvailableInfo: hasPlayingMusic || hasWeather || hasClock
         || hasTemperature
     readonly property int screenWidth: targetScreen?.width
@@ -115,7 +121,8 @@ Item {
         hasAvailableInfo && !vertical,
         Math.max(baseHeight, availableLength - estimatedAccessoryWidth),
         proportions,
-        vertical ? AdaptiveMath.MAX_HEIGHT_RATIO : AdaptiveMath.MAX_WIDTH_RATIO
+        vertical ? AdaptiveMath.MAX_HEIGHT_RATIO : AdaptiveMath.MAX_WIDTH_RATIO,
+        infoSlotUnits
     )
     // At the 18px absolute icon floor, the cards cannot keep even compact
     // glyphs legible. Remove the carousel and its divider as one unit, which
@@ -125,7 +132,21 @@ Item {
     readonly property bool hasInfo: hasAvailableInfo && !hideInfoCarousel
     // A side Dock rotates its content row. Its dedicated compact carousel
     // needs only two icon lengths, while the bottom carousel keeps four.
-    readonly property int infoSlotUnits: vertical ? 2 : 4
+    readonly property bool infoExpanded: ConfigService.infoCardMode === "expanded"
+    readonly property int expandedInfoUnits: {
+        let total = 0
+        for (const id of ConfigService.infoCardOrder) {
+            const available = id === "music" ? hasPlayingMusic
+                : id === "weather" ? hasWeather
+                : id === "clock" ? hasClock
+                : id === "metrics" ? hasTemperature : false
+            if (available)
+                total += vertical ? 2 : (id === "clock" ? 3 : 4)
+        }
+        return total
+    }
+    readonly property int infoSlotUnits: infoExpanded
+        ? expandedInfoUnits : (vertical ? 2 : 4)
     // ═══════════════════════════════════════════════════════════
     // Computed layout (re-evaluates on any input change)
     // ═══════════════════════════════════════════════════════════
@@ -867,6 +888,8 @@ Item {
             widthUnits: container.infoUnits
             showClock: container.hasClock
             showTemperature: container.hasTemperature
+            cardOrder: ConfigService.infoCardOrder
+            expanded: container.infoExpanded
             visible: container.hasInfo && !container.vertical
         }
 
@@ -879,6 +902,8 @@ Item {
             widthUnits: container.infoUnits
             showClock: container.hasClock
             showTemperature: container.hasTemperature
+            cardOrder: ConfigService.infoCardOrder
+            expanded: container.infoExpanded
             visible: container.hasInfo && container.vertical
         }
 
