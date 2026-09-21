@@ -204,8 +204,15 @@ assert.match(settingsApp, /function saveGlassFollowsAppearanceMode/,
 // The card that hosts the gallery and those controls must measure itself from
 // its contents. A literal height sized for the macOS layout leaves a dead band
 // under Material, where the embedded page is ~150px shorter.
+//
+// The gap between the gallery term and the Material term is left generous on
+// purpose: the sum legitimately grows as the card gains conditionally-visible
+// rows (the Material colour-source control is one), and a tight bound turned
+// that into a false failure. What the assertion actually guards is that both
+// terms are *present in the same expression* — the hardcoded height is caught
+// by the `doesNotMatch` below.
 assert.match(settingsApp,
-    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,120}?themeMaterialSettings\.implicitHeight/,
+    /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,400}?themeMaterialSettings\.implicitHeight/,
     "the theme card derives its height from the gallery and the embedded page");
 assert.match(settingsApp, /Layout\.preferredHeight:\s*implicitHeight/,
     "the theme card feeds that derived height into the layout");
@@ -387,7 +394,17 @@ assert.match(barAutoHide, /name:\s*s\.name\s*\|\|\s*""/,
     "Bar auto-hide identifies target screens by name as well as geometry");
 assert.match(barDateStatus, /GlassText\s*\{/,
     "top-bar labels protect their glyph edges over changing wallpaper");
-assert.doesNotMatch(controlCenterPanel, /^\s*Text\s*\{/m,
+// Control-center labels that sit on the translucent glass must carry the
+// readability outline. The session-confirmation dialog is the exception: it is
+// a KosFloatPanel with its own opaque content surface, so its labels read
+// ThemeService/content colours on a solid fill and an outline would be wrong.
+// Slice that dialog out before checking, so the assertion keeps guarding the
+// glass surfaces without forbidding plain Text on the opaque one.
+const sessionConfirmStart = controlCenterPanel.indexOf("id: sessionConfirm");
+assert.ok(sessionConfirmStart > 0,
+    "the session confirmation dialog is still present to be exempted");
+const controlCenterGlass = controlCenterPanel.slice(0, sessionConfirmStart);
+assert.doesNotMatch(controlCenterGlass, /^\s*Text\s*\{/m,
     "control-center labels use bidirectional glass readability outlines");
 assert.match(globalMenuSource,
     /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,

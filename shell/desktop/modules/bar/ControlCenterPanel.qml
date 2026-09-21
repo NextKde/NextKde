@@ -1448,7 +1448,7 @@ PopupWindow {
                                     ? "#ff3b30" : ThemeService.foregroundColor
                             }
 
-                            Text {
+                            GlassText {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.label
                                 color: modelData.danger

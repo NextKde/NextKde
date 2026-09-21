@@ -7,9 +7,24 @@ const source = readFileSync(new URL("WindowService.qml", import.meta.url), "utf8
 // Also exercise the same update path after the independent indexing PR lands.
 const usesIndex = source.includes("WindowRecordIndex.indexWindowRecords");
 const WindowRecordIndex = usesIndex ? await import("./WindowRecordIndex.mjs") : null;
-const names = ["_newWindowId", "_presentationEqual", "_placementEqual",
-    "_updatePlacement", "geometriesEqual", "_rebuild"];
-if (!usesIndex) names.push("_findOldRecord");
+// Discover the private helpers instead of listing them by hand. A hand-written
+// list silently rots: the moment `_rebuild` starts calling a new helper (as it
+// did with `_pruneThumbnails`) the extraction skips it, the mock service has no
+// such method, and this test fails on a change that broke nothing.
+//
+// The skip list below is the mirror image: it names the helpers that read QML
+// runtime state (`_topRepeater`, `_updateTimer`, `PlatformClient`, ...) or that
+// drive the public API through side effects, and so cannot run against a bare
+// mock object. Keep it to those, and let everything else be picked up
+// automatically.
+const skip = ["_scheduleUpdate", "_collectToplevels", "_consumeKwinEvent",
+    "_enqueueKwinCommand", "_sendKwinCommand", "_subscribeKwin",
+    "switchDesktop", "windowById", "windowsForApp", "thumbnailUrl",
+    "requestThumbnail", "activateWindow", "minimizeWindow", "closeWindow",
+    "toggleShowDesktop"];
+const names = [...source.matchAll(/^    function (\w+)\(/gm)]
+    .map(m => m[1]).filter(name => !skip.includes(name));
+assert.ok(names.includes("_rebuild"), "_rebuild must exist in WindowService.qml");
 const functions = names.map(name => {
     const match = source.match(new RegExp(`^    function ${name}\\([^]*?^    }`, "m"));
     assert.ok(match, name);
@@ -25,7 +40,11 @@ const windowModel = {
     setProperty: (i, key, value) => { writes++; rows[i][key] = value; },
 };
 const svc = { records: [], _kwinWindows: [], _nextWindowNumber: 1,
-    revision: 0, placementRevision: 0, _recordsById: {} };
+    revision: 0, placementRevision: 0, _recordsById: {},
+    // Thumbnail state the service keeps keyed by KWin handle. `_rebuild` sweeps
+    // it, so the mock has to carry the same shape or the sweep reads undefined.
+    thumbnailRevision: 0, _thumbnailUrlsByHandle: {},
+    _thumbnailPendingByHandle: {}};
 const context = vm.createContext({ svc, windowModel, WindowRecordIndex,
     _collectToplevels: () => [],
     AppIdentityService: { resolve: id => ({ desktopId: id, rawAppId: id, iconSource: id }) },
@@ -66,9 +85,14 @@ const unchanged = svc.placementRevision;
 svc._rebuild();
 assert.equal(svc.placementRevision, unchanged);
 // Each presentation field must still wake both presentation and collision.
+// `iconPath` is deliberately absent: presentation now derives the icon from the
+// shared themed source (`_presentationEqual` compares `iconSource`), and KWin's
+// absolute `iconPath` is only consulted when theme lookup finds nothing. The
+// mock resolver always answers, so a bare `iconPath` change moves `iconSource`
+// not at all and must not wake either lane.
 for (const patch of [{ title: "renamed" }, { activated: true }, { minimized: true },
     { fullscreen: true }, { urgent: true }, { desktops: ["desktop-2"] },
-    { onAllDesktops: true }, { appId: "new-app" }, { iconPath: "/new.png" }, { pid: 123 }]) {
+    { onAllDesktops: true }, { appId: "new-app" }, { pid: 123 }]) {
     const revision = svc.revision, placement = svc.placementRevision;
     svc._kwinWindows[0] = { ...svc._kwinWindows[0], ...patch };
     svc._rebuild();
