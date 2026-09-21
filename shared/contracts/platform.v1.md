@@ -41,7 +41,33 @@ Current operation groups are:
   `file.open-kde`
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
-- `settings.open` (allow-listed KDE System Settings modules)
+- `settings.open` (allow-listed KDE System Settings modules) and
+  `settings.launch` (launch the `kos-settings` app with a fixed argv; the
+  only accepted payload field is `shellDir`, an optional absolute path that
+  must canonicalise to an existing directory and is exported to the child as
+  `KOS_SHELL_DIR` so a development Settings session reconnects to the Shell
+  that launched it; no caller-supplied arguments)
+- `state.read`, `state.write` (bounded read/write of UTF-8 state files under
+  `$XDG_STATE_HOME/quickshell`; payload `{dir, file[, data]}` where `dir` is a
+  relative sub-path -- or an absolute path that must stay under the state root
+  -- and `file` is a bare file name (`dir` <=512 chars, `file` <=255 chars).
+  Paths are canonicalized and must remain under the root (`..` and symlink
+  escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
+  rename. `state.read` returns `{data, exists}` and reports `exists:false`
+  with an empty `data` for a missing file)
+- `notify` (freedesktop notification; payload `{summary, body?, icon?,
+  appName?, urgency?}` with `urgency` one of `low`/`normal`/`critical` and
+  `appName` (<=128 chars) the notification's grouping/app label, defaulting
+  to `"KOS Shell"`. The daemon calls `org.freedesktop.Notifications.Notify`
+  when the service is registered and otherwise spawns `notify-send` with a
+  fixed argv; fields are length-capped and never reach a shell)
+- `nightlight.get`, `nightlight.toggle` (KWin Night Color; `toggle` writes
+  `NightColor/Active` to kwinrc and applies through the NightLight D-Bus
+  interface. Once the config write has committed, a failure to uninhibit /
+  inhibit / reconfigure is partial application, not a failed toggle: the
+  response stays `ok:true` with `result.applied:false` and a `warning`
+  string, so callers align their UI to the persisted `enabled` state rather
+  than rolling back to a value that no longer matches kwinrc)
 - `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
   shortcuts; the Shell composes each Exec line, the daemon validates,
   persists, and registers)
@@ -81,8 +107,12 @@ KGlobalAccel client library (the plasma powerdevil mechanism): every KOS
 shortcut is a QAction under the single `org.kos.Platform` component, so the
 Shortcuts KCM shows ONE "KOS" entry and no service desktop files exist at
 all. `shortcuts.apply` carries `{shortcuts:[{id,description,combo,exec}]}`;
-on activation the daemon runs the Exec line the Shell supplied, so it always
-addresses the live Shell instance (dev `-p` or installed `-c kos`).
+the daemon allow-lists each exec — it must parse (shell quoting rules, no
+metacharacters) into `qs|quickshell [-c name] [-p|--path dir] ipc call
+<target> <action>...` and is spawned as an argv array, never through a
+shell; anything else is rejected and logged. On activation the daemon runs
+the validated command the Shell supplied, so it always addresses the live
+Shell instance (dev `-p` or installed `-c kos`).
 `shortcuts.uninstall` unregisters the actions and removes leftover files
 from superseded layouts.
 

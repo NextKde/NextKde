@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.desktop.modules.platform
 
 // Persists the user's Alt+drag reordering of the tray row — native
 // StatusNotifierItem icons and the shell's own network/battery/settings/
@@ -148,32 +149,14 @@ QtObject {
 
     function _doSave() {
         const json = JSON.stringify({ version: 1, order: svc.order }, null, 2)
-        const proc = _makeProc([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/tray-order.json.tmp\" && mv \"$1/tray-order.json.tmp\" \"$1/tray-order.json\"",
-            "tray-order-save", svc.configDir, json,
-        ])
-        if (proc) {
-            proc.exited.connect(function(code) {
-                if (code !== 0)
-                    console.warn("[SysTrayOrder] save failed code=" + code)
-                proc.destroy()
-            })
-            proc.running = true
-        }
+        JsonConfigStore.writePath(svc.configPath, json)
     }
 
     function loadConfig() {
-        const proc = _makeProc(["sh", "-c", "cat \"$1\"", "tray-order-load", svc.configPath])
-        if (!proc) {
-            svc.ready = true
-            return
-        }
-        proc.exited.connect(function(code) {
-            const output = proc.stdout?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(svc.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const obj = JSON.parse(output)
+                    const obj = JSON.parse(data)
                     if (Array.isArray(obj.order)) {
                         const raw = obj.order.filter(key => typeof key === "string")
                         const trayPart = raw.filter(k => svc.isTrayKey(k))
@@ -185,25 +168,7 @@ QtObject {
                 }
             }
             svc.ready = true
-            proc.destroy()
         })
-        proc.running = true
-    }
-
-    property Component _procFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProc(command) {
-        try {
-            return _procFactory.createObject(svc, { command: command })
-        } catch (e) {
-            console.warn("SysTrayOrderService: cannot create Process:", e)
-        }
-        return null
     }
 
     Component.onCompleted: loadConfig()

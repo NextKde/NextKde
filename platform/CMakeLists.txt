@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Concurrent DBus Gui Network)
+find_package(KF6CoreAddons REQUIRED)
 find_package(KF6IconThemes REQUIRED)
 find_package(KF6GlobalAccel REQUIRED)
 find_package(KF6KIO REQUIRED)
@@ -29,6 +30,7 @@ target_link_libraries(kos-platform PRIVATE
     Qt6::DBus
     Qt6::Gui
     Qt6::Network
+    KF6::CoreAddons
     KF6::IconThemes
     KF6::GlobalAccel
     KF6::KIOGui

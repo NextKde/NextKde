@@ -16,6 +16,16 @@
 
 namespace KosPlatform {
 
+// One connect request: the settings dict already carries every secret, so the
+// runner treats this as opaque data. The map never lands in a log or an argv
+// -- it goes straight into AddConnection.
+struct NmConnectRequest {
+    QString device;
+    QString savedProfileUuid;
+    QVariantMap settings;
+    QString replaceProfileId;
+};
+
 class PlatformServer final : public QObject {
     Q_OBJECT
 
@@ -62,6 +72,8 @@ private:
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);
     void runNetworkDetails(QLocalSocket *socket, const QJsonObject &request,
                            const QString &device);
+    void runNetworkConnect(QLocalSocket *socket, const QJsonObject &request,
+                           const NmConnectRequest &connect);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
@@ -113,6 +125,7 @@ private:
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleStateOperation(QLocalSocket *socket, const QJsonObject &request);
     void startClipboardHistoryWatcher(QProcess *&watcher,
                                       const QStringList &arguments);
     void runClipboardDecode(QLocalSocket *socket, const QJsonObject &request,
@@ -151,6 +164,11 @@ private:
     // current compositor session (KWin does not hot-reload NightColor Active).
     std::optional<quint32> m_nightLightInhibitionCookie;
     bool m_watchImages = true;
+    // clipboard.history.list rides the reply cache; these track the last
+    // cliphist output hash + prune time so the thumbs sweep runs only on real
+    // changes, not on every panel refresh.
+    QByteArray m_lastClipboardListHash;
+    qint64 m_lastClipboardPruneMs = 0;
     QHash<QString, CachedReply> m_replyCache;
     QHash<QString, QList<PendingReply>> m_inFlightReplies;
     QSet<QString> m_nmWatchedPaths;

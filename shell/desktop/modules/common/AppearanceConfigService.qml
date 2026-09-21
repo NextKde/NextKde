@@ -497,22 +497,6 @@ QtObject {
         }
     }
 
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProcess(command) {
-        try {
-            return processFactory.createObject(service, { command })
-        } catch (error) {
-            console.warn("[AppearanceConfig] cannot create process: " + error)
-        }
-        return null
-    }
-
     function _save() {
         const payload = JSON.stringify({
             version: 27,
@@ -558,22 +542,7 @@ QtObject {
             barLayoutMode: service.barLayoutMode,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
         }, null, 2)
-        const process = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "appearance-config-save",
-            service.configDir,
-            payload,
-        ])
-        if (!process)
-            return
-        process.exited.connect(function(code) {
-            if (code !== 0) {
-                console.warn("[AppearanceConfig] save failed code=" + code
-                    + " stderr=" + (process.stderr?.text ?? ""))
-            }
-        })
-        process.running = true
+        JsonConfigStore.writePath(service.configPath, payload)
     }
 
     function _syncGlassEffect() {
@@ -627,18 +596,10 @@ QtObject {
     }
 
     function _load() {
-        const process = _makeProcess([
-            "sh", "-c", "cat \"$1\"", "appearance-config-load",
-            service.configPath,
-        ])
-        if (!process) {
-            ready = true
-            return
-        }
-        process.exited.connect(function(code) {
-            if (code === 0 && process.stdout?.text) {
+        JsonConfigStore.readPath(service.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const object = JSON.parse(process.stdout.text)
+                    const object = JSON.parse(data)
                     // Old v7 files may have a Dock value but never a global
                     // one. Read it once as the global migration source, then
                     // save the flattened v8 shape below.
@@ -811,9 +772,7 @@ QtObject {
             service.ready = true
             service.effectSyncTimer.restart()
             service.dockAnimationEffectSyncTimer.restart()
-            process.destroy()
         })
-        process.running = true
     }
 
     Component.onCompleted: _load()

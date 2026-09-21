@@ -140,60 +140,19 @@ QtObject {
         onTriggered: service._save()
     }
 
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProcess(command) {
-        try {
-            return processFactory.createObject(service, { command })
-        } catch (error) {
-            console.warn("[Shortcuts] cannot create process: " + error)
-        }
-        return null
-    }
-
     function _save() {
         const payload = JSON.stringify({
             version: 1,
             overrides: service.overrides,
         }, null, 2)
-        const process = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "shortcuts-config-save",
-            service.configDir,
-            payload,
-        ])
-        if (!process)
-            return
-        process.exited.connect(function(code) {
-            if (code !== 0) {
-                console.warn("[Shortcuts] save failed code=" + code
-                    + " stderr=" + (process.stderr?.text ?? ""))
-            }
-            process.destroy()
-        })
-        process.running = true
+        JsonConfigStore.writePath(service.configPath, payload)
     }
 
     function _load() {
-        const process = _makeProcess([
-            "sh", "-c", "cat \"$1\"", "shortcuts-config-load",
-            service.configPath,
-        ])
-        if (!process) {
-            ready = true
-            applyToPlatform()
-            return
-        }
-        process.exited.connect(function(code) {
-            if (code === 0 && process.stdout?.text) {
+        JsonConfigStore.readPath(service.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const object = JSON.parse(process.stdout.text)
+                    const object = JSON.parse(data)
                     const stored = object.overrides
                     if (stored && typeof stored === "object") {
                         // Only accept overrides that name a known shortcut.
@@ -211,9 +170,7 @@ QtObject {
             }
             service.ready = true
             service.applyToPlatform()
-            process.destroy()
         })
-        process.running = true
     }
 
     // QtObject has no children: non-visual objects must be declared as

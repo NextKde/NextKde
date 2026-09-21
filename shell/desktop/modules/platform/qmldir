@@ -1,4 +1,5 @@
 module qs.desktop.modules.platform
 singleton PlatformClient 1.0 PlatformClient.qml
+singleton JsonConfigStore 1.0 JsonConfigStore.qml
 singleton DataClient 1.0 DataClient.qml
 singleton WorkspaceLayoutService 1.0 WorkspaceLayoutService.qml

@@ -1,8 +1,8 @@
 import QtQuick
 import QtQml.Models
 import Quickshell
-import Quickshell.Io
 import Quickshell.Services.SystemTray
+import qs.desktop.modules.platform
 
 // Bridges system tray item attention signals into desktop notifications.
 // When a tray icon starts flashing (status becomes NeedsAttention) or its
@@ -34,12 +34,6 @@ QtObject {
         }
     }
 
-    // Reusable process for sending notifications.
-    property Process _sender: Process {
-        stdout: StdioCollector {}
-        stderr: StdioCollector {}
-    }
-
     function _now() { return Date.now() }
 
     function _canNotify(item, summary, body) {
@@ -61,19 +55,23 @@ QtObject {
         if (!_canNotify(item, summary, body))
             return
 
-        // Send through the session D-Bus notification interface.
-        // Quickshell's NotificationServer owns org.freedesktop.Notifications
-        // when Plasma's daemon is not present, so this lands in our own UI.
-        root._sender.command = [
-            "notify-send",
-            "-a", appName,
-            "-i", icon,
-            summary,
-            body,
-            "-u", "normal",
-            "-t", "5000"
-        ]
-        root._sender.running = true
+        // The daemon's notify op reaches the session D-Bus notification
+        // interface. Quickshell's NotificationServer owns
+        // org.freedesktop.Notifications when Plasma's daemon is not present,
+        // so this lands in our own UI. The previous single shared Process
+        // rewrote `command` while a send was still running, which dropped or
+        // misattributed notifications; the op carries validated data instead.
+        PlatformClient.request("notify", {
+            summary: summary,
+            body: body,
+            icon: icon,
+            appName: appName,
+            urgency: "normal"
+        }, function(response) {
+            if (!response?.ok)
+                console.warn("[TrayNotify] notify failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
     }
 
     // This bridge only needs one listener object per tray entry. A visual

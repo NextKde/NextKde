@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 
 // ────────────────────────────────────────────────────────────────
 // DockConfigService — Persistent JSON configuration.
@@ -363,7 +364,7 @@ QtObject {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Persistence — write JSON via shell process
+    // Persistence — JSON through the platform daemon's state ops
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
@@ -389,85 +390,29 @@ QtObject {
         const json = JSON.stringify(obj, null, 2)
         console.log("[DockConfig] save requested path=" + svc.configPath
                     + " items=" + JSON.stringify(obj.dockItems))
-
-        // Pass the directory and JSON as separate process arguments. The old
-        // implementation called write() before exec() while stdinEnabled was
-        // false, so the data was discarded and config.json was never created.
-        // Using printf with positional shell arguments avoids fragile quoting
-        // and does not depend on a stdin channel being closed correctly.
-        const proc = _makeProc([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "dock-config-save",
-            svc.configDir,
-            json,
-        ])
-        if (proc) {
-            proc.exited.connect(function(code) {
-                const stderr = proc.stderr?.text ?? ""
-                if (code === 0) {
-                    console.log("[DockConfig] save complete path=" + svc.configPath)
-                } else {
-                    console.warn("[DockConfig] save failed code=" + code
-                                 + " stderr=" + stderr)
-                }
-                proc.destroy()
-            })
-            // Setting running is the documented, unambiguous process start
-            // path. It avoids the exec() overload ambiguity in QML.
-            proc.running = true
-        }
+        JsonConfigStore.writePath(svc.configPath, json, function(ok) {
+            if (ok)
+                console.log("[DockConfig] save complete path=" + svc.configPath)
+        })
     }
 
     function loadConfig() {
         console.log("[DockConfig] load requested path=" + svc.configPath)
-        const proc = _makeProc([
-            "sh", "-c", "cat \"$1\"", "dock-config-load", svc.configPath
-        ])
-        if (!proc) return
-        proc.exited.connect(function(code) {
-            // Process.stdout is a StdioCollector, not a string. Its text
-            // field contains the JSON collected after the command finishes.
-            const output = proc.stdout?.text ?? ""
-            const stderr = proc.stderr?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(svc.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const obj = JSON.parse(output)
+                    const obj = JSON.parse(data)
                     _apply(obj)
-                    svc.ready = true
                     console.log("[DockConfig] load complete pinned="
                                 + JSON.stringify(svc.pinnedAppIds))
                 } catch (e) {
-                    svc.ready = true
                     console.warn("[DockConfig] parse error, using defaults: " + e)
                 }
-            } else if (code !== 0) {
-                svc.ready = true
-                console.log("[DockConfig] no saved config yet code=" + code
-                            + " stderr=" + stderr)
+            } else if (!exists) {
+                console.log("[DockConfig] no saved config yet")
             }
-            proc.destroy()
+            svc.ready = true
         })
-        proc.running = true
-    }
-
-    // Reusable Process factory
-    property Component _procFactory: Component {
-        Process {
-            // Collect both streams so completion logs contain the actual
-            // command failure, and loadConfig can parse stdout.text.
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProc(command) {
-        try {
-            return _procFactory.createObject(svc, { command: command })
-        } catch (e) {
-            console.warn("DockConfigService: cannot create Process:", e)
-        }
-        return null
     }
 
     function _apply(obj) {

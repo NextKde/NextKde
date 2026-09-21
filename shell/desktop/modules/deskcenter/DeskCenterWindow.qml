@@ -4,7 +4,6 @@ import QtQml.Models
 import QtCore
 import Qt.labs.platform as Platform
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
@@ -12,6 +11,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
@@ -166,16 +166,18 @@ PanelWindow {
         }
     }
 
-    property Component notificationProcess: Component {
-        Process {}
-    }
-
     function sendTimerNotification(summary, body) {
-        const process = notificationProcess.createObject(root, {
-            command: ["notify-send", "--app-name=DeskCenter", summary, body]
+        PlatformClient.request("notify", {
+            summary: summary,
+            body: body,
+            icon: "",
+            appName: "DeskCenter",
+            urgency: "normal"
+        }, function(response) {
+            if (!response?.ok)
+                console.warn("[DeskCenter] timer notify failed: "
+                    + (response?.error?.message || "platform unavailable"))
         })
-        process.exited.connect(function() { process.destroy() })
-        process.running = true
     }
 
     // Higher priority widgets win when a short display cannot accommodate all

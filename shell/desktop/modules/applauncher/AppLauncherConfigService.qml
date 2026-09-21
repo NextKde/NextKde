@@ -589,32 +589,14 @@ QtObject {
             hiddenAppIds: hiddenAppIds,
             appOverrides: appOverrides,
         }, null, 2)
-        const proc = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "applauncher-config-save", configDir, json,
-        ])
-        if (!proc)
-            return
-        proc.exited.connect(function(code) {
-            if (code !== 0)
-                console.warn("[AppLauncherConfig] save failed code=" + code)
-            proc.destroy()
-        })
-        proc.running = true
+        JsonConfigStore.writePath(configPath, json)
     }
 
     function load() {
-        const proc = _makeProcess([
-            "sh", "-c", "cat \"$1\"", "applauncher-config-load", configPath,
-        ])
-        if (!proc)
-            return
-        proc.exited.connect(function(code) {
-            const output = proc.stdout?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const saved = JSON.parse(output)
+                    const saved = JSON.parse(data)
                     if (service.isValidDisplayMode(saved.displayMode))
                         displayMode = saved.displayMode
                     if (saved.layoutProfiles) {
@@ -648,24 +630,7 @@ QtObject {
                     console.warn("[AppLauncherConfig] parse failed: " + error)
                 }
             }
-            proc.destroy()
         })
-        proc.running = true
-    }
-
-    property Component _processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-    function _makeProcess(command) {
-        try {
-            return _processFactory.createObject(service, { command: command })
-        } catch (error) {
-            console.warn("[AppLauncherConfig] process creation failed: " + error)
-            return null
-        }
     }
 
     Component.onCompleted: load()

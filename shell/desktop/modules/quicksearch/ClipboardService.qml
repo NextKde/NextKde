@@ -52,17 +52,7 @@ QtObject {
             watchImages: service.watchImages,
             maxItems: service.maxItems,
         }, null, 2)
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c",
-                      "mkdir -p \"$1\" && printf '%s' \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-                      "clipboard-config-save", configDir, json],
-        })
-        proc.exited.connect(function(code) {
-            if (code !== 0)
-                console.warn("[Clipboard] save config failed")
-            proc.destroy()
-        })
-        proc.running = true
+        JsonConfigStore.writePath(configPath, json)
     }
 
     function _syncWatchImages() {
@@ -75,14 +65,10 @@ QtObject {
     }
 
     function load() {
-        const proc = processFactory.createObject(service, {
-            command: ["sh", "-c", "cat \"$1\"", "clipboard-config-load", configPath],
-        })
-        proc.exited.connect(function(code) {
-            const output = proc.stdout?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const saved = JSON.parse(output)
+                    const saved = JSON.parse(data)
                     if (typeof saved.watchImages === "boolean")
                         service.watchImages = saved.watchImages
                     if (typeof saved.maxItems === "number" && saved.maxItems > 0)
@@ -92,9 +78,7 @@ QtObject {
                 }
             }
             service._syncWatchImages()
-            proc.destroy()
         })
-        proc.running = true
     }
 
     function refresh() {
@@ -420,10 +404,4 @@ QtObject {
         refreshPinned()
     }
 
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
 }

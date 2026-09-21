@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.desktop.modules.platform
 
 // Shell-wide icon appearance. Application icons, launcher results, Bar icons
 // and future desktop widgets share this contract; it is not Dock state.
@@ -68,40 +69,38 @@ QtObject {
         repeat: false
         onTriggered: service.save()
     }
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
     function save() {
         const payload = JSON.stringify({ version: 1, mode, opacity, tintColor: tintColor.toString() }, null, 2)
-        const process = processFactory.createObject(service, { command: ["sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/icon-appearance.json.tmp\" && mv \"$1/icon-appearance.json.tmp\" \"$1/icon-appearance.json\"",
-            "icon-appearance-save", configDir, payload] })
-        process.running = true
-        process.exited.connect(function(code) { if (code !== 0) console.warn("[IconAppearance] save failed: " + code); process.destroy() })
+        JsonConfigStore.writePath(configPath, payload)
     }
+    // The icon settings used to live inside dock/config.json. An existing
+    // primary file wins even when it turns out empty or unparseable (the old
+    // `test -f` gate); only its absence falls through to the legacy file.
     function load() {
-        const process = processFactory.createObject(service, { command: ["sh", "-c",
-            "if [ -f \"$1\" ]; then cat \"$1\"; elif [ -f \"$2\" ]; then cat \"$2\"; fi",
-            "icon-appearance-load", configPath, legacyConfigPath] })
-        process.exited.connect(function(code) {
-            if (code === 0 && process.stdout?.text) {
-                try {
-                    const object = JSON.parse(process.stdout.text)
-                    const legacyMode = object.iconMode === "duotone" ? "tint" : object.iconMode
-                    const loadedMode = object.mode ?? legacyMode
-                    if (isValidMode(loadedMode)) mode = loadedMode
-                    const loadedOpacity = normalizedOpacity(object.opacity ?? object.iconOpacity)
-                    if (Number.isFinite(loadedOpacity)) opacity = loadedOpacity
-                    const loadedTint = String(object.tintColor ?? object.iconTintColor ?? "").toLowerCase()
-                    if (isValidColor(loadedTint)) tintColor = loadedTint
-                } catch (error) { console.warn("[IconAppearance] parse error: " + error) }
-            }
-            ready = true; process.destroy()
+        JsonConfigStore.readPath(configPath, function(data, exists) {
+            if (exists)
+                applyText(data)
+            else
+                JsonConfigStore.readPath(legacyConfigPath, function(legacyData, legacyExists) {
+                    if (legacyExists && legacyData)
+                        applyText(legacyData)
+                    else
+                        ready = true
+                })
         })
-        process.running = true
+    }
+    function applyText(text) {
+        try {
+            const object = JSON.parse(text)
+            const legacyMode = object.iconMode === "duotone" ? "tint" : object.iconMode
+            const loadedMode = object.mode ?? legacyMode
+            if (isValidMode(loadedMode)) mode = loadedMode
+            const loadedOpacity = normalizedOpacity(object.opacity ?? object.iconOpacity)
+            if (Number.isFinite(loadedOpacity)) opacity = loadedOpacity
+            const loadedTint = String(object.tintColor ?? object.iconTintColor ?? "").toLowerCase()
+            if (isValidColor(loadedTint)) tintColor = loadedTint
+        } catch (error) { console.warn("[IconAppearance] parse error: " + error) }
+        ready = true
     }
     Component.onCompleted: load()
 }
