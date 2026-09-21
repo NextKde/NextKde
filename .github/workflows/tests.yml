@@ -44,27 +44,6 @@ jobs:
             kwindowsystem kiconthemes kglobalaccel \
             go dbus nodejs python
 
-      # The heavy, slow-changing part: compiler output for Qt/KF6 headers.
-      # Keyed on a per-commit value with a prefix fallback so a source edit
-      # reuses objects rather than starting over.
-      - name: Mount ccache
-        uses: actions/cache@v4
-        with:
-          path: .build/ccache
-          key: ccache-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ runner.os }}-
-
-      # Restoring the compiler cache is worthless unless CMake is told to use
-      # it, and CMake only learns that at configure time.
-      - name: Configure ccache
-        run: |
-          mkdir -p .build/ccache
-          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> "${GITHUB_ENV}"
-          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> "${GITHUB_ENV}"
-          echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.build/ccache" >> "${GITHUB_ENV}"
-          echo "CCACHE_MAXSIZE=1G" >> "${GITHUB_ENV}"
-
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
       # which is most of that test's runtime and is unrelated to this project.
@@ -125,20 +104,6 @@ jobs:
             qt6-base qt6-declarative \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers
-
-      - name: Mount ccache
-        uses: actions/cache@v4
-        with:
-          path: .build/ccache-kwin
-          key: ccache-kwin-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            ccache-kwin-${{ runner.os }}-
-
-      - name: Configure ccache
-        run: |
-          mkdir -p .build/ccache-kwin
-          echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.build/ccache-kwin" >> "${GITHUB_ENV}"
-          echo "CCACHE_MAXSIZE=1G" >> "${GITHUB_ENV}"
 
       # Compiling is all this job proves, and that is deliberate. Whether the
       # plugin then loads, and whether the install path relabels correctly, is
