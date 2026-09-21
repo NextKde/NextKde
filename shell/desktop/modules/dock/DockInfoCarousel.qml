@@ -49,6 +49,7 @@ Item {
     property int page: clockPage
     property int previousPage: -1
     property int transitionDirection: 1
+    property int hoveredPage: -1
 
     width: expanded ? expandedWidth : iconSize * widthUnits + iconSize * 0.2
     height: iconSize * 1.2
@@ -176,6 +177,21 @@ Item {
         return expanded || page === candidate
     }
 
+    function hoveredPageAt(x) {
+        if (!expanded)
+            return page
+        let start = 0
+        for (const candidate of pageOrder) {
+            if (!cardVisible(candidate))
+                continue
+            const span = iconSize * unitsFor(candidate) + cardGap + cardSpacing
+            if (x >= start && x < start + span)
+                return candidate
+            start += span
+        }
+        return page
+    }
+
     Component.onCompleted: ensureValidPage(showClock)
     onHasMusicChanged: ensureValidPage(false)
     onHasWeatherChanged: ensureValidPage(false)
@@ -213,6 +229,73 @@ Item {
             wheelCooldown.restart()
             wheel.accepted = true
         }
+    }
+
+    Item {
+        id: infoAnchor
+        visible: false
+        y: 0
+        height: carousel.height
+        x: carousel.hoveredPage >= 0 ? carousel.layoutX(carousel.hoveredPage) : 0
+        width: carousel.hoveredPage >= 0
+            ? carousel.cardWidth(carousel.hoveredPage) : carousel.width
+    }
+
+    readonly property int pointerPage: infoHover.hovered
+        ? carousel.hoveredPageAt(infoHover.point.position.x) : -1
+
+    onPointerPageChanged: {
+        if (pointerPage < 0)
+            return
+        if (pointerPage === carousel.musicPage) {
+            if (infoPopup.visible)
+                infoPopup.requestClose()
+            return
+        }
+        carousel.hoveredPage = pointerPage
+        if (infoPopup.visible)
+            infoPopupOpenDelay.stop()
+    }
+
+    HoverHandler {
+        id: infoHover
+        onHoveredChanged: {
+            if (hovered) {
+                infoPopupCloseDelay.stop()
+                infoPopupOpenDelay.restart()
+            } else if (!infoPopup.pointerInside) {
+                infoPopupOpenDelay.stop()
+                infoPopupCloseDelay.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: infoPopupOpenDelay
+        interval: 420
+        repeat: false
+        onTriggered: {
+            if (infoHover.hovered && carousel.pointerPage >= 0
+                    && carousel.pointerPage !== carousel.musicPage)
+                DockModelService.openDockPopup(infoPopup)
+        }
+    }
+
+    Timer {
+        id: infoPopupCloseDelay
+        interval: 260
+        repeat: false
+        onTriggered: {
+            if (!infoHover.hovered && !infoPopup.pointerInside)
+                infoPopup.requestClose()
+        }
+    }
+
+    DockInfoPopup {
+        id: infoPopup
+        anchorItem: infoAnchor
+        page: carousel.hoveredPage
+        onVisibleChanged: if (!visible) DockModelService.releaseDockPopup(infoPopup)
     }
 
     DockMusicPlayer {
