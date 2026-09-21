@@ -12,6 +12,7 @@ Item {
     height: implicitHeight
     property bool dockHosted: false
     property string dockEdge: "bottom"
+    readonly property bool contextualEditingAvailable: !dockHosted
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"
     // DockContainer uses this stable, single-row maximum for its width solver.
     // The visible tray may then fold to two rows without feeding a discrete
@@ -209,6 +210,17 @@ Item {
                 trailingKeys: root.visibleTrailingCells.map(entry => entry.key)
             }
         }
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        enabled: root.contextualEditingAvailable
+        onTapped: statusAreaEditor.openFor(root)
+    }
+
+    StatusAreaEditor {
+        id: statusAreaEditor
     }
 
     NetworkPanel {
