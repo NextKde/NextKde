@@ -18,6 +18,33 @@ kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
 kwin_plugin_api_version=""
 kwin_plugin_rebuild_required=0
 
+# Both compiler front-ends dump scratch into $TMPDIR, and on many systems that
+# is /tmp -- here a 10 MB tmpfs. Two moderately parallel translation units are
+# enough to fill it and fail the build with "设备上没有空间" partway through,
+# which is what makes raising the job count look unsafe. Redirect everything
+# into the build tree instead, where there is room. Any caller-supplied TMPDIR
+# still wins, so `TMPDIR=/big/disk ./tools/kosctl install` behaves as asked.
+export TMPDIR="${TMPDIR:-$build_dir/tmp}"
+export GOTMPDIR="${GOTMPDIR:-$build_dir/tmp}"
+mkdir -p -- "$build_dir/tmp"
+
+# How many compile jobs to ask for.
+#
+# The two cmake invocations below defaulted to two jobs, so an 18-thread machine
+# built with an effective parallelism of about 2.3 and a first `kosctl install`
+# took close to two minutes. nproc is the right basis, but not unbounded: past
+# roughly twelve the parallel steps contend for memory bandwidth and the wall
+# clock climbs back (measured -j8 59.7s, -j12 49.6s, -j16 53.2s), so cap rather
+# than matching a large machine. CMAKE_BUILD_PARALLEL_LEVEL overrides entirely.
+kos_build_jobs() {
+    local jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-}
+    if [[ -z "$jobs" ]]; then
+        jobs=$(nproc 2>/dev/null || printf '4')
+        (( jobs > 12 )) && jobs=12
+    fi
+    printf '%s' "$jobs"
+}
+
 qs_bin=$(command -v qs || command -v quickshell || true)
 qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
 
@@ -30,7 +57,7 @@ is_nixos() {
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
     quickshell cmake ninja gcc qt6-base qt6-declarative go
-    kwindowsystem kiconthemes kglobalaccel
+    kwindowsystem kiconthemes kglobalaccel kio
 )
 arch_kwin_build_packages=(
     extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils
@@ -234,10 +261,26 @@ configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Debug}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
     prepare_cmake_build_dir "$build_dir" "$project_dir"
+    # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
+    # bare `cmake --build` then compiles every registered test before deploying
+    # any of them -- `kosctl` never runs ctest from this directory, so that was
+    # pure overhead on every install.
+    #
+    # Turning it off here is safe for everything this directory produces:
+    #   - deploy_artifacts needs kos-platform, kos-settings and the Go-built
+    #     data service, none of which come from the BUILD_TESTING block;
+    #   - the KWin plugin components are governed by KOS_BUILD_KWIN_PLUGINS,
+    #     not BUILD_TESTING, so `cmake --install --component kwin_plugins`
+    #     still finds its binaries;
+    #   - `kosctl install apps` builds from its own .build/apps-release tree
+    #     (tools/install-apps.sh), so nothing here feeds that path.
+    # Tests now have one owner: ./tools/run-tests.sh, which keeps its own
+    # .build/tests directory.
     configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
-        -DKOS_BUILD_KWIN_PLUGINS="$plugins"
+        -DKOS_BUILD_KWIN_PLUGINS="$plugins" \
+        -DBUILD_TESTING=OFF
 }
 
 prepare_cmake_build_dir() {
@@ -335,7 +378,7 @@ build_kwin_glass() {
         cmake --build "$glass_build_dir" --target clean
     fi
     cmake --build "$glass_build_dir" \
-        --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}" 2>&1 \
+        --parallel "$(kos_build_jobs)" 2>&1 \
         | filter_vendored_warnings
 }
 
@@ -345,7 +388,7 @@ build() {
     if (( kwin_plugin_rebuild_required )); then
         cmake --build "$build_dir" --target clean
     fi
-    cmake --build "$build_dir" --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+    cmake --build "$build_dir" --parallel "$(kos_build_jobs)"
     if kwin_plugins_enabled; then
         build_kwin_glass
         record_kwin_plugin_api_version

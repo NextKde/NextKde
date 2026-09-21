@@ -41,7 +41,7 @@ jobs:
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
             qt6-base qt6-declarative \
-            kwindowsystem kiconthemes kglobalaccel \
+            kwindowsystem kiconthemes kglobalaccel kio \
             go dbus nodejs python
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
