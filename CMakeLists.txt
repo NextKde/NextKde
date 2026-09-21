@@ -167,24 +167,36 @@ if(BUILD_TESTING)
     # apps/common, apps/weather, apps/music, services/pim-service and
     # services/data-service, because those directories only exist when their
     # parent feature is configured.
-    set_tests_properties(kos-deskcenter.widget-layout kos-shell.date-buckets
-        kos-shell.squircle kos-shell.tray-attention-match
-        kos-shell.notification-count-match kos-shell.control-center-submenu-state
-        kos-shell.date-projection kos-shell.window-placement-updates
-        kos-shell.window-record-index kos-shell.wallpaper-color-source
-        kos-shell.appearance-config kos-shell.dock-adaptive
-        kos-shell.dock-autohide
-        PROPERTIES LABELS logic)
-    set_tests_properties(kos-ui.visual-contract kos-ui.color-scheme
-        kos-ui.page-cache-policy
-        PROPERTIES LABELS ui)
-    set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
-        kos-shell.liquid-glass-panel
-        PROPERTIES LABELS ui)
-    set_tests_properties(kos-platform.window-placement PROPERTIES LABELS platform)
-    set_tests_properties(kos-platform.contracts PROPERTIES LABELS platform)
-    if(TARGET kos-lockscreen.theme-resolution)
-        set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
+    # Every label has to be applied under the same condition that registered
+    # the test: set_tests_properties aborts the configure when a named test
+    # does not exist, and each source below is optional -- the node tests need
+    # node, date-projection additionally needs qmltestrunner, the three runtime
+    # tests need an installed quickshell (absent in a CI container), and the
+    # contract test needs python.
+    if(KOS_NODE_EXECUTABLE)
+        set_tests_properties(kos-deskcenter.widget-layout kos-shell.date-buckets
+            kos-shell.squircle kos-shell.tray-attention-match
+            kos-shell.notification-count-match kos-shell.control-center-submenu-state
+            kos-shell.window-placement-updates
+            kos-shell.window-record-index kos-shell.wallpaper-color-source
+            kos-shell.appearance-config kos-shell.dock-adaptive
+            kos-shell.dock-autohide
+            PROPERTIES LABELS logic)
+        set_tests_properties(kos-ui.visual-contract kos-ui.color-scheme
+            kos-ui.page-cache-policy
+            PROPERTIES LABELS ui)
+        set_tests_properties(kos-platform.window-placement PROPERTIES LABELS platform)
+    endif()
+    if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        set_tests_properties(kos-shell.date-projection PROPERTIES LABELS logic)
+    endif()
+    if(KOS_QUICKSHELL_EXECUTABLE)
+        set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
+            kos-shell.liquid-glass-panel
+            PROPERTIES LABELS ui)
+    endif()
+    if(KOS_PYTHON_EXECUTABLE)
+        set_tests_properties(kos-platform.contracts PROPERTIES LABELS platform)
     endif()
 endif()
 
@@ -312,6 +324,11 @@ if(BUILD_TESTING)
     # show. The script exits 0 (skip) when the development headers are missing.
     add_test(NAME kos-lockscreen.theme-resolution
         COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/theme-resolution/run.sh")
+    # Labelled here rather than in the block above: `if(TARGET ...)` cannot see
+    # tests (they are not build targets), and this test is registered only now,
+    # so an earlier set_tests_properties would name a test that does not exist
+    # yet. Without this line the test carries no label and no layer runs it.
+    set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
 endif()
 
 if(KOS_BUILD_CALENDAR)

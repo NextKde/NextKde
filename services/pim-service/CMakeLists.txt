@@ -55,36 +55,41 @@ if(BUILD_TESTING)
     add_test(NAME kos-pim.store COMMAND kos-pim-store-test)
     set_tests_properties(kos-pim.store PROPERTIES TIMEOUT 20 LABELS data)
 
-    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
-    qt_add_executable(kos-pim-dbus-test
-        tests/PimDbusTest.cpp
-    )
-    target_link_libraries(kos-pim-dbus-test PRIVATE
-        Qt6::Core
-        Qt6::DBus
-        Qt6::Test
-    )
-    add_test(NAME kos-pim.dbus
-        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
-            ${CMAKE_COMMAND} -E env
-            KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
-            $<TARGET_FILE:kos-pim-dbus-test>
-    )
-    set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20 LABELS data)
+    # dbus-run-session gates only these two D-Bus tests: a machine without it
+    # still builds and runs the store test, so this probe must not be REQUIRED
+    # (apps/music/CMakeLists.txt guards its identical probe the same way).
+    find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+    if(DBUS_RUN_SESSION_EXECUTABLE)
+        qt_add_executable(kos-pim-dbus-test
+            tests/PimDbusTest.cpp
+        )
+        target_link_libraries(kos-pim-dbus-test PRIVATE
+            Qt6::Core
+            Qt6::DBus
+            Qt6::Test
+        )
+        add_test(NAME kos-pim.dbus
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
+                ${CMAKE_COMMAND} -E env
+                KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
+                $<TARGET_FILE:kos-pim-dbus-test>
+        )
+        set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20 LABELS data)
 
-    qt_add_executable(kos-pim-client-dbus-test
-        tests/PimClientDbusTest.cpp
-    )
-    target_link_libraries(kos-pim-client-dbus-test PRIVATE
-        Kos::PimClient
-        Qt6::DBus
-        Qt6::Test
-    )
-    add_test(NAME kos-pim.client-dbus
-        COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
-            ${CMAKE_COMMAND} -E env
-            KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
-            $<TARGET_FILE:kos-pim-client-dbus-test>
-    )
-    set_tests_properties(kos-pim.client-dbus PROPERTIES TIMEOUT 20 LABELS data)
+        qt_add_executable(kos-pim-client-dbus-test
+            tests/PimClientDbusTest.cpp
+        )
+        target_link_libraries(kos-pim-client-dbus-test PRIVATE
+            Kos::PimClient
+            Qt6::DBus
+            Qt6::Test
+        )
+        add_test(NAME kos-pim.client-dbus
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
+                ${CMAKE_COMMAND} -E env
+                KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
+                $<TARGET_FILE:kos-pim-client-dbus-test>
+        )
+        set_tests_properties(kos-pim.client-dbus PROPERTIES TIMEOUT 20 LABELS data)
+    endif()
 endif()
