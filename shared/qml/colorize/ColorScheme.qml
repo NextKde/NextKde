@@ -63,6 +63,12 @@ QtObject {
 
     property string _accentName: ""
 
+    // previewSwatches() results keyed on seed|target|variant. Cleared on
+    // rebuild() so a state the builders forgot (none today — they are pure)
+    // could not survive a palette change; the key itself already separates
+    // every input that affects the output.
+    property var _previewCache: ({})
+
     function color(role, darkMode, fallback) {
         const entry = palette && palette[role]
         const variant = entry && entry[darkMode ? "dark" : "light"]
@@ -121,10 +127,18 @@ QtObject {
     function previewSwatches(target) {
         if (!seed || !isValidScheme(target))
             return []
+        // The swatch set is a pure function of (seed, target, variant): variant
+        // only shapes the monet branch, but it stays in the key so a variant
+        // change never serves the previous variant's colours. Seed changes are
+        // a different key, so a new wallpaper always rebuilds and can never be
+        // handed the previous palette's swatches.
+        const key = seed + "|" + target + "|" + variant
+        if (_previewCache[key])
+            return _previewCache[key]
         const pair = target === "monet"
             ? Mcu.buildSchemePair(seed, { variant: variant })
             : Traditional.buildSchemePair(seed, { table: target })
-        return [
+        const swatches = [
             pair.light.primary,
             pair.light.tertiary,
             pair.light.secondary,
@@ -132,6 +146,8 @@ QtObject {
             pair.light.surface_container,
             pair.dark.surface_container,
         ]
+        _previewCache[key] = swatches
+        return swatches
     }
 
     function setScheme(value) {
@@ -143,6 +159,10 @@ QtObject {
     }
 
     function rebuild() {
+        // The preview cache keys are complete, so entries stay correct across
+        // a rebuild; dropping them anyway keeps a seed switch from holding the
+        // previous wallpaper's six swatch arrays forever.
+        _previewCache = ({})
         if (!seed) {
             palette = ({})
             _accentName = ""

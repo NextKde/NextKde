@@ -451,6 +451,15 @@ function paletteColor(palette, tone, role) {
 export const ROLE_NAMES = Object.keys(ROLE_SPEC);
 export const VARIANTS_AVAILABLE = Object.keys(VARIANTS);
 
+// buildScheme is pure in (seed, variant, dark): same inputs, same 49 hexes.
+// A wallpaper switch asks for the same pair twice (the active palette plus the
+// settings preview), and the picker asks for all three colour sources on the
+// same seed, so results are memoized. The key carries every input that affects
+// the output — a different seed or variant is a different key and always
+// rebuilds, so a palette change can never be served a stale scheme.
+const SCHEME_CACHE_LIMIT = 64;
+const schemeCache = new Map();
+
 // Build the full role->hex map for one mode.
 //
 // `options.variant`   — "tonal-spot" (default) or "vibrant"
@@ -458,13 +467,35 @@ export const VARIANTS_AVAILABLE = Object.keys(VARIANTS);
 export function buildScheme(seedHex, options = {}) {
     const variant = options.variant ?? DEFAULT_VARIANT;
     const dark = options.dark ?? false;
-    const palettes = buildPalettes(seedHex, variant, dark);
+    // hexToArgb normalizes "#64C4D4"/"64c4d4" to one key, and the same parse
+    // feeds source_color below.
+    const argb = hexToArgb(seedHex);
+    const key = argb + "|" + variant + "|" + (dark ? "1" : "0");
+    const cached = schemeCache.get(key);
+    // Callers get a copy: a scheme handed out twice must not be corrupted by
+    // one consumer mutating it.
+    if (cached) return Object.assign({}, cached);
 
-    const out = { source_color: argbToHex(hexToArgb(seedHex)) };
+    const palettes = buildPalettes(seedHex, variant, dark);
+    // Roles sharing a (family, tone) resolve to the same swatch — the fixed
+    // roles reuse their family's base tones — so each family+tone pair is
+    // solved once per build instead of once per role. `role` joins the key
+    // when the role is a nominal-chroma one, keeping the cache honest if that
+    // set is ever re-enabled (it is empty today).
+    const resolved = ({});
+    const out = { source_color: argbToHex(argb) };
     for (const [role, [family, lightTone, darkTone]] of Object.entries(ROLE_SPEC)) {
-        out[role] = paletteColor(palettes[family], dark ? darkTone : lightTone, role);
+        const tone = dark ? darkTone : lightTone;
+        const rkey = family + "|" + tone
+            + (NOMINAL_CHROMA_ROLES.has(role) ? "|" + role : "");
+        if (resolved[rkey] === undefined)
+            resolved[rkey] = paletteColor(palettes[family], tone, role);
+        out[role] = resolved[rkey];
     }
-    return out;
+    if (schemeCache.size >= SCHEME_CACHE_LIMIT)
+        schemeCache.delete(schemeCache.keys().next().value);
+    schemeCache.set(key, out);
+    return Object.assign({}, out);
 }
 
 // Both modes at once, matching matugen's `colors[role][light|dark]` shape.
