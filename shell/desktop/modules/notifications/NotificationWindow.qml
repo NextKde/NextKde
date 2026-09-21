@@ -32,6 +32,11 @@ PanelWindow {
 
     required property var groupService
 
+    // Global ceiling on popup auto-expire, in ms. Apps may request longer
+    // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
+    // allowed to linger past this. Change this single number to retune.
+    readonly property int maxAutoExpireMs: 6000
+
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -163,6 +168,12 @@ PanelWindow {
                     card._lastIconSource = AppIdentityService._iconPath(
                         card.notification.image || card.notification.appIcon)
                 }
+                // The delegate is reused when a group's newest notification is
+                // replaced by a newer one. Without this reset the fresh notice
+                // would inherit the previous one's already-elapsed time and
+                // vanish almost immediately.
+                card._elapsedMs = 0
+                card._lastTickAt = 0
             }
             // Display fields: use live notification, fall back to snapshot
             // when the group is dying (notification null but card visible).
@@ -188,6 +199,24 @@ PanelWindow {
                 : Qt.rgba(1, 1, 1, 0.50)
             readonly property int textStyle: ThemeService.isDark ? Text.Outline : Text.Normal
             readonly property string iconSource: card.displayIconSource
+
+            // Hover state for pause-on-hover. A HoverHandler (not a MouseArea)
+            // so it never steals clicks from the buttons inside the card.
+            property bool hovered: false
+            HoverHandler {
+                onHoveredChanged: card.hovered = hovered
+            }
+
+            // Auto-expire duration for this card, in ms. Critical notifications
+            // stay until dismissed (matches Plasma: urgency=critical never
+            // auto-expires); everything else is capped by root.maxAutoExpireMs.
+            readonly property int expireMs: {
+                if (card.isCritical)
+                    return 0
+                const n = card.notification
+                const requested = (n && n.expireTimeout > 0) ? n.expireTimeout : 7000
+                return Math.min(root.maxAutoExpireMs, Math.max(1000, requested))
+            }
 
             width: notificationList.width
             height: Math.floor(content.implicitHeight + 28)
@@ -275,19 +304,81 @@ PanelWindow {
                     root.groupService.dismissGroupByKey(card.groupKey)
             }
 
-            // Auto-expire timer. Started on completed; guarded for null.
-            // FreeDesktop: expireTimeout is milliseconds; -1 = persistent;
-            // 0 = server picks. We default to 7000ms.
-            Timer {
-                interval: {
-                    const n = card.notification
-                    return (n && n.expireTimeout > 0)
-                        ? Math.max(1000, n.expireTimeout)
-                        : 7000
+            // ---- countdown bar ----
+            // Drawn as the bottom sliver of the card, above the glass panel so
+            // it stays visible. Hidden for critical/persistent notifications
+            // (no countdown to show) and once the group is dying.
+            Rectangle {
+                id: countdownTrack
+                visible: card.expireMs > 0 && !card.isCritical
+                anchors {
+                    left: parent.left; right: parent.right; bottom: parent.bottom
+                    leftMargin: card.radius * 0.5
+                    rightMargin: card.radius * 0.5
+                    bottomMargin: 6
                 }
-                running: card.notification !== null
-                repeat: false
-                onTriggered: card.close(true)
+                height: 2
+                radius: 1
+                color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.08)
+
+                Rectangle {
+                    radius: parent.radius
+                    height: parent.height
+                    // Drains left-to-right: the remaining sliver shrinks toward
+                    // the left edge as time runs out. Updated every 50ms by the
+                    // ticker, so no Behavior is needed -- adding one would lag
+                    // the bar behind the real remaining time.
+                    width: Math.round(parent.width * card._remainingFraction)
+                    anchors.left: parent.left
+                    color: ThemeService.isDark
+                        ? Qt.rgba(1, 1, 1, 0.55)
+                        : Qt.rgba(0, 0, 0, 0.35)
+                }
+            }
+
+            // ---- auto-expire ----
+
+            // QML's Timer has no `paused` property, and changing any of its
+            // properties while running RESETS the elapsed time (documented).
+            // So a Timer cannot be paused on hover -- `running: !hovered` would
+            // restart the countdown every time the pointer crossed the card.
+            //
+            // Instead we run a fixed-step ticker and accumulate elapsed time
+            // ourselves, using Date.now() so the accumulated value does not
+            // drift with frame jitter. Hover simply stops accumulating.
+            property real _elapsedMs: 0
+            property real _lastTickAt: 0
+
+            readonly property real _remainingMs: Math.max(0, card.expireMs - card._elapsedMs)
+            // 1 -> 0, for the bar.
+            readonly property real _remainingFraction: card.expireMs > 0
+                ? Math.max(0, Math.min(1, card._remainingMs / card.expireMs))
+                : 0
+
+            // Ticker only runs while the card is alive AND not hovered. It is
+            // deliberately NOT restarted on hover-out with a fresh baseline:
+            // _lastTickAt is re-seeded at the top of each onTriggered, so the
+            // gap spent hovered is never counted.
+            Timer {
+                id: expireTicker
+                interval: 50
+                repeat: true
+                running: card.notification !== null && card.expireMs > 0 && !card.hovered
+                onTriggered: {
+                    const now = Date.now()
+                    if (card._lastTickAt > 0)
+                        card._elapsedMs += now - card._lastTickAt
+                    card._lastTickAt = now
+                    if (card._remainingMs <= 0)
+                        card.close(true)
+                }
+            }
+
+            // Re-seed the baseline whenever the ticker (re)starts, so the time
+            // spent hovered or paused is excluded from the countdown.
+            onHoveredChanged: {
+                if (!card.hovered)
+                    card._lastTickAt = 0
             }
 
             // ---- header ----
