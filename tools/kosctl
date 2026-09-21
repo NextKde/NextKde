@@ -658,11 +658,9 @@ start_all() {
     local -a kos_units=(
         kos-platform.service kos-data.service kos-shell.service
     )
-    # Match the install step: optional application services join the core set
-    # only when their unit has actually been installed.
-    if [[ -e "$runtime_unit_dir/kos-pim-service.service" ]]; then
-        kos_units+=(kos-pim-service.service)
-    fi
+    # kos-pim-service is D-Bus activated on demand and is deliberately kept
+    # non-resident (see deploy_artifacts). It must not be enabled or restarted
+    # from `start` either, or `install apps`'s disable keeps fighting this.
     # Replace a manually launched `kos` instance so systemd becomes its sole
     # supervisor; the unit's --no-duplicate would otherwise exit repeatedly
     # while that instance is alive.

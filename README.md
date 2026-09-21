@@ -365,6 +365,13 @@ Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令�
 `start` 会立即应用 Shell、平台服务和数据服务更新；KWin 特效二进制会在下次注销并
 重新登录或重启后载入，避免在运行中的合成器里热替换插件。
 
+> `kosctl dev` 复用的是 systemd 里已安装的 `kos-platform` 和 `kos-data`——它不替你重编这两个服务。改了 platform 的 C++ 或 data-service 的 Go 后，要先把新版本装上并重启服务，再 `dev` 才连到新代码：
+>
+> - 改 platform（C++）：`./tools/kosctl install && ./tools/kosctl start` 重启 `kos-platform.service`
+> - 改 data-service（Go）：同上，重启 `kos-data.service`
+>
+> 只有 Shell QML 能在 `dev` 下即改即生效；platform、data-service、KWin 插件都不支持热重载，改了必须重装并重启。
+
 常用命令：
 
 ```sh

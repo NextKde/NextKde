@@ -298,6 +298,17 @@ After changing C++, Go, or KWin plugins:
 Updated KWin effect binaries load after the next logout/login or reboot; this
 avoids hot-replacing plugins inside the running compositor.
 
+> `kosctl dev` reuses the already-installed `kos-platform` and `kos-data` from
+> systemd — it does not rebuild them for you. After changing platform's C++ or
+> data-service's Go, install and restart the service before `dev` connects to
+> the new code:
+>
+> - platform (C++): `./tools/kosctl install && ./tools/kosctl start` restarts `kos-platform.service`
+> - data-service (Go): same — restarts `kos-data.service`
+>
+> Only Shell QML hot-reloads under `dev`; platform, data-service, and KWin
+> plugins do not — they must be reinstalled and their services restarted.
+
 Useful commands:
 
 ```sh
