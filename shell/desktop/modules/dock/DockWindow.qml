@@ -106,10 +106,14 @@ PanelWindow {
 
     // Only a permanently visible Dock reserves workspace. Hide modes keep the
     // zone at 0 so windows do not reflow whenever the Dock reveals or hides.
+    // A permanently visible Dock reserves exactly the band its glass occupies:
+    // the height plus the inset that keeps the glass off the physical edge.
+    // No extra workspace gap — a maximised window must sit flush against the
+    // top edge of the dock instead of floating above a dead strip.
     exclusiveZone: ConfigService.visibilityMode === "always"
         ? (root.vertical
-            ? dockContainer.width + root.edgeMargin + root.workspaceGap
-            : dockContainer.height + root.edgeMargin + root.workspaceGap)
+            ? dockContainer.width + root.edgeMargin
+            : dockContainer.height + root.edgeMargin)
         : 0
 
     // The custom KWin glass effect consumes this region for both backdrop
@@ -176,10 +180,9 @@ PanelWindow {
             y: root.surfaceGlobalY + root.restY,
             width: dockContainer.width,
             height: dockContainer.height
-        // A permanently visible Dock reserves the same visual gap above/beside
-        // its glass. Hide modes deliberately publish no gap: otherwise a new
-        // window would avoid an invisible Dock after it has slid away.
-        }, ConfigService.visibilityMode === "always" ? root.workspaceGap : 0)
+        // Hide modes deliberately publish no gap: otherwise a new window
+        // would avoid an invisible Dock after it has slid away.
+        }, 0)
     }
 
     Timer {
