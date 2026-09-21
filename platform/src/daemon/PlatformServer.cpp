@@ -19,6 +19,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QImage>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -33,6 +34,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QTimer>
+#include <QtConcurrent>
 
 #include <KIO/ApplicationLauncherJob>
 #include <KService>
@@ -101,6 +103,35 @@ QJsonObject errorObject(const QString &code, const QString &message, bool retrya
     return QJsonObject{{QStringLiteral("code"), code},
                        {QStringLiteral("message"), message},
                        {QStringLiteral("retryable"), retryable}};
+}
+
+// Outcome of a file.copy run on the copy pool. Empty when the copy
+// committed; a description of the failed stage otherwise.
+struct CopyResult {
+    QString error;
+};
+
+// Runs on a m_copyPool thread: QFile/QSaveFile are plain file objects and
+// safe off the event loop. The 1MiB chunk loop matches the old inline
+// implementation, including the QSaveFile commit() fsync.
+CopyResult copyFileChunked(const QString &source, const QString &destination)
+{
+    QFile input(source);
+    QSaveFile output(destination);
+    if (!input.open(QIODevice::ReadOnly))
+        return {QStringLiteral("open-source")};
+    if (!output.open(QIODevice::WriteOnly))
+        return {QStringLiteral("open-destination")};
+    while (!input.atEnd()) {
+        const QByteArray chunk = input.read(1024 * 1024);
+        if (chunk.isEmpty() && !input.atEnd())
+            return {QStringLiteral("read")};
+        if (output.write(chunk) != chunk.size())
+            return {QStringLiteral("write")};
+    }
+    if (!output.commit())
+        return {QStringLiteral("commit")};
+    return {};
 }
 
 QVariant unwrapDbusValue(const QVariant &value)
@@ -1045,6 +1076,9 @@ PlatformServer::PlatformServer(QObject *parent)
     const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
     if (!pactl.isEmpty())
         startAudioEventWatcher(pactl);
+    // Two concurrent copies at most: more would thrash the same disk anyway,
+    // and the pool queue keeps additional requests waiting off the event loop.
+    m_copyPool.setMaxThreadCount(2);
 }
 
 PlatformServer::~PlatformServer()
@@ -2511,32 +2545,41 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                     QStringLiteral("无法创建目标目录"), true);
             return true;
         }
-        QFile input(source);
-        QSaveFile output(destination);
-        if (!input.open(QIODevice::ReadOnly) || !output.open(QIODevice::WriteOnly)) {
+        // QSaveFile truncates destination on open, so copying a file onto
+        // itself would erase the source before the first read. Canonical
+        // paths resolve symlinks; when one side has no canonical form (the
+        // destination usually does not exist yet) fall back to absolutes.
+        const QFileInfo sourceInfo(source);
+        const QFileInfo destinationInfo(destination);
+        const QString sourceCanonical = sourceInfo.canonicalFilePath();
+        const QString destinationCanonical = destinationInfo.canonicalFilePath();
+        const bool sameFile = !sourceCanonical.isEmpty() && !destinationCanonical.isEmpty()
+            ? sourceCanonical == destinationCanonical
+            : sourceInfo.absoluteFilePath() == destinationInfo.absoluteFilePath();
+        if (sameFile) {
             respond(socket, request, false, {}, QStringLiteral("copy-failed"),
                     QStringLiteral("无法复制文件"), true);
             return true;
         }
-        bool copied = true;
-        while (!input.atEnd()) {
-            const QByteArray chunk = input.read(1024 * 1024);
-            if (chunk.isEmpty() && !input.atEnd()) {
-                copied = false;
-                break;
+        // The copy itself runs on m_copyPool: a multi-GB transfer would
+        // otherwise block every socket client, KWin broadcast and D-Bus
+        // signal on this event loop for its whole duration.
+        auto *watcher = new QFutureWatcher<CopyResult>(this);
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        connect(watcher, &QFutureWatcher<CopyResult>::finished, this,
+                [this, watcher, guardedSocket, request, destination]() {
+            watcher->deleteLater();
+            if (watcher->result().error.isEmpty()) {
+                respond(guardedSocket.data(), request, true,
+                        QJsonObject{{QStringLiteral("path"), destination}});
+            } else {
+                respond(guardedSocket.data(), request, false, {},
+                        QStringLiteral("copy-failed"),
+                        QStringLiteral("无法复制文件"), true);
             }
-            if (output.write(chunk) != chunk.size()) {
-                copied = false;
-                break;
-            }
-        }
-        if (!copied || !output.commit()) {
-            respond(socket, request, false, {}, QStringLiteral("copy-failed"),
-                    QStringLiteral("无法复制文件"), true);
-            return true;
-        }
-        respond(socket, request, true,
-                QJsonObject{{QStringLiteral("path"), destination}});
+        });
+        watcher->setFuture(QtConcurrent::run(&m_copyPool, copyFileChunked,
+                                             source, destination));
         return true;
     }
     if (op == QStringLiteral("file.launch")) {
