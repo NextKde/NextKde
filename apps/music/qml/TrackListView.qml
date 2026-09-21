@@ -27,6 +27,63 @@ Item {
             musicController.playTrack(trackId)
     }
 
+    // One shared menu for the whole list. Giving every delegate its own Menu
+    // with eight MenuItems costs ~8 objects per row and is rebuilt on every
+    // model reset; a single instance just re-targets the row/track it was
+    // opened for.
+    property int menuRow: -1
+    property var menuTrackId: -1
+    property string menuTrackTitle: ""
+
+    function openTrackMenu(row, trackId, title, sourceItem) {
+        menuRow = row
+        menuTrackId = trackId
+        menuTrackTitle = title
+        trackMenu.popup(sourceItem)
+    }
+
+    Menu {
+        id: trackMenu
+
+        MenuItem {
+            text: qsTr("Play now")
+            onTriggered: root.playRow(root.menuRow, root.menuTrackId)
+        }
+        MenuItem {
+            text: qsTr("Play next")
+            onTriggered: root.musicController.playTrackNext(root.menuTrackId)
+        }
+        MenuItem {
+            text: qsTr("Add to queue")
+            onTriggered: root.musicController.enqueueTrack(root.menuTrackId)
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: qsTr("Add to playlist…")
+            onTriggered: root.addToPlaylistRequested(root.menuTrackId)
+        }
+        MenuItem {
+            text: qsTr("Convert audio…")
+            onTriggered: root.transcodeRequested(root.menuTrackId,
+                                                 root.menuTrackTitle)
+        }
+        MenuSeparator {
+            visible: root.contextMode === "queue"
+                || root.contextMode === "playlist"
+        }
+        MenuItem {
+            visible: root.contextMode === "queue"
+            text: qsTr("Remove from queue")
+            onTriggered: root.musicController.removeQueueRow(root.menuRow)
+        }
+        MenuItem {
+            visible: root.contextMode === "playlist"
+            text: qsTr("Remove from playlist")
+            onTriggered: root.musicController.removeTrackFromPlaylist(
+                             root.playlistId, root.menuTrackId)
+        }
+    }
+
     KosEmptyState {
         anchors.centerIn: parent
         width: Math.min(parent.width - 40, 440)
@@ -129,7 +186,10 @@ Item {
 
             TapHandler {
                 acceptedButtons: Qt.RightButton
-                onTapped: trackMenu.popup()
+                onTapped: root.openTrackMenu(trackDelegate.index,
+                                             trackDelegate.trackId,
+                                             trackDelegate.title,
+                                             trackDelegate)
             }
 
             HoverHandler { id: hover }
@@ -215,49 +275,10 @@ Item {
                     text: "⋮"
                     flat: true
                     Accessible.name: qsTr("Track actions")
-                    onClicked: trackMenu.popup()
-                }
-            }
-
-            Menu {
-                id: trackMenu
-
-                MenuItem {
-                    text: qsTr("Play now")
-                    onTriggered: root.playRow(trackDelegate.index, trackDelegate.trackId)
-                }
-                MenuItem {
-                    text: qsTr("Play next")
-                    onTriggered: root.musicController.playTrackNext(trackDelegate.trackId)
-                }
-                MenuItem {
-                    text: qsTr("Add to queue")
-                    onTriggered: root.musicController.enqueueTrack(trackDelegate.trackId)
-                }
-                MenuSeparator {}
-                MenuItem {
-                    text: qsTr("Add to playlist…")
-                    onTriggered: root.addToPlaylistRequested(trackDelegate.trackId)
-                }
-                MenuItem {
-                    text: qsTr("Convert audio…")
-                    onTriggered: root.transcodeRequested(trackDelegate.trackId,
-                                                         trackDelegate.title)
-                }
-                MenuSeparator {
-                    visible: root.contextMode === "queue"
-                        || root.contextMode === "playlist"
-                }
-                MenuItem {
-                    visible: root.contextMode === "queue"
-                    text: qsTr("Remove from queue")
-                    onTriggered: root.musicController.removeQueueRow(trackDelegate.index)
-                }
-                MenuItem {
-                    visible: root.contextMode === "playlist"
-                    text: qsTr("Remove from playlist")
-                    onTriggered: root.musicController.removeTrackFromPlaylist(
-                                     root.playlistId, trackDelegate.trackId)
+                    onClicked: root.openTrackMenu(trackDelegate.index,
+                                                  trackDelegate.trackId,
+                                                  trackDelegate.title,
+                                                  this)
                 }
             }
         }
