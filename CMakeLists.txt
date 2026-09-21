@@ -106,6 +106,16 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.liquid-glass-panel PROPERTIES TIMEOUT 15)
+            # Drives the shipping DockIcon's magnificationPointer by hand to
+            # check where the Dock decides an icon is hovered. The hover test
+            # must not read geometry that the hover lift itself moves, which is
+            # what makes the cursor jitter at the slot edge.
+            add_test(NAME kos-shell.dock-hover-hit
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-hover-hit/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.dock-hover-hit PROPERTIES TIMEOUT 20)
             add_test(NAME kos-shell.traditional-color-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/run.mjs
@@ -114,6 +124,7 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.traditional-color-runtime PROPERTIES TIMEOUT 15)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
+                kos-shell.dock-hover-hit
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         find_program(KOS_WESTON_EXECUTABLE NAMES weston)
@@ -242,6 +253,7 @@ if(BUILD_TESTING)
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
             kos-shell.liquid-glass-panel kos-shell.traditional-color-runtime
+            kos-shell.dock-hover-hit
             PROPERTIES LABELS ui)
     endif()
     if(KOS_PYTHON_EXECUTABLE)
