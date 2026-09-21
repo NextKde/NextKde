@@ -80,6 +80,18 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updatePosition"), position}));
     }
 
+    Q_INVOKABLE QVariantMap updateDockAlignment(const QString &alignment) {
+        return snapshotFromReply(callDock({QStringLiteral("updateAlignment"), alignment}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockStyle(const QString &style) {
+        return snapshotFromReply(callDock({QStringLiteral("updateDockStyle"), style}));
+    }
+
+    Q_INVOKABLE QVariantMap updateDockInfoCardMode(const QString &mode) {
+        return snapshotFromReply(callDock({QStringLiteral("updateInfoCardMode"), mode}));
+    }
+
     Q_INVOKABLE QVariantMap updateDockIconMode(const QString &mode) {
         return snapshotFromReply(callDock({QStringLiteral("updateIconMode"), mode}));
     }

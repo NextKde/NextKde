@@ -512,6 +512,14 @@ ApplicationWindow {
         property real dockHeight: 60
         property int dockPositionIndex: 0
         readonly property var dockPositions: ["bottom", "left", "right"]
+        property int dockAlignmentIndex: 1
+        readonly property var dockAlignments: ["start", "center", "end"]
+        readonly property var dockAlignmentLabels: dockPositionIndex === 0
+            ? ["靠左", "居中", "靠右"] : ["靠上", "居中", "靠下"]
+        property int dockStyleIndex: 0
+        readonly property var dockStyles: ["floating", "taskbar"]
+        property int infoCardModeIndex: 0
+        readonly property var infoCardModes: ["carousel", "expanded"]
         property int iconModeIndex: 0
         readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
@@ -644,6 +652,21 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
+        function dockAlignmentIndexFromString(alignment) {
+            const idx = dockAlignments.indexOf(alignment)
+            return idx >= 0 ? idx : 1
+        }
+
+        function dockStyleIndexFromString(style) {
+            const idx = dockStyles.indexOf(style)
+            return idx >= 0 ? idx : 0
+        }
+
+        function infoCardModeIndexFromString(mode) {
+            const idx = infoCardModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
         function visibilityModeIndexFromString(mode) {
             const idx = visibilityModes.indexOf(mode)
             return idx >= 0 ? idx : 0
@@ -741,6 +764,9 @@ ApplicationWindow {
                 return
             dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
+            dockAlignmentIndex = dockAlignmentIndexFromString(state.alignment)
+            dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
+            infoCardModeIndex = infoCardModeIndexFromString(state.infoCardMode)
             iconModeIndex = iconModeIndexFromString(state.iconMode)
             iconOpacity = Number(state.iconOpacity)
             iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
@@ -757,6 +783,30 @@ ApplicationWindow {
                 return
             const position = dockPositions[index]
             applyState(bridge.updateDockPosition(position))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveAlignment(index) {
+            if (!bridge)
+                return
+            applyState(bridge.updateDockAlignment(dockAlignments[index]))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveDockStyle(index) {
+            if (!bridge)
+                return
+            applyState(bridge.updateDockStyle(dockStyles[index]))
+            if (bridge.lastError)
+                errorText = bridge.lastError
+        }
+
+        function saveInfoCardMode(index) {
+            if (!bridge)
+                return
+            applyState(bridge.updateDockInfoCardMode(infoCardModes[index]))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -966,11 +1016,135 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             color: theme.card
-            radius: 18
-            implicitHeight: 111
+            radius: window.materialForm ? 24 : 18
+            implicitHeight: dockLayoutColumn.implicitHeight
 
             Column {
+                id: dockLayoutColumn
                 anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 164
+
+                    Rectangle {
+                        id: dockPreviewScreen
+                        anchors {
+                            fill: parent
+                            leftMargin: 16
+                            rightMargin: 16
+                            topMargin: 14
+                            bottomMargin: 12
+                        }
+                        radius: window.materialForm ? 20 : 14
+                        color: theme.previewPane
+                        border.width: 1
+                        border.color: theme.floatingBorder
+                        clip: true
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right; top: parent.top }
+                            height: 18
+                            color: theme.previewBar
+                            opacity: 0.82
+                            Row {
+                                anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 8 }
+                                spacing: 4
+                                Repeater {
+                                    model: 3
+                                    Rectangle {
+                                        width: 4; height: 4; radius: 2
+                                        color: theme.previewIcon
+                                        opacity: 0.72
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            id: dockPreview
+                            readonly property bool vertical: dockPage.dockPositionIndex !== 0
+                            readonly property bool taskbar: dockPage.dockStyleIndex === 1
+                            readonly property real thickness: 12
+                                + (dockPage.dockHeight - 40) / 60 * 10
+                            readonly property real compactLength:
+                                dockPage.infoCardModeIndex === 1 ? 190 : 126
+                            width: vertical ? thickness
+                                : (taskbar ? dockPreviewScreen.width : compactLength)
+                            height: vertical
+                                ? (taskbar ? dockPreviewScreen.height - 18 : compactLength)
+                                : thickness
+                            radius: taskbar ? 0 : Math.min(width, height) / 2
+                            color: taskbar ? theme.previewTaskbar : theme.previewDock
+                            border.width: taskbar ? 0 : 1
+                            border.color: theme.floatingBorder
+                            x: {
+                                if (dockPage.dockPositionIndex === 1)
+                                    return taskbar ? 0 : 8
+                                if (dockPage.dockPositionIndex === 2)
+                                    return dockPreviewScreen.width - width - (taskbar ? 0 : 8)
+                                if (taskbar)
+                                    return 0
+                                if (dockPage.dockAlignmentIndex === 0)
+                                    return 10
+                                if (dockPage.dockAlignmentIndex === 2)
+                                    return dockPreviewScreen.width - width - 10
+                                return (dockPreviewScreen.width - width) / 2
+                            }
+                            y: {
+                                if (dockPage.dockPositionIndex === 0)
+                                    return dockPreviewScreen.height - height
+                                        - (taskbar ? 0 : 8)
+                                if (taskbar)
+                                    return 18
+                                if (dockPage.dockAlignmentIndex === 0)
+                                    return 26
+                                if (dockPage.dockAlignmentIndex === 2)
+                                    return dockPreviewScreen.height - height - 8
+                                return 18 + (dockPreviewScreen.height - 18 - height) / 2
+                            }
+
+                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+
+                            Row {
+                                visible: !dockPreview.vertical
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Repeater {
+                                    model: dockPage.infoCardModeIndex === 1 ? 7 : 5
+                                    Rectangle {
+                                        width: Math.max(5, dockPreview.height * 0.42)
+                                        height: width
+                                        radius: width / 2
+                                        color: index >= 4 ? theme.accent : theme.previewIcon
+                                        opacity: index >= 4 ? 0.78 : 0.72
+                                    }
+                                }
+                            }
+
+                            Column {
+                                visible: dockPreview.vertical
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Repeater {
+                                    model: dockPage.infoCardModeIndex === 1 ? 6 : 4
+                                    Rectangle {
+                                        width: Math.max(5, dockPreview.width * 0.42)
+                                        height: width
+                                        radius: width / 2
+                                        color: index >= 3 ? theme.accent : theme.previewIcon
+                                        opacity: index >= 3 ? 0.78 : 0.72
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
 
                 Item {
                     width: parent.width
@@ -1002,13 +1176,101 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
+                        Text { text: "对齐"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            model: [
+                                { id: "start", label: dockPage.dockAlignmentLabels[0] },
+                                { id: "center", label: dockPage.dockAlignmentLabels[1] },
+                                { id: "end", label: dockPage.dockAlignmentLabels[2] }
+                            ]
+                            itemWidthOverride: 58
+                            currentIndex: dockPage.dockAlignmentIndex
+                            onSelectionChanged: function(index) { dockPage.saveAlignment(index) }
+                        }
+                    }
                 }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "▭"; tint: "#af52de" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Text { text: "Dock 样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: dockPage.dockStyleIndex === 0
+                                    ? "自适应内容并保留主题间距" : "贴合屏幕边缘并延伸为任务栏"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        SettingsNavBar {
+                            model: [
+                                { id: "floating", label: "悬浮" },
+                                { id: "taskbar", label: "任务栏" }
+                            ]
+                            itemWidthOverride: 62
+                            currentIndex: dockPage.dockStyleIndex
+                            onSelectionChanged: function(index) { dockPage.saveDockStyle(index) }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◫"; tint: "#30d158" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Text { text: "信息卡片布局"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: dockPage.infoCardModeIndex === 0
+                                    ? "在同一位置自动轮播" : "同时展示全部已添加卡片"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        SettingsNavBar {
+                            model: [
+                                { id: "carousel", label: "轮播" },
+                                { id: "expanded", label: "展开" }
+                            ]
+                            itemWidthOverride: 62
+                            currentIndex: dockPage.infoCardModeIndex
+                            onSelectionChanged: function(index) { dockPage.saveInfoCardMode(index) }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
 
                 Item {
                     width: parent.width
