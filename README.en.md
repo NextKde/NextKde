@@ -280,12 +280,7 @@ Do not combine `qs -c` and `qs -p`: they are mutually exclusive. A Settings
 app opened separately from the desktop menu still targets the installed Shell;
 use the source Shell's gear or the command above while debugging.
 
-Apply QML-only changes to an installed copy:
-
-```sh
-./tools/kosctl sync
-./tools/kosctl start
-```
+QML changes hot-reload live under `kosctl dev` (see above). To ship them to an installed desktop, use `install` + `start` like the C++/Go/KWin path below.
 
 After changing C++, Go, or KWin plugins:
 

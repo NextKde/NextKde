@@ -117,7 +117,7 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|sync|dev|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|dev|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
   git clone <repo> && cd Nextkde
@@ -680,45 +680,6 @@ start_all() {
     printf '\n'
 }
 
-# sync — copy shell QML (and shared controls) to the installed config without
-# rebuilding. The installed shell does not hot-reload (its file watcher is
-# disabled), so run `./tools/kosctl start` to apply the copied QML. Cheapest
-# edit loop for QML-only changes; use `install` when C++/Go/KWin code changed.
-sync_qml() {
-    local shell_config="$config_dir/quickshell/kos"
-    if [[ ! -d "$shell_config" ]]; then
-        echo "kos is not installed; run ./tools/kosctl install first" >&2
-        return 1
-    fi
-    # Keep the QML-only path compatible with installations made before
-    # Kos.Ui became source symlinks; deploy_artifacts performs the same
-    # targeted migration during a full install.
-    rm -rf "$shell_config/Kos/Ui/colorize" \
-           "$shell_config/Kos/Ui/foundation" \
-           "$shell_config/Kos/Ui/controls"
-    rm -rf "$shell_config/shared/qml/controls"
-    cp -a "$project_dir/shell/." "$shell_config/"
-    # shell/Kos/Ui symlinks dangle once copied out of the checkout; replace
-    # them with the real files so the installed shell keeps importing Kos.Ui.
-    materialize_kos_ui "$shell_config" \
-        "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
-    mkdir -p "$shell_config/shared/qml"
-    rm -rf "$shell_config/shared/qml/controls"
-    cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
-    # The lock screen package rides along: it is pure QML too, and editing it
-    # is the same loop as editing the shell.
-    if lockscreen_installed; then
-        rm -rf "$prefix/share/plasma/shells/org.kos.desktop" \
-            "$prefix/share/plasma/look-and-feel/org.kos.desktop"
-        cp -a "$project_dir/apps/lockscreen" \
-            "$prefix/share/plasma/shells/org.kos.desktop"
-        cp -a "$project_dir/apps/lockscreen" \
-            "$prefix/share/plasma/look-and-feel/org.kos.desktop"
-        printf 'Synced lock screen package.\n'
-    fi
-    printf 'Synced shell QML to %s; run ./tools/kosctl start to apply it.\n' "$shell_config"
-}
-
 # dev — run the source Shell against the normal systemd platform and data
 # services. It deliberately does not build, install, stop, or replace them;
 # all clients use the single standard runtime socket pair.
@@ -1022,7 +983,7 @@ install_kwin_plugins() {
 #
 # It is a copy, not a symlink, matching how deploy_artifacts ships the shell:
 # an installed layout must not depend on the checkout staying in place. QML
-# edits reach it through `kosctl sync`.
+# edits reach it through `install lockscreen`.
 install_lockscreen() {
     local shells_dir="$prefix/share/plasma/shells/org.kos.desktop"
     local laf_dir="$prefix/share/plasma/look-and-feel/org.kos.desktop"
@@ -1338,7 +1299,6 @@ case "${1:-}" in
             *) usage >&2; exit 2 ;;
         esac ;;
     start) start_all ;;
-    sync) sync_qml ;;
     dev) dev_all ;;
     run) run_shell "${2:-}" ;;
     uninstall)

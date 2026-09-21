@@ -144,8 +144,7 @@ KOS 的锁屏是可选的，默认**不安装**——可选组件通过子命令
 `plasma/shells/` 解析皮肤包的，`look-and-feel/` 对它无效（原因与验证脚本见
 [apps/lockscreen/tests/theme-resolution](apps/lockscreen/tests/theme-resolution)），
 两个目录都放是为了让 `plasma-apply-lookandfeel` 与系统设置页也能解析到它。
-它是纯 QML 数据包：改完 QML 运行 `./tools/kosctl sync` 即可更新，不必重新
-`install`。
+它是纯 QML 数据包：改完 QML 运行 `./tools/kosctl install lockscreen` 重新拷贝即可，不必走完整 `install`。
 
 `uninstall` 会移除锁屏并删除 `ShellPackage` 键。
 
@@ -348,12 +347,7 @@ KOS_SHELL_DIR="$PWD/shell" kos-settings
 不要把 `-c` 与 `-p` 一起传给 `qs`；两者互斥。应用菜单单独打开的设置中心仍会连接安装版
 Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令。
 
-修改 QML 后应用到已安装版本：
-
-```sh
-./tools/kosctl sync
-./tools/kosctl start
-```
+QML 改动在 `kosctl dev` 下即时生效（见上文）。要发布到已安装桌面，与下面 C++/Go/KWin 一样走 `install` + `start`。
 
 修改 C++、Go 或 KWin 插件后：
 
