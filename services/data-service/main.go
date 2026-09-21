@@ -135,17 +135,55 @@ type DataError struct {
 	Retryable bool   `json:"retryable"`
 }
 
+// subscriberConn serializes every write to a shared JSONL connection. All
+// three writers (subscribe announcement, broadcasts, request responses) go
+// through writeLine, which holds wmu for the whole set-deadline -> write ->
+// clear-deadline sequence so bytes can never interleave on the wire and no
+// goroutine can clear a deadline another writer just armed.
+type subscriberConn struct {
+	net.Conn
+	wmu sync.Mutex
+}
+
+// writeLine writes one complete JSONL line under a bounded deadline. The
+// deadline is always cleared afterwards because it is absolute: leaving it
+// armed would make every later write on the long-lived connection time out
+// (the bug that used to freeze the shell after its first metrics snapshot).
+func (c *subscriberConn) writeLine(raw []byte, timeout time.Duration) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	if err := c.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
+	_, err := c.Write(raw)
+	// Clear even on a failed write: a conn that stays in service must not
+	// inherit a stale deadline, and a dead conn is removed anyway.
+	_ = c.SetWriteDeadline(time.Time{})
+	return err
+}
+
 type Service struct {
-	mu                        sync.Mutex
-	desktopSubscribersMu      sync.Mutex
-	desktopSubscribers        map[net.Conn]struct{}
-	state                     State
-	statePath, snapshotPath   string
-	desktopDirectory          string
-	weatherProvider           WeatherProvider
-	weatherRequestSerial      uint64
-	last                      time.Time
+	mu                      sync.Mutex
+	desktopSubscribersMu    sync.Mutex
+	desktopSubscribers      map[*subscriberConn]struct{}
+	state                   State
+	statePath, snapshotPath string
+	desktopDirectory        string
+	weatherProvider         WeatherProvider
+	weatherRequestSerial    uint64
+	// weatherFailStreak counts consecutive forecast fetch failures and drives
+	// the exponential retry backoff. Guarded by s.mu.
+	weatherFailStreak int
+	last              time.Time
+	// prevCPUTotal/prevCPUIdle are only touched by readCPU, which runs only
+	// from sample() (the main goroutine's startup call and 10s tick), so they
+	// stay race-free even though sampling happens outside s.mu.
 	prevCPUTotal, prevCPUIdle float64
+	// sensors caches the one-time thermal/hwmon enumeration: sysfs device
+	// topology and labels do not change at runtime, so only the input values
+	// are re-read on every sample.
+	sensorsOnce sync.Once
+	sensors     []sensorProbe
 }
 
 func day(t time.Time) string { return t.Format("2006-01-02") }
@@ -164,7 +202,7 @@ func newService() *Service {
 		statePath:          filepath.Join(root, "state.json"),
 		snapshotPath:       filepath.Join(root, "snapshot.json"),
 		desktopDirectory:   desktopDirectory(),
-		desktopSubscribers: map[net.Conn]struct{}{},
+		desktopSubscribers: map[*subscriberConn]struct{}{},
 		weatherProvider:    newOpenMeteoProvider(),
 		last:               time.Now(),
 	}
@@ -186,23 +224,23 @@ func newService() *Service {
 	return s
 }
 
-func writeJSON(path string, value any) error {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if err = os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+func writeJSONBytes(path string, raw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err = os.WriteFile(tmp, raw, 0644); err != nil {
+	if err := os.WriteFile(tmp, raw, 0644); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
 }
+
+// persist marshals state.json and snapshot.json under s.mu — the same
+// sanctioned pattern as snapshotResult — so the encoder never iterates maps
+// or slices that concurrent writers mutate, then performs the actual disk
+// writes after releasing the lock so no blocking IO stalls state updates.
 func (s *Service) persist() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.settle(time.Now())
 	snapshot := Snapshot{
 		SchemaVersion: 1,
@@ -212,14 +250,23 @@ func (s *Service) persist() {
 		Desktop:       s.state.Desktop,
 		Weather:       s.state.Weather,
 	}
-	_ = writeJSON(s.statePath, s.state)
-	_ = writeJSON(s.snapshotPath, snapshot)
+	stateRaw, stateErr := json.Marshal(s.state)
+	snapshotRaw, snapshotErr := json.Marshal(snapshot)
+	s.mu.Unlock()
+	if stateErr == nil {
+		_ = writeJSONBytes(s.statePath, stateRaw)
+	}
+	// snapshot.json stays written for backward compatibility: the external
+	// kos-weather app reads it as its offline fallback.
+	if snapshotErr == nil {
+		_ = writeJSONBytes(s.snapshotPath, snapshotRaw)
+	}
 }
 
 // subscribeDesktop turns the existing local event socket into a small
 // notification channel as well. QML keeps one connection open and only reads
 // the snapshot after a change notification, so neither side polls a directory.
-func (s *Service) subscribeDesktop(conn net.Conn) {
+func (s *Service) subscribeDesktop(conn *subscriberConn) {
 	s.desktopSubscribersMu.Lock()
 	_, alreadySubscribed := s.desktopSubscribers[conn]
 	s.desktopSubscribers[conn] = struct{}{}
@@ -230,60 +277,68 @@ func (s *Service) subscribeDesktop(conn net.Conn) {
 	// The atomic snapshot is created before the socket starts listening. A new
 	// subscriber is therefore always prompted to consume one complete current
 	// directory state instead of waiting for the next filesystem mutation.
-	_ = conn.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
+	// writeLine serializes this against broadcasts and responses on the same
+	// connection and clears the absolute write deadline afterwards, so it
+	// cannot leak into the long-lived request loop (the bug where the shell
+	// only ever received its first metrics snapshot). A failed write is
+	// ignored: the conn stays usable for the request loop.
 	event := map[string]interface{}{"version": 1, "event": "desktop.changed",
 		"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
 	raw, _ := json.Marshal(event)
-	_, _ = conn.Write(append(raw, '\n'))
-	// Clear the absolute deadline: it must not leak into the long-lived request
-	// loop, or every response written after this 100ms window would time out
-	// (which is why the shell only ever received its first metrics snapshot).
-	_ = conn.SetWriteDeadline(time.Time{})
+	_ = conn.writeLine(append(raw, '\n'), 100*time.Millisecond)
 }
 
-func (s *Service) unsubscribeDesktop(conn net.Conn) {
+func (s *Service) unsubscribeDesktop(conn *subscriberConn) {
 	s.desktopSubscribersMu.Lock()
 	delete(s.desktopSubscribers, conn)
 	s.desktopSubscribersMu.Unlock()
 }
 
-func (s *Service) publishDesktop() {
+// broadcastEvent writes one JSONL event to every subscriber. The subscriber
+// list is collected under desktopSubscribersMu, but the bounded writes run
+// after releasing it, serialized per connection by each conn's wmu — so a
+// slow subscriber can never hold the registry lock and deadlock every later
+// publish or subscribe. Dead conns are removed and closed afterwards.
+func (s *Service) broadcastEvent(name string) {
+	event := map[string]interface{}{"version": 1, "event": name,
+		"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
+	raw, _ := json.Marshal(event)
+	line := append(raw, '\n')
+
 	s.desktopSubscribersMu.Lock()
-	defer s.desktopSubscribersMu.Unlock()
+	subscribers := make([]*subscriberConn, 0, len(s.desktopSubscribers))
 	for conn := range s.desktopSubscribers {
-		_ = conn.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
-		event := map[string]interface{}{"version": 1, "event": "desktop.changed",
-			"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
-		raw, _ := json.Marshal(event)
-		if _, err := conn.Write(append(raw, '\n')); err != nil {
-			delete(s.desktopSubscribers, conn)
-			_ = conn.Close()
-			continue
+		subscribers = append(subscribers, conn)
+	}
+	s.desktopSubscribersMu.Unlock()
+
+	var dead []*subscriberConn
+	for _, conn := range subscribers {
+		if err := conn.writeLine(line, 100*time.Millisecond); err != nil {
+			dead = append(dead, conn)
 		}
-		// Do not leave the 100ms broadcast deadline armed on the shared
-		// connection; the request loop would otherwise inherit it and time out.
-		_ = conn.SetWriteDeadline(time.Time{})
+	}
+	if len(dead) > 0 {
+		s.desktopSubscribersMu.Lock()
+		for _, conn := range dead {
+			delete(s.desktopSubscribers, conn)
+		}
+		s.desktopSubscribersMu.Unlock()
+		for _, conn := range dead {
+			_ = conn.Close()
+		}
 	}
 }
 
-// Weather shares the connection registry with desktop events. Holding the
-// same write mutex prevents two asynchronous broadcasts from interleaving on
-// a JSONL connection.
+func (s *Service) publishDesktop() {
+	s.broadcastEvent("desktop.changed")
+}
+
+// Weather shares the connection registry with desktop events: both broadcast
+// through broadcastEvent, and the per-connection wmu inside writeLine keeps
+// two asynchronous broadcasts from interleaving on a JSONL connection.
 func (s *Service) publishWeather() {
-	s.desktopSubscribersMu.Lock()
-	defer s.desktopSubscribersMu.Unlock()
-	for conn := range s.desktopSubscribers {
-		_ = conn.SetWriteDeadline(time.Now().Add(100 * time.Millisecond))
-		event := map[string]interface{}{"version": 1, "event": "weather.changed",
-			"payload": map[string]interface{}{"updatedAt": time.Now().UnixMilli()}}
-		raw, _ := json.Marshal(event)
-		if _, err := conn.Write(append(raw, '\n')); err != nil {
-			delete(s.desktopSubscribers, conn)
-			_ = conn.Close()
-			continue
-		}
-		_ = conn.SetWriteDeadline(time.Time{})
-	}
+	s.broadcastEvent("weather.changed")
 }
 
 func desktopDirectory() string {
@@ -541,29 +596,17 @@ func readMem() (used, total float64) {
 	return used * 1024, memTotal * 1024
 }
 
+// readDisk reports used/total bytes of the root filesystem via statfs — the
+// same counters df -B1 prints — without forking a process per sample.
 func readDisk() (used, total float64) {
-	raw, err := os.ReadFile("/proc/mounts")
-	if err != nil {
+	var stat unix.Statfs_t
+	if err := unix.Statfs("/", &stat); err != nil || stat.Bsize <= 0 || stat.Blocks == 0 {
 		return 0, 0
 	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[1] != "/" {
-			continue
-		}
-		if out, err := exec.Command("df", "-B1", "--output=used,size", "/").Output(); err == nil {
-			if rows := strings.Split(strings.TrimSpace(string(out)), "\n"); len(rows) >= 2 {
-				values := strings.Fields(rows[1])
-				if len(values) == 2 {
-					used, _ = strconv.ParseFloat(values[0], 64)
-					total, _ = strconv.ParseFloat(values[1], 64)
-					return used, total
-				}
-			}
-		}
-		break
-	}
-	return 0, 0
+	bsize := uint64(stat.Bsize)
+	total = float64(stat.Blocks * bsize)
+	used = float64((stat.Blocks - stat.Bfree) * bsize)
+	return used, total
 }
 
 func readFrequency() float64 {
@@ -650,7 +693,21 @@ func selectCurrentCPUTemperature(readings []SensorReading) float64 {
 	return current
 }
 
-func readTemperature() (current float64, readings []SensorReading) {
+// sensorProbe is one enumerated temperature input. Probes are collected once
+// per service lifetime (see Service.sensorsOnce): sysfs hwmon/thermal device
+// topology and labels do not meaningfully change at runtime, so re-globbing
+// and re-reading label/name files on every 10s sample would be pure waste.
+// Only inputPath — the live value — is read per sample.
+type sensorProbe struct {
+	source    string
+	device    string
+	label     string
+	inputPath string
+}
+
+// enumerateSensors performs the one-time thermal-zone/hwmon walk.
+func enumerateSensors() []sensorProbe {
+	var probes []sensorProbe
 	zones, _ := filepath.Glob("/sys/class/thermal/thermal_zone*/type")
 	for _, t := range zones {
 		label := strings.TrimSpace(string(readRaw(t)))
@@ -660,9 +717,9 @@ func readTemperature() (current float64, readings []SensorReading) {
 			!strings.Contains(strings.ToLower(label), "pkg") {
 			continue
 		}
-		value := parseF64("/sys/class/thermal/thermal_zone" + index + "/temp")
-		readings = append(readings, SensorReading{
-			Source: "thermal", Device: "kernel", Label: label, MilliC: value,
+		probes = append(probes, sensorProbe{
+			source: "thermal", device: "kernel", label: label,
+			inputPath: "/sys/class/thermal/thermal_zone" + index + "/temp",
 		})
 	}
 	hwmons, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
@@ -676,10 +733,21 @@ func readTemperature() (current float64, readings []SensorReading) {
 			if label == "" {
 				label = "Temperature " + index
 			}
-			readings = append(readings, SensorReading{
-				Source: "hwmon", Device: device, Label: label, MilliC: parseF64(input),
+			probes = append(probes, sensorProbe{
+				source: "hwmon", device: device, label: label, inputPath: input,
 			})
 		}
+	}
+	return probes
+}
+
+func (s *Service) readTemperature() (current float64, readings []SensorReading) {
+	s.sensorsOnce.Do(func() { s.sensors = enumerateSensors() })
+	for _, probe := range s.sensors {
+		readings = append(readings, SensorReading{
+			Source: probe.source, Device: probe.device,
+			Label: probe.label, MilliC: parseF64(probe.inputPath),
+		})
 	}
 	return selectCurrentCPUTemperature(readings), readings
 }
@@ -886,15 +954,21 @@ func (s *Service) settle(now time.Time) {
 	s.last = now
 }
 
+// sample performs every sysfs/proc read before taking s.mu: the probes take
+// 5-15ms and would otherwise stall settle/snapshot/persist writers on every
+// 10s tick. s.mu is held only for the state mutation and History append.
+// Callers are serialized on the main goroutine (startup + tick select), so
+// the prevCPU counters in readCPU and the sensorsOnce cache stay race-free.
 func (s *Service) sample() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
-	current, readings := readTemperature()
+	current, readings := s.readTemperature()
 	memUsed, memTotal := readMem()
 	diskUsed, diskTotal := readDisk()
 	cpu := s.readCPU()
 	frequency := readFrequency()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.state.Metrics.CPU = cpu
 	// Ratios must stay finite: a failed probe yields NaN, which json.Marshal
 	// rejects and would silently kill the whole snapshot write.
@@ -928,9 +1002,31 @@ func (s *Service) sample() {
 	s.state.Metrics.AverageMilliC = current
 	s.state.Metrics.MaximumMilliC = maximum5Minute
 }
+
 func dataError(request DataRequest, code, message string, retryable bool) DataResponse {
 	return DataResponse{Version: 1, RequestID: request.RequestID, OK: false,
 		Error: &DataError{Code: code, Message: message, Retryable: retryable}}
+}
+
+// snapshotResult marshals a state section while still holding s.mu so the
+// encoder never iterates maps or slices that settle/rollDay/sample/weather
+// writes mutate under the same lock, then unmarshals into a private copy so
+// callers marshal the response after the lock without touching shared state.
+// The wire format is unchanged: Result is still map[string]interface{}{key:
+// value} exactly like the former shallow-copy snapshot responses.
+func snapshotResult[T any](s *Service, request DataRequest, key string, read func() T) DataResponse {
+	s.mu.Lock()
+	raw, err := json.Marshal(read())
+	s.mu.Unlock()
+	if err != nil {
+		return dataError(request, "marshal-failed", err.Error(), false)
+	}
+	var value T
+	if err = json.Unmarshal(raw, &value); err != nil {
+		return dataError(request, "marshal-failed", err.Error(), false)
+	}
+	return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
+		Result: map[string]interface{}{key: value}}
 }
 
 func (s *Service) handleRequest(request DataRequest) DataResponse {
@@ -939,23 +1035,17 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 	}
 	switch request.Operation {
 	case "metrics.snapshot":
-		s.mu.Lock()
-		metrics := s.state.Metrics
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"metrics": metrics}}
+		return snapshotResult(s, request, "metrics", func() Metrics {
+			return s.state.Metrics
+		})
 	case "activity.snapshot":
-		s.mu.Lock()
-		activity := s.state.Activity
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"activity": activity}}
+		return snapshotResult(s, request, "activity", func() Activity {
+			return s.state.Activity
+		})
 	case "desktop.snapshot":
-		s.mu.Lock()
-		desktop := s.state.Desktop
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"desktop": desktop}}
+		return snapshotResult(s, request, "desktop", func() Desktop {
+			return s.state.Desktop
+		})
 	case "desktop.refresh":
 		if s.refreshDesktop() {
 			s.persist()
@@ -964,11 +1054,9 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
 			Result: map[string]interface{}{"refreshed": true}}
 	case "weather.snapshot":
-		s.mu.Lock()
-		weather := s.state.Weather
-		s.mu.Unlock()
-		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
-			Result: map[string]interface{}{"weather": weather}}
+		return snapshotResult(s, request, "weather", func() WeatherState {
+			return s.state.Weather
+		})
 	case "weather.search":
 		query, _ := request.Payload["query"].(string)
 		language, _ := request.Payload["language"].(string)
@@ -1042,26 +1130,26 @@ func serve(s *Service, path string) error {
 			return e
 		}
 		go func() {
-			defer c.Close()
-			s.subscribeDesktop(c)
-			defer s.unsubscribeDesktop(c)
-			scanner := bufio.NewScanner(c)
+			conn := &subscriberConn{Conn: c}
+			defer conn.Close()
+			s.subscribeDesktop(conn)
+			defer s.unsubscribeDesktop(conn)
+			scanner := bufio.NewScanner(conn)
 			for scanner.Scan() {
 				var request DataRequest
 				if json.Unmarshal(scanner.Bytes(), &request) != nil {
 					response := dataError(request, "invalid-json", "请求不是有效 JSON", false)
 					raw, _ := json.Marshal(response)
-					_ = c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-					_, _ = c.Write(append(raw, '\n'))
+					_ = conn.writeLine(append(raw, '\n'), 2*time.Second)
 					continue
 				}
 				response := s.handleRequest(request)
 				raw, _ := json.Marshal(response)
-				// Re-arm a fresh deadline before every response: other write paths
-				// (desktop broadcasts) leave a stale 100ms deadline on the shared
-				// connection, and an absolute deadline never resets on its own.
-				_ = c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-				_, _ = c.Write(append(raw, '\n'))
+				// writeLine arms a fresh 2s deadline for every response and
+				// clears it under the conn's write mutex, so broadcasts can
+				// neither interleave bytes nor leave a stale absolute
+				// deadline behind on this shared connection.
+				_ = conn.writeLine(append(raw, '\n'), 2*time.Second)
 			}
 		}()
 	}
