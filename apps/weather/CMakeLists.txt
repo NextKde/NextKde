@@ -61,5 +61,6 @@ if(BUILD_TESTING)
     set_tests_properties(kos-weather.client-snapshot PROPERTIES
         ENVIRONMENT "KOS_WEATHER_DISABLE_SERVICE_AUTOSTART=1"
         TIMEOUT 10
+        LABELS data
     )
 endif()

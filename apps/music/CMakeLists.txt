@@ -93,7 +93,7 @@ if(BUILD_TESTING)
         PkgConfig::KOS_MUSIC_TAGLIB
     )
     add_test(NAME kos-music.core COMMAND kos-music-core-test)
-    set_tests_properties(kos-music.core PROPERTIES TIMEOUT 20)
+    set_tests_properties(kos-music.core PROPERTIES TIMEOUT 20 LABELS data)
 
     qt_add_executable(kos-music-engine-test
         tests/MusicEngineTest.cpp
@@ -118,6 +118,7 @@ if(BUILD_TESTING)
     set_tests_properties(kos-music.engine PROPERTIES
         ENVIRONMENT "G_DEBUG=fatal-criticals;KOS_MUSIC_FAKE_AUDIO=1"
         TIMEOUT 30
+        LABELS data
     )
 
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
@@ -149,6 +150,7 @@ if(BUILD_TESTING)
         set_tests_properties(kos-music.mpris PROPERTIES
             ENVIRONMENT "G_DEBUG=fatal-criticals;KOS_MUSIC_FAKE_AUDIO=1"
             TIMEOUT 30
+            LABELS data
         )
     endif()
 endif()

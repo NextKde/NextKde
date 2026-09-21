@@ -51,4 +51,5 @@ if(BUILD_TESTING)
         COMMAND kos-application-preferences-test
     )
     set_tests_properties(kos-application.preferences PROPERTIES TIMEOUT 20)
+    set_tests_properties(kos-application.preferences PROPERTIES LABELS data)
 endif()

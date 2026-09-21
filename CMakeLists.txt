@@ -154,6 +154,38 @@ if(BUILD_TESTING)
         )
         set_tests_properties(kos-platform.contracts PROPERTIES TIMEOUT 10)
     endif()
+
+    # Labels group the suite so a caller can run one layer without the others.
+    # `tools/run-tests.sh` and CI both drive `ctest -L`, so a test only has to
+    # be listed once, here, to join a layer:
+    #
+    #   logic    pure computation, node or python, no display and no service
+    #   platform the daemon's contract test
+    #   ui       needs a QML engine (and, for the panel tests, a compositor)
+    #
+    # The data/service layer is labelled where those tests are registered, in
+    # apps/common, apps/weather, apps/music, services/pim-service and
+    # services/data-service, because those directories only exist when their
+    # parent feature is configured.
+    set_tests_properties(kos-deskcenter.widget-layout kos-shell.date-buckets
+        kos-shell.squircle kos-shell.tray-attention-match
+        kos-shell.notification-count-match kos-shell.control-center-submenu-state
+        kos-shell.date-projection kos-shell.window-placement-updates
+        kos-shell.window-record-index kos-shell.wallpaper-color-source
+        kos-shell.appearance-config kos-shell.dock-adaptive
+        kos-shell.dock-autohide
+        PROPERTIES LABELS logic)
+    set_tests_properties(kos-ui.visual-contract kos-ui.color-scheme
+        kos-ui.page-cache-policy
+        PROPERTIES LABELS ui)
+    set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
+        kos-shell.liquid-glass-panel
+        PROPERTIES LABELS ui)
+    set_tests_properties(kos-platform.window-placement PROPERTIES LABELS platform)
+    set_tests_properties(kos-platform.contracts PROPERTIES LABELS platform)
+    if(TARGET kos-lockscreen.theme-resolution)
+        set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
+    endif()
 endif()
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS

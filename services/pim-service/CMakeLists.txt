@@ -53,7 +53,7 @@ if(BUILD_TESTING)
         Qt6::Test
     )
     add_test(NAME kos-pim.store COMMAND kos-pim-store-test)
-    set_tests_properties(kos-pim.store PROPERTIES TIMEOUT 20)
+    set_tests_properties(kos-pim.store PROPERTIES TIMEOUT 20 LABELS data)
 
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session REQUIRED)
     qt_add_executable(kos-pim-dbus-test
@@ -70,7 +70,7 @@ if(BUILD_TESTING)
             KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
             $<TARGET_FILE:kos-pim-dbus-test>
     )
-    set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20)
+    set_tests_properties(kos-pim.dbus PROPERTIES TIMEOUT 20 LABELS data)
 
     qt_add_executable(kos-pim-client-dbus-test
         tests/PimClientDbusTest.cpp
@@ -86,5 +86,5 @@ if(BUILD_TESTING)
             KOS_PIM_TEST_SERVICE=$<TARGET_FILE:kos-pim-service>
             $<TARGET_FILE:kos-pim-client-dbus-test>
     )
-    set_tests_properties(kos-pim.client-dbus PROPERTIES TIMEOUT 20)
+    set_tests_properties(kos-pim.client-dbus PROPERTIES TIMEOUT 20 LABELS data)
 endif()

@@ -47,9 +47,14 @@ if(BUILD_TESTING)
             GOCACHE=${CMAKE_CURRENT_BINARY_DIR}/go-test-cache
             ${KOS_GO_EXECUTABLE} test ./...
     )
+    # The first run on a cold module cache compiles the whole standard library
+    # before the first assertion executes and takes well over a minute; a warm
+    # cache finishes in about ten seconds. One number has to cover both, and
+    # only the cold path matters to CI, so size it for that.
     set_tests_properties(kos-data-service.go PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        TIMEOUT 60
+        TIMEOUT 180
+        LABELS data
     )
 endif()
 
