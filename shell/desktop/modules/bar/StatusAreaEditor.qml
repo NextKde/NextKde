@@ -12,6 +12,14 @@ PopupWindow {
     id: editor
 
     property Item anchorItem: null
+    readonly property color foregroundColor: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.surfaceForeground,
+        AppearanceTokens.isDarkTheme ? "#f5f5f7" : "#1c1c1e")
+    readonly property color backgroundColor: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.surfaceContainer,
+        AppearanceTokens.isDarkTheme ? "#1c1c1e" : "#ffffff")
+    readonly property color accentColor: AppearanceTokens.surface.pick(
+        AppearanceTokens.colors.primary, "#0a84ff")
     readonly property var ids: ["network", "battery", "settings", "controlcenter"]
     readonly property var labels: ({
         network: "网络", battery: "电池", settings: "设置", controlcenter: "控制中心"
@@ -53,7 +61,7 @@ PopupWindow {
             anchors.fill: parent
             radius: AppearanceTokens.isMaterial ? 28 : 20
             cornerExponent: AppearanceTokens.isMaterial ? 2.0 : 2.35
-            baseColor: ThemeService.backgroundColor
+            baseColor: editor.backgroundColor
             surfaceOpacity: 1
             scrimEnabled: AppearanceTokens.surface.usesBackdrop
             scrimLevel: "subtle"
@@ -66,12 +74,12 @@ PopupWindow {
                 Layout.fillWidth: true
                 Text {
                     text: "状态栏"
-                    color: ThemeService.foregroundColor
+                    color: editor.foregroundColor
                     font { pixelSize: 14; weight: Font.DemiBold }
                 }
                 Text {
                     text: "拖动排序，点按显示或隐藏"
-                    color: ThemeService.foregroundColor
+                    color: editor.foregroundColor
                     opacity: 0.58
                     font.pixelSize: 11
                 }
@@ -80,15 +88,15 @@ PopupWindow {
                     width: 48; height: 26; radius: AppearanceTokens.isMaterial ? 13 : 9
                     color: AppearanceTokens.surface.pick(
                         AppearanceTokens.colors.primaryContainer,
-                        Qt.rgba(ThemeService.foregroundColor.r,
-                            ThemeService.foregroundColor.g,
-                            ThemeService.foregroundColor.b, 0.10))
+                        Qt.rgba(editor.foregroundColor.r,
+                            editor.foregroundColor.g,
+                            editor.foregroundColor.b, 0.10))
                     Text {
                         anchors.centerIn: parent
                         text: "完成"
                         color: AppearanceTokens.surface.pick(
                             AppearanceTokens.colors.primaryContainerForeground,
-                            ThemeService.foregroundColor)
+                            editor.foregroundColor)
                         font { pixelSize: 11; weight: Font.DemiBold }
                     }
                     TapHandler { onTapped: editor.visible = false }
@@ -114,9 +122,9 @@ PopupWindow {
                         color: active
                             ? AppearanceTokens.surface.pick(
                                 AppearanceTokens.colors.secondaryContainer,
-                                Qt.rgba(ThemeService.foregroundColor.r,
-                                    ThemeService.foregroundColor.g,
-                                    ThemeService.foregroundColor.b, 0.10))
+                                Qt.rgba(editor.foregroundColor.r,
+                                    editor.foregroundColor.g,
+                                    editor.foregroundColor.b, 0.10))
                             : "transparent"
                         border.width: active ? 2 : 1
                         border.color: active ? AppearanceTokens.colors.primary
@@ -133,20 +141,20 @@ PopupWindow {
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: editor.symbols[cellCard.modelData]
-                                color: ThemeService.foregroundColor
+                                color: editor.foregroundColor
                                 font.pixelSize: 19
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: editor.labels[cellCard.modelData]
-                                color: ThemeService.foregroundColor
+                                color: editor.foregroundColor
                                 font { pixelSize: 10; weight: Font.DemiBold }
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: cellCard.requiredCell ? "固定" : (cellCard.active ? "−" : "+")
-                                color: cellCard.requiredCell ? ThemeService.foregroundColor
-                                    : (cellCard.active ? "#ff453a" : ThemeService.accentColor)
+                                color: cellCard.requiredCell ? editor.foregroundColor
+                                    : (cellCard.active ? "#ff453a" : editor.accentColor)
                                 opacity: cellCard.requiredCell ? 0.55 : 1
                                 font { pixelSize: 10; weight: Font.Bold }
                             }
