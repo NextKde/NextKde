@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -16,6 +17,10 @@
 #include <utility>
 
 namespace {
+
+// Upper bound for m_readBuffer: newline-delimited responses are small, so a
+// peer that never sends '\n' must not grow the buffer without limit.
+constexpr qsizetype kMaxSocketBufferBytes = 1024 * 1024;
 
 QString stateRoot()
 {
@@ -80,6 +85,15 @@ WeatherClient::WeatherClient(QObject *parent)
     connect(&m_snapshotFallbackTimer, &QTimer::timeout, this, [this] {
         ensureSnapshotWatch();
         reloadSnapshot();
+    });
+    // Polling the snapshot file is only a fallback for when the socket is
+    // down; once connected, weather.changed events and the file watcher
+    // already cover updates, so gate the timer on connectedChanged.
+    connect(this, &WeatherClient::connectedChanged, this, [this] {
+        if (connected())
+            m_snapshotFallbackTimer.stop();
+        else
+            m_snapshotFallbackTimer.start();
     });
     m_snapshotFallbackTimer.start();
 
@@ -299,6 +313,15 @@ void WeatherClient::readSocketLines()
         m_readBuffer.remove(0, newline + 1);
         if (!line.isEmpty())
             processSocketLine(line);
+    }
+    if (m_readBuffer.size() > kMaxSocketBufferBytes) {
+        qWarning() << "WeatherClient: socket read buffer exceeded"
+                   << kMaxSocketBufferBytes
+                   << "bytes without a newline; dropping the connection";
+        m_readBuffer.clear();
+        // abort() emits disconnected(), which restarts the fallback timer
+        // and schedules reconnect via onSocketDisconnected().
+        m_socket.abort();
     }
 }
 
