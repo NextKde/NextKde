@@ -14,9 +14,15 @@ add_custom_command(
     OUTPUT ${KOS_DATA_SERVICE_EXECUTABLE}
     COMMAND ${CMAKE_COMMAND} -E make_directory
         ${CMAKE_CURRENT_BINARY_DIR}/go-cache
+    # -buildvcs=false: Go stamps VCS info by shelling out to git, and that step
+    # aborts the build with "error obtaining VCS status: exit status 128" when
+    # git cannot read the checkout -- the usual case in a CI container, where
+    # the workspace is owned by another uid (dubious ownership). Nothing reads
+    # the stamped info, so drop it; the binary is then identical wherever it
+    # was built. The Nix path gets the same behaviour from buildGoModule.
     COMMAND ${CMAKE_COMMAND} -E env
         GOCACHE=${CMAKE_CURRENT_BINARY_DIR}/go-cache
-        ${KOS_GO_EXECUTABLE} build -trimpath
+        ${KOS_GO_EXECUTABLE} build -trimpath -buildvcs=false
             -o ${KOS_DATA_SERVICE_EXECUTABLE} .
     DEPENDS ${kos_data_service_sources}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

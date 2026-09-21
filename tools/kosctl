@@ -398,8 +398,12 @@ build() {
         cd "$project_dir/services/data-service"
         # Use a reachable default mirror while preserving the standard
         # GOPROXY override for CI, downstream packagers, and offline caches.
+        # -buildvcs=false matches services/data-service/CMakeLists.txt: Go's
+        # VCS stamping shells out to git, which fails on checkouts git refuses
+        # to read (dubious ownership, tarball exports) and aborts the build.
         GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" \
-            go build -trimpath -o "$build_dir/bin/kos-data-service" .
+            go build -trimpath -buildvcs=false \
+                -o "$build_dir/bin/kos-data-service" .
     )
 }
 
