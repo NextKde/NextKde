@@ -410,6 +410,21 @@ QVariantMap dbusGetAll(const QDBusConnection &bus, const QString &service,
     }
     return first.toMap();
 }
+// bus.interface()->isServiceRegistered() rides the shared
+// QDBusConnectionInterface, whose timeout cannot be narrowed without
+// touching every other bus call. A per-call temporary interface keeps this
+// lookup bounded at kDbusCallTimeoutMs instead.
+bool dbusServiceRegistered(const QDBusConnection &bus, const QString &service)
+{
+    QDBusInterface lookup(QStringLiteral("org.freedesktop.DBus"),
+                          QStringLiteral("/org/freedesktop/DBus"),
+                          QStringLiteral("org.freedesktop.DBus"), bus);
+    lookup.setTimeout(kDbusCallTimeoutMs);
+    const QDBusMessage reply = lookup.call(QStringLiteral("NameHasOwner"), service);
+    return reply.type() == QDBusMessage::ReplyMessage
+        && !reply.arguments().isEmpty()
+        && reply.arguments().constFirst().toBool();
+}
 
 QString dbusPathOf(const QVariant &value)
 {
@@ -1505,9 +1520,7 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
     // PropertiesChanged watches bound how often it happens.
 
     const QDBusConnection bus = QDBusConnection::systemBus();
-    const QDBusReply<bool> registered = bus.interface()->isServiceRegistered(
-        QString::fromLatin1(kNmService));
-    if (!registered.isValid() || !registered.value()) {
+    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
         const QString code = QStringLiteral("network-unavailable");
         const QString message = QStringLiteral("平台网络状态查询失败");
         respond(socket, request, false, {}, code, message, true);
@@ -1629,9 +1642,7 @@ void PlatformServer::runNetworkDetails(QLocalSocket *socket,
         return;
 
     const QDBusConnection bus = QDBusConnection::systemBus();
-    const QDBusReply<bool> registered = bus.interface()->isServiceRegistered(
-        QString::fromLatin1(kNmService));
-    if (!registered.isValid() || !registered.value()) {
+    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
         const QString code = QStringLiteral("network-unavailable");
         const QString message = QStringLiteral("平台命令不可用");
         respond(socket, request, false, {}, code, message, true);
@@ -1712,7 +1723,7 @@ void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &r
         && !bluetoothClass.entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty();
     const QDBusConnection bus = QDBusConnection::systemBus();
     const bool serviceRegistered = hasHardware
-        && bus.interface()->isServiceRegistered(QString::fromLatin1(kBluezService)).value();
+        && dbusServiceRegistered(bus, QString::fromLatin1(kBluezService));
     // Arm the ObjectManager watch even while the service is down so BlueZ
     // appearing later invalidates the "unavailable" snapshot instead of
     // waiting out the TTL.
@@ -2780,6 +2791,7 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                               QStringLiteral("/org/freedesktop/portal/desktop"),
                               QStringLiteral("org.freedesktop.portal.AppChooser"),
                               QDBusConnection::sessionBus());
+        portal.setTimeout(kDbusCallTimeoutMs);
         if (!portal.isValid()) {
             respond(socket, request, false, {}, QStringLiteral("open-with-unavailable"),
                     QStringLiteral("KDE 打开方式面板不可用"), false);
@@ -2892,6 +2904,7 @@ bool PlatformServer::handleKWin(QLocalSocket *socket, const QJsonObject &request
         QDBusInterface effect(QStringLiteral("org.kde.KWin"),
                               QStringLiteral("/KOSDockWindowAnimation"),
                               QStringLiteral("org.kos.KWin.DockWindowAnimation"));
+        effect.setTimeout(kDbusCallTimeoutMs);
         if (!effect.isValid()) {
             respond(socket, request, false, {}, QStringLiteral("kwin-effect-unavailable"),
                     QStringLiteral("Dock 窗口动画特效不可用"), true);
@@ -2921,24 +2934,36 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
         QDBusInterface bridge(QStringLiteral("org.kde.KWin"),
                               QStringLiteral("/KOSContextMenuInput"),
                               QStringLiteral("org.kos.KWin.ContextMenuInput"));
+        bridge.setTimeout(kDbusCallTimeoutMs);
         if (!bridge.isValid()) {
             respond(socket, request, false, {}, QStringLiteral("appmenu-bridge-unavailable"),
                     QStringLiteral("全局菜单桥接尚未加载"), true);
             return true;
         }
-        const QDBusMessage reply = bridge.call(QStringLiteral("activeApplicationMenu"));
-        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-            respond(socket, request, false, {}, QStringLiteral("appmenu-bridge-failed"),
-                    QStringLiteral("无法读取活动窗口菜单"), true);
-            return true;
-        }
-        const QVariantMap address = variantMapFromDbusValue(reply.arguments().first());
-        respond(socket, request, true, QJsonObject{{QStringLiteral("available"),
-                                                    address.value(QStringLiteral("available")).toBool()},
-                                                   {QStringLiteral("service"),
-                                                    address.value(QStringLiteral("service")).toString()},
-                                                   {QStringLiteral("path"),
-                                                    address.value(QStringLiteral("path")).toString()}});
+        // Async: a wedged KWin bridge must not stall every other socket
+        // client; the pending call is still bounded by the interface timeout.
+        const QDBusPendingCall pending = bridge.asyncCall(
+            QStringLiteral("activeApplicationMenu"));
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, guardedSocket = QPointer<QLocalSocket>(socket),
+                 request, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+                respond(guardedSocket.data(), request, false, {}, QStringLiteral("appmenu-bridge-failed"),
+                        QStringLiteral("无法读取活动窗口菜单"), true);
+                return;
+            }
+            const QVariantMap address = variantMapFromDbusValue(reply.arguments().first());
+            respond(guardedSocket.data(), request, true,
+                    QJsonObject{{QStringLiteral("available"),
+                                 address.value(QStringLiteral("available")).toBool()},
+                                {QStringLiteral("service"),
+                                 address.value(QStringLiteral("service")).toString()},
+                                {QStringLiteral("path"),
+                                 address.value(QStringLiteral("path")).toString()}});
+        });
         return true;
     }
 
@@ -2952,6 +2977,9 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
     }
 
     QDBusInterface menu(service, path, QStringLiteral("com.canonical.dbusmenu"));
+    // Third-party apps own this dbusmenu service and can hang; bound every
+    // call on it.
+    menu.setTimeout(kDbusCallTimeoutMs);
     if (!menu.isValid()) {
         respond(socket, request, false, {}, QStringLiteral("appmenu-unavailable"),
                 QStringLiteral("应用未提供全局菜单"), true);
@@ -2962,21 +2990,33 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
         // The root needs one additional level so top-level labels such as
         // File and Edit are identified as submenus rather than actions.
         const int depth = qBound(1, payload.value(QStringLiteral("depth")).toInt(1), 5);
-        const QDBusMessage reply = menu.call(QStringLiteral("GetLayout"), id, depth,
+        // A hung third-party app must not stall the daemon's event loop, so
+        // the layout read stays async; the interface timeout still bounds
+        // the pending call.
+        const QDBusPendingCall pending = menu.asyncCall(
+            QStringLiteral("GetLayout"), id, depth,
             QStringList{QStringLiteral("label"), QStringLiteral("visible"),
                         QStringLiteral("enabled"), QStringLiteral("type"),
                         QStringLiteral("children-display"), QStringLiteral("toggle-type"),
                         QStringLiteral("toggle-state"), QStringLiteral("icon-name")});
-        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().size() < 2) {
-            respond(socket, request, false, {}, QStringLiteral("appmenu-layout-failed"),
-                    QStringLiteral("无法读取应用菜单"), true);
-            return true;
-        }
-        const QDBusArgument root = qvariant_cast<QDBusArgument>(reply.arguments().at(1));
-        const QJsonObject parent = menuItemFromArgument(root);
-        const QJsonArray items = parent.value(QStringLiteral("children")).toArray();
-        respond(socket, request, true, QJsonObject{{QStringLiteral("parent"), parent},
-                                                     {QStringLiteral("items"), items}});
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, guardedSocket = QPointer<QLocalSocket>(socket),
+                 request, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().size() < 2) {
+                respond(guardedSocket.data(), request, false, {}, QStringLiteral("appmenu-layout-failed"),
+                        QStringLiteral("无法读取应用菜单"), true);
+                return;
+            }
+            const QDBusArgument root = qvariant_cast<QDBusArgument>(reply.arguments().at(1));
+            const QJsonObject parent = menuItemFromArgument(root);
+            const QJsonArray items = parent.value(QStringLiteral("children")).toArray();
+            respond(guardedSocket.data(), request, true,
+                    QJsonObject{{QStringLiteral("parent"), parent},
+                                {QStringLiteral("items"), items}});
+        });
         return true;
     }
     if (op == QStringLiteral("appmenu.open") || op == QStringLiteral("appmenu.close")
@@ -3022,6 +3062,7 @@ bool PlatformServer::handleInput(QLocalSocket *socket, const QJsonObject &reques
     QDBusInterface effect(QStringLiteral("org.kde.KWin"),
                           QStringLiteral("/KOSContextMenuInput"),
                           QStringLiteral("org.kos.KWin.ContextMenuInput"));
+    effect.setTimeout(kDbusCallTimeoutMs);
     if (!effect.isValid()) {
         respond(socket, request, false, {}, QStringLiteral("input-bridge-unavailable"),
                 QStringLiteral("按键注入桥接尚未加载"), true);
@@ -3180,6 +3221,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
 
         QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
                             QStringLiteral("org.kde.KWin"), QDBusConnection::sessionBus());
+        kwin.setTimeout(kDbusCallTimeoutMs);
         const QDBusMessage reconfigureReply = kwin.call(QStringLiteral("reconfigure"));
         if (reconfigureReply.type() == QDBusMessage::ErrorMessage) {
             respond(socket, request, false, {}, QStringLiteral("nightlight-reconfigure-failed"),
@@ -3694,6 +3736,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                                QStringLiteral("/org/freedesktop/login1/session/auto"),
                                QStringLiteral("org.freedesktop.login1.Session"),
                                QDBusConnection::systemBus());
+        session.setTimeout(kDbusCallTimeoutMs);
         const QDBusMessage reply = session.call(QStringLiteral("SetBrightness"),
                                                 QStringLiteral("backlight"),
                                                 backlight.value(QStringLiteral("device")).toString(), rawValue);
@@ -3707,8 +3750,9 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     if (op == QStringLiteral("theme.reconfigure")) {
         QDBusInterface kwin(QStringLiteral("org.kde.KWin"), QStringLiteral("/KWin"),
                             QStringLiteral("org.kde.KWin"));
+        // Fire-and-forget: the reply is unused, so never block the loop.
         if (kwin.isValid())
-            kwin.call(QStringLiteral("reconfigure"));
+            kwin.asyncCall(QStringLiteral("reconfigure"));
         respond(socket, request, true, QJsonObject{{QStringLiteral("reconfigured"), true}});
         return true;
     }
@@ -3791,8 +3835,9 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                 QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
                                        QStringLiteral("org.kde.kwin.Effects"));
                 if (effects.isValid()) {
-                    effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
-                    effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("blur"));
+                    // Fire-and-forget reload notifications; replies unused.
+                    effects.asyncCall(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
+                    effects.asyncCall(QStringLiteral("reconfigureEffect"), QStringLiteral("blur"));
                 }
                 respond(guardedSocket.data(), request, true,
                         QJsonObject{{QStringLiteral("configured"), true},
@@ -3851,8 +3896,9 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
                                    QStringLiteral("org.kde.kwin.Effects"));
             if (effects.isValid())
-                effects.call(QStringLiteral("reconfigureEffect"),
-                             QStringLiteral("kos_dock_window_animation"));
+                // Fire-and-forget reload notification; the reply is unused.
+                effects.asyncCall(QStringLiteral("reconfigureEffect"),
+                                  QStringLiteral("kos_dock_window_animation"));
             return QJsonObject{{QStringLiteral("configured"), true},
                                {QStringLiteral("kwinAvailable"), effects.isValid()}};
         }, 10000);
