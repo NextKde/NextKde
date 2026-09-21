@@ -170,7 +170,9 @@ public:
         // Prewarm the desktop index so the first window snapshot does not
         // wait for several hundred .desktop files to be parsed.
         const QPointer<Bridge> self(this);
-        QtConcurrent::run(&m_iconPool, [self] {
+        // Fire-and-forget: the ticket on m_iconPool supersedes stale work,
+        // so the QFuture is intentionally discarded.
+        m_iconPool.start([self] {
             if (self)
                 self->ensureDesktopIndex();
         });
@@ -217,7 +219,9 @@ private:
     {
         const quint64 ticket = ++m_iconTicket;
         const QPointer<Bridge> self(this);
-        QtConcurrent::run(&m_iconPool, [self, ticket, event]() mutable {
+        // Fire-and-forget: m_iconTicket supersedes stale snapshots, so the
+        // QFuture is intentionally discarded.
+        m_iconPool.start([self, ticket, event]() mutable {
             if (!self || ticket != self->m_iconTicket)
                 return;
             QJsonObject decorated = event;
@@ -390,7 +394,10 @@ private:
                 expectedBytes->store(0);
                 // The reader exits on the expected-size check within one poll
                 // cycle; reap it off-thread so this callback never blocks.
-                QtConcurrent::run([pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
+                // Fire-and-forget: we only need waitForFinished to return, the
+                // QFuture is intentionally discarded.
+                QThreadPool::globalInstance()->start(
+                    [pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
                 publishThumbnailError(id, reply.error().message());
                 endThumbnailCapture(id);
                 return;
@@ -411,9 +418,11 @@ private:
 
             // A 4K frame is tens of MB of pixels plus a PNG encode; decode,
             // scale and save off the D-Bus thread.
+            // Fire-and-forget: QPointer<guard> + m_thumbnailSerial supersedes
+            // stale captures, so the QFuture is intentionally discarded.
             const quint64 serial = ++m_thumbnailSerial;
             const QPointer<Bridge> guard(this);
-            QtConcurrent::run([guard, id, pixelsFuture, width, height, stride,
+            QThreadPool::globalInstance()->start([guard, id, pixelsFuture, width, height, stride,
                                format, expectedSize, serial]() mutable {
                 const QByteArray bytes = pixelsFuture.result();
                 if (!guard)
