@@ -75,6 +75,7 @@ private:
     void runNetworkConnect(QLocalSocket *socket, const QJsonObject &request,
                            const NmConnectRequest &connect);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
+    void runTrayIdentify(QLocalSocket *socket, const QJsonObject &request);
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
     QString operation(const QJsonObject &request) const;
@@ -125,6 +126,7 @@ private:
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleTrayOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleStateOperation(QLocalSocket *socket, const QJsonObject &request);
     void startClipboardHistoryWatcher(QProcess *&watcher,
                                       const QStringList &arguments);

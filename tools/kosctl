@@ -553,6 +553,13 @@ deploy_artifacts() {
             "$project_dir/shell/Kos/Ui/qmldir" "$project_dir/shared/qml"
     fi
 
+    # SurfaceShape native QML plugin: copy from build dir to user shell config
+    # so Quickshell finds `import Kos.SurfaceShape 1.0` without requiring root install to /usr
+    if [[ -d "$artifact_root/qml/Kos/SurfaceShape" ]]; then
+        rm -rf "$shell_config/Kos/SurfaceShape"
+        cp -a "$artifact_root/qml/Kos/SurfaceShape" "$shell_config/Kos/"
+    fi
+
     # --- Systemd user services ---
     mkdir -p "$runtime_unit_dir"
     if is_nixos; then

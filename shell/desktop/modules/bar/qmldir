@@ -25,6 +25,7 @@ TrayNotificationBridge 1.0 TrayNotificationBridge.qml
 singleton NetworkService 1.0 NetworkService.qml
 singleton ControlCenterService 1.0 ControlCenterService.qml
 singleton SysTrayOrderService 1.0 SysTrayOrderService.qml
+singleton SysTrayIdentityService 1.0 SysTrayIdentityService.qml
 ControlCenterCard 1.0 ControlCenterCard.qml
 ControlCenterCoordinator 1.0 ControlCenterCoordinator.qml
 ControlCenterSlider 1.0 ControlCenterSlider.qml

@@ -71,6 +71,12 @@ Current operation groups are:
 - `shortcuts.apply`, `shortcuts.uninstall` (kglobalaccel-owned global
   shortcuts; the Shell composes each Exec line, the daemon validates,
   persists, and registers)
+- `tray.identify` (friendly names for StatusNotifierItem entries whose `Id` is
+  a generated token such as an Electron `chrome_status_icon_*`; the daemon
+  reads the SNI watcher's registration list, each item's `Id`/`Title`, and the
+  owning connection's PID -- then `/proc/<pid>/comm` and `cmdline` -- on its
+  worker pool, so the Shell never spawns a helper process to resolve them.
+  Returns `{"names": {"<itemId>": "<friendly name>"}}`)
 - `network.*` (including `network.traffic` for read-only interface counters),
   `audio.*` (including `audio.applications`,
   `audio.application.set-volume`, and `audio.application.set-mute` for

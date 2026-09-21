@@ -492,6 +492,9 @@ constexpr int kNightLightCacheTtlMs = 10000;
 // wl-paste watcher's dataChanged callback invalidates on the next copy, so a
 // real entry never waits out the TTL.
 constexpr int kClipboardHistoryCacheTtlMs = 1500;
+// tray.identify answers may ride the reply cache briefly: the Shell debounces
+// its own refresh, and a tray icon's identity never changes mid-session.
+constexpr int kTrayIdentifyCacheTtlMs = 3000;
 // Bounded D-Bus round-trips: a wedged NetworkManager/BlueZ used to be able
 // to stall the whole daemon through the default 25 s call timeout.
 constexpr int kDbusCallTimeoutMs = 2000;
@@ -549,6 +552,37 @@ bool dbusServiceRegistered(const QDBusConnection &bus, const QString &service)
     return reply.type() == QDBusMessage::ReplyMessage
         && !reply.arguments().isEmpty()
         && reply.arguments().constFirst().toBool();
+}
+
+// Properties.Get of a single property, bounded like every other round-trip.
+QVariant dbusGetProperty(const QDBusConnection &bus, const QString &service,
+                         const QString &path, const QString &interface,
+                         const QString &property)
+{
+    QDBusInterface target(service, path,
+                          QStringLiteral("org.freedesktop.DBus.Properties"), bus);
+    target.setTimeout(kDbusCallTimeoutMs);
+    const QDBusMessage reply =
+        target.call(QStringLiteral("Get"), interface, property);
+    if (reply.type() == QDBusMessage::ReplyMessage
+        && reply.arguments().size() == 1)
+        return unwrapDbusValue(reply.arguments().constFirst());
+    return {};
+}
+
+// PID of the process behind a bus name, for /proc lookups. Returns 0 when
+// the name has vanished from the bus.
+uint dbusUnixProcessId(const QDBusConnection &bus, const QString &service)
+{
+    QDBusInterface lookup(QStringLiteral("org.freedesktop.DBus"),
+                          QStringLiteral("/org/freedesktop/DBus"),
+                          QStringLiteral("org.freedesktop.DBus"), bus);
+    lookup.setTimeout(kDbusCallTimeoutMs);
+    const QDBusMessage reply =
+        lookup.call(QStringLiteral("GetConnectionUnixProcessID"), service);
+    return reply.type() == QDBusMessage::ReplyMessage
+            && !reply.arguments().isEmpty()
+        ? reply.arguments().constFirst().toUInt() : 0U;
 }
 
 QString dbusPathOf(const QVariant &value)
@@ -685,12 +719,13 @@ struct NetworkWorkerResult {
 
 // QDBusConnection::systemBus() is bound to the calling thread, so pool
 // workers open a per-call private connection instead. The name embeds the
-// thread id plus this worker's serial so two queued workers sharing a pool
-// thread can never collide on the registry entry.
-QString workerBusName()
+// worker tag, the thread id plus this worker's serial so two queued workers
+// sharing a pool thread can never collide on the registry entry.
+QString workerBusName(const QString &tag)
 {
     static std::atomic<quint64> serial{0};
-    return QStringLiteral("kos-net-%1-%2")
+    return QStringLiteral("kos-%1-%2-%3")
+        .arg(tag)
         .arg(quintptr(QThread::currentThreadId()), 0, 16)
         .arg(serial.fetch_add(1, std::memory_order_relaxed));
 }
@@ -718,7 +753,7 @@ QList<QDBusObjectPath> nmGetDevices(const QDBusConnection &bus)
 // touched paths go home in watchPaths for the main thread to subscribe.
 NetworkWorkerResult networkRefreshWorker()
 {
-    const ScopedBusConnection guard(workerBusName());
+    const ScopedBusConnection guard(workerBusName(QStringLiteral("net")));
     const QDBusConnection bus = QDBusConnection::connectToBus(
         QDBusConnection::SystemBus, guard.name);
 
@@ -827,7 +862,7 @@ NetworkWorkerResult networkRefreshWorker()
 // Interface name, then read its ActiveConnection/Ip4Config/Wireless state.
 NetworkWorkerResult networkDetailsWorker(const QString &device)
 {
-    const ScopedBusConnection guard(workerBusName());
+    const ScopedBusConnection guard(workerBusName(QStringLiteral("net")));
     const QDBusConnection bus = QDBusConnection::connectToBus(
         QDBusConnection::SystemBus, guard.name);
 
@@ -1076,7 +1111,7 @@ NetworkWorkerResult networkConnectWorker(const QString &device,
                                          const QVariantMap &settings,
                                          const QString &replaceProfileId)
 {
-    const ScopedBusConnection guard(workerBusName());
+    const ScopedBusConnection guard(workerBusName(QStringLiteral("net")));
     const QDBusConnection bus = QDBusConnection::connectToBus(
         QDBusConnection::SystemBus, guard.name);
 
@@ -1148,6 +1183,118 @@ NetworkWorkerResult networkConnectWorker(const QString &device,
     out.ok = true;
     out.result = QJsonObject{{QStringLiteral("connected"), true}};
     out.watchPaths = {devicePath};
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// tray.identify
+//
+// SNI items from Electron apps often carry generated ids ("1",
+// "chrome_status_icon_*") and no title, so the Shell cannot label the tray
+// icon. The walk runs on m_dbusPool over a private session-bus connection:
+// RegisteredStatusNotifierItems from the watcher, then per-item Id/Title
+// plus the owning connection's UnixProcessID; /proc/<pid>/comm and cmdline
+// are read locally. Everything on the bus is bounded by kDbusCallTimeoutMs.
+// Names resolve through a fixed alias table (mirrored by
+// SysTrayIdentityService.qml's synchronous fast path), then the item title,
+// then the capitalised process name.
+// ---------------------------------------------------------------------------
+
+struct TrayIdentityResult {
+    bool ok = false;
+    QString code;
+    QString message;
+    QJsonObject names;
+};
+
+QString trayIdentityAlias(const QString &commLower)
+{
+    static const QHash<QString, QString> aliases{
+        {QStringLiteral("qq"), QStringLiteral("QQ")},
+        {QStringLiteral("linuxqq"), QStringLiteral("QQ")},
+        {QStringLiteral("antigravity"), QStringLiteral("Antigravity")},
+        {QStringLiteral("rustdesk"), QStringLiteral("RustDesk")},
+        {QStringLiteral("karing"), QStringLiteral("Karing")},
+        {QStringLiteral("sunshine"), QStringLiteral("Sunshine")},
+        {QStringLiteral("wechat"), QStringLiteral("微信")},
+        {QStringLiteral("fcitx"), QStringLiteral("输入法")},
+        {QStringLiteral("fcitx5"), QStringLiteral("输入法")},
+        {QStringLiteral("google-chrome"), QStringLiteral("Google Chrome")},
+        {QStringLiteral("chrome"), QStringLiteral("Google Chrome")},
+        {QStringLiteral("chromium"), QStringLiteral("Chromium")},
+        {QStringLiteral("code"), QStringLiteral("VS Code")},
+    };
+    return aliases.value(commLower);
+}
+
+TrayIdentityResult trayIdentifyWorker()
+{
+    const ScopedBusConnection guard(workerBusName(QStringLiteral("tray")));
+    const QDBusConnection bus = QDBusConnection::connectToBus(
+        QDBusConnection::SessionBus, guard.name);
+
+    TrayIdentityResult out;
+    const QVariant itemsVariant = dbusGetProperty(bus,
+        QStringLiteral("org.kde.StatusNotifierWatcher"),
+        QStringLiteral("/StatusNotifierWatcher"),
+        QStringLiteral("org.kde.StatusNotifierWatcher"),
+        QStringLiteral("RegisteredStatusNotifierItems"));
+    if (itemsVariant.metaType() != QMetaType::fromType<QStringList>()) {
+        out.code = QStringLiteral("tray-unavailable");
+        out.message = QStringLiteral("托盘状态不可用");
+        return out;
+    }
+
+    const QStringList items = itemsVariant.toStringList();
+    for (const QString &item : items) {
+        const qsizetype slash = item.indexOf(QLatin1Char('/'));
+        if (slash <= 0)
+            continue;
+        const QString service = item.left(slash);
+        const QString path = QStringLiteral("/") + item.mid(slash + 1);
+        const QString id = dbusGetProperty(bus, service, path,
+            QStringLiteral("org.kde.StatusNotifierItem"),
+            QStringLiteral("Id")).toString();
+        if (id.isEmpty())
+            continue;
+        const QString title = dbusGetProperty(bus, service, path,
+            QStringLiteral("org.kde.StatusNotifierItem"),
+            QStringLiteral("Title")).toString();
+        const uint pid = dbusUnixProcessId(bus, service);
+
+        // /proc reads are local files; a process that exits between the bus
+        // lookup and the read just yields no name.
+        QString comm;
+        QString cmd;
+        if (pid > 0) {
+            QFile commFile(QStringLiteral("/proc/%1/comm").arg(pid));
+            if (commFile.open(QIODevice::ReadOnly))
+                comm = QString::fromUtf8(commFile.readAll()).trimmed().toLower();
+            QFile cmdFile(QStringLiteral("/proc/%1/cmdline").arg(pid));
+            if (cmdFile.open(QIODevice::ReadOnly)) {
+                QByteArray raw = cmdFile.readAll();
+                raw.replace('\0', " ");
+                cmd = QString::fromUtf8(raw).trimmed().toLower();
+            }
+        }
+
+        QString name;
+        const QString alias = trayIdentityAlias(comm);
+        if (comm.contains(QStringLiteral("qq")) || cmd.contains(QStringLiteral("/qq/"))
+            || cmd.contains(QStringLiteral("linuxqq"))) {
+            name = QStringLiteral("QQ");
+        } else if (!alias.isEmpty()) {
+            name = alias;
+        } else if (!title.isEmpty()) {
+            name = title;
+        } else if (!comm.isEmpty()) {
+            name = comm;
+            name[0] = name[0].toUpper();
+        }
+        if (!name.isEmpty())
+            out.names.insert(id, name);
+    }
+    out.ok = true;
     return out;
 }
 
@@ -2252,6 +2399,28 @@ void PlatformServer::runNetworkConnect(QLocalSocket *socket,
                                          connectRequest.savedProfileUuid,
                                          connectRequest.settings,
                                          connectRequest.replaceProfileId));
+}
+
+void PlatformServer::runTrayIdentify(QLocalSocket *socket, const QJsonObject &request)
+{
+    const QString key = QStringLiteral("tray.identify");
+    if (serveCachedReply(socket, request, key)
+        || queueIfInFlight(key, socket, request))
+        return;
+
+    // The walk is a bounded D-Bus sweep (one Get per item plus a PID lookup)
+    // on m_dbusPool, so a slow or wedged watcher cannot stall the socket loop.
+    auto *watcher = new QFutureWatcher<TrayIdentityResult>(this);
+    connect(watcher, &QFutureWatcher<TrayIdentityResult>::finished, this,
+            [this, watcher, key]() {
+        watcher->deleteLater();
+        const TrayIdentityResult out = watcher->result();
+        completeInFlight(key, out.ok,
+                         out.ok ? QJsonObject{{QStringLiteral("names"), out.names}}
+                                : QJsonObject{},
+                         out.code, out.message, true, kTrayIdentifyCacheTtlMs);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_dbusPool, trayIdentifyWorker));
 }
 
 void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
@@ -4681,6 +4850,16 @@ bool PlatformServer::handleStateOperation(QLocalSocket *socket, const QJsonObjec
     return false;
 }
 
+bool PlatformServer::handleTrayOperation(QLocalSocket *socket, const QJsonObject &request)
+{
+    const QString op = operation(request);
+    if (op == QStringLiteral("tray.identify")) {
+        runTrayIdentify(socket, request);
+        return true;
+    }
+    return false;
+}
+
 void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &request)
 {
     if (request.value(QStringLiteral("version")).toInt(kProtocolVersion) != kProtocolVersion) {
@@ -4703,6 +4882,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         || handleKWin(socket, request) || handleAppMenu(socket, request)
         || handleInput(socket, request)
         || handleSystemOperation(socket, request)
+        || handleTrayOperation(socket, request)
         || handleStateOperation(socket, request))
         return;
     respond(socket, request, false, {}, QStringLiteral("unknown-operation"),

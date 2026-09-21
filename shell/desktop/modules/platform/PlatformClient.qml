@@ -48,7 +48,8 @@ QtObject {
         "network.traffic": true,
         "nightlight.get": true,
         "platform.ping": true,
-        "state.read": true
+        "state.read": true,
+        "tray.identify": true
     })
     readonly property int maxQueueSize: 200
     readonly property int requestTimeoutMs: 30000

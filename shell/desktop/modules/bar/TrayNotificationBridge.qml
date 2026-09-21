@@ -46,7 +46,7 @@ QtObject {
     }
 
     function _notify(item) {
-        const appName = item.title || item.id || "System Tray"
+        const appName = SysTrayIdentityService.friendlyName(item) || item.title || "系统通知"
         const summary = item.tooltipTitle || appName
         const body = item.tooltipDescription
             || (item.status === SystemTrayItem.NeedsAttention ? "新消息" : "状态更新")

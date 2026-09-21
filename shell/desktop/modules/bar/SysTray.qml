@@ -244,8 +244,7 @@ Item {
                 y: root.slotOrigin(naturalIndex).y
                 width: isValid ? root.itemSize : 0
                 height: isValid ? root.itemSize : 0
-                readonly property string tooltip: modelData ? (modelData.tooltipTitle
-                    || modelData.title || modelData.id || "") : ""
+                readonly property string tooltip: modelData ? SysTrayIdentityService.friendlyName(modelData) : ""
                 readonly property bool isSymbolicMask: Boolean(modelData?.isMask)
                     || (typeof modelData?.icon === "string" && (
                         modelData.icon.indexOf("symbolic") !== -1
