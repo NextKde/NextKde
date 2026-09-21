@@ -382,6 +382,40 @@ QString resolveDesktopFile(const QString &id)
     return {};
 }
 
+// Resolves a KOS-shipped helper binary. systemd starts this daemon with the
+// default system PATH, which does not contain the user install prefix
+// (~/.local/bin), so a bare PATH lookup finds nothing even though the binary
+// sits in the same prefix as the daemon itself -- every Settings click then
+// failed with "KOS 设置应用不可用".
+QString resolveOwnExecutable(const QString &name)
+{
+    const QString onPath = QStandardPaths::findExecutable(name);
+    if (!onPath.isEmpty())
+        return onPath;
+
+    QStringList candidates;
+    // Same install prefix as this daemon: <prefix>/libexec/kos-platform ->
+    // <prefix>/bin/<name>. Derived instead of hardcoded, so it holds for the
+    // default ~/.local prefix as well as /usr/local or a Nix store path.
+    QDir selfDir(QFileInfo(QCoreApplication::applicationFilePath()).absolutePath());
+    if (selfDir.dirName() == QStringLiteral("libexec") && selfDir.cdUp())
+        candidates.append(selfDir.filePath(QStringLiteral("bin")) + QLatin1Char('/') + name);
+    // Fallback for a daemon started straight out of a build tree, which has no
+    // sibling bin/ directory next to it.
+    const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    if (!home.isEmpty())
+        candidates.append(QDir(home).filePath(QStringLiteral(".local/bin/") + name));
+
+    for (const QString &candidate : candidates) {
+        const QFileInfo info(candidate);
+        if (!info.isFile() || !info.isExecutable())
+            continue;
+        const QString canonical = info.canonicalFilePath();
+        return canonical.isEmpty() ? info.absoluteFilePath() : canonical;
+    }
+    return {};
+}
+
 QStringList cleanPaths(const QJsonValue &value)
 {
     QStringList paths;
@@ -4032,7 +4066,7 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             }
             shellDir = canonical;
         }
-        const QString executable = QStandardPaths::findExecutable(
+        const QString executable = resolveOwnExecutable(
             QStringLiteral("kos-settings"));
         if (executable.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("settings-unavailable"),
