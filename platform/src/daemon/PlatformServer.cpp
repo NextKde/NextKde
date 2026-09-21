@@ -1684,6 +1684,36 @@ QJsonObject parseBrightness(const QByteArray &output, int exitCode)
     return QJsonObject{{QStringLiteral("available"), false}};
 }
 
+// 解析 kscreen-doctor -j 输出，提取屏幕输出列表及各屏幕的优先级 (Priority)
+QJsonObject parseDisplayOutputs(const QByteArray &output, int exitCode)
+{
+    if (exitCode != 0)
+        return QJsonObject{{QStringLiteral("available"), false}};
+    QJsonParseError error{};
+    const QJsonDocument doc = QJsonDocument::fromJson(output, &error);
+    if (error.error != QJsonParseError::NoError || !doc.isObject())
+        return QJsonObject{{QStringLiteral("available"), false}};
+
+    const QJsonArray outputs = doc.object().value(QStringLiteral("outputs")).toArray();
+    QJsonArray resultOutputs;
+    for (const auto &val : outputs) {
+        const QJsonObject item = val.toObject();
+        if (!item.value(QStringLiteral("connected")).toBool() || !item.value(QStringLiteral("enabled")).toBool())
+            continue;
+        resultOutputs.append(QJsonObject{
+            {QStringLiteral("name"), item.value(QStringLiteral("name")).toString()},
+            {QStringLiteral("priority"), item.value(QStringLiteral("priority")).toInt()},
+            {QStringLiteral("connected"), true},
+            {QStringLiteral("enabled"), true}
+        });
+    }
+    return QJsonObject{
+        {QStringLiteral("available"), true},
+        {QStringLiteral("outputs"), resultOutputs}
+    };
+}
+
+
 QString uniquePath(const QString &destination, const QString &baseName)
 {
     QString candidate = QDir(destination).filePath(baseName);
@@ -4602,6 +4632,21 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     }
     if (op == QStringLiteral("session.switch-user")) {
         runCommand(socket, request, QStringLiteral("dm-tool"), {QStringLiteral("switch-to-greeter")}, {}, 15000);
+        return true;
+    }
+    if (op == QStringLiteral("display.outputs.get")) {
+        const QString key = QStringLiteral("display.outputs.get");
+        if (serveCachedReply(socket, request, key))
+            return true;
+        const QString kscreenDoctor = QStandardPaths::findExecutable(QStringLiteral("kscreen-doctor"));
+        if (!kscreenDoctor.isEmpty()) {
+            runCommand(socket, request, kscreenDoctor, {QStringLiteral("-j")},
+                       parseDisplayOutputs, kDefaultCommandTimeoutMs,
+                       key, 1000);
+            return true;
+        }
+        respond(socket, request, false, {}, QStringLiteral("kscreen-doctor-unavailable"),
+                QStringLiteral("kscreen-doctor 不可用"), false);
         return true;
     }
     if (op == QStringLiteral("display.brightness.get")) {

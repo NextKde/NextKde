@@ -84,6 +84,7 @@ PanelWindow {
     // File metadata is supplied by kos-data-service; this surface only
     // lays it out as a right-aligned desktop grid.
     readonly property var desktopFiles: DesktopFilesService
+    readonly property string desktopOutput: screen?.name ?? ""
 
     function formattedTimer() {
         const hours = Math.floor(timerSeconds / 3600)
@@ -260,8 +261,6 @@ PanelWindow {
         sourceDate: clock.date
     }
 
-    // Global desktop background click handler: catches clicks on any empty area of the desktop
-    // (left widget columns, margins, empty spaces between widgets, and background wallpaper).
     MouseArea {
         id: globalDesktopBackgroundArea
         anchors.fill: parent
@@ -282,7 +281,7 @@ PanelWindow {
 
     Repeater {
         id: widgetRepeater
-        model: root.widgetDefinitions
+        model: root.screen?.name === ScreenLifecycle.activeScreen?.name ? root.widgetDefinitions : []
 
         delegate: DeskWidgetCard {
             id: card
@@ -2163,7 +2162,7 @@ PanelWindow {
     // columns from right to left and rows from top to bottom.
     Item {
         id: desktopFileGrid
-        x: root.leftInset + 4 * (root.cellSize + root.gap)
+        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
         y: root.topInset
         width: root.width - x - root.rightInset
         height: root.height - y - root.bottomInset
@@ -2214,21 +2213,9 @@ PanelWindow {
         property real selectionEndX: 0
         property real selectionEndY: 0
         property var selectionBase: []
-        readonly property var orderedEntries: ordered(root.desktopFiles.entries)
-
-        Settings {
-            id: desktopLayout
-            location: "file://" + Quickshell.stateDir + "/deskcenter-desktop-files.ini"
-            category: "DesktopFiles"
-            property string orderJson: "[]"
-            property int iconSize: 56
-            property bool showExtensions: true
-            // Per-entry customisation keyed by absolute path. The historical
-            // key name is retained so existing folder settings stay intact;
-            // files and folders both use the same payload.
-            // Each value is { "color": "#hex", "emoji": "📁" }.
-            property string folderCustomJson: "{}"
-        }
+        readonly property var screenEntries: root.desktopFiles.entriesForOutput(root.desktopOutput)
+        readonly property var orderedEntries: ordered(screenEntries)
+        readonly property var desktopLayout: root.desktopFiles.layout
 
         // Parsed cache of folderCustomJson, rebuilt only when the raw string
         // changes so delegates don't re-parse on every paint.
@@ -2488,7 +2475,13 @@ PanelWindow {
         }
 
         function saveOrder(entries) {
-            desktopLayout.orderJson = JSON.stringify(entries.map(function(item) { return item.path }))
+            const paths = entries.map(function(item) { return item.path })
+            let saved = []
+            try { saved = JSON.parse(desktopLayout.orderJson) } catch (_) {}
+            // Preserve the other screens' relative order in the shared file.
+            desktopLayout.orderJson = JSON.stringify(saved.filter(function(path) {
+                return paths.indexOf(path) < 0
+            }).concat(paths))
             desktopLayout.sync()
         }
 
@@ -2504,7 +2497,7 @@ PanelWindow {
         }
 
         function arrange(compare) {
-            const next = root.desktopFiles.entries.slice().sort(function(left, right) {
+            const next = screenEntries.slice().sort(function(left, right) {
                 const leftIsFolder = left.kind === "folder"
                 const rightIsFolder = right.kind === "folder"
                 if (leftIsFolder !== rightIsFolder)
@@ -2536,7 +2529,10 @@ PanelWindow {
         }
 
         function resetLayout() {
-            desktopLayout.orderJson = "[]"
+            let saved = []
+            try { saved = JSON.parse(desktopLayout.orderJson) } catch (_) {}
+            const paths = screenEntries.map(function(entry) { return entry.path })
+            desktopLayout.orderJson = JSON.stringify(saved.filter(function(path) { return paths.indexOf(path) < 0 }))
             desktopLayout.sync()
             clearDesktopSelection()
         }
@@ -2596,14 +2592,16 @@ PanelWindow {
             pendingRenamePath = ""
             root.desktopFiles.createUntitledFolder(function(path) {
                 desktopFileGrid.pendingRenamePath = path
-            })
+                Qt.callLater(function() { desktopFileGrid.startPendingRename() })
+            }, root.desktopOutput)
         }
 
         function createNewFile() {
             pendingRenamePath = ""
             root.desktopFiles.createUntitledFile(function(path) {
                 desktopFileGrid.pendingRenamePath = path
-            })
+                Qt.callLater(function() { desktopFileGrid.startPendingRename() })
+            }, root.desktopOutput)
         }
 
         function startPendingRename() {
@@ -2652,7 +2650,7 @@ PanelWindow {
             } else if (event.key === Qt.Key_X) {
                 root.desktopFiles.copyEntries(selectedEntries(), "cut")
             } else if (event.key === Qt.Key_V) {
-                root.desktopFiles.pasteIntoDesktop()
+                root.desktopFiles.pasteIntoDesktop(root.desktopOutput)
             } else {
                 return false
             }
@@ -2800,7 +2798,7 @@ PanelWindow {
             else if (kind === "cut")
                 root.desktopFiles.copyEntries(selectedEntries(), "cut")
             else if (kind === "paste")
-                root.desktopFiles.pasteIntoDesktop()
+                root.desktopFiles.pasteIntoDesktop(root.desktopOutput)
             else if (kind === "open")
                 root.desktopFiles.openDirectory()
             else if (kind === "arrange")
@@ -2999,7 +2997,7 @@ PanelWindow {
                 })
             }
             function onLastErrorChanged() {
-                if (root.desktopFiles.lastError)
+                if (root.desktopFiles.lastError && root.desktopOutput === root.desktopFiles.defaultOutput)
                     root.sendTimerNotification("桌面文件", root.desktopFiles.lastError)
             }
         }
@@ -3018,7 +3016,7 @@ PanelWindow {
                     drop.accepted = false
                     return
                 }
-                root.desktopFiles.importExternalUrls(drop.urls)
+                root.desktopFiles.importExternalUrls(drop.urls, drop.proposedAction, root.desktopOutput)
                 drop.accepted = true
             }
         }
@@ -3669,6 +3667,7 @@ PanelWindow {
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
+            visible: !root.isDashboardMode
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
@@ -3680,7 +3679,7 @@ PanelWindow {
             cellWidth: desktopFileGrid.itemWidth
             cellHeight: desktopFileGrid.itemHeight
             iconVisualSize: desktopFileGrid.iconSize + 12
-            showExtensions: desktopLayout.showExtensions
+            showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache
             renameCallback: function(entry, name) {
                 return desktopFileGrid.commitRename(entry, name)
@@ -3708,7 +3707,7 @@ PanelWindow {
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
             onExternalUrlsDropped: function(urls, action) {
-                root.desktopFiles.importExternalUrls(urls, action)
+                root.desktopFiles.importExternalUrls(urls, action, root.desktopOutput)
             }
             z: 30
         }

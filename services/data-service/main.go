@@ -94,6 +94,8 @@ type DesktopEntry struct {
 	Kind       string `json:"kind"`
 	Icon       string `json:"icon,omitempty"`
 	ModifiedAt int64  `json:"modifiedAt"`
+	Output     string `json:"output,omitempty"`
+	fileID     string
 }
 type Desktop struct {
 	Directory string         `json:"directory"`
@@ -109,10 +111,11 @@ type Snapshot struct {
 	Weather       WeatherState `json:"weather"`
 }
 type State struct {
-	Metrics  Metrics      `json:"metrics"`
-	Activity Activity     `json:"activity"`
-	Desktop  Desktop      `json:"desktop"`
-	Weather  WeatherState `json:"weather"`
+	Metrics           Metrics                     `json:"metrics"`
+	Activity          Activity                    `json:"activity"`
+	Desktop           Desktop                     `json:"desktop"`
+	Weather           WeatherState                `json:"weather"`
+	DesktopPlacements map[string]DesktopPlacement `json:"desktopPlacements,omitempty"`
 }
 type DataRequest struct {
 	Version   int                    `json:"version"`
@@ -164,6 +167,9 @@ func (c *subscriberConn) writeLine(raw []byte, timeout time.Duration) error {
 
 type Service struct {
 	mu                      sync.Mutex
+	desktopMu               sync.Mutex
+	desktopOutputs          []string
+	defaultDesktopOutput    string
 	desktopSubscribersMu    sync.Mutex
 	desktopSubscribers      map[*subscriberConn]struct{}
 	state                   State
@@ -408,11 +414,11 @@ func desktopLauncherPresentation(path string) (string, string) {
 	return name, icon
 }
 
-func readDesktop(directory string) Desktop {
+func readDesktop(directory string) (Desktop, error) {
 	desktop := Desktop{Directory: directory, Entries: []DesktopEntry{}}
 	entries, err := os.ReadDir(directory)
 	if err != nil {
-		return desktop
+		return desktop, err
 	}
 	for _, entry := range entries {
 		// Match standard desktop behaviour: dot-files are managed by their
@@ -422,7 +428,10 @@ func readDesktop(directory string) Desktop {
 		}
 		info, err := entry.Info()
 		if err != nil {
-			continue
+			// A rename racing the scan can invalidate one directory entry.
+			// Discard the partial scan so its old identity survives until the
+			// next complete snapshot can associate the new name with it.
+			return desktop, err
 		}
 		kind := desktopKind(entry)
 		title, icon := "", ""
@@ -432,6 +441,7 @@ func readDesktop(directory string) Desktop {
 		desktop.Entries = append(desktop.Entries, DesktopEntry{
 			Name: entry.Name(), Path: filepath.Join(directory, entry.Name()),
 			Title: title, Kind: kind, Icon: icon, ModifiedAt: info.ModTime().UnixMilli(),
+			fileID: desktopFileID(info),
 		})
 	}
 	sort.SliceStable(desktop.Entries, func(left, right int) bool {
@@ -446,23 +456,38 @@ func readDesktop(directory string) Desktop {
 		return strings.ToLower(desktop.Entries[left].Name) < strings.ToLower(desktop.Entries[right].Name)
 	})
 	desktop.UpdatedAt = time.Now().UnixMilli()
-	return desktop
+	return desktop, nil
 }
 
 func (s *Service) refreshDesktop() bool {
-	desktop := readDesktop(s.desktopDirectory)
+	s.desktopMu.Lock()
+	defer s.desktopMu.Unlock()
+	return s.refreshDesktopLocked()
+}
+
+// desktopMu serializes scans with output assignments so an older watcher scan
+// cannot overwrite a placement made just after a create, rename, or drop.
+func (s *Service) refreshDesktopLocked() bool {
+	desktop, err := readDesktop(s.desktopDirectory)
+	if err != nil {
+		// A temporarily unavailable directory is not an empty desktop. Keep its
+		// ownership records so reconnecting storage does not lose placements.
+		return false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	placements := reconcileDesktopPlacements(&desktop, s.state.DesktopPlacements, s.defaultDesktopOutput)
 	previous := s.state.Desktop
 	// The update time is intentionally excluded: unchanged directory scans do
 	// not churn the atomic snapshot or wake the QML consumer.
 	previous.UpdatedAt = 0
 	comparison := desktop
 	comparison.UpdatedAt = 0
-	if reflect.DeepEqual(previous, comparison) {
+	if reflect.DeepEqual(previous, comparison) && reflect.DeepEqual(placements, s.state.DesktopPlacements) {
 		return false
 	}
 	s.state.Desktop = desktop
+	s.state.DesktopPlacements = placements
 	return true
 }
 
@@ -1053,6 +1078,10 @@ func (s *Service) handleRequest(request DataRequest) DataResponse {
 		}
 		return DataResponse{Version: 1, RequestID: request.RequestID, OK: true,
 			Result: map[string]interface{}{"refreshed": true}}
+	case "desktop.outputs":
+		return s.configureDesktopOutputs(request)
+	case "desktop.place":
+		return s.placeDesktopEntries(request)
 	case "weather.snapshot":
 		return snapshotResult(s, request, "weather", func() WeatherState {
 			return s.state.Weather

@@ -40,6 +40,7 @@ QtObject {
         "clipboard.read": true,
         "clipboard.thumb": true,
         "display.brightness.get": true,
+        "display.outputs.get": true,
         "file.open-with": true,
         "file.trash-state": true,
         "network.details": true,

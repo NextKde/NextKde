@@ -173,6 +173,16 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_autohide.mjs
         )
         set_tests_properties(kos-shell.dock-autohide PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-deskcenter.desktop-outputs
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_outputs.mjs
+        )
+        set_tests_properties(kos-deskcenter.desktop-outputs PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.screen-selection
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_screen_selection.mjs
+        )
+        set_tests_properties(kos-shell.screen-selection PROPERTIES TIMEOUT 10)
         add_test(NAME kos-platform.window-placement
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_window_placement.mjs
@@ -218,7 +228,8 @@ if(BUILD_TESTING)
             kos-shell.window-placement-updates
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.appearance-config kos-shell.dock-adaptive
-            kos-shell.dock-autohide
+            kos-shell.dock-autohide kos-deskcenter.desktop-outputs
+            kos-shell.screen-selection
             kos-ui.visual-contract kos-ui.color-scheme
             kos-ui.page-cache-policy kos-ui.settings-material
             kos-ui.traditional-color

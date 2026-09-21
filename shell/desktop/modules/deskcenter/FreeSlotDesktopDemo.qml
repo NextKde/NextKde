@@ -131,6 +131,11 @@ Item {
             && dragEvent.source === outboundDragItem
     }
 
+    function isOtherDesktopDrag(dragEvent) {
+        const surface = dragEvent.source?.desktopDragSurface
+        return !!surface && surface !== root
+    }
+
     function updateOwnSystemDrag(dropArea, dragEvent) {
         if (!dragActive || outboundDragSourceId === "")
             return
@@ -747,7 +752,7 @@ Item {
                 root.updateOwnSystemDrag(desktopDropArea, drag)
                 return
             }
-            if (!drag.hasUrls || drag.source) {
+            if (!drag.hasUrls || (drag.source && !root.isOtherDesktopDrag(drag))) {
                 drag.accepted = false
                 root.externalDragActive = false
                 return
@@ -766,7 +771,7 @@ Item {
                 root.updateOwnSystemDrag(desktopDropArea, drag)
                 return
             }
-            if (!drag.hasUrls || drag.source)
+            if (!drag.hasUrls || (drag.source && !root.isOtherDesktopDrag(drag)))
                 return
             root.externalDragAction = root.acceptedExternalDropAction(drag)
             if (root.externalDragAction === Qt.IgnoreAction)
@@ -798,7 +803,7 @@ Item {
                 root.externalDragAction = Qt.CopyAction
                 return
             }
-            if (!drop.hasUrls || drop.source) {
+            if (!drop.hasUrls || (drop.source && !root.isOtherDesktopDrag(drop))) {
                 drop.accepted = false
                 return
             }
@@ -915,6 +920,7 @@ Item {
             }
             Item {
                 id: dragVisual
+                readonly property var desktopDragSurface: root
                 width: root.cellWidth
                 height: root.cellHeight
                 opacity: root.outboundDragStarted

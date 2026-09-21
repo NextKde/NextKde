@@ -1,8 +1,11 @@
 pragma Singleton
 
 import QtQuick
-import Kos.SurfaceShape 1.0
+import QtCore
+import Quickshell
+import qs.desktop.modules.common
 import qs.desktop.modules.platform
+import "DesktopOutputs.mjs" as DesktopOutputs
 
 // Presentation-facing desktop file model. All filesystem, MIME, clipboard,
 // and launcher work is delegated to the two resident services; this object
@@ -14,34 +17,79 @@ QtObject {
     property string directory: ""
     property bool ready: false
     property string lastError: ""
-    // Launching an application is asynchronous: gio only confirms that it
-    // handed the request to the desktop system, not that the process already
-    // has a window. Keep the pointer over the originating entry busy for that
-    // gap, which is the conventional desktop launch acknowledgement.
-    property string openingPath: ""
     property bool desktopSubscriptionEnabled: true
     property var openWith: ({ loading: false, mime: "", defaultId: "", handlers: [] })
     property string clipboardMode: ""
     property var clipboardPaths: []
+    property var availableOutputs: DesktopOutputs.outputNames(ScreenLifecycle.usableScreens)
+    readonly property string defaultOutput: ScreenLifecycle.activeScreen?.name ?? ""
 
-    property Timer openingFeedbackTimer: Timer {
-        id: openingFeedbackTimer
-        interval: 2500
-        repeat: false
-        onTriggered: {
-            service.openingPath = ""
-            CursorOverride.busy = false
-        }
+    // One writer for the existing module settings. Multiple desktop windows
+    // must not hold independent caches of the same Settings file.
+    property Settings layout: Settings {
+        location: "file://" + Quickshell.stateDir + "/deskcenter-desktop-files.ini"
+        category: "DesktopFiles"
+        property string orderJson: "[]"
+        property int iconSize: 56
+        property bool showExtensions: true
+        property string folderCustomJson: "{}"
     }
 
-    function beginOpening(entry) {
-        if (!entry?.path)
-            return false
-        openingPath = entry.path
-        CursorOverride.busy = true
-        openingFeedbackTimer.restart()
-        return true
+    function entriesForOutput(output) {
+        return DesktopOutputs.entriesForOutput(entries, output, availableOutputs, defaultOutput)
     }
+
+    function configureOutputs() {
+        const outputs = availableOutputs
+        const selectedDefault = outputs.indexOf(defaultOutput) >= 0
+            ? defaultOutput : (outputs[0] ?? "")
+        DataClient.request("desktop.outputs", { outputs: outputs, defaultOutput: selectedDefault }, function(response) {
+            if (response?.ok)
+                service.applySnapshot(response.result?.desktop)
+        })
+    }
+
+    function applySnapshot(desktop) {
+        if (!desktop)
+            return
+        entries = Array.isArray(desktop.entries) ? desktop.entries : []
+        directory = desktop.directory ?? ""
+        ready = true
+    }
+
+    function placeEntries(paths, output, callback) {
+        if (!paths.length)
+            return
+        DataClient.request("desktop.place", { paths: paths, output: output || defaultOutput }, function(response) {
+            _result(response, function(result) {
+                service.applySnapshot(result.desktop)
+                if (callback)
+                    callback()
+            }, function(message) {
+                service.lastError = message
+                service.requestDesktopRefresh()
+            })
+        })
+    }
+
+    function claimDesktopIcons() {
+        if (ready && directory && availableOutputs.length > 0)
+            _platform("desktop.icons.claim", {})
+    }
+
+    // Give Plasma time to create a new desktop containment after hotplug.
+    // The platform also watches its config and owns automatic lease cleanup.
+    property Timer iconLeaseTimer: Timer {
+        interval: 750
+        onTriggered: service.claimDesktopIcons()
+    }
+    onReadyChanged: if (ready && iconLeaseTimer) iconLeaseTimer.restart()
+    onAvailableOutputsChanged: {
+        configureOutputs()
+        if (iconLeaseTimer)
+            iconLeaseTimer.restart()
+    }
+    onDefaultOutputChanged: configureOutputs()
 
     function _result(response, success, failure) {
         if (response?.ok) {
@@ -64,10 +112,7 @@ QtObject {
         DataClient.request("desktop.snapshot", {}, function(response) {
             if (!response?.ok)
                 return
-            const desktop = response.result?.desktop ?? response.result ?? {}
-            entries = Array.isArray(desktop.entries) ? desktop.entries : []
-            directory = desktop.directory ?? ""
-            ready = true
+            applySnapshot(response.result?.desktop ?? response.result)
         })
     }
 
@@ -86,20 +131,10 @@ QtObject {
     }
 
     function openEntry(entry) {
-        if (!beginOpening(entry))
+        if (!entry?.path)
             return
-        const path = entry.path
-        PlatformClient.request(entry.kind === "launcher" ? "file.launch" : "file.open",
-            entry.kind === "launcher" ? { desktopFile: path } : { path: path }, function(response) {
-                if (response?.ok)
-                    return
-                if (service.openingPath === path) {
-                    openingFeedbackTimer.stop()
-                    service.openingPath = ""
-                    CursorOverride.busy = false
-                }
-                service.lastError = response?.error?.message || "无法打开项目"
-            })
+        _platform(entry.kind === "launcher" ? "file.launch" : "file.open",
+            entry.kind === "launcher" ? { desktopFile: entry.path } : { path: entry.path })
     }
 
     function emptyFileMimeFromSuffix(path) {
@@ -133,7 +168,7 @@ QtObject {
     }
 
     function launchWith(entry, desktopId) {
-        if (desktopId && beginOpening(entry))
+        if (entry?.path && desktopId)
             _platform("file.launch", { path: entry.path, desktopId: desktopId })
     }
 
@@ -152,23 +187,25 @@ QtObject {
             _platform("file.open", { path: directory })
     }
 
-    function createUntitledFolder(callback) {
+    function createUntitledFolder(callback, output) {
         if (!directory)
             return
         _platform("file.create-folder", { directory: directory }, function(result) {
-            requestDesktopRefresh()
-            if (callback)
-                callback(result.path || "")
+            placeEntries([result.path], output, function() {
+                if (callback)
+                    callback(result.path)
+            })
         })
     }
 
-    function createUntitledFile(callback) {
+    function createUntitledFile(callback, output) {
         if (!directory)
             return
         _platform("file.create-file", { directory: directory }, function(result) {
-            requestDesktopRefresh()
-            if (callback)
-                callback(result.path || "")
+            placeEntries([result.path], output, function() {
+                if (callback)
+                    callback(result.path)
+            })
         })
     }
 
@@ -189,13 +226,21 @@ QtObject {
         return true
     }
 
-    function transfer(paths, mode, callback) {
+    function transfer(paths, mode, callback, output) {
         if (!paths.length || !directory)
             return false
-        _platform("file.transfer", { paths: paths, destination: directory, mode: mode }, function() {
-            requestDesktopRefresh()
-            if (callback)
-                callback()
+        // Cutting and pasting between desktop surfaces moves the icon, not
+        // the backing file. Copy/paste still explicitly creates a new copy.
+        if (mode === "move") {
+            const local = paths.filter(function(path) { return DesktopOutputs.isDesktopPath(path, service.directory) })
+            if (local.length > 0)
+                placeEntries(local, output, local.length === paths.length ? callback : undefined)
+            paths = paths.filter(function(path) { return !DesktopOutputs.isDesktopPath(path, service.directory) })
+            if (!paths.length)
+                return true
+        }
+        _platform("file.transfer", { paths: paths, destination: directory, mode: mode }, function(result) {
+            placeEntries(result.paths || [], output, callback)
         })
         return true
     }
@@ -253,7 +298,7 @@ QtObject {
         })
     }
 
-    function pasteIntoDesktop() {
+    function pasteIntoDesktop(output) {
         if (!directory)
             return
         PlatformClient.request("clipboard.read", {}, function(response) {
@@ -269,20 +314,22 @@ QtObject {
                     service.clipboardMode = ""
                     service.clipboardPaths = []
                 }
-            })
+            }, output)
         })
     }
 
-    function importExternalUrls(urls, action) {
-        const paths = (urls ?? []).map(function(url) {
-            const value = url?.toString ? url.toString() : String(url)
-            return value.startsWith("file://") ? decodeURIComponent(value.slice(7)) : ""
-        }).filter(function(path) { return !!path })
+    function importExternalUrls(urls, action, output) {
+        const paths = DesktopOutputs.localPaths(urls)
         if (!paths.length) {
             lastError = "只能拖入本地文件"
             return
         }
-        transfer(paths, action === Qt.MoveAction ? "move" : "copy")
+        const local = paths.filter(function(path) { return DesktopOutputs.isDesktopPath(path, service.directory) })
+        const incoming = paths.filter(function(path) { return !DesktopOutputs.isDesktopPath(path, service.directory) })
+        if (local.length)
+            placeEntries(local, output)
+        if (incoming.length)
+            transfer(incoming, action === Qt.MoveAction ? "move" : "copy", undefined, output)
     }
 
     property Connections dataConnection: Connections {
@@ -292,10 +339,24 @@ QtObject {
                 service.reload()
         }
         function onTransportChanged(connected) {
-            if (connected)
+            if (connected) {
+                service.configureOutputs()
                 service.reload()
+            }
         }
     }
 
-    Component.onCompleted: reload()
+    property Connections platformConnection: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected)
+                service.iconLeaseTimer.restart()
+        }
+    }
+
+    Component.onCompleted: {
+        configureOutputs()
+        reload()
+        iconLeaseTimer.restart()
+    }
 }
