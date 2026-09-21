@@ -308,14 +308,30 @@ Useful commands:
 ./tools/kosctl glass-settings
 ```
 
-Architecture and test documentation lives in [docs/](docs/). Before
-contributing, at minimum run:
+Architecture and test documentation lives in [docs/](docs/). Before opening a
+pull request you **must** run:
 
 ```sh
 git diff --check
 python3 platform/tests/test_contract.py
 python3 tools/check-docs.py
+./tools/run-tests.sh          # data / service layer tests (required)
 ```
+
+`./tools/run-tests.sh` is the single entry point, and CI runs the same command.
+It defaults to the **data / service layer** — the part that must never crash,
+the part that needs no display, and the part CI verifies:
+
+```sh
+./tools/run-tests.sh              # data layer (default)
+./tools/run-tests.sh --layer platform
+./tools/run-tests.sh --all        # includes the UI layer; needs a graphical session
+./tools/run-tests.sh --help       # all options
+```
+
+If you touch QML or the UI, also run `--all`: the UI layer needs a QML engine
+(and a compositor for the panel tests), so it cannot run in the CI container and
+is only meaningful locally.
 
 ## License
 

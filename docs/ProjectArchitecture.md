@@ -149,6 +149,53 @@ Existing atomic writes of a module's own configuration under
 desktop integration. Keep them local to configuration persistence and plan
 their service-owned replacement separately.
 
+## Testing layers
+
+Tests are grouped by what they need to run, and the grouping is enforced by
+ctest `LABELS` rather than by separate test frameworks. `tools/run-tests.sh` is
+the only entry point; local development and CI invoke the same command so that
+a green result means the same thing in both places.
+
+| Label | What it covers | Needs | Runs in CI |
+|---|---|---|---|
+| `data` | `services/*` and the code they own: the Go data service, the PIM store and its D-Bus client, app preference/weather/music cores | nothing beyond a compiler and Go | yes |
+| `platform` | `platform/tests/test_window_placement.mjs` (node) and `test_contract.py` (python): the platform daemon's contract | node, python | yes |
+| `logic` | pure computation across the shell and dock: date bucketing, window-record indexing, appearance config, dock adaptive/autohide | node | no |
+| `ui` | anything that constructs a QML engine; the panel tests additionally want a compositor | a graphical session | no |
+
+```sh
+./tools/run-tests.sh              # data (default)
+./tools/run-tests.sh --layer platform
+./tools/run-tests.sh --all        # every layer, for a desktop machine
+```
+
+Two rules follow from the table:
+
+1. **`data` and `platform` must pass on a bare machine.** They are what CI
+   checks, and a failure here is a real regression, not an environment quirk.
+   Anything added to these layers must stay free of display and D-Bus-session
+   dependencies.
+2. **`ui` failures are only meaningful locally.** They cannot run in a
+   container, so a green CI run says nothing about them. Treat a UI-layer
+   failure as a real signal precisely because it is not drowned out by CI
+   noise, and do not "fix" one by loosening the assertion without checking
+   whether the source or the test is stale.
+
+The `kos-data-service.go` test needs `GOCACHE` pointed at a warm cache to stay
+fast: compiling the Go standard library cold takes well over a minute, against
+about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
+`GOCACHE`, so exporting one from a wrapper script has no effect — CI caches
+`.build/tests/services/data-service/go-test-cache`, which is the directory the
+ctest entry point actually uses.
+
+The four KWin plugins under `integrations/kwin` and
+`integrations/quickshell/surface-shape` are built by a **separate CI job** that
+only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
+deliberately narrower than "the plugins work": loading them needs a running
+compositor, and installing them needs a SELinux relabel check, and neither
+exists in a container. Compilation is the part that can be verified
+automatically; the rest stays a real-machine check.
+
 ## Change strategy
 
 Directory moves, platform daemon, Shell client migration, data-service
@@ -156,3 +203,6 @@ migration, build/install tooling, and documentation are separate commits. Each
 stage is buildable or has an explicit external prerequisite called out in its
 commit validation. This keeps rollback and review boundaries clear during the
 one-time cutover.
+
+Changes to `data` or `platform` layer tests must keep those layers green, and
+a pull request that touches them should say which layers were run.

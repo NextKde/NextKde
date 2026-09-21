@@ -375,13 +375,27 @@ Shell；调试时请从源码 Shell 的齿轮打开，或使用上面的命令�
 ./tools/kosctl glass-settings
 ```
 
-测试与架构资料在 [docs/](docs/)；贡献代码前建议至少运行：
+测试与架构资料在 [docs/](docs/)。提交 PR 前**必须**运行：
 
 ```sh
 git diff --check
 python3 platform/tests/test_contract.py
 python3 tools/check-docs.py
+./tools/run-tests.sh          # 数据/服务层测试（提交前必须过）
 ```
+
+`./tools/run-tests.sh` 是测试的唯一入口，本地与 CI 跑的是同一条命令。默认只跑
+**数据/服务层**——这层不需要显示环境，是"不能崩"的部分，也是 CI 会验的部分：
+
+```sh
+./tools/run-tests.sh              # data 层（默认）
+./tools/run-tests.sh --layer platform
+./tools/run-tests.sh --all        # 含界面层；需要图形会话
+./tools/run-tests.sh --help       # 全部选项
+```
+
+改动界面/QML 时请额外跑 `--all`：界面层测试需要 QML 引擎（面板测试还需要合成器），
+CI 容器里跑不了，所以它们只在本地生效。
 
 ## 许可证
 
