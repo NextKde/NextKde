@@ -52,6 +52,13 @@ namespace {
 constexpr int kProtocolVersion = 1;
 constexpr auto kClipboardCutMime = "application/x-kde-cutselection";
 constexpr auto kGnomeFilesMime = "x-special/gnome-copied-files";
+// Cap on unparsed bytes buffered per client socket. The largest legitimate
+// request is a single JSON line (path lists, shortcut tables, cliphist
+// records -- clipboard image data travels through cliphist files, never
+// inline), all orders of magnitude below this; anything past the cap is a
+// client streaming without a newline, which is cut off instead of growing
+// the buffer without bound.
+constexpr qsizetype kMaxClientBufferBytes = 1024 * 1024;
 
 bool finiteNumber(const QJsonValue &value, double minimum, double maximum)
 {
@@ -1359,12 +1366,30 @@ void PlatformServer::readClient()
         return;
     QByteArray &buffer = m_buffers[socket];
     buffer.append(socket->readAll());
+    // A newline-free client would otherwise grow this buffer forever; the
+    // cap bounds per-connection memory and rejects the peer explicitly.
+    if (buffer.size() > kMaxClientBufferBytes) {
+        QJsonObject response{{QStringLiteral("version"), kProtocolVersion},
+                              {QStringLiteral("ok"), false},
+                              {QStringLiteral("error"), errorObject(
+                                   QStringLiteral("request-too-large"),
+                                   QStringLiteral("请求超出大小限制"), false)}};
+        socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
+        socket->flush();
+        // Emits disconnected() -> clientDisconnected(), which removes the
+        // buffer and schedules the socket for deletion.
+        socket->disconnectFromServer();
+        return;
+    }
+    // Consume complete lines through a cursor and compact once at the end;
+    // removing per line would memmove the tail for every line in a batch.
+    qsizetype offset = 0;
     while (true) {
-        const qsizetype newline = buffer.indexOf('\n');
+        const qsizetype newline = buffer.indexOf('\n', offset);
         if (newline < 0)
             break;
-        const QByteArray line = buffer.left(newline).trimmed();
-        buffer.remove(0, newline + 1);
+        const QByteArray line = buffer.mid(offset, newline - offset).trimmed();
+        offset = newline + 1;
         if (line.isEmpty())
             continue;
         QJsonParseError error;
@@ -1381,6 +1406,10 @@ void PlatformServer::readClient()
         }
         handleRequest(socket, document.object());
     }
+    // Bytes after the last newline are a partial line; keep them for the
+    // next readyRead and drop only what was consumed.
+    if (offset > 0)
+        buffer.remove(0, offset);
 }
 
 void PlatformServer::clientDisconnected()
