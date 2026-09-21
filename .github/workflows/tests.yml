@@ -1,0 +1,160 @@
+name: tests
+
+# Pull requests and the default branch share one configuration so that "green"
+# means exactly the same thing in both places.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded run on the same branch tells us nothing, so cancel it.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: data + platform layers
+    runs-on: ubuntu-latest
+
+    # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
+    # from `pacman`, and this image gives those packages the same names and the
+    # same Qt 6.11 the project is developed against. Ubuntu's names differ and
+    # mapping them would be a second, drifting source of truth.
+    container: archlinux:base-devel
+
+    steps:
+      # The container has no git; actions/checkout needs it before anything else.
+      - name: Install git
+        run: pacman -Sy --noconfirm --needed git
+
+      - uses: actions/checkout@v4
+
+      # node and python are what the platform layer runs on; neither needs a
+      # display, so both layers in this job work in a container.
+      - name: Install build dependencies
+        run: |
+          pacman -S --noconfirm --needed \
+            cmake ninja gcc \
+            qt6-base qt6-declarative \
+            kwindowsystem kiconthemes kglobalaccel \
+            go dbus nodejs python
+
+      # The heavy, slow-changing part: compiler output for Qt/KF6 headers.
+      # Keyed on a per-commit value with a prefix fallback so a source edit
+      # reuses objects rather than starting over.
+      - name: Mount ccache
+        uses: actions/cache@v4
+        with:
+          path: .build/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      # Restoring the compiler cache is worthless unless CMake is told to use
+      # it, and CMake only learns that at configure time.
+      - name: Configure ccache
+        run: |
+          mkdir -p .build/ccache
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache" >> "${GITHUB_ENV}"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache" >> "${GITHUB_ENV}"
+          echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.build/ccache" >> "${GITHUB_ENV}"
+          echo "CCACHE_MAXSIZE=1G" >> "${GITHUB_ENV}"
+
+      # Warm Go's build cache across runs. `kos-data-service.go` compiles the
+      # whole standard library on a cold cache (>50 s locally, ~1 s warm),
+      # which is most of that test's runtime and is unrelated to this project.
+      #
+      # The path is services/data-service/CMakeLists.txt:47's `go-test-cache`,
+      # NOT run-tests.sh's own GOCACHE: that script exports GOCACHE inside the
+      # build root, but the ctest entry point overrides it with an absolute
+      # path, so the script's directory and every sibling of it stay empty.
+      - name: Mount Go test cache
+        uses: actions/cache@v4
+        with:
+          path: .build/tests/services/data-service/go-test-cache
+          key: gocache-${{ runner.os }}-${{ hashFiles('services/data-service/go.sum') }}
+          restore-keys: |
+            gocache-${{ runner.os }}-
+
+      # The single entry point shared with local development: it configures with
+      # -DBUILD_TESTING=ON -DKOS_BUILD_KWIN_PLUGINS=OFF, keeps TMPDIR and
+      # GOTMPDIR inside the build tree, and runs `ctest -L data|platform`.
+      - name: Run the data and platform layers
+        run: ./tools/run-tests.sh --layer data --layer platform
+
+      - name: Summarise which layers ran
+        if: always()
+        run: |
+          {
+            echo "### Test layers"
+            echo
+            echo "| layer | where it runs |"
+            echo "|---|---|"
+            echo "| \`data\` | here, on every run |"
+            echo "| \`platform\` | here, on every run |"
+            echo "| \`logic\` | locally, via \`./tools/run-tests.sh --all\` |"
+            echo "| \`ui\` | locally, on a machine with a compositor |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  kwin-plugins:
+    name: KWin plugins compile
+    runs-on: ubuntu-latest
+
+    container: archlinux:base-devel
+
+    steps:
+      - name: Install git
+        run: pacman -Sy --noconfirm --needed git
+
+      - uses: actions/checkout@v4
+
+      # The four plugins under integrations/kwin and integrations/quickshell
+      # pull their own dependencies on top of the core set: `KWin` and
+      # `KDecoration3` come from the `kwin` and `kdecoration` packages, and the
+      # plugins additionally want Qt6 Widgets/OpenGL and gettext for the i18n
+      # catalogs. This list is `arch_kwin_build_packages` in tools/kosctl:35.
+      - name: Install plugin build dependencies
+        run: |
+          pacman -S --noconfirm --needed \
+            cmake ninja gcc \
+            qt6-base qt6-declarative \
+            extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
+            kcoreaddons kdecoration gettext libxcb vulkan-headers
+
+      - name: Mount ccache
+        uses: actions/cache@v4
+        with:
+          path: .build/ccache-kwin
+          key: ccache-kwin-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-kwin-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          mkdir -p .build/ccache-kwin
+          echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.build/ccache-kwin" >> "${GITHUB_ENV}"
+          echo "CCACHE_MAXSIZE=1G" >> "${GITHUB_ENV}"
+
+      # Compiling is all this job proves, and that is deliberate. Whether the
+      # plugin then loads, and whether the install path relabels correctly, is
+      # a question about a running compositor and a SELinux policy -- neither
+      # of which exists in a container, and both of which have already burned
+      # this project once. Those stay a real-machine check.
+      #
+      # BUILD_TESTING=OFF keeps the unrelated test binaries out of the build so
+      # a compiler error here is unambiguously a plugin error.
+      - name: Configure
+        run: |
+          cmake -S . -B .build/kwin -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKOS_BUILD_KWIN_PLUGINS=ON \
+            -DKOS_BUILD_PLATFORM=OFF \
+            -DBUILD_TESTING=OFF
+
+      - name: Build the KWin plugins
+        run: cmake --build .build/kwin --parallel "$(nproc)"
