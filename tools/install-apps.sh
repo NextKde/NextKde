@@ -7,17 +7,25 @@ prefix=${KOS_INSTALL_PREFIX:-"$HOME/.local"}
 build_dir=${KOS_APPS_BUILD_DIR:-"$project_dir/.build/apps-release"}
 unit_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user
 
-for command_name in busctl cmake ctest ninja readlink systemctl; do
+for command_name in busctl cmake ninja readlink systemctl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "Missing install dependency: $command_name" >&2
         exit 1
     fi
 done
 
+# An install must not build or run tests -- they have one owner,
+# tools/run-tests.sh (the same policy the core kosctl build follows).
 cmake --preset apps-release -S "$project_dir" \
-    -DCMAKE_INSTALL_PREFIX="$prefix"
-cmake --build "$build_dir" --parallel
-ctest --test-dir "$build_dir" --output-on-failure
+    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DBUILD_TESTING=OFF
+jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
+case "$jobs" in ''|*[!0-9]*) jobs=4 ;; esac
+if [ "$jobs" -gt 12 ]; then jobs=12; fi
+mkdir -p "$build_dir/tmp"
+# /tmp can be a small tmpfs; the core kosctl redirects the same way.
+TMPDIR="$build_dir/tmp" GOTMPDIR="$build_dir/tmp" \
+    cmake --build "$build_dir" --parallel "$jobs"
 cmake --install "$build_dir"
 
 # ~/.local/share/systemd/user is a standard user-unit search path. Keep a

@@ -508,6 +508,12 @@ deploy_artifacts() {
     rm -rf "$prefix/share/shared/qml"
     mkdir -p "$prefix/share/shared/qml"
     cp -a "$shared_qml_src/." "$prefix/share/shared/qml/"
+    # The checkout tree carries build/test files next to the runtime QML;
+    # the Nix installPhase filters the same two patterns, and the CMake
+    # install rule that used to run this copy carried the same EXCLUDEs.
+    # Shipping them put CMakeLists.txt and test_*.mjs into user prefixes.
+    find "$prefix/share/shared/qml" \
+        \( -name CMakeLists.txt -o -name 'test_*.mjs' \) -delete
 
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
@@ -557,8 +563,14 @@ deploy_artifacts() {
         sed "s|%h/.local|$prefix|g" \
             "$project_dir/packaging/systemd/kos-platform.service" \
             > "$runtime_unit_dir/kos-platform.service"
-        sed "s|%h/.local|$prefix|g" \
-            "$project_dir/packaging/systemd/kos-data.service" \
+        # Single source of truth: the unit template lives next to the service
+        # it starts (services/data-service/systemd/kos-data.service.in). The
+        # apps install (tools/install-apps.sh) generates the same template
+        # through CMake configure_file, so a second copy under packaging/
+        # meant two writers for ~/.config/systemd/user/kos-data.service --
+        # whichever install ran last silently won.
+        sed "s|@CMAKE_INSTALL_FULL_LIBEXECDIR@|$prefix/libexec|g" \
+            "$project_dir/services/data-service/systemd/kos-data.service.in" \
             > "$runtime_unit_dir/kos-data.service"
         sed "s|@QS_EXEC@|$qs_bin|g" \
             "$project_dir/packaging/systemd/kos-shell.service.in" \
@@ -590,12 +602,11 @@ deploy_artifacts() {
         local -a kos_units=(
             kos-platform.service kos-data.service kos-shell.service
         )
-        # Application services are optional: tools/install-apps.sh drops their
-        # units next to the core ones, but a core-only installation must not
-        # fail on `enable` because an optional unit is absent.
-        if [[ -e "$runtime_unit_dir/kos-pim-service.service" ]]; then
-            kos_units+=(kos-pim-service.service)
-        fi
+        # kos-pim-service is deliberately not enabled. It is D-Bus activated
+        # on demand (org.nextkde.Kos.Pim1.service) and tools/install-apps.sh
+        # keeps it non-resident; enabling it from the core install fought
+        # that policy -- which one won depended on the order the two
+        # installs happened to run in.
         # install is non-disruptive: it registers the units for the next
         # session (and login autostart) but leaves the running session alone.
         # In-place updates of executables and QML only take effect after the
@@ -1019,8 +1030,16 @@ install_lockscreen() {
     local laf_dir="$prefix/share/plasma/look-and-feel/org.kos.desktop"
     mkdir -p "$(dirname "$shells_dir")" "$(dirname "$laf_dir")"
     rm -rf "$shells_dir" "$laf_dir"
-    cp -a "$project_dir/apps/lockscreen" "$shells_dir"
-    cp -a "$project_dir/apps/lockscreen" "$laf_dir"
+    # The checkout tree carries development content next to the runtime
+    # package; a theme root should hold only what the greeter resolves.
+    # tests/ alone is more than half of the tree (pkgprobe.cpp, stub QML).
+    local lockscreen_src="$project_dir/apps/lockscreen"
+    local theme_root
+    for theme_root in "$shells_dir" "$laf_dir"; do
+        cp -a "$lockscreen_src" "$theme_root"
+        rm -rf "$theme_root/tests"
+        rm -f "$theme_root/README.md" "$theme_root/README.zh-CN.md"
+    done
 
     # The greeter takes the shell package name from plasmashellrc
     # [Shell] ShellPackage (apps/lockscreen/tests/theme-resolution/pkgprobe.cpp

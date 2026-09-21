@@ -84,7 +84,9 @@ units, and shell files but leaves those state directories intact.
 ### systemd user units
 
 Installation registers three `systemd --user` units, generated from
-`packaging/systemd/` into `~/.config/systemd/user/`. All three are
+`packaging/systemd/` (and, for `kos-data.service`, from
+`services/data-service/systemd/kos-data.service.in` — the unit lives next
+to the service it starts) into `~/.config/systemd/user/`. All three are
 `PartOf=graphical-session.target` (so logout stops them cleanly) and
 `WantedBy=graphical-session.target` (so each login starts them again —
 `default.target` would only start them once at boot).
