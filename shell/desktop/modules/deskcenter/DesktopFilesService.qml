@@ -72,23 +72,7 @@ QtObject {
         })
     }
 
-    function claimDesktopIcons() {
-        if (ready && directory && availableOutputs.length > 0)
-            _platform("desktop.icons.claim", {})
-    }
-
-    // Give Plasma time to create a new desktop containment after hotplug.
-    // The platform also watches its config and owns automatic lease cleanup.
-    property Timer iconLeaseTimer: Timer {
-        interval: 750
-        onTriggered: service.claimDesktopIcons()
-    }
-    onReadyChanged: if (ready && iconLeaseTimer) iconLeaseTimer.restart()
-    onAvailableOutputsChanged: {
-        configureOutputs()
-        if (iconLeaseTimer)
-            iconLeaseTimer.restart()
-    }
+    onAvailableOutputsChanged: configureOutputs()
     onDefaultOutputChanged: configureOutputs()
 
     function _result(response, success, failure) {
@@ -346,17 +330,8 @@ QtObject {
         }
     }
 
-    property Connections platformConnection: Connections {
-        target: PlatformClient
-        function onTransportChanged(connected) {
-            if (connected)
-                service.iconLeaseTimer.restart()
-        }
-    }
-
     Component.onCompleted: {
         configureOutputs()
         reload()
-        iconLeaseTimer.restart()
     }
 }
