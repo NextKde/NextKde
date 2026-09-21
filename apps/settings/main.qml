@@ -315,8 +315,19 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            snapshot = bridge.integrationSnapshot()
-            errorText = bridge.lastError || ""
+            // The reply lands on integrationSnapshotChanged; the bridge does
+            // its D-Bus and /proc probes off the UI thread now, so this page's
+            // 5s poll no longer freezes anything.
+            bridge.integrationSnapshot()
+        }
+
+        Connections {
+            target: integrationPage.bridge
+            enabled: integrationPage.bridge !== null
+            function onIntegrationSnapshotChanged(state) {
+                integrationPage.snapshot = state
+                integrationPage.errorText = integrationPage.bridge.lastError || ""
+            }
         }
 
         function notificationState() {
@@ -558,9 +569,7 @@ ApplicationWindow {
 
         function setDockBlurInherit(enabled) {
             if (!bridge) return
-            applyAppearanceState(bridge.updateDockBlurInherit(enabled))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockBlurInherit(enabled)
         }
 
         Timer {
@@ -599,9 +608,7 @@ ApplicationWindow {
             if (!dockBlurDirty || !bridge)
                 return
             dockBlurDirty = false
-            applyAppearanceState(bridge.updateDockBlurStrength(dockBlurStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockBlurStrength(dockBlurStrength)
         }
 
         function previewDockLiquid(value) {
@@ -618,9 +625,7 @@ ApplicationWindow {
             if (!dockLiquidDirty || !bridge)
                 return
             dockLiquidDirty = false
-            applyAppearanceState(bridge.updateDockLiquidStrength(dockLiquidStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockLiquidStrength(dockLiquidStrength)
         }
 
         function applyAppearanceState(state) {
@@ -756,44 +761,34 @@ ApplicationWindow {
             if (!bridge)
                 return
             const position = dockPositions[index]
-            applyState(bridge.updateDockPosition(position))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockPosition(position)
         }
 
         function saveIconMode(index) {
             if (!bridge)
                 return
             const mode = iconModes[index]
-            applyState(bridge.updateDockIconMode(mode))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockIconMode(mode)
         }
 
         function saveTintColor(color) {
             if (!bridge)
                 return
-            applyState(bridge.updateDockIconTintColor(color))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockIconTintColor(color)
         }
 
         function saveVisibilityMode(index) {
             if (!bridge)
                 return
             const mode = visibilityModes[index]
-            applyState(bridge.updateDockVisibilityMode(mode))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockVisibilityMode(mode)
         }
 
         function saveWindowGrouping(index) {
             if (!bridge)
                 return
             const mode = windowGroupings[index]
-            applyState(bridge.updateDockWindowGrouping(mode))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockWindowGrouping(mode)
         }
 
         function applyTintPreset(index) {
@@ -805,18 +800,16 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.dockSnapshot())
-            applyAppearanceState(bridge.appearanceSnapshot())
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            // Both snapshots arrive on the signals below; nothing is read
+            // synchronously here.
+            bridge.dockSnapshot()
+            bridge.appearanceSnapshot()
         }
 
         function saveLayout() {
             if (!bridge)
                 return
-            applyState(bridge.updateDockLayout(dockHeight))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockLayout(dockHeight)
         }
 
         function previewDockHeight(position) {
@@ -846,9 +839,22 @@ ApplicationWindow {
             if (!iconOpacityDirty || !bridge)
                 return
             iconOpacityDirty = false
-            applyState(bridge.updateDockIconOpacity(iconOpacity))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockIconOpacity(iconOpacity)
+        }
+
+        Connections {
+            target: dockPage.bridge
+            enabled: dockPage.bridge !== null
+            function onDockSnapshotChanged(state) {
+                dockPage.applyState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
+            function onAppearanceSnapshotChanged(state) {
+                dockPage.applyAppearanceState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
         }
 
         Component.onCompleted: refresh()
@@ -1509,9 +1515,7 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.appearanceSnapshot())
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.appearanceSnapshot()
         }
 
         Timer {
@@ -1550,9 +1554,7 @@ ApplicationWindow {
             if (!blurDirty || !bridge)
                 return
             blurDirty = false
-            applyState(bridge.updateGlobalBlurStrength(blurStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateGlobalBlurStrength(blurStrength)
         }
 
         function previewLiquid(value) {
@@ -1569,9 +1571,7 @@ ApplicationWindow {
             if (!liquidDirty || !bridge)
                 return
             liquidDirty = false
-            applyState(bridge.updateGlobalLiquidStrength(liquidStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateGlobalLiquidStrength(liquidStrength)
         }
 
         function setSystemAppearance(index) {
@@ -1579,11 +1579,7 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            if (!bridge.applySystemAppearance(index === 1)) {
-                errorText = bridge.lastError
-                return
-            }
-            errorText = ""
+            bridge.applySystemAppearance(index === 1)
         }
 
         function setGlassStyle(index) {
@@ -1592,17 +1588,29 @@ ApplicationWindow {
             const option = glassStyles.options[index]
             if (!option)
                 return
-            applyState(bridge.updateGlassStyle(option.id))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateGlassStyle(option.id)
         }
 
         function saveGlassFollowsAppearanceMode(checked) {
             if (!bridge)
                 return
-            applyState(bridge.updateGlassFollowsAppearanceMode(checked))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateGlassFollowsAppearanceMode(checked)
+        }
+
+        Connections {
+            target: displayPage.bridge
+            enabled: displayPage.bridge !== null
+            function onAppearanceSnapshotChanged(state) {
+                displayPage.applyState(state)
+                if (displayPage.bridge.lastError)
+                    displayPage.errorText = displayPage.bridge.lastError
+            }
+            function onSystemAppearanceApplied(accepted) {
+                if (accepted)
+                    displayPage.errorText = ""
+                else if (displayPage.bridge.lastError)
+                    displayPage.errorText = displayPage.bridge.lastError
+            }
         }
 
         Component.onCompleted: refresh()
@@ -1919,20 +1927,27 @@ ApplicationWindow {
         })
         function refresh() {
             if (!bridge) return
-            controls = bridge.glassDebugSnapshot()
-            presetStyle = bridge.glassPresetStyle()
-            errorText = bridge.lastError || ""
+            bridge.glassDebugSnapshot()
         }
         function updateValue(key, value) {
-            if (!bridge || !bridge.updateGlassDebugValue(key, value)) {
-                errorText = bridge ? (bridge.lastError || "写入 KWin 配置失败") : "设置桥不可用"
+            if (!bridge) {
+                errorText = "设置桥不可用"
                 return
             }
-            errorText = ""
-            // Re-read so the row shows what was actually stored: a preset-backed
-            // value passes through the shell's own clamping, and a style switch
-            // elsewhere may have exchanged the whole set under us.
-            refresh()
+            // Fire-and-forget: the reply re-reads what was actually stored
+            // (a preset-backed value passes through the shell's own clamping)
+            // and lands on glassDebugSnapshotChanged below.
+            bridge.updateGlassDebugValue(key, value)
+        }
+
+        Connections {
+            target: glassDebugPage.bridge
+            enabled: glassDebugPage.bridge !== null
+            function onGlassDebugSnapshotChanged(controls, presetStyle) {
+                glassDebugPage.controls = controls
+                glassDebugPage.presetStyle = presetStyle
+                glassDebugPage.errorText = glassDebugPage.bridge.lastError || ""
+            }
         }
 
         Component.onCompleted: refresh()
@@ -2223,14 +2238,23 @@ ApplicationWindow {
             tonePosition = nearestTone(color)
             opacityDirty = false
         }
-        function refresh() { if (bridge) applyState(bridge.appearanceSnapshot()) }
-        function saveMode(index) { if (bridge) applyState(bridge.updateGlobalIconMode(modes[index])) }
-        function saveTint(color) { if (bridge) applyState(bridge.updateGlobalIconTintColor(color)) }
+        function refresh() { if (bridge) bridge.appearanceSnapshot() }
+        function saveMode(index) { if (bridge) bridge.updateGlobalIconMode(modes[index]) }
+        function saveTint(color) { if (bridge) bridge.updateGlobalIconTintColor(color) }
         function commitOpacity() {
             if (!opacityDirty || !bridge) return
             opacityDirty = false
-            applyState(bridge.updateGlobalIconOpacity(iconOpacity))
+            bridge.updateGlobalIconOpacity(iconOpacity)
         }
+
+        Connections {
+            target: iconAppearance.bridge
+            enabled: iconAppearance.bridge !== null
+            function onAppearanceSnapshotChanged(state) {
+                iconAppearance.applyState(state)
+            }
+        }
+
         Component.onCompleted: refresh()
 
         Text {
@@ -2438,9 +2462,7 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.appearanceSnapshot())
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.appearanceSnapshot()
         }
 
         function selectStyle(style) {
@@ -2448,12 +2470,7 @@ ApplicationWindow {
                 errorText = bridge ? "未知的主题形态" : "尚未构建 Settings 桥接程序"
                 return
             }
-            const state = bridge.updateShellStyle(style)
-            applyState(state)
-            themeMaterialSettings.applyState(state)
-            globalAppearanceSettings.applyState(state)
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateShellStyle(style)
         }
 
         function setDockWindowAnimationStyle(style) {
@@ -2461,9 +2478,7 @@ ApplicationWindow {
                 errorText = bridge ? "未知的窗口动画" : "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.updateDockWindowAnimationStyle(style))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateDockWindowAnimationStyle(style)
         }
 
         // Only the Material shell style reads the colour source; switching it
@@ -2474,10 +2489,21 @@ ApplicationWindow {
                 errorText = bridge ? "未知的配色来源" : "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.updateMaterialColorScheme(scheme))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateMaterialColorScheme(scheme)
         }
+
+        Connections {
+            target: themePage.bridge
+            enabled: themePage.bridge !== null
+            function onAppearanceSnapshotChanged(state) {
+                themePage.applyState(state)
+                themeMaterialSettings.applyState(state)
+                globalAppearanceSettings.applyState(state)
+                if (themePage.bridge.lastError)
+                    themePage.errorText = themePage.bridge.lastError
+            }
+        }
+
         Component.onCompleted: refresh()
 
         Text {
@@ -3102,9 +3128,7 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.appearanceSnapshot())
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.appearanceSnapshot()
         }
 
         function setBarIntegratedWithDock(enabled) {
@@ -3112,34 +3136,26 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.updateBarIntegratedWithDock(enabled))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarIntegratedWithDock(enabled)
         }
 
         function saveBarVisibilityMode(index) {
             if (!bridge)
                 return
             const mode = barVisibilityModes[index]
-            applyState(bridge.updateBarVisibilityMode(mode))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarVisibilityMode(mode)
         }
 
         function saveBarLayoutMode(index) {
             if (!bridge)
                 return
             const mode = barLayoutModes[index]
-            applyState(bridge.updateBarLayoutMode(mode))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarLayoutMode(mode)
         }
 
         function setBarBlurInherit(enabled) {
             if (!bridge) return
-            applyState(bridge.updateBarBlurInherit(enabled))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarBlurInherit(enabled)
         }
 
         Timer {
@@ -3178,9 +3194,7 @@ ApplicationWindow {
             if (!barBlurDirty || !bridge)
                 return
             barBlurDirty = false
-            applyState(bridge.updateBarBlurStrength(barBlurStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarBlurStrength(barBlurStrength)
         }
 
         function previewBarLiquid(value) {
@@ -3197,9 +3211,17 @@ ApplicationWindow {
             if (!barLiquidDirty || !bridge)
                 return
             barLiquidDirty = false
-            applyState(bridge.updateBarLiquidStrength(barLiquidStrength))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateBarLiquidStrength(barLiquidStrength)
+        }
+
+        Connections {
+            target: barPage.bridge
+            enabled: barPage.bridge !== null
+            function onAppearanceSnapshotChanged(state) {
+                barPage.applyState(state)
+                if (barPage.bridge.lastError)
+                    barPage.errorText = barPage.bridge.lastError
+            }
         }
 
         Component.onCompleted: refresh()
@@ -3553,25 +3575,29 @@ ApplicationWindow {
                 errorText = "尚未构建 Settings 桥接程序"
                 return
             }
-            applyState(bridge.shortcutsSnapshot())
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.shortcutsSnapshot()
         }
 
         function saveBinding(id, combo) {
             if (!bridge)
                 return
-            applyState(bridge.updateShortcut(id, combo))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.updateShortcut(id, combo)
         }
 
         function resetBinding(id) {
             if (!bridge)
                 return
-            applyState(bridge.resetShortcut(id))
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.resetShortcut(id)
+        }
+
+        Connections {
+            target: shortcutsPage.bridge
+            enabled: shortcutsPage.bridge !== null
+            function onShortcutsSnapshotChanged(state) {
+                shortcutsPage.applyState(state)
+                if (shortcutsPage.bridge.lastError)
+                    shortcutsPage.errorText = shortcutsPage.bridge.lastError
+            }
         }
 
         // Maps a raw key event to its kglobalaccel PortableText name.
@@ -3842,63 +3868,53 @@ ApplicationWindow {
 
         function reloadFromBridge() {
             if (!bridge) return
-            const snap = bridge.launcherSnapshot()
-            applySnapshot(snap)
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.launcherSnapshot()
         }
 
+        // The picker rows keep the optimistic local update they had; the
+        // authoritative snapshot arrives on launcherSnapshotChanged below.
         function saveDisplayMode(index) {
             displayModeIndex = index
             displayMode = displayModes[index] || "bottom"
-            if (bridge) {
-                const snap = bridge.updateLauncherDisplayMode(displayMode)
-                applySnapshot(snap)
-                if (bridge.lastError)
-                    errorText = bridge.lastError
-            }
+            if (bridge)
+                bridge.updateLauncherDisplayMode(displayMode)
         }
 
         function saveFontWeight(index) {
             fontWeightIndex = index
             fontWeight = fontWeights[index] || "normal"
-            if (bridge) {
-                const snap = bridge.updateLauncherProfileFontWeight(displayMode, fontWeight)
-                applySnapshot(snap)
-                if (bridge.lastError)
-                    errorText = bridge.lastError
-            }
+            if (bridge)
+                bridge.updateLauncherProfileFontWeight(displayMode, fontWeight)
         }
 
         function saveIconSize(index) {
             iconSizeIndex = index
             iconSize = iconSizes[index] || "medium"
-            if (bridge) {
-                const snap = bridge.updateLauncherProfileIconSize(displayMode, iconSize)
-                applySnapshot(snap)
-                if (bridge.lastError)
-                    errorText = bridge.lastError
-            }
+            if (bridge)
+                bridge.updateLauncherProfileIconSize(displayMode, iconSize)
         }
 
         function saveDensity(index) {
             densityIndex = index
             density = densities[index] || "balanced"
-            if (bridge) {
-                const snap = bridge.updateLauncherProfileDensity(displayMode, density)
-                applySnapshot(snap)
-                if (bridge.lastError)
-                    errorText = bridge.lastError
-            }
+            if (bridge)
+                bridge.updateLauncherProfileDensity(displayMode, density)
         }
 
         function resetCurrentProfile() {
             if (!bridge)
                 return
-            const snap = bridge.resetLauncherLayoutProfile(displayMode)
-            applySnapshot(snap)
-            if (bridge.lastError)
-                errorText = bridge.lastError
+            bridge.resetLauncherLayoutProfile(displayMode)
+        }
+
+        Connections {
+            target: launcherPage.bridge
+            enabled: launcherPage.bridge !== null
+            function onLauncherSnapshotChanged(snap) {
+                launcherPage.applySnapshot(snap)
+                if (launcherPage.bridge.lastError)
+                    launcherPage.errorText = launcherPage.bridge.lastError
+            }
         }
 
         Component.onCompleted: reloadFromBridge()
@@ -4332,32 +4348,52 @@ ApplicationWindow {
                         }
                     }
 
-                    LauncherSettingsPage {
-                        visible: window.currentPage === 4
+                    // Every page used to be instantiated at startup, so its
+                    // Component.onCompleted refresh spawned a `quickshell ipc
+                    // call` on the UI thread; with the shell down that froze
+                    // the window for tens of seconds. Each Loader now creates
+                    // its page only when the page is first opened, and the
+                    // refreshes themselves are asynchronous.
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 4
+                        sourceComponent: LauncherSettingsPage {}
                     }
 
-                    ShortcutsSettingsPage {
-                        visible: window.currentPage === 5
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 5
+                        sourceComponent: ShortcutsSettingsPage {}
                     }
 
-                    IntegrationStatusPage {
-                        visible: window.currentPage === 6
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 6
+                        sourceComponent: IntegrationStatusPage {}
                     }
 
-                    GlassDebugPage {
-                        visible: window.currentPage === 7
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 7
+                        sourceComponent: GlassDebugPage {}
                     }
 
-                    DockSettingsPage {
-                        visible: window.currentPage === 3
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 3
+                        sourceComponent: DockSettingsPage {}
                     }
 
-                    BarSettingsPage {
-                        visible: window.currentPage === 2
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 2
+                        sourceComponent: BarSettingsPage {}
                     }
 
-                    ThemeSettingsPage {
-                        visible: window.currentPage === 1
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 1
+                        sourceComponent: ThemeSettingsPage {}
                     }
 
                 }
