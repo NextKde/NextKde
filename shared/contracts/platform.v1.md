@@ -76,7 +76,9 @@ Current operation groups are:
   reads the SNI watcher's registration list, each item's `Id`/`Title`, and the
   owning connection's PID -- then `/proc/<pid>/comm` and `cmdline` -- on its
   worker pool, so the Shell never spawns a helper process to resolve them.
-  Returns `{"names": {"<itemId>": "<friendly name>"}}`)
+  Returns `{"names": {"<itemId>": "<friendly name>"}}`; an item whose name
+  cannot be derived is omitted rather than mapped to an empty string, and the
+  Shell keeps its own fallback for those)
 - `network.*` (including `network.traffic` for read-only interface counters),
   `audio.*` (including `audio.applications`,
   `audio.application.set-volume`, and `audio.application.set-mute` for

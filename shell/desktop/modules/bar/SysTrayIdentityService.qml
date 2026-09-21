@@ -50,6 +50,34 @@ QtObject {
         return false
     }
 
+    // 有些应用用自己的名字拼出 ID（如 WorkBuddy_status_icon_1），剥掉生成的
+    // 后缀就能还原；纯运行时生成的 ID（chrome_status_icon_1）剥完不剩任何
+    // 信息，此处返回空，绝不猜测它属于哪个应用。
+    function _nameFromId(id) {
+        if (!id) return ""
+        if (/^chrome[_-]status[_-]icon/i.test(id)) return ""
+        let name = id.replace(/^tray[-\s]?icon(\s+tray\s+app)?\s+/i, "")
+        name = name.replace(/[_-]status[_-]icon[_-]?[0-9]*$/i, "").replace(/[_-]+$/, "").trim()
+        // 只有确实剥掉了生成片段才算还原出名字：没有剥掉说明该 ID 自身就是
+        // 无信息的标识（例如随机哈希），照原样显示等于没有名字。
+        if (name === id.trim()) return ""
+        if (name.length < 2 || !/^[A-Za-z0-9._-]+$/.test(name)) return ""
+        if (svc._genericNames[name.toLowerCase()]) return ""
+        // 已含大写说明是应用自己的拼写（WorkBuddy）；带分隔符的名字是应用自己
+        // 的风格（cc-switch），只有单个小写单词才需要首字母大写。
+        if (name.indexOf("-") < 0 && name.indexOf("_") < 0
+                && name === name.toLowerCase())
+            name = name.charAt(0).toUpperCase() + name.slice(1)
+        return name
+    }
+
+    readonly property var _genericNames: ({
+        "app": true, "apprun": true, "resources": true, "electron": true,
+        "node": true, "chrome": true, "chromium": true, "python": true,
+        "python3": true, "java": true, "sh": true, "bash": true, "env": true,
+        "flatpak": true, "snap": true, "tray": true, "icon": true
+    })
+
     // 获取托盘项的友好显示名称
     function friendlyName(item) {
         if (!item) return ""
@@ -83,15 +111,28 @@ QtObject {
             return id
         }
 
-        // 5. 完全为内部生硬 ID 且尚未解析出时安全返回空，避免把内部 ID 显示
-        // 给用户。此处不做猜测：曾把任意 Chromium 系托盘应用一律猜成 QQ。
-        return ""
+        // 5. id 是生成标识时，仍尝试从它自己拼出的名字还原
+        const fromId = svc._nameFromId(id)
+        if (fromId) return fromId
+
+        // 6. 最后兜底回到改动前的行为：宁可显示原始 ID，也不要把提示整个变
+        // 空。daemon 未部署 tray.identify（旧版本或连接断开）时，第 3 步永远
+        // 不会命中，此处保证 QQ / WorkBuddy 一类应用至少仍有可读的提示。
+        return item.tooltipTitle || item.title || id || ""
     }
 
     // 托盘项的变化很密集（聊天类应用每条消息都会改 tooltip），而 daemon 侧的
     // 遍历要扫全部注册项，所以合并成一次防抖查询。
     property Timer _refreshTimer: Timer {
         interval: 1200
+        onTriggered: svc._query()
+    }
+
+    // 查询失败（daemon 未就绪、正在重启，或版本还不认识这个 op）时退避重试：
+    // 否则解析结果会一直为空，直到下一次托盘事件才恢复。
+    property int _failures: 0
+    property Timer _retryTimer: Timer {
+        interval: 2000
         onTriggered: svc._query()
     }
 
@@ -105,8 +146,14 @@ QtObject {
             if (!response?.ok) {
                 console.warn("[SysTrayIdentityService] identify failed: "
                     + (response?.error?.message || "platform unavailable"))
+                if (svc._failures < 5) {
+                    svc._failures++
+                    _retryTimer.interval = 2000 * svc._failures
+                    _retryTimer.restart()
+                }
                 return
             }
+            svc._failures = 0
             const data = response.result?.names ?? {}
             const next = Object.assign({}, svc.resolvedNames)
             let changed = false
@@ -137,6 +184,15 @@ QtObject {
         }
         onObjectAdded: svc.refresh()
         onObjectRemoved: svc.refresh()
+    }
+
+    // daemon 重启或晚于 Shell 启动时，重连成功就是重新解析的时机；不依赖
+    // 退避重试的次数上限。
+    property Connections _clientConn: Connections {
+        target: PlatformClient
+        function onTransportChanged(connected) {
+            if (connected) svc.refresh()
+        }
     }
 
     Component.onCompleted: svc.refresh()
