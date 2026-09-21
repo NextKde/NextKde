@@ -60,9 +60,15 @@ Item {
         ? 0 : ConfigService.barHeight
     // A fused side Dock gets the full output height because the standalone
     // top Bar and its exclusive strip are disabled too.
-    readonly property int availableLength: vertical
+    // Length strategy. "stretch" pins the dock to the whole edge; floating
+    // keeps the usual inset on the three free sides, otherwise it reaches the
+    // corners. The inset is removed from the available length here so the
+    // icon solver below keeps working on the length the glass really gets.
+    readonly property bool stretched: ConfigService.dockStyle === "taskbar"
+    readonly property real stretchInset: 0
+    readonly property int availableLength: (vertical
         ? screenHeight - reservedBarHeight
-        : screenWidth
+        : screenWidth) - (stretched ? Math.round(stretchInset * 2) : 0)
     readonly property real baseHeight: ConfigService.baseHeight
     // Shape proportions come from the selected shell style. The macOS token
     // values equal the previous Dock defaults, preserving the upgrade baseline.
@@ -120,7 +126,6 @@ Item {
     // A side Dock rotates its content row. Its dedicated compact carousel
     // needs only two icon lengths, while the bottom carousel keeps four.
     readonly property int infoSlotUnits: vertical ? 2 : 4
-
     // ═══════════════════════════════════════════════════════════
     // Computed layout (re-evaluates on any input change)
     // ═══════════════════════════════════════════════════════════
@@ -138,9 +143,19 @@ Item {
 
     readonly property int computedDockHeight: _layout.dockHeight
     readonly property int iconSize: _layout.iconSize
-    readonly property int computedDockWidth: Math.round(_layout.dockWidth
+    // naturalDockWidth is the width the content asks for — the only width an
+    // "auto" dock ever takes. A stretched dock grows to the full available
+    // length, and stretchSlack is exactly the gap that growth leaves over,
+    // which the content row spends on the spacer that pushes the information
+    // carousel to the far end (§ Windows-style taskbar layout).
+    readonly property int naturalDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
         + accessoryCount * (2 + dividerMargin * 2 + itemSpacing * 2))
+    readonly property int computedDockWidth: stretched
+        ? Math.max(naturalDockWidth, availableLength)
+        : naturalDockWidth
+    readonly property real stretchSlack: Math.max(0, computedDockWidth
+        - naturalDockWidth)
     readonly property int itemSpacing: _layout.itemSpacing
     readonly property int hPadding: _layout.hPadding
     readonly property int vPadding: _layout.vPadding
@@ -822,6 +837,19 @@ Item {
                         DockModelService.activateApp(model.appId)
                 }
             }
+        }
+
+        // ── Stretch slack: push the information slot to the far end ──
+        // Only a stretched dock has slack. Spending it between the window
+        // tasks and the information slot keeps launchers and running windows
+        // against the starting edge while the clock, weather and the trailing
+        // status area sit at the opposite one — a taskbar-style split. The
+        // spacer carries no content, so an auto-width dock collapses it to 0
+        // and the row keeps its historical compact layout.
+        Item {
+            width: container.stretchSlack
+            height: 1
+            visible: container.stretched
         }
 
         // ── Divider 2: windows | information slot (conditional) ──

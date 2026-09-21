@@ -55,7 +55,8 @@ PanelWindow {
     property bool clockInInfoCarousel: false
     readonly property bool vertical: root.position === "left"
         || root.position === "right"
-    readonly property int edgeMargin: AppearanceTokens.dock.edgeMargin
+    readonly property int edgeMargin: ConfigService.dockStyle === "taskbar"
+        ? 0 : AppearanceTokens.dock.edgeMargin
     readonly property int workspaceGap: AppearanceTokens.dock.workspaceGap
     // Wayland does not expose a trustworthy QWindow global position to QML.
     // Derive this layer surface's compositor-global origin from the output it
@@ -127,15 +128,44 @@ PanelWindow {
         regions: [pill.blurRegion, revealHandle.blurRegion]
     }
 
+    // A stretched dock spans the edge, so its own inset is the only thing
+    // left to place: floating keeps the usual edge gap on the three free
+    // sides, otherwise it reaches the corners. An auto-width dock keeps its
+    // content-driven length and alignment decides where along the edge it
+    // rests: start/end hug that edge, centre keeps the historical midpoint.
+    readonly property bool stretched: ConfigService.dockStyle === "taskbar"
+    readonly property real stretchInset: 0
+    // Side docks start below the standalone top bar; a fused bar reserves
+    // nothing. Mirrors DockContainer.reservedBarHeight so the glass never
+    // slides underneath the bar it is meant to sit beside.
+    readonly property real reservedTop: AppearanceConfigService.barIntegratedWithDock
+        ? 0 : ConfigService.barHeight
+
+    function alignedOffset(available, length) {
+        if (root.stretched)
+            return root.stretchInset
+        if (ConfigService.alignment === "start")
+            return root.edgeMargin
+        if (ConfigService.alignment === "end")
+            return available - root.edgeMargin - length
+        return (available - length) / 2
+    }
+
     // Stable, full-reveal position of the glass inside the surface. Always
     // derived from surface/container size — never the animated transform.
     readonly property real restX: root.vertical
         ? (root.position === "right"
             ? root.width - root.edgeMargin - dockContainer.width
             : root.edgeMargin)
-        : (root.width - dockContainer.width) / 2
+        : root.alignedOffset(root.width, dockContainer.width)
     readonly property real restY: root.vertical
-        ? (root.height - dockContainer.height) / 2
+        ? (root.stretched
+            ? root.reservedTop + root.stretchInset
+            : (ConfigService.alignment === "start"
+                ? root.reservedTop + root.edgeMargin
+                : (ConfigService.alignment === "end"
+                    ? root.height - root.edgeMargin - dockContainer.height
+                    : (root.height - dockContainer.height) / 2)))
         : root.height - root.edgeMargin - dockContainer.height
 
     function publishWorkspaceLayout() {
