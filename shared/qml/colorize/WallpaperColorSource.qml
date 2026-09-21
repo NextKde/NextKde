@@ -47,6 +47,18 @@ QtObject {
     readonly property int preferredScreen: Quickshell.screens.length > 1 ? 1 : 0
     property url wallpaperUrl: ""
     property string configuredWallpaperUrl: ""
+    // Last file text each FileView delivered. The timer reloads whether or not
+    // Plasma touched the file, so the full line-by-line parse only runs when
+    // the bytes actually changed. `null` is the never-loaded sentinel: it can
+    // never equal real content, so the first load — even of an empty file —
+    // always processes, which keeps the paletteCleared path reachable.
+    property var _lastShellConfigText: null
+    property var _lastConfigText: null
+    // Poll decimation state. While a wallpaper is resolved the config almost
+    // never changes, so only every (_pollSkip + 1)-th tick reloads the files;
+    // the countdown lives here and `_pollSkip` is the re-arm value.
+    property int _pollPhase: 0
+    readonly property int _pollSkip: 4
     // Keep a QML-owned reference while resolving a wallpaper package.
     property var _resolveProcess: null
     readonly property color primary: palette.primary
@@ -69,6 +81,9 @@ QtObject {
     function _applyWallpaperUrl(nextUrl) {
         if (wallpaperUrl.toString() === nextUrl)
             return
+        // A fresh URL pulls the poll back to the full rate so the wallpaper
+        // that comes after this one is noticed within one tick, not five.
+        _pollPhase = 0
         console.log("[WallpaperColorSource] sampling screen=" + preferredScreen
             + " " + nextUrl)
         wallpaperUrl = nextUrl
@@ -236,7 +251,23 @@ QtObject {
         }
     }
 
+    // Re-arm the decimation countdown after a reload produced new bytes: the
+    // change just consumed is the reason to keep polling slowly, and a config
+    // that now resolves to no wallpaper goes back to every-tick polling until
+    // one is found.
+    function _contentChanged() {
+        _pollPhase = configuredWallpaperUrl ? _pollSkip : 0
+    }
+
     function refresh() {
+        // The tick itself stays short because a resolved wallpaper must never
+        // wait for it; the file reloads are what get decimated. See
+        // _pollPhase/_contentChanged.
+        if (_pollPhase > 0) {
+            _pollPhase--
+            return
+        }
+        _pollPhase = configuredWallpaperUrl ? _pollSkip : 0
         // plasmashellrc decides which applets config is live, so it is re-read on
         // the same tick: Plasma picks the shell package up at startup, and the
         // wallpaper file moves with it.
@@ -295,7 +326,16 @@ QtObject {
         // keeps this honest, because the installed shell runs with
         // QS_DISABLE_FILE_WATCHER=1 and no watch would ever fire.
         watchChanges: false
-        onLoaded: svc._applyShellPackage(svc._parseShellPackage(text()))
+        onLoaded: {
+            // The timer reloads on a fixed cadence whether or not the file
+            // moved, so the parse only runs when the bytes actually differ.
+            const content = text()
+            if (content === svc._lastShellConfigText)
+                return
+            svc._lastShellConfigText = content
+            svc._contentChanged()
+            svc._applyShellPackage(svc._parseShellPackage(content))
+        }
         // A session without a plasmashellrc is normal; the KDE candidate stands.
         onLoadFailed: function() {}
     }
@@ -306,7 +346,16 @@ QtObject {
         // Keep the existing periodic reload: atomic replacement must not
         // depend on a watch of the old inode. Failed reads retain the palette.
         watchChanges: false
-        onLoaded: svc._readWallpaperText(text())
+        onLoaded: {
+            // Same early-out as _shellConfigFile: unchanged bytes mean the
+            // whole _parseWallpaperConfig pass would produce the same URL.
+            const content = text()
+            if (content === svc._lastConfigText)
+                return
+            svc._lastConfigText = content
+            svc._contentChanged()
+            svc._readWallpaperText(content)
+        }
         onLoadFailed: error => svc._fallBackToNextConfig(error)
     }
 
