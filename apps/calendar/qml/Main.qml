@@ -30,6 +30,10 @@ KosApplicationWindow {
         Number(Qt.locale().firstDayOfWeek) % 7
     readonly property date weekStart: startOfWeek(selectedDate)
     readonly property var selectedItems: itemsForDate(selectedDate)
+    // One scan per invalidation (occurrencesChanged, searchQuery, filters);
+    // every day/hour cell then just looks up its key instead of rescanning
+    // pim.occurrences + pim.todoOccurrences.
+    readonly property var itemsByDate: buildItemsByDate()
 
     Timer {
         interval: 60000
@@ -199,10 +203,91 @@ KosApplicationWindow {
         return Qt.locale().dayName(qtDay, format)
     }
 
-    function eventContainsDate(event, key) {
-        const start = String(value(event, "start", "")).slice(0, 10)
-        const end = String(value(event, "end", "")).slice(0, 10)
-        return start === key || (start < key && end > key)
+    function addDayRange(bucket, startKey, endKey, item) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey))
+            return
+        const start = new Date(startKey + "T00:00:00")
+        const end = /^\d{4}-\d{2}-\d{2}$/.test(endKey)
+            ? new Date(endKey + "T00:00:00") : start
+        for (let day = start; day <= end;
+                day = new Date(day.getFullYear(), day.getMonth(),
+                               day.getDate() + 1)) {
+            const key = dateKey(day)
+            if (bucket[key] === undefined)
+                bucket[key] = []
+            bucket[key].push(item)
+        }
+    }
+
+    function buildItemsByDate() {
+        const result = ({})
+        const representedTodos = new Map()
+        const events = pim.occurrences ?? []
+        const todos = pim.todoOccurrences ?? []
+
+        if (showEvents) {
+            for (let index = 0; index < events.length; index++) {
+                const event = events[index]
+                if (!matchesSearch(event))
+                    continue
+                const item = { kind: "event", record: event }
+                const start = String(value(event, "start", "")).slice(0, 10)
+                const end = String(value(event, "end", "")).slice(0, 10)
+                // Keep the old per-day semantics: a multi-day event lands on
+                // its start day and every strictly-covered day, not the end.
+                addDayRange(result, start,
+                    end > start ? previousDateKey(end) : start, item)
+                const todoId = String(value(event, "linkedTodoId", ""))
+                if (todoId.length > 0) {
+                    let todoDays = representedTodos.get(todoId)
+                    if (todoDays === undefined)
+                        representedTodos.set(todoId,
+                            todoDays = Object.create(null))
+                    addDayRange(todoDays, start,
+                        end > start ? previousDateKey(end) : start, item)
+                }
+            }
+        }
+
+        if (showTasks) {
+            for (let index = 0; index < todos.length; index++) {
+                const todo = todos[index]
+                if (!matchesSearch(todo))
+                    continue
+                const due = String(value(todo, "due", "")).slice(0, 10)
+                const id = String(value(todo, "seriesId",
+                                        value(todo, "id", "")))
+                const days = representedTodos.get(id)
+                if (days !== undefined && days[due] !== undefined)
+                    continue
+                if (!showCompletedTasks
+                        && Boolean(value(todo, "completed", false)))
+                    continue
+                addDayRange(result, due, due,
+                            { kind: "todo", record: todo })
+            }
+        }
+
+        for (const key in result) {
+            result[key].sort(function(left, right) {
+                const leftAllDay = itemAllDay(left)
+                const rightAllDay = itemAllDay(right)
+                if (leftAllDay !== rightAllDay)
+                    return leftAllDay ? -1 : 1
+                return itemDateTime(left).localeCompare(itemDateTime(right))
+            })
+        }
+        return result
+    }
+
+    function previousDateKey(key) {
+        const date = new Date(key + "T00:00:00")
+        return dateKey(new Date(date.getFullYear(), date.getMonth(),
+                                date.getDate() - 1))
+    }
+
+    function itemsForDate(date) {
+        return itemsByDate[dateKey(date)] ?? []
     }
 
     function matchesSearch(record) {
@@ -213,48 +298,6 @@ KosApplicationWindow {
             + String(value(record, "description", "")) + "\n"
             + String(value(record, "location", ""))).toLocaleLowerCase()
         return haystack.indexOf(query) >= 0
-    }
-
-    function itemsForDate(date) {
-        const key = dateKey(date)
-        const result = []
-        const representedTodos = ({})
-
-        if (showEvents) {
-            const events = pim.occurrences ?? []
-            for (let index = 0; index < events.length; index++) {
-                const event = events[index]
-                if (!eventContainsDate(event, key) || !matchesSearch(event))
-                    continue
-                result.push({ kind: "event", record: event })
-                const todoId = String(value(event, "linkedTodoId", ""))
-                if (todoId.length > 0)
-                    representedTodos[todoId] = true
-            }
-        }
-
-        if (showTasks) {
-            const todos = pim.todoOccurrences ?? []
-            for (let index = 0; index < todos.length; index++) {
-                const todo = todos[index]
-                const due = String(value(todo, "due", "")).slice(0, 10)
-                const id = String(value(todo, "seriesId", value(todo, "id", "")))
-                if (due !== key || representedTodos[id] || !matchesSearch(todo))
-                    continue
-                if (!showCompletedTasks && Boolean(value(todo, "completed", false)))
-                    continue
-                result.push({ kind: "todo", record: todo })
-            }
-        }
-
-        result.sort(function(left, right) {
-            const leftAllDay = itemAllDay(left)
-            const rightAllDay = itemAllDay(right)
-            if (leftAllDay !== rightAllDay)
-                return leftAllDay ? -1 : 1
-            return itemDateTime(left).localeCompare(itemDateTime(right))
-        })
-        return result
     }
 
     function itemRecord(item) {
