@@ -883,6 +883,7 @@ Item {
 
         // ── Shared music / weather / clock / temperature information slot ──
         DockInfoCarousel {
+            id: horizontalInfoCarousel
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
@@ -890,6 +891,7 @@ Item {
             showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
+            onEditRequested: componentEditor.openFor(horizontalInfoCarousel)
             visible: container.hasInfo && !container.vertical
         }
 
@@ -897,6 +899,7 @@ Item {
         // Row rotates 90 degrees, so this component keeps text upright while
         // reserving only two icon lengths along the edge.
         DockSideInfoCarousel {
+            id: verticalInfoCarousel
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
@@ -904,6 +907,7 @@ Item {
             showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
+            onEditRequested: componentEditor.openFor(verticalInfoCarousel)
             visible: container.hasInfo && container.vertical
         }
 
@@ -921,6 +925,48 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+        }
+    }
+
+    Rectangle {
+        id: componentEditButton
+        z: 80
+        visible: container.editMode
+        anchors { top: parent.top; right: parent.right; margins: 4 }
+        width: componentEditLabel.implicitWidth + 22
+        height: 26
+        radius: AppearanceTokens.isMaterial ? 13 : 9
+        color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.primaryContainer,
+            ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16)
+                : Qt.rgba(1, 1, 1, 0.92))
+        border.width: 1
+        border.color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.primary,
+            Qt.rgba(ThemeService.foregroundColor.r,
+                ThemeService.foregroundColor.g,
+                ThemeService.foregroundColor.b, 0.18))
+
+        Text {
+            id: componentEditLabel
+            anchors.centerIn: parent
+            text: "+ 组件"
+            color: AppearanceTokens.surface.pick(
+                AppearanceTokens.colors.primaryContainerForeground,
+                ThemeService.foregroundColor)
+            font { pixelSize: 10; weight: Font.DemiBold }
+        }
+
+        TapHandler {
+            onTapped: componentEditor.openFor(componentEditButton)
+        }
+    }
+
+    DockComponentEditor {
+        id: componentEditor
+        onVisibleChanged: {
+            if (visible)
+                container.editMode = true
         }
     }
 }

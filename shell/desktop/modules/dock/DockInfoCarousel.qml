@@ -12,6 +12,7 @@ import qs.desktop.modules.weather
 //
 Item {
     id: carousel
+    signal editRequested()
 
     readonly property int musicPage: 0
     readonly property int weatherPage: 1
@@ -229,6 +230,12 @@ Item {
             wheelCooldown.restart()
             wheel.accepted = true
         }
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: carousel.editRequested()
     }
 
     Item {

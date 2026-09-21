@@ -10,6 +10,7 @@ import "../../../Kos/Ui"
 // text remains horizontal while the card occupies two icon lengths vertically.
 Item {
     id: carousel
+    signal editRequested()
 
     readonly property int musicPage: 0
     readonly property int weatherPage: 1
@@ -247,6 +248,12 @@ Item {
             wheelCooldown.restart()
             wheel.accepted = true
         }
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: carousel.editRequested()
     }
 
     Row {
