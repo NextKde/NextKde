@@ -165,6 +165,10 @@ private:
     // event loop. Declared last so it is destroyed first: ~QThreadPool waits
     // for in-flight copies (bounded file IO) before members go away.
     QThreadPool m_copyPool;
+    // Synchronous NM/BlueZ-class D-Bus walks (network.refresh/details) run
+    // here off the socket event loop. Declared last so ~QThreadPool waits for
+    // in-flight workers (bounded calls) before members go away.
+    QThreadPool m_dbusPool;
 };
 
 } // namespace KosPlatform

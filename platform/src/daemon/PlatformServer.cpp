@@ -33,6 +33,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QThread>
 #include <QTimer>
 #include <QtConcurrent>
 
@@ -40,6 +41,7 @@
 #include <KService>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <functional>
 #include <memory>
@@ -463,9 +465,10 @@ QString dbusPathOf(const QVariant &value)
         ? qvariant_cast<QDBusObjectPath>(value).path() : QString();
 }
 
-QVariantMap nmGetAll(const QString &path, const QString &interface)
+QVariantMap nmGetAll(const QDBusConnection &bus, const QString &path,
+                     const QString &interface)
 {
-    return dbusGetAll(QDBusConnection::systemBus(), kNmService, path, interface);
+    return dbusGetAll(bus, kNmService, path, interface);
 }
 
 // NMConnectivity enum -> the strings nmcli printed, so the contract result
@@ -495,26 +498,27 @@ QString nmDeviceStateName(uint state)
 
 // Every path read through here is appended to `watched` so the caller can
 // subscribe PropertiesChanged and drop the reply cache as soon as any piece
-// of the answer changes upstream.
-QString nmReadActiveConnectionId(const QString &activeConnectionPath,
+QString nmReadActiveConnectionId(const QDBusConnection &bus,
+                                 const QString &activeConnectionPath,
                                  QSet<QString> *watched)
 {
     if (activeConnectionPath.isEmpty() || activeConnectionPath == QStringLiteral("/"))
         return {};
     if (watched)
         watched->insert(activeConnectionPath);
-    return nmGetAll(activeConnectionPath,
+    return nmGetAll(bus, activeConnectionPath,
                     QStringLiteral("org.freedesktop.NetworkManager.Connection.Active"))
         .value(QStringLiteral("Id")).toString();
 }
 
-QString nmReadIpv4(const QString &ip4ConfigPath, QSet<QString> *watched)
+QString nmReadIpv4(const QDBusConnection &bus, const QString &ip4ConfigPath,
+                   QSet<QString> *watched)
 {
     if (ip4ConfigPath.isEmpty() || ip4ConfigPath == QStringLiteral("/"))
         return {};
     if (watched)
         watched->insert(ip4ConfigPath);
-    const QVariantMap props = nmGetAll(ip4ConfigPath,
+    const QVariantMap props = nmGetAll(bus, ip4ConfigPath,
         QStringLiteral("org.freedesktop.NetworkManager.IP4Config"));
     const QVariant addressData = props.value(QStringLiteral("AddressData"));
     if (addressData.metaType() != QMetaType::fromType<QDBusArgument>())
@@ -541,7 +545,9 @@ struct NmWirelessInfo {
     QString accessPointPath;
 };
 
-NmWirelessInfo nmReadWireless(const QVariantMap &deviceProps, QSet<QString> *watched)
+NmWirelessInfo nmReadWireless(const QDBusConnection &bus,
+                              const QVariantMap &deviceProps,
+                              QSet<QString> *watched)
 {
     NmWirelessInfo info;
     info.accessPointPath = dbusPathOf(
@@ -550,7 +556,7 @@ NmWirelessInfo nmReadWireless(const QVariantMap &deviceProps, QSet<QString> *wat
         return info;
     if (watched)
         watched->insert(info.accessPointPath);
-    const QVariantMap accessPoint = nmGetAll(info.accessPointPath,
+    const QVariantMap accessPoint = nmGetAll(bus, info.accessPointPath,
         QStringLiteral("org.freedesktop.NetworkManager.AccessPoint"));
     const QByteArray ssid = accessPoint.value(QStringLiteral("Ssid")).toByteArray();
     if (!ssid.isEmpty())
@@ -558,6 +564,233 @@ NmWirelessInfo nmReadWireless(const QVariantMap &deviceProps, QSet<QString> *wat
     info.strength = qBound(0,
         accessPoint.value(QStringLiteral("Strength")).toInt(), 100);
     return info;
+}
+
+// connectToBus registers `name` in a process-wide connection registry that
+// only disconnectFromBus removes; a worker that returned early would leak the
+// entry forever. This guard also handles the destructor-warning path
+// (QDBusConnection objects must not outlive the name they hold).
+struct ScopedBusConnection {
+    explicit ScopedBusConnection(const QString &name) : name(name) {}
+    ~ScopedBusConnection() { QDBusConnection::disconnectFromBus(name); }
+    QString name;
+};
+
+// Every read a network worker performs ends up in this result. The worker
+// thread owns no Qt objects beyond its private bus connection; everything
+// that must happen on the server (watch subscriptions, reply cache, socket
+// writes) is carried back here for the main thread to apply.
+struct NetworkWorkerResult {
+    bool ok = false;
+    bool retryable = true;
+    QString code;
+    QString message;
+    QJsonObject result;
+    QJsonObject detailsPrefill;
+    QString detailsKey;
+    QStringList watchPaths;
+};
+
+// QDBusConnection::systemBus() is bound to the calling thread, so pool
+// workers open a per-call private connection instead. The name embeds the
+// thread id plus this worker's serial so two queued workers sharing a pool
+// thread can never collide on the registry entry.
+QString workerBusName()
+{
+    static std::atomic<quint64> serial{0};
+    return QStringLiteral("kos-net-%1-%2")
+        .arg(quintptr(QThread::currentThreadId()), 0, 16)
+        .arg(serial.fetch_add(1, std::memory_order_relaxed));
+}
+
+// The GetDevices method call both network workers need; bounded like every
+// other D-Bus round-trip.
+QList<QDBusObjectPath> nmGetDevices(const QDBusConnection &bus)
+{
+    QDBusInterface networkManager(QString::fromLatin1(kNmService),
+                                  QString::fromLatin1(kNmRootPath),
+                                  QString::fromLatin1(kNmService), bus);
+    networkManager.setTimeout(kDbusCallTimeoutMs);
+    const QDBusMessage reply = networkManager.call(QStringLiteral("GetDevices"));
+    if (reply.type() == QDBusMessage::ReplyMessage
+        && !reply.arguments().isEmpty())
+        return qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().constFirst());
+    return {};
+}
+
+// Runs on m_dbusPool: the whole N+1 NM walk (registration check, manager
+// GetAll, GetDevices, per-device GetAll/AC/Ip4/Wireless reads) is synchronous
+// D-Bus and used to stall the socket event loop for seconds on slow-NM
+// systems. watchNmPath is deliberately NOT called here -- it mutates
+// m_nmWatchedPaths and registers signal matches on the main bus, so the
+// touched paths go home in watchPaths for the main thread to subscribe.
+NetworkWorkerResult networkRefreshWorker()
+{
+    const ScopedBusConnection guard(workerBusName());
+    const QDBusConnection bus = QDBusConnection::connectToBus(
+        QDBusConnection::SystemBus, guard.name);
+
+    NetworkWorkerResult out;
+    QSet<QString> watched{QString::fromLatin1(kNmRootPath)};
+
+    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
+        out.code = QStringLiteral("network-unavailable");
+        out.message = QStringLiteral("平台网络状态查询失败");
+        return out;
+    }
+
+    const QVariantMap manager = nmGetAll(bus, QString::fromLatin1(kNmRootPath),
+                                         QString::fromLatin1(kNmService));
+    if (manager.isEmpty()) {
+        // A transient GetAll failure would otherwise serialize as
+        // wifiEnabled:false/"unknown" -- answer retryable instead of caching
+        // fabricated state for the Shell to render.
+        out.code = QStringLiteral("network-unavailable");
+        out.message = QStringLiteral("平台网络状态查询失败");
+        return out;
+    }
+
+    const QList<QDBusObjectPath> devicePaths = nmGetDevices(bus);
+
+    // Same selection the nmcli table drove: the first wifi/ethernet row,
+    // overridden by the activated one.
+    QVariantMap selected;
+    QString selectedPath;
+    for (const QDBusObjectPath &devicePath : devicePaths) {
+        watched.insert(devicePath.path());
+        const QVariantMap device = nmGetAll(bus, devicePath.path(),
+            QStringLiteral("org.freedesktop.NetworkManager.Device"));
+        const uint type = device.value(QStringLiteral("DeviceType")).toUInt();
+        if (type != 1 && type != 2)
+            continue;
+        const uint state = device.value(QStringLiteral("State")).toUInt();
+        if (selected.isEmpty() || state == 100) {
+            selected = device;
+            selectedPath = devicePath.path();
+        }
+        if (state == 100)
+            break;
+    }
+
+    const uint type = selected.value(QStringLiteral("DeviceType")).toUInt();
+    const uint state = selected.value(QStringLiteral("State")).toUInt();
+    const QString deviceState = nmDeviceStateName(state);
+    QString connectionName;
+    QString ssid;
+    QString ipv4;
+    int signalStrength = -1;
+    if (!selected.isEmpty() && state == 100) {
+        connectionName = nmReadActiveConnectionId(bus,
+            dbusPathOf(selected.value(QStringLiteral("ActiveConnection"))),
+            &watched);
+        if (type == 2) {
+            const NmWirelessInfo wifi = nmReadWireless(bus,
+                nmGetAll(bus, selectedPath,
+                         QStringLiteral("org.freedesktop.NetworkManager.Device.Wireless")),
+                &watched);
+            ssid = wifi.ssid;
+            signalStrength = wifi.strength;
+        }
+        ipv4 = nmReadIpv4(bus,
+            dbusPathOf(selected.value(QStringLiteral("Ip4Config"))), &watched);
+        if (ssid.isEmpty() && type == 2)
+            ssid = connectionName;
+        // The follow-up network.details request the Shell fires after every
+        // refresh asks for exactly these fields -- prefill its cache so the
+        // second request stays local.
+        out.detailsKey = QStringLiteral("network.details:")
+            + selected.value(QStringLiteral("Interface")).toString();
+        if (!out.detailsKey.endsWith(QLatin1Char(':')))
+            out.detailsPrefill = QJsonObject{
+                {QStringLiteral("available"), true},
+                {QStringLiteral("connectionName"), connectionName},
+                {QStringLiteral("ssid"), ssid},
+                {QStringLiteral("ipv4"), ipv4},
+                {QStringLiteral("signalStrength"), signalStrength}};
+    }
+
+    out.result = QJsonObject{
+        {QStringLiteral("available"), true},
+        {QStringLiteral("networkingEnabled"),
+         manager.value(QStringLiteral("NetworkingEnabled")).toBool()},
+        {QStringLiteral("connectivity"),
+         nmConnectivityName(manager.value(QStringLiteral("Connectivity")).toUInt())},
+        {QStringLiteral("wifiEnabled"),
+         manager.value(QStringLiteral("WirelessEnabled")).toBool()},
+        {QStringLiteral("connectionType"),
+         type == 2 ? QStringLiteral("wifi")
+                   : type == 1 ? QStringLiteral("ethernet") : QStringLiteral("none")},
+        {QStringLiteral("deviceName"), selected.value(QStringLiteral("Interface")).toString()},
+        {QStringLiteral("connectionName"), connectionName},
+        {QStringLiteral("deviceState"), deviceState},
+        {QStringLiteral("ssid"), ssid},
+        {QStringLiteral("signalStrength"), signalStrength},
+        {QStringLiteral("ipv4"), ipv4}};
+    out.ok = true;
+    out.watchPaths = watched.values();
+    return out;
+}
+
+// Same worker-thread walk for network.details:<device>: find the device by
+// Interface name, then read its ActiveConnection/Ip4Config/Wireless state.
+NetworkWorkerResult networkDetailsWorker(const QString &device)
+{
+    const ScopedBusConnection guard(workerBusName());
+    const QDBusConnection bus = QDBusConnection::connectToBus(
+        QDBusConnection::SystemBus, guard.name);
+
+    NetworkWorkerResult out;
+    QSet<QString> watched{QString::fromLatin1(kNmRootPath)};
+
+    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
+        out.code = QStringLiteral("network-unavailable");
+        out.message = QStringLiteral("平台命令不可用");
+        return out;
+    }
+
+    QVariantMap found;
+    QString foundPath;
+    const QList<QDBusObjectPath> devicePaths = nmGetDevices(bus);
+    for (const QDBusObjectPath &devicePath : devicePaths) {
+        watched.insert(devicePath.path());
+        const QVariantMap props = nmGetAll(bus, devicePath.path(),
+            QStringLiteral("org.freedesktop.NetworkManager.Device"));
+        if (props.value(QStringLiteral("Interface")).toString() == device) {
+            found = props;
+            foundPath = devicePath.path();
+            break;
+        }
+    }
+    if (found.isEmpty()) {
+        out.code = QStringLiteral("network-device-unavailable");
+        out.message = QStringLiteral("平台命令执行失败");
+        return out;
+    }
+
+    const QString connectionName = nmReadActiveConnectionId(bus,
+        dbusPathOf(found.value(QStringLiteral("ActiveConnection"))), &watched);
+    const QString ipv4 = nmReadIpv4(bus,
+        dbusPathOf(found.value(QStringLiteral("Ip4Config"))), &watched);
+    QString ssid = connectionName;
+    int signalStrength = -1;
+    if (found.value(QStringLiteral("DeviceType")).toUInt() == 2) {
+        const NmWirelessInfo wifi = nmReadWireless(bus,
+            nmGetAll(bus, foundPath,
+                     QStringLiteral("org.freedesktop.NetworkManager.Device.Wireless")),
+            &watched);
+        if (!wifi.ssid.isEmpty())
+            ssid = wifi.ssid;
+        signalStrength = wifi.strength;
+    }
+
+    out.result = QJsonObject{{QStringLiteral("available"), true},
+                             {QStringLiteral("connectionName"), connectionName},
+                             {QStringLiteral("ssid"), ssid},
+                             {QStringLiteral("ipv4"), ipv4},
+                             {QStringLiteral("signalStrength"), signalStrength}};
+    out.ok = true;
+    out.watchPaths = watched.values();
+    return out;
 }
 
 QJsonObject parseAudio(const QByteArray &output, int exitCode)
@@ -1079,6 +1312,10 @@ PlatformServer::PlatformServer(QObject *parent)
     // Two concurrent copies at most: more would thrash the same disk anyway,
     // and the pool queue keeps additional requests waiting off the event loop.
     m_copyPool.setMaxThreadCount(2);
+    // network.refresh/network.details run their synchronous NM D-Bus walks
+    // here; a dedicated pool keeps them from queueing behind file.copy work
+    // (and vice versa).
+    m_dbusPool.setMaxThreadCount(2);
 }
 
 PlatformServer::~PlatformServer()
@@ -1547,124 +1784,26 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
                                        const QJsonObject &request)
 {
     const QString key = QStringLiteral("network.refresh");
-    if (serveCachedReply(socket, request, key))
+    if (serveCachedReply(socket, request, key)
+        || queueIfInFlight(key, socket, request))
         return;
-    // The read is synchronous D-Bus on this event loop, so there is no
-    // in-flight window to dedup -- only the TTL cache and the
-    // PropertiesChanged watches bound how often it happens.
 
-    const QDBusConnection bus = QDBusConnection::systemBus();
-    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
-        const QString code = QStringLiteral("network-unavailable");
-        const QString message = QStringLiteral("平台网络状态查询失败");
-        respond(socket, request, false, {}, code, message, true);
-        storeReply(key, kNetworkCacheTtlMs, false, {}, code, message, true);
-        return;
-    }
-
-    watchNmPath(QString::fromLatin1(kNmRootPath));
-    const QVariantMap manager = nmGetAll(QString::fromLatin1(kNmRootPath),
-                                         QString::fromLatin1(kNmService));
-    if (manager.isEmpty()) {
-        // A transient GetAll failure would otherwise serialize as
-        // wifiEnabled:false/"unknown" -- answer retryable instead of caching
-        // fabricated state for the Shell to render.
-        const QString code = QStringLiteral("network-unavailable");
-        const QString message = QStringLiteral("平台网络状态查询失败");
-        respond(socket, request, false, {}, code, message, true);
-        storeReply(key, kNetworkCacheTtlMs, false, {}, code, message, true);
-        return;
-    }
-
-    QDBusInterface networkManager(QString::fromLatin1(kNmService),
-                                  QString::fromLatin1(kNmRootPath),
-                                  QString::fromLatin1(kNmService), bus);
-    networkManager.setTimeout(kDbusCallTimeoutMs);
-    const QDBusMessage devicesReply = networkManager.call(QStringLiteral("GetDevices"));
-    QList<QDBusObjectPath> devicePaths;
-    if (devicesReply.type() == QDBusMessage::ReplyMessage
-        && !devicesReply.arguments().isEmpty())
-        devicePaths = qdbus_cast<QList<QDBusObjectPath>>(
-            devicesReply.arguments().constFirst());
-
-    // Same selection the nmcli table drove: the first wifi/ethernet row,
-    // overridden by the activated one.
-    QVariantMap selected;
-    QString selectedPath;
-    for (const QDBusObjectPath &devicePath : devicePaths) {
-        watchNmPath(devicePath.path());
-        const QVariantMap device = nmGetAll(devicePath.path(),
-            QStringLiteral("org.freedesktop.NetworkManager.Device"));
-        const uint type = device.value(QStringLiteral("DeviceType")).toUInt();
-        if (type != 1 && type != 2)
-            continue;
-        const uint state = device.value(QStringLiteral("State")).toUInt();
-        if (selected.isEmpty() || state == 100) {
-            selected = device;
-            selectedPath = devicePath.path();
-        }
-        if (state == 100)
-            break;
-    }
-
-    const uint type = selected.value(QStringLiteral("DeviceType")).toUInt();
-    const uint state = selected.value(QStringLiteral("State")).toUInt();
-    const QString deviceState = nmDeviceStateName(state);
-    QString connectionName;
-    QString ssid;
-    QString ipv4;
-    int signalStrength = -1;
-    if (!selected.isEmpty() && state == 100) {
-        QSet<QString> watched;
-        connectionName = nmReadActiveConnectionId(
-            dbusPathOf(selected.value(QStringLiteral("ActiveConnection"))), &watched);
-        if (type == 2) {
-            const NmWirelessInfo wifi = nmReadWireless(
-                nmGetAll(selectedPath,
-                         QStringLiteral("org.freedesktop.NetworkManager.Device.Wireless")),
-                &watched);
-            ssid = wifi.ssid;
-            signalStrength = wifi.strength;
-        }
-        ipv4 = nmReadIpv4(dbusPathOf(selected.value(QStringLiteral("Ip4Config"))),
-                          &watched);
-        for (const QString &path : watched)
+    // The whole NM walk (registration check, GetAll, GetDevices, per-device
+    // reads) is synchronous D-Bus; on m_dbusPool it cannot stall the socket
+    // event loop for seconds the way it used to on a slow NetworkManager.
+    auto *watcher = new QFutureWatcher<NetworkWorkerResult>(this);
+    connect(watcher, &QFutureWatcher<NetworkWorkerResult>::finished, this,
+            [this, watcher, key]() {
+        watcher->deleteLater();
+        const NetworkWorkerResult out = watcher->result();
+        for (const QString &path : out.watchPaths)
             watchNmPath(path);
-        if (ssid.isEmpty() && type == 2)
-            ssid = connectionName;
-        // The follow-up network.details request the Shell fires after every
-        // refresh asks for exactly these fields -- prefill its cache so the
-        // second request stays local.
-        const QString detailsKey = QStringLiteral("network.details:")
-            + selected.value(QStringLiteral("Interface")).toString();
-        if (!detailsKey.endsWith(QLatin1Char(':')))
-            storeReply(detailsKey, kNetworkCacheTtlMs, true,
-                       QJsonObject{{QStringLiteral("available"), true},
-                                   {QStringLiteral("connectionName"), connectionName},
-                                   {QStringLiteral("ssid"), ssid},
-                                   {QStringLiteral("ipv4"), ipv4},
-                                   {QStringLiteral("signalStrength"), signalStrength}});
-    }
-
-    const QJsonObject result{
-        {QStringLiteral("available"), true},
-        {QStringLiteral("networkingEnabled"),
-         manager.value(QStringLiteral("NetworkingEnabled")).toBool()},
-        {QStringLiteral("connectivity"),
-         nmConnectivityName(manager.value(QStringLiteral("Connectivity")).toUInt())},
-        {QStringLiteral("wifiEnabled"),
-         manager.value(QStringLiteral("WirelessEnabled")).toBool()},
-        {QStringLiteral("connectionType"),
-         type == 2 ? QStringLiteral("wifi")
-                   : type == 1 ? QStringLiteral("ethernet") : QStringLiteral("none")},
-        {QStringLiteral("deviceName"), selected.value(QStringLiteral("Interface")).toString()},
-        {QStringLiteral("connectionName"), connectionName},
-        {QStringLiteral("deviceState"), deviceState},
-        {QStringLiteral("ssid"), ssid},
-        {QStringLiteral("signalStrength"), signalStrength},
-        {QStringLiteral("ipv4"), ipv4}};
-    respond(socket, request, true, result);
-    storeReply(key, kNetworkCacheTtlMs, true, result);
+        if (!out.detailsKey.isEmpty() && !out.detailsKey.endsWith(QLatin1Char(':')))
+            storeReply(out.detailsKey, kNetworkCacheTtlMs, true, out.detailsPrefill);
+        completeInFlight(key, out.ok, out.result, out.code, out.message,
+                         out.retryable, kNetworkCacheTtlMs);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_dbusPool, networkRefreshWorker));
 }
 
 void PlatformServer::runNetworkDetails(QLocalSocket *socket,
@@ -1672,76 +1811,22 @@ void PlatformServer::runNetworkDetails(QLocalSocket *socket,
                                        const QString &device)
 {
     const QString key = QStringLiteral("network.details:") + device;
-    if (serveCachedReply(socket, request, key))
+    if (serveCachedReply(socket, request, key)
+        || queueIfInFlight(key, socket, request))
         return;
 
-    const QDBusConnection bus = QDBusConnection::systemBus();
-    if (!dbusServiceRegistered(bus, QString::fromLatin1(kNmService))) {
-        const QString code = QStringLiteral("network-unavailable");
-        const QString message = QStringLiteral("平台命令不可用");
-        respond(socket, request, false, {}, code, message, true);
-        storeReply(key, kNetworkCacheTtlMs, false, {}, code, message, true);
-        return;
-    }
-
-    watchNmPath(QString::fromLatin1(kNmRootPath));
-    QDBusInterface networkManager(QString::fromLatin1(kNmService),
-                                  QString::fromLatin1(kNmRootPath),
-                                  QString::fromLatin1(kNmService), bus);
-    networkManager.setTimeout(kDbusCallTimeoutMs);
-    const QDBusMessage devicesReply = networkManager.call(QStringLiteral("GetDevices"));
-
-    QVariantMap found;
-    QString foundPath;
-    if (devicesReply.type() == QDBusMessage::ReplyMessage
-        && !devicesReply.arguments().isEmpty()) {
-        const QList<QDBusObjectPath> devicePaths =
-            qdbus_cast<QList<QDBusObjectPath>>(devicesReply.arguments().constFirst());
-        for (const QDBusObjectPath &devicePath : devicePaths) {
-            watchNmPath(devicePath.path());
-            const QVariantMap props = nmGetAll(devicePath.path(),
-                QStringLiteral("org.freedesktop.NetworkManager.Device"));
-            if (props.value(QStringLiteral("Interface")).toString() == device) {
-                found = props;
-                foundPath = devicePath.path();
-                break;
-            }
-        }
-    }
-    if (found.isEmpty()) {
-        const QString code = QStringLiteral("network-device-unavailable");
-        const QString message = QStringLiteral("平台命令执行失败");
-        respond(socket, request, false, {}, code, message, true);
-        storeReply(key, kNetworkCacheTtlMs, false, {}, code, message, true);
-        return;
-    }
-
-    QSet<QString> watched;
-    QString connectionName = nmReadActiveConnectionId(
-        dbusPathOf(found.value(QStringLiteral("ActiveConnection"))), &watched);
-    const QString ipv4 = nmReadIpv4(
-        dbusPathOf(found.value(QStringLiteral("Ip4Config"))), &watched);
-    QString ssid = connectionName;
-    int signalStrength = -1;
-    if (found.value(QStringLiteral("DeviceType")).toUInt() == 2) {
-        const NmWirelessInfo wifi = nmReadWireless(
-            nmGetAll(foundPath,
-                     QStringLiteral("org.freedesktop.NetworkManager.Device.Wireless")),
-            &watched);
-        if (!wifi.ssid.isEmpty())
-            ssid = wifi.ssid;
-        signalStrength = wifi.strength;
-    }
-    for (const QString &path : watched)
-        watchNmPath(path);
-
-    const QJsonObject result{{QStringLiteral("available"), true},
-                             {QStringLiteral("connectionName"), connectionName},
-                             {QStringLiteral("ssid"), ssid},
-                             {QStringLiteral("ipv4"), ipv4},
-                             {QStringLiteral("signalStrength"), signalStrength}};
-    respond(socket, request, true, result);
-    storeReply(key, kNetworkCacheTtlMs, true, result);
+    auto *watcher = new QFutureWatcher<NetworkWorkerResult>(this);
+    connect(watcher, &QFutureWatcher<NetworkWorkerResult>::finished, this,
+            [this, watcher, key]() {
+        watcher->deleteLater();
+        const NetworkWorkerResult out = watcher->result();
+        for (const QString &path : out.watchPaths)
+            watchNmPath(path);
+        completeInFlight(key, out.ok, out.result, out.code, out.message,
+                         out.retryable, kNetworkCacheTtlMs);
+    });
+    watcher->setFuture(QtConcurrent::run(&m_dbusPool, networkDetailsWorker,
+                                         device));
 }
 
 void PlatformServer::runBluetoothList(QLocalSocket *socket, const QJsonObject &request)
