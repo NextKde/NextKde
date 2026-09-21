@@ -6,6 +6,7 @@
 #include "Transcoder.h"
 
 #include <QFutureWatcher>
+#include <QHash>
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
@@ -170,6 +171,7 @@ private slots:
     void scanFinished();
 
 private:
+    void initialize();
     void setError(const QString &message);
     void startNextScan();
     void refreshLibrary();
@@ -194,6 +196,7 @@ private:
     QFutureWatcher<ScanResult> m_scanWatcher;
     MprisService *m_mpris = nullptr;
     QList<TrackRecord> m_tracks;
+    QHash<qint64, int> m_trackIndex;
     QList<qint64> m_queueIds;
     QStringList m_pendingScanRoots;
     QVariantList m_albums;

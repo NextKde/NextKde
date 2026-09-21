@@ -575,7 +575,24 @@ KosApplicationWindow {
                     visible: root.isLibraryTrackPage
                     placeholderText: qsTr("Search library…")
                     Accessible.name: qsTr("Search music library")
-                    onTextChanged: music.setSearch(text)
+                    // Debounce: every keystroke otherwise rebuilds the whole
+                    // library model (filter + locale-aware sort + full reset,
+                    // destroying every delegate and reloading artwork).
+                    onTextChanged: searchDebounce.restart()
+                    // Flush a pending search when the field disappears so the
+                    // model never lags one debounce interval behind the page.
+                    onVisibleChanged: {
+                        if (!visible && searchDebounce.running) {
+                            searchDebounce.stop()
+                            music.setSearch(text)
+                        }
+                    }
+
+                    Timer {
+                        id: searchDebounce
+                        interval: 300
+                        onTriggered: music.setSearch(searchField.text)
+                    }
                 }
 
                 KosRoundButton {

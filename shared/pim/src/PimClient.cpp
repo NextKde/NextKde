@@ -211,7 +211,10 @@ void PimClient::onServiceChanged(const QString &, const QString &, const QString
 
 void PimClient::onRemoteChanged(qulonglong revision)
 {
-    if (revision >= m_revision)
+    // The service bumps the revision on every accepted mutation, so an equal
+    // or lower revision carries nothing new. Only a strictly newer snapshot
+    // is worth a full round-trip.
+    if (revision > m_revision)
         refresh();
 }
 
@@ -297,7 +300,9 @@ void PimClient::handleReply(QDBusPendingCallWatcher *watcher, ReplyKind kind,
                          .value(QStringLiteral("id")).toString();
     }
     emit operationSucceeded(operation, resolvedId);
-    refresh();
+    // No refresh() here: the service emits changed(revision) for every
+    // accepted mutation and onRemoteChanged() already fetches the new
+    // snapshot. Refreshing again would double the round-trips per write.
 }
 
 void PimClient::requestRange()

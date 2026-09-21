@@ -1,6 +1,7 @@
 #include "PlaybackEngine.h"
 
 #include <QFileInfo>
+#include <QMetaObject>
 
 #include <gst/gst.h>
 
@@ -15,6 +16,19 @@ QString gstErrorMessage(const GError *error, const gchar *debug)
     if (debug && *debug)
         message += QStringLiteral(" (%1)").arg(QString::fromUtf8(debug));
     return message;
+}
+
+// Runs on whatever streaming thread posted the message. It must not touch Qt
+// object members; it only queues pollBus() onto the engine's thread so the
+// bus is drained on the UI event loop instead of a polling timer.
+GstBusSyncReply busSyncHandler(GstBus *bus, GstMessage *message,
+                               gpointer userData)
+{
+    Q_UNUSED(bus)
+    Q_UNUSED(message)
+    auto *engine = static_cast<PlaybackEngine *>(userData);
+    QMetaObject::invokeMethod(engine, "pollBus", Qt::QueuedConnection);
+    return GST_BUS_PASS;
 }
 
 } // namespace
@@ -67,20 +81,24 @@ PlaybackEngine::PlaybackEngine(QObject *parent)
         }
     }
 
-    m_busTimer.setInterval(40);
-    connect(&m_busTimer, &QTimer::timeout, this, &PlaybackEngine::pollBus);
-    m_busTimer.start();
+    // Wake the UI thread only when the bus posts a message; the sync handler
+    // queues pollBus() and never touches Qt object members itself.
+    gst_bus_set_sync_handler(m_bus, busSyncHandler, this, nullptr);
     m_positionTimer.setInterval(250);
-    connect(&m_positionTimer, &QTimer::timeout, this, &PlaybackEngine::updatePosition);
-    m_positionTimer.start();
+    connect(&m_positionTimer, &QTimer::timeout, this,
+            &PlaybackEngine::updatePosition);
 }
 
 PlaybackEngine::~PlaybackEngine()
 {
     if (m_playbin)
         gst_element_set_state(m_playbin, GST_STATE_NULL);
-    if (m_bus)
+    if (m_bus) {
+        // Drop the handler before unreferencing so no queued pollBus() call
+        // or in-flight bus post can touch a destroyed engine.
+        gst_bus_set_sync_handler(m_bus, nullptr, nullptr, nullptr);
         gst_object_unref(m_bus);
+    }
     if (m_playbin)
         gst_object_unref(m_playbin);
 }
@@ -317,6 +335,12 @@ void PlaybackEngine::setState(const QString &state)
     if (m_state == state)
         return;
     m_state = state;
+    // Position polling only matters while frames are advancing; keep the
+    // timer stopped for every other state so idle playback costs no wakeups.
+    if (m_state == QStringLiteral("Playing"))
+        m_positionTimer.start();
+    else
+        m_positionTimer.stop();
     emit stateChanged();
 }
 
