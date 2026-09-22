@@ -184,39 +184,62 @@ ApplicationWindow {
     // settings are live in the checkout Shell the user is looking at and are not
     // the ones the installed desktop reads at login. Conflating the two is the
     // mistake this banner exists to prevent, so it names the Shell as well.
+    // Deliberately loud. A development window and the installed desktop render
+    // identically, so this band is the only thing between "I just tuned my dock"
+    // and "I just tuned a copy nobody logs into". A quiet note would be read as
+    // decoration and skipped, which is exactly the outcome it exists to prevent.
     component DevelopmentBanner: Rectangle {
         Layout.fillWidth: true
-        Layout.bottomMargin: 18
-        implicitHeight: bannerText.implicitHeight + 22
-        radius: 14
-        color: Qt.rgba(1, 0.62, 0.04, 0.12)
+        Layout.bottomMargin: 22
+        implicitHeight: bannerText.implicitHeight + 40
+        radius: 16
+        color: Qt.rgba(1, 0.62, 0.04, 0.2)
         border.width: 1
-        border.color: Qt.rgba(1, 0.62, 0.04, 0.32)
+        border.color: Qt.rgba(1, 0.62, 0.04, 0.65)
 
         Rectangle {
             id: bannerAccent
             x: 0
-            y: 8
-            width: 3
-            height: parent.height - 16
-            radius: 2
+            y: 10
+            width: 5
+            height: parent.height - 20
+            radius: 2.5
             color: "#ff9f0a"
+        }
+
+        Rectangle {
+            id: bannerBadge
+            anchors.left: bannerAccent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 16
+            width: 28
+            height: 28
+            radius: 14
+            color: "#ff9f0a"
+
+            Text {
+                anchors.centerIn: parent
+                text: "!"
+                color: "#241700"
+                font.pixelSize: 17
+                font.weight: Font.Bold
+            }
         }
 
         Column {
             id: bannerText
-            anchors.left: bannerAccent.right
+            anchors.left: bannerBadge.right
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 11
-            anchors.rightMargin: 12
-            spacing: 3
+            anchors.leftMargin: 14
+            anchors.rightMargin: 18
+            spacing: 4
 
             Text {
                 text: "调试会话 · 源码树 Shell"
                 color: theme.primaryText
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
+                font.pixelSize: 17
+                font.weight: Font.Bold
             }
 
             Text {
@@ -224,7 +247,7 @@ ApplicationWindow {
                 text: "界面从这份源码加载，改 QML 立即生效；"
                     + "配置写进这次调试会话自己的目录，与服务模式的那份相互独立。"
                 color: theme.secondaryText
-                font.pixelSize: 12
+                font.pixelSize: 13
                 wrapMode: Text.Wrap
             }
 
@@ -232,7 +255,7 @@ ApplicationWindow {
                 width: parent.width
                 text: window.sessionShellDir
                 color: theme.tertiaryText
-                font.pixelSize: 11
+                font.pixelSize: 12
                 elide: Text.ElideMiddle
             }
         }
