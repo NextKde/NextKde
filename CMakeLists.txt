@@ -111,6 +111,16 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.liquid-glass-panel PROPERTIES TIMEOUT 15)
+            # Reads the resolved glass ink in the states 液态玻璃跟随外观模式 can
+            # put the glass in. The binding chain it walks (config -> appearance
+            # token -> surface/text) renders a plausible colour even when it is
+            # broken, so only the resolved values catch it.
+            add_test(NAME kos-shell.glass-ink
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/glass-ink/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.glass-ink PROPERTIES TIMEOUT 15)
             # Drives the shipping DockIcon's magnificationPointer by hand to
             # check where the Dock decides an icon is hovered. The hover test
             # must not read geometry that the hover lift itself moves, which is
@@ -129,6 +139,7 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.traditional-color-runtime PROPERTIES TIMEOUT 15)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
+                kos-shell.glass-ink
                 kos-shell.dock-hover-hit
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
@@ -266,7 +277,8 @@ if(BUILD_TESTING)
     endif()
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
-            kos-shell.liquid-glass-panel kos-shell.traditional-color-runtime
+            kos-shell.liquid-glass-panel kos-shell.glass-ink
+            kos-shell.traditional-color-runtime
             kos-shell.dock-hover-hit
             PROPERTIES LABELS ui)
     endif()

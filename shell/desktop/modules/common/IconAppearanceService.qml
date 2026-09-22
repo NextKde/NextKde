@@ -55,9 +55,20 @@ QtObject {
     // Desktop widget content stays monochrome in both grayscale and tint
     // modes. Tint is reserved for the WidgetGlassMaterial background; Canvas,
     // images, and QML text do not all enter an ancestor shader consistently.
+    // Only a glass that is actually dark takes the fixed white ink. A glass
+    // that follows a light appearance resolves the palette's dark on-surface
+    // ink instead, so the chrome in front of it no longer needs a readability
+    // outline. Material keeps its own semantic role in both schemes.
+    //
+    // The white branch is keyed on `isDarkTheme` rather than on the desktop's
+    // light/dark state: `isDarkTheme` already folds in "the glass does not
+    // follow the appearance, so it stays dark", which is the case a
+    // system-theme test would get wrong.
     function glassContentColor(alpha) {
         const opacity = alpha === undefined ? 1.0 : alpha
-        if (AppearanceTokens.isMaterial) {
+        const darkGlass = !AppearanceTokens.isMaterial
+            && AppearanceTokens.isDarkTheme
+        if (!darkGlass) {
             const base = AppearanceTokens.colors.surfaceForeground
             return Qt.rgba(base.r, base.g, base.b, opacity)
         }

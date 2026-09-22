@@ -1,5 +1,6 @@
 import QtQuick
 import qs.desktop.modules.bar
+import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 
@@ -8,6 +9,12 @@ import qs.desktop.modules.platform
 // kernel byte counters and never performs network-management actions.
 Item {
     id: root
+
+    // The readouts below already take the glass tint through ThemeService; the
+    // arrow glyph has to move with them or the two halves of one indicator
+    // disagree. The ink follows the glass, so while 液态玻璃跟随外观模式 is off
+    // the arrow still strokes exactly the white it stroked before.
+    readonly property color glyphInk: AppearanceTokens.content.glassInk()
 
     // BarWindow routes this request to the shared NetworkPanel. Keeping the
     // event at component level lets the same traffic readout be reused in a
@@ -100,10 +107,11 @@ Item {
             id: directionGlyph
             width: 13
             height: 18
+            onGlyphInkChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.reset()
-                ctx.strokeStyle = "white"
+                ctx.strokeStyle = root.glyphInk
                 ctx.lineWidth = 1.35
                 ctx.lineCap = "round"
                 ctx.beginPath()

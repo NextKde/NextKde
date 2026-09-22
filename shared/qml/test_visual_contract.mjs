@@ -219,6 +219,54 @@ assert.match(settingsApp, /Layout\.preferredHeight:\s*implicitHeight/,
 assert.doesNotMatch(settingsApp, /Layout\.preferredHeight:\s*550\b/,
     "the theme card no longer hardcodes the macOS-only height");
 
+// 玻璃文字墨色 is driven by the one option the settings row above already owns
+// (液态玻璃跟随外观模式), so these assertions pin the rule rather than a control:
+// while the option is off the glass stays dark in both appearances and keeps the
+// fixed white ink the shell has always drawn; turning it on lets a light
+// appearance light the glass, and the ink turns dark with it. The branch keys on
+// the appearance token, which already folds in "the glass does not follow, so it
+// stays dark" -- reading the desktop theme instead would paint black type on a
+// dark glass whenever the option is off on a light desktop.
+const appearanceTokensSource = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
+assert.match(appearanceTokensSource,
+    /function glassInk\(alpha\)[\s\S]{0,160}?glassContentColor\(alpha\)/,
+    "shell chrome asks one glass ink resolver instead of testing the style itself");
+const glassInkSurface = read("../../shell/desktop/modules/common/LiquidGlassSurface.qml");
+const iconAppearanceSource = read("../../shell/desktop/modules/common/IconAppearanceService.qml");
+assert.match(iconAppearanceSource,
+    /isDarkTheme[\s\S]{0,200}?surfaceForeground[\s\S]{0,160}?Qt\.rgba\(1, 1, 1, opacity\)/,
+    "glass ink stays white only while the glass itself is dark");
+assert.doesNotMatch(iconAppearanceSource, /resolvedAppearanceIsDark|systemIsDark/,
+    "glass ink never takes the desktop's theme for the glass's own ink");
+// The white hierarchy the glass shipped with has to move as one: a role that
+// keeps its own literal reads correctly while the glass is dark and turns
+// invisible the moment a light appearance lights it.
+for (const role of ["foregroundColor", "secondaryForegroundColor",
+                    "tertiaryForegroundColor"])
+    assert.match(glassInkSurface,
+        new RegExp(`readonly property color ${role}:[\\s\\S]{0,400}?content\\.glassInk\\(`),
+        `the glass ${role} follows the resolved ink`);
+assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
+    /onGlyphInkChanged:\s*requestPaint\(\)/,
+    "the Bar traffic arrow repaints when the ink it strokes with moves");
+for (const [path, description] of [
+    ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
+    ["../../shell/desktop/modules/bar/NetworkPanel.qml", "network panel chrome"],
+    ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
+    ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
+    ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
+]) {
+    assert.match(read(path), /content\.glassInk\(/,
+        `${description} takes the glass ink instead of a white literal`);
+}
+// A second switch would split one decision in two and let the halves disagree,
+// and the rejected draft of this rule is exactly what that looked like.
+assert.doesNotMatch(read("../../shell/desktop/modules/common/AppearanceConfigService.qml"),
+    /glassInkFollowsAppearanceMode/,
+    "the glass ink reuses the existing option instead of adding its own");
+assert.doesNotMatch(settingsApp, /glassInkFollowsAppearanceMode|文字颜色跟随外观/,
+    "the appearance card grows no second glass row");
+
 const switchSource = read("./foundation/KosSwitch.qml");
 const segmentedSource = read("./controls/LiquidSegmentedControl.qml");
 assert.match(switchSource, /Accessible\.onPressAction/,
