@@ -47,4 +47,20 @@ if(BUILD_TESTING)
         LABELS ui
         TIMEOUT 15
     )
+
+    # The smoke test above proves the pages load; this one proves the right
+    # pages were chosen, which is a separate failure mode: an installed binary
+    # serving a checkout Shell would open and render the installed copy, look
+    # entirely correct, and ignore every QML edit until someone reinstalls.
+    if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-settings.dev-session-entry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dev-session/run.mjs
+                $<TARGET_FILE:kos-settings>
+        )
+        set_tests_properties(kos-settings.dev-session-entry PROPERTIES
+            LABELS ui
+            TIMEOUT 30
+        )
+    endif()
 endif()

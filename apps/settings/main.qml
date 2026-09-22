@@ -134,6 +134,16 @@ ApplicationWindow {
         }
     }
 
+    // Set by the standalone bridge from the session this window is serving, not
+    // from where this binary was installed: a Shell started from a checkout
+    // (`kosctl dev`) answers as a development session even though the binary
+    // itself is the installed one. A missing bridge (older binary, plain QML
+    // preview) reads as false, which keeps the banner out of the way.
+    readonly property bool developmentSession: (typeof settingsBridge !== "undefined")
+        ? settingsBridge.developmentSession === true : false
+    readonly property string sessionShellDir: (typeof settingsBridge !== "undefined")
+        ? settingsBridge.sessionShellDir : ""
+
     readonly property var contentByPage: [
         {
             subtitle: "显示",
@@ -168,6 +178,65 @@ ApplicationWindow {
             groups: []
         }
     ]
+
+    // Shown only while a development session drives this window. Every value on
+    // these pages then belongs to that session's own state directory: the
+    // settings are live in the checkout Shell the user is looking at and are not
+    // the ones the installed desktop reads at login. Conflating the two is the
+    // mistake this banner exists to prevent, so it names the Shell as well.
+    component DevelopmentBanner: Rectangle {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 18
+        implicitHeight: bannerText.implicitHeight + 22
+        radius: 14
+        color: Qt.rgba(1, 0.62, 0.04, 0.12)
+        border.width: 1
+        border.color: Qt.rgba(1, 0.62, 0.04, 0.32)
+
+        Rectangle {
+            id: bannerAccent
+            x: 0
+            y: 8
+            width: 3
+            height: parent.height - 16
+            radius: 2
+            color: "#ff9f0a"
+        }
+
+        Column {
+            id: bannerText
+            anchors.left: bannerAccent.right
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 11
+            anchors.rightMargin: 12
+            spacing: 3
+
+            Text {
+                text: "调试会话 · 源码树 Shell"
+                color: theme.primaryText
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                width: parent.width
+                text: "界面从这份源码加载，改 QML 立即生效；"
+                    + "配置写进这次调试会话自己的目录，与服务模式的那份相互独立。"
+                color: theme.secondaryText
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+
+            Text {
+                width: parent.width
+                text: window.sessionShellDir
+                color: theme.tertiaryText
+                font.pixelSize: 11
+                elide: Text.ElideMiddle
+            }
+        }
+    }
 
     component SettingIcon: Rectangle {
         required property string symbol
@@ -4565,6 +4634,12 @@ ApplicationWindow {
                     width: Math.max(0, Math.min(pageScroll.width, maximumWidth))
                     x: Math.max(0, Math.round((pageScroll.width - width) / 2))
                     spacing: 0
+
+                    // Invisible rows are left out of a Layout, so an installed
+                    // session shows no gap where this sits.
+                    DevelopmentBanner {
+                        visible: window.developmentSession
+                    }
 
                     Text {
                         text: window.contentByPage[window.currentPage].subtitle

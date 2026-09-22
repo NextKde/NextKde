@@ -4,13 +4,17 @@
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QProcess>
 #include <QStandardPaths>
@@ -73,11 +77,33 @@ bool isReadOnlyDebugKey(const QString &key)
 class SettingsBridge final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(bool developmentSession READ isDevelopmentSession NOTIFY sessionChanged)
+    Q_PROPERTY(QString sessionShellDir READ sessionShellDir NOTIFY sessionChanged)
 
 public:
-    explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {}
+    explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
+        // The Shell's own Settings entry goes through the platform daemon, which
+        // exports KOS_SHELL_DIR for the session it belongs to. That is the one
+        // launch path that can answer before the window exists, so it is taken
+        // as the starting answer and corrected below if a call lands somewhere
+        // else.
+        const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
+        if (!configured.isEmpty())
+            m_sessionShellDir = configured;
+    }
 
     QString lastError() const { return m_lastError; }
+
+    // Whether this window is driving a Shell started from a checkout
+    // (`kosctl dev`, `qs -p <checkout>/shell`) rather than the installed `kos`
+    // configuration. It decides which QML tree is loaded and whether the window
+    // reports itself as a development session, so it is derived from the
+    // session itself and never from this binary's own location.
+    bool isDevelopmentSession() const {
+        return !m_sessionShellDir.isEmpty() && !isInstalledShellDirectory(m_sessionShellDir);
+    }
+
+    QString sessionShellDir() const { return m_sessionShellDir; }
 
     Q_INVOKABLE QVariantMap dockSnapshot() {
         return snapshotFromReply(callDock({QStringLiteral("snapshot")}));
@@ -488,6 +514,7 @@ public:
 
 signals:
     void lastErrorChanged();
+    void sessionChanged();
 
 private:
     QVariantMap snapshotFromReply(const QString &payload) {
@@ -718,6 +745,25 @@ private:
             + QStringLiteral("/quickshell/kos");
     }
 
+    // The session directory equals the installed one only when the Shell was
+    // started as `-c kos`. Compared cleaned, because the value arrives from the
+    // environment and a trailing slash would otherwise read as a checkout.
+    static bool isInstalledShellDirectory(const QString &shellPath) {
+        if (shellPath.isEmpty())
+            return false;
+        return QDir::cleanPath(shellPath) == QDir::cleanPath(installedShellDirectory());
+    }
+
+    // Recorded from the candidate that actually answered, so a window opened
+    // without KOS_SHELL_DIR (app grid, KRunner) still learns which session it is
+    // serving instead of guessing from the fallback order.
+    void setSessionShell(const QString &shellPath) {
+        if (m_sessionShellDir == shellPath)
+            return;
+        m_sessionShellDir = shellPath;
+        emit sessionChanged();
+    }
+
     // Candidate Shell directories, most specific first. A Settings window is
     // started from two different places and only one of them can pass the
     // environment down: the Shell's own Settings entry goes through the
@@ -814,8 +860,10 @@ private:
                     // hard failure does.
                     const QString reply =
                         QString::fromUtf8(process.readAllStandardOutput()).trimmed();
-                    if (!isIpcDiagnostic(reply))
+                    if (!isIpcDiagnostic(reply)) {
+                        setSessionShell(QDir::cleanPath(shellPath));
                         return reply;
+                    }
                     failure = fallbackError;
                 } else {
                     failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
@@ -839,11 +887,197 @@ private:
     }
 
     QString m_lastError;
+    // The Shell directory this window is talking to: seeded from KOS_SHELL_DIR,
+    // replaced by whichever candidate answers. Empty until one of the two has
+    // happened, which is also the state the banner treats as "not a development
+    // session" rather than guessing.
+    QString m_sessionShellDir;
     // Last appearance snapshot the shell sent. Kept for glassDebugSpecs(), which
     // reads the active preset out of it, and refreshed on every glass debug
     // snapshot so the style it names is the one being edited right now.
     QJsonObject m_appearanceSnapshot;
 };
+
+namespace {
+
+// Which QML tree this window runs. A development session must show the checkout
+// the Shell in front of the user was started from -- the point of `kosctl dev`
+// is to see source edits without reinstalling, and the QML half of Settings is
+// the only half that can be iterated on that way (the binary is installed by
+// `kosctl install` and is not rebuilt by `dev`). The copy installed beside the
+// binary stays the answer for the service session. The compile-time tree is
+// last: a binary built in a checkout has no copy next to it, an installed one
+// has no checkout to point at.
+struct SettingsEntry {
+    QString qmlPath;
+    // Non-empty only when qmlPath lies in a checkout: the root whose edits are
+    // watched while the window is open. Empty means "load once, never reload",
+    // which is every case the user is not developing against.
+    QString checkoutRoot;
+    // Named in the log line, which is the only thing that tells the three trees
+    // apart from the outside -- they render identically, so a wrong choice shows
+    // up as nothing at all.
+    QString source;
+};
+
+SettingsEntry chooseSettingsEntry(bool developmentSession, const QString &sessionShellDir)
+{
+    SettingsEntry entry;
+    if (developmentSession && !sessionShellDir.isEmpty()) {
+        // `KOS_SHELL_DIR` names the Shell directory, so the checkout is one
+        // level up from it and the pages sit in `apps/settings`. Derived from
+        // the session rather than from SETTINGS_QML_DIR, so the window runs the
+        // same tree as the Shell it is editing even when the two were built from
+        // different paths.
+        const QString qmlPath = QDir::cleanPath(
+            QDir(sessionShellDir).filePath(QStringLiteral("../apps/settings/main.qml")));
+        if (QFileInfo::exists(qmlPath)) {
+            entry.qmlPath = qmlPath;
+            entry.checkoutRoot = QDir::cleanPath(
+                QDir(sessionShellDir).filePath(QStringLiteral("..")));
+            entry.source = QStringLiteral("session checkout");
+            return entry;
+        }
+    }
+
+    const QString installedCopy = QDir(QCoreApplication::applicationDirPath()).filePath(
+        QStringLiteral("../share/kos/settings/main.qml"));
+    if (QFileInfo::exists(installedCopy)) {
+        entry.qmlPath = installedCopy;
+        entry.source = QStringLiteral("installed copy");
+        return entry;
+    }
+
+    entry.qmlPath = QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
+        QStringLiteral("main.qml"));
+    entry.source = QStringLiteral("build tree");
+    return entry;
+}
+
+// Rebuilds the window when the checkout it was loaded from changes. Two rules
+// keep this from being a way to lose the window: the reload is debounced,
+// because one editor save is not one event (a write plus a rename), and the new
+// text is compiled before anything is torn down, so a file that does not parse
+// reports its errors and leaves the current UI on screen.
+class SettingsQmlReloader final : public QObject {
+public:
+    SettingsQmlReloader(QQmlApplicationEngine *engine, const QUrl &entryPoint,
+                        const QString &checkoutRoot, QObject *parent = nullptr)
+        : QObject(parent), m_engine(engine), m_entryPoint(entryPoint) {
+        const QString pages = QFileInfo(entryPoint.toLocalFile()).absolutePath();
+        if (!pages.isEmpty())
+            m_directories.append(pages);
+        // The pages import the shared tree by relative path, so both halves of
+        // the window are part of the same edit loop. Only the directory itself
+        // is listed here; qmlFiles() walks it.
+        if (!checkoutRoot.isEmpty()) {
+            const QString shared = QDir(checkoutRoot).filePath(QStringLiteral("shared/qml"));
+            if (QFileInfo(shared).isDir())
+                m_directories.append(shared);
+        }
+    }
+
+    void start() {
+        if (m_directories.isEmpty())
+            return;
+
+        m_debounce.setSingleShot(true);
+        m_debounce.setInterval(300);
+        connect(&m_debounce, &QTimer::timeout, this, [this] { reload(); });
+        connect(&m_watcher, &QFileSystemWatcher::fileChanged, this,
+                [this](const QString &) { m_debounce.start(); });
+        connect(&m_watcher, &QFileSystemWatcher::directoryChanged, this,
+                [this](const QString &) {
+                    refreshWatches();
+                    m_debounce.start();
+                });
+        refreshWatches();
+    }
+
+private:
+    // Both suffixes matter: the pages also import plain .mjs helpers (the
+    // Material colour implementation), and those are edited the same way.
+    static QStringList qmlFiles(const QString &directory) {
+        QStringList files;
+        QDirIterator iterator(directory,
+                              {QStringLiteral("*.qml"), QStringLiteral("*.mjs")},
+                              QDir::Files, QDirIterator::Subdirectories);
+        while (iterator.hasNext())
+            files.append(iterator.next());
+        return files;
+    }
+
+    // Watches are per path, not per directory, so they have to be re-listed
+    // after every change: an editor that saves by writing a new file over the
+    // old one drops the watch on the old inode.
+    void refreshWatches() {
+        QStringList missingFiles;
+        QStringList missingDirectories;
+        for (const QString &directory : m_directories) {
+            if (!QFileInfo(directory).isDir())
+                continue;
+            if (!m_watcher.directories().contains(directory))
+                missingDirectories.append(directory);
+            for (const QString &file : qmlFiles(directory)) {
+                if (!m_watcher.files().contains(file))
+                    missingFiles.append(file);
+            }
+        }
+        if (!missingDirectories.isEmpty())
+            m_watcher.addPaths(missingDirectories);
+        if (!missingFiles.isEmpty())
+            m_watcher.addPaths(missingFiles);
+    }
+
+    // Compiled on a throwaway engine on purpose: the live one caches compiled
+    // QML by URL, so asking it about the file it already loaded answers from the
+    // cache -- it would pass text that no longer compiles, and the reload that
+    // followed would tear the window down. A fresh engine reads the file from
+    // disk, which is the whole question here.
+    bool compiles() {
+        QQmlEngine validator;
+        validator.setImportPathList(m_engine->importPathList());
+        QQmlComponent component(&validator, m_entryPoint);
+        if (!component.isError())
+            return true;
+        qWarning().noquote()
+            << "kos-settings: QML changed but does not compile, keeping the window"
+               " as it is:"
+            << component.errorString().trimmed();
+        return false;
+    }
+
+    void reload() {
+        if (!compiles())
+            return;
+
+        const QList<QObject *> roots = m_engine->rootObjects();
+        for (QObject *root : roots)
+            delete root;
+        m_engine->clearComponentCache();
+        m_engine->load(m_entryPoint);
+        if (m_engine->rootObjects().isEmpty()) {
+            // Only reachable for text that compiles and still fails to build its
+            // root object. Say so instead of leaving an empty screen behind: the
+            // watcher is still live, so the next change that works brings the
+            // window back.
+            qWarning().noquote()
+                << "kos-settings: reload failed, the window is gone until the next"
+                   " change that loads";
+            return;
+        }
+        qInfo().noquote() << "kos-settings: reloaded" << m_entryPoint.toLocalFile();
+        refreshWatches();
+    }
+
+    QQmlApplicationEngine *m_engine = nullptr;
+    QUrl m_entryPoint;
+    QStringList m_directories;
+    QFileSystemWatcher m_watcher;
+    QTimer m_debounce;
+};
+
+} // namespace
 
 int main(int argc, char *argv[]) {
     QGuiApplication application(argc, argv);
@@ -857,15 +1091,29 @@ int main(int argc, char *argv[]) {
     SettingsBridge bridge;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
-    QString settingsQml = QDir(QCoreApplication::applicationDirPath()).filePath(
-        QStringLiteral("../share/kos/settings/main.qml"));
-    if (!QFileInfo::exists(settingsQml))
-        settingsQml = QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
-            QStringLiteral("main.qml"));
-    const QUrl entrypoint = QUrl::fromLocalFile(settingsQml);
+
+    const SettingsEntry entry = chooseSettingsEntry(bridge.isDevelopmentSession(),
+                                                    bridge.sessionShellDir());
+    if (entry.qmlPath.isEmpty()) {
+        qWarning() << "kos-settings: no QML entry point found; looked beside the binary"
+                      " and in" << QStringLiteral(SETTINGS_QML_DIR);
+        return 1;
+    }
+    qInfo().noquote() << "kos-settings: loading QML from" << entry.qmlPath
+                      << QStringLiteral("(%1%2)").arg(
+                             entry.source,
+                             entry.checkoutRoot.isEmpty()
+                                 ? QString()
+                                 : QStringLiteral(", reloads on change"));
+    const QUrl entrypoint = QUrl::fromLocalFile(entry.qmlPath);
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;
+
+    // Inert unless the QML came from a checkout, which is the only case where
+    // there is something to watch.
+    SettingsQmlReloader reloader(&engine, entrypoint, entry.checkoutRoot);
+    reloader.start();
     // --smoke-test is the build-side check that the settings window loads:
     // run one event loop turn (as ApplicationRunner does for the apps) and
     // exit, so CI can prove main.qml instantiates without a display.
