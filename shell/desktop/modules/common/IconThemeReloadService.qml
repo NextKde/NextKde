@@ -18,6 +18,11 @@ QtObject {
     // Changes whenever KDE applies a different icon theme. Consumers use this
     // to discard resolved icon paths without restarting all shell windows.
     property int revision: 0
+    // image://icon URLs commonly keep the same text across a theme change.
+    // Once that happens, bypass Qt Quick's process-wide decoded-pixmap cache
+    // for the rest of this shell session so old-theme pixels cannot return.
+    // A fresh shell starts with an empty cache and enables reuse again.
+    property bool pixmapCacheAllowed: true
 
     function themeFromConfig(text) {
         const lines = String(text || "").split("\n")
@@ -82,6 +87,7 @@ QtObject {
         onTriggered: {
             console.log("[IconTheme] changed to " + service.activeTheme
                 + "; refreshing icon sources")
+            service.pixmapCacheAllowed = false
             service.revision++
         }
     }

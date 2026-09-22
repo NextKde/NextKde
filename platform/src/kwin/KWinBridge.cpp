@@ -58,6 +58,8 @@ Bridge *g_bridge = nullptr;
 // small concurrency window and park the rest on a bounded queue.
 constexpr int kMaxThumbnailConcurrency = 2;
 constexpr qsizetype kMaxThumbnailQueue = 32;
+constexpr qint64 kThumbnailFreshMs = 5000;
+constexpr int kThumbnailWorkerThreads = 4;
 
 class Bridge final : public QObject {
     Q_OBJECT
@@ -167,6 +169,12 @@ public:
         // One thread means the caches below need no locking and KIconLoader
         // is only ever touched from a thread it was constructed on.
         m_iconPool.setMaxThreadCount(1);
+        // Raw screenshot frames are tens of MiB. Keeping them off Qt's global
+        // pool prevents captures from leaving one large malloc arena behind
+        // on every CPU worker the global pool happens to choose. Two captures
+        // need at most one pipe reader and one encoder each.
+        m_thumbnailPool.setMaxThreadCount(kThumbnailWorkerThreads);
+        m_thumbnailPool.setExpiryTimeout(-1);
         // Prewarm the desktop index so the first window snapshot does not
         // wait for several hundred .desktop files to be parsed.
         const QPointer<Bridge> self(this);
@@ -255,6 +263,8 @@ private:
         for (auto it = m_thumbnailPaths.begin(); it != m_thumbnailPaths.end();) {
             if (!ids.contains(it.key())) {
                 QFile::remove(it.value());
+                m_thumbnailCapturedAtMs.remove(it.key());
+                m_thumbnailSizes.remove(it.key());
                 it = m_thumbnailPaths.erase(it);
             } else {
                 ++it;
@@ -274,6 +284,16 @@ private:
 
     void captureThumbnail(const QString &id)
     {
+        const QString cachedPath = m_thumbnailPaths.value(id);
+        const qint64 capturedAt = m_thumbnailCapturedAtMs.value(id, 0);
+        const QSize cachedSize = m_thumbnailSizes.value(id);
+        if (!cachedPath.isEmpty() && cachedSize.isValid()
+                && QFileInfo::exists(cachedPath)
+                && QDateTime::currentMSecsSinceEpoch() - capturedAt < kThumbnailFreshMs) {
+            publishThumbnailDebug(id, QStringLiteral("cache-hit"));
+            publishThumbnail(id, cachedPath, cachedSize.width(), cachedSize.height());
+            return;
+        }
         if (m_thumbnailInFlight.contains(id) || m_thumbnailQueue.contains(id))
             return;
         if (int(m_thumbnailInFlight.size()) >= kMaxThumbnailConcurrency) {
@@ -320,7 +340,8 @@ private:
         // deadlock. Start draining immediately in a worker thread.
         const auto expectedBytes = std::make_shared<std::atomic<qint64>>(-1);
         const auto deadlineMs = std::make_shared<std::atomic<qint64>>(-1);
-        auto pixelsFuture = QtConcurrent::run([readFd = pipeFds[0], expectedBytes, deadlineMs] {
+        auto pixelsFuture = QtConcurrent::run(&m_thumbnailPool,
+                [readFd = pipeFds[0], expectedBytes, deadlineMs] {
             // The drain loop leaves through four different branches. Hand-closing
             // the read end on only two of them leaked one descriptor per capture,
             // and a long session eventually reached EMFILE: glib then aborts the
@@ -396,7 +417,7 @@ private:
                 // cycle; reap it off-thread so this callback never blocks.
                 // Fire-and-forget: we only need waitForFinished to return, the
                 // QFuture is intentionally discarded.
-                QThreadPool::globalInstance()->start(
+                m_thumbnailPool.start(
                     [pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
                 publishThumbnailError(id, reply.error().message());
                 endThumbnailCapture(id);
@@ -422,7 +443,7 @@ private:
             // stale captures, so the QFuture is intentionally discarded.
             const quint64 serial = ++m_thumbnailSerial;
             const QPointer<Bridge> guard(this);
-            QThreadPool::globalInstance()->start([guard, id, pixelsFuture, width, height, stride,
+            m_thumbnailPool.start([guard, id, pixelsFuture, width, height, stride,
                                format, expectedSize, serial]() mutable {
                 const QByteArray bytes = pixelsFuture.result();
                 if (!guard)
@@ -448,14 +469,14 @@ private:
                     return;
                 }
 
-                QImage image(reinterpret_cast<const uchar *>(bytes.constData()),
-                             width, height, stride, format);
+                const QImage source(reinterpret_cast<const uchar *>(bytes.constData()),
+                                    width, height, stride, format);
                 // The preview is rendered at roughly 316x184 logical pixels.
                 // Keep a 2x source so it remains crisp on high-DPI outputs
                 // rather than being upscaled by Qt Quick from a 360px
                 // thumbnail.
-                image = image.copy().scaled(QSize(720, 440), Qt::KeepAspectRatio,
-                                            Qt::SmoothTransformation);
+                QImage image = source.scaled(QSize(720, 440), Qt::KeepAspectRatio,
+                                             Qt::SmoothTransformation);
                 if (image.isNull()) {
                     fail(QStringLiteral("Cannot decode KWin screenshot"));
                     return;
@@ -500,8 +521,16 @@ private:
         if (!previousPath.isEmpty() && previousPath != path)
             QFile::remove(previousPath);
         m_thumbnailPaths.insert(id, path);
+        m_thumbnailCapturedAtMs.insert(id, QDateTime::currentMSecsSinceEpoch());
+        m_thumbnailSizes.insert(id, QSize(width, height));
         endThumbnailCapture(id);
 
+        publishThumbnail(id, path, width, height);
+    }
+
+    void publishThumbnail(const QString &id, const QString &path,
+                          int width, int height)
+    {
         QJsonObject event;
         event.insert(QStringLiteral("type"), QStringLiteral("thumbnail"));
         event.insert(QStringLiteral("id"), id);
@@ -614,15 +643,17 @@ private:
     QHash<QString, QString> m_iconCache;
     QSet<QString> m_lastWindowIds;
     QHash<QString, QString> m_thumbnailPaths;
+    QHash<QString, qint64> m_thumbnailCapturedAtMs;
+    QHash<QString, QSize> m_thumbnailSizes;
     QSet<QString> m_thumbnailInFlight;
     QQueue<QString> m_thumbnailQueue;
     quint64 m_thumbnailSerial = 0;
     bool m_desktopIndexReady = false;
     std::atomic<quint64> m_iconTicket{0};
-    // Serialises icon work onto one thread and lets stale snapshots early-out.
-    // Declared last so it is destroyed first: ~QThreadPool waits for the
-    // worker while the caches above are still alive.
+    // Both pools are declared last so their destructors wait for workers while
+    // every cache they access above is still alive.
     QThreadPool m_iconPool;
+    QThreadPool m_thumbnailPool;
 };
 
 } // namespace

@@ -38,7 +38,10 @@ Item {
         source: root.source
         smooth: root.smooth
         asynchronous: root.asynchronous
-        backer.cache: false
+        // Direct rendering can safely reuse Qt Quick's decoded pixmap. Keep
+        // the effect path uncached because it owns a live layer texture.
+        backer.cache: !root.needsEffect
+            && IconThemeReloadService.pixmapCacheAllowed
         visible: !root.needsEffect
         // Provide a live texture directly to ShaderEffect. A separate
         // ShaderEffectSource keeps an extra QQuickItem alive across a

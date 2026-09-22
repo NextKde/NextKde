@@ -90,7 +90,7 @@ QtObject {
     readonly property int   smartHideUrgentRevealMs:   2200  // §5.8 temporary reveal for an urgent window
     // Window previews should feel like a direct hover affordance, while still
     // ignoring brief pointer passes across neighbouring Dock icons.
-    readonly property int   windowPreviewDelay:         90
+    readonly property int   windowPreviewDelay:         300
     // Leave enough hand-off time to move from the Dock icon into the separate
     // preview surface, while keeping the preview responsive when abandoned.
     readonly property int   windowPreviewCloseDelay:     130

@@ -162,6 +162,17 @@ def test_thumbnail_capture_closes_every_descriptor_it_opens() -> None:
     assert_thumbnail_fd_ownership((ROOT / "platform/src/kwin/KWinBridge.cpp").read_text())
 
 
+def test_thumbnail_memory_is_bounded_and_recent_frames_are_reused() -> None:
+    source = (ROOT / "platform/src/kwin/KWinBridge.cpp").read_text()
+    assert "kThumbnailFreshMs" in source
+    assert "cache-hit" in source
+    assert "QtConcurrent::run(&m_thumbnailPool" in source
+    assert "m_thumbnailPool.setMaxThreadCount" in source
+    assert "QThreadPool::globalInstance()->start" not in source
+    assert "image.copy().scaled" not in source
+    assert "source.scaled" in source
+
+
 def test_brightness_targets_one_kde_display() -> None:
     source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
     assert "openScreenBrightness" in source
@@ -189,5 +200,6 @@ if __name__ == "__main__":
     test_bridge_trace_is_opt_in()
     test_thumbnail_drain_owns_the_read_descriptor()
     test_thumbnail_capture_closes_every_descriptor_it_opens()
+    test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
     print("platform contracts: ok")
