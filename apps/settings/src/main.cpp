@@ -79,6 +79,7 @@ class SettingsBridge final : public QObject {
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(bool developmentSession READ isDevelopmentSession NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionShellDir READ sessionShellDir NOTIFY sessionChanged)
+    Q_PROPERTY(bool sourceTreeEntry READ sourceTreeEntry NOTIFY entryChanged)
 
 public:
     explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
@@ -104,6 +105,25 @@ public:
     }
 
     QString sessionShellDir() const { return m_sessionShellDir; }
+
+    // Whether the pages on screen actually came from a checkout: the fact the
+    // banner has to report. Deliberately not `developmentSession`, which only
+    // says which Shell answered IPC. A .desktop launch (app grid, KRunner)
+    // starts with no KOS_SHELL_DIR and loads the installed copy, then the first
+    // successful call discovers the checkout session and flips that one to true
+    // -- keying the banner off the session would announce hot reloading on a
+    // window that is reloading nothing.
+    bool sourceTreeEntry() const { return m_sourceTreeEntry; }
+
+    // Called once from main() with the entry point it picked, before the engine
+    // loads it. Constant for the life of the window: the pages cannot change
+    // trees mid-run.
+    void setSourceTreeEntry(bool value) {
+        if (m_sourceTreeEntry == value)
+            return;
+        m_sourceTreeEntry = value;
+        emit entryChanged();
+    }
 
     Q_INVOKABLE QVariantMap dockSnapshot() {
         return snapshotFromReply(callDock({QStringLiteral("snapshot")}));
@@ -515,6 +535,7 @@ public:
 signals:
     void lastErrorChanged();
     void sessionChanged();
+    void entryChanged();
 
 private:
     QVariantMap snapshotFromReply(const QString &payload) {
@@ -889,9 +910,11 @@ private:
     QString m_lastError;
     // The Shell directory this window is talking to: seeded from KOS_SHELL_DIR,
     // replaced by whichever candidate answers. Empty until one of the two has
-    // happened, which is also the state the banner treats as "not a development
+    // happened, which is also the state that reads as "not a development
     // session" rather than guessing.
     QString m_sessionShellDir;
+    // Set once, from the entry point main() chose, before the engine loads it.
+    bool m_sourceTreeEntry = false;
     // Last appearance snapshot the shell sent. Kept for glassDebugSpecs(), which
     // reads the active preset out of it, and refreshed on every glass debug
     // snapshot so the style it names is the one being edited right now.
@@ -1103,6 +1126,9 @@ int main(int argc, char *argv[]) {
 
     const SettingsEntry entry = chooseSettingsEntry(bridge.isDevelopmentSession(),
                                                     bridge.sessionShellDir());
+    // Recorded before the engine loads anything, so the banner and the reloader
+    // cannot disagree about which tree the window is running.
+    bridge.setSourceTreeEntry(!entry.checkoutRoot.isEmpty());
     if (entry.qmlPath.isEmpty()) {
         qWarning() << "kos-settings: no QML entry point found; looked beside the binary"
                       " and in" << QStringLiteral(SETTINGS_QML_DIR);

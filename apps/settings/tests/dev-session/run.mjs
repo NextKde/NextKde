@@ -51,6 +51,8 @@ function environmental(shellDir) {
 function page(marker) {
     // Deliberately nothing like the real pages: this asserts which file was
     // picked, not that the real one still loads (the smoke test covers that).
+    // It does read the bridge, because the banner condition is the other half of
+    // the same decision -- see the source-text checks at the end.
     return `import QtQuick
 import QtQuick.Controls
 
@@ -59,6 +61,8 @@ ApplicationWindow {
     width: 320
     height: 200
     Text { text: "${marker}" }
+    Component.onCompleted: console.log("BANNER-" + (typeof settingsBridge !== "undefined"
+        ? settingsBridge.sourceTreeEntry : "no-bridge"))
 }
 `;
 }
@@ -108,6 +112,8 @@ try {
         `the log has to name the checkout as the source:\n${development}`);
     check(development.includes("reloads on change"),
         `a checkout session must watch its pages, not only load them once:\n${development}`);
+    check(development.includes("BANNER-true"),
+        `a checkout entry has to report itself as one, or its banner never shows:\n${development}`);
 
     // 2. No session at all: the installed copy beside the binary, and no
     //    watcher -- reloading a window because someone installed over it is the
@@ -128,12 +134,26 @@ try {
         `a launch with no session must not pick up a checkout:\n${installed}`);
     check(!installed.includes("reloads on change"),
         `the installed copy must not claim to reload:\n${installed}`);
+    check(installed.includes("BANNER-false"),
+        `the installed copy must not claim a checkout entry, or the banner lies:\n${installed}`);
 
     const installedEdited = await editWhileRunning(layoutBinary, null, layoutPage);
     check(!installedEdited.includes("reloaded"),
         `the installed copy must not be watched:\n${installedEdited}`);
     check(installedEdited.includes("installed copy"),
         `the edit run has to be the installed-copy branch:\n${installedEdited}`);
+
+    // 3. The banner condition belongs to the same decision, and it has to follow
+    //    the entry point rather than the session: a window opened from the app
+    //    grid loads the installed copy and only then talks to a checkout Shell,
+    //    so keying the banner off the session would announce hot reloading on a
+    //    window that has none. Asserted on the source text, because both
+    //    spellings render perfectly -- only the file says which one shipped.
+    const pages = readFileSync(join(import.meta.dirname, "../../main.qml"), "utf8");
+    check(/visible:\s*window\.sourceTreeEntry/.test(pages),
+        "the banner must be shown from the entry point, not from the session");
+    check(!/visible:\s*window\.developmentSession/.test(pages),
+        "the banner must not be driven by the session it happens to reach");
 
     console.log(`settings dev-session entry point: ${checks} checks passed`);
 } finally {

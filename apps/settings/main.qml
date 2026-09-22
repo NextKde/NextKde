@@ -134,13 +134,15 @@ ApplicationWindow {
         }
     }
 
-    // Set by the standalone bridge from the session this window is serving, not
-    // from where this binary was installed: a Shell started from a checkout
-    // (`kosctl dev`) answers as a development session even though the binary
-    // itself is the installed one. A missing bridge (older binary, plain QML
-    // preview) reads as false, which keeps the banner out of the way.
-    readonly property bool developmentSession: (typeof settingsBridge !== "undefined")
-        ? settingsBridge.developmentSession === true : false
+    // Whether the pages on screen came from a checkout -- which is also what
+    // makes them hot-reloadable. Reported by the standalone bridge from the
+    // entry point it loaded, not from the session it ends up talking to: a
+    // .desktop launch (app grid, KRunner) shows the installed copy even when a
+    // checkout Shell is the one answering IPC, and the banner must not claim
+    // otherwise. A missing bridge (older binary, plain QML preview) reads as
+    // false, which keeps the banner out of the way.
+    readonly property bool sourceTreeEntry: (typeof settingsBridge !== "undefined")
+        ? settingsBridge.sourceTreeEntry === true : false
     readonly property string sessionShellDir: (typeof settingsBridge !== "undefined")
         ? settingsBridge.sessionShellDir : ""
 
@@ -4643,7 +4645,7 @@ ApplicationWindow {
                     // Invisible rows are left out of a Layout, so an installed
                     // session shows no gap where this sits.
                     DevelopmentBanner {
-                        visible: window.developmentSession
+                        visible: window.sourceTreeEntry
                     }
 
                     Text {
