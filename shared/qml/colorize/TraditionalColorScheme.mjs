@@ -430,9 +430,32 @@ export const TABLES_AVAILABLE = Object.keys(TABLES);
 // The options are copied field by field rather than with object spread:
 // qmlcachegen rejects `{ ...options }` outright and the failure only shows up
 // at build time. MaterialColorScheme.mjs documents the same trap.
+//
+// Results are memoized on (seed, table, variant, dark) — the full set of
+// inputs that can change the output. Each build costs 4+ nearest-neighbour
+// scans over the whole table plus a tone-walk per foreground, and the same
+// (seed, scheme) pair is requested repeatedly: once for the active palette
+// and again for the settings preview on every palette revision. An injected
+// array table (the tests' fallback driver) bypasses the cache: a fresh array
+// has no name to key on and each one must be re-evaluated. A different seed,
+// table, variant or mode is a different key, so a palette change always
+// rebuilds and is never served the previous scheme.
+const SCHEME_CACHE_LIMIT = 32;
+const schemeCache = new Map();
+
 export function buildScheme(seedHex, options = {}) {
     const table = options.table ?? DEFAULT_TABLE;
     const dark = options.dark ?? false;
+    const cacheable = !Array.isArray(table);
+    const key = cacheable
+        ? String(seedHex).toLowerCase() + "|" + table + "|"
+            + (options.variant ?? MATERIAL_FALLBACK_VARIANT)
+            + "|" + (dark ? "1" : "0")
+        : "";
+    if (cacheable) {
+        const cached = schemeCache.get(key);
+        if (cached) return Object.assign({}, cached);
+    }
     const entries = catalogue(table);
     const seed = { h: 0, c: 0, t: 0 };
     const seedHct = hexToHct(seedHex);
@@ -448,14 +471,18 @@ export function buildScheme(seedHex, options = {}) {
         // Table cannot express this seed: hand the whole scheme to Monet.
         //
         // The variant is forwarded explicitly. MaterialColorScheme defaults to
-        // "tonal-spot", while the shell runs "vibrant", so dropping it here
-        // would silently fall back to a different scheme than the rest of the
-        // palette — a difference invisible until someone compares the two.
-        // No object spread: qmlcachegen rejects it (see buildSchemePair).
-        return buildMaterialScheme(seedHex, {
+        const fallback = buildMaterialScheme(seedHex, {
             variant: options.variant ?? MATERIAL_FALLBACK_VARIANT,
             dark: dark,
         });
+        // The Monet result is still this scheme's answer for the seed, so it
+        // is cached under the same key; repeat preview calls stay cheap.
+        if (cacheable) {
+            if (schemeCache.size >= SCHEME_CACHE_LIMIT)
+                schemeCache.delete(schemeCache.keys().next().value);
+            schemeCache.set(key, fallback);
+        }
+        return Object.assign({}, fallback);
     }
 
     const accent = accentMatch.entry;
@@ -513,7 +540,12 @@ export function buildScheme(seedHex, options = {}) {
         out[role] = familyRole(families[family], tone, role);
     }
 
-    return out;
+    if (cacheable) {
+        if (schemeCache.size >= SCHEME_CACHE_LIMIT)
+            schemeCache.delete(schemeCache.keys().next().value);
+        schemeCache.set(key, out);
+    }
+    return Object.assign({}, out);
 }
 
 // A base colour synthesised from a seed when no swatch was acceptable, so the

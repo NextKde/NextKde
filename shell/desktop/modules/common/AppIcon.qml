@@ -25,6 +25,13 @@ Item {
     // sources that never reach the icon provider (plain files, bundled assets).
     property bool   asynchronous:      false
 
+    // The shader pass only earns its FBO when it actually rewrites pixels:
+    // desaturation, tonal tint, or the dimmed monochrome opacity. In the
+    // default color mode all three are identity, so the icon draws directly
+    // and skips both the FBO allocation and the second rasterization.
+    readonly property bool needsEffect: saturation !== 1.0
+        || tintEnabled !== 0.0 || opacityMultiplier !== 1.0
+
     IconImage {
         id: iconImage
         anchors.fill: parent
@@ -32,16 +39,17 @@ Item {
         smooth: root.smooth
         asynchronous: root.asynchronous
         backer.cache: false
-        visible: false
+        visible: !root.needsEffect
         // Provide a live texture directly to ShaderEffect. A separate
         // ShaderEffectSource keeps an extra QQuickItem alive across a
         // LayerShell window hide/show and can crash Qt Quick during cleanup.
-        layer.enabled: true
+        layer.enabled: root.needsEffect
         layer.smooth: root.smooth
     }
 
     ShaderEffect {
         anchors.fill: iconImage
+        visible: root.needsEffect
         property variant source: iconImage
         property real opacityMult: root.opacityMultiplier
         property real sat: root.saturation

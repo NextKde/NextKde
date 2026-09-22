@@ -264,6 +264,12 @@ PanelWindow {
         id: resultIcon
         property string iconSource: ""
 
+        // Color mode with no tint/desaturation renders the icon unchanged, so
+        // draw it directly and skip the ShaderEffect pass entirely.
+        readonly property bool needsEffect: IconAppearanceService.mode !== "color"
+            || IconAppearanceService.saturation !== 1.0
+            || IconAppearanceService.tintEnabled !== 0.0
+
         IconImage {
             id: sourceImage
             anchors.fill: parent
@@ -272,11 +278,12 @@ PanelWindow {
             // Theme icon: synchronous, see AppIcon.qml.
             asynchronous: false
             backer.cache: false
-            visible: false
+            visible: !resultIcon.needsEffect
         }
 
         ShaderEffect {
             anchors.fill: parent
+            visible: resultIcon.needsEffect
             property variant source: sourceImage.backer
             property real opacityMult: IconAppearanceService.mode === "color"
                 ? 1.0 : IconAppearanceService.opacity

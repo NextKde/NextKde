@@ -36,8 +36,6 @@ layout(std140, binding = 0) uniform buf {
 // disagree around 45 degrees and a gap shows up between card and shadow.
 float squircleNorm(vec2 q, float n)
 {
-    if (n == 2.0)
-        return length(q);
     if (q.x <= 0.0)
         return q.y;
     if (q.y <= 0.0)
@@ -48,6 +46,17 @@ float squircleNorm(vec2 q, float n)
 float squircleDistance(vec2 p, vec2 halfSize, float radius, float n)
 {
     vec2 q = abs(p) - halfSize + vec2(radius);
+    // n == 2 is a plain rounded rectangle: the p-norm collapses to length(),
+    // so the whole field is the classic rounded-box SDF with no pow() at all.
+    // n arrives as a uniform, which makes this a uniform branch -- every pixel
+    // in the draw takes the same side, so the pow path below costs nothing
+    // when the card has circular corners. That case has to be fast: it is the
+    // fallback the shadow drops to when the squircle token is off, and the
+    // fill-rate-bound GPUs are exactly the ones that cannot afford 3 pow()
+    // per squircleDistance() call, twice per pixel.
+    if (n == 2.0)
+        return length(max(q, vec2(0.0)))
+            + min(max(q.x, q.y), 0.0) - radius;
     return squircleNorm(max(q, vec2(0.0)), n) + min(max(q.x, q.y), 0.0) - radius;
 }
 
@@ -120,7 +129,13 @@ void main()
     float alpha = 1.0 - t;
     alpha = alpha * alpha * (3.0 - 2.0 * alpha);
 
-    alpha = pow(alpha, max(falloff, 0.25)) * (1.0 - inside);
+    // A fixed quadratic falloff stands in for pow(alpha, falloff): pow() is a
+    // per-pixel exp2/log2 pair spent on a knob no caller tunes, while
+    // alpha*alpha is two multiplies and keeps the same monotone pull-in
+    // towards the card that falloff > 1 produced. `falloff` stays declared in
+    // the block -- the vertex stage shares this buffer's layout -- but no
+    // longer feeds the curve.
+    alpha = alpha * alpha * (1.0 - inside);
 
     // Qt Quick layers composite premultiplied, so rgb is scaled by its own
     // alpha before the item opacity is applied.

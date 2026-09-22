@@ -197,23 +197,14 @@ Item {
 
     // ---- Glass background (the pill strip) ----
     // Same structure as the LiquidGlassSwitch track: tinted base, inner
-    // depth gradient and a subtle top sheen. The layer+OpacityMask clips
-    // the flat-topped sheen to the pill arc so no white corner masks show
-    // (the same trick the switch uses for its whole body).
+    // depth gradient and a subtle top sheen. The sheen is a full-pill
+    // rounded rect whose gradient fades out by 40% height, so it clips
+    // itself to the arc -- no layer+OpacityMask needed on the track at all.
     Rectangle {
         id: track
         anchors.fill: parent
         radius: height / 2
         color: root.trackColor
-
-        layer.enabled: true
-        layer.effect: OpacityMask {
-            maskSource: Rectangle {
-                width: track.width
-                height: track.height
-                radius: track.height / 2
-            }
-        }
 
         Rectangle {
             anchors.fill: parent
@@ -229,15 +220,12 @@ Item {
 
         // Track highlight (subtle top sheen)
         Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: parent.height * 0.4
+            anchors.fill: parent
             radius: parent.radius
             gradient: Gradient {
                 orientation: Gradient.Vertical
                 GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.10) }
-                GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
+                GradientStop { position: 0.4; color: Qt.rgba(1, 1, 1, 0.0) }
             }
         }
     }
@@ -279,10 +267,14 @@ Item {
         width: root.thumbWidth
         height: root.thumbHeight
 
-        // Clip thumb contents (top highlight, aberration borders) to the
-        // pill arc, exactly like the switch. The thumb's movement/growth is
-        // transform-based, so the cached mask simply scales along.
-        layer.enabled: true
+        // Clip thumb contents to the pill arc only while the glass lens is
+        // on screen: its chromatic aberration borders are offset +/-0.5 px
+        // and would poke outside the arc. At rest every child is already
+        // pill-rounded inside the bounds, so the layer is off and no
+        // source+mask FBO pair is kept alive or re-uploaded per physics
+        // frame. The gate follows the lens's animated opacity, so the mask
+        // stays on through the 100 ms crossfade -- no unclipped frame.
+        layer.enabled: glassLens.opacity > 0
         layer.effect: OpacityMask {
             maskSource: Rectangle {
                 width: thumb.width

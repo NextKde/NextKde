@@ -705,7 +705,9 @@ Item {
                 asynchronous: false
                 rotation: icon.vertical ? -90 : 0
                 transformOrigin: Item.Center
-                layer.enabled: true
+                // Flattening to an FBO is only needed while the monochrome
+                // shader path is active; color mode draws the icon directly.
+                layer.enabled: IconAppearanceService.mode !== "color"
                 layer.smooth: true
                 opacityMultiplier: IconAppearanceService.mode === "color"
                     ? 1.0 : IconAppearanceService.opacity

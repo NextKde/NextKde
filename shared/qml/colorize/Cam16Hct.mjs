@@ -352,15 +352,50 @@ function xyzFromCam16Jch(j, chroma, hue, vc) {
 // HCT — hue and chroma from CAM16, tone from Lab L*
 // ---------------------------------------------------------------------------
 
+// Memoization — see the HCT section below for what is cached.
+// ---------------------------------------------------------------------------
+// Both directions below are pure functions of small inputs, and the scheme
+// builders re-ask the same questions constantly: a role table reuses ~12
+// tones per family across 49 roles, foreground selection walks a tone ramp,
+// and the settings preview builds the same pair once per colour source. The
+// inner solve is ~2400 CAM16 evaluations, so repetition is the difference
+// between a millisecond and a visible stall.
+//
+// Keys are the exact inputs (no rounding): a different float is a different
+// key, so the cache can only ever reproduce a result the uncached path would
+// have computed. Maps are bounded and a hit re-inserts its entry, so the
+// working set of a live palette survives while cold keys age out.
+const CONVERT_CACHE_LIMIT = 4096;
+
+function cacheGet(map, key) {
+    const value = map.get(key);
+    if (value === undefined) return undefined;
+    map.delete(key);
+    map.set(key, value);
+    return value;
+}
+
+function cachePut(map, key, value) {
+    if (map.size >= CONVERT_CACHE_LIMIT)
+        map.delete(map.keys().next().value);
+    map.set(key, value);
+    return value;
+}
+
+const hctFromArgbCache = new Map();
+const argbFromHctCache = new Map();
+
 // ARGB -> [hue, chroma, tone]. MCU's Hct.fromInt.
 export function argbToHct(argb) {
+    const cached = cacheGet(hctFromArgbCache, argb);
+    if (cached !== undefined) return cached;
     const [r, g, b] = argbChannels(argb);
     const [x, y, z] = rgbLinearToXyz(linearized(r), linearized(g), linearized(b));
     const cam = cam16FromXyz(x, y, z, DEFAULT_VIEWING);
     // CAM16's J is not L*; HCT takes tone straight from Lab's L*. y is a 0-1
     // colour channel here, while lstarFromY works on the 0-100 luminance scale.
     const tone = lstarFromY(y * 100.0);
-    return [cam.hue, cam.chroma, tone];
+    return cachePut(hctFromArgbCache, argb, [cam.hue, cam.chroma, tone]);
 }
 
 export function hexToHct(hex) {
@@ -399,12 +434,19 @@ function inGamutXyz(x, y, z) {
 
 // HCT -> ARGB. MCU's HctSolver.solveToInt.
 export function hctToArgb(hue, chroma, tone) {
-    if (tone <= 0.0) return argbFromRgb(0, 0, 0);
-    if (tone >= 100.0) return argbFromRgb(255, 255, 255);
+    // The key is the exact input triple; a different float is a different key,
+    // so a hit can only replay a result the uncached path would have computed.
+    const key = hue + "," + chroma + "," + tone;
+    const cached = cacheGet(argbFromHctCache, key);
+    if (cached !== undefined) return cached;
+
+    if (tone <= 0.0) return cachePut(argbFromHctCache, key, argbFromRgb(0, 0, 0));
+    if (tone >= 100.0)
+        return cachePut(argbFromHctCache, key, argbFromRgb(255, 255, 255));
     if (chroma < 0.0001) {
         // MCU: argbFromLstar(tone) — a neutral grey at exactly this L*.
         const grey = lstarToSrgb8(tone);
-        return argbFromRgb(grey, grey, grey);
+        return cachePut(argbFromHctCache, key, argbFromRgb(grey, grey, grey));
     }
 
     // yFromLstar is 0-100; the CAM16 helpers work on the 0-1 colour scale.
@@ -427,7 +469,7 @@ export function hctToArgb(hue, chroma, tone) {
     const j = solveJForY(hue, safeChroma, yTarget);
     const xyz = xyzFromCam16Jch(j, safeChroma, hue, DEFAULT_VIEWING);
     const [r, g, b] = xyzToRgb255(xyz[0], xyz[1], xyz[2]);
-    return argbFromRgb(r, g, b);
+    return cachePut(argbFromHctCache, key, argbFromRgb(r, g, b));
 }
 
 // MCU's argbFromLstar: the sRGB grey whose Lab L* equals `lstar`.

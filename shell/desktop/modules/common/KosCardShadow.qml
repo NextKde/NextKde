@@ -30,7 +30,13 @@ ShaderEffect {
     property real cardWidth: 0
     property real cardHeight: 0
     property real cornerRadius: 0
-    property real cornerExponent: 3.0
+    // 2.0, not the squircle token's 3.0: at 2 the shader's distance field is
+    // the classic rounded-box SDF (one length(), no pow()), and a host that
+    // does not say otherwise pays the cheap path. KosFloatPanel still passes
+    // AppearanceTokens.shape.cornerExponent explicitly, so a squircle card
+    // keeps a squircle hole -- the field has to match the mask's curve or the
+    // two edges split around 45 degrees.
+    property real cornerExponent: 2.0
 
     // Cast direction in pixels. Positive Y casts downwards, so the usual "light
     // from the top left" is a positive pair.
@@ -38,12 +44,18 @@ ShaderEffect {
     property real offsetY: 10
     // How far the shadow fades past its own edge, and how much it is grown
     // before fading so it stays solid right up to the card.
-    property real softness: 56
+    // 24, not 56: softness also feeds `margin`, so the old default grew the
+    // item ~130px past the card on every side and ran the SDF over all of it.
+    // 24 still reads as a soft cast shadow and roughly halves the shaded
+    // area. KosFloatPanel sets its own value, so only future default users
+    // see this change.
+    property real softness: 24
     property real spread: 0
-    // Exponent on the falloff curve. 1 leaves the smooth ramp, above 1 pulls the
-    // shading in towards the card, below 1 spreads it out. Above 1 the ramp
-    // collapses fast enough that nothing survives the glass rim along the card's
-    // edge, which reads as "no shadow outside the card at all".
+    // Retained for source compatibility -- nothing reads it anymore. The
+    // shader replaced pow(alpha, falloff) with a fixed alpha*alpha curve: the
+    // per-pixel pow() cost an exp2/log2 pair on every fragment while no host
+    // ever tuned the knob. The uniform stays in the block because the vertex
+    // stage shares this buffer's layout.
     property real falloff: 1.0
     property color shadowColor: Qt.rgba(0, 0, 0, 0.50)
 

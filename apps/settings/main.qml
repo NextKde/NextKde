@@ -3700,45 +3700,60 @@ ApplicationWindow {
                     // the window for tens of seconds. Each Loader now creates
                     // its page only when the page is first opened, and the
                     // refreshes themselves are asynchronous.
+                    //
+                    // `visible: active` is part of that contract, not
+                    // decoration: deactivating a Loader destroys its item but
+                    // leaves the Loader's own implicit size at whatever the
+                    // page last measured, and a Layout skips only *invisible*
+                    // items -- so without it a page the user has left keeps its
+                    // whole height as a blank slab between the title and the
+                    // page actually being shown.
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 4
+                        visible: active
                         sourceComponent: LauncherSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 5
+                        visible: active
                         sourceComponent: ShortcutsSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 6
+                        visible: active
                         sourceComponent: IntegrationStatusPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 7
+                        visible: active
                         sourceComponent: GlassDebugPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 3
+                        visible: active
                         sourceComponent: DockSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 2
+                        visible: active
                         sourceComponent: BarSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
                         active: window.currentPage === 1
+                        visible: active
                         sourceComponent: ThemeSettingsPage {}
                     }
 

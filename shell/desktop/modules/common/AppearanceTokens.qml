@@ -105,6 +105,9 @@ QtObject {
         WallpaperColorSource.darkMode = tokens.isDarkTheme
         ColorScheme.setScheme(tokens.resolvedColorScheme)
         ColorScheme.setSeed(tokens.seedColor)
+        // Populate the deferred preview swatches once the seed/scheme calls
+        // above have settled the first palette.
+        _swatchTimer.restart()
     }
 
     function _mix(base, tint, amount, alpha) {
@@ -143,17 +146,42 @@ QtObject {
     // tint, so a shell-style switch (material -> macos) or a colour-source
     // switch left them drawing the previous theme's colours.
     readonly property int colorRevision: ColorScheme.revision
-
     // One entry per colour source, each carrying representative swatches for the
     // settings page to draw its picker from. The page runs in a separate
     // process and cannot evaluate the scheme itself, so the swatches travel over
     // the appearance snapshot.
-    readonly property var colorSchemeSwatches: [
-        { id: "monet", colors: ColorScheme.previewSwatches("monet") },
-        { id: "chinese", colors: ColorScheme.previewSwatches("chinese") },
-        { id: "japanese", colors: ColorScheme.previewSwatches("japanese") },
-    ]
+    //
+    // Rebuilding this inline in the binding would run three buildSchemePair
+    // calls (a full 49-role x 2-mode solve each) synchronously inside the
+    // palette revision change — on the same stack that is already paying for
+    // the active scheme. The preview does not feed anything the next frame
+    // needs, so the rebuild is deferred one event-loop turn through a
+    // zero-interval timer: the wallpaper switch finishes first, and the
+    // swatches refresh a moment later. With the module-level memoization in
+    // the scheme builders, the deferral is what keeps the *cold* rebuild off
+    // the critical path.
+    readonly property var colorSchemeSwatches: _colorSchemeSwatches
+    property var _colorSchemeSwatches: []
 
+    function _rebuildSwatches() {
+        _colorSchemeSwatches = [
+            { id: "monet", colors: ColorScheme.previewSwatches("monet") },
+            { id: "chinese", colors: ColorScheme.previewSwatches("chinese") },
+            { id: "japanese", colors: ColorScheme.previewSwatches("japanese") },
+        ]
+    }
+
+    property Timer _swatchTimer: Timer {
+        interval: 0
+        onTriggered: tokens._rebuildSwatches()
+    }
+
+    // Palette revision covers every way the swatches can go stale: a new seed,
+    // a scheme switch, a variant change. Restarting the timer coalesces the
+    // bursts a rebuild produces (seed then revision fire together). The first
+    // population is armed in the singleton's single Component.onCompleted above
+    // — QML allows only one per object.
+    onColorRevisionChanged: _swatchTimer.restart()
     readonly property QtObject colors: QtObject {
         readonly property color primary: ColorScheme.color("primary", tokens.isDarkTheme)
         readonly property color primaryForeground: ColorScheme.color("on_primary", tokens.isDarkTheme)

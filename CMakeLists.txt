@@ -204,6 +204,14 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_window_placement.mjs
         )
         set_tests_properties(kos-platform.window-placement PROPERTIES TIMEOUT 10)
+        # The JSONL transport core shared by PlatformClient and DataClient:
+        # reconnect queueing, dedup, expiry and the fail-all path run under a
+        # stubbed socket, no daemon or display needed.
+        add_test(NAME kos-platform.jsonl-client
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/platform/tests/test_jsonl_client.mjs
+        )
+        set_tests_properties(kos-platform.jsonl-client PROPERTIES TIMEOUT 10)
     endif()
 
     # The platform contract test is dependency-free Python with its own
@@ -250,7 +258,8 @@ if(BUILD_TESTING)
             kos-ui.page-cache-policy kos-ui.settings-material
             kos-ui.traditional-color
             PROPERTIES LABELS logic)
-        set_tests_properties(kos-platform.window-placement PROPERTIES LABELS platform)
+        set_tests_properties(kos-platform.window-placement
+            kos-platform.jsonl-client PROPERTIES LABELS platform)
     endif()
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
         set_tests_properties(kos-shell.date-projection PROPERTIES LABELS logic)
