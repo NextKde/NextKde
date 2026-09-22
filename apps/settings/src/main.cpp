@@ -80,6 +80,8 @@ class SettingsBridge final : public QObject {
     Q_PROPERTY(bool developmentSession READ isDevelopmentSession NOTIFY sessionChanged)
     Q_PROPERTY(QString sessionShellDir READ sessionShellDir NOTIFY sessionChanged)
     Q_PROPERTY(bool sourceTreeEntry READ sourceTreeEntry NOTIFY entryChanged)
+    Q_PROPERTY(bool developmentBannerDismissed READ isDevelopmentBannerDismissed
+                   WRITE setDevelopmentBannerDismissed NOTIFY bannerDismissedChanged)
 
 public:
     explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
@@ -123,6 +125,20 @@ public:
             return;
         m_sourceTreeEntry = value;
         emit entryChanged();
+    }
+
+    // Whether the user closed the development banner. Held here rather than in
+    // the window because the window is rebuilt on every QML reload, and a reload
+    // is not a new session: without this the banner would come back the moment
+    // anyone edited the page they were told to edit. The flag lives for the
+    // process, so reopening Settings starts from a visible banner again.
+    bool isDevelopmentBannerDismissed() const { return m_bannerDismissed; }
+
+    void setDevelopmentBannerDismissed(bool dismissed) {
+        if (m_bannerDismissed == dismissed)
+            return;
+        m_bannerDismissed = dismissed;
+        emit bannerDismissedChanged();
     }
 
     Q_INVOKABLE QVariantMap dockSnapshot() {
@@ -536,6 +552,7 @@ signals:
     void lastErrorChanged();
     void sessionChanged();
     void entryChanged();
+    void bannerDismissedChanged();
 
 private:
     QVariantMap snapshotFromReply(const QString &payload) {
@@ -915,6 +932,9 @@ private:
     QString m_sessionShellDir;
     // Set once, from the entry point main() chose, before the engine loads it.
     bool m_sourceTreeEntry = false;
+    // Set from the banner's close control. Survives a QML reload on purpose --
+    // see isDevelopmentBannerDismissed().
+    bool m_bannerDismissed = false;
     // Last appearance snapshot the shell sent. Kept for glassDebugSpecs(), which
     // reads the active preset out of it, and refreshed on every glass debug
     // snapshot so the style it names is the one being edited right now.

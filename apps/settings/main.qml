@@ -146,6 +146,20 @@ ApplicationWindow {
     readonly property string sessionShellDir: (typeof settingsBridge !== "undefined")
         ? settingsBridge.sessionShellDir : ""
 
+    // The banner states how this window was loaded, which closing it cannot
+    // change -- so the close control hides the notice for this run only. The
+    // flag lives on the bridge rather than here on purpose: every QML edit
+    // rebuilds this window, and a banner that returns after each save would
+    // defeat the control. Reopening Settings shows it again.
+    readonly property bool developmentBannerVisible: window.sourceTreeEntry
+        && !((typeof settingsBridge !== "undefined")
+            ? settingsBridge.developmentBannerDismissed === true : false)
+
+    function dismissDevelopmentBanner() {
+        if (typeof settingsBridge !== "undefined")
+            settingsBridge.developmentBannerDismissed = true
+    }
+
     readonly property var contentByPage: [
         {
             subtitle: "显示",
@@ -220,13 +234,44 @@ ApplicationWindow {
             }
         }
 
+        // Closing is not "never warn me again": a fresh window is a fresh load
+        // and shows the banner again. This only clears the band out of the way
+        // of someone who already knows, for as long as that window is open.
+        Rectangle {
+            id: bannerClose
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 14
+            width: 28
+            height: 28
+            radius: 14
+            color: bannerCloseHit.containsMouse
+                ? Qt.rgba(0.14, 0.09, 0, 0.18) : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "✕"
+                color: "#241700"
+                font.pixelSize: 15
+                font.weight: Font.Bold
+            }
+
+            MouseArea {
+                id: bannerCloseHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: window.dismissDevelopmentBanner()
+            }
+        }
+
         Column {
             id: bannerText
             anchors.left: bannerBadge.right
-            anchors.right: parent.right
+            anchors.right: bannerClose.left
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 14
-            anchors.rightMargin: 18
+            anchors.rightMargin: 12
             spacing: 3
 
             Text {
@@ -4643,9 +4688,10 @@ ApplicationWindow {
                     spacing: 0
 
                     // Invisible rows are left out of a Layout, so an installed
-                    // session shows no gap where this sits.
+                    // session shows no gap where this sits, and neither does a
+                    // development one once the banner has been closed.
                     DevelopmentBanner {
-                        visible: window.sourceTreeEntry
+                        visible: window.developmentBannerVisible
                     }
 
                     Text {

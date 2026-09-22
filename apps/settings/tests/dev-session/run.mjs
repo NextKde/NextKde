@@ -150,10 +150,15 @@ try {
     //    window that has none. Asserted on the source text, because both
     //    spellings render perfectly -- only the file says which one shipped.
     const pages = readFileSync(join(import.meta.dirname, "../../main.qml"), "utf8");
-    check(/visible:\s*window\.sourceTreeEntry/.test(pages),
+    check(/visible:\s*window\.developmentBannerVisible/.test(pages),
         "the banner must be shown from the entry point, not from the session");
+    check(/developmentBannerVisible:\s*window\.sourceTreeEntry[\s\S]{0,200}?settingsBridge\.developmentBannerDismissed/
+        .test(pages),
+        "the banner condition must be the entry point AND the dismissal, nothing else");
     check(!/visible:\s*window\.developmentSession/.test(pages),
         "the banner must not be driven by the session it happens to reach");
+    check(/settingsBridge\.developmentBannerDismissed = true/.test(pages),
+        "the close control has to dismiss the banner on the bridge, so a reload cannot resurrect it");
 
     console.log(`settings dev-session entry point: ${checks} checks passed`);
 } finally {
