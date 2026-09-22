@@ -126,7 +126,7 @@ PanelWindow {
         : (isCenterMode
             ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
             : (isBottomWideMode
-                ? (screen ? Math.round(screen.width / 3) : 640)
+                ? (screen ? Math.round(screen.width * 0.50) : 960)
                 : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)))
 
     readonly property real launcherHeight: isFullscreenMode

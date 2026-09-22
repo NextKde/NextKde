@@ -4171,7 +4171,7 @@ ApplicationWindow {
                         id: launcherModeNavBar
                         model: [
                             { id: "bottom",     label: "底部吸附" },
-                            { id: "bottomWide", label: "底部宽屏" },
+                            { id: "bottomWide", label: "底部紧凑" },
                             { id: "center",     label: "屏幕居中" },
                             { id: "fullscreen", label: "全屏覆盖" }
                         ]

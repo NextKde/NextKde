@@ -414,7 +414,7 @@ Item {
                 },
                 {
                     icon: "align-center",
-                    label: "底部宽屏",
+                    label: "底部紧凑",
                     cmd: "bottomWide",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottomWide"
