@@ -702,29 +702,38 @@ private:
     // environment down: the Shell's own Settings entry goes through the
     // platform daemon, which exports KOS_SHELL_DIR for the session it belongs
     // to, while a .desktop launch (app grid, KRunner, menu) inherits nothing.
-    // The list is therefore a preference order, not a decision -- callShell
-    // falls through to the next entry when one names a Shell that is not
-    // running, so an installed session still works with a source tree left on
-    // disk, and vice versa.
+    // The list is therefore a preference order, and an ordinary launch (no
+    // KOS_SHELL_DIR) has to reach the running session on its first try.
     static QStringList shellDirectories() {
         QStringList directories;
         const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
         if (!configured.isEmpty())
             directories.append(configured);
 
-        // Development desktop entries do not inherit the Shell environment.
-        // Prefer the compile-time source tree when it still exists; this is
-        // the same tree a locally built settings binary was compiled for.
-        // Resolved before use: the literal carries `..` segments
-        // (apps/settings/../../shell) and Quickshell matches IPC targets by the
-        // directory it registered, so the resolved form is the one that hits.
-        const QString source = QFileInfo(QStringLiteral(SETTINGS_SHELL_DIR))
-                                   .canonicalFilePath();
-        if (!source.isEmpty()
-            && QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
-            directories.append(source);
-
+        // Then the installed session: an end user only ever runs that one, and
+        // it is the session this binary belongs to. Its directory is an
+        // absolute path under the config location, so it does not depend on
+        // the current working directory or on any inherited environment.
         directories.append(installedShellDirectory());
+
+        // The compile-time source tree is a fallback for `qs -p <dir>`
+        // sessions, NOT a first choice: it exists on any machine that built
+        // this binary (a Nix store copy, or the checkout itself), so trying it
+        // first would aim every ordinary launch at a Shell that is not
+        // running. Both spellings of the literal are offered because
+        // Quickshell matches instances by the path it was launched with, and
+        // only comparably-spelled paths hit: the cleaned form handles the `..`
+        // segments (apps/settings/../../shell), the canonical form handles a
+        // checkout reached through a symlink (a synced or linked folder).
+        const QString declared = QDir::cleanPath(QStringLiteral(SETTINGS_SHELL_DIR));
+        const QString canonical = QFileInfo(declared).canonicalFilePath();
+        for (const QString &source : {declared, canonical}) {
+            if (source.isEmpty() || directories.contains(source))
+                continue;
+            if (QFileInfo::exists(QDir(source).filePath(QStringLiteral("shell.qml"))))
+                directories.append(source);
+        }
+
         directories.removeDuplicates();
         return directories;
     }
@@ -737,6 +746,19 @@ private:
         if (shellPath == installedShellDirectory())
             return {QStringLiteral("-c"), QStringLiteral("kos")};
         return {QStringLiteral("--path"), shellPath};
+    }
+
+    // Quickshell's `ipc call` exits 0 while printing one of these diagnostics,
+    // so a zero exit code on its own cannot be trusted: a wrong instance -- one
+    // without the target, or a stale build without the function -- would
+    // otherwise answer with an error sentence as if it were the value.
+    static bool isIpcDiagnostic(const QString &reply) {
+        static const QStringList diagnostics = {
+            QStringLiteral("Target not found."),
+            QStringLiteral("Function not found."),
+            QStringLiteral("Function required to send message."),
+        };
+        return diagnostics.contains(reply);
     }
 
     QString callShell(const QString &target, const QStringList &arguments,
@@ -766,7 +788,14 @@ private:
                     failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
                 } else if (process.exitStatus() == QProcess::NormalExit
                            && process.exitCode() == 0) {
-                    return QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+                    // A diagnostic reply means this candidate is not the Shell
+                    // serving us, so fall through to the next one exactly like a
+                    // hard failure does.
+                    const QString reply =
+                        QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+                    if (!isIpcDiagnostic(reply))
+                        return reply;
+                    failure = fallbackError;
                 } else {
                     failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
                     if (failure.isEmpty())
