@@ -40,14 +40,20 @@ Item {
     // drag-reordering or persistence.
     readonly property int pinnedCount: DockModelService.pinnedCount + 2
     readonly property int windowCount: DockModelService.windowCount
-    readonly property bool hasPlayingMusic: DockMprisService.hasPlayingPlayer
-    readonly property bool hasWeather: WeatherService.available
+    function infoCardSelected(id) {
+        return ConfigService.infoCardOrder.indexOf(id) >= 0
+    }
+    readonly property bool hasPlayingMusic: infoCardSelected("music")
+        && DockMprisService.hasPlayingPlayer
+    readonly property bool hasWeather: infoCardSelected("weather")
+        && WeatherService.available
     // Side Dock Stack information keeps its clock page. The separate
     // top-of-Dock clock is intentionally not injected by DesktopEnvironment.
-    readonly property bool hasClock: clockInInfoCarousel || vertical
+    readonly property bool hasClock: infoCardSelected("clock")
+        && (clockInInfoCarousel || vertical)
     // Temperature is a permanent horizontal Dock page. MetricsService may
     // still be loading its first snapshot; the card remains and shows "--".
-    readonly property bool hasTemperature: true
+    readonly property bool hasTemperature: infoCardSelected("metrics")
     readonly property bool hasAvailableInfo: hasPlayingMusic || hasWeather || hasClock
         || hasTemperature
     readonly property int screenWidth: targetScreen?.width
@@ -60,9 +66,17 @@ Item {
         ? 0 : ConfigService.barHeight
     // A fused side Dock gets the full output height because the standalone
     // top Bar and its exclusive strip are disabled too.
-    readonly property int availableLength: vertical
+    // Surface style and content distribution are independent. A taskbar
+    // always fills its edge; relaxed content also asks a floating surface for
+    // the available length, but keeps proportional insets and rounded glass.
+    readonly property bool stretched: ConfigService.dockStyle === "taskbar"
+    readonly property bool relaxed: ConfigService.contentStyle === "relaxed"
+    readonly property bool fillsAvailableLength: stretched || relaxed
+    readonly property real floatingSpreadInset: !stretched && relaxed
+        ? Math.max(4, Math.round(baseHeight * 0.12)) : 0
+    readonly property int availableLength: (vertical
         ? screenHeight - reservedBarHeight
-        : screenWidth
+        : screenWidth) - Math.round(floatingSpreadInset * 2)
     readonly property real baseHeight: ConfigService.baseHeight
     // Shape proportions come from the selected shell style. The macOS token
     // values equal the previous Dock defaults, preserving the upgrade baseline.
@@ -109,7 +123,8 @@ Item {
         hasAvailableInfo && !vertical,
         Math.max(baseHeight, availableLength - estimatedAccessoryWidth),
         proportions,
-        vertical ? AdaptiveMath.MAX_HEIGHT_RATIO : AdaptiveMath.MAX_WIDTH_RATIO
+        vertical ? AdaptiveMath.MAX_HEIGHT_RATIO : AdaptiveMath.MAX_WIDTH_RATIO,
+        infoSlotUnits
     )
     // At the 18px absolute icon floor, the cards cannot keep even compact
     // glyphs legible. Remove the carousel and its divider as one unit, which
@@ -119,8 +134,21 @@ Item {
     readonly property bool hasInfo: hasAvailableInfo && !hideInfoCarousel
     // A side Dock rotates its content row. Its dedicated compact carousel
     // needs only two icon lengths, while the bottom carousel keeps four.
-    readonly property int infoSlotUnits: vertical ? 2 : 4
-
+    readonly property bool infoExpanded: ConfigService.infoCardMode === "expanded"
+    readonly property int expandedInfoUnits: {
+        let total = 0
+        for (const id of ConfigService.infoCardOrder) {
+            const available = id === "music" ? hasPlayingMusic
+                : id === "weather" ? hasWeather
+                : id === "clock" ? hasClock
+                : id === "metrics" ? hasTemperature : false
+            if (available)
+                total += vertical ? 2 : (id === "clock" ? 3 : 4)
+        }
+        return total
+    }
+    readonly property int infoSlotUnits: infoExpanded
+        ? expandedInfoUnits : (vertical ? 2 : 4)
     // ═══════════════════════════════════════════════════════════
     // Computed layout (re-evaluates on any input change)
     // ═══════════════════════════════════════════════════════════
@@ -138,9 +166,17 @@ Item {
 
     readonly property int computedDockHeight: _layout.dockHeight
     readonly property int iconSize: _layout.iconSize
-    readonly property int computedDockWidth: Math.round(_layout.dockWidth
+    // naturalDockWidth is the width the content asks for. A taskbar or relaxed
+    // layout grows to the available edge length. distributionSlack is spent
+    // only by relaxed content, between apps/windows and trailing components.
+    readonly property int naturalDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
         + accessoryCount * (2 + dividerMargin * 2 + itemSpacing * 2))
+    readonly property int computedDockWidth: fillsAvailableLength
+        ? Math.max(naturalDockWidth, availableLength)
+        : naturalDockWidth
+    readonly property real distributionSlack: Math.max(0, computedDockWidth
+        - naturalDockWidth)
     readonly property int itemSpacing: _layout.itemSpacing
     readonly property int hPadding: _layout.hPadding
     readonly property int vPadding: _layout.vPadding
@@ -378,6 +414,13 @@ Item {
                 },
                 {
                     icon: "align-center",
+                    label: "底部紧凑",
+                    cmd: "bottomWide",
+                    checkable: true,
+                    checked: AppLauncherConfigService.displayMode === "bottomWide"
+                },
+                {
+                    icon: "align-center",
                     label: "屏幕居中",
                     cmd: "center",
                     checkable: true,
@@ -416,7 +459,8 @@ Item {
         onAction: function(cmd) {
             if (cmd === "settings") {
                 DesktopAppLauncher.openSettings()
-            } else if (cmd === "bottom" || cmd === "center" || cmd === "fullscreen") {
+            } else if (cmd === "bottom" || cmd === "bottomWide"
+                    || cmd === "center" || cmd === "fullscreen") {
                 AppLauncherConfigService.updateDisplayMode(cmd)
             }
         }
@@ -824,6 +868,19 @@ Item {
             }
         }
 
+        // ── Stretch slack: push the information slot to the far end ──
+        // Only a stretched dock has slack. Spending it between the window
+        // tasks and the information slot keeps launchers and running windows
+        // against the starting edge while the clock, weather and the trailing
+        // status area sit at the opposite one — a taskbar-style split. The
+        // spacer carries no content, so an auto-width dock collapses it to 0
+        // and the row keeps its historical compact layout.
+        Item {
+            width: container.relaxed ? container.distributionSlack : 0
+            height: 1
+            visible: width > 0
+        }
+
         // ── Divider 2: windows | information slot (conditional) ──
         DockDivider {
             dockHeight: container.computedDockHeight
@@ -834,11 +891,16 @@ Item {
 
         // ── Shared music / weather / clock / temperature information slot ──
         DockInfoCarousel {
+            id: horizontalInfoCarousel
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
             showClock: container.hasClock
             showTemperature: container.hasTemperature
+            cardOrder: ConfigService.infoCardOrder
+            expanded: container.infoExpanded
+            autoRotate: ConfigService.infoCardAutoRotate
+            onEditRequested: componentEditor.openFor(horizontalInfoCarousel)
             visible: container.hasInfo && !container.vertical
         }
 
@@ -846,11 +908,16 @@ Item {
         // Row rotates 90 degrees, so this component keeps text upright while
         // reserving only two icon lengths along the edge.
         DockSideInfoCarousel {
+            id: verticalInfoCarousel
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             widthUnits: container.infoUnits
             showClock: container.hasClock
             showTemperature: container.hasTemperature
+            cardOrder: ConfigService.infoCardOrder
+            expanded: container.infoExpanded
+            autoRotate: ConfigService.infoCardAutoRotate
+            onEditRequested: componentEditor.openFor(verticalInfoCarousel)
             visible: container.hasInfo && container.vertical
         }
 
@@ -868,6 +935,48 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+        }
+    }
+
+    Rectangle {
+        id: componentEditButton
+        z: 80
+        visible: container.editMode
+        anchors { top: parent.top; right: parent.right; margins: 4 }
+        width: componentEditLabel.implicitWidth + 22
+        height: 26
+        radius: AppearanceTokens.isMaterial ? 13 : 9
+        color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.primaryContainer,
+            ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16)
+                : Qt.rgba(1, 1, 1, 0.92))
+        border.width: 1
+        border.color: AppearanceTokens.surface.pick(
+            AppearanceTokens.colors.primary,
+            Qt.rgba(ThemeService.foregroundColor.r,
+                ThemeService.foregroundColor.g,
+                ThemeService.foregroundColor.b, 0.18))
+
+        Text {
+            id: componentEditLabel
+            anchors.centerIn: parent
+            text: "+ 组件"
+            color: AppearanceTokens.surface.pick(
+                AppearanceTokens.colors.primaryContainerForeground,
+                ThemeService.foregroundColor)
+            font { pixelSize: 10; weight: Font.DemiBold }
+        }
+
+        TapHandler {
+            onTapped: componentEditor.openFor(componentEditButton)
+        }
+    }
+
+    DockComponentEditor {
+        id: componentEditor
+        onVisibleChanged: {
+            if (visible)
+                container.editMode = true
         }
     }
 }

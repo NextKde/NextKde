@@ -18,6 +18,11 @@ QtObject {
     signal hideRequested(string appId)
     signal editRequested(var application)
 
+    // execDetached exemption (R12): the desktop-entry Exec line runs through
+    // DesktopEntry.execute(), not through a shell or system-control command.
+    // This path is only a last resort -- application.launch (daemon) is the
+    // primary route; reaching here means the daemon is gone or the KIO launch
+    // failed, so there is no op left that could carry the entry.
     function _executeDirect(entry, appId, reason) {
         try {
             entry.execute()
@@ -30,6 +35,13 @@ QtObject {
         }
     }
 
+    // execDetached exemption (R12): deep-link argv is `entry.command` -- the
+    // argv the desktop entry already declares -- plus app-owned arguments.
+    // The daemon's application.launch op accepts only {desktopId, urls}; it
+    // cannot append arbitrary argv, so a whitelist would mean either a new
+    // contract op or hardcoding each app's deep-link flags in the daemon.
+    // This is a direct argv exec (no shell), kept until the deep-link surface
+    // is redesigned around URLs.
     function _executeCommandDirect(command, appId) {
         try {
             Quickshell.execDetached(command)
@@ -54,14 +66,28 @@ QtObject {
         // TTY and terminal apps die immediately. Route them through the
         // platform daemon here; KIO::ApplicationLauncherJob wraps them in the
         // user's configured terminal.
-        if (!PlatformClient.connected)
+        if (!PlatformClient.connected) {
+            if (entry.runInTerminal) {
+                console.warn("[AppAction] terminal app needs the daemon, "
+                             + "no TTY fallback exists app=" + appId)
+                return false
+            }
             return _executeDirect(entry, appId, "platform-unavailable")
+        }
         PlatformClient.request("application.launch", {
             desktopId: appId,
             urls: []
         }, function(response) {
-            if (!response.ok)
+            if (!response.ok) {
+                if (entry.runInTerminal) {
+                    // Spawning a terminal app without a TTY always dies; a
+                    // silent dead process is worse than a logged refusal.
+                    console.warn("[AppAction] terminal app launch failed, "
+                                 + "no TTY fallback app=" + appId)
+                    return
+                }
                 service._executeDirect(entry, appId, "platform-launch")
+            }
         })
         console.log("[AppAction] platform launch app=" + appId)
         return true

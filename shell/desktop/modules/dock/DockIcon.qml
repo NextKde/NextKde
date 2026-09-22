@@ -245,11 +245,26 @@ Item {
         && magnificationRoot !== null
         && magnificationPointer.x > -9999
         && magnificationPointer.y > -9999
+    // Stable slot centre in the magnification root's coordinates, mapped from
+    // the layout parent and never from the icon, so nothing derived from it can
+    // read the hover transform it drives. Mapping the icon itself would fold in
+    // its own lift/scale. On today's Dock the two happen to agree on the
+    // influence axis -- a side Dock rotates its row, so the local lift lands on
+    // the axis the influence ignores -- so this is not a behaviour change; it
+    // makes the independence explicit rather than accidental, and lets the
+    // hover test below share one definition of "the slot".
+    function _slotCentreInRoot() {
+        const slotParent = icon.parent
+        const cx = icon.x + icon.width / 2
+        const cy = icon.y + icon.height / 2
+        return slotParent
+            ? slotParent.mapToItem(magnificationRoot, cx, cy)
+            : icon.mapToItem(magnificationRoot, cx, cy)
+    }
     readonly property real _magnificationInfluence: {
         if (!_distanceMagnificationEnabled || !visible)
             return 0.0
-        const center = icon.mapToItem(magnificationRoot,
-            icon.width / 2, icon.height / 2)
+        const center = icon._slotCentreInRoot()
         const iconAxis = vertical ? center.y : center.x
         const pointerAxis = vertical ? magnificationPointer.y
                                      : magnificationPointer.x
@@ -265,8 +280,10 @@ Item {
     readonly property real _magnificationScale:
         1.0 + _magnificationInfluence
             * (AppearanceTokens.dock.magnificationMaxScale - 1.0)
+    // Continuous (sub-pixel) lift: rounding this to whole pixels would quantise
+    // the small magnification lift into a couple of visible steps.
     readonly property real _magnificationLift:
-        -Math.round(icon.iconSize
+        -(icon.iconSize
             * AppearanceTokens.dock.magnificationLiftRatio
             * _magnificationInfluence)
     // The distance curve already includes the hovered icon. Keep the original
@@ -321,7 +338,38 @@ Item {
     }
 
     // ── Hover animation ──
-    readonly property bool _hovering: _mouseArea.containsMouse
+    // Hover is resolved against the icon's *static* layout slot rather than the
+    // MouseArea's live geometry. `_mouseArea` is anchored to this item, so it
+    // moves with the very hover lift/scale it triggers: with the pointer parked
+    // on the slot's bottom edge the icon lifts out from under the cursor (the
+    // measured band is ~0.75px, one row at 1x), the hover clears, the icon drops
+    // back and the cycle repeats — an endless jitter. Testing the untransformed
+    // slot against the container pointer makes hover a pure function of the
+    // pointer again.
+    //
+    // The slot is not the zoomed artwork, and that is deliberate: a pointer in
+    // the gap between two slots, or in the overhang a magnified neighbour leaves
+    // past its slot, is no longer reported as hovering. The old test covered the
+    // 1.19x-scaled rect, which grew ~4.5px past the slot and therefore bridged
+    // the 4px inter-icon gap.
+    //
+    // A DockIcon whose container publishes no pointer (magnificationRoot unset,
+    // or the pointer outside it) keeps the MouseArea answer. The Dock's own
+    // icons, including the pinned launcher and trash, all receive the container
+    // root, so they take the pointer path; the fallback is for isolated hosts.
+    readonly property bool _hovering: {
+        if (!icon.interactive || !icon.visible)
+            return false
+        if (magnificationRoot === null || magnificationPointer.x < -9999
+                || magnificationPointer.y < -9999)
+            // No container pointer to test against. This path does read the
+            // item's own transform, which is acceptable here because a host that
+            // publishes no pointer is not running the hover magnification.
+            return _mouseArea.containsMouse
+        const centre = icon._slotCentreInRoot()
+        return Math.abs(centre.x - magnificationPointer.x) <= icon.width / 2
+            && Math.abs(centre.y - magnificationPointer.y) <= icon.height / 2
+    }
     readonly property var _appWindows: {
         WindowService.revision
         if (icon.windowId) {
@@ -447,8 +495,9 @@ Item {
                     + " windowCount=" + icon._appWindows.length);
                 p.appId = icon.appId
                 p.windowId = icon._previewWindowId
-                p.title = WindowService.windowById(icon._previewWindowId)?.title
-                    ?? icon.displayName
+                // The strip is labelled with the application; each card labels
+                // its own window (see DockWindowPreview's per-card title).
+                p.appName = icon.displayName
                 p.windows = icon._appWindows
                 DockModelService.openDockPopup(p)
             } else if (icon._hovering && icon.isRunning) {

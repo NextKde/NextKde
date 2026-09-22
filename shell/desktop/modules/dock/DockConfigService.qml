@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 
 // ────────────────────────────────────────────────────────────────
 // DockConfigService — Persistent JSON configuration.
@@ -36,6 +37,16 @@ QtObject {
     property real   baseHeight:   60
     property string theme:        "system"
     property string position:     "bottom"
+    // Product-level presentation. Geometry details are derived from this one
+    // choice so settings cannot create a stretched-but-floating hybrid.
+    property string dockStyle:    "floating"
+    // Compact keeps the whole content group together. Relaxed spends any
+    // taskbar slack between apps/windows and the trailing information area.
+    property string contentStyle: "compact"
+    // Internal compatibility projections while renderers consume the concise
+    // product model. They are derived, never persisted or exposed in settings.
+    readonly property string widthMode: dockStyle === "taskbar" ? "stretch" : "auto"
+    readonly property bool stretchFloating: false
     // Reserved strip of the top status bar. Side docks subtract it from the
     // screen height so their column cap never overlaps the bar. The bar reads
     // this value too, keeping one source of truth; a future bar-visibility
@@ -172,6 +183,131 @@ QtObject {
         position = nextPosition
         scheduleSave()
         return true
+    }
+
+    function isValidDockStyle(value) {
+        return value === "floating" || value === "taskbar"
+            || value === "transparent"
+    }
+
+    function updateDockStyle(rawStyle) {
+        const nextStyle = String(rawStyle)
+        if (!isValidDockStyle(nextStyle))
+            return false
+        if (dockStyle === nextStyle)
+            return false
+        dockStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function isValidContentStyle(value) {
+        return value === "compact" || value === "relaxed"
+    }
+
+    function updateContentStyle(rawStyle) {
+        const nextStyle = String(rawStyle)
+        if (!isValidContentStyle(nextStyle))
+            return false
+        if (contentStyle === nextStyle)
+            return false
+        contentStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    // ── Information cards (music / weather / clock / metrics) ──
+    // "carousel" keeps the historical single shared slot that rotates through
+    // the enabled cards; "expanded" gives every enabled card its own place in
+    // the row so nothing rotates any more.
+    property string infoCardMode: "carousel"
+    property bool infoCardAutoRotate: true
+    readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
+    // One ordered list is the whole component model. Zero items hides the
+    // region, one is naturally fixed, and multiple items rotate or expand.
+    property var infoCardOrder: ["music", "weather", "clock", "metrics"]
+    readonly property bool infoCardMusic: infoCardOrder.indexOf("music") >= 0
+    readonly property bool infoCardWeather: infoCardOrder.indexOf("weather") >= 0
+    readonly property bool infoCardClock: infoCardOrder.indexOf("clock") >= 0
+    readonly property bool infoCardMetrics: infoCardOrder.indexOf("metrics") >= 0
+    readonly property bool infoClockSeconds: true
+    readonly property bool infoClockDate: true
+    readonly property bool infoClockSolar: true
+    readonly property bool infoMetricAverage: true
+    readonly property bool infoMetricPeak: true
+    readonly property bool infoMetricCpu: true
+    readonly property bool infoMetricMemory: true
+    readonly property bool infoMetricStorage: true
+
+    function isValidInfoCardMode(value) {
+        return value === "carousel" || value === "expanded"
+    }
+
+    function updateInfoCardMode(rawMode) {
+        const nextMode = String(rawMode)
+        if (!isValidInfoCardMode(nextMode))
+            return false
+        if (infoCardMode === nextMode)
+            return false
+        infoCardMode = nextMode
+        scheduleSave()
+        return true
+    }
+
+    function updateInfoCardAutoRotate(enabled) {
+        const nextValue = Boolean(enabled)
+        if (infoCardAutoRotate === nextValue)
+            return false
+        infoCardAutoRotate = nextValue
+        scheduleSave()
+        return true
+    }
+
+    function normalizedInfoCardOrder(rawOrder) {
+        const input = Array.isArray(rawOrder) ? rawOrder : []
+        const result = []
+        for (const rawId of input) {
+            const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
+            if (knownInfoCardIds.indexOf(id) < 0 || result.indexOf(id) >= 0)
+                continue
+            result.push(id)
+        }
+        return result
+    }
+
+    function updateInfoCardOrder(rawOrder) {
+        const next = normalizedInfoCardOrder(rawOrder)
+        if (JSON.stringify(next) === JSON.stringify(infoCardOrder))
+            return false
+        infoCardOrder = next
+        scheduleSave()
+        return true
+    }
+
+    function addInfoCard(rawId, rawIndex) {
+        const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
+        if (knownInfoCardIds.indexOf(id) < 0 || infoCardOrder.indexOf(id) >= 0)
+            return false
+        const next = infoCardOrder.slice()
+        const index = Math.max(0, Math.min(next.length,
+            Number.isFinite(Number(rawIndex)) ? Number(rawIndex) : next.length))
+        next.splice(index, 0, id)
+        return updateInfoCardOrder(next)
+    }
+
+    function removeInfoCard(rawId) {
+        const id = String(rawId)
+        return updateInfoCardOrder(infoCardOrder.filter(candidate => candidate !== id))
+    }
+
+    function moveInfoCard(rawId, rawIndex) {
+        const id = String(rawId)
+        const next = infoCardOrder.filter(candidate => candidate !== id)
+        if (next.length === infoCardOrder.length)
+            return false
+        const index = Math.max(0, Math.min(next.length, Number(rawIndex)))
+        next.splice(index, 0, id)
+        return updateInfoCardOrder(next)
     }
 
     function updateTheme(rawTheme) {
@@ -363,14 +499,17 @@ QtObject {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Persistence — write JSON via shell process
+    // Persistence — JSON through the platform daemon's state ops
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 3,
+            version: 8,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
+            // Product-level layout (v6)
+            dockStyle:     svc.dockStyle,
+            contentStyle:  svc.contentStyle,
             barHeight:     svc.barHeight,
             iconOverrides: svc.iconOverrides,
             dockItems:     svc.dockItems,
@@ -385,89 +524,37 @@ QtObject {
             visibilityMode: svc.visibilityMode,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
+            // Information cards (v6)
+            infoCardMode: svc.infoCardMode,
+            infoCardAutoRotate: svc.infoCardAutoRotate,
+            infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
         console.log("[DockConfig] save requested path=" + svc.configPath
                     + " items=" + JSON.stringify(obj.dockItems))
-
-        // Pass the directory and JSON as separate process arguments. The old
-        // implementation called write() before exec() while stdinEnabled was
-        // false, so the data was discarded and config.json was never created.
-        // Using printf with positional shell arguments avoids fragile quoting
-        // and does not depend on a stdin channel being closed correctly.
-        const proc = _makeProc([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "dock-config-save",
-            svc.configDir,
-            json,
-        ])
-        if (proc) {
-            proc.exited.connect(function(code) {
-                const stderr = proc.stderr?.text ?? ""
-                if (code === 0) {
-                    console.log("[DockConfig] save complete path=" + svc.configPath)
-                } else {
-                    console.warn("[DockConfig] save failed code=" + code
-                                 + " stderr=" + stderr)
-                }
-                proc.destroy()
-            })
-            // Setting running is the documented, unambiguous process start
-            // path. It avoids the exec() overload ambiguity in QML.
-            proc.running = true
-        }
+        JsonConfigStore.writePath(svc.configPath, json, function(ok) {
+            if (ok)
+                console.log("[DockConfig] save complete path=" + svc.configPath)
+        })
     }
 
     function loadConfig() {
         console.log("[DockConfig] load requested path=" + svc.configPath)
-        const proc = _makeProc([
-            "sh", "-c", "cat \"$1\"", "dock-config-load", svc.configPath
-        ])
-        if (!proc) return
-        proc.exited.connect(function(code) {
-            // Process.stdout is a StdioCollector, not a string. Its text
-            // field contains the JSON collected after the command finishes.
-            const output = proc.stdout?.text ?? ""
-            const stderr = proc.stderr?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(svc.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const obj = JSON.parse(output)
+                    const obj = JSON.parse(data)
                     _apply(obj)
-                    svc.ready = true
                     console.log("[DockConfig] load complete pinned="
                                 + JSON.stringify(svc.pinnedAppIds))
                 } catch (e) {
-                    svc.ready = true
                     console.warn("[DockConfig] parse error, using defaults: " + e)
                 }
-            } else if (code !== 0) {
-                svc.ready = true
-                console.log("[DockConfig] no saved config yet code=" + code
-                            + " stderr=" + stderr)
+            } else if (!exists) {
+                console.log("[DockConfig] no saved config yet")
             }
-            proc.destroy()
+            svc.ready = true
         })
-        proc.running = true
-    }
-
-    // Reusable Process factory
-    property Component _procFactory: Component {
-        Process {
-            // Collect both streams so completion logs contain the actual
-            // command failure, and loadConfig can parse stdout.text.
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProc(command) {
-        try {
-            return _procFactory.createObject(svc, { command: command })
-        } catch (e) {
-            console.warn("DockConfigService: cannot create Process:", e)
-        }
-        return null
     }
 
     function _apply(obj) {
@@ -480,6 +567,61 @@ QtObject {
                 scheduleSave()
             }
         }
+        // v6 productises both experimental PR schemas. A stretched dock or a
+        // zero-margin edge dock becomes the taskbar preset; all other legacy
+        // configurations keep the historical floating presentation.
+        if (obj.dockStyle !== undefined) {
+            if (isValidDockStyle(obj.dockStyle)) {
+                svc.dockStyle = obj.dockStyle
+            } else {
+                console.warn("[DockConfig] invalid dockStyle ignored")
+                scheduleSave()
+            }
+        } else if (obj.widthMode === "stretch" || Number(obj.edgeMargin) === 0) {
+            svc.dockStyle = "taskbar"
+        }
+        if (obj.contentStyle !== undefined) {
+            if (isValidContentStyle(obj.contentStyle)) {
+                svc.contentStyle = obj.contentStyle
+            } else {
+                console.warn("[DockConfig] invalid contentStyle ignored")
+                scheduleSave()
+            }
+        }
+
+        // Accept both proposed PR card schemas, then persist only the ordered
+        // component model. Missing keys retain the historical four cards.
+        if (obj.infoCardMode !== undefined) {
+            if (isValidInfoCardMode(obj.infoCardMode)) {
+                svc.infoCardMode = obj.infoCardMode
+            } else {
+                console.warn("[DockConfig] invalid infoCardMode ignored")
+                scheduleSave()
+            }
+        }
+        if (obj.infoCardAutoRotate !== undefined)
+            svc.infoCardAutoRotate = Boolean(obj.infoCardAutoRotate)
+        if (Array.isArray(obj.infoCardOrder)) {
+            svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
+        } else if (obj.showWidgets === false) {
+            svc.infoCardOrder = []
+        } else if (obj.widgetMode === "fixed" && obj.fixedWidget !== undefined) {
+            svc.infoCardOrder = normalizedInfoCardOrder([obj.fixedWidget])
+        } else if (obj.enabledWidgets && typeof obj.enabledWidgets === "object") {
+            svc.infoCardOrder = normalizedInfoCardOrder(knownInfoCardIds.filter(id => {
+                const legacyId = id === "metrics" ? "temperature" : id
+                return Boolean(obj.enabledWidgets[legacyId])
+            }))
+        } else if (obj.infoCardMusic !== undefined || obj.infoCardWeather !== undefined
+                || obj.infoCardClock !== undefined || obj.infoCardMetrics !== undefined) {
+            svc.infoCardOrder = normalizedInfoCardOrder([
+                obj.infoCardMusic === false ? "" : "music",
+                obj.infoCardWeather === false ? "" : "weather",
+                obj.infoCardClock === false ? "" : "clock",
+                obj.infoCardMetrics === false ? "" : "metrics"
+            ])
+        }
+
         if (obj.barHeight !== undefined) {
             const barHeight = Math.max(0, Math.min(100, Number(obj.barHeight)))
             if (Number.isFinite(barHeight))

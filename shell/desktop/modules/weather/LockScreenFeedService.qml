@@ -17,10 +17,12 @@ import qs.desktop.modules.platform
 // as a small QML file into the installed theme package, where the lock screen
 // picks it up with a plain Loader.
 //
-// The file is data only -- five property assignments, no logic -- and it is
-// written atomically (tmp, then mv) so a lock screen never sees a half file.
-// The `test -f` guard keeps a desktop that is not running this theme from
-// creating an empty package directory as a side effect.
+// The file is data only -- five property assignments, no logic. state.write
+// stages it atomically inside the shell's state root and file.copy publishes
+// it into the installed package, both ending in the daemon's tmp+rename, so a
+// lock screen never sees a half file. The package probe keeps a desktop that
+// is not running this theme from creating an empty package directory as a
+// side effect.
 QtObject {
     id: service
 
@@ -30,6 +32,13 @@ QtObject {
     readonly property string packageDir:
         StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
         + "/plasma/shells/org.kos.desktop/contents/lockscreen"
+
+    // state.write cannot reach the package directory (it is confined to the
+    // quickshell state root), so the feed is staged under stateDir and
+    // file.copy publishes it from there. The staging file lives in weather/
+    // so it does not collide with any component's config.json.
+    readonly property string stagingPath:
+        Quickshell.stateDir + "/weather/LockFeed.qml"
 
     readonly property int refreshMinutes: 5
 
@@ -73,27 +82,35 @@ QtObject {
         const body = payload()
         if (body === "")
             return
-        const proc = _procFactory.createObject(service, { command: [
-            "sh", "-c",
-            // The theme has to already be installed here for this to be worth
-            // anything, so let that test gate the whole write.
-            "test -f \"$1/LockScreen.qml\""
-            + " && printf %s \"$2\" > \"$1/LockFeed.qml.tmp\""
-            + " && mv \"$1/LockFeed.qml.tmp\" \"$1/LockFeed.qml\"",
-            "lock-feed-save",
-            service.packageDir,
-            body
-        ] })
-        if (proc) {
-            proc.exited.connect(function (code) {
-                const stderr = proc.stderr?.text ?? ""
-                if (code !== 0)
-                    console.warn("[LockScreenFeed] write skipped or failed code="
-                        + code + " stderr=" + stderr)
-                proc.destroy()
+        // Re-probe on every write rather than trusting a latched result: a
+        // lockscreen installed mid-session starts receiving the feed, and an
+        // uninstalled one stops it -- the daemon's file.copy would otherwise
+        // mkpath the package directory right back.
+        service._pendingBody = body
+        _packageProbe.reload()
+    }
+
+    // Called once the probe has a fresh answer. The daemon's state ops stay
+    // inside the quickshell state root, so the feed is staged there and then
+    // copied into the package directory; both steps are daemon-side
+    // tmp+rename writes.
+    function _publishPending() {
+        const body = service._pendingBody
+        if (body === "")
+            return
+        service._pendingBody = ""
+        JsonConfigStore.writePath(service.stagingPath, body, function(ok) {
+            if (!ok)
+                return
+            PlatformClient.request("file.copy", {
+                source: service.stagingPath,
+                destination: service.packageDir + "/LockFeed.qml",
+            }, function(response) {
+                if (!response?.ok)
+                    console.warn("[LockScreenFeed] publish failed: "
+                        + (response?.error?.message || "platform unavailable"))
             })
-            proc.running = true
-        }
+        })
     }
 
     // WeatherService refreshes about once an hour and pushes on change; the
@@ -113,10 +130,21 @@ QtObject {
         }
     }
 
-    property Component _procFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
+    // Gate on the installed theme like the old `test -f LockScreen.qml` did:
+    // on a desktop that never installed this package the probe fails to load
+    // and nothing is copied, so no stray plasma package directory appears as
+    // a side effect. reload() gives a fresh answer each write, so install and
+    // uninstall are both picked up mid-session.
+    property FileView _packageProbe: FileView {
+        path: service.packageDir + "/LockScreen.qml"
+        preload: true
+        // A missing package is the expected state on desktops that never
+        // installed the lockscreen theme; don't warn every write.
+        printErrors: false
+        onLoaded: service._publishPending()
+        onLoadFailed: function(error) {
+            service._pendingBody = ""
         }
     }
+    property string _pendingBody: ""
 }

@@ -244,8 +244,7 @@ Item {
                 y: root.slotOrigin(naturalIndex).y
                 width: isValid ? root.itemSize : 0
                 height: isValid ? root.itemSize : 0
-                readonly property string tooltip: modelData ? (modelData.tooltipTitle
-                    || modelData.title || modelData.id || "") : ""
+                readonly property string tooltip: modelData ? SysTrayIdentityService.friendlyName(modelData) : ""
                 readonly property bool isSymbolicMask: Boolean(modelData?.isMask)
                     || (typeof modelData?.icon === "string" && (
                         modelData.icon.indexOf("symbolic") !== -1
@@ -706,5 +705,14 @@ Item {
     function trailingItem(index) {
         const wrapper = trailingRepeater.itemAt(index)
         return wrapper?.loader?.item ?? null
+    }
+
+    // Looks a trailing cell up by its stable key instead of its rendered
+    // position. The StatusArea's panels anchor to these cells, and a hidden
+    // cell shifts every later index, so an index-based lookup would silently
+    // anchor a panel to the wrong icon once visibility is configurable.
+    function trailingItemForKey(key) {
+        const index = root.trailingKeys.indexOf(String(key))
+        return index >= 0 ? trailingItem(index) : null
     }
 }

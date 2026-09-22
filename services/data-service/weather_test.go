@@ -132,11 +132,11 @@ func TestFailedWeatherRefreshPreservesCachedConditions(t *testing.T) {
 	state.Status = weatherStatusReady
 	state.Current = &WeatherCurrent{Time: "cached", Temperature: 24}
 	service := &Service{
-		state:              State{Weather: state},
-		statePath:          filepath.Join(directory, "state.json"),
-		snapshotPath:       filepath.Join(directory, "snapshot.json"),
-		weatherProvider:    failingWeatherProvider{},
-		last:               time.Now(),
+		state:           State{Weather: state},
+		statePath:       filepath.Join(directory, "state.json"),
+		snapshotPath:    filepath.Join(directory, "snapshot.json"),
+		weatherProvider: failingWeatherProvider{},
+		last:            time.Now(),
 	}
 
 	if !service.startWeatherRefresh(true) {
@@ -161,4 +161,72 @@ func TestFailedWeatherRefreshPreservesCachedConditions(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("weather refresh did not complete")
+}
+
+func TestWeatherBackoffGrowsExponentiallyAndCaps(t *testing.T) {
+	want := []time.Duration{
+		1 * time.Minute, 2 * time.Minute, 4 * time.Minute, 8 * time.Minute,
+		16 * time.Minute, 30 * time.Minute, 30 * time.Minute,
+	}
+	for streak, expected := range want {
+		if got := weatherBackoff(streak + 1); got != expected {
+			t.Fatalf("weatherBackoff(%d) = %v, want %v", streak+1, got, expected)
+		}
+	}
+	if got := weatherBackoff(0); got != time.Minute {
+		t.Fatalf("weatherBackoff(0) = %v, want 1m", got)
+	}
+	if got := weatherBackoff(1000); got != weatherBackoffMax {
+		t.Fatalf("weatherBackoff(1000) = %v, want capped %v", got, weatherBackoffMax)
+	}
+}
+
+// A failed refresh while offline (Current == nil) must schedule the next
+// attempt via exponential backoff instead of allowing every 10s tick to
+// spawn another HTTP request.
+func TestFailedWeatherRefreshBacksOffAndGatesNextTick(t *testing.T) {
+	directory := t.TempDir()
+	state := defaultWeatherState()
+	service := &Service{
+		state:           State{Weather: state},
+		statePath:       filepath.Join(directory, "state.json"),
+		snapshotPath:    filepath.Join(directory, "snapshot.json"),
+		weatherProvider: failingWeatherProvider{},
+		last:            time.Now(),
+	}
+	service.state.Activity.TodayApps = map[string]AppUsage{}
+	service.state.Activity.UptimeByDay = map[string]float64{}
+
+	if !service.startWeatherRefresh(true) {
+		t.Fatal("refresh was not accepted")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		service.mu.Lock()
+		status := service.state.Weather.Status
+		service.mu.Unlock()
+		if status == weatherStatusError {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	service.mu.Lock()
+	weather := service.state.Weather
+	streak := service.weatherFailStreak
+	service.mu.Unlock()
+	if weather.Status != weatherStatusError || weather.Current != nil {
+		t.Fatalf("unexpected weather after failure: %#v", weather)
+	}
+	if streak != 1 {
+		t.Fatalf("fail streak = %d, want 1", streak)
+	}
+	expectedEarliest := time.Now().Add(weatherBackoff(1) - 5*time.Second).UnixMilli()
+	if weather.NextRefreshAt < expectedEarliest {
+		t.Fatalf("NextRefreshAt = %d, want >= %d (backoff)", weather.NextRefreshAt, expectedEarliest)
+	}
+	// The non-forced tick must now be gated by NextRefreshAt even though
+	// Current is nil.
+	if service.startWeatherRefresh(false) {
+		t.Fatal("backoff gate did not suppress the automatic refresh")
+	}
 }

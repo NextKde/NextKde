@@ -133,6 +133,32 @@ ApplicationWindow {
         }
     }
 
+    // Whether the pages on screen came from a checkout -- which is also what
+    // makes them hot-reloadable. Reported by the standalone bridge from the
+    // entry point it loaded, not from the session it ends up talking to: a
+    // .desktop launch (app grid, KRunner) shows the installed copy even when a
+    // checkout Shell is the one answering IPC, and the banner must not claim
+    // otherwise. A missing bridge (older binary, plain QML preview) reads as
+    // false, which keeps the banner out of the way.
+    readonly property bool sourceTreeEntry: (typeof settingsBridge !== "undefined")
+        ? settingsBridge.sourceTreeEntry === true : false
+    readonly property string sessionShellDir: (typeof settingsBridge !== "undefined")
+        ? settingsBridge.sessionShellDir : ""
+
+    // The banner states how this window was loaded, which closing it cannot
+    // change -- so the close control hides the notice for this run only. The
+    // flag lives on the bridge rather than here on purpose: every QML edit
+    // rebuilds this window, and a banner that returns after each save would
+    // defeat the control. Reopening Settings shows it again.
+    readonly property bool developmentBannerVisible: window.sourceTreeEntry
+        && !((typeof settingsBridge !== "undefined")
+            ? settingsBridge.developmentBannerDismissed === true : false)
+
+    function dismissDevelopmentBanner() {
+        if (typeof settingsBridge !== "undefined")
+            settingsBridge.developmentBannerDismissed = true
+    }
+
     readonly property var contentByPage: [
         {
             subtitle: "显示",
@@ -167,6 +193,101 @@ ApplicationWindow {
             groups: []
         }
     ]
+
+    // Shown only while a development session drives this window. Every value on
+    // these pages then belongs to that session's own state directory: the
+    // settings are live in the checkout Shell the user is looking at and are not
+    // the ones the installed desktop reads at login. Conflating the two is the
+    // mistake this banner exists to prevent.
+    // Deliberately loud. A development window and the installed desktop render
+    // identically, so this band is the only thing between "I just tuned my dock"
+    // and "I just tuned a copy nobody logs into". A quiet note would be read as
+    // decoration and skipped, which is exactly the outcome it exists to prevent.
+    // Solid fill in fixed colours rather than theme tints: the contrast then
+    // holds in either theme, and it cannot be mistaken for one more card.
+    // Two short lines, not a paragraph: the warning has to land while the user
+    // is looking past it at whatever they came here to change.
+    component DevelopmentBanner: Rectangle {
+        Layout.fillWidth: true
+        Layout.bottomMargin: 22
+        implicitHeight: bannerText.implicitHeight + 34
+        radius: 16
+        color: "#ff9f0a"
+
+        Rectangle {
+            id: bannerBadge
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 18
+            width: 28
+            height: 28
+            radius: 14
+            color: "#241700"
+
+            Text {
+                anchors.centerIn: parent
+                text: "!"
+                color: "#ff9f0a"
+                font.pixelSize: 17
+                font.weight: Font.Bold
+            }
+        }
+
+        // Closing is not "never warn me again": a fresh window is a fresh load
+        // and shows the banner again. This only clears the band out of the way
+        // of someone who already knows, for as long as that window is open.
+        Rectangle {
+            id: bannerClose
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.rightMargin: 14
+            width: 28
+            height: 28
+            radius: 14
+            color: bannerCloseHit.containsMouse
+                ? Qt.rgba(0.14, 0.09, 0, 0.18) : "transparent"
+
+            Text {
+                anchors.centerIn: parent
+                text: "✕"
+                color: "#241700"
+                font.pixelSize: 15
+                font.weight: Font.Bold
+            }
+
+            MouseArea {
+                id: bannerCloseHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: window.dismissDevelopmentBanner()
+            }
+        }
+
+        Column {
+            id: bannerText
+            anchors.left: bannerBadge.right
+            anchors.right: bannerClose.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 14
+            anchors.rightMargin: 12
+            spacing: 3
+
+            Text {
+                text: "kos-settings 开发者热更新模式"
+                color: "#241700"
+                font.pixelSize: 17
+                font.weight: Font.Bold
+            }
+
+            Text {
+                width: parent.width
+                text: "和启动台加载的安装模式不一样"
+                color: Qt.rgba(0.14, 0.09, 0, 0.78)
+                font.pixelSize: 13
+            }
+        }
+    }
 
     component SettingIcon: Rectangle {
         required property string symbol
@@ -243,6 +364,8 @@ ApplicationWindow {
     component SettingsNavBar: LiquidControls.LiquidNavBar {
         size: "tiny"
         accentColor: theme.role("primary", theme.dark ? "#64b5ff" : "#0066cc")
+        selectedItemColor: window.materialForm
+            ? theme.role("on_primary", "#ffffff") : accentColor
         itemColor: theme.dark ? "#ffffff" : "#1c1c1e"
         trackColor: theme.dark
             ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"
@@ -522,6 +645,10 @@ ApplicationWindow {
         property real dockHeight: 60
         property int dockPositionIndex: 0
         readonly property var dockPositions: ["bottom", "left", "right"]
+        property int dockContentStyleIndex: 0
+        readonly property var dockContentStyles: ["compact", "relaxed"]
+        property int dockStyleIndex: 0
+        readonly property var dockStyles: ["floating", "taskbar", "transparent"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0
@@ -531,6 +658,16 @@ ApplicationWindow {
 
         function positionIndexFromString(position) {
             const idx = dockPositions.indexOf(position)
+            return idx >= 0 ? idx : 0
+        }
+
+        function dockContentStyleIndexFromString(style) {
+            const idx = dockContentStyles.indexOf(style)
+            return idx >= 0 ? idx : 0
+        }
+
+        function dockStyleIndexFromString(style) {
+            const idx = dockStyles.indexOf(style)
             return idx >= 0 ? idx : 0
         }
 
@@ -549,6 +686,8 @@ ApplicationWindow {
                 return
             dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
+            dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
+            dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             layoutDirty = false
@@ -561,6 +700,21 @@ ApplicationWindow {
             const position = dockPositions[index]
             bridge.updateDockPosition(position)
         }
+
+        // Fire-and-forget: the shell answers with a full snapshot, which lands
+        // on dockSnapshotChanged and is folded in by applyState there.
+        function saveContentStyle(index) {
+            if (!bridge)
+                return
+            bridge.updateDockContentStyle(dockContentStyles[index])
+        }
+
+        function saveDockStyle(index) {
+            if (!bridge)
+                return
+            bridge.updateDockStyle(dockStyles[index])
+        }
+
         function saveVisibilityMode(index) {
             if (!bridge)
                 return
@@ -727,10 +881,11 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             color: theme.card
-            radius: 18
-            implicitHeight: 111
+            radius: window.materialForm ? 24 : 18
+            implicitHeight: dockLayoutColumn.implicitHeight
 
             Column {
+                id: dockLayoutColumn
                 anchors.fill: parent
 
                 Item {
@@ -763,13 +918,82 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.leftMargin: 53
-                    height: 1
-                    color: theme.separator
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "内容样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: dockPage.dockContentStyleIndex === 0
+                                    ? "应用、窗口与组件紧凑排列"
+                                    : "应用和窗口靠前，其他组件靠后"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            model: [
+                                { id: "compact", label: "紧凑" },
+                                { id: "relaxed", label: "宽松" }
+                            ]
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            itemWidthOverride: 62
+                            currentIndex: dockPage.dockContentStyleIndex
+                            onSelectionChanged: function(index) { dockPage.saveContentStyle(index) }
+                        }
+                    }
                 }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "▭"; tint: "#af52de" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "Dock 样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: dockPage.dockStyleIndex === 0
+                                    ? "自适应内容并保留主题间距"
+                                    : (dockPage.dockStyleIndex === 1
+                                        ? "贴合屏幕边缘并延伸为任务栏"
+                                        : "隐藏 Dock 背景，保留组件背景")
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            model: [
+                                { id: "floating", label: "悬浮" },
+                                { id: "taskbar", label: "任务栏" },
+                                { id: "transparent", label: "全透明" }
+                            ]
+                            itemWidthOverride: 62
+                            currentIndex: dockPage.dockStyleIndex
+                            onSelectionChanged: function(index) { dockPage.saveDockStyle(index) }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
 
                 Item {
                     width: parent.width
@@ -1308,7 +1532,8 @@ ApplicationWindow {
             text: "「材质」分组就是当前材质风格（" + glassDebugPage.presetStyleLabel
                 + "）的预设值：改动写进该预设、立即生效并在重启后保留，切换材质风格会换用另一套。"
                 + "「折射强度」还会乘以顶部的「液态强度」，实际生效值 = 液态强度 × 该值。"
-                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，仍可能被普通预设覆盖。"
+                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，外观主题不接管它们，改动会保留；"
+                + "标「设计值」的行由外观主题决定，只读。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -1391,6 +1616,15 @@ ApplicationWindow {
                                 color: theme.secondaryText
                                 font.pixelSize: 10
                             }
+                            Text {
+                                // Derived from a design value on every appearance
+                                // sync, so it is shown for reference but offers no
+                                // control: an edit here would silently revert.
+                                visible: modelData.readOnly === true
+                                text: "设计值"
+                                color: theme.secondaryText
+                                font.pixelSize: 10
+                            }
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: modelData.type !== "bool" && modelData.type !== "string"
@@ -1410,6 +1644,7 @@ ApplicationWindow {
                                 Layout.preferredWidth: 220
                                 visible: (modelData.type === "int" || modelData.type === "real")
                                     && modelData.key !== "TintMode"
+                                    && modelData.readOnly !== true
                                 value: (currentNumber - Number(modelData.min))
                                     / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider
@@ -2937,7 +3172,7 @@ ApplicationWindow {
         spacing: 7
         property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
         property string displayMode: "bottom"
-        readonly property var displayModes: ["bottom", "center", "fullscreen"]
+        readonly property var displayModes: ["bottom", "bottomWide", "center", "fullscreen"]
         property int displayModeIndex: 0
         property string iconSize: "medium"
         property string density: "balanced"
@@ -3054,6 +3289,7 @@ ApplicationWindow {
                         id: launcherModeNavBar
                         model: [
                             { id: "bottom",     label: "底部吸附" },
+                            { id: "bottomWide", label: "底部紧凑" },
                             { id: "center",     label: "屏幕居中" },
                             { id: "fullscreen", label: "全屏覆盖" }
                         ]
@@ -3411,6 +3647,13 @@ ApplicationWindow {
                     width: Math.max(0, Math.min(pageScroll.width, maximumWidth))
                     x: Math.max(0, Math.round((pageScroll.width - width) / 2))
                     spacing: 0
+
+                    // Invisible rows are left out of a Layout, so an installed
+                    // session shows no gap where this sits, and neither does a
+                    // development one once the banner has been closed.
+                    DevelopmentBanner {
+                        visible: window.developmentBannerVisible
+                    }
 
                     Text {
                         text: window.contentByPage[window.currentPage].subtitle

@@ -68,11 +68,9 @@ install prompt tells the user to log out/in (or reboot) to apply, with
 `./tools/kosctl start` as the opt-in way to apply immediately. `./tools/kosctl
 start` restarts the units (KWin effects are only persisted to kwinrc and load
 on the next KWin/session start, and manually launched shell instances are
-adopted). `./tools/kosctl sync` copies QML-only edits into the installed config
-without hot-reloading (the installed shell runs with its file watcher disabled
-so a copy in progress can never trigger a half-written reload), and
-`./tools/kosctl dev` runs only the Shell from the source tree and reuses the
-installed systemd platform and data services through their standard sockets.
+adopted). `./tools/kosctl dev` runs only the Shell from the source tree and
+reuses the installed systemd platform and data services through their standard
+sockets.
 Every launch mode shares one pinned state directory
 (`$XDG_STATE_HOME/quickshell/kos`), so user data such as dock pins and launcher
 icons is independent of how the shell was started. The data service keeps its

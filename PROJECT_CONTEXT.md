@@ -113,6 +113,18 @@ only the Shell from the source tree while reusing the resident
 sockets. All launch modes share one pinned state directory via the `StateDir`
 pragma in `shell/shell.qml`.
 
+Settings follows the session it serves rather than the location of its binary.
+`kosctl dev` builds no applications, so the window the Shell starts is the
+installed `kos-settings`, and it would load the QML copy installed beside it —
+a `kosctl install` per edit, which is what `dev` exists to avoid. The session
+directory the platform daemon passes down as `KOS_SHELL_DIR` therefore decides
+the tree: a checkout Shell makes Settings load that checkout's own
+`apps/settings/main.qml` (and watch it, so a save rebuilds the open window;
+text that does not compile is refused and the window stays as it is), while an
+ordinary launch keeps loading the installed copy. Development sessions show a
+banner saying so, because the settings on those pages belong to the session's
+own state directory and not to the ones the installed desktop reads at login.
+
 `CMakePresets.json` provides core Debug/Release configurations plus all-app and
 per-app presets. Optional application switches default to `OFF`, so a core
 Shell build does not pull application dependencies. Go dependencies are

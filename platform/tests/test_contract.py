@@ -32,6 +32,32 @@ def test_platform_contract_mentions_socket_and_errors() -> None:
         assert field in text
 
 
+def test_literal_shell_operations_have_daemon_handlers() -> None:
+    """Every literal platform request in QML must exist in the daemon.
+
+    Keeping this check generic prevents a client-only operation from degrading
+    into a startup notification saying "unknown platform operation".
+    Dynamic operation names remain covered by their owning feature tests.
+    """
+    request_patterns = (
+        re.compile(r'PlatformClient\.request\(\s*"([^"]+)"'),
+        re.compile(r'_platform\(\s*"([^"]+)"'),
+    )
+    operations: set[str] = set()
+    for qml in (ROOT / "shell").rglob("*.qml"):
+        text = qml.read_text()
+        for pattern in request_patterns:
+            operations.update(pattern.findall(text))
+
+    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    missing = sorted(
+        operation
+        for operation in operations
+        if f'QStringLiteral("{operation}")' not in source
+    )
+    assert not missing, f"QML requests unsupported platform operations: {missing}"
+
+
 def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> None:
     source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
     handler = source[source.index("bool PlatformServer::handleApplication"):]
@@ -156,6 +182,7 @@ def test_brightness_targets_one_kde_display() -> None:
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
+    test_literal_shell_operations_have_daemon_handlers()
     test_application_launch_uses_kde_launcher_without_arbitrary_commands()
     test_theme_toggle_uses_the_safe_palette_path()
     test_nightlight_toggle_only_changes_persistent_master_switch()

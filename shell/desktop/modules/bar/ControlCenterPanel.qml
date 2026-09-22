@@ -8,6 +8,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
@@ -101,12 +102,17 @@ PopupWindow {
         activeSubmenu = ""
         coordinator.modalActive = false
     }
-
     function openSettingsModule(module) {
         panel.close()
-        // Launch directly from the shell so a closing popup or a stale daemon
-        // response cannot swallow the click.
-        Quickshell.execDetached(["kcmshell6", module])
+        // The platform daemon owns launching KCMs (allow-listed module names,
+        // fixed argv); a closing popup or a stale response cannot swallow the
+        // click because the daemon, not this window, spawns kcmshell6.
+        PlatformClient.request("settings.open", { module: module },
+            function(response) {
+                if (!response?.ok)
+                    console.warn("[ControlCenter] settings module failed: " + module
+                        + " " + (response?.error?.message || "platform unavailable"))
+            })
     }
 
     onNetworkRequested: openSubmenu("wifi")

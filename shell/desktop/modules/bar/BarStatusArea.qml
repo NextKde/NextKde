@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
 // visual items whether this component lives in BarWindow or inside Dock.
@@ -11,6 +12,7 @@ Item {
     height: implicitHeight
     property bool dockHosted: false
     property string dockEdge: "bottom"
+    readonly property bool contextualEditingAvailable: !dockHosted
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"
     // DockContainer uses this stable, single-row maximum for its width solver.
     // The visible tray may then fold to two rows without feeding a discrete
@@ -18,6 +20,19 @@ Item {
     readonly property real layoutMaximumWidth: cpuSlot.width
         + systemTray.singleRowImplicitWidth
         + (cpuSlot.visible ? statusArea.spacing : 0)
+
+    // The shell-owned cells, paired with the component that renders each one.
+    // One table feeds both the rendered components and their reorder keys, so a
+    // hidden cell can never desynchronise the two lists. Reading the persisted
+    // hidden set here is what makes the Settings switch take effect live.
+    readonly property var trailingCells: [
+        { key: "network", component: networkQuickControl },
+        { key: "battery", component: batteryQuickControl },
+        { key: "settings", component: settingsQuickControl },
+        { key: "controlcenter", component: controlCenterQuickControl }
+    ]
+    readonly property var visibleTrailingCells: trailingCells.filter(
+        entry => !AppearanceConfigService.isStatusCellHidden(entry.key))
 
     property bool controlCenterLoaded: false
     readonly property var controlCenter: controlCenterLoader.item
@@ -62,12 +77,17 @@ Item {
             controlCenterUnloadTimer.restart()
     }
 
+    // Both panels anchor by cell key, never by rendered index: hiding a cell
+    // shifts the indices of everything after it, so an index-based lookup would
+    // anchor the WiFi popup to the battery glyph once network was hidden.
+    // A hidden cell yields null, and every caller already handles an absent
+    // anchor by falling back to a fixed position.
     function networkStatusAnchor() {
-        return systemTray.trailingItem(0)?.control ?? null
+        return systemTray.trailingItemForKey("network")?.control ?? null
     }
 
     function controlCenterAnchor() {
-        return systemTray.trailingItem(3)?.control ?? null
+        return systemTray.trailingItemForKey("controlcenter")?.control ?? null
     }
 
     Component {
@@ -186,11 +206,21 @@ Item {
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
                 availableHeight: root.height
-                trailingComponents: [networkQuickControl, batteryQuickControl,
-                    settingsQuickControl, controlCenterQuickControl]
-                trailingKeys: ["network", "battery", "settings", "controlcenter"]
+                trailingComponents: root.visibleTrailingCells.map(entry => entry.component)
+                trailingKeys: root.visibleTrailingCells.map(entry => entry.key)
             }
         }
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        enabled: root.contextualEditingAvailable
+        onTapped: statusAreaEditor.openFor(root)
+    }
+
+    StatusAreaEditor {
+        id: statusAreaEditor
     }
 
     NetworkPanel {

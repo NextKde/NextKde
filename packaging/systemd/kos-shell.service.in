@@ -29,6 +29,7 @@ KillMode=process
 # QML edits take effect via `kosctl start`, or via `kosctl dev` (which runs
 # from the source tree with its own watcher and sockets).
 Environment=QS_DISABLE_FILE_WATCHER=1
+Environment=QML2_IMPORT_PATH=%h/.config/quickshell/kos:%h/.local/lib/qt6/qml
 ExecStart=@QS_EXEC@ --no-duplicate -c kos
 Restart=on-failure
 RestartSec=2

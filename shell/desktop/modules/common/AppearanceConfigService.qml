@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
+import "VisibilityPolicy.mjs" as VisibilityPolicy
 
 // Global appearance settings shared by shell surfaces. Keep these values out
 // of DockConfigService: glass material is a shell-wide concern, while pinned
@@ -157,6 +158,13 @@ QtObject {
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
     property string dockWindowAnimationStyle: "scale"
+    // Which individual surfaces are shown. Both lists hold the ids that are
+    // *hidden*; an absent id is visible, so a newly added widget or StatusArea
+    // cell appears by default and an upgrade never silently removes one.
+    // The ids are validated against the known sets below before being written,
+    // so a hand-edited config file cannot make a surface disappear entirely.
+    property var hiddenDeskCenterWidgets: []
+    property var hiddenStatusCells: []
     property bool ready: false
 
     function isValidShellStyle(value) {
@@ -188,6 +196,57 @@ QtObject {
 
     function isValidGlassStyle(value) {
         return value === "liquid" || value === "soft" || value === "frosted"
+    }
+
+    // The authoring order of the DeskCenter cards and the shell-owned
+    // StatusArea cells. Both the layout pass and the settings page read them
+    // from here, so neither can drift from the surfaces the shell builds.
+    // VisibilityPolicy.mjs owns the validation rules and is unit-tested on its
+    // own; this service only persists what it returns.
+    readonly property var deskCenterWidgetIds: VisibilityPolicy.deskCenterWidgetIds
+    readonly property var statusCellIds: VisibilityPolicy.statusCellIds
+
+    function isKnownDeskCenterWidget(id) {
+        return VisibilityPolicy.isKnownDeskCenterWidget(id)
+    }
+
+    function isKnownStatusCell(id) {
+        return VisibilityPolicy.isKnownStatusCell(id)
+    }
+
+    // Drops unknown ids and duplicates, and refuses to hide the anchor cells,
+    // so a stale or hand-edited config cannot remove a surface that no longer
+    // exists nor leave the other panels without an anchor.
+    function isDeskCenterWidgetHidden(id) {
+        return VisibilityPolicy.isHidden(service.hiddenDeskCenterWidgets, id)
+    }
+
+    function isStatusCellHidden(id) {
+        return VisibilityPolicy.isHidden(service.hiddenStatusCells, id)
+    }
+
+    // `visible` is the requested state, so the callers stay declarative: a
+    // switch holds the surface's wanted value, not its stored inverse.
+    function setDeskCenterWidgetVisible(id, visible) {
+        const next = VisibilityPolicy.withVisibility(
+            service.hiddenDeskCenterWidgets, id, visible,
+            VisibilityPolicy.deskCenterWidgetIds)
+        if (next === null)
+            return false
+        service.hiddenDeskCenterWidgets = next
+        saveTimer.restart()
+        return true
+    }
+
+    function setStatusCellVisible(id, visible) {
+        const next = VisibilityPolicy.withVisibility(
+            service.hiddenStatusCells, id, visible,
+            VisibilityPolicy.statusCellIds)
+        if (next === null)
+            return false
+        service.hiddenStatusCells = next
+        saveTimer.restart()
+        return true
     }
 
     function _normalized(value) {
@@ -497,25 +556,9 @@ QtObject {
         }
     }
 
-    property Component processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-
-    function _makeProcess(command) {
-        try {
-            return processFactory.createObject(service, { command })
-        } catch (error) {
-            console.warn("[AppearanceConfig] cannot create process: " + error)
-        }
-        return null
-    }
-
     function _save() {
         const payload = JSON.stringify({
-            version: 27,
+            version: 28,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -557,23 +600,12 @@ QtObject {
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
+            // Sorted before writing so a reorder in the UI never produces a
+            // spurious diff, and so the file stays readable by hand.
+            hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
+            hiddenStatusCells: service.hiddenStatusCells.slice().sort(),
         }, null, 2)
-        const process = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "appearance-config-save",
-            service.configDir,
-            payload,
-        ])
-        if (!process)
-            return
-        process.exited.connect(function(code) {
-            if (code !== 0) {
-                console.warn("[AppearanceConfig] save failed code=" + code
-                    + " stderr=" + (process.stderr?.text ?? ""))
-            }
-        })
-        process.running = true
+        JsonConfigStore.writePath(service.configPath, payload)
     }
 
     function _syncGlassEffect() {
@@ -627,18 +659,10 @@ QtObject {
     }
 
     function _load() {
-        const process = _makeProcess([
-            "sh", "-c", "cat \"$1\"", "appearance-config-load",
-            service.configPath,
-        ])
-        if (!process) {
-            ready = true
-            return
-        }
-        process.exited.connect(function(code) {
-            if (code === 0 && process.stdout?.text) {
+        JsonConfigStore.readPath(service.configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const object = JSON.parse(process.stdout.text)
+                    const object = JSON.parse(data)
                     // Old v7 files may have a Dock value but never a global
                     // one. Read it once as the global migration source, then
                     // save the flattened v8 shape below.
@@ -653,6 +677,12 @@ QtObject {
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
+                    // v28 adds per-surface visibility. Files written before it
+                    // carry neither key, and the empty arrays they fall back to
+                    // mean "everything visible" -- the behaviour those
+                    // installations already had.
+                    const hiddenWidgets = object.hiddenDeskCenterWidgets
+                    const hiddenCells = object.hiddenStatusCells
                     const glassStyle = String(object.glassStyle ?? "liquid")
                     const followsAppearance = object.glassFollowsAppearanceMode
                     const followsAppearanceLegacy = object.glassFollowsColorMode
@@ -682,6 +712,14 @@ QtObject {
                         service.materialColorScheme = colorScheme
                     if (hasBarIntegration)
                         service.barIntegratedWithDock = object.barIntegratedWithDock
+                    // Drops unknown ids, duplicates and any attempt to hide an
+                    // anchor cell, so a stale or hand-edited config cannot
+                    // remove a surface that no longer exists nor leave the
+                    // other panels without an anchor.
+                    service.hiddenDeskCenterWidgets = VisibilityPolicy.normalizeHiddenIds(
+                        hiddenWidgets, VisibilityPolicy.deskCenterWidgetIds)
+                    service.hiddenStatusCells = VisibilityPolicy.normalizeHiddenIds(
+                        hiddenCells, VisibilityPolicy.statusCellIds)
                     if (hasGlassFollows)
                         service.glassFollowsAppearanceMode =
                             typeof followsAppearance === "boolean"
@@ -793,7 +831,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 27
+                    if (Number(object.version) !== 28
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
                             || !service.isValidMaterialColorScheme(colorScheme)
@@ -811,9 +849,7 @@ QtObject {
             service.ready = true
             service.effectSyncTimer.restart()
             service.dockAnimationEffectSyncTimer.restart()
-            process.destroy()
         })
-        process.running = true
     }
 
     Component.onCompleted: _load()

@@ -1,4 +1,5 @@
 import Quickshell
+import QtQuick
 import qs.desktop.modules.common
 
 // A desktop surface is intentionally independent from application windows.
@@ -6,10 +7,19 @@ import qs.desktop.modules.common
 Scope {
     id: root
 
-    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    // Desktop files and context menus exist independently on every usable
+    // output. DeskCenterWindow itself keeps widgets restricted to the elected
+    // primary screen.
+    Variants {
+        model: ScreenLifecycle.usableScreens
 
-    DeskCenterWindow {
-        screen: root.targetScreen
-        visible: ScreenLifecycle.outputAvailable && root.targetScreen !== null
+        delegate: Component {
+            DeskCenterWindow {
+                required property var modelData
+
+                screen: modelData
+                visible: ScreenLifecycle.outputAvailable
+            }
+        }
     }
 }

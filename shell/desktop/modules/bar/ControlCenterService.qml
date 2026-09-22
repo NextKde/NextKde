@@ -405,6 +405,8 @@ QtObject {
             return false
         nightLightChangeInProgress = true
         const requestedEnabled = !nightLightEnabled
+        const previousEnabled = nightLightEnabled
+        const previousActive = nightLightActive
         nightLightEnabled = requestedEnabled
         nightLightActive = requestedEnabled
         PlatformClient.request("nightlight.toggle", { enabled: requestedEnabled }, function(response) {
@@ -413,8 +415,11 @@ QtObject {
                 nightLightEnabled = !!response.result?.enabled
                 nightLightActive = !!response.result?.running
             } else {
-                Quickshell.execDetached(["qdbus6", "org.kde.kglobalaccel", "/component/kwin",
-                    "org.kde.kglobalaccel.Component.invokeShortcut", "Toggle Night Color"])
+                nightLightEnabled = previousEnabled
+                nightLightActive = previousActive
+                const message = response?.error?.message || "夜灯切换失败"
+                console.warn("[ControlCenter] nightlight.toggle failed: " + message)
+                lastSessionError = message
             }
         })
         return true

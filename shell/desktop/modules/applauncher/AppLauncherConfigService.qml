@@ -21,6 +21,7 @@ QtObject {
     // presentation without exposing fragile spacing math in Settings.
     property var layoutProfiles: ({
         bottom: { iconSize: "medium", density: "compact", fontWeight: "normal" },
+        bottomWide: { iconSize: "medium", density: "compact", fontWeight: "normal" },
         center: { iconSize: "medium", density: "balanced", fontWeight: "normal" },
         fullscreen: { iconSize: "large", density: "balanced", fontWeight: "medium" },
     })
@@ -30,7 +31,8 @@ QtObject {
     signal customIconImportFinished(string appId, string path, bool success)
 
     function isValidDisplayMode(mode) {
-        return mode === "bottom" || mode === "center" || mode === "fullscreen"
+        return mode === "bottom" || mode === "bottomWide"
+            || mode === "center" || mode === "fullscreen"
     }
 
     function isValidFontWeight(weight) {
@@ -48,7 +50,7 @@ QtObject {
     function _defaultProfile(mode) {
         if (mode === "fullscreen")
             return { iconSize: "large", density: "balanced", fontWeight: "medium" }
-        if (mode === "bottom")
+        if (mode === "bottom" || mode === "bottomWide")
             return { iconSize: "medium", density: "compact", fontWeight: "normal" }
         return { iconSize: "medium", density: "balanced", fontWeight: "normal" }
     }
@@ -67,6 +69,7 @@ QtObject {
         const candidate = raw && typeof raw === "object" ? raw : ({})
         return {
             bottom: _normalizedProfile(candidate.bottom, "bottom"),
+            bottomWide: _normalizedProfile(candidate.bottomWide, "bottomWide"),
             center: _normalizedProfile(candidate.center, "center"),
             fullscreen: _normalizedProfile(candidate.fullscreen, "fullscreen"),
         }
@@ -582,39 +585,21 @@ QtObject {
 
     function _save() {
         const json = JSON.stringify({
-            version: 3,
+            version: 4,
             displayMode: displayMode,
             layoutProfiles: layoutProfiles,
             rootItems: rootItems,
             hiddenAppIds: hiddenAppIds,
             appOverrides: appOverrides,
         }, null, 2)
-        const proc = _makeProcess([
-            "sh", "-c",
-            "mkdir -p \"$1\" && printf %s \"$2\" > \"$1/config.json.tmp\" && mv \"$1/config.json.tmp\" \"$1/config.json\"",
-            "applauncher-config-save", configDir, json,
-        ])
-        if (!proc)
-            return
-        proc.exited.connect(function(code) {
-            if (code !== 0)
-                console.warn("[AppLauncherConfig] save failed code=" + code)
-            proc.destroy()
-        })
-        proc.running = true
+        JsonConfigStore.writePath(configPath, json)
     }
 
     function load() {
-        const proc = _makeProcess([
-            "sh", "-c", "cat \"$1\"", "applauncher-config-load", configPath,
-        ])
-        if (!proc)
-            return
-        proc.exited.connect(function(code) {
-            const output = proc.stdout?.text ?? ""
-            if (code === 0 && output) {
+        JsonConfigStore.readPath(configPath, function(data, exists) {
+            if (exists && data) {
                 try {
-                    const saved = JSON.parse(output)
+                    const saved = JSON.parse(data)
                     if (service.isValidDisplayMode(saved.displayMode))
                         displayMode = saved.displayMode
                     if (saved.layoutProfiles) {
@@ -633,6 +618,7 @@ QtObject {
                             ? saved.fontWeight : "normal"
                         layoutProfiles = {
                             bottom: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
+                            bottomWide: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                             center: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                             fullscreen: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                         }
@@ -648,24 +634,7 @@ QtObject {
                     console.warn("[AppLauncherConfig] parse failed: " + error)
                 }
             }
-            proc.destroy()
         })
-        proc.running = true
-    }
-
-    property Component _processFactory: Component {
-        Process {
-            stdout: StdioCollector {}
-            stderr: StdioCollector {}
-        }
-    }
-    function _makeProcess(command) {
-        try {
-            return _processFactory.createObject(service, { command: command })
-        } catch (error) {
-            console.warn("[AppLauncherConfig] process creation failed: " + error)
-            return null
-        }
     }
 
     Component.onCompleted: load()

@@ -67,10 +67,21 @@ Item {
                 ? ConfigService.visibilityMode : "always"
             const windowGrouping = ConfigService.isValidWindowGrouping(ConfigService.windowGrouping)
                 ? ConfigService.windowGrouping : "grouped"
+            const dockStyle = ConfigService.isValidDockStyle(ConfigService.dockStyle)
+                ? ConfigService.dockStyle : "floating"
+            const contentStyle = ConfigService.isValidContentStyle(ConfigService.contentStyle)
+                ? ConfigService.contentStyle : "compact"
+            const infoCardMode = ConfigService.isValidInfoCardMode(ConfigService.infoCardMode)
+                ? ConfigService.infoCardMode : "carousel"
             return JSON.stringify({
                 baseHeight: ConfigService.baseHeight,
                 theme: theme,
                 position: position,
+                dockStyle: dockStyle,
+                contentStyle: contentStyle,
+                infoCardMode: infoCardMode,
+                infoCardAutoRotate: ConfigService.infoCardAutoRotate,
+                infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
                 iconMode: iconMode,
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
@@ -86,6 +97,35 @@ Item {
 
         function updatePosition(newPosition: string): string {
             ConfigService.updatePosition(newPosition)
+            return snapshot()
+        }
+
+        function updateContentStyle(newStyle: string): string {
+            ConfigService.updateContentStyle(newStyle)
+            return snapshot()
+        }
+
+        function updateDockStyle(newStyle: string): string {
+            ConfigService.updateDockStyle(newStyle)
+            return snapshot()
+        }
+
+        function updateInfoCardMode(mode: string): string {
+            ConfigService.updateInfoCardMode(mode)
+            return snapshot()
+        }
+
+        function updateInfoCardAutoRotate(enabled: bool): string {
+            ConfigService.updateInfoCardAutoRotate(enabled)
+            return snapshot()
+        }
+
+        function updateInfoCardOrder(orderJson: string): string {
+            try {
+                ConfigService.updateInfoCardOrder(JSON.parse(orderJson))
+            } catch (error) {
+                console.warn("[DockSettings] invalid info card order: " + error)
+            }
             return snapshot()
         }
 
@@ -177,6 +217,21 @@ Item {
                 barLayoutMode: AppearanceConfigService.barLayoutMode,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
+                // Same reason as materialColorSwatches above: these are arrays,
+                // and a plain JSON string crosses the hand-written C++ whitelist
+                // with no conversion left to get wrong. They carry the *hidden*
+                // ids, so an id absent from the list means "visible".
+                hiddenDeskCenterWidgets: JSON.stringify(
+                    AppearanceConfigService.hiddenDeskCenterWidgets),
+                hiddenStatusCells: JSON.stringify(
+                    AppearanceConfigService.hiddenStatusCells),
+                // The known id sets, so the Settings page builds its switches
+                // from the Shell's own list instead of a second hardcoded copy
+                // that can drift from the surfaces the shell actually creates.
+                deskCenterWidgetIds: JSON.stringify(
+                    AppearanceConfigService.deskCenterWidgetIds),
+                statusCellIds: JSON.stringify(
+                    AppearanceConfigService.statusCellIds),
                 tokenVersion: AppearanceTokens.version,
             })
         }
@@ -263,6 +318,18 @@ Item {
 
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
+            return snapshot()
+        }
+
+        // Per-surface visibility. `visible` is the wanted state, so the switch
+        // in the Settings page holds the same value it displays.
+        function updateDeskCenterWidgetVisibility(id: string, visible: bool): string {
+            AppearanceConfigService.setDeskCenterWidgetVisible(id, visible)
+            return snapshot()
+        }
+
+        function updateStatusCellVisibility(id: string, visible: bool): string {
+            AppearanceConfigService.setStatusCellVisible(id, visible)
             return snapshot()
         }
 

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -52,14 +53,14 @@ func TestRollingTemperatureMaximumUsesFiveMinuteWindow(t *testing.T) {
 }
 
 func TestDesktopSubscriptionImmediatelyAnnouncesSnapshot(t *testing.T) {
-	service := &Service{desktopSubscribers: map[net.Conn]struct{}{}}
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
 	server, client := net.Pipe()
 	defer server.Close()
 	defer client.Close()
 
 	done := make(chan struct{})
 	go func() {
-		service.subscribeDesktop(server)
+		service.subscribeDesktop(&subscriberConn{Conn: server})
 		close(done)
 	}()
 	line, err := bufio.NewReader(client).ReadString('\n')
@@ -187,4 +188,262 @@ func TestAcquireInstanceLockIsExclusive(t *testing.T) {
 		t.Fatalf("lock was not released after close: %v", err)
 	}
 	_ = third.Close()
+}
+
+// Regression test for the "concurrent map iteration and map write" panic:
+// activity.snapshot used to shallow-copy s.state.Activity and marshal the
+// response after releasing s.mu, while settle/rollDay kept mutating the live
+// TodayApps and UptimeByDay maps. The snapshot is now deep-copied under the
+// lock via marshal+unmarshal, so racing writers must stay safe under -race.
+func TestActivitySnapshotConcurrentWithSettle(t *testing.T) {
+	service := &Service{last: time.Now()}
+	service.state.Activity.TodayApps = map[string]AppUsage{
+		"firefox": {Name: "Firefox", Seconds: 300},
+	}
+	service.state.Activity.UptimeByDay = map[string]float64{}
+	service.state.Activity.Active = true
+	service.state.Activity.ActiveApp = "firefox"
+	service.state.Activity.TodayAppsDay = day(time.Now())
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for time.Now().Before(deadline) {
+			service.mu.Lock()
+			service.settle(time.Now())
+			service.state.Activity.TodayApps["writer"] = AppUsage{
+				Name:    "Writer",
+				Seconds: float64(time.Now().UnixNano() % 100),
+			}
+			service.state.Activity.UptimeByDay[day(time.Now())] += 0.5
+			service.mu.Unlock()
+		}
+	}()
+
+	for time.Now().Before(deadline) {
+		response := service.handleRequest(DataRequest{
+			Version:   1,
+			RequestID: "race",
+			Operation: "activity.snapshot",
+		})
+		if !response.OK {
+			t.Fatalf("activity.snapshot failed: %#v", response.Error)
+		}
+		// The race used to fire here: the outer marshal iterated maps that
+		// the writer goroutine was mutating.
+		raw, err := json.Marshal(response)
+		if err != nil {
+			t.Fatalf("marshal response: %v", err)
+		}
+		var decoded struct {
+			OK     bool `json:"ok"`
+			Result struct {
+				Activity struct {
+					TodayApps   map[string]AppUsage `json:"todayApps"`
+					UptimeByDay map[string]float64  `json:"uptimeByDay"`
+				} `json:"activity"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("snapshot payload is not the documented shape: %v", err)
+		}
+		if !decoded.OK || decoded.Result.Activity.TodayApps == nil {
+			t.Fatalf("snapshot payload missing activity data: %s", raw)
+		}
+	}
+	<-done
+}
+
+// Same race class for weather.snapshot: the shallow WeatherState copy shared
+// the Locations backing array that setWeatherLocation mutates in place.
+func TestWeatherSnapshotConcurrentWithLocationWrites(t *testing.T) {
+	service := &Service{last: time.Now()}
+	service.state.Weather.Locations = []WeatherLocation{
+		{ID: "open-meteo:1", Name: "Berlin", Latitude: 52.5, Longitude: 13.4},
+		{ID: "open-meteo:2", Name: "Paris", Latitude: 48.9, Longitude: 2.4},
+	}
+	service.state.Weather.Current = &WeatherCurrent{Time: "2026-09-20T12:00", Temperature: 21}
+	service.state.Weather.Hourly = []WeatherHourlyPoint{
+		{Time: "2026-09-20T13:00", Temperature: 22},
+	}
+	service.state.Weather.Daily = []WeatherDay{
+		{Date: "2026-09-20", TemperatureMaximum: 24, TemperatureMinimum: 14},
+	}
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		counter := 0
+		for time.Now().Before(deadline) {
+			counter++
+			service.mu.Lock()
+			// Mirror setWeatherLocation's in-place write into the shared
+			// Locations backing array plus the wholesale slice/pointer swaps.
+			service.state.Weather.Locations[0] = WeatherLocation{
+				ID: "open-meteo:1", Name: "Berlin",
+				Latitude: 52.5, Longitude: float64(counter),
+			}
+			service.state.Weather.Current = &WeatherCurrent{
+				Time: "2026-09-20T12:00", Temperature: float64(counter),
+			}
+			service.state.Weather.Hourly = append(service.state.Weather.Hourly[:1],
+				WeatherHourlyPoint{Time: "x", Temperature: float64(counter)})
+			service.mu.Unlock()
+		}
+	}()
+
+	for time.Now().Before(deadline) {
+		response := service.handleRequest(DataRequest{
+			Version:   1,
+			RequestID: "race",
+			Operation: "weather.snapshot",
+		})
+		if !response.OK {
+			t.Fatalf("weather.snapshot failed: %#v", response.Error)
+		}
+		raw, err := json.Marshal(response)
+		if err != nil {
+			t.Fatalf("marshal response: %v", err)
+		}
+		var decoded struct {
+			OK     bool `json:"ok"`
+			Result struct {
+				Weather struct {
+					Locations []WeatherLocation `json:"locations"`
+				} `json:"weather"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("snapshot payload is not the documented shape: %v", err)
+		}
+		if !decoded.OK || len(decoded.Result.Weather.Locations) != 2 {
+			t.Fatalf("snapshot payload missing weather data: %s", raw)
+		}
+	}
+	<-done
+}
+
+// Regression test for the JSONL interleave/deadlock class: broadcasts and
+// request-response writes share each conn, and before per-conn write mutexes
+// their bytes could interleave mid-line while racing deadline ops could arm
+// (or clear) a deadline under another writer. Now every writer goes through
+// writeLine, so each line the client reads must be exactly one JSON value.
+func TestBroadcastDoesNotInterleaveWithResponses(t *testing.T) {
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	const broadcasts, responses = 30, 30
+
+	readDone := make(chan error, 1)
+	go func() {
+		reader := bufio.NewReader(client)
+		// One subscribe announcement + all broadcasts + all responses.
+		for i := 0; i < 1+broadcasts+responses; i++ {
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				readDone <- err
+				return
+			}
+			var value map[string]interface{}
+			if err := json.Unmarshal(line, &value); err != nil {
+				readDone <- err
+				return
+			}
+		}
+		readDone <- nil
+	}()
+
+	conn := &subscriberConn{Conn: server}
+	service.subscribeDesktop(conn)
+	defer service.unsubscribeDesktop(conn)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < broadcasts; i++ {
+			service.publishDesktop()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < responses; i++ {
+			response, _ := json.Marshal(DataResponse{Version: 1, OK: true})
+			if err := conn.writeLine(append(response, '\n'), 2*time.Second); err != nil {
+				t.Errorf("response write failed: %v", err)
+				return
+			}
+		}
+	}()
+	wg.Wait()
+
+	select {
+	case err := <-readDone:
+		if err != nil {
+			t.Fatalf("client read an interleaved/corrupt line: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out reading broadcast/response lines")
+	}
+}
+
+// A subscriber that never reads must not stall publishes: the write deadline
+// bounds each broadcast write and the conn is dropped after it expires, so
+// publishDesktop returns quickly instead of blocking the event system.
+func TestPublishDesktopDoesNotBlockOnUnreadConn(t *testing.T) {
+	service := &Service{desktopSubscribers: map[*subscriberConn]struct{}{}}
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	conn := &subscriberConn{Conn: server}
+	// Never read on client: the subscribe announcement write itself blocks
+	// until the deadline, so it must run off the test goroutine.
+	subscribed := make(chan struct{})
+	go func() {
+		service.subscribeDesktop(conn)
+		close(subscribed)
+	}()
+	defer service.unsubscribeDesktop(conn)
+	// Never read on client: every write blocks until the 100ms deadline,
+	// so the conn is removed after the first publish and later publishes
+	// have no subscribers at all.
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		service.publishDesktop()
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("publishes took %v; a stalled subscriber must not block them", elapsed)
+	}
+	<-subscribed
+}
+
+// readDisk reports the root filesystem's statfs counters without forking df:
+// total is nonzero on any machine that can run this test and used never
+// exceeds total.
+func TestReadDiskReportsRootFilesystem(t *testing.T) {
+	used, total := readDisk()
+	if total <= 0 {
+		t.Skip("root filesystem statfs unavailable")
+	}
+	if used < 0 || used > total {
+		t.Fatalf("readDisk = (%v, %v); want 0 <= used <= total", used, total)
+	}
+}
+
+// readTemperature enumerates sensors lazily and caches them; a second call
+// must return the same probe set instead of re-globbing sysfs.
+func TestReadTemperatureCachesSensorEnumeration(t *testing.T) {
+	service := &Service{}
+	_, first := service.readTemperature()
+	probes := service.sensors
+	_, second := service.readTemperature()
+	if len(first) != len(second) || len(second) != len(probes) {
+		t.Fatalf("cached enumeration changed between calls: %d vs %d probes %d",
+			len(first), len(second), len(probes))
+	}
 }

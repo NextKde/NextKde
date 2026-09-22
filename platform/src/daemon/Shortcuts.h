@@ -20,7 +20,10 @@ namespace KosPlatform {
 // Registers or updates the whole set. Every shortcut object carries `id`,
 // `description`, `combo` (kglobalaccel PortableText, e.g. "Meta+Shift+Space")
 // and `exec` (the command line to run on activation). All-or-nothing: a
-// malformed item aborts before any QAction is touched.
+// malformed item aborts before any QAction is touched. Each exec is parsed
+// with KShell::splitArgs(AbortOnMeta) and must resolve to
+// `qs|quickshell [-c name] [-p|--path dir] ipc call <target> <action>...`;
+// anything else is rejected with a warning before a process is spawned.
 bool applyShortcutSet(const QJsonArray &shortcuts, QString *error = nullptr);
 
 // Unregisters every KOS action (bindings become inactive) and drops the

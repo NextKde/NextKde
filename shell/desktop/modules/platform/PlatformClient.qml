@@ -40,6 +40,7 @@ QtObject {
         "clipboard.read": true,
         "clipboard.thumb": true,
         "display.brightness.get": true,
+        "display.outputs.get": true,
         "file.open-with": true,
         "file.trash-state": true,
         "network.details": true,
@@ -47,7 +48,9 @@ QtObject {
         "network.scan": true,
         "network.traffic": true,
         "nightlight.get": true,
-        "platform.ping": true
+        "platform.ping": true,
+        "state.read": true,
+        "tray.identify": true
     })
     readonly property int maxQueueSize: 200
     readonly property int requestTimeoutMs: 30000

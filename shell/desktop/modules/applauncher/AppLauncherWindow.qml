@@ -54,7 +54,8 @@ PanelWindow {
 
     readonly property bool isFullscreenMode: displayMode === "fullscreen"
     readonly property bool isCenterMode: displayMode === "center"
-    readonly property bool isBottomMode: displayMode === "bottom"
+    readonly property bool isBottomWideMode: displayMode === "bottomWide"
+    readonly property bool isBottomMode: displayMode === "bottom" || isBottomWideMode
     // Fullscreen is a separate Launchpad presentation, not a stretched bottom
     // sheet. Keep its pages independent from the persisted application order.
     property int fullscreenPage: 0
@@ -124,7 +125,9 @@ PanelWindow {
         ? (screen ? screen.width : 1920)
         : (isCenterMode
             ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
-            : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth))
+            : (isBottomWideMode
+                ? (screen ? Math.round(screen.width * 0.50) : 960)
+                : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)))
 
     readonly property real launcherHeight: isFullscreenMode
         ? (screen ? screen.height : 1080)

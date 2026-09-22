@@ -3,6 +3,7 @@ find_program(KOS_GO_EXECUTABLE NAMES go REQUIRED)
 set(kos_data_service_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/main.go
     ${CMAKE_CURRENT_SOURCE_DIR}/weather.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/desktop_placement.go
     ${CMAKE_CURRENT_SOURCE_DIR}/go.mod
     ${CMAKE_CURRENT_SOURCE_DIR}/go.sum
 )

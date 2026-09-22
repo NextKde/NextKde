@@ -55,8 +55,16 @@ PanelWindow {
     property bool clockInInfoCarousel: false
     readonly property bool vertical: root.position === "left"
         || root.position === "right"
-    readonly property int edgeMargin: AppearanceTokens.dock.edgeMargin
-    readonly property int workspaceGap: AppearanceTokens.dock.workspaceGap
+    // A floating Dock breathes by a proportion of its own thickness, so a
+    // 100pt Dock does not retain the cramped inset intended for a 40pt one.
+    // Taskbar presentation is a true edge fill and therefore has no inset.
+    readonly property int edgeMargin: ConfigService.dockStyle === "taskbar"
+        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
+    // Keep the opposite edge airy as well: maximised windows stop before the
+    // floating glass instead of touching its top/inner edge. This follows the
+    // Dock thickness just like edgeMargin, while a taskbar remains flush.
+    readonly property int workspaceMargin: ConfigService.dockStyle === "taskbar"
+        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
     // Wayland does not expose a trustworthy QWindow global position to QML.
     // Derive this layer surface's compositor-global origin from the output it
     // is explicitly bound to and from the anchors declared below.
@@ -79,8 +87,10 @@ PanelWindow {
 
     // Cross-edge thickness = glass + float. Length is forced by the anchors
     // (full screen along the anchored edge); these set the other dimension.
-    implicitHeight: root.vertical ? 0 : dockContainer.height + root.edgeMargin
-    implicitWidth: root.vertical ? dockContainer.width + root.edgeMargin : 0
+    implicitHeight: root.vertical ? 0
+        : dockContainer.height + root.edgeMargin + root.workspaceMargin
+    implicitWidth: root.vertical
+        ? dockContainer.width + root.edgeMargin + root.workspaceMargin : 0
 
     // ── Auto-hide controller ──
     // One controller per surface; inputs come from the singleton services and
@@ -105,10 +115,14 @@ PanelWindow {
 
     // Only a permanently visible Dock reserves workspace. Hide modes keep the
     // zone at 0 so windows do not reflow whenever the Dock reveals or hides.
+    // A permanently visible Dock reserves exactly the band its glass occupies:
+    // the height plus the inset that keeps the glass off the physical edge.
+    // Floating mode also reserves its proportional inner breathing space;
+    // taskbar mode remains a flush edge fill.
     exclusiveZone: ConfigService.visibilityMode === "always"
         ? (root.vertical
-            ? dockContainer.width + root.edgeMargin + root.workspaceGap
-            : dockContainer.height + root.edgeMargin + root.workspaceGap)
+            ? dockContainer.width + root.edgeMargin + root.workspaceMargin
+            : dockContainer.height + root.edgeMargin + root.workspaceMargin)
         : 0
 
     // The custom KWin glass effect consumes this region for both backdrop
@@ -124,8 +138,23 @@ PanelWindow {
         // Each LiquidGlassPanel owns its own rounded blur mask and exact
         // SurfaceShape. This window is only the compositor boundary: it
         // combines the two independently shaped surfaces into one region.
-        regions: [pill.blurRegion, revealHandle.blurRegion]
+        // Transparent style removes only the Dock's shared capsule; the
+        // reveal handle and component-owned card surfaces stay intact.
+        regions: ConfigService.dockStyle === "transparent"
+            ? [revealHandle.blurRegion]
+            : [pill.blurRegion, revealHandle.blurRegion]
     }
+
+    // A taskbar spans the edge. A floating Dock remains centred along its
+    // edge; content distribution is controlled inside DockContainer instead
+    // of moving the whole surface around the screen.
+    readonly property bool stretched: ConfigService.dockStyle === "taskbar"
+    readonly property real stretchInset: 0
+    // Side docks start below the standalone top bar; a fused bar reserves
+    // nothing. Mirrors DockContainer.reservedBarHeight so the glass never
+    // slides underneath the bar it is meant to sit beside.
+    readonly property real reservedTop: AppearanceConfigService.barIntegratedWithDock
+        ? 0 : ConfigService.barHeight
 
     // Stable, full-reveal position of the glass inside the surface. Always
     // derived from surface/container size — never the animated transform.
@@ -133,9 +162,13 @@ PanelWindow {
         ? (root.position === "right"
             ? root.width - root.edgeMargin - dockContainer.width
             : root.edgeMargin)
-        : (root.width - dockContainer.width) / 2
+        : (root.stretched ? root.stretchInset
+            : (root.width - dockContainer.width) / 2)
     readonly property real restY: root.vertical
-        ? (root.height - dockContainer.height) / 2
+        ? (root.stretched
+            ? root.reservedTop + root.stretchInset
+            : (root.reservedTop
+                + (root.height - root.reservedTop - dockContainer.height) / 2))
         : root.height - root.edgeMargin - dockContainer.height
 
     function publishWorkspaceLayout() {
@@ -146,10 +179,9 @@ PanelWindow {
             y: root.surfaceGlobalY + root.restY,
             width: dockContainer.width,
             height: dockContainer.height
-        // A permanently visible Dock reserves the same visual gap above/beside
-        // its glass. Hide modes deliberately publish no gap: otherwise a new
-        // window would avoid an invisible Dock after it has slid away.
-        }, ConfigService.visibilityMode === "always" ? root.workspaceGap : 0)
+        // Hide modes deliberately publish no gap: otherwise a new window
+        // would avoid an invisible Dock after it has slid away.
+        }, root.workspaceMargin)
     }
 
     Timer {
@@ -198,7 +230,8 @@ PanelWindow {
             id: pill
             anchors.fill: parent
             z: -1
-            radius: dockContainer.pillRadius
+            visible: ConfigService.dockStyle !== "transparent"
+            radius: root.stretched ? 0 : dockContainer.pillRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
             cornerExponent: 2.35
