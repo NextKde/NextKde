@@ -52,6 +52,7 @@ PopupWindow {
         anchors.fill: parent
 
         LiquidGlassPanel {
+            id: editorSurface
             anchors.fill: parent
             radius: AppearanceTokens.isMaterial ? 28 : 20
             cornerExponent: AppearanceTokens.isMaterial ? 2.0 : 2.35
@@ -212,6 +213,11 @@ PopupWindow {
             }
         }
     }
+
+    // Material paints its tonal fallback in QML. Glass themes delegate the
+    // finish to KWin, so this standalone popup must publish its own shape.
+    BackgroundEffect.blurRegion: editor.visible
+        ? editorSurface.blurRegion : null
 
     HoverHandler { onHoveredChanged: editor.pointerInside = hovered }
 }
