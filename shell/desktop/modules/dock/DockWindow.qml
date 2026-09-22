@@ -138,7 +138,11 @@ PanelWindow {
         // Each LiquidGlassPanel owns its own rounded blur mask and exact
         // SurfaceShape. This window is only the compositor boundary: it
         // combines the two independently shaped surfaces into one region.
-        regions: [pill.blurRegion, revealHandle.blurRegion]
+        // Transparent style removes only the Dock's shared capsule; the
+        // reveal handle and component-owned card surfaces stay intact.
+        regions: ConfigService.dockStyle === "transparent"
+            ? [revealHandle.blurRegion]
+            : [pill.blurRegion, revealHandle.blurRegion]
     }
 
     // A taskbar spans the edge. A floating Dock remains centred along its
@@ -226,6 +230,7 @@ PanelWindow {
             id: pill
             anchors.fill: parent
             z: -1
+            visible: ConfigService.dockStyle !== "transparent"
             radius: root.stretched ? 0 : dockContainer.pillRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.

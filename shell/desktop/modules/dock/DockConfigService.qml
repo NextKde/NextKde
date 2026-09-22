@@ -187,6 +187,7 @@ QtObject {
 
     function isValidDockStyle(value) {
         return value === "floating" || value === "taskbar"
+            || value === "transparent"
     }
 
     function updateDockStyle(rawStyle) {

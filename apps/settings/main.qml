@@ -638,7 +638,7 @@ ApplicationWindow {
         property int dockContentStyleIndex: 0
         readonly property var dockContentStyles: ["compact", "relaxed"]
         property int dockStyleIndex: 0
-        readonly property var dockStyles: ["floating", "taskbar"]
+        readonly property var dockStyles: ["floating", "taskbar", "transparent"]
         property int iconModeIndex: 0
         readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
@@ -1210,7 +1210,10 @@ ApplicationWindow {
                             Text { text: "Dock 样式"; color: theme.primaryText; font.pixelSize: 14 }
                             Text {
                                 text: dockPage.dockStyleIndex === 0
-                                    ? "自适应内容并保留主题间距" : "贴合屏幕边缘并延伸为任务栏"
+                                    ? "自适应内容并保留主题间距"
+                                    : (dockPage.dockStyleIndex === 1
+                                        ? "贴合屏幕边缘并延伸为任务栏"
+                                        : "隐藏 Dock 背景，保留组件背景")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -1220,7 +1223,8 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             model: [
                                 { id: "floating", label: "悬浮" },
-                                { id: "taskbar", label: "任务栏" }
+                                { id: "taskbar", label: "任务栏" },
+                                { id: "transparent", label: "全透明" }
                             ]
                             itemWidthOverride: 62
                             currentIndex: dockPage.dockStyleIndex
