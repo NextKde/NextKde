@@ -365,6 +365,8 @@ ApplicationWindow {
     component SettingsNavBar: LiquidControls.LiquidNavBar {
         size: "tiny"
         accentColor: theme.role("primary", theme.dark ? "#64b5ff" : "#0066cc")
+        selectedItemColor: window.materialForm
+            ? theme.role("on_primary", "#ffffff") : accentColor
         itemColor: theme.dark ? "#ffffff" : "#1c1c1e"
         trackColor: theme.dark
             ? Qt.rgba(1, 1, 1, 0.10) : "#d1d1d6"

@@ -27,6 +27,10 @@ Item {
                                       // the preset height/pill look.
     property bool disabled: false
     property color accentColor: "#ff453a"
+    // Foreground painted over the selected thumb. Liquid form historically
+    // uses the accent itself over a white pill; Material callers can provide
+    // the matching on-primary role for a filled primary thumb.
+    property color selectedItemColor: accentColor
     property color itemColor: "#ffffff"
     property color trackColor: Qt.rgba(1, 1, 1, 0.10)
     property real labelFontPixelSize: 0 // 0 = use the selected size preset
@@ -445,7 +449,8 @@ Item {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: modelData.icon || ""
-                    color: index === root.currentIndex ? root.accentColor : root.itemColor
+                    color: index === root.currentIndex
+                        ? root.selectedItemColor : root.itemColor
                     font.pixelSize: root.iconSize
                     font.weight: Font.DemiBold
                 }
@@ -454,7 +459,8 @@ Item {
                     visible: Boolean(modelData.label
                         && modelData.label.toString().length > 0)
                     text: modelData.label || ""
-                    color: index === root.currentIndex ? root.accentColor : root.itemColor
+                    color: index === root.currentIndex
+                        ? root.selectedItemColor : root.itemColor
                     font.pixelSize: root.fontSize
                     font.weight: index === root.currentIndex
                         ? Math.max(root.labelFontWeight, Font.DemiBold)
