@@ -66,15 +66,17 @@ Item {
         ? 0 : ConfigService.barHeight
     // A fused side Dock gets the full output height because the standalone
     // top Bar and its exclusive strip are disabled too.
-    // Length strategy. "stretch" pins the dock to the whole edge; floating
-    // keeps the usual inset on the three free sides, otherwise it reaches the
-    // corners. The inset is removed from the available length here so the
-    // icon solver below keeps working on the length the glass really gets.
+    // Surface style and content distribution are independent. A taskbar
+    // always fills its edge; relaxed content also asks a floating surface for
+    // the available length, but keeps proportional insets and rounded glass.
     readonly property bool stretched: ConfigService.dockStyle === "taskbar"
-    readonly property real stretchInset: 0
+    readonly property bool relaxed: ConfigService.contentStyle === "relaxed"
+    readonly property bool fillsAvailableLength: stretched || relaxed
+    readonly property real floatingSpreadInset: !stretched && relaxed
+        ? Math.max(4, Math.round(baseHeight * 0.12)) : 0
     readonly property int availableLength: (vertical
         ? screenHeight - reservedBarHeight
-        : screenWidth) - (stretched ? Math.round(stretchInset * 2) : 0)
+        : screenWidth) - Math.round(floatingSpreadInset * 2)
     readonly property real baseHeight: ConfigService.baseHeight
     // Shape proportions come from the selected shell style. The macOS token
     // values equal the previous Dock defaults, preserving the upgrade baseline.
@@ -164,18 +166,16 @@ Item {
 
     readonly property int computedDockHeight: _layout.dockHeight
     readonly property int iconSize: _layout.iconSize
-    // naturalDockWidth is the width the content asks for — the only width an
-    // "auto" dock ever takes. A stretched dock grows to the full available
-    // length, and stretchSlack is exactly the gap that growth leaves over,
-    // which the content row spends on the spacer that pushes the information
-    // carousel to the far end (§ Windows-style taskbar layout).
+    // naturalDockWidth is the width the content asks for. A taskbar or relaxed
+    // layout grows to the available edge length. distributionSlack is spent
+    // only by relaxed content, between apps/windows and trailing components.
     readonly property int naturalDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
         + accessoryCount * (2 + dividerMargin * 2 + itemSpacing * 2))
-    readonly property int computedDockWidth: stretched
+    readonly property int computedDockWidth: fillsAvailableLength
         ? Math.max(naturalDockWidth, availableLength)
         : naturalDockWidth
-    readonly property real stretchSlack: Math.max(0, computedDockWidth
+    readonly property real distributionSlack: Math.max(0, computedDockWidth
         - naturalDockWidth)
     readonly property int itemSpacing: _layout.itemSpacing
     readonly property int hPadding: _layout.hPadding
@@ -868,9 +868,7 @@ Item {
         // spacer carries no content, so an auto-width dock collapses it to 0
         // and the row keeps its historical compact layout.
         Item {
-            width: container.stretched
-                && ConfigService.contentStyle === "relaxed"
-                ? container.stretchSlack : 0
+            width: container.relaxed ? container.distributionSlack : 0
             height: 1
             visible: width > 0
         }
