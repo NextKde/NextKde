@@ -940,16 +940,19 @@ SettingsEntry chooseSettingsEntry(bool developmentSession, const QString &sessio
         }
     }
 
-    const QString installedCopy = QDir(QCoreApplication::applicationDirPath()).filePath(
-        QStringLiteral("../share/kos/settings/main.qml"));
+    // Cleaned so the logged path is the one a reader can paste into a shell:
+    // `~/.local/bin/../share/...` is what the join produces, not what exists.
+    const QString installedCopy = QDir::cleanPath(
+        QDir(QCoreApplication::applicationDirPath()).filePath(
+            QStringLiteral("../share/kos/settings/main.qml")));
     if (QFileInfo::exists(installedCopy)) {
         entry.qmlPath = installedCopy;
         entry.source = QStringLiteral("installed copy");
         return entry;
     }
 
-    entry.qmlPath = QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
-        QStringLiteral("main.qml"));
+    entry.qmlPath = QDir::cleanPath(QDir(QStringLiteral(SETTINGS_QML_DIR)).filePath(
+        QStringLiteral("main.qml")));
     entry.source = QStringLiteral("build tree");
     return entry;
 }
@@ -964,17 +967,23 @@ public:
     SettingsQmlReloader(QQmlApplicationEngine *engine, const QUrl &entryPoint,
                         const QString &checkoutRoot, QObject *parent = nullptr)
         : QObject(parent), m_engine(engine), m_entryPoint(entryPoint) {
+        // Only a checkout is watched. The installed copy is a destination, not
+        // an edit surface: it changes when someone installs, and rebuilding the
+        // window under a running user at that moment would be a surprise rather
+        // than a feature -- with the shell's own copy the same `kosctl install`
+        // is explicitly kept from hot-reloading anything.
+        if (checkoutRoot.isEmpty())
+            return;
+
         const QString pages = QFileInfo(entryPoint.toLocalFile()).absolutePath();
         if (!pages.isEmpty())
             m_directories.append(pages);
         // The pages import the shared tree by relative path, so both halves of
         // the window are part of the same edit loop. Only the directory itself
         // is listed here; qmlFiles() walks it.
-        if (!checkoutRoot.isEmpty()) {
-            const QString shared = QDir(checkoutRoot).filePath(QStringLiteral("shared/qml"));
-            if (QFileInfo(shared).isDir())
-                m_directories.append(shared);
-        }
+        const QString shared = QDir(checkoutRoot).filePath(QStringLiteral("shared/qml"));
+        if (QFileInfo(shared).isDir())
+            m_directories.append(shared);
     }
 
     void start() {
