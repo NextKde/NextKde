@@ -67,18 +67,18 @@ Item {
                 ? ConfigService.visibilityMode : "always"
             const windowGrouping = ConfigService.isValidWindowGrouping(ConfigService.windowGrouping)
                 ? ConfigService.windowGrouping : "grouped"
-            const alignment = ConfigService.isValidAlignment(ConfigService.alignment)
-                ? ConfigService.alignment : "center"
             const dockStyle = ConfigService.isValidDockStyle(ConfigService.dockStyle)
                 ? ConfigService.dockStyle : "floating"
+            const contentStyle = ConfigService.isValidContentStyle(ConfigService.contentStyle)
+                ? ConfigService.contentStyle : "compact"
             const infoCardMode = ConfigService.isValidInfoCardMode(ConfigService.infoCardMode)
                 ? ConfigService.infoCardMode : "carousel"
             return JSON.stringify({
                 baseHeight: ConfigService.baseHeight,
                 theme: theme,
                 position: position,
-                alignment: alignment,
                 dockStyle: dockStyle,
+                contentStyle: contentStyle,
                 infoCardMode: infoCardMode,
                 infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
                 iconMode: iconMode,
@@ -99,8 +99,8 @@ Item {
             return snapshot()
         }
 
-        function updateAlignment(newAlignment: string): string {
-            ConfigService.updateAlignment(newAlignment)
+        function updateContentStyle(newStyle: string): string {
+            ConfigService.updateContentStyle(newStyle)
             return snapshot()
         }
 

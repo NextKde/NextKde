@@ -154,8 +154,8 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updatePosition"), position}));
     }
 
-    Q_INVOKABLE QVariantMap updateDockAlignment(const QString &alignment) {
-        return snapshotFromReply(callDock({QStringLiteral("updateAlignment"), alignment}));
+    Q_INVOKABLE QVariantMap updateDockContentStyle(const QString &style) {
+        return snapshotFromReply(callDock({QStringLiteral("updateContentStyle"), style}));
     }
 
     Q_INVOKABLE QVariantMap updateDockStyle(const QString &style) {

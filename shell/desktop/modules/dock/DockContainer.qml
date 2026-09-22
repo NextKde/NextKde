@@ -868,9 +868,11 @@ Item {
         // spacer carries no content, so an auto-width dock collapses it to 0
         // and the row keeps its historical compact layout.
         Item {
-            width: container.stretchSlack
+            width: container.stretched
+                && ConfigService.contentStyle === "relaxed"
+                ? container.stretchSlack : 0
             height: 1
-            visible: container.stretched
+            visible: width > 0
         }
 
         // ── Divider 2: windows | information slot (conditional) ──

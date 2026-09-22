@@ -37,15 +37,12 @@ QtObject {
     property real   baseHeight:   60
     property string theme:        "system"
     property string position:     "bottom"
-    // Where the glass rests along its edge. "start" | "center" | "end" — on a
-    // bottom dock that reads as left/centre/right, on a side dock as
-    // top/centre/bottom. One enum covers both because the two axes are the
-    // same problem: the dock keeps its content-driven length and only its
-    // offset along the edge changes.
-    property string alignment:    "center"
     // Product-level presentation. Geometry details are derived from this one
     // choice so settings cannot create a stretched-but-floating hybrid.
     property string dockStyle:    "floating"
+    // Compact keeps the whole content group together. Relaxed spends any
+    // taskbar slack between apps/windows and the trailing information area.
+    property string contentStyle: "compact"
     // Internal compatibility projections while renderers consume the concise
     // product model. They are derived, never persisted or exposed in settings.
     readonly property string widthMode: dockStyle === "taskbar" ? "stretch" : "auto"
@@ -188,21 +185,6 @@ QtObject {
         return true
     }
 
-    function isValidAlignment(value) {
-        return value === "start" || value === "center" || value === "end"
-    }
-
-    function updateAlignment(rawAlignment) {
-        const nextAlignment = String(rawAlignment)
-        if (!isValidAlignment(nextAlignment))
-            return false
-        if (alignment === nextAlignment)
-            return false
-        alignment = nextAlignment
-        scheduleSave()
-        return true
-    }
-
     function isValidDockStyle(value) {
         return value === "floating" || value === "taskbar"
     }
@@ -214,6 +196,21 @@ QtObject {
         if (dockStyle === nextStyle)
             return false
         dockStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function isValidContentStyle(value) {
+        return value === "compact" || value === "relaxed"
+    }
+
+    function updateContentStyle(rawStyle) {
+        const nextStyle = String(rawStyle)
+        if (!isValidContentStyle(nextStyle))
+            return false
+        if (contentStyle === nextStyle)
+            return false
+        contentStyle = nextStyle
         scheduleSave()
         return true
     }
@@ -495,13 +492,13 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 6,
+            version: 7,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
             // Product-level layout (v6)
-            alignment:     svc.alignment,
             dockStyle:     svc.dockStyle,
+            contentStyle:  svc.contentStyle,
             barHeight:     svc.barHeight,
             iconOverrides: svc.iconOverrides,
             dockItems:     svc.dockItems,
@@ -561,14 +558,6 @@ QtObject {
         // v6 productises both experimental PR schemas. A stretched dock or a
         // zero-margin edge dock becomes the taskbar preset; all other legacy
         // configurations keep the historical floating presentation.
-        if (obj.alignment !== undefined) {
-            if (isValidAlignment(obj.alignment)) {
-                svc.alignment = obj.alignment
-            } else {
-                console.warn("[DockConfig] invalid alignment ignored")
-                scheduleSave()
-            }
-        }
         if (obj.dockStyle !== undefined) {
             if (isValidDockStyle(obj.dockStyle)) {
                 svc.dockStyle = obj.dockStyle
@@ -578,6 +567,14 @@ QtObject {
             }
         } else if (obj.widthMode === "stretch" || Number(obj.edgeMargin) === 0) {
             svc.dockStyle = "taskbar"
+        }
+        if (obj.contentStyle !== undefined) {
+            if (isValidContentStyle(obj.contentStyle)) {
+                svc.contentStyle = obj.contentStyle
+            } else {
+                console.warn("[DockConfig] invalid contentStyle ignored")
+                scheduleSave()
+            }
         }
 
         // Accept both proposed PR card schemas, then persist only the ordered

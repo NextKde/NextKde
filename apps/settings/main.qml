@@ -635,10 +635,8 @@ ApplicationWindow {
         property real dockHeight: 60
         property int dockPositionIndex: 0
         readonly property var dockPositions: ["bottom", "left", "right"]
-        property int dockAlignmentIndex: 1
-        readonly property var dockAlignments: ["start", "center", "end"]
-        readonly property var dockAlignmentLabels: dockPositionIndex === 0
-            ? ["靠左", "居中", "靠右"] : ["靠上", "居中", "靠下"]
+        property int dockContentStyleIndex: 0
+        readonly property var dockContentStyles: ["compact", "relaxed"]
         property int dockStyleIndex: 0
         readonly property var dockStyles: ["floating", "taskbar"]
         property int infoCardModeIndex: 0
@@ -775,9 +773,9 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
-        function dockAlignmentIndexFromString(alignment) {
-            const idx = dockAlignments.indexOf(alignment)
-            return idx >= 0 ? idx : 1
+        function dockContentStyleIndexFromString(style) {
+            const idx = dockContentStyles.indexOf(style)
+            return idx >= 0 ? idx : 0
         }
 
         function dockStyleIndexFromString(style) {
@@ -887,7 +885,7 @@ ApplicationWindow {
                 return
             dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
-            dockAlignmentIndex = dockAlignmentIndexFromString(state.alignment)
+            dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             infoCardModeIndex = infoCardModeIndexFromString(state.infoCardMode)
             iconModeIndex = iconModeIndexFromString(state.iconMode)
@@ -910,10 +908,10 @@ ApplicationWindow {
                 errorText = bridge.lastError
         }
 
-        function saveAlignment(index) {
+        function saveContentStyle(index) {
             if (!bridge)
                 return
-            applyState(bridge.updateDockAlignment(dockAlignments[index]))
+            applyState(bridge.updateDockContentStyle(dockContentStyles[index]))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1180,24 +1178,34 @@ ApplicationWindow {
 
                 Item {
                     width: parent.width
-                    height: 54
+                    height: 62
                     RowLayout {
                         anchors.fill: parent
                         anchors.leftMargin: 16
                         anchors.rightMargin: 16
                         spacing: 12
                         SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
-                        Text { text: "对齐"; color: theme.primaryText; font.pixelSize: 14 }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "内容样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: dockPage.dockContentStyleIndex === 0
+                                    ? "应用、窗口与组件紧凑排列"
+                                    : "应用和窗口靠前，其他组件靠后"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             model: [
-                                { id: "start", label: dockPage.dockAlignmentLabels[0] },
-                                { id: "center", label: dockPage.dockAlignmentLabels[1] },
-                                { id: "end", label: dockPage.dockAlignmentLabels[2] }
+                                { id: "compact", label: "紧凑" },
+                                { id: "relaxed", label: "宽松" }
                             ]
-                            itemWidthOverride: 58
-                            currentIndex: dockPage.dockAlignmentIndex
-                            onSelectionChanged: function(index) { dockPage.saveAlignment(index) }
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                            itemWidthOverride: 62
+                            currentIndex: dockPage.dockContentStyleIndex
+                            onSelectionChanged: function(index) { dockPage.saveContentStyle(index) }
                         }
                     }
                 }
