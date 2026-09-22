@@ -69,10 +69,12 @@ QtObject {
     // ── Control-centre tiles ─────────────────────────────────────────────
     // A tile is a container, not a glass card: in the tonal form it takes the
     // scheme's container fills and the ink that reads on them. Each role keeps
-    // exactly the literal the tiles were drawn with as its glass value, so the
-    // glass form is byte-identical and only the tonal form changes.
+    // exactly the literal the tiles were drawn with as its glass value while
+    // the tile is dark, so the default glass form stays byte-identical and only
+    // the tonal form (or a light glass) changes.
     readonly property color tileGlyph: AppearanceTokens.surface.pick(
-        AppearanceTokens.colors.surfaceVariantForeground, "white")
+        AppearanceTokens.colors.surfaceVariantForeground,
+        (isDark ? "white" : lightFg))
     readonly property color tileActiveGlyph: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primaryContainerForeground, "white")
     // The fill `tileActiveGlyph` is cut for: an enabled toggle reads as a

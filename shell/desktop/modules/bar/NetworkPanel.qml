@@ -268,8 +268,9 @@ PopupWindow {
                     connected: NetworkService.deviceState === "connected"
                         && NetworkService.connectionType === "wifi"
                     signalStrength: NetworkService.signalStrength
-                    glyphColor: NetworkService.wifiEnabled ? "#0a84ff"
-                        : "white"
+                    glyphColor: NetworkService.wifiEnabled
+                        ? "#0a84ff"
+                        : AppearanceTokens.content.glassInk()
                 }
                 MouseArea {
                     anchors.fill: parent

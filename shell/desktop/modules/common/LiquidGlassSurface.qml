@@ -93,18 +93,23 @@ Rectangle {
         return Math.min(0.20, (base + protection)
             * (material === "thick" ? 1.18 : 1.0))
     }
-    // Glass controls use the same white foreground hierarchy in light and
-    // dark themes. Choosing black from the estimated wallpaper makes symbols
-    // flip while the material itself remains visually dark/transparent.
+    // The foreground hierarchy follows the resolved ink the same way the rest
+    // of the shell does: the fixed white hierarchy while the dark glass is in
+    // force, and the palette's dark ink once a light glass follows the
+    // appearance, so a light surface never paints white-on-white. The choice
+    // never samples the estimated wallpaper: picking black from it makes
+    // symbols flip while the material itself stays dark/transparent.
     readonly property color foregroundColor: usesMaterialSurface
-        ? AppearanceTokens.colors.surfaceForeground : Qt.rgba(1, 1, 1, 1.0)
+        ? AppearanceTokens.colors.surfaceForeground
+        : AppearanceTokens.content.glassInk()
     readonly property color secondaryForegroundColor: usesMaterialSurface
-        ? AppearanceTokens.colors.surfaceVariantForeground : Qt.rgba(1, 1, 1, 0.82)
+        ? AppearanceTokens.colors.surfaceVariantForeground
+        : AppearanceTokens.content.glassInk(0.82)
     readonly property color tertiaryForegroundColor: usesMaterialSurface
         ? Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
             AppearanceTokens.colors.surfaceVariantForeground.g,
             AppearanceTokens.colors.surfaceVariantForeground.b, 0.70)
-        : Qt.rgba(1, 1, 1, 0.66)
+        : AppearanceTokens.content.glassInk(0.66)
     readonly property real baseLuminance: baseColor.r * 0.2126
         + baseColor.g * 0.7152 + baseColor.b * 0.0722
     // Bright surfaces need less white overlay to remain translucent; darker

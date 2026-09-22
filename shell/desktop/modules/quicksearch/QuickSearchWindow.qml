@@ -533,7 +533,7 @@ PanelWindow {
                     verticalCenter: fieldPill.verticalCenter
                 }
                 text: "⌕"
-                color: Qt.rgba(1, 1, 1, 0.72)
+                color: AppearanceTokens.content.glassInk(0.72)
                 font.pixelSize: 20
                 style: ThemeService.isDark ? Text.Outline : Text.Normal
                 styleColor: dialog.textOutlineColor
@@ -594,7 +594,7 @@ PanelWindow {
                     anchors.fill: parent
                     visible: !searchInput.text
                     text: root.placeholder
-                    color: Qt.rgba(1, 1, 1, 0.54)
+                    color: AppearanceTokens.content.glassInk(0.54)
                     font: searchInput.font
                     verticalAlignment: Text.AlignVCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -613,7 +613,7 @@ PanelWindow {
                 GlassText {
                     text: root.modeTitle + (root.mode === "clipboard"
                         ? (root.clipboardPinnedOnly ? " · 固定" : " · 最新优先") : "") + " · Tab"
-                    color: Qt.rgba(1, 1, 1, 0.46)
+                    color: AppearanceTokens.content.glassInk(0.46)
                     font.pixelSize: 11
                     anchors.verticalCenter: parent.verticalCenter
                     style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -641,7 +641,7 @@ PanelWindow {
                         text: "清空"
                         color: clearMouse.containsMouse
                             ? "#ff453a"
-                            : Qt.rgba(1, 1, 1, 0.60)
+                            : AppearanceTokens.content.glassInk(0.60)
                         font.pixelSize: 11
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -683,7 +683,7 @@ PanelWindow {
                         text: "固定 " + ClipboardService.pinnedCount
                         color: root.clipboardPinnedOnly
                             ? (ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : "#0066cc")
-                            : Qt.rgba(1, 1, 1, 0.60)
+                            : AppearanceTokens.content.glassInk(0.60)
                         font.pixelSize: 11
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -721,7 +721,7 @@ PanelWindow {
                         text: "⚙"
                         color: root.clipboardSettingsOpen
                             ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
-                            : Qt.rgba(1, 1, 1, 0.70)
+                            : AppearanceTokens.content.glassInk(0.70)
                         font.pixelSize: 13
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -751,7 +751,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         // The button advertises the layout selected by a click.
                         text: root.viewMode === "list" ? "▦" : "☷"
-                        color: Qt.rgba(1, 1, 1, 0.76)
+                        color: AppearanceTokens.content.glassInk(0.76)
                         font.pixelSize: 16
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -820,7 +820,7 @@ PanelWindow {
                         horizontalAlignment: Text.AlignRight
                         text: "×"
                         font.pixelSize: 18
-                        color: Qt.rgba(1, 1, 1, 0.60)
+                        color: AppearanceTokens.content.glassInk(0.60)
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
                         MouseArea {
@@ -855,7 +855,7 @@ PanelWindow {
                         GlassText {
                             text: "自动记录截图与复制的图片"
                             font.pixelSize: 10
-                            color: Qt.rgba(1, 1, 1, 0.55)
+                            color: AppearanceTokens.content.glassInk(0.55)
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
@@ -978,7 +978,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "›"
                             font.pixelSize: 16
-                        color: Qt.rgba(1, 1, 1, 0.40)
+                        color: AppearanceTokens.content.glassInk(0.40)
                         }
                     }
 
@@ -1099,7 +1099,7 @@ PanelWindow {
                     GlassText {
                         width: parent.width
                         text: resultItem.modelData.subtitle
-                        color: Qt.rgba(1, 1, 1, 0.68)
+                        color: AppearanceTokens.content.glassInk(0.68)
                         elide: Text.ElideRight
                         font.pixelSize: 11
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -1178,7 +1178,7 @@ PanelWindow {
                             text: (resultItem.modelData.pinned ?? false) ? "★" : "☆"
                             color: (resultItem.modelData.pinned ?? false)
                                 ? (ThemeService.isDark ? "#ffd60a" : "#c08a00")
-                                : Qt.rgba(1, 1, 1, 0.68)
+                                : AppearanceTokens.content.glassInk(0.68)
                             font.pixelSize: 13
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
@@ -1218,7 +1218,8 @@ PanelWindow {
                         GlassText {
                             anchors.centerIn: parent
                             text: "×"
-                            color: deleteBtnMouse.containsMouse ? "#ff453a" : Qt.rgba(1, 1, 1, 0.60)
+                            color: deleteBtnMouse.containsMouse ? "#ff453a"
+                                : AppearanceTokens.content.glassInk(0.60)
                             font.pixelSize: 16
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
@@ -1338,7 +1339,8 @@ PanelWindow {
                     GlassText {
                         anchors.centerIn: parent
                         text: "×"
-                        color: gridDeleteMouse.containsMouse ? "#ff453a" : Qt.rgba(1, 1, 1, 0.80)
+                        color: gridDeleteMouse.containsMouse ? "#ff453a"
+                            : AppearanceTokens.content.glassInk(0.80)
                         font.pixelSize: 14
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
                         styleColor: dialog.textOutlineColor
@@ -1426,7 +1428,7 @@ PanelWindow {
                         topMargin: 71
                     }
                     text: gridResultItem.modelData.subtitle.replace("图片剪贴板 · ", "")
-                    color: Qt.rgba(1, 1, 1, 0.54)
+                    color: AppearanceTokens.content.glassInk(0.54)
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
                     font.pixelSize: 9
@@ -1464,7 +1466,7 @@ PanelWindow {
                 : (root.mode === "clipboard"
                     ? (root.clipboardPinnedOnly ? "还没有固定任何内容" : "剪贴板历史为空")
                     : "未找到匹配的窗口")
-            color: Qt.rgba(1, 1, 1, 0.52)
+            color: AppearanceTokens.content.glassInk(0.52)
             font.pixelSize: 13
             style: ThemeService.isDark ? Text.Outline : Text.Normal
             styleColor: dialog.textOutlineColor

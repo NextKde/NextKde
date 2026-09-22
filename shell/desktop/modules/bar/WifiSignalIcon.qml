@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 
 // Shared Wi-Fi glyph for the Bar and every network power control.  The faint
 // outline shows the radio is present; the bright arcs show the current signal
@@ -9,7 +10,9 @@ Item {
     property bool wifiEnabled: true
     property bool connected: false
     property int signalStrength: -1
-    property color glyphColor: "white"
+    // Every caller on shell chrome passes an explicit role; this default only
+    // has to stay readable on the glass the shell actually painted.
+    property color glyphColor: AppearanceTokens.content.glassInk()
     property real lineWidth: 1.55
     readonly property int signalLevel: !wifiEnabled || !connected
         || signalStrength < 0 ? 0

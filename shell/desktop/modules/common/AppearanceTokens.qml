@@ -326,6 +326,16 @@ QtObject {
         readonly property bool onBackdrop: tokens.surface.paintInQml
             || IconAppearanceService.mode !== "color"
 
+        // Ink for shell chrome that always sits on the shell's own backdrop
+        // (Bar, Dock, Control Centre, glass panels). Unlike ink() this never
+        // falls back to a caller's artwork colour, because a control's glyph or
+        // label is not the card's own picture. The material/glass branch is
+        // shared with ink() rather than re-derived here, so a chrome glyph and
+        // a card's own text can never disagree. `alpha` is optional.
+        function glassInk(alpha) {
+            return IconAppearanceService.glassContentColor(alpha)
+        }
+
         // Ink over the backdrop, or the caller's own colour when the card is its
         // own artwork. `alpha` is optional and applies only to the ink.
         function ink(ownColor, alpha) {
