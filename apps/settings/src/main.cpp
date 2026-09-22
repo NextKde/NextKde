@@ -56,6 +56,18 @@ const PresetDebugKey *presetDebugKey(const QString &key)
     return nullptr;
 }
 
+// Rows that belong to neither side of this window: the shell rewrites them from
+// a design value on every appearance sync, so a Settings edit would take effect
+// and then silently revert. CornerExponent is the one such key today -- the
+// shell writes it from AppearanceTokens.shape.cornerExponent, which is a source
+// constant, not user configuration. Those rows are reported read-only so the UI
+// stops offering a control that cannot hold its value; the write path is refused
+// as well, so a stale UI cannot reintroduce the double write.
+bool isReadOnlyDebugKey(const QString &key)
+{
+    return key == QLatin1String("CornerExponent");
+}
+
 } // namespace
 
 class SettingsBridge final : public QObject {
@@ -198,6 +210,7 @@ public:
             // kwinrc units so the ranges below stay meaningful, and are marked so
             // updateGlassDebugValue() knows to write the preset rather than kwinrc.
             bool presetBacked = false;
+            const bool readOnly = isReadOnlyDebugKey(QString::fromLatin1(key));
             QVariant value = config.value(QString::fromLatin1(key), fallback);
             if (const PresetDebugKey *preset = presetDebugKey(QString::fromLatin1(key))) {
                 const QJsonValue stored = m_appearanceSnapshot.value(
@@ -214,6 +227,7 @@ public:
                 {QStringLiteral("min"), minimum}, {QStringLiteral("max"), maximum},
                 {QStringLiteral("step"), step},
                 {QStringLiteral("presetBacked"), presetBacked},
+                {QStringLiteral("readOnly"), readOnly},
                 {QStringLiteral("value"), value}});
         };
         add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
@@ -264,6 +278,13 @@ public:
             if (spec.value(QStringLiteral("key")).toString() == key) { match = spec; break; }
         }
         if (match.isEmpty()) return false;
+        // A design-value row has no writable home: the shell re-derives it on
+        // every appearance sync. Refuse the write rather than let the value
+        // silently revert, and say why so the failure is not a mystery.
+        if (match.value(QStringLiteral("readOnly")).toBool()) {
+            setLastError(QStringLiteral("该参数由外观设计值决定，无法在此修改"));
+            return false;
+        }
         QVariant stored = value;
         const QString type = match.value(QStringLiteral("type")).toString();
         if (type == QStringLiteral("bool")) stored = value.toBool();

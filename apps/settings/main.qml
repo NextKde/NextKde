@@ -2208,7 +2208,8 @@ ApplicationWindow {
             text: "「材质」分组就是当前材质风格（" + glassDebugPage.presetStyleLabel
                 + "）的预设值：改动写进该预设、立即生效并在重启后保留，切换材质风格会换用另一套。"
                 + "「折射强度」还会乘以顶部的「液态强度」，实际生效值 = 液态强度 × 该值。"
-                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，仍可能被普通预设覆盖。"
+                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，外观主题不接管它们，改动会保留；"
+                + "标「设计值」的行由外观主题决定，只读。"
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -2291,6 +2292,15 @@ ApplicationWindow {
                                 color: theme.secondaryText
                                 font.pixelSize: 10
                             }
+                            Text {
+                                // Derived from a design value on every appearance
+                                // sync, so it is shown for reference but offers no
+                                // control: an edit here would silently revert.
+                                visible: modelData.readOnly === true
+                                text: "设计值"
+                                color: theme.secondaryText
+                                font.pixelSize: 10
+                            }
                             Item { Layout.fillWidth: true }
                             Text {
                                 visible: modelData.type !== "bool" && modelData.type !== "string"
@@ -2310,6 +2320,7 @@ ApplicationWindow {
                                 Layout.preferredWidth: 220
                                 visible: (modelData.type === "int" || modelData.type === "real")
                                     && modelData.key !== "TintMode"
+                                    && modelData.readOnly !== true
                                 value: (currentNumber - Number(modelData.min))
                                     / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider
