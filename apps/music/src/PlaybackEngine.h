@@ -44,10 +44,11 @@ signals:
     void seeked(qint64 positionMs);
 
 private slots:
-    void pollBus();
     void updatePosition();
 
 private:
+    Q_INVOKABLE void pollBus();
+
     void setState(const QString &state);
     void setErrorMessage(const QString &message);
     void setDuration(qint64 durationMs);
@@ -55,7 +56,6 @@ private:
 
     GstElement *m_playbin = nullptr;
     GstBus *m_bus = nullptr;
-    QTimer m_busTimer;
     QTimer m_positionTimer;
     QUrl m_source;
     QString m_backendName;

@@ -12,6 +12,11 @@ public:
     explicit PimStore(const QString &storageDirectory = {}, QObject *parent = nullptr);
     ~PimStore() override;
 
+    // Persist pending state immediately, bypassing the write debounce.
+    // Called by the destructor; tests use it to observe on-disk state
+    // without spinning the event loop.
+    void flush();
+
 public slots:
     QString snapshot() const;
     QString eventsForRange(const QString &startDate, const QString &endDate) const;

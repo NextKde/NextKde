@@ -13,10 +13,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
+#include <QProcess>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
-#include <QProcess>
 #include <QStandardPaths>
 #include <QSettings>
 #include <QThread>
@@ -141,225 +142,146 @@ public:
         emit bannerDismissedChanged();
     }
 
-    Q_INVOKABLE QVariantMap dockSnapshot() {
-        return snapshotFromReply(callDock({QStringLiteral("snapshot")}));
+    // Every shell call is asynchronous: the request returns at once and the
+    // reply is delivered on the UI thread through the matching *Changed
+    // signal. Before this, each call spawned `quickshell ipc call` and blocked
+    // the GUI thread in waitForStarted/waitForFinished plus a retry sleep, so
+    // one failed request froze the window for ~11s and the eagerly
+    // instantiated pages froze startup entirely while the shell was down.
+    Q_INVOKABLE void dockSnapshot() {
+        callDock({QStringLiteral("snapshot")});
     }
 
-    Q_INVOKABLE QVariantMap updateDockLayout(double height) {
-        return snapshotFromReply(callDock({QStringLiteral("updateLayout"),
-                                           QString::number(height, 'f', 2)}));
+    Q_INVOKABLE void updateDockLayout(double height) {
+        callDock({QStringLiteral("updateLayout"),
+                  QString::number(height, 'f', 2)});
     }
 
-    Q_INVOKABLE QVariantMap updateDockPosition(const QString &position) {
-        return snapshotFromReply(callDock({QStringLiteral("updatePosition"), position}));
+    Q_INVOKABLE void updateDockPosition(const QString &position) {
+        callDock({QStringLiteral("updatePosition"), position});
     }
 
-    Q_INVOKABLE QVariantMap updateDockContentStyle(const QString &style) {
-        return snapshotFromReply(callDock({QStringLiteral("updateContentStyle"), style}));
+    Q_INVOKABLE void updateDockContentStyle(const QString &style) {
+        callDock({QStringLiteral("updateContentStyle"), style});
     }
 
-    Q_INVOKABLE QVariantMap updateDockStyle(const QString &style) {
-        return snapshotFromReply(callDock({QStringLiteral("updateDockStyle"), style}));
+    Q_INVOKABLE void updateDockStyle(const QString &style) {
+        callDock({QStringLiteral("updateDockStyle"), style});
     }
 
-    Q_INVOKABLE QVariantMap updateDockIconMode(const QString &mode) {
-        return snapshotFromReply(callDock({QStringLiteral("updateIconMode"), mode}));
+    Q_INVOKABLE void updateDockIconMode(const QString &mode) {
+        callDock({QStringLiteral("updateIconMode"), mode});
     }
 
-    Q_INVOKABLE QVariantMap updateDockIconOpacity(double opacity) {
-        return snapshotFromReply(callDock({QStringLiteral("updateIconOpacity"), QString::number(opacity, 'f', 2)}));
+    Q_INVOKABLE void updateDockIconOpacity(double opacity) {
+        callDock({QStringLiteral("updateIconOpacity"),
+                  QString::number(opacity, 'f', 2)});
     }
 
-    Q_INVOKABLE QVariantMap updateDockIconTintColor(const QString &color) {
-        return snapshotFromReply(callDock({QStringLiteral("updateIconTintColor"), color}));
+    Q_INVOKABLE void updateDockIconTintColor(const QString &color) {
+        callDock({QStringLiteral("updateIconTintColor"), color});
     }
 
-    Q_INVOKABLE QVariantMap updateDockVisibilityMode(const QString &mode) {
-        return snapshotFromReply(callDock({QStringLiteral("updateVisibilityMode"), mode}));
+    Q_INVOKABLE void updateDockVisibilityMode(const QString &mode) {
+        callDock({QStringLiteral("updateVisibilityMode"), mode});
     }
 
-    Q_INVOKABLE QVariantMap updateDockWindowGrouping(const QString &mode) {
-        return snapshotFromReply(callDock({QStringLiteral("updateWindowGrouping"), mode}));
+    Q_INVOKABLE void updateDockWindowGrouping(const QString &mode) {
+        callDock({QStringLiteral("updateWindowGrouping"), mode});
     }
 
-    Q_INVOKABLE QVariantMap appearanceSnapshot() {
-        return appearanceSnapshotFromReply(callAppearance({QStringLiteral("snapshot")}));
+    Q_INVOKABLE void appearanceSnapshot() {
+        callAppearance({QStringLiteral("snapshot")});
     }
 
-    Q_INVOKABLE QVariantMap updateBlurStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
+    Q_INVOKABLE void updateBlurStrength(double strength) {
+        callAppearance({
             QStringLiteral("updateGlobalBlurStrength"),
-            QString::number(strength, 'f', 3)}));
+            QString::number(strength, 'f', 3)});
     }
 
-    Q_INVOKABLE QVariantMap updateLiquidStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
+    Q_INVOKABLE void updateLiquidStrength(double strength) {
+        callAppearance({
             QStringLiteral("updateGlobalLiquidStrength"),
-            QString::number(strength, 'f', 3)}));
+            QString::number(strength, 'f', 3)});
     }
 
-    Q_INVOKABLE QVariantMap updateGlobalBlurStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
+    Q_INVOKABLE void updateGlobalBlurStrength(double strength) {
+        callAppearance({
             QStringLiteral("updateGlobalBlurStrength"),
-            QString::number(strength, 'f', 3)}));
+            QString::number(strength, 'f', 3)});
     }
 
-    Q_INVOKABLE QVariantMap updateGlobalLiquidStrength(double strength) {
-        return appearanceSnapshotFromReply(callAppearance({
+    Q_INVOKABLE void updateGlobalLiquidStrength(double strength) {
+        callAppearance({
             QStringLiteral("updateGlobalLiquidStrength"),
-            QString::number(strength, 'f', 3)}));
+            QString::number(strength, 'f', 3)});
     }
 
-    Q_INVOKABLE QVariantMap updateGlassStyle(const QString &style) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateGlassStyle"), style}));
+    Q_INVOKABLE void updateGlassStyle(const QString &style) {
+        callAppearance({QStringLiteral("updateGlassStyle"), style});
     }
 
-    Q_INVOKABLE QVariantMap updateGlassPresetParameter(const QString &name, double value) {
-        return appearanceSnapshotFromReply(callAppearance({
+    Q_INVOKABLE void updateGlassPresetParameter(const QString &name, double value) {
+        callAppearance({
             QStringLiteral("updateGlassPresetParameter"), name,
-            QString::number(value, 'f', 3)}));
+            QString::number(value, 'f', 3)});
     }
 
-    Q_INVOKABLE QVariantMap resetGlassPreset(const QString &style) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("resetGlassPreset"), style}));
+    Q_INVOKABLE void resetGlassPreset(const QString &style) {
+        callAppearance({QStringLiteral("resetGlassPreset"), style});
     }
 
-    Q_INVOKABLE QVariantList glassDebugSnapshot() {
-        // One round trip, shared: the 材质 rows below take their value from the
-        // active preset carried in this snapshot, and glassPresetStyle() names
-        // the style those values belong to. An unreachable shell leaves the
-        // snapshot empty, so those rows fall back to reading kwinrc and a write
-        // reports the shell error instead of silently doing nothing.
-        m_appearanceSnapshot = fetchAppearanceSnapshot();
-        return glassDebugSpecs();
+    // One appearance request feeds both products the debug page needs: the
+    // spec table is local (kwinrc + the cached shell snapshot), while the
+    // preset style label names which preset that snapshot belongs to, so it
+    // is only meaningful once the snapshot reply arrives. Both are delivered
+    // together on glassDebugSnapshotChanged.
+    Q_INVOKABLE void glassDebugSnapshot() {
+        callShell(QStringLiteral("appearance-settings"),
+                  {QStringLiteral("snapshot")},
+                  QStringLiteral("外观设置请求失败"), RequestKind::GlassDebug);
     }
 
-    // Which style's preset the debug page's 材质 rows edit, as of the last
-    // glassDebugSnapshot() call. Shown next to them so a tuned value is not
-    // mistaken for a global one.
-    Q_INVOKABLE QString glassPresetStyle() const {
-        return m_appearanceSnapshot.value(QStringLiteral("glassStyle"))
-            .toString(QStringLiteral("liquid"));
-    }
-
-    // Helpers for glassDebugSnapshot(); not Q_INVOKABLE, QML reaches them only
-    // through it.
-    QJsonObject fetchAppearanceSnapshot() {
-        const QByteArray payload = callAppearance({QStringLiteral("snapshot")}).toUtf8();
-        QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(payload, &parseError);
-        if (parseError.error != QJsonParseError::NoError || !document.isObject())
-            return {};
-        return document.object();
-    }
-
-    QVariantList glassDebugSpecs() const {
-        const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
-            + QStringLiteral("/kwinrc");
-        QSettings config(path, QSettings::IniFormat);
-        config.beginGroup(QStringLiteral("Effect-blurplus"));
-        QVariantList result;
-        const auto add = [&](const char *key, const char *label, const char *section,
-                             const char *type, double minimum, double maximum,
-                             double step, const QVariant &fallback) {
-            // Preset-backed rows report the preset's own value, converted into
-            // kwinrc units so the ranges below stay meaningful, and are marked so
-            // updateGlassDebugValue() knows to write the preset rather than kwinrc.
-            bool presetBacked = false;
-            const bool readOnly = isReadOnlyDebugKey(QString::fromLatin1(key));
-            QVariant value = config.value(QString::fromLatin1(key), fallback);
-            if (const PresetDebugKey *preset = presetDebugKey(QString::fromLatin1(key))) {
-                const QJsonValue stored = m_appearanceSnapshot.value(
-                    QStringLiteral("activePreset") + QString::fromLatin1(preset->parameter));
-                if (stored.isDouble()) {
-                    presetBacked = true;
-                    value = stored.toDouble() * preset->toKwinrc;
-                }
-            }
-            result.append(QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)},
-                {QStringLiteral("label"), QString::fromUtf8(label)},
-                {QStringLiteral("section"), QString::fromUtf8(section)},
-                {QStringLiteral("type"), QString::fromLatin1(type)},
-                {QStringLiteral("min"), minimum}, {QStringLiteral("max"), maximum},
-                {QStringLiteral("step"), step},
-                {QStringLiteral("presetBacked"), presetBacked},
-                {QStringLiteral("readOnly"), readOnly},
-                {QStringLiteral("value"), value}});
-        };
-        add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
-        add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
-        add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);
-        add("DockNoiseStrength", "Dock 噪点", "模糊", "int", 0, 100, 1, 5);
-        add("BlurSaturationCompensation", "模糊饱和度补偿", "模糊", "bool", 0, 1, 1, true);
-        add("Brightness", "亮度", "色彩", "real", 0, 2, .01, 1.0);
-        add("Saturation", "饱和度", "色彩", "real", 0, 3, .01, 1.0);
-        add("Contrast", "对比度", "色彩", "real", 0, 2, .01, 1.0);
-        add("OklabSaturation", "使用 OKLab 饱和度", "色彩", "bool", 0, 1, 1, false);
-        add("RefractionStrength", "折射强度", "材质", "real", 0, 20, .1, 0.0);
-        add("RefractionEdgeSize", "折射边缘范围", "材质", "real", 0, 50, .1, 20.0);
-        add("RefractionNormalPow", "折射法线曲线", "材质", "real", .1, 10, .1, 2.0);
-        add("RefractionRGBFringing", "RGB 色散", "材质", "real", 0, 20, .1, 1.0);
-        add("RefractionOffsetStrength", "主体折射强度", "材质", "real", 0, 20, .1, 0.0);
-        add("MaterialSoftness", "柔和度", "材质", "real", 0, 1, .01, 0.0);
-        add("MaterialReflectionStrength", "宽反射强度", "材质", "real", 0, 1, .01, 0.0);
-        add("ExcludeDecorations", "窗口装饰不应用染色", "适用范围", "bool", 0, 1, 1, false);
-        add("MenuCornerRadius", "菜单圆角", "圆角", "real", 0, 100, 1, 0.0);
-        add("DockCornerRadius", "Dock 圆角", "圆角", "real", 0, 100, 1, 0.0);
-        add("CornerExponent", "圆角连续度", "圆角", "real", 2, 8, .1, 3.0);
-        add("UseDeclaredCornerRadius", "优先使用应用声明圆角", "圆角", "bool", 0, 1, 1, false);
-        add("IgnoreContentBlurRegion", "忽略内容模糊区域", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCorners", "动态圆角", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeDocks", "动态圆角排除 Dock", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeTooltips", "动态圆角排除 Tooltip", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeMenus", "动态圆角排除菜单", "圆角", "bool", 0, 1, 1, false);
-        add("OnlyQuickshell", "仅处理 Quickshell", "窗口匹配", "bool", 0, 1, 1, true);
-        add("WindowClasses", "窗口类列表", "窗口匹配", "string", 0, 0, 0, QStringLiteral("quickshell"));
-        add("BlurMatching", "匹配列表内窗口", "窗口匹配", "bool", 0, 1, 1, true);
-        add("BlurDecorations", "强制模糊窗口装饰", "窗口匹配", "bool", 0, 1, 1, false);
-        add("BlurMenus", "强制模糊菜单", "窗口匹配", "bool", 0, 1, 1, false);
-        add("BlurDocks", "强制模糊 Dock", "窗口匹配", "bool", 0, 1, 1, false);
-        add("SkipEmptyDockBlurRegions", "跳过空 Dock 模糊区域", "窗口匹配", "bool", 0, 1, 1, true);
-        config.endGroup();
-        return result;
-    }
-
-    Q_INVOKABLE bool updateGlassDebugValue(const QString &key, const QVariant &value) {
-        // The spec table does not depend on the appearance snapshot, so this
-        // reuses whatever the last glassDebugSnapshot() cached instead of paying
-        // for another round trip per edit.
-        const QVariantList specs = glassDebugSpecs();
-        QVariantMap match;
-        for (const QVariant &item : specs) {
-            const QVariantMap spec = item.toMap();
-            if (spec.value(QStringLiteral("key")).toString() == key) { match = spec; break; }
+    // Fire-and-forget: the reply (a full snapshot for preset-backed keys)
+    // lands on glassDebugSnapshotChanged, which re-reads the stored values
+    // through the shell's own clamping, so the page never needed the return
+    // value it used to wait on.
+    Q_INVOKABLE void updateGlassDebugValue(const QString &key, const QVariant &value) {
+        const QVariantMap match = glassDebugSpec(key);
+        if (match.isEmpty()) {
+            setLastError(QStringLiteral("未知的 KWin 参数：%1").arg(key));
+            emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
+            return;
         }
-        if (match.isEmpty()) return false;
+        QVariant stored = value;
         // A design-value row has no writable home: the shell re-derives it on
         // every appearance sync. Refuse the write rather than let the value
         // silently revert, and say why so the failure is not a mystery.
         if (match.value(QStringLiteral("readOnly")).toBool()) {
             setLastError(QStringLiteral("该参数由外观设计值决定，无法在此修改"));
-            return false;
+            emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
+            return;
         }
-        QVariant stored = value;
-        const QString type = match.value(QStringLiteral("type")).toString();
-        if (type == QStringLiteral("bool")) stored = value.toBool();
+
+        const QString type = match.value(QStringLiteral("type")).toString();        if (type == QStringLiteral("bool")) stored = value.toBool();
         else if (type != QStringLiteral("string")) {
             const double number = qBound(match.value(QStringLiteral("min")).toDouble(),
                 value.toDouble(), match.value(QStringLiteral("max")).toDouble());
             stored = type == QStringLiteral("int") ? QVariant(qRound(number)) : QVariant(number);
         }
-        // A preset-backed key belongs to the shell: writing kwinrc directly would
-        // be undone by the next appearance sync. Hand it the value in preset units
-        // and let it persist the preset and reconfigure the effect; the reply is a
-        // full snapshot, so a rejected write (bad name, shell down) reports why.
+        // A preset-backed key belongs to the shell: writing kwinrc directly
+        // would be undone by the next appearance sync. Hand it the value in
+        // preset units and let it persist the preset and reconfigure the
+        // effect; the reply is a full snapshot, so a rejected write (bad name,
+        // shell down) reports why.
         if (const PresetDebugKey *preset = presetDebugKey(key)) {
-            const QString reply = callAppearance({QStringLiteral("updateGlassPresetParameter"),
-                QString::fromLatin1(preset->parameter),
-                QString::number(stored.toDouble() / preset->toKwinrc, 'f', 3)});
-            return !appearanceSnapshotFromReply(reply).isEmpty();
+            callShell(QStringLiteral("appearance-settings"),
+                      {QStringLiteral("updateGlassPresetParameter"),
+                       QString::fromLatin1(preset->parameter),
+                       QString::number(stored.toDouble() / preset->toKwinrc, 'f', 3)},
+                      QStringLiteral("外观设置请求失败"), RequestKind::GlassDebug);
+            return;
         }
         QSettings config(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
             + QStringLiteral("/kwinrc"), QSettings::IniFormat);
@@ -367,181 +289,124 @@ public:
         config.setValue(key, stored); config.endGroup(); config.sync();
         QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
             QStringLiteral("org.kde.kwin.Effects"));
-        if (effects.isValid()) effects.call(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
-        return config.status() == QSettings::NoError;
-    }
-
-    Q_INVOKABLE QVariantMap updateGlobalIconMode(const QString &mode) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateGlobalIconMode"), mode}));
-    }
-
-    Q_INVOKABLE QVariantMap updateGlobalIconOpacity(double opacity) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateGlobalIconOpacity"),
-            QString::number(opacity, 'f', 3)}));
-    }
-
-    Q_INVOKABLE QVariantMap updateGlobalIconTintColor(const QString &color) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateGlobalIconTintColor"), color}));
-    }
-
-    Q_INVOKABLE QVariantMap updateShellStyle(const QString &style) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateShellStyle"), style}));
-    }
-
-    Q_INVOKABLE QVariantMap updateMaterialColorScheme(const QString &scheme) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateMaterialColorScheme"), scheme}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarIntegratedWithDock(bool enabled) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarIntegratedWithDock"),
-            enabled ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateGlassFollowsAppearanceMode(bool enabled) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateGlassFollowsAppearanceMode"),
-            enabled ? QStringLiteral("true") : QStringLiteral("false")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarVisibilityMode(const QString &mode) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarVisibilityMode"), mode}));
-    }
-
-    Q_INVOKABLE QVariantMap updateBarLayoutMode(const QString &mode) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateBarLayoutMode"), mode}));
-    }
-
-    Q_INVOKABLE QVariantMap updateDockWindowAnimationStyle(const QString &style) {
-        return appearanceSnapshotFromReply(callAppearance({
-            QStringLiteral("updateDockWindowAnimationStyle"), style}));
-    }
-
-    Q_INVOKABLE QVariantMap resetAppearanceStrengths() {
-        return appearanceSnapshotFromReply(callAppearance({QStringLiteral("resetStrengths")}));
-    }
-
-    Q_INVOKABLE QVariantMap launcherSnapshot() {
-        return launcherSnapshotFromReply(callLauncher({QStringLiteral("snapshot")}));
-    }
-
-    Q_INVOKABLE QVariantMap shortcutsSnapshot() {
-        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("snapshot")}));
-    }
-
-    Q_INVOKABLE QVariantMap updateShortcut(const QString &id, const QString &combo) {
-        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("updateShortcut"),
-                                                         id, combo}));
-    }
-
-    Q_INVOKABLE QVariantMap resetShortcut(const QString &id) {
-        return shortcutsSnapshotFromReply(callShortcuts({QStringLiteral("resetShortcut"), id}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherDisplayMode(const QString &mode) {
-        return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateDisplayMode"), mode}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherProfileIconSize(const QString &mode,
-                                                           const QString &size) {
-        return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateProfileIconSize"), mode, size}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherProfileDensity(const QString &mode,
-                                                          const QString &density) {
-        return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateProfileDensity"), mode, density}));
-    }
-
-    Q_INVOKABLE QVariantMap updateLauncherProfileFontWeight(const QString &mode,
-                                                             const QString &weight) {
-        return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("updateProfileFontWeight"), mode, weight}));
-    }
-
-    Q_INVOKABLE QVariantMap resetLauncherLayoutProfile(const QString &mode) {
-        return launcherSnapshotFromReply(callLauncher({
-            QStringLiteral("resetProfile"), mode}));
-    }
-
-    Q_INVOKABLE bool applySystemAppearance(bool dark) {
-        QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(
-            callAppearance({QStringLiteral("applySystemAppearance"),
-                            dark ? QStringLiteral("true") : QStringLiteral("false")})
-                .toUtf8(), &parseError);
-        if (parseError.error != QJsonParseError::NoError || !document.isObject())
-            return false;
-        const QJsonObject response = document.object();
-        const bool accepted = response.value(QStringLiteral("accepted")).toBool();
-        if (!accepted && m_lastError.isEmpty())
-            setLastError(QStringLiteral("桌面环境拒绝了主题切换请求"));
-        return accepted;
-    }
-
-    Q_INVOKABLE QVariantMap integrationSnapshot() {
-        QVariantMap result = integrationSnapshotFromReply(
-            callIntegration({QStringLiteral("snapshot")}));
-
-        const QDBusConnection sessionBus = QDBusConnection::sessionBus();
-        auto *busInterface = sessionBus.interface();
-        QString notificationProvider = QStringLiteral("none");
-        QString notificationOwner;
-        uint notificationPid = 0;
-        if (busInterface) {
-            const QDBusReply<QString> ownerReply = busInterface->serviceOwner(
-                QStringLiteral("org.freedesktop.Notifications"));
-            if (ownerReply.isValid() && !ownerReply.value().isEmpty()) {
-                notificationOwner = ownerReply.value();
-                const QDBusReply<uint> pidReply = busInterface->servicePid(notificationOwner);
-                if (pidReply.isValid())
-                    notificationPid = pidReply.value();
-
-                QFile commandLine(QStringLiteral("/proc/%1/cmdline").arg(notificationPid));
-                QString command;
-                if (commandLine.open(QIODevice::ReadOnly)) {
-                    QByteArray raw = commandLine.readAll();
-                    raw.replace('\0', ' ');
-                    command = QString::fromLocal8Bit(raw).trimmed();
-                }
-                if (command.contains(QStringLiteral("plasmashell"))) {
-                    notificationProvider = QStringLiteral("plasma");
-                } else if (command.contains(QStringLiteral("/qs"))
-                           || command.contains(QStringLiteral("quickshell"))) {
-                    notificationProvider = QStringLiteral("kos");
-                } else {
-                    notificationProvider = QStringLiteral("other");
-                }
-                result.insert(QStringLiteral("notificationCommand"), command);
-            }
+        if (effects.isValid())
+            effects.asyncCall(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
+        if (config.status() != QSettings::NoError) {
+            setLastError(QStringLiteral("写入 KWin 配置失败"));
+            emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
+            return;
         }
-        result.insert(QStringLiteral("notificationProvider"), notificationProvider);
-        result.insert(QStringLiteral("notificationOwner"), notificationOwner);
-        result.insert(QStringLiteral("notificationPid"), notificationPid);
+        glassDebugSnapshot();
+    }
 
-        QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
-                               QStringLiteral("org.kde.kwin.Effects"), sessionBus);
-        const QStringList loadedEffects = effects.isValid()
-            ? effects.property("loadedEffects").toStringList() : QStringList{};
-        result.insert(QStringLiteral("kwinAvailable"), effects.isValid());
-        result.insert(QStringLiteral("glassLoaded"),
-                      loadedEffects.contains(QStringLiteral("glass")));
-        result.insert(QStringLiteral("dockAnimationLoaded"),
-                      loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
-        result.insert(QStringLiteral("contextMenuInputLoaded"),
-                      loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
-        result.insert(QStringLiteral("updatedAt"),
-                      QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
-        return result;
+    Q_INVOKABLE void updateGlobalIconMode(const QString &mode) {
+        callAppearance({QStringLiteral("updateGlobalIconMode"), mode});
+    }
+
+    Q_INVOKABLE void updateGlobalIconOpacity(double opacity) {
+        callAppearance({
+            QStringLiteral("updateGlobalIconOpacity"),
+            QString::number(opacity, 'f', 3)});
+    }
+
+    Q_INVOKABLE void updateGlobalIconTintColor(const QString &color) {
+        callAppearance({QStringLiteral("updateGlobalIconTintColor"), color});
+    }
+
+    Q_INVOKABLE void updateShellStyle(const QString &style) {
+        callAppearance({QStringLiteral("updateShellStyle"), style});
+    }
+
+    Q_INVOKABLE void updateMaterialColorScheme(const QString &scheme) {
+        callAppearance({QStringLiteral("updateMaterialColorScheme"), scheme});
+    }
+
+    Q_INVOKABLE void updateBarIntegratedWithDock(bool enabled) {
+        callAppearance({
+            QStringLiteral("updateBarIntegratedWithDock"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateGlassFollowsAppearanceMode(bool enabled) {
+        callAppearance({
+            QStringLiteral("updateGlassFollowsAppearanceMode"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateBarVisibilityMode(const QString &mode) {
+        callAppearance({QStringLiteral("updateBarVisibilityMode"), mode});
+    }
+
+    Q_INVOKABLE void updateBarLayoutMode(const QString &mode) {
+        callAppearance({QStringLiteral("updateBarLayoutMode"), mode});
+    }
+
+    Q_INVOKABLE void updateDockWindowAnimationStyle(const QString &style) {
+        callAppearance({QStringLiteral("updateDockWindowAnimationStyle"), style});
+    }
+
+    Q_INVOKABLE void resetAppearanceStrengths() {
+        callAppearance({QStringLiteral("resetStrengths")});
+    }
+
+    Q_INVOKABLE void launcherSnapshot() {
+        callLauncher({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE void shortcutsSnapshot() {
+        callShortcuts({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE void updateShortcut(const QString &id, const QString &combo) {
+        callShortcuts({QStringLiteral("updateShortcut"), id, combo});
+    }
+
+    Q_INVOKABLE void resetShortcut(const QString &id) {
+        callShortcuts({QStringLiteral("resetShortcut"), id});
+    }
+
+    Q_INVOKABLE void updateLauncherDisplayMode(const QString &mode) {
+        callLauncher({QStringLiteral("updateDisplayMode"), mode});
+    }
+
+    Q_INVOKABLE void updateLauncherProfileIconSize(const QString &mode,
+                                                    const QString &size) {
+        callLauncher({
+            QStringLiteral("updateProfileIconSize"), mode, size});
+    }
+
+    Q_INVOKABLE void updateLauncherProfileDensity(const QString &mode,
+                                                    const QString &density) {
+        callLauncher({
+            QStringLiteral("updateProfileDensity"), mode, density});
+    }
+
+    Q_INVOKABLE void updateLauncherProfileFontWeight(const QString &mode,
+                                                      const QString &weight) {
+        callLauncher({
+            QStringLiteral("updateProfileFontWeight"), mode, weight});
+    }
+
+    Q_INVOKABLE void resetLauncherLayoutProfile(const QString &mode) {
+        callLauncher({QStringLiteral("resetProfile"), mode});
+    }
+
+    Q_INVOKABLE void applySystemAppearance(bool dark) {
+        callShell(QStringLiteral("appearance-settings"),
+                  {QStringLiteral("applySystemAppearance"),
+                   dark ? QStringLiteral("true") : QStringLiteral("false")},
+                  QStringLiteral("外观设置请求失败"),
+                  RequestKind::ApplySystemAppearance);
+    }
+
+    // Only the request is issued here; the reply handler folds in the D-Bus
+    // and /proc probes (off the UI thread) before emitting the snapshot.
+    Q_INVOKABLE void integrationSnapshot() {
+        if (m_integrationPending)
+            return;
+        m_integrationPending = true;
+        callShell(QStringLiteral("integration-status"), {QStringLiteral("snapshot")},
+                  QStringLiteral("接入状态请求失败"), RequestKind::Integration);
     }
 
 signals:
@@ -549,8 +414,28 @@ signals:
     void sessionChanged();
     void entryChanged();
     void bannerDismissedChanged();
+    void dockSnapshotChanged(const QVariantMap &snapshot);
+    void appearanceSnapshotChanged(const QVariantMap &snapshot);
+    void launcherSnapshotChanged(const QVariantMap &snapshot);
+    void shortcutsSnapshotChanged(const QVariantMap &snapshot);
+    void glassDebugSnapshotChanged(const QVariantList &controls,
+                                   const QString &presetStyle);
+    void integrationSnapshotChanged(const QVariantMap &snapshot);
+    void systemAppearanceApplied(bool accepted);
 
 private:
+    // What the requesting page wants back once the IPC reply lands: every
+    // request maps to exactly one signal.
+    enum class RequestKind {
+        Dock,
+        Appearance,
+        Launcher,
+        Shortcuts,
+        Integration,
+        GlassDebug,
+        ApplySystemAppearance,
+    };
+
     QVariantMap snapshotFromReply(const QString &payload) {
         if (payload.isEmpty())
             return {};
@@ -573,6 +458,11 @@ private:
         return {
             {QStringLiteral("baseHeight"), object.value(QStringLiteral("baseHeight")).toDouble()},
             {QStringLiteral("position"), object.value(QStringLiteral("position")).toString()},
+            // contentStyle/dockStyle are read straight back by the dock page's
+            // applyState; without them the two pickers snap back to index 0 on
+            // every snapshot refresh.
+            {QStringLiteral("contentStyle"), object.value(QStringLiteral("contentStyle")).toString()},
+            {QStringLiteral("dockStyle"), object.value(QStringLiteral("dockStyle")).toString()},
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
@@ -749,29 +639,193 @@ private:
         };
     }
 
-    QString callDock(const QStringList &arguments) {
-        return callShell(QStringLiteral("dock-settings"), arguments,
-                         QStringLiteral("Dock 设置请求失败"));
+    // The 材质 rows' spec table, read from kwinrc with preset values overlaid
+    // from the last appearance snapshot. Local file + cached state only, so
+    // it is safe to build on the UI thread when the IPC reply lands.
+    QVariantList glassDebugSpecs() const {
+        const QString path = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
+            + QStringLiteral("/kwinrc");
+        QSettings config(path, QSettings::IniFormat);
+        config.beginGroup(QStringLiteral("Effect-blurplus"));
+        QVariantList result;
+        const auto add = [&](const char *key, const char *label, const char *section,
+                             const char *type, double minimum, double maximum,
+                             double step, const QVariant &fallback) {
+            // Preset-backed rows report the preset's own value, converted into
+            // kwinrc units so the ranges below stay meaningful, and are marked so
+            // updateGlassDebugValue() knows to write the preset rather than kwinrc.
+            bool presetBacked = false;
+            const bool readOnly = isReadOnlyDebugKey(QString::fromLatin1(key));
+            QVariant value = config.value(QString::fromLatin1(key), fallback);
+            if (const PresetDebugKey *preset = presetDebugKey(QString::fromLatin1(key))) {
+                const QJsonValue stored = m_appearanceSnapshot.value(
+                    QStringLiteral("activePreset") + QString::fromLatin1(preset->parameter));
+                if (stored.isDouble()) {
+                    presetBacked = true;
+                    value = stored.toDouble() * preset->toKwinrc;
+                }
+            }
+            result.append(QVariantMap{{QStringLiteral("key"), QString::fromLatin1(key)},
+                {QStringLiteral("label"), QString::fromUtf8(label)},
+                {QStringLiteral("section"), QString::fromUtf8(section)},
+                {QStringLiteral("type"), QString::fromLatin1(type)},
+                {QStringLiteral("min"), minimum}, {QStringLiteral("max"), maximum},
+                {QStringLiteral("step"), step},
+                {QStringLiteral("presetBacked"), presetBacked},
+                {QStringLiteral("readOnly"), readOnly},
+                {QStringLiteral("value"), value}});
+        };
+        add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
+        add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
+        add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);
+        add("DockNoiseStrength", "Dock 噪点", "模糊", "int", 0, 100, 1, 5);
+        add("BlurSaturationCompensation", "模糊饱和度补偿", "模糊", "bool", 0, 1, 1, true);
+        add("Brightness", "亮度", "色彩", "real", 0, 2, .01, 1.0);
+        add("Saturation", "饱和度", "色彩", "real", 0, 3, .01, 1.0);
+        add("Contrast", "对比度", "色彩", "real", 0, 2, .01, 1.0);
+        add("OklabSaturation", "使用 OKLab 饱和度", "色彩", "bool", 0, 1, 1, false);
+        add("RefractionStrength", "折射强度", "材质", "real", 0, 20, .1, 0.0);
+        add("RefractionEdgeSize", "折射边缘范围", "材质", "real", 0, 50, .1, 20.0);
+        add("RefractionNormalPow", "折射法线曲线", "材质", "real", .1, 10, .1, 2.0);
+        add("RefractionRGBFringing", "RGB 色散", "材质", "real", 0, 20, .1, 1.0);
+        add("RefractionOffsetStrength", "主体折射强度", "材质", "real", 0, 20, .1, 0.0);
+        add("MaterialSoftness", "柔和度", "材质", "real", 0, 1, .01, 0.0);
+        add("MaterialReflectionStrength", "宽反射强度", "材质", "real", 0, 1, .01, 0.0);
+        add("ExcludeDecorations", "窗口装饰不应用染色", "适用范围", "bool", 0, 1, 1, false);
+        add("MenuCornerRadius", "菜单圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("DockCornerRadius", "Dock 圆角", "圆角", "real", 0, 100, 1, 0.0);
+        add("CornerExponent", "圆角连续度", "圆角", "real", 2, 8, .1, 3.0);
+        add("UseDeclaredCornerRadius", "优先使用应用声明圆角", "圆角", "bool", 0, 1, 1, false);
+        add("IgnoreContentBlurRegion", "忽略内容模糊区域", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCorners", "动态圆角", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeDocks", "动态圆角排除 Dock", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeTooltips", "动态圆角排除 Tooltip", "圆角", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeMenus", "动态圆角排除菜单", "圆角", "bool", 0, 1, 1, false);
+        add("OnlyQuickshell", "仅处理 Quickshell", "窗口匹配", "bool", 0, 1, 1, true);
+        add("WindowClasses", "窗口类列表", "窗口匹配", "string", 0, 0, 0, QStringLiteral("quickshell"));
+        add("BlurMatching", "匹配列表内窗口", "窗口匹配", "bool", 0, 1, 1, true);
+        add("BlurDecorations", "强制模糊窗口装饰", "窗口匹配", "bool", 0, 1, 1, false);
+        add("BlurMenus", "强制模糊菜单", "窗口匹配", "bool", 0, 1, 1, false);
+        add("BlurDocks", "强制模糊 Dock", "窗口匹配", "bool", 0, 1, 1, false);
+        add("SkipEmptyDockBlurRegions", "跳过空 Dock 模糊区域", "窗口匹配", "bool", 0, 1, 1, true);
+        config.endGroup();
+        return result;
     }
 
-    QString callAppearance(const QStringList &arguments) {
-        return callShell(QStringLiteral("appearance-settings"), arguments,
-                         QStringLiteral("外观设置请求失败"));
+    // Which style's preset the debug page's 材质 rows edit, as of the last
+    // appearance snapshot. Shown next to them so a tuned value is not
+    // mistaken for a global one.
+    QString glassPresetStyle() const {
+        return m_appearanceSnapshot.value(QStringLiteral("glassStyle"))
+            .toString(QStringLiteral("liquid"));
     }
 
-    QString callLauncher(const QStringList &arguments) {
-        return callShell(QStringLiteral("applauncher-settings"), arguments,
-                         QStringLiteral("启动台设置请求失败"));
+    // Spec lookup for updateGlassDebugValue(): the spec table itself does not
+    // depend on the shell snapshot, so this reuses whatever the last reply
+    // cached instead of paying for another round trip per edit.
+    QVariantMap glassDebugSpec(const QString &key) const {
+        const QVariantList specs = glassDebugSpecs();
+        for (const QVariant &item : specs) {
+            const QVariantMap spec = item.toMap();
+            if (spec.value(QStringLiteral("key")).toString() == key)
+                return spec;
+        }
+        return {};
     }
 
-    QString callShortcuts(const QStringList &arguments) {
-        return callShell(QStringLiteral("shortcuts-settings"), arguments,
-                         QStringLiteral("快捷键设置请求失败"));
+    // The notification-owner and KWin probes use blocking D-Bus calls and a
+    // /proc read, so they run on a worker thread; the finished snapshot is
+    // delivered back on the UI thread through a queued invocation, which is
+    // the only place QML-visible state is touched.
+    void startIntegrationProbe(const QVariantMap &replyMap) {
+        // The bridge may be destroyed while the probe is still running, so the
+        // worker only captures a QPointer: no member of this is touched off the
+        // UI thread, and the queued delivery is skipped once it is gone.
+        const QPointer<SettingsBridge> guard(this);
+        QThread *thread = QThread::create([guard, replyMap]() {
+            QVariantMap result = replyMap;
+
+            const QDBusConnection sessionBus = QDBusConnection::sessionBus();
+            auto *busInterface = sessionBus.interface();
+            QString notificationProvider = QStringLiteral("none");
+            QString notificationOwner;
+            uint notificationPid = 0;
+            if (busInterface) {
+                const QDBusReply<QString> ownerReply = busInterface->serviceOwner(
+                    QStringLiteral("org.freedesktop.Notifications"));
+                if (ownerReply.isValid() && !ownerReply.value().isEmpty()) {
+                    notificationOwner = ownerReply.value();
+                    const QDBusReply<uint> pidReply = busInterface->servicePid(notificationOwner);
+                    if (pidReply.isValid())
+                        notificationPid = pidReply.value();
+
+                    QFile commandLine(QStringLiteral("/proc/%1/cmdline").arg(notificationPid));
+                    QString command;
+                    if (commandLine.open(QIODevice::ReadOnly)) {
+                        QByteArray raw = commandLine.readAll();
+                        raw.replace('\0', ' ');
+                        command = QString::fromLocal8Bit(raw).trimmed();
+                    }
+                    if (command.contains(QStringLiteral("plasmashell"))) {
+                        notificationProvider = QStringLiteral("plasma");
+                    } else if (command.contains(QStringLiteral("/qs"))
+                               || command.contains(QStringLiteral("quickshell"))) {
+                        notificationProvider = QStringLiteral("kos");
+                    } else {
+                        notificationProvider = QStringLiteral("other");
+                    }
+                    result.insert(QStringLiteral("notificationCommand"), command);
+                }
+            }
+            result.insert(QStringLiteral("notificationProvider"), notificationProvider);
+            result.insert(QStringLiteral("notificationOwner"), notificationOwner);
+            result.insert(QStringLiteral("notificationPid"), notificationPid);
+
+            QDBusInterface effects(QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                                   QStringLiteral("org.kde.kwin.Effects"), sessionBus);
+            const QStringList loadedEffects = effects.isValid()
+                ? effects.property("loadedEffects").toStringList() : QStringList{};
+            result.insert(QStringLiteral("kwinAvailable"), effects.isValid());
+            result.insert(QStringLiteral("glassLoaded"),
+                          loadedEffects.contains(QStringLiteral("glass")));
+            result.insert(QStringLiteral("dockAnimationLoaded"),
+                          loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
+            result.insert(QStringLiteral("contextMenuInputLoaded"),
+                          loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+            result.insert(QStringLiteral("updatedAt"),
+                          QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")));
+
+            if (guard) {
+                QMetaObject::invokeMethod(guard.data(), [guard, result]() {
+                    if (!guard)
+                        return;
+                    guard->m_integrationPending = false;
+                    emit guard->integrationSnapshotChanged(result);
+                }, Qt::QueuedConnection);
+            }
+        });
+        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        thread->start();
     }
 
-    QString callIntegration(const QStringList &arguments) {
-        return callShell(QStringLiteral("integration-status"), arguments,
-                         QStringLiteral("接入状态请求失败"));
+    void callDock(const QStringList &arguments) {
+        callShell(QStringLiteral("dock-settings"), arguments,
+                  QStringLiteral("Dock 设置请求失败"), RequestKind::Dock);
+    }
+
+    void callAppearance(const QStringList &arguments) {
+        callShell(QStringLiteral("appearance-settings"), arguments,
+                  QStringLiteral("外观设置请求失败"), RequestKind::Appearance);
+    }
+
+    void callLauncher(const QStringList &arguments) {
+        callShell(QStringLiteral("applauncher-settings"), arguments,
+                  QStringLiteral("启动台设置请求失败"), RequestKind::Launcher);
+    }
+
+    void callShortcuts(const QStringList &arguments) {
+        callShell(QStringLiteral("shortcuts-settings"), arguments,
+                  QStringLiteral("快捷键设置请求失败"), RequestKind::Shortcuts);
     }
 
     static QString installedShellDirectory() {
@@ -862,55 +916,172 @@ private:
         return diagnostics.contains(reply);
     }
 
-    QString callShell(const QString &target, const QStringList &arguments,
-                      const QString &fallbackError) {
-        const QStringList shellPaths = shellDirectories();
-        QString failure;
-        QString attemptedShell;
-        for (int index = 0; index < shellPaths.size(); ++index) {
-            const QString shellPath = shellPaths.at(index);
-            attemptedShell = shellPath;
-            // The Shell can still be registering IPC targets during the first
-            // moments of a development launch, so the preferred candidate gets
-            // one retry. Later candidates are fallbacks for a Shell that is
-            // simply not the running one, where a second attempt buys nothing.
-            const int attempts = index == 0 ? 2 : 1;
-            for (int attempt = 0; attempt < attempts; ++attempt) {
-                QProcess process;
-                QStringList command = connectArgsFor(shellPath);
-                command << QStringLiteral("ipc") << QStringLiteral("call") << target;
-                command.append(arguments);
-                process.start(QStringLiteral("quickshell"), command);
-                if (!process.waitForStarted(1500)) {
-                    failure = QStringLiteral("无法启动 Quickshell IPC");
-                } else if (!process.waitForFinished(5000)) {
-                    process.kill();
-                    process.waitForFinished();
-                    failure = QStringLiteral("桌面环境没有响应（超过 5 秒）");
-                } else if (process.exitStatus() == QProcess::NormalExit
-                           && process.exitCode() == 0) {
-                    // A diagnostic reply means this candidate is not the Shell
-                    // serving us, so fall through to the next one exactly like a
-                    // hard failure does.
-                    const QString reply =
-                        QString::fromUtf8(process.readAllStandardOutput()).trimmed();
-                    if (!isIpcDiagnostic(reply)) {
-                        setSessionShell(QDir::cleanPath(shellPath));
-                        return reply;
-                    }
-                    failure = fallbackError;
+    void callShell(const QString &target, const QStringList &arguments,
+                   const QString &fallbackError, RequestKind kind) {
+        startShellAttempt(target, arguments, fallbackError, kind,
+                          shellDirectories(), 0, 0, {});
+    }
+
+    // One asynchronous attempt at one candidate. On a diagnostic reply or a
+    // transport failure the next attempt/candidate is chained from the
+    // process's finished signal, so the UI thread never waits: the preferred
+    // candidate gets one retry (the Shell can still be registering IPC
+    // targets during the first moments of a development launch); later
+    // candidates are fallbacks, where a second attempt buys nothing.
+    void startShellAttempt(const QString &target, const QStringList &arguments,
+                           const QString &fallbackError, RequestKind kind,
+                           const QStringList &shellPaths, int index, int attempt,
+                           const QString &failure) {
+        const QString shellPath = shellPaths.at(index);
+        QStringList command = connectArgsFor(shellPath);
+        command << QStringLiteral("ipc") << QStringLiteral("call") << target;
+        command.append(arguments);
+
+        auto *process = new QProcess(this);
+        // A hung `quickshell ipc call` used to sit inside waitForFinished() on
+        // the UI thread; now the timeout is a timer, so the worst case is a
+        // killed stale process, not a frozen window.
+        auto *watchdog = new QTimer(process);
+        watchdog->setSingleShot(true);
+        watchdog->setInterval(5000);
+        connect(process, &QProcess::started, watchdog, qOverload<>(&QTimer::start));
+        connect(watchdog, &QTimer::timeout, process, [process]() {
+            process->setProperty("timedOut", true);
+            process->kill();
+        });
+        connect(process, &QProcess::finished, this,
+                [this, process, kind, target, arguments, shellPath, fallbackError,
+                 shellPaths, index, attempt, failure](int exitCode,
+                                                      QProcess::ExitStatus exitStatus) {
+            const QString output = QString::fromUtf8(
+                process->readAllStandardOutput()).trimmed();
+            const bool preferred = index == 0;
+            const int maxAttempts = preferred ? 2 : 1;
+            // Retry the preferred candidate, fall through to the next one, and
+            // only report failure once every candidate has been tried.
+            const auto advance = [&](const QString &reason) {
+                if (attempt + 1 < maxAttempts) {
+                    startShellAttempt(target, arguments, fallbackError, kind,
+                                      shellPaths, index, attempt + 1, reason);
+                } else if (index + 1 < shellPaths.size()) {
+                    startShellAttempt(target, arguments, fallbackError, kind,
+                                      shellPaths, index + 1, 0, reason);
                 } else {
-                    failure = QString::fromUtf8(process.readAllStandardError()).trimmed();
-                    if (failure.isEmpty())
-                        failure = fallbackError;
+                    setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
+                                     .arg(reason, target, shellPath));
+                    failKind(kind);
                 }
-                if (attempt + 1 < attempts)
-                    QThread::msleep(120);
+            };
+            if (exitStatus == QProcess::NormalExit && exitCode == 0) {
+                if (!isIpcDiagnostic(output)) {
+                    setSessionShell(QDir::cleanPath(shellPath));
+                    handleReply(kind, output);
+                } else {
+                    // A diagnostic reply means this candidate is not the Shell
+                    // serving us, so treat it like a hard failure.
+                    advance(fallbackError);
+                }
+            } else {
+                QString reason = QString::fromUtf8(
+                    process->readAllStandardError()).trimmed();
+                if (process->property("timedOut").toBool())
+                    reason = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+                else if (reason.isEmpty())
+                    reason = fallbackError;
+                advance(reason);
             }
+            process->deleteLater();
+        });
+        // FailedToStart never emits finished; crashes do, and are reported
+        // there so a dead process is not counted twice.
+        connect(process, &QProcess::errorOccurred, this,
+                [this, process, kind, target, arguments, shellPath, shellPaths,
+                 index, attempt, failure](QProcess::ProcessError error) {
+            if (error != QProcess::FailedToStart)
+                return;
+            const bool preferred = index == 0;
+            const int maxAttempts = preferred ? 2 : 1;
+            const QString reason = QStringLiteral("无法启动 Quickshell IPC");
+            if (attempt + 1 < maxAttempts) {
+                startShellAttempt(target, arguments, reason, kind,
+                                  shellPaths, index, attempt + 1, reason);
+            } else if (index + 1 < shellPaths.size()) {
+                startShellAttempt(target, arguments, reason, kind,
+                                  shellPaths, index + 1, 0, reason);
+            } else {
+                setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
+                                 .arg(reason, target, shellPath));
+                failKind(kind);
+            }
+            process->deleteLater();
+        });
+        process->start(QStringLiteral("quickshell"), command);
+    }
+
+    // Dispatch the reply to the signal the requesting page listens to.
+    void handleReply(RequestKind kind, const QString &payload) {
+        switch (kind) {
+        case RequestKind::Dock:
+            emit dockSnapshotChanged(snapshotFromReply(payload));
+            break;
+        case RequestKind::Appearance:
+            emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
+            break;
+        case RequestKind::Launcher:
+            emit launcherSnapshotChanged(launcherSnapshotFromReply(payload));
+            break;
+        case RequestKind::Shortcuts:
+            emit shortcutsSnapshotChanged(shortcutsSnapshotFromReply(payload));
+            break;
+        case RequestKind::Integration:
+            startIntegrationProbe(integrationSnapshotFromReply(payload));
+            break;
+        case RequestKind::GlassDebug:
+            appearanceSnapshotFromReply(payload);
+            emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
+            break;
+        case RequestKind::ApplySystemAppearance: {
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(
+                payload.toUtf8(), &parseError);
+            bool accepted = false;
+            if (parseError.error == QJsonParseError::NoError && document.isObject())
+                accepted = document.object()
+                    .value(QStringLiteral("accepted")).toBool();
+            if (!accepted && m_lastError.isEmpty())
+                setLastError(QStringLiteral("桌面环境拒绝了主题切换请求"));
+            emit systemAppearanceApplied(accepted);
+            break;
         }
-        setLastError(QStringLiteral("%1（IPC：%2；Shell：%3）")
-                         .arg(failure, target, attemptedShell));
-        return {};
+        }
+    }
+
+    // A transport failure produces no payload, but the page still needs its
+    // signal so it can leave the pending state and show lastError.
+    void failKind(RequestKind kind) {
+        switch (kind) {
+        case RequestKind::Dock:
+            emit dockSnapshotChanged({});
+            break;
+        case RequestKind::Appearance:
+            emit appearanceSnapshotChanged({});
+            break;
+        case RequestKind::Launcher:
+            emit launcherSnapshotChanged({});
+            break;
+        case RequestKind::Shortcuts:
+            emit shortcutsSnapshotChanged({});
+            break;
+        case RequestKind::Integration:
+            startIntegrationProbe(integrationSnapshotFromReply({}));
+            break;
+        case RequestKind::GlassDebug:
+            emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
+            break;
+        case RequestKind::ApplySystemAppearance:
+            emit systemAppearanceApplied(false);
+            break;
+        }
     }
 
     void setLastError(const QString &error) {
@@ -935,6 +1106,9 @@ private:
     // reads the active preset out of it, and refreshed on every glass debug
     // snapshot so the style it names is the one being edited right now.
     QJsonObject m_appearanceSnapshot;
+    // The integration probe is a worker thread: while one is running the 5s
+    // page poll must not pile up another.
+    bool m_integrationPending = false;
 };
 
 namespace {

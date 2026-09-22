@@ -110,7 +110,8 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     QVERIFY(writeTestWave(inputPath));
 
     MusicController controller;
-    QVERIFY(controller.ready());
+    // Database open and MPRIS registration are deferred to the event loop.
+    QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
     QVERIFY2(controller.mprisRegistered(), "MPRIS service did not register");
     QCOMPARE(mprisProperty(QString::fromLatin1(rootInterface), QStringLiteral("Identity"))
                  .toString(),

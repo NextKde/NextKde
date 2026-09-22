@@ -94,10 +94,22 @@ MusicController::MusicController(QObject *parent)
                         .filePath(QStringLiteral("kos/music"));
     }
     m_artworkPath = QDir(cachePath).filePath(QStringLiteral("artwork"));
+    // Defer the database open, library read, and MPRIS registration until the
+    // event loop is running. Doing this work in the constructor blocks the
+    // QML engine before the first frame, since MusicController is instantiated
+    // from Main.qml's object tree. All public entry points are guarded by
+    // m_ready so calls made before initialization finishes are no-ops instead
+    // of touching an unopened database.
+    QTimer::singleShot(0, this, [this] { initialize(); });
+}
+
+void MusicController::initialize()
+{
     QString databaseError;
     if (!m_database.open(QDir(m_dataPath).filePath(QStringLiteral("library.sqlite")),
                          &databaseError)) {
         setError(databaseError);
+        emit readyChanged();
         return;
     }
     m_ready = true;
@@ -122,11 +134,8 @@ MusicController::MusicController(QObject *parent)
         m_queueIndex = m_queueIds.isEmpty() ? -1 : 0;
     m_mpris = new MprisService(this, this);
     emit mprisRegisteredChanged();
-
-    QTimer::singleShot(0, this, [this] {
-        emit readyChanged();
-        rescanLibrary();
-    });
+    emit readyChanged();
+    rescanLibrary();
 }
 
 MusicController::~MusicController() = default;
@@ -266,6 +275,8 @@ void MusicController::addLibraryFolder(const QString &pathOrUrl)
 
 void MusicController::removeLibraryFolder(const QString &pathOrUrl)
 {
+    if (!m_ready)
+        return;
     const QFileInfo info(localPath(pathOrUrl));
     QString path = info.canonicalFilePath();
     if (path.isEmpty())
@@ -330,6 +341,8 @@ void MusicController::playQueueRow(int row)
 
 void MusicController::playPlaylistRow(int row)
 {
+    if (!m_ready)
+        return;
     const QList<qint64> ids = m_database.playlistTrackIds(m_selectedPlaylistId);
     if (row < 0 || row >= ids.size())
         return;
@@ -444,6 +457,8 @@ void MusicController::removeQueueRow(int row)
 
 void MusicController::clearQueue()
 {
+    if (!m_ready)
+        return;
     m_engine.stop();
     setQueue({}, -1);
 }
@@ -500,12 +515,16 @@ void MusicController::seekFraction(double fraction)
 
 void MusicController::setVolume(double volume)
 {
+    if (!m_ready)
+        return;
     m_engine.setVolume(volume);
     m_database.setSetting(QStringLiteral("volume"), QString::number(m_engine.volume()));
 }
 
 void MusicController::setShuffle(bool shuffle)
 {
+    if (!m_ready)
+        return;
     if (m_shuffle == shuffle)
         return;
     m_shuffle = shuffle;
@@ -517,6 +536,8 @@ void MusicController::setShuffle(bool shuffle)
 
 void MusicController::setRepeatMode(const QString &mode)
 {
+    if (!m_ready)
+        return;
     QString normalized = mode.toLower();
     if (normalized == QLatin1String("none")) {
         // Valid as-is.
@@ -534,6 +555,8 @@ void MusicController::setRepeatMode(const QString &mode)
 
 void MusicController::createPlaylist(const QString &name)
 {
+    if (!m_ready)
+        return;
     const QString cleaned = name.trimmed().left(128);
     if (cleaned.isEmpty())
         return;
@@ -545,6 +568,8 @@ void MusicController::createPlaylist(const QString &name)
 
 void MusicController::renamePlaylist(qlonglong playlistId, const QString &name)
 {
+    if (!m_ready)
+        return;
     const QString cleaned = name.trimmed().left(128);
     if (cleaned.isEmpty())
         return;
@@ -556,6 +581,8 @@ void MusicController::renamePlaylist(qlonglong playlistId, const QString &name)
 
 void MusicController::removePlaylist(qlonglong playlistId)
 {
+    if (!m_ready)
+        return;
     QString error;
     if (!m_database.removePlaylist(playlistId, &error))
         setError(error);
@@ -567,12 +594,16 @@ void MusicController::removePlaylist(qlonglong playlistId)
 
 void MusicController::selectPlaylist(qlonglong playlistId)
 {
+    if (!m_ready)
+        return;
     m_selectedPlaylistId = playlistId;
     refreshPlaylistModel();
 }
 
 void MusicController::addTrackToPlaylist(qlonglong playlistId, qlonglong trackId)
 {
+    if (!m_ready)
+        return;
     QString error;
     if (!m_database.addTrackToPlaylist(playlistId, trackId, &error))
         setError(error);
@@ -583,6 +614,8 @@ void MusicController::addTrackToPlaylist(qlonglong playlistId, qlonglong trackId
 
 void MusicController::removeTrackFromPlaylist(qlonglong playlistId, qlonglong trackId)
 {
+    if (!m_ready)
+        return;
     QString error;
     if (!m_database.removeTrackFromPlaylist(playlistId, trackId, &error))
         setError(error);
@@ -593,6 +626,8 @@ void MusicController::removeTrackFromPlaylist(qlonglong playlistId, qlonglong tr
 
 void MusicController::playPlaylist(qlonglong playlistId)
 {
+    if (!m_ready)
+        return;
     const QList<qint64> ids = m_database.playlistTrackIds(playlistId);
     if (ids.isEmpty())
         return;
@@ -617,6 +652,8 @@ void MusicController::cancelTranscode() { m_transcoder.cancel(); }
 
 void MusicController::openUri(const QString &uriOrPath)
 {
+    if (!m_ready)
+        return;
     QUrl url(uriOrPath);
     if (!url.isValid() || url.scheme().isEmpty())
         url = QUrl::fromLocalFile(QFileInfo(uriOrPath).absoluteFilePath());
@@ -653,6 +690,8 @@ void MusicController::clearError() { setError({}); }
 
 void MusicController::scanFinished()
 {
+    if (!m_ready)
+        return;
     const ScanResult result = m_scanWatcher.result();
     QString error;
     if (m_database.libraryRoots().contains(result.rootPath)
@@ -709,6 +748,13 @@ void MusicController::refreshLibrary()
     m_tracks = m_database.allTracks(&error);
     if (!error.isEmpty())
         setError(error);
+    // Keep an id -> row index: findTrack is consulted by every current-track
+    // property getter and by tracksForIds for each queued/playlist row, so a
+    // linear scan turns each property read into an O(n) walk.
+    m_trackIndex.clear();
+    m_trackIndex.reserve(m_tracks.size());
+    for (int index = 0; index < m_tracks.size(); ++index)
+        m_trackIndex.insert(m_tracks.at(index).id, index);
     m_libraryFolders = m_database.libraryRoots();
     m_libraryModel.setTracks(m_tracks);
     refreshGroups();
@@ -869,9 +915,9 @@ QList<TrackRecord> MusicController::tracksForIds(const QList<qint64> &ids) const
 
 std::optional<TrackRecord> MusicController::findTrack(qint64 id) const
 {
-    const auto found = std::find_if(m_tracks.cbegin(), m_tracks.cend(),
-                                    [id](const TrackRecord &track) { return track.id == id; });
-    return found == m_tracks.cend() ? std::nullopt : std::optional<TrackRecord>(*found);
+    const auto index = m_trackIndex.constFind(id);
+    return index == m_trackIndex.cend()
+        ? std::nullopt : std::optional<TrackRecord>(m_tracks.at(index.value()));
 }
 
 QString MusicController::localPath(const QString &pathOrUrl)
