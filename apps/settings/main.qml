@@ -1146,129 +1146,6 @@ ApplicationWindow {
 
                 Item {
                     width: parent.width
-                    height: 164
-
-                    Rectangle {
-                        id: dockPreviewScreen
-                        anchors {
-                            fill: parent
-                            leftMargin: 16
-                            rightMargin: 16
-                            topMargin: 14
-                            bottomMargin: 12
-                        }
-                        radius: window.materialForm ? 20 : 14
-                        color: theme.previewPane
-                        border.width: 1
-                        border.color: theme.floatingBorder
-                        clip: true
-
-                        Rectangle {
-                            anchors { left: parent.left; right: parent.right; top: parent.top }
-                            height: 18
-                            color: theme.previewBar
-                            opacity: 0.82
-                            Row {
-                                anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 8 }
-                                spacing: 4
-                                Repeater {
-                                    model: 3
-                                    Rectangle {
-                                        width: 4; height: 4; radius: 2
-                                        color: theme.previewIcon
-                                        opacity: 0.72
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            id: dockPreview
-                            readonly property bool vertical: dockPage.dockPositionIndex !== 0
-                            readonly property bool taskbar: dockPage.dockStyleIndex === 1
-                            readonly property real thickness: 12
-                                + (dockPage.dockHeight - 40) / 60 * 10
-                            readonly property real compactLength:
-                                dockPage.infoCardModeIndex === 1 ? 190 : 126
-                            width: vertical ? thickness
-                                : (taskbar ? dockPreviewScreen.width : compactLength)
-                            height: vertical
-                                ? (taskbar ? dockPreviewScreen.height - 18 : compactLength)
-                                : thickness
-                            radius: taskbar ? 0 : Math.min(width, height) / 2
-                            color: taskbar ? theme.previewTaskbar : theme.previewDock
-                            border.width: taskbar ? 0 : 1
-                            border.color: theme.floatingBorder
-                            x: {
-                                if (dockPage.dockPositionIndex === 1)
-                                    return taskbar ? 0 : 8
-                                if (dockPage.dockPositionIndex === 2)
-                                    return dockPreviewScreen.width - width - (taskbar ? 0 : 8)
-                                if (taskbar)
-                                    return 0
-                                if (dockPage.dockAlignmentIndex === 0)
-                                    return 10
-                                if (dockPage.dockAlignmentIndex === 2)
-                                    return dockPreviewScreen.width - width - 10
-                                return (dockPreviewScreen.width - width) / 2
-                            }
-                            y: {
-                                if (dockPage.dockPositionIndex === 0)
-                                    return dockPreviewScreen.height - height
-                                        - (taskbar ? 0 : 8)
-                                if (taskbar)
-                                    return 18
-                                if (dockPage.dockAlignmentIndex === 0)
-                                    return 26
-                                if (dockPage.dockAlignmentIndex === 2)
-                                    return dockPreviewScreen.height - height - 8
-                                return 18 + (dockPreviewScreen.height - 18 - height) / 2
-                            }
-
-                            Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                            Behavior on y { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                            Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                            Behavior on height { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
-
-                            Row {
-                                visible: !dockPreview.vertical
-                                anchors.centerIn: parent
-                                spacing: 4
-                                Repeater {
-                                    model: dockPage.infoCardModeIndex === 1 ? 7 : 5
-                                    Rectangle {
-                                        width: Math.max(5, dockPreview.height * 0.42)
-                                        height: width
-                                        radius: width / 2
-                                        color: index >= 4 ? theme.accent : theme.previewIcon
-                                        opacity: index >= 4 ? 0.78 : 0.72
-                                    }
-                                }
-                            }
-
-                            Column {
-                                visible: dockPreview.vertical
-                                anchors.centerIn: parent
-                                spacing: 4
-                                Repeater {
-                                    model: dockPage.infoCardModeIndex === 1 ? 6 : 4
-                                    Rectangle {
-                                        width: Math.max(5, dockPreview.width * 0.42)
-                                        height: width
-                                        radius: width / 2
-                                        color: index >= 3 ? theme.accent : theme.previewIcon
-                                        opacity: index >= 3 ? 0.78 : 0.72
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle { width: parent.width; height: 1; color: theme.separator }
-
-                Item {
-                    width: parent.width
                     height: 54
                     RowLayout {
                         anchors.fill: parent
@@ -1335,7 +1212,6 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "▭"; tint: "#af52de" }
                         ColumnLayout {
-                            Layout.fillWidth: true
                             spacing: 1
                             Text { text: "Dock 样式"; color: theme.primaryText; font.pixelSize: 14 }
                             Text {
@@ -1345,7 +1221,9 @@ ApplicationWindow {
                                 font.pixelSize: 11
                             }
                         }
+                        Item { Layout.fillWidth: true }
                         SettingsNavBar {
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             model: [
                                 { id: "floating", label: "悬浮" },
                                 { id: "taskbar", label: "任务栏" }
@@ -1369,7 +1247,6 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◫"; tint: "#30d158" }
                         ColumnLayout {
-                            Layout.fillWidth: true
                             spacing: 1
                             Text { text: "信息卡片布局"; color: theme.primaryText; font.pixelSize: 14 }
                             Text {
@@ -1379,7 +1256,9 @@ ApplicationWindow {
                                 font.pixelSize: 11
                             }
                         }
+                        Item { Layout.fillWidth: true }
                         SettingsNavBar {
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             model: [
                                 { id: "carousel", label: "轮播" },
                                 { id: "expanded", label: "展开" }
