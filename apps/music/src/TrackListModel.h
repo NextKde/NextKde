@@ -36,6 +36,8 @@ public:
         FormatRole,
         AddedAtRole,
         PlayCountRole,
+        SourceRole,
+        ProviderIdRole,
     };
 
     explicit TrackListModel(QObject *parent = nullptr);
@@ -51,6 +53,7 @@ public:
     void setMode(const QString &mode);
     QString filterValue() const;
     void setFilterValue(const QString &value);
+    void setView(const QString &mode, const QString &filterValue = {});
 
     void setTracks(const QList<TrackRecord> &tracks);
     QList<TrackRecord> visibleTracks() const;
@@ -58,6 +61,10 @@ public:
     std::optional<TrackRecord> trackById(qint64 id) const;
 
     Q_INVOKABLE qlonglong trackIdAt(int row) const;
+    std::optional<TrackRecord> trackAt(int row) const;
+
+    static QString normalizeSearchText(const QString &text);
+    static bool matchesSearch(const QStringList &fields, const QString &query);
 
 signals:
     void searchChanged();

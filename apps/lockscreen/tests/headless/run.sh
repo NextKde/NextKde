@@ -23,8 +23,14 @@ fi
 # No QML disk cache: a stale compiled copy would let every assertion below run
 # against the previous revision of the theme and pass, which is worse than a
 # failing test.
+if ! command -v dbus-run-session >/dev/null 2>&1; then
+    echo "dbus-run-session is required for an isolated lock-screen test" >&2
+    exit 92
+fi
+
 for scale in 2 1; do
-    QT_SCALE_FACTOR=$scale QT_QPA_PLATFORM=offscreen \
+    dbus-run-session -- env \
+        QT_SCALE_FACTOR=$scale QT_QPA_PLATFORM=offscreen \
         QT_QUICK_BACKEND=software QML_DISABLE_DISK_CACHE=1 \
         timeout 25 qml6 wrapper.qml || exit $?
 done

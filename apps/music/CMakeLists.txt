@@ -1,4 +1,4 @@
-find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent DBus QuickDialogs2 Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Concurrent DBus Network Qml QuickDialogs2 Sql)
 find_package(PkgConfig REQUIRED)
 # The root project may already have resolved these (it does when it adds this
 # directory purely to reach the tests below). Reuse that result when present so
@@ -38,6 +38,23 @@ set(KOS_MUSIC_CORE_SOURCES
 # test-only descent would fail. Skipping it keeps the tests independent of the
 # application's own dependencies.
 if(NOT KOS_MUSIC_TESTS_ONLY)
+qt_add_executable(kos-music-lx-source-host
+    src/LxSourceHostMain.cpp
+)
+configure_file(src/LxSourceHost.js kos-music-lx-source-host.js COPYONLY)
+target_link_libraries(kos-music-lx-source-host PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Qml
+)
+install(TARGETS kos-music-lx-source-host
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(PROGRAMS src/LxSourceHost.js
+    DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RENAME kos-music-lx-source-host.js
+)
+
 kos_add_application(kos-music
     URI Kos.Apps.Music
     DISPLAY_NAME "KOS Music"
@@ -46,6 +63,12 @@ kos_add_application(kos-music
     METAINFO_FILE ${CMAKE_CURRENT_SOURCE_DIR}/data/org.nextkde.Kos.Music.metainfo.xml
     SOURCES
         src/main.cpp
+        src/LxSourceService.cpp
+        src/LxSourceService.h
+        src/LyricsService.cpp
+        src/LyricsService.h
+        src/OnlineMusicProvider.cpp
+        src/OnlineMusicProvider.h
         ${KOS_MUSIC_CORE_SOURCES}
     QML_SOURCES
         src/MusicController.cpp
@@ -55,11 +78,16 @@ kos_add_application(kos-music
     QML_FILES
         qml/Artwork.qml
         qml/Main.qml
+        qml/MiniPlayer.qml
         qml/MusicGroupGrid.qml
+        qml/MusicSourcePage.qml
+        qml/NowPlayingPage.qml
+        qml/OnlineSearchPage.qml
         qml/TrackListView.qml
     LINK_LIBRARIES
         Qt6::Concurrent
         Qt6::DBus
+        Qt6::Network
         Qt6::QuickDialogs2
         Qt6::Sql
         PkgConfig::KOS_MUSIC_GSTREAMER
@@ -74,6 +102,10 @@ endif()
 if(BUILD_TESTING)
     qt_add_executable(kos-music-core-test
         tests/MusicCoreTest.cpp
+        src/LyricsService.cpp
+        src/LyricsService.h
+        src/OnlineMusicProvider.cpp
+        src/OnlineMusicProvider.h
         src/MetadataScanner.cpp
         src/MetadataScanner.h
         src/MusicDatabase.cpp
@@ -88,12 +120,57 @@ if(BUILD_TESTING)
     target_link_libraries(kos-music-core-test PRIVATE
         Qt6::Core
         Qt6::Qml
+        Qt6::Network
         Qt6::Sql
         Qt6::Test
         PkgConfig::KOS_MUSIC_TAGLIB
     )
     add_test(NAME kos-music.core COMMAND kos-music-core-test)
     set_tests_properties(kos-music.core PROPERTIES TIMEOUT 20 LABELS data)
+
+    if(TARGET kos-music-lx-source-host)
+        qt_add_executable(kos-music-source-host-test
+            tests/LxSourceHostTest.cpp
+        )
+        target_link_libraries(kos-music-source-host-test PRIVATE
+            Qt6::Core
+            Qt6::Network
+            Qt6::Test
+        )
+        add_test(NAME kos-music.source-host
+            COMMAND ${CMAKE_COMMAND} -E env
+                KOS_MUSIC_SOURCE_HOST_TEST=$<TARGET_FILE:kos-music-lx-source-host>
+                $<TARGET_FILE:kos-music-source-host-test>
+        )
+        set_tests_properties(kos-music.source-host PROPERTIES
+            TIMEOUT 15
+            LABELS data
+        )
+
+        qt_add_executable(kos-music-source-service-test
+            tests/LxSourceServiceTest.cpp
+            src/LxSourceService.cpp
+            src/LxSourceService.h
+            src/MusicTypes.h
+        )
+        target_include_directories(kos-music-source-service-test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        target_link_libraries(kos-music-source-service-test PRIVATE
+            Qt6::Core
+            Qt6::Network
+            Qt6::Test
+        )
+        add_test(NAME kos-music.source-service
+            COMMAND ${CMAKE_COMMAND} -E env
+                KOS_MUSIC_SOURCE_HOST=$<TARGET_FILE:kos-music-lx-source-host>
+                $<TARGET_FILE:kos-music-source-service-test>
+        )
+        set_tests_properties(kos-music.source-service PROPERTIES
+            TIMEOUT 20
+            LABELS data
+        )
+    endif()
 
     qt_add_executable(kos-music-engine-test
         tests/MusicEngineTest.cpp
@@ -121,11 +198,40 @@ if(BUILD_TESTING)
         LABELS data
     )
 
+    if(TARGET kos-music-lx-source-host)
+        qt_add_executable(kos-music-live-source-check
+            tests/MusicLiveSourceCheck.cpp
+            src/LxSourceService.cpp
+            src/LxSourceService.h
+            src/LyricsService.cpp
+            src/LyricsService.h
+            src/OnlineMusicProvider.cpp
+            src/OnlineMusicProvider.h
+            src/PlaybackEngine.cpp
+            src/PlaybackEngine.h
+            src/MusicTypes.h
+        )
+        target_include_directories(kos-music-live-source-check PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        target_link_libraries(kos-music-live-source-check PRIVATE
+            Qt6::Core
+            Qt6::Network
+            PkgConfig::KOS_MUSIC_GSTREAMER
+        )
+    endif()
+
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
     if(DBUS_RUN_SESSION_EXECUTABLE)
         qt_add_executable(kos-music-mpris-test
             tests/MusicMprisTest.cpp
             ${KOS_MUSIC_CORE_SOURCES}
+            src/LxSourceService.cpp
+            src/LxSourceService.h
+            src/LyricsService.cpp
+            src/LyricsService.h
+            src/OnlineMusicProvider.cpp
+            src/OnlineMusicProvider.h
             src/MusicController.cpp
             src/MusicController.h
             src/TrackListModel.cpp
@@ -138,6 +244,7 @@ if(BUILD_TESTING)
             Qt6::Concurrent
             Qt6::Core
             Qt6::DBus
+            Qt6::Network
             Qt6::Qml
             Qt6::Sql
             Qt6::Test

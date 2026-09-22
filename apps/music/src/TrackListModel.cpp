@@ -12,6 +12,62 @@ QString trackArtist(const TrackRecord &track)
     return track.artist.isEmpty() ? track.albumArtist : track.artist;
 }
 
+QStringList normalizedTokens(const QString &text)
+{
+    return TrackListModel::normalizeSearchText(text)
+        .split(QLatin1Char(' '), Qt::SkipEmptyParts);
+}
+
+int trackSearchScore(const TrackRecord &track, const QString &query)
+{
+    const QString normalizedQuery = TrackListModel::normalizeSearchText(query);
+    if (normalizedQuery.isEmpty())
+        return 0;
+
+    const QString title = TrackListModel::normalizeSearchText(track.title);
+    const QString artist = TrackListModel::normalizeSearchText(track.artist);
+    const QString albumArtist = TrackListModel::normalizeSearchText(track.albumArtist);
+    const QString album = TrackListModel::normalizeSearchText(track.album);
+    const QString genre = TrackListModel::normalizeSearchText(track.genre);
+    const QString document =
+        QStringList{title, artist, albumArtist, album, genre}.join(QLatin1Char(' '));
+    const QStringList tokens = normalizedTokens(normalizedQuery);
+    for (const QString &token : tokens) {
+        if (!document.contains(token))
+            return -1;
+    }
+
+    int score = tokens.size() * 10;
+    if (title == normalizedQuery)
+        score += 1200;
+    else if (title.startsWith(normalizedQuery))
+        score += 900;
+    if (artist == normalizedQuery || albumArtist == normalizedQuery)
+        score += 720;
+    else if (artist.startsWith(normalizedQuery) || albumArtist.startsWith(normalizedQuery))
+        score += 540;
+    if (album == normalizedQuery)
+        score += 460;
+    else if (album.startsWith(normalizedQuery))
+        score += 340;
+
+    for (const QString &token : tokens) {
+        if (title == token)
+            score += 150;
+        else if (title.startsWith(token))
+            score += 100;
+        else if (title.contains(token))
+            score += 60;
+        if (artist == token || albumArtist == token)
+            score += 90;
+        else if (artist.startsWith(token) || albumArtist.startsWith(token))
+            score += 60;
+        if (album == token)
+            score += 50;
+    }
+    return score;
+}
+
 } // namespace
 
 TrackListModel::TrackListModel(QObject *parent)
@@ -52,6 +108,8 @@ QVariant TrackListModel::data(const QModelIndex &index, int role) const
     case FormatRole: return track.format;
     case AddedAtRole: return track.addedAt;
     case PlayCountRole: return track.playCount;
+    case SourceRole: return track.source;
+    case ProviderIdRole: return track.providerId;
     default: return {};
     }
 }
@@ -66,6 +124,7 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         {ArtworkUrlRole, "artworkUrl"}, {TrackNumberRole, "trackNumber"},
         {DiscNumberRole, "discNumber"}, {YearRole, "year"}, {FormatRole, "format"},
         {AddedAtRole, "addedAt"}, {PlayCountRole, "playCount"},
+        {SourceRole, "source"}, {ProviderIdRole, "providerId"},
     };
 }
 
@@ -76,9 +135,10 @@ QString TrackListModel::search() const
 
 void TrackListModel::setSearch(const QString &search)
 {
-    if (m_search == search)
+    const QString normalized = normalizeSearchText(search);
+    if (m_search == normalized)
         return;
-    m_search = search;
+    m_search = normalized;
     emit searchChanged();
     rebuild();
 }
@@ -108,6 +168,21 @@ void TrackListModel::setFilterValue(const QString &value)
         return;
     m_filterValue = value;
     emit filterValueChanged();
+    rebuild();
+}
+
+void TrackListModel::setView(const QString &mode, const QString &filterValue)
+{
+    const bool modeChangedValue = m_mode != mode;
+    const bool filterChangedValue = m_filterValue != filterValue;
+    if (!modeChangedValue && !filterChangedValue)
+        return;
+    m_mode = mode;
+    m_filterValue = filterValue;
+    if (modeChangedValue)
+        emit modeChanged();
+    if (filterChangedValue)
+        emit filterValueChanged();
     rebuild();
 }
 
@@ -143,10 +218,16 @@ qlonglong TrackListModel::trackIdAt(int row) const
     return row >= 0 && row < m_visible.size() ? m_visible.at(row).id : -1;
 }
 
+std::optional<TrackRecord> TrackListModel::trackAt(int row) const
+{
+    return row >= 0 && row < m_visible.size()
+        ? std::optional<TrackRecord>(m_visible.at(row)) : std::nullopt;
+}
+
 void TrackListModel::rebuild()
 {
-    QList<TrackRecord> filtered;
-    const QString needle = m_search.trimmed();
+    QList<std::pair<TrackRecord, int>> filtered;
+    const QString needle = m_search;
     for (const TrackRecord &track : std::as_const(m_source)) {
         if (m_mode == QLatin1String("album")) {
             const qsizetype separator = m_filterValue.indexOf(albumSeparator);
@@ -166,44 +247,77 @@ void TrackListModel::rebuild()
                                           Qt::CaseInsensitive) != 0) {
             continue;
         }
-        if (!needle.isEmpty()
-            && !track.title.contains(needle, Qt::CaseInsensitive)
-            && !track.artist.contains(needle, Qt::CaseInsensitive)
-            && !track.album.contains(needle, Qt::CaseInsensitive)
-            && !track.genre.contains(needle, Qt::CaseInsensitive)) {
+        const int score = trackSearchScore(track, needle);
+        if (score < 0)
             continue;
-        }
-        filtered.append(track);
+        filtered.append({track, score});
     }
-    if (m_mode == QLatin1String("queue")) {
+
+    const auto relevanceOrder = [&needle](const auto &left, const auto &right) {
+        return !needle.isEmpty() && left.second != right.second
+            ? std::optional<bool>(left.second > right.second) : std::nullopt;
+    };
+    if (m_mode == QLatin1String("queue") && needle.isEmpty()) {
         // The source order is the persisted playback order.
     } else if (m_mode == QLatin1String("recent")) {
-        std::stable_sort(filtered.begin(), filtered.end(), [](const TrackRecord &left,
-                                                              const TrackRecord &right) {
-            return left.addedAt > right.addedAt;
+        std::stable_sort(filtered.begin(), filtered.end(), [&relevanceOrder](const auto &left,
+                                                                            const auto &right) {
+            if (const auto relevant = relevanceOrder(left, right))
+                return *relevant;
+            return left.first.addedAt > right.first.addedAt;
         });
     } else if (m_mode == QLatin1String("album")) {
-        std::stable_sort(filtered.begin(), filtered.end(), [](const TrackRecord &left,
-                                                              const TrackRecord &right) {
-            if (left.discNumber != right.discNumber)
-                return left.discNumber < right.discNumber;
-            if (left.trackNumber != right.trackNumber)
-                return left.trackNumber < right.trackNumber;
-            return left.title.localeAwareCompare(right.title) < 0;
+        std::stable_sort(filtered.begin(), filtered.end(), [&relevanceOrder](const auto &left,
+                                                                            const auto &right) {
+            if (const auto relevant = relevanceOrder(left, right))
+                return *relevant;
+            if (left.first.discNumber != right.first.discNumber)
+                return left.first.discNumber < right.first.discNumber;
+            if (left.first.trackNumber != right.first.trackNumber)
+                return left.first.trackNumber < right.first.trackNumber;
+            return left.first.title.localeAwareCompare(right.first.title) < 0;
         });
     } else {
-        std::stable_sort(filtered.begin(), filtered.end(), [](const TrackRecord &left,
-                                                              const TrackRecord &right) {
-            const int titleOrder = left.title.localeAwareCompare(right.title);
+        std::stable_sort(filtered.begin(), filtered.end(), [&relevanceOrder](const auto &left,
+                                                                            const auto &right) {
+            if (const auto relevant = relevanceOrder(left, right))
+                return *relevant;
+            const int titleOrder = left.first.title.localeAwareCompare(right.first.title);
             return titleOrder == 0
-                ? left.artist.localeAwareCompare(right.artist) < 0 : titleOrder < 0;
+                ? left.first.artist.localeAwareCompare(right.first.artist) < 0
+                : titleOrder < 0;
         });
     }
 
+    QList<TrackRecord> visible;
+    visible.reserve(filtered.size());
+    for (auto &candidate : filtered)
+        visible.append(std::move(candidate.first));
     beginResetModel();
-    m_visible = std::move(filtered);
+    m_visible = std::move(visible);
     endResetModel();
     emit countChanged();
+}
+
+QString TrackListModel::normalizeSearchText(const QString &text)
+{
+    return text.normalized(QString::NormalizationForm_KC).toCaseFolded().simplified();
+}
+
+bool TrackListModel::matchesSearch(const QStringList &fields, const QString &query)
+{
+    const QStringList tokens = normalizedTokens(query);
+    if (tokens.isEmpty())
+        return true;
+    QStringList normalizedFields;
+    normalizedFields.reserve(fields.size());
+    for (const QString &field : fields)
+        normalizedFields.append(normalizeSearchText(field));
+    const QString document = normalizedFields.join(QLatin1Char(' '));
+    return std::all_of(tokens.cbegin(), tokens.cend(),
+                       [&document](const QString &token) {
+                           return document.contains(token);
+                       });
 }
 
 QString TrackListModel::durationText(qint64 milliseconds)

@@ -26,6 +26,23 @@ QtObject {
     // revision to refresh cover art and palettes after a track change.
     property int metadataRevision: 0
     property string _metadataSignature: ""
+    readonly property string currentLyric: {
+        const revision = metadataRevision
+        return metadataString("kos:currentLyric") || metadataString("xesam:asText")
+    }
+    readonly property string nextLyric: {
+        const revision = metadataRevision
+        return metadataString("kos:nextLyric")
+    }
+
+    function metadataString(key) {
+        const metadata = activePlayer?.metadata
+        let value = metadata ? metadata[key] : null
+        for (let depth = 0; depth < 4 && value !== null
+                && typeof value === "object" && value.value !== undefined; depth++)
+            value = value.value
+        return value === null || value === undefined ? "" : String(value)
+    }
 
     // ── Player tracking via Repeater ──
     property var _playerRefs: []
@@ -56,7 +73,12 @@ QtObject {
             // slot immediately enters or leaves its carousel in that case.
             Connections {
                 target: delegate.player
+                ignoreUnknownSignals: true
                 function onPlaybackStateChanged() { svc._updateActivePlayer() }
+                function onMetadataChanged() {
+                    svc._updateActivePlayer()
+                    svc.refreshMetadata()
+                }
             }
         }
     }
@@ -72,7 +94,8 @@ QtObject {
     function refreshMetadata() {
         const player = activePlayer
         const signature = [player?.trackArtUrl ?? "", player?.trackTitle ?? "",
-            player?.trackArtist ?? "", player?.isPlaying ?? false].join("\u001f")
+            player?.trackArtist ?? "", metadataString("kos:currentLyric"),
+            metadataString("kos:nextLyric"), player?.isPlaying ?? false].join("\u001f")
         if (signature !== _metadataSignature) {
             _metadataSignature = signature
             metadataRevision++

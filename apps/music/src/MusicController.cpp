@@ -1,8 +1,11 @@
 #include "MusicController.h"
 
+#include "LxSourceService.h"
+#include "LyricsService.h"
 #include "MetadataScanner.h"
 #include "MprisService.h"
 
+#include <QCollator>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDBusObjectPath>
@@ -22,6 +25,17 @@
 namespace {
 
 const QChar albumSeparator(0x1f);
+
+const QStringList &supportedOnlineQualities()
+{
+    static const QStringList qualities{
+        QStringLiteral("128k"),
+        QStringLiteral("320k"),
+        QStringLiteral("flac"),
+        QStringLiteral("flac24bit"),
+    };
+    return qualities;
+}
 
 QString fallbackName(const QString &value, const QString &fallback)
 {
@@ -47,16 +61,23 @@ MusicController::MusicController(QObject *parent)
     , m_libraryModel(this)
     , m_queueModel(this)
     , m_playlistTracksModel(this)
+    , m_onlineModel(this)
+    , m_onlineProvider(this)
     , m_scanWatcher(this)
 {
     m_queueModel.setMode(QStringLiteral("queue"));
     m_playlistTracksModel.setMode(QStringLiteral("queue"));
+    m_onlineModel.setMode(QStringLiteral("queue"));
     connect(&m_scanWatcher, &QFutureWatcher<ScanResult>::finished,
             this, &MusicController::scanFinished);
     connect(&m_engine, &PlaybackEngine::stateChanged,
             this, &MusicController::playbackStateChanged);
     connect(&m_engine, &PlaybackEngine::positionChanged,
             this, &MusicController::positionChanged);
+    connect(&m_engine, &PlaybackEngine::positionChanged, this, [this] {
+        if (m_lyricsService)
+            m_lyricsService->setPositionMs(m_engine.positionMs());
+    });
     connect(&m_engine, &PlaybackEngine::durationChanged,
             this, &MusicController::durationChanged);
     connect(&m_engine, &PlaybackEngine::seekableChanged,
@@ -94,17 +115,73 @@ MusicController::MusicController(QObject *parent)
                         .filePath(QStringLiteral("kos/music"));
     }
     m_artworkPath = QDir(cachePath).filePath(QStringLiteral("artwork"));
-    // Defer the database open, library read, and MPRIS registration until the
-    // event loop is running. Doing this work in the constructor blocks the
-    // QML engine before the first frame, since MusicController is instantiated
-    // from Main.qml's object tree. All public entry points are guarded by
-    // m_ready so calls made before initialization finishes are no-ops instead
-    // of touching an unopened database.
+    // Defer the database open, library read, source-host startup, and MPRIS
+    // registration until the event loop is running so QML can render first.
     QTimer::singleShot(0, this, [this] { initialize(); });
 }
 
 void MusicController::initialize()
 {
+    const QString cachePath = QFileInfo(m_artworkPath).absolutePath();
+    m_sourceService = std::make_unique<LxSourceService>(m_dataPath, this);
+    m_lyricsService = std::make_unique<LyricsService>(
+        QDir(cachePath).filePath(QStringLiteral("lyrics")), this);
+    connect(&m_onlineProvider, &OnlineMusicProvider::searchingChanged,
+            this, &MusicController::onlineSearchingChanged);
+    connect(&m_onlineProvider, &OnlineMusicProvider::errorMessageChanged,
+            this, &MusicController::onlineErrorChanged);
+    connect(&m_onlineProvider, &OnlineMusicProvider::resultsReady,
+            &m_onlineModel, &TrackListModel::setTracks);
+    connect(m_sourceService.get(), &LxSourceService::sourcesChanged,
+            this, &MusicController::musicSourcesChanged);
+    connect(m_sourceService.get(), &LxSourceService::stateChanged,
+            this, &MusicController::musicSourceStateChanged);
+    connect(m_sourceService.get(), &LxSourceService::errorMessageChanged,
+            this, &MusicController::musicSourceErrorChanged);
+    connect(m_sourceService.get(), &LxSourceService::capabilitiesChanged,
+            this, [this] {
+        const QStringList qualities = onlineQualities();
+        if (!qualities.isEmpty() && !qualities.contains(m_onlineQuality)) {
+            const QString fallback = qualities.contains(QStringLiteral("128k"))
+                ? QStringLiteral("128k") : qualities.first();
+            if (m_onlineQuality != fallback) {
+                m_onlineQuality = fallback;
+                if (m_ready)
+                    m_database.setSetting(QStringLiteral("onlineQuality"), fallback);
+                emit onlineQualityChanged();
+            }
+        }
+        emit onlineQualitiesChanged();
+    });
+    connect(m_sourceService.get(), &LxSourceService::sourceImported,
+            this, [this](const QString &name) {
+        emit userMessage(tr("Music source %1 was imported").arg(name));
+    });
+    connect(m_sourceService.get(), &LxSourceService::resolved,
+            this, [this](qint64 trackId, const QUrl &url) {
+        if (trackId != m_resolvingTrackId || trackId != currentTrackId())
+            return;
+        m_resolvingTrackId = -1;
+        emit playbackStateChanged();
+        if (m_engine.load(url, true))
+            m_database.recordPlayed(trackId);
+    });
+    connect(m_sourceService.get(), &LxSourceService::resolveFailed,
+            this, [this](qint64 trackId, const QString &message) {
+        if (trackId == m_resolvingTrackId) {
+            m_resolvingTrackId = -1;
+            emit playbackStateChanged();
+        }
+        setError(tr("Unable to play online track: %1").arg(message));
+    });
+    connect(m_lyricsService.get(), &LyricsService::lyricsChanged,
+            this, &MusicController::lyricsChanged);
+    connect(m_lyricsService.get(), &LyricsService::currentLineChanged,
+            this, &MusicController::currentLyricChanged);
+    connect(m_lyricsService.get(), &LyricsService::loadingChanged,
+            this, &MusicController::lyricsLoadingChanged);
+    connect(m_lyricsService.get(), &LyricsService::errorMessageChanged,
+            this, &MusicController::lyricsErrorChanged);
     QString databaseError;
     if (!m_database.open(QDir(m_dataPath).filePath(QStringLiteral("library.sqlite")),
                          &databaseError)) {
@@ -113,6 +190,11 @@ void MusicController::initialize()
         return;
     }
     m_ready = true;
+    const QString storedOnlineQuality =
+        m_database.setting(QStringLiteral("onlineQuality"), QStringLiteral("128k"))
+            .trimmed().toLower();
+    if (supportedOnlineQualities().contains(storedOnlineQuality))
+        m_onlineQuality = storedOnlineQuality;
     m_repeatMode = m_database.setting(QStringLiteral("repeat"), QStringLiteral("none"));
     if (m_repeatMode != QLatin1String("track")
         && m_repeatMode != QLatin1String("playlist")) {
@@ -143,6 +225,7 @@ MusicController::~MusicController() = default;
 TrackListModel *MusicController::libraryModel() { return &m_libraryModel; }
 TrackListModel *MusicController::queueModel() { return &m_queueModel; }
 TrackListModel *MusicController::playlistTracksModel() { return &m_playlistTracksModel; }
+TrackListModel *MusicController::onlineModel() { return &m_onlineModel; }
 QVariantList MusicController::albums() const { return m_albums; }
 QVariantList MusicController::artists() const { return m_artists; }
 QVariantList MusicController::playlists() const { return m_playlists; }
@@ -152,10 +235,65 @@ bool MusicController::scanning() const { return m_scanning; }
 QString MusicController::scanStatus() const { return m_scanStatus; }
 QStringList MusicController::scanWarnings() const { return m_scanWarnings; }
 QString MusicController::errorMessage() const { return m_errorMessage; }
+bool MusicController::onlineSearching() const { return m_onlineProvider.searching(); }
+QString MusicController::onlineError() const { return m_onlineProvider.errorMessage(); }
+QVariantList MusicController::musicSources() const
+{
+    return m_sourceService ? m_sourceService->sources() : QVariantList{};
+}
+QString MusicController::activeMusicSourceId() const
+{
+    return m_sourceService ? m_sourceService->activeSourceId() : QString{};
+}
+QString MusicController::musicSourceState() const
+{
+    return m_sourceService ? m_sourceService->state() : QStringLiteral("inactive");
+}
+QString MusicController::musicSourceError() const
+{
+    return m_sourceService ? m_sourceService->errorMessage() : QString{};
+}
+QStringList MusicController::onlineQualities() const { return m_sourceService ? m_sourceService->availableQualities() : QStringList{}; }
+QString MusicController::onlineQuality() const { return m_onlineQuality; }
+QVariantList MusicController::lyrics() const
+{
+    return m_lyricsService && m_lyricsService->loadedTrackId() == currentTrackId()
+        ? m_lyricsService->lines() : QVariantList{};
+}
+int MusicController::currentLyricIndex() const
+{
+    return m_lyricsService && m_lyricsService->loadedTrackId() == currentTrackId()
+        ? m_lyricsService->currentLineIndex() : -1;
+}
+QString MusicController::currentLyric() const
+{
+    const QVariantList lines = lyrics();
+    const int index = currentLyricIndex();
+    return index >= 0 && index < lines.size()
+        ? lines.at(index).toMap().value(QStringLiteral("text")).toString() : QString{};
+}
+QString MusicController::nextLyric() const
+{
+    const QVariantList lines = lyrics();
+    const int index = currentLyricIndex() + 1;
+    return index >= 0 && index < lines.size()
+        ? lines.at(index).toMap().value(QStringLiteral("text")).toString() : QString{};
+}
+bool MusicController::lyricsLoading() const
+{
+    return m_lyricsService && m_lyricsService->loading();
+}
+QString MusicController::lyricsError() const
+{
+    return m_lyricsService ? m_lyricsService->errorMessage() : QString{};
+}
 bool MusicController::engineAvailable() const { return m_engine.available(); }
 QString MusicController::engineBackend() const { return m_engine.backendName(); }
 bool MusicController::mprisRegistered() const { return m_mpris && m_mpris->registered(); }
-QString MusicController::playbackState() const { return m_engine.state(); }
+QString MusicController::playbackState() const
+{
+    return m_resolvingTrackId >= 0 ? QStringLiteral("Loading") : m_engine.state();
+}
 qlonglong MusicController::currentTrackId() const
 {
     return m_queueIndex >= 0 && m_queueIndex < m_queueIds.size()
@@ -193,6 +331,17 @@ bool MusicController::seekable() const { return m_engine.seekable(); }
 double MusicController::volume() const { return m_engine.volume(); }
 bool MusicController::shuffle() const { return m_shuffle; }
 QString MusicController::repeatMode() const { return m_repeatMode; }
+QString MusicController::playbackMode() const
+{
+    if (m_repeatMode == QLatin1String("track"))
+        return QStringLiteral("track");
+    if (m_shuffle)
+        return QStringLiteral("shuffle");
+    if (m_repeatMode == QLatin1String("playlist"))
+        return QStringLiteral("playlist");
+    return QStringLiteral("sequential");
+}
+QString MusicController::librarySearch() const { return m_librarySearch; }
 bool MusicController::canGoNext() const
 {
     return !m_queueIds.isEmpty()
@@ -230,12 +379,18 @@ QVariantMap MusicController::mprisMetadata() const
         {QStringLiteral("xesam:title"), track->title},
         {QStringLiteral("xesam:artist"), QStringList{track->artist}},
         {QStringLiteral("xesam:album"), track->album},
-        {QStringLiteral("xesam:url"), track->url},
+        {QStringLiteral("xesam:url"), track->url.isEmpty() ? track->path : track->url},
         {QStringLiteral("xesam:trackNumber"), track->trackNumber},
         {QStringLiteral("xesam:genre"), QStringList{track->genre}},
     };
     if (!track->artworkUrl.isEmpty())
         metadata.insert(QStringLiteral("mpris:artUrl"), track->artworkUrl);
+    const QString lyric = currentLyric();
+    const QString followingLyric = nextLyric();
+    metadata.insert(QStringLiteral("xesam:asText"), lyric);
+    metadata.insert(QStringLiteral("kos:currentLyric"), lyric);
+    metadata.insert(QStringLiteral("kos:nextLyric"), followingLyric);
+    metadata.insert(QStringLiteral("kos:lyricIndex"), currentLyricIndex());
     return metadata;
 }
 
@@ -305,13 +460,73 @@ void MusicController::rescanLibrary()
 
 void MusicController::setLibraryView(const QString &mode, const QString &filterValue)
 {
-    m_libraryModel.setFilterValue(filterValue);
-    m_libraryModel.setMode(mode);
+    m_libraryModel.setView(mode, filterValue);
 }
 
 void MusicController::setSearch(const QString &search)
 {
-    m_libraryModel.setSearch(search);
+    const QString normalized = TrackListModel::normalizeSearchText(search);
+    if (m_librarySearch == normalized)
+        return;
+    m_librarySearch = normalized;
+    m_libraryModel.setSearch(normalized);
+    applyGroupSearch();
+    emit librarySearchChanged();
+    emit libraryChanged();
+}
+
+void MusicController::searchOnline(const QString &query)
+{
+    m_onlineProvider.search(query);
+}
+
+qint64 MusicController::storeOnlineTrack(int row)
+{
+    const auto track = m_onlineModel.trackAt(row);
+    if (!track)
+        return -1;
+    QString error;
+    const qint64 id = m_database.addExternalTrack(*track, &error);
+    if (id < 0) {
+        setError(error);
+        return -1;
+    }
+    refreshLibrary();
+    return id;
+}
+
+void MusicController::playOnlineRow(int row)
+{
+    const qint64 id = storeOnlineTrack(row);
+    if (id < 0)
+        return;
+    setQueue({id}, 0);
+    startCurrentTrack();
+}
+
+void MusicController::enqueueOnlineRow(int row)
+{
+    const qint64 id = storeOnlineTrack(row);
+    if (id >= 0)
+        enqueueTrack(id);
+}
+
+void MusicController::importMusicSource(const QString &pathOrUrl)
+{
+    if (m_sourceService)
+        m_sourceService->importSource(pathOrUrl);
+}
+
+void MusicController::activateMusicSource(const QString &sourceId)
+{
+    if (m_sourceService)
+        m_sourceService->activateSource(sourceId);
+}
+
+void MusicController::removeMusicSource(const QString &sourceId)
+{
+    if (m_sourceService)
+        m_sourceService->removeSource(sourceId);
 }
 
 void MusicController::playTrack(qlonglong trackId)
@@ -442,13 +657,21 @@ void MusicController::removeQueueRow(int row)
     if (m_queueIds.isEmpty()) {
         m_queueIndex = -1;
         m_engine.stop();
+        m_lyricsService->load({});
     } else if (row < m_queueIndex) {
         --m_queueIndex;
     } else if (m_queueIndex >= m_queueIds.size()) {
         m_queueIndex = m_queueIds.size() - 1;
     }
-    if (removingCurrent)
+    if (removingCurrent) {
+        if (!m_queueIds.isEmpty())
+            m_lyricsService->load({});
+        if (m_resolvingTrackId >= 0) {
+            m_resolvingTrackId = -1;
+            emit playbackStateChanged();
+        }
         m_engine.stop();
+    }
     refreshQueueModel();
     persistQueue();
     emit queueChanged();
@@ -459,7 +682,7 @@ void MusicController::clearQueue()
 {
     if (!m_ready)
         return;
-    m_engine.stop();
+    stop();
     setQueue({}, -1);
 }
 
@@ -472,10 +695,13 @@ void MusicController::play()
     const auto track = findTrack(currentTrackId());
     if (!track)
         return;
-    if (m_engine.source() != QUrl(track->url))
+    if (track->source != QLatin1String("local")
+        || m_engine.source().isEmpty()
+        || m_engine.source() != QUrl(track->url)) {
         startCurrentTrack();
-    else
+    } else {
         m_engine.play();
+    }
 }
 
 void MusicController::pause() { m_engine.pause(); }
@@ -486,7 +712,12 @@ void MusicController::togglePlayPause()
     else
         play();
 }
-void MusicController::stop() { m_engine.stop(); }
+void MusicController::stop()
+{
+    m_resolvingTrackId = -1;
+    emit playbackStateChanged();
+    m_engine.stop();
+}
 void MusicController::next() { advance(false); }
 void MusicController::previous()
 {
@@ -531,6 +762,7 @@ void MusicController::setShuffle(bool shuffle)
     m_database.setSetting(QStringLiteral("shuffle"), shuffle ? QStringLiteral("true")
                                                              : QStringLiteral("false"));
     emit shuffleChanged();
+    emit playbackModeChanged();
     emit queueChanged();
 }
 
@@ -550,7 +782,54 @@ void MusicController::setRepeatMode(const QString &mode)
     m_repeatMode = normalized;
     m_database.setSetting(QStringLiteral("repeat"), normalized);
     emit repeatModeChanged();
+    emit playbackModeChanged();
     emit queueChanged();
+}
+
+void MusicController::setPlaybackMode(const QString &mode)
+{
+    QString normalized = mode.trimmed().toLower();
+    if (normalized != QLatin1String("sequential")
+        && normalized != QLatin1String("playlist")
+        && normalized != QLatin1String("track")
+        && normalized != QLatin1String("shuffle")) {
+        normalized = QStringLiteral("sequential");
+    }
+    const bool nextShuffle = normalized == QLatin1String("shuffle");
+    const QString nextRepeat = normalized == QLatin1String("track")
+        ? QStringLiteral("track")
+        : normalized == QLatin1String("playlist")
+            ? QStringLiteral("playlist") : QStringLiteral("none");
+    const bool shuffleChangedValue = m_shuffle != nextShuffle;
+    const bool repeatChangedValue = m_repeatMode != nextRepeat;
+    if (!shuffleChangedValue && !repeatChangedValue)
+        return;
+    m_shuffle = nextShuffle;
+    m_repeatMode = nextRepeat;
+    m_database.setSetting(QStringLiteral("shuffle"), m_shuffle
+                          ? QStringLiteral("true") : QStringLiteral("false"));
+    m_database.setSetting(QStringLiteral("repeat"), m_repeatMode);
+    if (shuffleChangedValue)
+        emit shuffleChanged();
+    if (repeatChangedValue)
+        emit repeatModeChanged();
+    emit playbackModeChanged();
+    emit queueChanged();
+}
+
+void MusicController::setOnlineQuality(const QString &quality)
+{
+    const QString normalized = quality.trimmed().toLower();
+    const QStringList available = onlineQualities();
+    const QStringList &allowed = available.isEmpty()
+        ? supportedOnlineQualities() : available;
+    if (!allowed.contains(normalized))
+        return;
+    if (m_onlineQuality == normalized)
+        return;
+    m_onlineQuality = normalized;
+    m_database.setSetting(QStringLiteral("onlineQuality"), normalized);
+    emit onlineQualityChanged();
 }
 
 void MusicController::createPlaylist(const QString &name)
@@ -772,6 +1051,7 @@ void MusicController::refreshGroups()
         QString filterValue;
         QString subtitle;
         QString artwork;
+        QStringList searchFields;
         int count = 0;
     };
     QMap<QString, Group> albumsByName;
@@ -786,6 +1066,8 @@ void MusicController::refreshGroups()
         album.subtitle = albumArtist;
         if (album.artwork.isEmpty())
             album.artwork = track.artworkUrl;
+        album.searchFields.append({albumName, albumArtist, track.title, track.artist,
+                                   track.albumArtist, track.genre});
         ++album.count;
 
         const QString artistValue = trackArtist(track);
@@ -795,23 +1077,58 @@ void MusicController::refreshGroups()
         artist.filterValue = artistValue;
         if (artist.artwork.isEmpty())
             artist.artwork = track.artworkUrl;
+        artist.searchFields.append({artistName, track.title, track.album,
+                                    track.albumArtist, track.genre});
         ++artist.count;
     }
-    m_albums.clear();
-    for (const Group &group : albumsByName) {
-        m_albums.append(QVariantMap{{QStringLiteral("name"), group.name},
-                                    {QStringLiteral("filterValue"), group.filterValue},
-                                    {QStringLiteral("subtitle"), group.subtitle},
-                                    {QStringLiteral("artworkUrl"), group.artwork},
-                                    {QStringLiteral("count"), group.count}});
+
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
+    QList<Group> albumGroups = albumsByName.values();
+    QList<Group> artistGroups = artistsByName.values();
+    const auto localizedOrder = [&collator](const Group &left, const Group &right) {
+        return collator.compare(left.name, right.name) < 0;
+    };
+    std::stable_sort(albumGroups.begin(), albumGroups.end(), localizedOrder);
+    std::stable_sort(artistGroups.begin(), artistGroups.end(), localizedOrder);
+
+    m_allAlbums.clear();
+    for (const Group &group : std::as_const(albumGroups)) {
+        m_allAlbums.append(QVariantMap{{QStringLiteral("name"), group.name},
+                                       {QStringLiteral("filterValue"), group.filterValue},
+                                       {QStringLiteral("subtitle"), group.subtitle},
+                                       {QStringLiteral("artworkUrl"), group.artwork},
+                                       {QStringLiteral("searchFields"), group.searchFields},
+                                       {QStringLiteral("count"), group.count}});
     }
-    m_artists.clear();
-    for (const Group &group : artistsByName) {
-        m_artists.append(QVariantMap{{QStringLiteral("name"), group.name},
-                                     {QStringLiteral("filterValue"), group.filterValue},
-                                     {QStringLiteral("artworkUrl"), group.artwork},
-                                     {QStringLiteral("count"), group.count}});
+    m_allArtists.clear();
+    for (const Group &group : std::as_const(artistGroups)) {
+        m_allArtists.append(QVariantMap{{QStringLiteral("name"), group.name},
+                                        {QStringLiteral("filterValue"), group.filterValue},
+                                        {QStringLiteral("artworkUrl"), group.artwork},
+                                        {QStringLiteral("searchFields"), group.searchFields},
+                                        {QStringLiteral("count"), group.count}});
     }
+    applyGroupSearch();
+}
+
+void MusicController::applyGroupSearch()
+{
+    const auto filter = [this](const QVariantList &source) {
+        QVariantList result;
+        for (const QVariant &entry : source) {
+            const QVariantMap group = entry.toMap();
+            if (TrackListModel::matchesSearch(
+                    group.value(QStringLiteral("searchFields")).toStringList(),
+                    m_librarySearch)) {
+                result.append(entry);
+            }
+        }
+        return result;
+    };
+    m_albums = filter(m_allAlbums);
+    m_artists = filter(m_allArtists);
 }
 
 void MusicController::refreshPlaylists()
@@ -842,9 +1159,17 @@ void MusicController::refreshPlaylistModel()
 
 void MusicController::setQueue(const QList<qint64> &trackIds, int currentIndex)
 {
-    m_queueIds = trackIds;
-    m_queueIndex = trackIds.isEmpty()
+    const int nextIndex = trackIds.isEmpty()
         ? -1 : std::clamp(currentIndex, 0, static_cast<int>(trackIds.size()) - 1);
+    const qint64 nextTrackId = nextIndex < 0 ? -1 : trackIds.at(nextIndex);
+    if (m_resolvingTrackId >= 0 && m_resolvingTrackId != nextTrackId) {
+        m_resolvingTrackId = -1;
+        emit playbackStateChanged();
+    }
+    m_queueIds = trackIds;
+    m_queueIndex = nextIndex;
+    if (trackIds.isEmpty())
+        m_lyricsService->load({});
     refreshQueueModel();
     persistQueue();
     emit queueChanged();
@@ -868,6 +1193,16 @@ void MusicController::startCurrentTrack()
         return;
     emit currentTrackChanged();
     emit durationChanged();
+    m_lyricsService->load(*track);
+    if (track->source != QLatin1String("local")) {
+        m_engine.stop();
+        m_resolvingTrackId = track->id;
+        emit playbackStateChanged();
+        m_sourceService->resolve(
+            track->id, track->source, track->sourceData, m_onlineQuality);
+        return;
+    }
+    m_resolvingTrackId = -1;
     if (m_engine.load(QUrl(track->url), true))
         m_database.recordPlayed(track->id);
 }
@@ -877,8 +1212,7 @@ void MusicController::advance(bool fromEndOfStream)
     if (m_queueIds.isEmpty())
         return;
     if (fromEndOfStream && m_repeatMode == QLatin1String("track")) {
-        m_engine.seek(0);
-        m_engine.play();
+        startCurrentTrack();
         return;
     }
     int nextIndex = m_queueIndex + 1;

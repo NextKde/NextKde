@@ -11,6 +11,9 @@ struct TrackRecord {
     qint64 rootId = -1;
     QString path;
     QString url;
+    QString source = QStringLiteral("local");
+    QString providerId;
+    QString sourceData;
     QString title;
     QString artist;
     QString album;

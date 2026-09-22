@@ -149,7 +149,7 @@ Tracked follow-ups from the apps-platform merge, not merge defects:
   applications. The designed bridge point is the `KOS_APPEARANCE`,
   `KOS_MATERIAL`, `KOS_ACCENT`, ... environment overrides honored by
   `ApplicationPreferences`, which `AppActionService.launchById` could inject.
-- Standalone applications use `LiquidTextField` with its fixed light-glass
-  palette, which is unreadable on light `AppTheme` surfaces. Applications
-  should receive a theme-aware wrapper (a `KosTextField` in `Kos.Ui` that
-  injects `AppTheme` colors) instead of editing the shared control.
+- `KosTextField` is the application-safe wrapper for text input. It injects
+  `AppTheme` text, field, border, and focus colors into the Shell-oriented
+  `LiquidTextField`; standalone application UI should use the wrapper rather
+  than the fixed light-glass defaults.

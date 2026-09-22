@@ -452,6 +452,7 @@ Item {
     }
 
     DeskCenter {}
+    DesktopLyrics {}
     // Do not briefly map the standalone Bar with the default setting and then
     // hide it while its tray delegates are still being constructed. Qt 6.11
     // can crash while cleaning that incomplete QQuickWindow scene. Wait for

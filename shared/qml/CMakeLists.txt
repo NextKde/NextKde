@@ -1,5 +1,6 @@
 set_source_files_properties(
     foundation/AppTheme.qml
+    controls/ControlForm.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -22,8 +23,10 @@ qt_add_qml_module(kos_ui
         foundation/KosSlider.qml
         foundation/KosSurface.qml
         foundation/KosSwitch.qml
+        foundation/KosTextField.qml
         foundation/KosToolButton.qml
         foundation/PageCachePolicy.js
+        controls/ControlForm.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
 )
