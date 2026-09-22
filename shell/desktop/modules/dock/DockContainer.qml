@@ -899,6 +899,7 @@ Item {
             showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
+            autoRotate: ConfigService.infoCardAutoRotate
             onEditRequested: componentEditor.openFor(horizontalInfoCarousel)
             visible: container.hasInfo && !container.vertical
         }
@@ -915,6 +916,7 @@ Item {
             showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
+            autoRotate: ConfigService.infoCardAutoRotate
             onEditRequested: componentEditor.openFor(verticalInfoCarousel)
             visible: container.hasInfo && container.vertical
         }

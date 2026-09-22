@@ -80,6 +80,7 @@ Item {
                 dockStyle: dockStyle,
                 contentStyle: contentStyle,
                 infoCardMode: infoCardMode,
+                infoCardAutoRotate: ConfigService.infoCardAutoRotate,
                 infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
                 iconMode: iconMode,
                 iconOpacity: ConfigService.iconOpacity,
@@ -111,6 +112,11 @@ Item {
 
         function updateInfoCardMode(mode: string): string {
             ConfigService.updateInfoCardMode(mode)
+            return snapshot()
+        }
+
+        function updateInfoCardAutoRotate(enabled: bool): string {
+            ConfigService.updateInfoCardAutoRotate(enabled)
             return snapshot()
         }
 

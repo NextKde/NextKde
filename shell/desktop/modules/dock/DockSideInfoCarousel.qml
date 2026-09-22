@@ -33,6 +33,7 @@ Item {
     property bool showClock: false
     property bool showTemperature: true
     property bool expanded: false
+    property bool autoRotate: true
     readonly property bool hasMusic: DockMprisService.hasPlayingPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property var player: DockMprisService.activePlayer
@@ -221,7 +222,8 @@ Item {
 
     Timer {
         interval: 30000
-        running: !carousel.expanded && carousel.availablePageCount > 1
+        running: carousel.autoRotate && !carousel.expanded
+            && carousel.availablePageCount > 1
         repeat: true
         onTriggered: {
             carousel.switchPage(1)

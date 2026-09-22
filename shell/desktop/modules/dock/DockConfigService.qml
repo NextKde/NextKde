@@ -220,6 +220,7 @@ QtObject {
     // the enabled cards; "expanded" gives every enabled card its own place in
     // the row so nothing rotates any more.
     property string infoCardMode: "carousel"
+    property bool infoCardAutoRotate: true
     readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
     // One ordered list is the whole component model. Zero items hides the
     // region, one is naturally fixed, and multiple items rotate or expand.
@@ -248,6 +249,15 @@ QtObject {
         if (infoCardMode === nextMode)
             return false
         infoCardMode = nextMode
+        scheduleSave()
+        return true
+    }
+
+    function updateInfoCardAutoRotate(enabled) {
+        const nextValue = Boolean(enabled)
+        if (infoCardAutoRotate === nextValue)
+            return false
+        infoCardAutoRotate = nextValue
         scheduleSave()
         return true
     }
@@ -492,7 +502,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 7,
+            version: 8,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -515,6 +525,7 @@ QtObject {
             windowGrouping: svc.windowGrouping,
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
+            infoCardAutoRotate: svc.infoCardAutoRotate,
             infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
@@ -587,6 +598,8 @@ QtObject {
                 scheduleSave()
             }
         }
+        if (obj.infoCardAutoRotate !== undefined)
+            svc.infoCardAutoRotate = Boolean(obj.infoCardAutoRotate)
         if (Array.isArray(obj.infoCardOrder)) {
             svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
         } else if (obj.showWidgets === false) {

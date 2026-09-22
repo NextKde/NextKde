@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
+import "../../../shared/qml/controls" as LiquidControls
 
 // Contextual editor for the information area. It edits the cards themselves:
 // active cards are ordered at the front, unused cards remain available in the
@@ -30,7 +31,7 @@ PopupWindow {
 
     visible: false
     implicitWidth: 456
-    implicitHeight: 154
+    implicitHeight: 204
     color: "transparent"
     grabFocus: true
 
@@ -208,6 +209,43 @@ PopupWindow {
                                 card.dragOffset = 0
                             }
                         }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 4
+                Layout.rightMargin: 4
+
+                ColumnLayout {
+                    spacing: 1
+                    Text {
+                        text: "自动轮播"
+                        color: ThemeService.foregroundColor
+                        font { pixelSize: 13; weight: Font.DemiBold }
+                    }
+                    Text {
+                        text: "关闭后仍可悬停并使用滚轮切换"
+                        color: ThemeService.foregroundColor
+                        opacity: 0.58
+                        font.pixelSize: 10
+                    }
+                }
+                Item { Layout.fillWidth: true; height: 1 }
+                LiquidControls.LiquidGlassSwitch {
+                    id: autoRotateSwitch
+                    implicitWidth: 58
+                    implicitHeight: 28
+                    checked: ConfigService.infoCardAutoRotate
+                    accentColor: ThemeService.accentColor
+                    trackColor: Qt.rgba(ThemeService.foregroundColor.r,
+                        ThemeService.foregroundColor.g,
+                        ThemeService.foregroundColor.b, 0.18)
+                    onToggled: function(enabled) {
+                        ConfigService.updateInfoCardAutoRotate(enabled)
+                        autoRotateSwitch.checked =
+                            ConfigService.infoCardAutoRotate
                     }
                 }
             }

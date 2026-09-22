@@ -36,6 +36,7 @@ Item {
     property bool showTemperature: true
 
     property bool expanded: false
+    property bool autoRotate: true
 
     readonly property bool hasMusic: DockMprisService.hasPlayingPlayer
     readonly property bool hasWeather: WeatherService.available
@@ -147,7 +148,7 @@ Item {
         previousPage = page
         transitionDirection = direction
         page = pages[(currentIndex + direction + pages.length) % pages.length]
-        if (resetTimer)
+        if (resetTimer && autoRotate)
             carouselTimer.restart()
     }
 
@@ -205,7 +206,8 @@ Item {
         id: carouselTimer
         interval: 30000
         // Nothing rotates once every card has its own place.
-        running: !carousel.expanded && carousel.availablePageCount > 1
+        running: carousel.autoRotate && !carousel.expanded
+            && carousel.availablePageCount > 1
         repeat: true
         onTriggered: carousel.switchPage(false, 1)
     }
