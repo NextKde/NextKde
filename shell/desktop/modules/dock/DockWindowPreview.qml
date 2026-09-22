@@ -11,7 +11,10 @@ PopupWindow {
     property Item anchorItem: null
     property string appId: ""
     property string windowId: ""
-    property string title: ""
+    // Group label for the strip: the owning application's display name. The
+    // strip never carries a single window's title -- every card labels its own
+    // window, which is what macOS shows in app expose.
+    property string appName: ""
     property var windows: []
     property real revealProgress: 0.0
     property bool closing: false
@@ -37,6 +40,13 @@ PopupWindow {
     }
 
     readonly property int windowCount: effectiveWindows.length
+    // macOS heads the strip with the application, never with one window's
+    // title; with several windows the count is the only aggregate the strip
+    // itself can state.
+    readonly property string toolbarLabel: {
+        const label = appName.trim().length > 0 ? appName.trim() : "窗口"
+        return windowCount > 1 ? label + " · " + windowCount + " 个窗口" : label
+    }
     readonly property real cardWidth: 174
     readonly property real cardHeight: 124
     readonly property real rowPadding: 7
@@ -216,7 +226,7 @@ PopupWindow {
                     anchors.right: plusBg.left
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    text: preview.title || preview.effectiveWindows[0]?.title || "窗口"
+                    text: preview.toolbarLabel
                     color: ThemeService.foregroundColor
                     elide: Text.ElideRight
                     font {
@@ -336,13 +346,17 @@ PopupWindow {
                             Item {
                                 id: thumbnailBox
                                 anchors.top: parent.top
-                                anchors.bottom: parent.bottom
+                                anchors.bottom: titleText.top
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 anchors.topMargin: 6
                                 anchors.leftMargin: 6
                                 anchors.rightMargin: 6
-                                anchors.bottomMargin: 6
+                                // Keep a compact, deliberate gap above the
+                                // title instead of reserving a fixed-height
+                                // thumbnail area that makes short previews
+                                // appear detached from their label.
+                                anchors.bottomMargin: 5
 
                                 Image {
                                     id: thumbMetrics
@@ -417,6 +431,29 @@ PopupWindow {
                                         }
                                     }
                                 }
+                            }
+
+                            // Per-window title at the bottom of the card. macOS
+                            // labels every window in app expose with its own
+                            // title; a strip-wide label cannot stand in for it,
+                            // because the windows of one application each carry
+                            // a different one.
+                            Text {
+                                id: titleText
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 7
+                                text: cardDelegate.winTitle || preview.appName || "窗口"
+                                color: ThemeService.foregroundColor
+                                style: Text.Outline
+                                styleColor: Qt.rgba(0, 0, 0, 0.45)
+                                font {
+                                    pixelSize: 11
+                                    weight: Font.DemiBold
+                                }
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignHCenter
                             }
 
                             // Close button '×'

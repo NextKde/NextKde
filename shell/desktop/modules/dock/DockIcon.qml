@@ -495,8 +495,9 @@ Item {
                     + " windowCount=" + icon._appWindows.length);
                 p.appId = icon.appId
                 p.windowId = icon._previewWindowId
-                p.title = WindowService.windowById(icon._previewWindowId)?.title
-                    ?? icon.displayName
+                // The strip is labelled with the application; each card labels
+                // its own window (see DockWindowPreview's per-card title).
+                p.appName = icon.displayName
                 p.windows = icon._appWindows
                 DockModelService.openDockPopup(p)
             } else if (icon._hovering && icon.isRunning) {
