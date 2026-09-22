@@ -183,17 +183,19 @@ ApplicationWindow {
     // these pages then belongs to that session's own state directory: the
     // settings are live in the checkout Shell the user is looking at and are not
     // the ones the installed desktop reads at login. Conflating the two is the
-    // mistake this banner exists to prevent, so it names the Shell as well.
+    // mistake this banner exists to prevent.
     // Deliberately loud. A development window and the installed desktop render
     // identically, so this band is the only thing between "I just tuned my dock"
     // and "I just tuned a copy nobody logs into". A quiet note would be read as
     // decoration and skipped, which is exactly the outcome it exists to prevent.
     // Solid fill in fixed colours rather than theme tints: the contrast then
     // holds in either theme, and it cannot be mistaken for one more card.
+    // Two short lines, not a paragraph: the warning has to land while the user
+    // is looking past it at whatever they came here to change.
     component DevelopmentBanner: Rectangle {
         Layout.fillWidth: true
         Layout.bottomMargin: 22
-        implicitHeight: bannerText.implicitHeight + 40
+        implicitHeight: bannerText.implicitHeight + 34
         radius: 16
         color: "#ff9f0a"
 
@@ -223,10 +225,10 @@ ApplicationWindow {
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 14
             anchors.rightMargin: 18
-            spacing: 4
+            spacing: 3
 
             Text {
-                text: "调试会话 · 源码树 Shell"
+                text: "kos-settings 开发者热更新模式"
                 color: "#241700"
                 font.pixelSize: 17
                 font.weight: Font.Bold
@@ -234,19 +236,9 @@ ApplicationWindow {
 
             Text {
                 width: parent.width
-                text: "界面从这份源码加载，改 QML 立即生效；"
-                    + "配置写进这次调试会话自己的目录，与服务模式的那份相互独立。"
+                text: "和启动台加载的安装模式不一样"
                 color: Qt.rgba(0.14, 0.09, 0, 0.78)
                 font.pixelSize: 13
-                wrapMode: Text.Wrap
-            }
-
-            Text {
-                width: parent.width
-                text: window.sessionShellDir
-                color: Qt.rgba(0.14, 0.09, 0, 0.62)
-                font.pixelSize: 12
-                elide: Text.ElideMiddle
             }
         }
     }
