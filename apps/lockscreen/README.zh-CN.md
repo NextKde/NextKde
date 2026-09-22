@@ -10,7 +10,9 @@
 
 ```
 metadata.json                 KPackage 元数据（Plasma/LookAndFeel，id org.kos.desktop）
-contents/defaults             继承 Breeze Dark，切换主题不影响桌面其余外观
+contents/defaults             继承 Breeze Dark，切换主题不影响桌面其余外观；
+                              还把 [Desktop] Containment 钉在纯壁纸的
+                              org.kde.desktopcontainment 上，供 plasmashell 读取（见下）
 contents/lockscreen/
     LockScreen.qml            greeter 入口（kscreenlocker 契约）＋ 密码输入状态机 + 壁纸接管
     LockClock.qml             超大时钟 + 日期（数字是液态玻璃：取背景那一块做遮罩）
@@ -83,10 +85,11 @@ Image 状态。这个主题跑在一个谁也 attach 不上的进程里，这是
 
 ## 后续
 
-- ~~接入 `tools/kosctl` 部署~~ 已完成：`KOS_INSTALL_LOCKSCREEN=1
-  ./tools/kosctl install` 会把包装到 `$prefix/share/plasma/shells/` **和**
+- ~~接入 `tools/kosctl` 部署~~ 已完成：`./tools/kosctl install lockscreen`
+  会把包装到 `$prefix/share/plasma/shells/` **和**
   `$prefix/share/plasma/look-and-feel/`（greeter 只搜前者，后者是给
   `plasma-apply-lookandfeel` 和系统设置页的），并把 `plasmashellrc [Shell]
-  ShellPackage` 指过来；`kosctl sync` 也会同步这个包。NixOS（`nix/package.nix`）
+  ShellPackage` 指过来。不带参数的 `./tools/kosctl install` 也会装 shells/ 根
+  ——作为桌面接管的 shell 包，但不含锁屏。NixOS（`nix/package.nix`）
   仍未接入——否则 NixOS 装不上（`Kos.SurfaceShape` 踩过同样的坑）。
 - 解锁/锁定过渡动画（KWin 侧「吸走窗口」原型在 vendored 特效里做，不在这里）。

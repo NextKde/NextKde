@@ -70,6 +70,9 @@ leftover_targets=(
     # optional surfaces (uninstall removes them if installed; sweep to be sure)
     "$prefix/share/plasma/shells/org.kos.desktop"
     "$prefix/share/plasma/look-and-feel/org.kos.desktop"
+    # appletsrc seeded by the desktop takeover; the previous shell's own
+    # appletsrc was never modified, so deleting this loses nothing
+    "$config_dir/plasma-org.kos.desktop-appletsrc"
     # runtime caches/state (regenerated on next start)
 )
 
@@ -195,6 +198,18 @@ if [[ -f "$kwinrc" ]]; then
             fail=1
         fi
     done
+fi
+# plasmashell exits at startup ("starting invalid corona") if ShellPackage
+# names a package that is no longer there, and a swept install leaves exactly
+# that if `kosctl uninstall` could not write the key back. Surface it loudly:
+# it is the difference between a working login and no wallpaper or panel.
+if command -v kreadconfig6 >/dev/null 2>&1 &&
+    [[ "$(kreadconfig6 --file plasmashellrc --group Shell --key ShellPackage 2>/dev/null)" == org.kos.desktop ]]; then
+    echo
+    echo "  WARNING: plasmashellrc still names org.kos.desktop, which was just deleted."
+    echo "  plasmashell will not start until it is reverted — run:"
+    echo "    kwriteconfig6 --file plasmashellrc --group Shell --key ShellPackage org.kde.plasma.desktop"
+    fail=1
 fi
 if (( fail == 0 )); then
     echo "  all targets gone ✓"

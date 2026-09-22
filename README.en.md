@@ -138,11 +138,94 @@ installs the plugin, and you still select it in KDE settings.
 
 KOS starts automatically after later logins.
 
+### Desktop file takeover (default)
+
+`install` points `plasmashellrc`'s `[Shell] ShellPackage` at the `org.kos.desktop`
+shell package that ships with KOS (`~/.local/share/plasma/shells/`): plasmashell
+then only draws the wallpaper — the package's `contents/defaults` pins the
+desktop containment to the wallpaper-only `org.kde.desktopcontainment`, so
+`~/Desktop` is no longer rendered a second time by a folder view, and the Plasma
+panel retires as well. Desktop files and interaction belong to DeskCenter
+instead of two stacked copies of which one does not respond (issue #90).
+**This takes effect at your next login.**
+
+Switching shells makes plasmashell build its own appletsrc (the wallpaper
+resets), so `install` migrates the desktop containments from the old appletsrc;
+the previous `ShellPackage` value is saved in
+`~/.local/share/kos/plasma-shell-state` and written back by `uninstall`.
+
+### Lock screen (optional)
+
+KOS's lock screen is optional and **not installed by default** — optional
+components are installed by their own subcommands, and a bare
+`install` / `uninstall` only covers the core desktop. The shell package a core
+install lays down contains no `contents/lockscreen`, so kscreenlocker keeps
+falling back to the default skin: taking over the desktop does not drag the
+lock screen in:
+
+```sh
+./tools/kosctl install lockscreen   # lock screen (per-user, no root)
+./tools/kosctl install apps         # optional standalone apps (= tools/install-apps.sh)
+
+./tools/kosctl uninstall lockscreen # remove only the lock screen
+```
+
+The **lock screen** (`apps/lockscreen`, a kscreenlocker skin package) installs
+to `~/.local/share/plasma/shells/org.kos.desktop` and
+`~/.local/share/plasma/look-and-feel/org.kos.desktop`, and points
+`plasmashellrc`'s `[Shell] ShellPackage` at `org.kos.desktop`. Note that the
+greeter resolves skin packages from `plasma/shells/` only — `look-and-feel/`
+does nothing for it (reasons and a verification script in
+[apps/lockscreen/tests/theme-resolution](apps/lockscreen/tests/theme-resolution));
+both directories are populated so `plasma-apply-lookandfeel` and the KDE
+settings page can resolve it too. It is pure QML data: after editing QML, run
+`./tools/kosctl install lockscreen` to copy it again — a full `install` is not
+needed.
+
+While KOS core is still installed, `uninstall lockscreen` only removes the
+skin (the greeter falls back to the default lock screen) and leaves the shell
+package and the desktop takeover alone; `uninstall` is what removes the shell
+package and restores the `ShellPackage` key to its pre-install value.
+
+### SDDM login screen: not available for now
+
+`apps/sddm` is KOS's SDDM login theme, but `kosctl install sddm` has been
+**removed for now** because the greeter integration still has problems: there
+is no install entry point, and the theme source stays in the repository until
+it is fixed.
+
+It used to do two things: copy the theme to `/usr/share/sddm/themes/kos` and
+select it in `/etc/sddm.conf.d/kos-theme.conf` (`[Theme] Current=kos`) — both
+in the system prefix, hence root. To preview it you have to run it by hand:
+
+```sh
+sddm-greeter --test-mode --theme apps/sddm   # if the window renders, consider restoring the install
+```
+
+If an older kosctl installed that theme, uninstall no longer cleans it up (that
+would need root), but `./tools/kosctl uninstall` prints a message when it finds
+the leftovers. If the login screen goes black or refuses your password, switch
+to a TTY with Ctrl+Alt+F2 (or F3/F4…) and log in there, then delete the theme
+selection file and restart the display manager to get the previous theme back:
+
+```sh
+sudo rm /etc/sddm.conf.d/kos-theme.conf
+sudo systemctl restart sddm
+```
+
+To remove the theme itself: `sudo rm -rf /usr/share/sddm/themes/kos`.
+
 ### 4. First setup
 
-KOS provides notifications. Remove Plasma's **Notifications** widget from the
-panel or system tray first, otherwise Plasma owns the notification service.
-KOS does not change your existing panel layout automatically.
+Notifications need no configuration. The installer's desktop takeover leaves
+plasmashell drawing only the wallpaper, so it no longer creates a notification
+service and `org.freedesktop.Notifications` belongs to KOS — Settings shows
+the current owner.
+
+The one thing to watch is a third-party daemon (dunst, mako, swaync, …): if it
+starts first it holds that name, KOS cannot take it back, and the notification
+centre stays empty. `install` warns when such a daemon is installed or already
+registered on the bus; disable it as the warning says.
 
 ## Screenshots
 
@@ -193,8 +276,52 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 ./tools/kosctl uninstall
 ```
 
-This removes KOS services and installed files. Personal state such as dock pins
-and appearance preferences remains available for a later reinstall.
+This stops and removes KOS files and services; personal state such as dock pins
+and appearance preferences is kept. An optionally installed lock screen goes
+away with it, and `plasmashellrc`'s `ShellPackage` is restored to its
+pre-install value (plasmashell reloads the previous shell at your next login);
+the shell package is kept only when that key cannot be written back — a
+`ShellPackage` naming a package that is no longer there makes plasmashell
+refuse to start (`starting invalid corona`). You can also remove only the lock
+screen: `./tools/kosctl uninstall lockscreen`.
+If an SDDM theme installed by an older kosctl is detected, uninstall prints the
+command to delete it by hand (see "SDDM login screen: not available for now"
+above).
+
+#### On NixOS we recommend the flake-based install
+
+1. Add the KOS input to your system flake:
+
+```Nix
+nextkde = {
+         # GitHub source: KOS Desktop Shell
+         url = "git+https://github.com/SuceV587/NextKde.git"
+         inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+2. Update the KOS flake input:
+
+```Nix
+nix flake update nextkde
+```
+
+3. Rebuild:
+
+```Nix
+sudo nixos-rebuild switch --flake .#hosts
+```
+
+4. Usage:
+
+```Nix
+    services.kos = {
+        enable = true;
+        # set to `enable = false;` to disable
+        weather.enable = true;
+        # KOS's built-in weather service
+    };
+```
 
 ## Main features
 

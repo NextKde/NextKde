@@ -125,10 +125,25 @@ NixOS 模块则需设置 `services.kos.decoration.enable = true;`；仅安装插
 
 安装完成后，KOS 会在之后登录时自动启动。
 
+### 桌面文件接管（默认行为）
+
+`install` 会把 `plasmashellrc` 的 `[Shell] ShellPackage` 指向 KOS 自带的
+`org.kos.desktop` shell 包（`~/.local/share/plasma/shells/`）：plasmashell 从此只画
+壁纸——包内 `contents/defaults` 把桌面 containment 钉在纯壁纸的
+`org.kde.desktopcontainment` 上，不再用文件夹视图渲染 `~/Desktop`，Plasma 面板也
+一并退场，桌面文件与交互交给 DeskCenter，不再是两份叠着、其中一份点不动
+（issue #90）。**下次登录生效。**
+
+切换 shell 会让 plasmashell 另建 appletsrc（壁纸会重置），`install` 会自动把旧
+appletsrc 里的桌面 containment 迁移过去；原 `ShellPackage` 值保存在
+`~/.local/share/kos/plasma-shell-state`，`uninstall` 时写回。
+
 ### 锁屏（可选）
 
 KOS 的锁屏是可选的，默认**不安装**——可选组件通过子命令按需安装，不带参数的
-`install` / `uninstall` 只覆盖核心桌面：
+`install` / `uninstall` 只覆盖核心桌面。核心 install 装的 shell 包不含
+`contents/lockscreen`，kscreenlocker 会照常回退到默认锁屏，因此接管桌面
+不会顺带装上锁屏：
 
 ```sh
 ./tools/kosctl install lockscreen   # 锁屏（用户级，无需 root）
@@ -146,7 +161,9 @@ KOS 的锁屏是可选的，默认**不安装**——可选组件通过子命令
 两个目录都放是为了让 `plasma-apply-lookandfeel` 与系统设置页也能解析到它。
 它是纯 QML 数据包：改完 QML 运行 `./tools/kosctl install lockscreen` 重新拷贝即可，不必走完整 `install`。
 
-`uninstall` 会移除锁屏并删除 `ShellPackage` 键。
+`uninstall lockscreen` 在 KOS 核心仍安装时只摘掉皮肤（greeter 回退默认锁屏），
+shell 包与桌面接管保持不动；`uninstall` 才会移除 shell 包并把 `ShellPackage`
+键恢复为安装前的值。
 
 ### SDDM 登录界面：暂时不提供
 
@@ -176,8 +193,12 @@ sudo systemctl restart sddm
 
 ### 4. 首次设置
 
-KOS 自己处理通知。请从 Plasma 面板或系统托盘移除“通知”组件，否则 Plasma 会占用
-通知服务。KOS 不会自动更改你现有的面板布局。
+通知不需要你配置：桌面接管后 plasmashell 只画壁纸、不再创建通知服务，
+`org.freedesktop.Notifications` 归 KOS（设置中心的「接入状态」会显示当前由谁接管）。
+
+唯一要留意的是第三方通知守护——装了 dunst / mako / swaync 之类、且它先启动，
+就会占住这个名字；KOS 抢不回来，通知中心会一直是空的。`install` 检测到已安装
+或已注册的第三方通知服务时会提示，按提示停用即可。
 
 ## 界面预览
 
@@ -228,7 +249,11 @@ journalctl --user -u kos-platform.service -u kos-data.service -f
 ```
 
 这会停止并移除 KOS 文件与服务；你的 Dock 固定项、外观等个人状态会保留。
-可选安装的锁屏也会一并移除。也可以只移除锁屏：`./tools/kosctl uninstall lockscreen`。
+可选安装的锁屏也会一并移除，`plasmashellrc` 的 `ShellPackage` 会恢复为安装
+KOS 前的值（plasmashell 在下次登录时重新加载原来的 shell）；只有在键写不回去
+时，shell 包才会被保留——`ShellPackage` 指向一个不存在的包会让 plasmashell
+直接拒绝启动（`starting invalid corona`）。也可以只移除锁屏：
+`./tools/kosctl uninstall lockscreen`。
 若检测到旧版 kosctl 装过的 SDDM 主题，卸载时会提示手动删除的命令（见上文
 「SDDM 登录界面：暂时不提供」一节）。
 

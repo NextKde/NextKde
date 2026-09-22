@@ -884,9 +884,11 @@ PanelWindow {
     }
 
     // Quickshell discards a PanelWindow's backing QQuickWindow whenever
-    // visible becomes false. Retain a harmless 1x1 mapped surface while the
-    // launcher is closed so the scene graph and uploaded glyph/icon textures
-    // survive, without keeping a full-output overlay in the compositor.
+    // visible becomes false. Retain a mapped surface while the launcher is
+    // closed so the scene graph and uploaded glyph/icon textures survive.
+    // Keep its output geometry stable: dynamically growing an already-mapped
+    // 1x1 layer surface is not reliable on every KWin/Quickshell combination.
+    // The empty input mask and hidden card below make the closed surface inert.
     visible: root.outputAvailable
     onPanelVisibleChanged: {
         if (panelVisible) {
@@ -1077,8 +1079,8 @@ PanelWindow {
     anchors {
         top: true
         left: true
-        right: root.panelVisible
-        bottom: root.panelVisible
+        right: true
+        bottom: true
     }
     // Dock is 5px above the output edge. Leave a 10px gap above its true
     // height without asking this module to reimplement Dock measurements.
@@ -1089,8 +1091,8 @@ PanelWindow {
     margins.bottom: root.isFullscreenMode ? 0 : (root.dockAtBottom ? AppLauncherService.dockHeight + 15 : 0)
     margins.left: root.isFullscreenMode ? 0 : (root.dockAtLeft ? AppLauncherService.dockHeight + 15 : 0)
     margins.right: root.isFullscreenMode ? 0 : (root.dockAtRight ? AppLauncherService.dockHeight + 15 : 0)
-    implicitWidth: root.panelVisible ? launcherWidth : 1
-    implicitHeight: root.panelVisible ? launcherHeight : 1
+    implicitWidth: launcherWidth
+    implicitHeight: launcherHeight
 
     // The layer-shell surface spans the output so this catcher can dismiss
     // the launcher from any empty area, while the visible card remains the

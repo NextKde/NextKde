@@ -12,7 +12,9 @@ hooks, and every lock entry point stay owned by kscreenlocker.
 
 ```
 metadata.json                 KPackage metadata (Plasma/LookAndFeel, id org.kos.desktop)
-contents/defaults             Inherits Breeze Dark so switching themes changes nothing else
+contents/defaults             Inherits Breeze Dark so switching themes changes nothing else;
+                              also pins [Desktop] Containment to the wallpaper-only
+                              org.kde.desktopcontainment for plasmashell (see below)
 contents/lockscreen/
     LockScreen.qml            Greeter entry point (kscreenlocker contract) + password input + wallpaper takeover
     LockClock.qml             Oversized clock + date (liquid-glass numerals masked from the backdrop)
@@ -100,12 +102,13 @@ looks softer. Use `MultiEffect` if a heavier blur is really wanted.
 ## Later
 
 - ~~Wire the package into `tools/kosctl` deployment~~ done:
-  `KOS_INSTALL_LOCKSCREEN=1 ./tools/kosctl install` ships it to
+  `./tools/kosctl install lockscreen` ships it to
   `$prefix/share/plasma/shells/` **and** `$prefix/share/plasma/look-and-feel/`
   (the greeter only searches the former; the latter is for
   `plasma-apply-lookandfeel` and the settings page) and points
-  `plasmashellrc [Shell] ShellPackage` at it; `kosctl sync` refreshes the
-  package too. NixOS (`nix/package.nix`) is still open — otherwise NixOS
+  `plasmashellrc [Shell] ShellPackage` at it. A bare `./tools/kosctl install`
+  ships the shells/ root too — as the desktop takeover shell, without the
+  lock screen. NixOS (`nix/package.nix`) is still open — otherwise NixOS
   installs will not ship it (the same gap that hit `Kos.SurfaceShape`).
 - Unlock/lock transition animations (the KWin-side "suck the windows in"
   prototype lives in the vendored effect, not here).

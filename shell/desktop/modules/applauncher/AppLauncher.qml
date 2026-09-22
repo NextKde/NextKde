@@ -28,9 +28,11 @@ Scope {
     // Loader containing a GridView/Repeater just after its PanelWindow becomes
     // invisible can leave a delegate temporarily detached while Qt still
     // processes a geometry update, which crashes Qt Quick 6.11 in
-    // QQuickItemPrivate::addToDirtyList(). The closed PanelWindow collapses to
-    // a 1x1 surface with an empty input region, so retaining it is both a safe
-    // close path and cheap for the compositor.
+    // QQuickItemPrivate::addToDirtyList(). The closed PanelWindow keeps its
+    // output-sized layer surface but hides its card and publishes an empty
+    // input region. Keeping the surface geometry stable is important: some
+    // layer-shell compositors do not reliably grow an already-mapped 1x1
+    // surface when its anchors change.
     property bool windowCreated: false
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     onOpenChanged: console.log("[AppLauncher] root open=" + open)

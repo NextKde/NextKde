@@ -426,11 +426,11 @@ assert.match(appLauncherWindow,
     /mask:\s*Region\s*\{[\s\S]*width:\s*root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.panelVisible \? root\.height : 0/,
     "the closed Launchpad backing surface cannot intercept desktop input");
 assert.match(appLauncherWindow,
-    /right:\s*root\.panelVisible[\s\S]*bottom:\s*root\.panelVisible[\s\S]*implicitWidth:\s*root\.panelVisible \? launcherWidth : 1[\s\S]*implicitHeight:\s*root\.panelVisible \? launcherHeight : 1/,
-    "the closed Launchpad surface collapses to one pixel instead of staying full-output");
+    /anchors\s*\{[\s\S]*top:\s*true[\s\S]*left:\s*true[\s\S]*right:\s*true[\s\S]*bottom:\s*true[\s\S]*implicitWidth:\s*launcherWidth[\s\S]*implicitHeight:\s*launcherHeight/,
+    "the retained Launchpad surface keeps stable output geometry between opens");
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
-    "the collapsed Launchpad surface never publishes a compositor blur region");
+    "the closed Launchpad surface never publishes a compositor blur region");
 assert.match(appIconSource,
     /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");

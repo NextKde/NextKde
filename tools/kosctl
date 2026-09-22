@@ -623,6 +623,70 @@ deploy_artifacts() {
     fi
 }
 
+# org.freedesktop.Notifications goes to whoever claims it first, and the shell
+# cannot take the name back afterwards. plasmashell is not a contender while it
+# runs KOS's shell package: that package has no panel, so nothing ever
+# instantiates its notification applet and it never creates its server. A
+# third-party daemon is a contender -- autostarted at login, or activated by a
+# notification sent before the shell is up. Report these and nothing else: the
+# files are the user's, and disabling them is their call.
+warn_notification_claimers() {
+    local -a found=()
+    local name
+    for name in dunst mako swaync fnott; do
+        if command -v "$name" >/dev/null 2>&1; then
+            found+=("$(command -v "$name") 已安装 / installed")
+        fi
+    done
+    # An activation file for the name starts its daemon on the first
+    # notification request (including during login, before the shell is up).
+    # KDE ships one for the same name in /usr/share, but its Exec is
+    # plasma_waitforname, which serves nothing -- skip it instead of warning
+    # every KDE user about a stock file.
+    local IFS=:
+    local -a data_dirs=("${XDG_DATA_HOME:-$HOME/.local/share}")
+    local dir file exec_line
+    for dir in ${XDG_DATA_DIRS:-/usr/local/share:/usr/share}; do
+        data_dirs+=("$dir")
+    done
+    for dir in "${data_dirs[@]}"; do
+        for file in "$dir"/dbus-1/services/*.service; do
+            [[ -e "$file" ]] || continue
+            grep -qs '^Name=org\.freedesktop\.Notifications$' "$file" || continue
+            # grep -m1 rather than `sed | head`: under `set -o pipefail` a
+            # SIGPIPE from a closed pipe would fail the assignment and abort
+            # the whole install over a file it only wanted to read.
+            exec_line=$(grep -m1 '^Exec=' "$file" || true)
+            exec_line=${exec_line#Exec=}
+            if [[ "$exec_line" == *plasma_waitforname* ]]; then
+                continue
+            fi
+            # A leftover file for a daemon that is no longer installed cannot
+            # claim anything, so say so instead of alarming the user about it.
+            local exec_bin="${exec_line%% *}"
+            if [[ "$exec_bin" != /* ]]; then
+                exec_bin=$(command -v "$exec_bin" 2>/dev/null || true)
+            fi
+            local note=""
+            if [[ -z "$exec_bin" || ! -x "$exec_bin" ]]; then
+                note=" （未安装 / not installed）"
+            fi
+            found+=("$file → ${exec_line:-?}$note")
+        done
+    done
+    if (( ${#found[@]} == 0 )); then
+        return 0
+    fi
+    printf '\n'
+    printf '  ⚠️  检测到第三方通知服务，它可能先占住 org.freedesktop.Notifications：\n'
+    printf '     Third-party notification services found; they may claim the name first:\n'
+    for name in "${found[@]}"; do
+        printf '       %s\n' "$name"
+    done
+    printf '     被它们先占住的话，KOS 收不到通知，也无法抢回；请停用或卸载\n'
+    printf '     If one claims it first, KOS gets no notifications and cannot take it back.\n'
+}
+
 # The final, bilingual summary is the last thing `install` prints, so the user
 # always sees it as the takeaway — after all build/stage/kwin output above it.
 print_install_summary() {
@@ -636,8 +700,9 @@ print_install_summary() {
     printf '\n'
     printf '  ⚡ 不想注销、立即生效：./tools/kosctl start\n'
     printf '     Apply now without logging out: ./tools/kosctl start\n'
-    printf '  ⚠️  注意：KWin 特效可能要到下次会话才会生效\n'
-    printf '     Note: KWin effects may not apply until the next session.\n'
+    printf '\n'
+    printf '  ⚠️  注意：KWin 特效与桌面接管（plasmashell 换 shell）要到下次登录才生效\n'
+    printf '     Note: KWin effects and the desktop takeover apply at your next login.\n'
     printf '\n'
     printf '  📦 安装位置：%s\n' "$prefix"
     printf '     (shell 配置：%s)\n' "$shell_config"
@@ -986,58 +1051,250 @@ install_kwin_plugins() {
 # which is what apps/lockscreen/tests/theme-resolution proves -- while
 # plasma-apply-lookandfeel and the systemsettings page resolve under
 # look-and-feel/. Shipping only one of the two leaves half the integrations
-# pointing at a package that is not there.
+# pointing at a package that is not there. The core `install` ships only the
+# shells/ root (desktop takeover, below); the look-and-feel/ copy stays part
+# of `install lockscreen`.
 #
 # It is a copy, not a symlink, matching how deploy_artifacts ships the shell:
 # an installed layout must not depend on the checkout staying in place. QML
 # edits reach it through `install lockscreen`.
-install_lockscreen() {
-    local shells_dir="$prefix/share/plasma/shells/org.kos.desktop"
-    local laf_dir="$prefix/share/plasma/look-and-feel/org.kos.desktop"
-    mkdir -p "$(dirname "$shells_dir")" "$(dirname "$laf_dir")"
-    rm -rf "$shells_dir" "$laf_dir"
+kos_shell_id=org.kos.desktop
+shells_dir="$prefix/share/plasma/shells/$kos_shell_id"
+laf_dir="$prefix/share/plasma/look-and-feel/$kos_shell_id"
+# plasmashellrc [Shell] ShellPackage is one key with two consumers: plasmashell
+# (which shell draws the desktop) and the kscreenlocker greeter (which skin
+# unlocks the session). The pre-KOS value is saved here once, and `uninstall`
+# writes it back -- deleting the key when the user had none.
+plasma_shell_state="$prefix/share/kos/plasma-shell-state"
+
+install_theme_root() {  # $1: destination package root
     # The checkout tree carries development content next to the runtime
     # package; a theme root should hold only what the greeter resolves.
     # tests/ alone is more than half of the tree (pkgprobe.cpp, stub QML).
-    local lockscreen_src="$project_dir/apps/lockscreen"
-    local theme_root
-    for theme_root in "$shells_dir" "$laf_dir"; do
-        cp -a "$lockscreen_src" "$theme_root"
-        rm -rf "$theme_root/tests"
-        rm -f "$theme_root/README.md" "$theme_root/README.zh-CN.md"
-    done
+    mkdir -p "$(dirname "$1")"
+    rm -rf "$1"
+    cp -a "$project_dir/apps/lockscreen" "$1"
+    rm -rf "$1/tests"
+    rm -f "$1/README.md" "$1/README.zh-CN.md"
+}
 
-    # The greeter takes the shell package name from plasmashellrc
-    # [Shell] ShellPackage (apps/lockscreen/tests/theme-resolution/pkgprobe.cpp
-    # reproduces its exact selection logic). This desktop replaces plasmashell
-    # with the Quickshell shell, so the key has no other consumer to disturb.
-    if command -v kwriteconfig6 >/dev/null 2>&1; then
-        kwriteconfig6 --file plasmashellrc --group Shell \
-            --key ShellPackage org.kos.desktop
-    else
-        # No kwriteconfig6: append the key only if it is absent -- a duplicated
-        # key would leave which one wins to the parser.
-        local rc="${XDG_CONFIG_HOME:-$HOME/.config}/plasmashellrc"
-        if ! grep -qsE '^[[:space:]]*ShellPackage[[:space:]]*=' "$rc"; then
-            { [[ -s "$rc" ]] && printf '\n'
-              printf '[Shell]\nShellPackage=org.kos.desktop\n'; } >> "$rc"
-        fi
-    fi
-    printf 'Lock screen installed (plasma/shells + look-and-feel, ShellPackage=org.kos.desktop).\n'
+shell_package_installed() {
+    [[ -f "$shells_dir/contents/defaults" ]]
 }
 
 lockscreen_installed() {
-    [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml" ]]
+    [[ -f "$shells_dir/contents/lockscreen/LockScreen.qml" ]]
 }
 
-remove_lockscreen() {
-    rm -rf "$prefix/share/plasma/shells/org.kos.desktop" \
-        "$prefix/share/plasma/look-and-feel/org.kos.desktop"
-    if command -v kwriteconfig6 >/dev/null 2>&1; then
-        kwriteconfig6 --file plasmashellrc --group Shell \
-            --key ShellPackage --delete
+# The core install's unit layout is what `uninstall lockscreen` distinguishes
+# a full revert from a skin strip: with the units present, the shells/ root
+# belongs to the desktop takeover and must stay.
+core_install_present() {
+    [[ -e "$runtime_unit_dir/kos-shell.service" ]]
+}
+
+previous_plasma_shell() {
+    if command -v kreadconfig6 >/dev/null 2>&1; then
+        kreadconfig6 --file plasmashellrc --group Shell \
+            --key ShellPackage 2>/dev/null || true
+    else
+        # pipefail would make a missing plasmashellrc fail the whole
+        # pipeline, so swallow it: the answer is simply "no key".
+        { sed -n 's/^[[:space:]]*ShellPackage[[:space:]]*=//p' \
+            "${XDG_CONFIG_HOME:-$HOME/.config}/plasmashellrc" 2>/dev/null || true; } \
+            | head -n 1 || true
     fi
-    printf 'Lock screen removed (ShellPackage key deleted).\n'
+}
+
+# Write (or delete) plasmashellrc [Shell] ShellPackage. Without kwriteconfig6
+# the line is rewritten in place: an appended second key would leave which one
+# wins to the parser.
+write_shell_package_key() {  # $1: value, or --delete
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        if [[ "$1" == "--delete" ]]; then
+            kwriteconfig6 --file plasmashellrc --group Shell \
+                --key ShellPackage --delete
+        else
+            kwriteconfig6 --file plasmashellrc --group Shell \
+                --key ShellPackage "$1"
+        fi
+        return 0
+    fi
+    local rc="${XDG_CONFIG_HOME:-$HOME/.config}/plasmashellrc"
+    if grep -qsE '^[[:space:]]*ShellPackage[[:space:]]*=' "$rc"; then
+        if [[ "$1" == "--delete" ]]; then
+            sed -i -e '/^[[:space:]]*ShellPackage[[:space:]]*=/d' "$rc"
+        else
+            sed -i -e "s|^[[:space:]]*ShellPackage[[:space:]]*=.*|ShellPackage=$1|" "$rc"
+        fi
+    elif [[ "$1" != "--delete" ]]; then
+        { [[ -s "$rc" ]] && printf '\n'
+          printf '[Shell]\nShellPackage=%s\n' "$1"; } >> "$rc"
+    fi
+}
+
+# plasmashell names its appletsrc after the shell package, so switching shells
+# starts containment config from an empty file and the wallpaper resets to
+# the default. Seed the org.kos file from the previous shell's instead:
+# desktop containments are carried over, rewritten to the wallpaper-only
+# plugin so no folder view survives the switch; panels are left behind
+# because KOS ships its own bar and dock.
+migrate_plasma_appletsrc() {  # $1: previous shell id
+    local from="$config_dir/plasma-$1-appletsrc"
+    local to="$config_dir/plasma-$kos_shell_id-appletsrc"
+    [[ -s "$from" && ! -e "$to" ]] || return 0
+    awk '
+        function is_desktop_plugin(p) {
+            return p == "org.kde.plasma.folder" || p == "org.kde.desktopcontainment"
+        }
+        function remember() {
+            if (base && is_desktop_plugin(plugin))
+                keep[id] = 1
+        }
+        FNR == 1 && NR != FNR && !pass2 {   # pass 1 just ended
+            remember()
+            pass2 = 1
+        }
+        FNR == NR {                         # pass 1: learn desktop ids
+            if ($0 ~ /^\[Containments\]\[[0-9]+\]$/) {
+                remember()
+                tmp = $0
+                sub(/^\[Containments\]\[/, "", tmp)
+                sub(/\]$/, "", tmp)
+                id = tmp
+                base = 1
+                plugin = ""
+            } else if ($0 ~ /^\[/) {
+                remember()
+                base = 0
+            } else if (base && $0 ~ /^plugin=/) {
+                plugin = substr($0, 8)
+            }
+            next
+        }
+        # pass 2: copy the kept sections, rewriting only the base plugin
+        /^\[/ {
+            want = 0
+            isbase = 0
+            if ($0 ~ /^\[Containments\]\[[0-9]+\]/) {
+                tmp = $0
+                sub(/^\[Containments\]\[/, "", tmp)
+                sub(/\].*$/, "", tmp)
+                if (tmp in keep) {
+                    want = 1
+                    isbase = ($0 ~ /^\[Containments\]\[[0-9]+\]$/)
+                }
+            }
+            if (want)
+                print
+            next
+        }
+        {
+            if (!want)
+                next
+            if (isbase && $0 ~ /^plugin=/)
+                $0 = "plugin=org.kde.desktopcontainment"
+            print
+        }
+    ' "$from" "$from" > "$to" || { rm -f "$to"; return 0; }
+    printf 'Desktop containments migrated from plasma-%s-appletsrc to plasma-%s-appletsrc.\n' \
+        "$1" "$kos_shell_id"
+}
+
+# Point plasmashell (and the lock screen greeter) at the org.kos shell: back
+# up the previous choice once, migrate the wallpaper config, write the key.
+# A no-op when the shell is already selected.
+switch_plasma_shell() {
+    local previous
+    previous=$(previous_plasma_shell)
+    [[ "$previous" == "$kos_shell_id" ]] && return 0
+    if [[ -n "$previous" && ! -s "$plasma_shell_state" ]]; then
+        mkdir -p "$(dirname "$plasma_shell_state")"
+        printf '%s\n' "$previous" > "$plasma_shell_state"
+    fi
+    migrate_plasma_appletsrc "${previous:-org.kde.plasma.desktop}"
+    write_shell_package_key "$kos_shell_id"
+}
+
+# Undo switch_plasma_shell: put the saved choice back, or delete the key when
+# the user had none. A user who picked another shell after installing KOS
+# keeps their choice.
+restore_plasma_shell() {
+    if [[ "$(previous_plasma_shell)" != "$kos_shell_id" ]]; then
+        return 0
+    fi
+    # The saved value is kept when the write fails, so a failed revert stays
+    # retryable and the caller's "do not delete the package" guard sees the
+    # key still naming us.
+    if [[ -s "$plasma_shell_state" ]]; then
+        local previous
+        previous=$(head -n 1 "$plasma_shell_state")
+        write_shell_package_key "$previous" || return 1
+        printf 'plasmashellrc ShellPackage restored to %s.\n' "$previous"
+    else
+        write_shell_package_key --delete || return 1
+        printf 'plasmashellrc ShellPackage key removed.\n'
+    fi
+    rm -f "$plasma_shell_state"
+}
+
+# The core install takes over the desktop. plasmashell stays resident to draw
+# the wallpaper, but running the org.kos shell its desktop containment is the
+# plain org.kde.desktopcontainment pinned by apps/lockscreen/contents/defaults
+# -- wallpaper only, no folder view -- so it stops rendering ~/Desktop behind
+# DeskCenter: the duplicate, input-dead icon layer of issue #90 disappears,
+# and the stock shell's panel gives way to the KOS bar and dock. plasmashell
+# picks the switch up the next time it starts, which is the next login.
+take_over_plasma_desktop() {
+    # Record the lock screen's presence before the copy overwrites it, so a
+    # core `install` run after `install lockscreen` keeps the skin.
+    local keep_lockscreen
+    if lockscreen_installed; then keep_lockscreen=1; else keep_lockscreen=0; fi
+    install_theme_root "$shells_dir"
+    # The lock screen stays opt-in: a shells package without contents/lockscreen
+    # makes the greeter fall back to org.kde.plasma.desktop's skin (the
+    # fallback-package path pkgprobe.cpp documents), so the core install does
+    # not drag the lock screen in with the takeover.
+    [[ "$keep_lockscreen" == 1 ]] || rm -rf "$shells_dir/contents/lockscreen"
+    switch_plasma_shell
+    printf 'Plasma desktop taken over: plasmashell will run the %s shell (wallpaper only).\n' \
+        "$kos_shell_id"
+}
+
+install_lockscreen() {
+    install_theme_root "$shells_dir"
+    install_theme_root "$laf_dir"
+    switch_plasma_shell
+    printf 'Lock screen installed (plasma/shells + look-and-feel, ShellPackage=%s).\n' \
+        "$kos_shell_id"
+}
+
+# `uninstall lockscreen` while the core desktop takeover is installed cannot
+# drop the shells/ root: plasmashell runs it as its shell. Strip the skin
+# instead -- a shell package without contents/lockscreen falls back to
+# org.kde.plasma.desktop's lock screen (greeterapp.cpp verifyPackageApi does
+# exactly that, see apps/lockscreen/tests/theme-resolution/pkgprobe.cpp) --
+# and keep the takeover intact. Without the core install, revert fully.
+remove_lockscreen() {
+    if core_install_present; then
+        # Deleting a path inside the shells root would follow a developer's
+        # symlink at the checkout (apps/lockscreen/README) into the source
+        # tree, so a symlinked root is left alone.
+        rm -rf "$laf_dir"
+        [[ -L "$shells_dir" ]] || rm -rf "$shells_dir/contents/lockscreen"
+        printf 'Lock screen removed; kscreenlocker falls back to the default skin.\n'
+        printf 'The desktop takeover keeps the shells/ package (./tools/kosctl uninstall reverts it).\n'
+    else
+        # Same ordering as uninstall: the key has to stop naming a package
+        # before that package is deleted, or plasmashell will not start.
+        restore_plasma_shell || true
+        if [[ "$(previous_plasma_shell)" == "$kos_shell_id" ]]; then
+            printf 'plasmashellrc still names %s; keeping its shell package.\n' "$kos_shell_id"
+        else
+            rm -rf "$shells_dir" "$laf_dir"
+            printf 'Lock screen removed (ShellPackage key reverted).\n'
+        fi
+    fi
 }
 
 # The standalone apps are built and installed by their own script: they carry
@@ -1065,6 +1322,8 @@ install_all() {
     if ! is_nixos; then
         install_kwin_plugins
     fi
+    take_over_plasma_desktop
+    warn_notification_claimers
     print_install_summary
 }
 
@@ -1162,9 +1421,23 @@ uninstall() {
     fi
     # The optional surfaces are removed by what exists, not by what was asked
     # for: an uninstall must clean up a component that was installed earlier
-    # even when no flag or argument names it now.
-    if lockscreen_installed; then
-        remove_lockscreen
+    # even when no flag or argument names it now. The shells/ root exists
+    # after any core install (desktop takeover) and doubles as the lock
+    # screen package, so removing it and reverting the ShellPackage key
+    # covers both.
+    if shell_package_installed; then
+        # Revert the key BEFORE removing the package, and only remove it once
+        # the key is off it: plasmashell exits at startup with "starting
+        # invalid corona" when ShellPackage names a package it cannot load,
+        # which leaves a session with no wallpaper and no panel.
+        restore_plasma_shell || true
+        if [[ "$(previous_plasma_shell)" == "$kos_shell_id" ]]; then
+            printf 'plasmashellrc still names %s; keeping its shell package so plasmashell can start.\n' \
+                "$kos_shell_id"
+        else
+            rm -rf "$shells_dir" "$laf_dir"
+            printf 'Plasma shell reverted; plasmashell reloads its previous shell at the next login.\n'
+        fi
     fi
     # An SDDM theme installed from this checkout by an earlier kosctl is left
     # alone -- removing it needs root -- so report it instead of silently

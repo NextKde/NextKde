@@ -78,13 +78,20 @@ else
     printf '\n  (qdbus6 unavailable; skipping runtime effect-load checks)\n'
 fi
 
-# Optional surfaces: only checked if something from them is present.
-if [[ -d "$prefix/share/plasma/shells/org.kos.desktop" ]]; then
-    hdr "lockscreen (installed)"
+# The shells/ root ships with every core install (desktop takeover); the lock
+# screen skin inside it is the optional part and is checked separately.
+if [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/defaults" ]]; then
+    hdr "Plasma desktop takeover (installed)"
     ck  "shells metadata.json"   "[[ -f \$prefix/share/plasma/shells/org.kos.desktop/metadata.json ]]"
     ck  "shells contents/"       "[[ -d \$prefix/share/plasma/shells/org.kos.desktop/contents ]]"
+    ck  "defaults wallpapers-only containment" "grep -q '^Containment=org.kde.desktopcontainment' \$prefix/share/plasma/shells/org.kos.desktop/contents/defaults"
     ckn "shells no tests/"       "[[ -d \$prefix/share/plasma/shells/org.kos.desktop/tests ]]"
     ckn "shells no README"       "[[ -f \$prefix/share/plasma/shells/org.kos.desktop/README.md ]]"
+    ck  "ShellPackage=org.kos.desktop" "[[ \"\$(kreadconfig6 --file plasmashellrc --group Shell --key ShellPackage 2>/dev/null)\" == org.kos.desktop ]]"
+    ckn "org.kos appletsrc folder-free" "grep -q '^plugin=org.kde.plasma.folder' \$config/plasma-org.kos.desktop-appletsrc 2>/dev/null"
+fi
+if [[ -f "$prefix/share/plasma/shells/org.kos.desktop/contents/lockscreen/LockScreen.qml" ]]; then
+    hdr "lockscreen (installed)"
     ck  "laf metadata.json"      "[[ -f \$prefix/share/plasma/look-and-feel/org.kos.desktop/metadata.json ]]"
     ckn "laf no tests/"          "[[ -d \$prefix/share/plasma/look-and-feel/org.kos.desktop/tests ]]"
 fi

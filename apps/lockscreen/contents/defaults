@@ -10,6 +10,16 @@ Theme=breeze-dark
 [plasmarc][Theme]
 name=default
 
+# plasmashell also runs this package as its shell (ShellPackage=org.kos.desktop,
+# set by kosctl). The desktop containment comes from this group: stock
+# org.kde.plasma.desktop declares org.kde.plasma.folder here, which would draw
+# ~/Desktop a second time on top of DeskCenter (issue #90). org.kde.desktopcontainment
+# is the plain wallpaper containment, matching what plasmashell already falls
+# back to when this group is absent.
+[Desktop]
+Containment=org.kde.desktopcontainment
+RuntimePlatform=Desktop
+
 [Wallpaper]
 Image=Next
 
