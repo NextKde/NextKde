@@ -55,9 +55,11 @@ PanelWindow {
     property bool clockInInfoCarousel: false
     readonly property bool vertical: root.position === "left"
         || root.position === "right"
+    // A floating Dock breathes by a proportion of its own thickness, so a
+    // 100pt Dock does not retain the cramped inset intended for a 40pt one.
+    // Taskbar presentation is a true edge fill and therefore has no inset.
     readonly property int edgeMargin: ConfigService.dockStyle === "taskbar"
-        ? 0 : AppearanceTokens.dock.edgeMargin
-    readonly property int workspaceGap: AppearanceTokens.dock.workspaceGap
+        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
     // Wayland does not expose a trustworthy QWindow global position to QML.
     // Derive this layer surface's compositor-global origin from the output it
     // is explicitly bound to and from the anchors declared below.
@@ -132,11 +134,9 @@ PanelWindow {
         regions: [pill.blurRegion, revealHandle.blurRegion]
     }
 
-    // A stretched dock spans the edge, so its own inset is the only thing
-    // left to place: floating keeps the usual edge gap on the three free
-    // sides, otherwise it reaches the corners. An auto-width dock keeps its
-    // content-driven length and alignment decides where along the edge it
-    // rests: start/end hug that edge, centre keeps the historical midpoint.
+    // A taskbar spans the edge. A floating Dock remains centred along its
+    // edge; content distribution is controlled inside DockContainer instead
+    // of moving the whole surface around the screen.
     readonly property bool stretched: ConfigService.dockStyle === "taskbar"
     readonly property real stretchInset: 0
     // Side docks start below the standalone top bar; a fused bar reserves
@@ -145,31 +145,19 @@ PanelWindow {
     readonly property real reservedTop: AppearanceConfigService.barIntegratedWithDock
         ? 0 : ConfigService.barHeight
 
-    function alignedOffset(available, length) {
-        if (root.stretched)
-            return root.stretchInset
-        if (ConfigService.alignment === "start")
-            return root.edgeMargin
-        if (ConfigService.alignment === "end")
-            return available - root.edgeMargin - length
-        return (available - length) / 2
-    }
-
     // Stable, full-reveal position of the glass inside the surface. Always
     // derived from surface/container size — never the animated transform.
     readonly property real restX: root.vertical
         ? (root.position === "right"
             ? root.width - root.edgeMargin - dockContainer.width
             : root.edgeMargin)
-        : root.alignedOffset(root.width, dockContainer.width)
+        : (root.stretched ? root.stretchInset
+            : (root.width - dockContainer.width) / 2)
     readonly property real restY: root.vertical
         ? (root.stretched
             ? root.reservedTop + root.stretchInset
-            : (ConfigService.alignment === "start"
-                ? root.reservedTop + root.edgeMargin
-                : (ConfigService.alignment === "end"
-                    ? root.height - root.edgeMargin - dockContainer.height
-                    : (root.height - dockContainer.height) / 2)))
+            : (root.reservedTop
+                + (root.height - root.reservedTop - dockContainer.height) / 2))
         : root.height - root.edgeMargin - dockContainer.height
 
     function publishWorkspaceLayout() {
@@ -231,7 +219,7 @@ PanelWindow {
             id: pill
             anchors.fill: parent
             z: -1
-            radius: dockContainer.pillRadius
+            radius: root.stretched ? 0 : dockContainer.pillRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
             cornerExponent: 2.35
