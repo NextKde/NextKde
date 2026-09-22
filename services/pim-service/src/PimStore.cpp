@@ -637,8 +637,11 @@ PimStore::~PimStore()
 void PimStore::flush()
 {
     d->saveTimer->stop();
-    d->flushSave();
-    writeWidgetSnapshot();
+    // Match the debounce-timer and synchronous scheduleSave() paths: only a
+    // successful state commit refreshes the widget file, so a failed save
+    // cannot leave the widget snapshot ahead of what is on disk.
+    if (d->flushSave())
+        writeWidgetSnapshot();
 }
 
 void PimStore::scheduleNextReminder()
