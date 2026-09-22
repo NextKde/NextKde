@@ -21,6 +21,7 @@ QtObject {
     // presentation without exposing fragile spacing math in Settings.
     property var layoutProfiles: ({
         bottom: { iconSize: "medium", density: "compact", fontWeight: "normal" },
+        bottomWide: { iconSize: "medium", density: "compact", fontWeight: "normal" },
         center: { iconSize: "medium", density: "balanced", fontWeight: "normal" },
         fullscreen: { iconSize: "large", density: "balanced", fontWeight: "medium" },
     })
@@ -30,7 +31,8 @@ QtObject {
     signal customIconImportFinished(string appId, string path, bool success)
 
     function isValidDisplayMode(mode) {
-        return mode === "bottom" || mode === "center" || mode === "fullscreen"
+        return mode === "bottom" || mode === "bottomWide"
+            || mode === "center" || mode === "fullscreen"
     }
 
     function isValidFontWeight(weight) {
@@ -48,7 +50,7 @@ QtObject {
     function _defaultProfile(mode) {
         if (mode === "fullscreen")
             return { iconSize: "large", density: "balanced", fontWeight: "medium" }
-        if (mode === "bottom")
+        if (mode === "bottom" || mode === "bottomWide")
             return { iconSize: "medium", density: "compact", fontWeight: "normal" }
         return { iconSize: "medium", density: "balanced", fontWeight: "normal" }
     }
@@ -67,6 +69,7 @@ QtObject {
         const candidate = raw && typeof raw === "object" ? raw : ({})
         return {
             bottom: _normalizedProfile(candidate.bottom, "bottom"),
+            bottomWide: _normalizedProfile(candidate.bottomWide, "bottomWide"),
             center: _normalizedProfile(candidate.center, "center"),
             fullscreen: _normalizedProfile(candidate.fullscreen, "fullscreen"),
         }
@@ -582,7 +585,7 @@ QtObject {
 
     function _save() {
         const json = JSON.stringify({
-            version: 3,
+            version: 4,
             displayMode: displayMode,
             layoutProfiles: layoutProfiles,
             rootItems: rootItems,
@@ -615,6 +618,7 @@ QtObject {
                             ? saved.fontWeight : "normal"
                         layoutProfiles = {
                             bottom: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
+                            bottomWide: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                             center: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                             fullscreen: { iconSize: oldIconSize, density: oldDensity, fontWeight: oldWeight },
                         }

@@ -4040,7 +4040,7 @@ ApplicationWindow {
         spacing: 7
         property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
         property string displayMode: "bottom"
-        readonly property var displayModes: ["bottom", "center", "fullscreen"]
+        readonly property var displayModes: ["bottom", "bottomWide", "center", "fullscreen"]
         property int displayModeIndex: 0
         property string iconSize: "medium"
         property string density: "balanced"
@@ -4167,6 +4167,7 @@ ApplicationWindow {
                         id: launcherModeNavBar
                         model: [
                             { id: "bottom",     label: "底部吸附" },
+                            { id: "bottomWide", label: "底部宽屏" },
                             { id: "center",     label: "屏幕居中" },
                             { id: "fullscreen", label: "全屏覆盖" }
                         ]

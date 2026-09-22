@@ -414,6 +414,13 @@ Item {
                 },
                 {
                     icon: "align-center",
+                    label: "底部宽屏",
+                    cmd: "bottomWide",
+                    checkable: true,
+                    checked: AppLauncherConfigService.displayMode === "bottomWide"
+                },
+                {
+                    icon: "align-center",
                     label: "屏幕居中",
                     cmd: "center",
                     checkable: true,
@@ -452,7 +459,8 @@ Item {
         onAction: function(cmd) {
             if (cmd === "settings") {
                 DesktopAppLauncher.openSettings()
-            } else if (cmd === "bottom" || cmd === "center" || cmd === "fullscreen") {
+            } else if (cmd === "bottom" || cmd === "bottomWide"
+                    || cmd === "center" || cmd === "fullscreen") {
                 AppLauncherConfigService.updateDisplayMode(cmd)
             }
         }
