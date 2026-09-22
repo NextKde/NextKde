@@ -188,39 +188,29 @@ ApplicationWindow {
     // identically, so this band is the only thing between "I just tuned my dock"
     // and "I just tuned a copy nobody logs into". A quiet note would be read as
     // decoration and skipped, which is exactly the outcome it exists to prevent.
+    // Solid fill in fixed colours rather than theme tints: the contrast then
+    // holds in either theme, and it cannot be mistaken for one more card.
     component DevelopmentBanner: Rectangle {
         Layout.fillWidth: true
         Layout.bottomMargin: 22
         implicitHeight: bannerText.implicitHeight + 40
         radius: 16
-        color: Qt.rgba(1, 0.62, 0.04, 0.2)
-        border.width: 1
-        border.color: Qt.rgba(1, 0.62, 0.04, 0.65)
-
-        Rectangle {
-            id: bannerAccent
-            x: 0
-            y: 10
-            width: 5
-            height: parent.height - 20
-            radius: 2.5
-            color: "#ff9f0a"
-        }
+        color: "#ff9f0a"
 
         Rectangle {
             id: bannerBadge
-            anchors.left: bannerAccent.right
+            anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: 16
+            anchors.leftMargin: 18
             width: 28
             height: 28
             radius: 14
-            color: "#ff9f0a"
+            color: "#241700"
 
             Text {
                 anchors.centerIn: parent
                 text: "!"
-                color: "#241700"
+                color: "#ff9f0a"
                 font.pixelSize: 17
                 font.weight: Font.Bold
             }
@@ -237,7 +227,7 @@ ApplicationWindow {
 
             Text {
                 text: "调试会话 · 源码树 Shell"
-                color: theme.primaryText
+                color: "#241700"
                 font.pixelSize: 17
                 font.weight: Font.Bold
             }
@@ -246,7 +236,7 @@ ApplicationWindow {
                 width: parent.width
                 text: "界面从这份源码加载，改 QML 立即生效；"
                     + "配置写进这次调试会话自己的目录，与服务模式的那份相互独立。"
-                color: theme.secondaryText
+                color: Qt.rgba(0.14, 0.09, 0, 0.78)
                 font.pixelSize: 13
                 wrapMode: Text.Wrap
             }
@@ -254,7 +244,7 @@ ApplicationWindow {
             Text {
                 width: parent.width
                 text: window.sessionShellDir
-                color: theme.tertiaryText
+                color: Qt.rgba(0.14, 0.09, 0, 0.62)
                 font.pixelSize: 12
                 elide: Text.ElideMiddle
             }
