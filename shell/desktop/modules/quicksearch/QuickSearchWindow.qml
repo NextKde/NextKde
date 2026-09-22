@@ -277,7 +277,10 @@ PanelWindow {
             smooth: true
             // Theme icon: synchronous, see AppIcon.qml.
             asynchronous: false
-            backer.cache: false
+            // Match AppIcon: cache the overwhelmingly common direct-color
+            // path, but leave the live ShaderEffect source uncached.
+            backer.cache: !resultIcon.needsEffect
+                && IconThemeReloadService.pixmapCacheAllowed
             visible: !resultIcon.needsEffect
         }
 

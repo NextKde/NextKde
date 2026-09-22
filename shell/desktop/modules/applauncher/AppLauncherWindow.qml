@@ -29,6 +29,9 @@ PanelWindow {
     // The module root passes this state explicitly (as QuickSearch does) so
     // every output-bound variant shares one reliable visibility binding.
     property bool open: false
+    // Keep visibility independent from PanelWindow.screen: screen resolution
+    // depends on the backing surface and would form a binding loop here.
+    property bool outputAvailable: false
     // Opening animates the foreground only (fade + slight scale + slide up);
     // closing is atomic because the compositor backdrop blur cannot fade in
     // lockstep with a QML layer. The blur region stays fixed at full card size
@@ -97,6 +100,8 @@ PanelWindow {
     onOpenChanged: {
         console.log("[AppLauncherWindow] received open=" + open);
         if (open) {
+            if (applicationsDirty)
+                applicationCatalogRefresh.restart();
             root.cancelFullscreenPageTransition();
             root.syncPagerSlots();
             contentRevealProgress = 0.0;
@@ -138,13 +143,13 @@ PanelWindow {
                     Math.round(screen.height * 0.85))
                 : (usesMinimumSize ? minimumLauncherHeight
                     : Math.round(screen.height * 0.50))))
-    readonly property var applications: {
-        // This window stays instantiated while hidden. Do not enumerate every
-        // desktop entry or resolve its icon until the launcher is actually
-        // opened; otherwise application updates rebuild the hidden grid and
-        // stall the whole shell.
-        if (!root.open)
-            return [];
+    // Preserve the resolved catalogue while hidden. Theme icons deliberately
+    // load on the GUI thread, so clearing this model on close made every open
+    // rebuild and synchronously decode the first screen of icons.
+    property var applications: []
+    property bool applicationsDirty: true
+
+    function rebuildApplications() {
         AppPresentationService.catalogRevision;
         AppPresentationService.revision;
         const catalogue = AppPresentationService.catalog();
@@ -163,7 +168,41 @@ PanelWindow {
                 entry: presentation.entry
             });
         }
-        return apps;
+        applications = apps;
+        applicationsDirty = false;
+    }
+
+    // Prewarm after startup has settled. Catalogue changes while hidden are
+    // coalesced here instead of becoming work on the launcher's opening frame.
+    Timer {
+        id: applicationCatalogRefresh
+        interval: root.open ? AppearanceTokens.motion.popupOpenDuration + 20 : 750
+        repeat: false
+        running: true
+        onTriggered: {
+            if (root.applicationsDirty)
+                root.rebuildApplications();
+        }
+    }
+
+    Connections {
+        target: AppPresentationService
+        function onCatalogRevisionChanged() {
+            root.applicationsDirty = true;
+            applicationCatalogRefresh.restart();
+        }
+        function onRevisionChanged() {
+            root.applicationsDirty = true;
+            applicationCatalogRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: AppLauncherConfigService
+        function onHiddenAppIdsChanged() {
+            root.applicationsDirty = true;
+            applicationCatalogRefresh.restart();
+        }
     }
     property string query: ""
     property int selectedIndex: 0
@@ -844,10 +883,13 @@ PanelWindow {
         }
     }
 
-    visible: root.panelVisible
-    onVisibleChanged: {
-        console.log("[AppLauncherWindow] visible=" + visible + " card=" + launcherWidth + "x" + launcherHeight);
-        if (visible) {
+    // Quickshell discards a PanelWindow's backing QQuickWindow whenever
+    // visible becomes false. Retain a harmless 1x1 mapped surface while the
+    // launcher is closed so the scene graph and uploaded glyph/icon textures
+    // survive, without keeping a full-output overlay in the compositor.
+    visible: root.outputAvailable
+    onPanelVisibleChanged: {
+        if (panelVisible) {
             selectedIndex = 0;
             fullscreenPage = 0;
             keyboardSelectionActive = false;
@@ -860,6 +902,12 @@ PanelWindow {
             displayedFolder = null;
             folderDialogOpen = false;
         }
+    }
+    mask: Region {
+        x: 0
+        y: 0
+        width: root.panelVisible ? root.width : 0
+        height: root.panelVisible ? root.height : 0
     }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -1029,8 +1077,8 @@ PanelWindow {
     anchors {
         top: true
         left: true
-        right: true
-        bottom: true
+        right: root.panelVisible
+        bottom: root.panelVisible
     }
     // Dock is 5px above the output edge. Leave a 10px gap above its true
     // height without asking this module to reimplement Dock measurements.
@@ -1041,7 +1089,8 @@ PanelWindow {
     margins.bottom: root.isFullscreenMode ? 0 : (root.dockAtBottom ? AppLauncherService.dockHeight + 15 : 0)
     margins.left: root.isFullscreenMode ? 0 : (root.dockAtLeft ? AppLauncherService.dockHeight + 15 : 0)
     margins.right: root.isFullscreenMode ? 0 : (root.dockAtRight ? AppLauncherService.dockHeight + 15 : 0)
-    implicitHeight: launcherHeight
+    implicitWidth: root.panelVisible ? launcherWidth : 1
+    implicitHeight: root.panelVisible ? launcherHeight : 1
 
     // The layer-shell surface spans the output so this catcher can dismiss
     // the launcher from any empty area, while the visible card remains the
@@ -1111,6 +1160,7 @@ PanelWindow {
         Item {
             id: launcherCard
             anchors.fill: parent
+            visible: root.panelVisible
             enabled: root.open
             opacity: 1.0
 
@@ -1517,7 +1567,7 @@ PanelWindow {
                             cellHeight: root.isFullscreenMode
                                 ? Math.max(122, tileHeight + root.gridGap)
                                 : tileHeight + root.gridGap
-                            model: root.open && !root.isFullscreenMode
+                            model: !root.isFullscreenMode
                                 ? root.filteredApplications : []
                             // Card presentations only. In fullscreen the
                             // persistent slot pager takes over entirely, so
@@ -1900,7 +1950,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.open && root.isFullscreenMode
+                        model: root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {
@@ -1930,7 +1980,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.open && root.isFullscreenMode
+                        model: root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {
@@ -1960,7 +2010,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.open && root.isFullscreenMode
+                        model: root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {
@@ -2826,7 +2876,7 @@ PanelWindow {
     // policy exactly: no full-screen exception and no launcher-specific
     // material controls. The shared glass configuration decides whether KWin
     // renders blur or refraction for this declared surface.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.visible
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.panelVisible
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? launcherSurface.blurRegion

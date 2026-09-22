@@ -28,8 +28,9 @@ Scope {
     // Loader containing a GridView/Repeater just after its PanelWindow becomes
     // invisible can leave a delegate temporarily detached while Qt still
     // processes a geometry update, which crashes Qt Quick 6.11 in
-    // QQuickItemPrivate::addToDirtyList(). The invisible PanelWindow no longer
-    // maps or accepts input, so retaining it is the safe close path.
+    // QQuickItemPrivate::addToDirtyList(). The closed PanelWindow collapses to
+    // a 1x1 surface with an empty input region, so retaining it is both a safe
+    // close path and cheap for the compositor.
     property bool windowCreated: false
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     onOpenChanged: console.log("[AppLauncher] root open=" + open)
@@ -57,6 +58,7 @@ Scope {
         sourceComponent: Component {
             AppLauncherWindow {
                 screen: root.targetScreen
+                outputAvailable: ScreenLifecycle.outputAvailable
                 open: root.open && ScreenLifecycle.outputAvailable
             }
         }

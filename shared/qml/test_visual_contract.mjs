@@ -409,9 +409,40 @@ assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
 const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
 const controlCenterPanelSource = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
 const globalMenuSource = read("../../shell/desktop/modules/bar/GlobalMenu.qml");
+const dockAnimationSource = read("../../shell/desktop/modules/dock/DockAnimation.qml");
+const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
+const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
+const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
     /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
     "Launchpad and anchored popups consume the same entrance tokens");
+assert.match(appLauncherWindow,
+    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
+    "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
+assert.match(appLauncherWindow,
+    /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
+    "Launchpad retains one backing window while a real output is available");
+assert.match(appLauncherWindow,
+    /mask:\s*Region\s*\{[\s\S]*width:\s*root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.panelVisible \? root\.height : 0/,
+    "the closed Launchpad backing surface cannot intercept desktop input");
+assert.match(appLauncherWindow,
+    /right:\s*root\.panelVisible[\s\S]*bottom:\s*root\.panelVisible[\s\S]*implicitWidth:\s*root\.panelVisible \? launcherWidth : 1[\s\S]*implicitHeight:\s*root\.panelVisible \? launcherHeight : 1/,
+    "the closed Launchpad surface collapses to one pixel instead of staying full-output");
+assert.match(appLauncherWindow,
+    /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
+    "the collapsed Launchpad surface never publishes a compositor blur region");
+assert.match(appIconSource,
+    /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
+    "shared app icons cache decoded pixmaps only on the direct-render path");
+assert.match(quickSearchWindow,
+    /backer\.cache:\s*!resultIcon\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
+    "QuickSearch caches decoded result pixmaps only on the direct-render path");
+assert.match(iconThemeReloadSource,
+    /pixmapCacheAllowed:\s*true[\s\S]*pixmapCacheAllowed = false[\s\S]*revision\+\+/,
+    "an icon-theme change bypasses stale process-wide decoded pixmaps");
+assert.match(dockAnimationSource,
+    /windowPreviewDelay:\s*300/,
+    "Dock previews debounce pointer passes before requesting a full-screen capture");
 // The four-pixel separation from the Bar moved from a per-card offset into the
 // panel's own anchor margins when the panel became one window. The value and
 // the intent are unchanged: standalone the panel starts four pixels below the
