@@ -162,10 +162,6 @@ public:
         return snapshotFromReply(callDock({QStringLiteral("updateDockStyle"), style}));
     }
 
-    Q_INVOKABLE QVariantMap updateDockInfoCardMode(const QString &mode) {
-        return snapshotFromReply(callDock({QStringLiteral("updateInfoCardMode"), mode}));
-    }
-
     Q_INVOKABLE QVariantMap updateDockIconMode(const QString &mode) {
         return snapshotFromReply(callDock({QStringLiteral("updateIconMode"), mode}));
     }

@@ -639,8 +639,6 @@ ApplicationWindow {
         readonly property var dockContentStyles: ["compact", "relaxed"]
         property int dockStyleIndex: 0
         readonly property var dockStyles: ["floating", "taskbar"]
-        property int infoCardModeIndex: 0
-        readonly property var infoCardModes: ["carousel", "expanded"]
         property int iconModeIndex: 0
         readonly property var iconModes: ["color", "grayscale", "tint"]
         property int visibilityModeIndex: 0
@@ -783,11 +781,6 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
-        function infoCardModeIndexFromString(mode) {
-            const idx = infoCardModes.indexOf(mode)
-            return idx >= 0 ? idx : 0
-        }
-
         function visibilityModeIndexFromString(mode) {
             const idx = visibilityModes.indexOf(mode)
             return idx >= 0 ? idx : 0
@@ -887,7 +880,6 @@ ApplicationWindow {
             dockPositionIndex = positionIndexFromString(state.position)
             dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
-            infoCardModeIndex = infoCardModeIndexFromString(state.infoCardMode)
             iconModeIndex = iconModeIndexFromString(state.iconMode)
             iconOpacity = Number(state.iconOpacity)
             iconTintColor = String(state.iconTintColor || "#a855f7").toLowerCase()
@@ -920,14 +912,6 @@ ApplicationWindow {
             if (!bridge)
                 return
             applyState(bridge.updateDockStyle(dockStyles[index]))
-            if (bridge.lastError)
-                errorText = bridge.lastError
-        }
-
-        function saveInfoCardMode(index) {
-            if (!bridge)
-                return
-            applyState(bridge.updateDockInfoCardMode(infoCardModes[index]))
             if (bridge.lastError)
                 errorText = bridge.lastError
         }
@@ -1241,41 +1225,6 @@ ApplicationWindow {
                             itemWidthOverride: 62
                             currentIndex: dockPage.dockStyleIndex
                             onSelectionChanged: function(index) { dockPage.saveDockStyle(index) }
-                        }
-                    }
-                }
-
-                Rectangle { width: parent.width; height: 1; color: theme.separator }
-
-                Item {
-                    width: parent.width
-                    height: 62
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "◫"; tint: "#30d158" }
-                        ColumnLayout {
-                            spacing: 1
-                            Text { text: "信息卡片布局"; color: theme.primaryText; font.pixelSize: 14 }
-                            Text {
-                                text: dockPage.infoCardModeIndex === 0
-                                    ? "在同一位置自动轮播" : "同时展示全部已添加卡片"
-                                color: theme.secondaryText
-                                font.pixelSize: 11
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                        SettingsNavBar {
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                            model: [
-                                { id: "carousel", label: "轮播" },
-                                { id: "expanded", label: "展开" }
-                            ]
-                            itemWidthOverride: 62
-                            currentIndex: dockPage.infoCardModeIndex
-                            onSelectionChanged: function(index) { dockPage.saveInfoCardMode(index) }
                         }
                     }
                 }
