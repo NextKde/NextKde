@@ -60,6 +60,11 @@ PanelWindow {
     // Taskbar presentation is a true edge fill and therefore has no inset.
     readonly property int edgeMargin: ConfigService.dockStyle === "taskbar"
         ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
+    // Keep the opposite edge airy as well: maximised windows stop before the
+    // floating glass instead of touching its top/inner edge. This follows the
+    // Dock thickness just like edgeMargin, while a taskbar remains flush.
+    readonly property int workspaceMargin: ConfigService.dockStyle === "taskbar"
+        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
     // Wayland does not expose a trustworthy QWindow global position to QML.
     // Derive this layer surface's compositor-global origin from the output it
     // is explicitly bound to and from the anchors declared below.
@@ -82,8 +87,10 @@ PanelWindow {
 
     // Cross-edge thickness = glass + float. Length is forced by the anchors
     // (full screen along the anchored edge); these set the other dimension.
-    implicitHeight: root.vertical ? 0 : dockContainer.height + root.edgeMargin
-    implicitWidth: root.vertical ? dockContainer.width + root.edgeMargin : 0
+    implicitHeight: root.vertical ? 0
+        : dockContainer.height + root.edgeMargin + root.workspaceMargin
+    implicitWidth: root.vertical
+        ? dockContainer.width + root.edgeMargin + root.workspaceMargin : 0
 
     // ── Auto-hide controller ──
     // One controller per surface; inputs come from the singleton services and
@@ -110,12 +117,12 @@ PanelWindow {
     // zone at 0 so windows do not reflow whenever the Dock reveals or hides.
     // A permanently visible Dock reserves exactly the band its glass occupies:
     // the height plus the inset that keeps the glass off the physical edge.
-    // No extra workspace gap — a maximised window must sit flush against the
-    // top edge of the dock instead of floating above a dead strip.
+    // Floating mode also reserves its proportional inner breathing space;
+    // taskbar mode remains a flush edge fill.
     exclusiveZone: ConfigService.visibilityMode === "always"
         ? (root.vertical
-            ? dockContainer.width + root.edgeMargin
-            : dockContainer.height + root.edgeMargin)
+            ? dockContainer.width + root.edgeMargin + root.workspaceMargin
+            : dockContainer.height + root.edgeMargin + root.workspaceMargin)
         : 0
 
     // The custom KWin glass effect consumes this region for both backdrop
@@ -170,7 +177,7 @@ PanelWindow {
             height: dockContainer.height
         // Hide modes deliberately publish no gap: otherwise a new window
         // would avoid an invisible Dock after it has slid away.
-        }, 0)
+        }, root.workspaceMargin)
     }
 
     Timer {
