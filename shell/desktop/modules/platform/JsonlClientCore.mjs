@@ -24,6 +24,8 @@
 // `queuedByKey`, `nextRequestId`) so the owning QML object can keep them as
 // bindable properties: pass an object whose getters/setters forward to those
 // properties as `config.state`; without one the core keeps its own tables.
+// `pending` and `queuedByKey` are Maps (see the note at their definition):
+// whatever `config.state` returns for them must be a Map too.
 // failAll() swaps the pending/queue/dedup tables wholesale, which is why the
 // state indirection goes through getters/setters rather than captured
 // references. `invokeCallbacks`, `callLater` and `now` are injectable so
@@ -51,10 +53,23 @@ export function makeClientCore(config) {
     // "platform" while its disconnect messages said "platform daemon";
     // DataClient used "data service" for both. Keep the strings identical.
     const timeoutName = config.timeoutName || config.daemonName;
+    // `pending` and `queuedByKey` are Maps, never plain objects. They are
+    // long-lived, they grow with computed keys (`pending[id] = entry`,
+    // `queuedByKey[dedupKey] = id`) and every entry is eventually `delete`d,
+    // so the table is repeatedly emptied and refilled. On a plain object that
+    // exact cycle drives QV4 into a bad state: deleting the last key detaches
+    // the member array and drops the object's internal class back to the
+    // table-less shared empty class, after which the *next* new-key write
+    // resolves a member slot from a NULL table and stores through NULL+0x38 —
+    // a hard SIGSEGV inside QV4::Object::insertMember, on the QML thread, with
+    // no JavaScript involved. Maps keep their entries outside the property
+    // table, so the hazard cannot arise. Do not "simplify" these back to
+    // `({})`; `readOperations` and `requestTimeoutOverrides` above stay plain
+    // objects because they are only ever read, never grown or deleted from.
     const state = config.state || {
         queue: [],
-        pending: ({}),
-        queuedByKey: ({}),
+        pending: new Map(),
+        queuedByKey: new Map(),
         nextRequestId: 1
     };
 
@@ -98,7 +113,7 @@ export function makeClientCore(config) {
             timeoutMs: timeoutOverride !== undefined
                 ? Number(timeoutOverride) : requestTimeoutMs
         };
-        state.pending[id] = entry;
+        state.pending.set(id, entry);
 
         if (isRead) {
             // Only the newest queued read for the same operation+payload
@@ -106,15 +121,15 @@ export function makeClientCore(config) {
             // bookkeeping still resolves.
             const dedupKey = op + " " + JSON.stringify(payload || ({}));
             entry.dedupKey = dedupKey;
-            const previousId = state.queuedByKey[dedupKey];
+            const previousId = state.queuedByKey.get(dedupKey);
             if (previousId !== undefined) {
-                const previous = state.pending[previousId];
+                const previous = state.pending.get(previousId);
                 if (previous)
                     entry.callbacks = previous.callbacks.concat(entry.callbacks);
-                delete state.pending[previousId];
+                state.pending.delete(previousId);
                 dropQueued(previousId);
             }
-            state.queuedByKey[dedupKey] = id;
+            state.queuedByKey.set(dedupKey, id);
         }
 
         state.queue.push({ version: protocolVersion, requestId: id,
@@ -158,38 +173,41 @@ export function makeClientCore(config) {
     // next event turn: this runs inside request(), so a synchronous callback
     // would break the callers' assumption that request() returns first.
     function failRequestLater(id, code, message) {
-        const entry = state.pending[id];
+        const entry = state.pending.get(id);
         if (entry === undefined)
             return;
-        delete state.pending[id];
+        state.pending.delete(id);
         dropQueued(id);
-        if (entry.dedupKey && state.queuedByKey[entry.dedupKey] === id)
-            delete state.queuedByKey[entry.dedupKey];
+        if (entry.dedupKey && state.queuedByKey.get(entry.dedupKey) === id)
+            state.queuedByKey.delete(entry.dedupKey);
         const response = makeFailure(id, code, message);
         callLater(function() { config.invokeCallbacks(entry, response) });
     }
 
     function failRequest(id, code, message) {
-        const entry = state.pending[id];
+        const entry = state.pending.get(id);
         if (entry === undefined)
             return;
-        delete state.pending[id];
+        state.pending.delete(id);
         dropQueued(id);
-        if (entry.dedupKey && state.queuedByKey[entry.dedupKey] === id)
-            delete state.queuedByKey[entry.dedupKey];
+        if (entry.dedupKey && state.queuedByKey.get(entry.dedupKey) === id)
+            state.queuedByKey.delete(entry.dedupKey);
         config.invokeCallbacks(entry, makeFailure(id, code, message));
     }
 
     // Snapshots the tables before invoking callbacks: a failure handler may
     // issue a fresh request, which must land in the post-disconnect queue.
+    // Iteration is over the snapshot, and the live tables are swapped for
+    // fresh Maps rather than emptied in place — so the handlers see the new
+    // tables and the retired one is never written to again.
     function failAll(code, message) {
         const pending = state.pending;
-        state.pending = ({});
+        state.pending = new Map();
         state.queue = [];
-        state.queuedByKey = ({});
-        for (const id in pending)
-            config.invokeCallbacks(pending[id],
-                makeFailure(id, code, message));
+        state.queuedByKey = new Map();
+        pending.forEach(function(entry, id) {
+            config.invokeCallbacks(entry, makeFailure(id, code, message));
+        });
     }
 
     // Queued entries count from enqueue and sent ones from send: either way
@@ -198,14 +216,13 @@ export function makeClientCore(config) {
     function expireRequests() {
         const nowMs = now();
         const expired = [];
-        for (const id in state.pending) {
-            const entry = state.pending[id];
+        state.pending.forEach(function(entry, id) {
             if (!entry || entry.timeoutMs <= 0)
-                continue;
+                return;
             const since = entry.sentAt > 0 ? entry.sentAt : entry.enqueuedAt;
             if (nowMs - since > entry.timeoutMs)
                 expired.push(id);
-        }
+        });
         for (let i = 0; i < expired.length; i++)
             failRequest(expired[i], "timeout",
                 timeoutName + " request timed out");
@@ -217,12 +234,12 @@ export function makeClientCore(config) {
             return;
         while (state.queue.length > 0) {
             const message = state.queue.shift();
-            const entry = state.pending[message.requestId];
+            const entry = state.pending.get(message.requestId);
             if (entry) {
                 entry.sentAt = now();
                 if (entry.dedupKey
-                        && state.queuedByKey[entry.dedupKey] === message.requestId)
-                    delete state.queuedByKey[entry.dedupKey];
+                        && state.queuedByKey.get(entry.dedupKey) === message.requestId)
+                    state.queuedByKey.delete(entry.dedupKey);
             }
             socket.write(JSON.stringify(message) + "\n");
         }
@@ -242,10 +259,10 @@ export function makeClientCore(config) {
             return;
         }
         const requestId = String(message.requestId || "");
-        if (!requestId || state.pending[requestId] === undefined)
+        if (!requestId || !state.pending.has(requestId))
             return;
-        const entry = state.pending[requestId];
-        delete state.pending[requestId];
+        const entry = state.pending.get(requestId);
+        state.pending.delete(requestId);
         config.invokeCallbacks(entry, message);
     }
 

@@ -50,9 +50,13 @@ QtObject {
     property var _queue: []
     // requestId -> { callbacks: [...], enqueuedAt: epoch ms, sentAt: epoch ms
     // (0 while queued), dedupKey: string, timeoutMs: int }
-    property var _pending: ({})
+    // Maps, not `({})`: entries grow under computed keys and are deleted down
+    // to empty over and over, which is the write cycle that walks QV4's
+    // Object::insertMember off a NULL member table and segfaults the shell.
+    // See the note above the state tables in JsonlClientCore.mjs.
+    property var _pending: new Map()
     // dedupKey -> requestId, for queued idempotent reads only.
-    property var _queuedByKey: ({})
+    property var _queuedByKey: new Map()
     property int _nextRequestId: 1
     signal eventReceived(string eventName, var payload)
     signal transportChanged(bool connected)
