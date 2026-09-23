@@ -19,12 +19,14 @@ public:
 
     explicit AiWorkerClient(QObject *parent = nullptr);
     ~AiWorkerClient() override;
-    void generateDepth(const QString &imagePath, Completion completion);
+    void generateDepth(const QString &imagePath, Completion completion,
+                       bool prepareSpatial = false);
 
 private:
     struct Request {
         QString id;
         QString imagePath;
+        bool prepareSpatial = false;
         Completion completion;
     };
 

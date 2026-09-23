@@ -42,4 +42,7 @@ qsb --qt6 -o card_shadow.frag.qsb card_shadow.frag
 echo "Compiling depth parallax fragment shader..."
 qsb --qt6 -o depth_parallax.frag.qsb depth_parallax.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb"
+echo "Compiling layered wallpaper fragment shader..."
+qsb --qt6 -o layered_wallpaper.frag.qsb layered_wallpaper.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb"

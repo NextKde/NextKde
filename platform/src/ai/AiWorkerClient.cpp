@@ -87,7 +87,8 @@ AiWorkerClient::~AiWorkerClient()
     }
 }
 
-void AiWorkerClient::generateDepth(const QString &imagePath, Completion completion)
+void AiWorkerClient::generateDepth(const QString &imagePath, Completion completion,
+                                   bool prepareSpatial)
 {
     m_idleTimeout.stop();
     if (m_requests.size() >= maximumWorkerQueueSize) {
@@ -97,7 +98,7 @@ void AiWorkerClient::generateDepth(const QString &imagePath, Completion completi
     }
 
     m_requests.enqueue({QUuid::createUuid().toString(QUuid::WithoutBraces),
-                        imagePath, std::move(completion)});
+                        imagePath, prepareSpatial, std::move(completion)});
     // A warm worker is already past its started() signal. Dispatch here as
     // well, otherwise the first request succeeds but later requests remain
     // queued forever while the worker waits on stdin.
@@ -138,6 +139,7 @@ void AiWorkerClient::dispatchNext()
         {QStringLiteral("requestId"), request.id},
         {QStringLiteral("operation"), QStringLiteral("depth.generate")},
         {QStringLiteral("imagePath"), request.imagePath},
+        {QStringLiteral("prepareSpatial"), request.prepareSpatial},
     };
     const QByteArray line = QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n';
     if (m_worker.write(line) != line.size()) {

@@ -1,8 +1,8 @@
 pragma Singleton
 import QtQuick
 
-// QML boundary for the local AI depth operation. Transport, model downloads,
-// hashing and CPU inference remain owned by kos-platform / liquid-ai.
+// QML boundary for local depth and optional spatial assets. Transport, model
+// downloads, hashing and CPU work remain owned by kos-platform / liquid-ai.
 QtObject {
     id: root
 
@@ -10,7 +10,9 @@ QtObject {
     readonly property bool busy: pendingCount > 0
 
     signal finished(string imagePath, string depthPath, int width, int height,
-                    bool cached, string model, string contract)
+                    bool cached, string model, string contract,
+                    string backgroundPath, string mattePath,
+                    string influencePath)
     signal failed(string imagePath, string code, string message, bool retryable)
 
     function generate(imagePath) {
@@ -21,7 +23,10 @@ QtObject {
         }
 
         pendingCount++
-        PlatformClient.request("depth.generate", { imagePath: path }, response => {
+        PlatformClient.request("depth.generate", {
+            imagePath: path,
+            prepareSpatial: true
+        }, response => {
             pendingCount = Math.max(0, pendingCount - 1)
             if (!response || !response.ok) {
                 const error = response && response.error ? response.error : ({})
@@ -32,7 +37,10 @@ QtObject {
             const result = response.result || ({})
             finished(path, String(result.depthPath || ""), Number(result.width || 0),
                 Number(result.height || 0), !!result.cached,
-                String(result.model || ""), String(result.contract || ""))
+                String(result.model || ""), String(result.contract || ""),
+                String(result.backgroundPath || ""),
+                String(result.mattePath || ""),
+                String(result.influencePath || ""))
         })
     }
 }

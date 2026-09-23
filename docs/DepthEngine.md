@@ -11,22 +11,33 @@ lower CPU priority and is made a preferred OOM victim so core desktop controls
 retain priority under system memory pressure.
 
 The Settings app exposes an opt-in **空间壁纸视差** toggle. It is off by
-default. `SpatialWallpaperService` requests a depth map only after the user
-enables it, and only when the selected wallpaper changes. It waits briefly for
-the wallpaper path to settle and retries temporary worker failures with a
-delay. `DepthManager`
-requests generation through `qs.desktop.modules.platform`; the daemon returns a
-local PNG path, image dimensions, cache status, model ID and preprocessing
-contract. The request can take up to five minutes while the model downloads or
-a large image is inferred. On success, `DepthWallpaperLayer` uses a small GPU
-shader pass to shift wallpaper samples according to depth and pointer position.
-The shader reproduces Plasma's aspect-preserving center crop for both the
-wallpaper and depth texture; Qt does not carry an Image's `fillMode` into a
-`ShaderEffect` sampler. It then applies an extra 3.2% crop per axis for
-movement. Most pointer motion pans the image together (2.75% per axis); the
-relative depth contribution is limited to 0.25% either way and fades where a
-depth boundary would otherwise pull colors across a foreground edge. Pointer
-changes are eased over 150 ms.
+default. `SpatialWallpaperService` requests assets only after the user enables
+it, and when the selected wallpaper changes. It waits briefly for the path to
+settle and retries temporary worker failures with a delay. `DepthManager`
+requests generation through `qs.desktop.modules.platform`; the daemon returns
+a local depth PNG, dimensions, cache status and model contract. The request can
+take up to five minutes during the first model download or a large inference.
+
+After depth generation, the worker optionally prepares three cached spatial
+assets: a depth-guided GrabCut foreground matte, a filled background, and a
+smooth near-field motion map. The preparation contract is
+`depth-grabcut-nearestfill-handfield-v2`; its cache is in `spatial-v2/` beneath
+the depth cache entry. Asset generation is limited to 2560 pixels wide and
+rejects a subject that is too small, too large, touches the image edge, or
+disagrees strongly with the depth seed. A rejected image still returns its
+depth map. This is an image heuristic and can produce imperfect edges; it does
+not add a semantic segmentation model.
+
+When all three assets load, `DepthWallpaperLayer` composites the original
+wallpaper over the filled background. The background moves 0.5% opposite the
+foreground's 2% travel; the near-field map adds at most 1% to protruding
+parts. A 5% crop keeps all samples within the texture during motion. If asset
+preparation or loading fails, the existing depth shader remains available: it
+uses a 3.2% crop, pans most of the image together by 2.75%, and limits the
+relative depth contribution to 0.25% either way. Both shaders recreate
+Plasma's aspect-preserving center crop in texture coordinates because Qt does
+not pass an Image's `fillMode` into a `ShaderEffect` sampler. Pointer changes
+are eased over 150 ms.
 The wallpaper and depth textures are decoded at the output's physical pixel
 size so high-DPI screens do not upscale a logical-resolution image.
 The renderer lives in a separate click-through Bottom-layer window, mapped
@@ -76,11 +87,11 @@ separate automatically.
    model, contract, source hash, generation time and output dimensions.
 
 Values are relative depth responses rather than distances; larger values
-indicate stronger near-depth response for this model. The current renderer uses
-them only for coarse parallax. It does not yet place widgets behind foreground
-objects: clean widget occlusion requires segmentation or matting to recover the
-foreground pixels. The 16-bit depth map remains cached independently of the
-renderer and is reused if the feature is turned off and on again.
+indicate stronger near-depth response for this model. The 16-bit depth map
+remains cached independently of the renderer and is reused if the feature is
+turned off and on again. The current scene assets do not yet put widgets
+behind foreground objects; widget occlusion needs a separate, verified mask
+and compositing path.
 
 ## Build runtime
 

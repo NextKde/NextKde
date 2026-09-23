@@ -5071,6 +5071,8 @@ void PlatformServer::runDepthGenerate(QLocalSocket *socket, const QJsonObject &r
 
     const QPointer<QLocalSocket> guardedSocket(socket);
     const QString imagePath = imageInfo.canonicalFilePath();
+    const bool prepareSpatial = request.value(QStringLiteral("payload"))
+        .toObject().value(QStringLiteral("prepareSpatial")).toBool(false);
     m_aiWorker.generateDepth(imagePath,
         [this, guardedSocket, request](bool ok, const QJsonObject &result,
                                       const QString &code, const QString &message,
@@ -5080,7 +5082,7 @@ void PlatformServer::runDepthGenerate(QLocalSocket *socket, const QJsonObject &r
             return;
         }
         respond(guardedSocket.data(), request, true, result);
-    });
+    }, prepareSpatial);
 }
 
 void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &request)
