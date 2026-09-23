@@ -221,6 +221,14 @@ doctor() {
     else
         printf 'warn %-12s no graphical session (builds still work)\n' session
     fi
+    local stale_units
+    stale_units=$(stale_kos_units)
+    if [[ -z "$stale_units" ]]; then
+        printf 'ok   %-12s running units match the deployed binaries\n' units
+    else
+        printf 'warn %-12s replaced binary still running: %s (./tools/kosctl start)\n' \
+            units "${stale_units//$'\n'/, }"
+    fi
     if is_nixos && (( nixos_hint )); then
         printf '\n'
         printf '  NixOS detected. Missing build dependencies can be installed:\n'
@@ -445,6 +453,30 @@ materialize_kos_ui() {
     done
 }
 
+# Unit names whose process is still running an executable that was replaced
+# underneath it, one per line. Linux refuses to write a running executable
+# (ETXTBSY), so an in-place deploy cannot keep the inode alive and
+# /proc/<pid>/exe reads "<path> (deleted)". KWin resolves an application's
+# restricted D-Bus interfaces by exactly that path -- it matches the .desktop
+# whose Exec= names it and reads X-KDE-DBUS-Restricted-Interfaces -- so a stale
+# kos-platform silently loses org.kde.KWin.ScreenShot2 and every window
+# thumbnail fails with "The process is not authorized to take a screenshot"
+# until the unit is restarted. Read-only: it never restarts anything.
+stale_kos_units() {
+    command -v systemctl >/dev/null 2>&1 || return 0
+    local unit pid exe
+    for unit in kos-platform.service kos-data.service kos-shell.service; do
+        pid=$(systemctl --user show -p MainPID --value "$unit" 2>/dev/null || true)
+        if [[ -z "$pid" || "$pid" == "0" ]]; then
+            continue
+        fi
+        exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+        if [[ "$exe" == *"(deleted)"* ]]; then
+            printf '%s\n' "$unit"
+        fi
+    done
+}
+
 # deploy_artifacts — deploy from a build output root to ~/.local.
 #   $1: artifact root directory (e.g. "$build_dir" or "$project_dir/result")
 #
@@ -620,6 +652,22 @@ deploy_artifacts() {
         # services restart — either at next login/relogin or via `kosctl start`.
         systemctl --user daemon-reload
         systemctl --user enable "${kos_units[@]}"
+    fi
+
+    # `install` deliberately leaves the session alone, but a replaced binary
+    # does not merely wait for a restart here: the running kos-platform loses
+    # its KWin screenshot permission and every window thumbnail fails. Say so
+    # explicitly rather than leaving it to look like a permissions bug.
+    local stale_units
+    stale_units=$(stale_kos_units)
+    if [[ -n "$stale_units" ]]; then
+        printf '\n'
+        printf '  ⚠️  仍在运行刚被替换掉的旧二进制：%s\n' "${stale_units//$'\n'/, }"
+        printf '     Still running the replaced binary: %s\n' "${stale_units//$'\n'/, }"
+        printf '     症状：dock 预览与窗口缩略图报 The process is not authorized to take a screenshot\n'
+        printf '     Symptom: window thumbnails fail with that KWin authorization error.\n'
+        printf '  ⚡ 立即生效：./tools/kosctl start\n'
+        printf '     Apply now: ./tools/kosctl start\n'
     fi
 }
 
