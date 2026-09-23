@@ -2,6 +2,8 @@ module qs.desktop.modules.deskcenter
 
 DeskCenter 1.0 DeskCenter.qml
 DeskCenterWindow 1.0 DeskCenterWindow.qml
+SpatialWallpaperWindow 1.0 SpatialWallpaperWindow.qml
+DepthWallpaperLayer 1.0 DepthWallpaperLayer.qml
 DeskWidgetCard 1.0 DeskWidgetCard.qml
 OfficialDragReorderDemo 1.0 OfficialDragReorderDemo.qml
 FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
@@ -9,4 +11,5 @@ FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
 singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml
 singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
+singleton SpatialWallpaperService 1.0 SpatialWallpaperService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml

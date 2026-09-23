@@ -39,4 +39,7 @@ echo "Compiling card shadow shaders..."
 qsb --qt6 -o card_shadow.vert.qsb card_shadow.vert
 qsb --qt6 -o card_shadow.frag.qsb card_shadow.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb"
+echo "Compiling depth parallax fragment shader..."
+qsb --qt6 -o depth_parallax.frag.qsb depth_parallax.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb"

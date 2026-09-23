@@ -56,8 +56,8 @@ is_nixos() {
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
-    quickshell cmake ninja gcc qt6-base qt6-declarative go
-    kwindowsystem kiconthemes kglobalaccel kio
+    quickshell cmake ninja gcc qt6-base qt6-declarative go curl
+    kwindowsystem kiconthemes kglobalaccel kio opencv patchelf
 )
 arch_kwin_build_packages=(
     extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils
@@ -268,6 +268,8 @@ configure_if_needed() {
 configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Debug}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
+    local ort_root
+    ort_root=$(ensure_onnxruntime_sdk)
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
     # bare `cmake --build` then compiles every registered test before deploying
@@ -287,8 +289,44 @@ configure_build() {
     configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
+        -DONNXRUNTIME_INCLUDE_DIR="$ort_root/include" \
+        -DONNXRUNTIME_LIBRARY="$ort_root/lib/libonnxruntime.so" \
         -DKOS_BUILD_KWIN_PLUGINS="$plugins" \
         -DBUILD_TESTING=OFF
+}
+
+# Keep the CPU runtime deterministic across machines. The SDK is a build
+# dependency only; the model remains a separately downloaded, hash-pinned user
+# cache asset. A Nix build gets onnxruntime from its declared package instead.
+ensure_onnxruntime_sdk() {
+    local root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
+    local archive="$build_dir/deps/onnxruntime-linux-x64-1.30.0.tgz"
+    local sha="a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd"
+    if [[ -f "$root/include/onnxruntime_cxx_api.h" \
+            && -f "$root/lib/libonnxruntime.so" ]]; then
+        printf '%s' "$root"
+        return 0
+    fi
+    mkdir -p "$build_dir/deps"
+    if [[ ! -f "$archive" ]]; then
+        command -v curl >/dev/null 2>&1 || {
+            printf 'curl is required to fetch the pinned ONNX Runtime SDK.\n' >&2
+            return 1
+        }
+        curl -fL --retry 3 -o "$archive" \
+            https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz
+    fi
+    printf '%s  %s\n' "$sha" "$archive" | sha256sum --check --status || {
+        printf 'Pinned ONNX Runtime SDK archive SHA256 mismatch.\n' >&2
+        return 1
+    }
+    tar -xzf "$archive" -C "$build_dir/deps"
+    [[ -f "$root/include/onnxruntime_cxx_api.h" \
+        && -f "$root/lib/libonnxruntime.so" ]] || {
+        printf 'Pinned ONNX Runtime SDK extracted without expected files.\n' >&2
+        return 1
+    }
+    printf '%s' "$root"
 }
 
 prepare_cmake_build_dir() {
@@ -322,6 +360,7 @@ ensure_build_dependencies() {
             libxcb
             cmake
             ninja
+            curl
         )
         local package
         for package in "${nix_packages[@]}"; do
@@ -490,21 +529,38 @@ deploy_artifacts() {
         return 1
     fi
 
-    mkdir -p "$prefix/libexec" "$prefix/bin" \
+    mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/lib" \
         "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
         "$prefix/share/shared/qml" "$prefix/share/applications"
 
     # --- Binaries ---
-    rm -f "$prefix/libexec/kos-platform" \
+    rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
     if is_nixos; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
+        ln -s "$artifact_root/libexec/kos-ai-worker" "$prefix/libexec/kos-ai-worker"
         ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
         ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
     else
         install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
+        install -m 0755 "$artifact_root/platform/kos-ai-worker" "$prefix/libexec/kos-ai-worker"
+        local ort_root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
+        if [[ -f "$ort_root/lib/libonnxruntime.so.1.30.0" ]]; then
+            install -m 0755 "$ort_root/lib/libonnxruntime.so.1.30.0" \
+                "$prefix/lib/libonnxruntime.so.1.30.0"
+            ln -sfn libonnxruntime.so.1.30.0 "$prefix/lib/libonnxruntime.so.1"
+            ln -sfn libonnxruntime.so.1 "$prefix/lib/libonnxruntime.so"
+            if [[ -f "$ort_root/lib/libonnxruntime_providers_shared.so" ]]; then
+                install -m 0755 "$ort_root/lib/libonnxruntime_providers_shared.so" \
+                    "$prefix/lib/libonnxruntime_providers_shared.so"
+            fi
+        fi
         install -m 0755 "$artifact_root/bin/kos-data-service"     "$prefix/libexec/kos-data-service"
         install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
+        if command -v patchelf >/dev/null 2>&1; then
+            patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-platform"
+            patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-ai-worker"
+        fi
     fi
 
     # --- KWin bridge script ---
@@ -1500,7 +1556,11 @@ uninstall() {
     if command -v systemctl >/dev/null 2>&1; then
         systemctl --user daemon-reload || true
     fi
-    rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+    rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
+        "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
+    rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
+        "$prefix/lib/libonnxruntime.so.1.30.0" \
+        "$prefix/lib/libonnxruntime_providers_shared.so"
     rm -f "$prefix/share/kos/platform/kwin/window-bridge.js" \
         "$prefix/share/kos/settings/main.qml" \
         "$prefix/share/applications/kos-settings.desktop" \

@@ -41,6 +41,13 @@ Current operation groups are:
   `file.open-kde`
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
+- `depth.generate` (CPU depth inference for an absolute local `imagePath`;
+  returns `{depthPath,width,height,cached,model,contract}`. The optional worker
+  downloads the pinned model to the user's cache on first use, verifies its
+  SHA256, and keeps the ONNX session warm for up to one idle minute. Inference
+  runs asynchronously and may take up to five minutes on the first request;
+  worker failures are request-local and do not affect unrelated platform
+  operations. Images remain local.)
 - `settings.open` (allow-listed KDE System Settings modules) and
   `settings.launch` (launch the `kos-settings` app with a fixed argv; the
   only accepted payload field is `shellDir`, an optional absolute path that

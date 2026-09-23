@@ -5057,6 +5057,32 @@ bool PlatformServer::handleTrayOperation(QLocalSocket *socket, const QJsonObject
     return false;
 }
 
+void PlatformServer::runDepthGenerate(QLocalSocket *socket, const QJsonObject &request)
+{
+    const QString requestedPath = request.value(QStringLiteral("payload")).toObject()
+        .value(QStringLiteral("imagePath")).toString();
+    const QFileInfo imageInfo(requestedPath);
+    if (!imageInfo.isAbsolute() || !imageInfo.exists() || !imageInfo.isFile()
+        || imageInfo.canonicalFilePath().isEmpty()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-image-path"),
+                QStringLiteral("图片路径无效或文件不存在"), false);
+        return;
+    }
+
+    const QPointer<QLocalSocket> guardedSocket(socket);
+    const QString imagePath = imageInfo.canonicalFilePath();
+    m_aiWorker.generateDepth(imagePath,
+        [this, guardedSocket, request](bool ok, const QJsonObject &result,
+                                      const QString &code, const QString &message,
+                                      bool retryable) {
+        if (!ok) {
+            respond(guardedSocket.data(), request, false, {}, code, message, retryable);
+            return;
+        }
+        respond(guardedSocket.data(), request, true, result);
+    });
+}
+
 void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &request)
 {
     if (request.value(QStringLiteral("version")).toInt(kProtocolVersion) != kProtocolVersion) {
@@ -5072,6 +5098,10 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
     }
     if (op == QStringLiteral("platform.ping")) {
         respond(socket, request, true, QJsonObject{{QStringLiteral("ready"), true}});
+        return;
+    }
+    if (op == QStringLiteral("depth.generate")) {
+        runDepthGenerate(socket, request);
         return;
     }
     if (handleClipboard(socket, request) || handleApplication(socket, request)

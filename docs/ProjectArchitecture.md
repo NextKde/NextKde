@@ -16,6 +16,7 @@ NextKde/
 │   └── contracts/            JSONL and shortcut contracts
 ├── services/data-service/    Go metrics/history/desktop service
 ├── platform/                 kos-platform C++/Qt daemon
+├── liquid-ai/                portable C++ local inference library
 ├── integrations/kwin/        project-owned KWin plugins
 ├── vendor/kwin-effects-glass/ third-party KWin effect
 ├── packaging/                systemd and desktop files
@@ -29,6 +30,7 @@ NextKde/
 apps/settings ── Shell IPC ──► Quickshell
 Quickshell ── JSONL sockets ──► kos-platform / kos-data-service
 kos-platform ── D-Bus/argv ──► KDE, KWin, NetworkManager, PipeWire, BlueZ
+kos-platform ── bounded JSONL ──► kos-ai-worker ──► liquid-ai ──► ONNX Runtime / OpenCV
 ```
 
 `apps/settings` never imports `shell/desktop`; it uses the narrow
@@ -45,7 +47,8 @@ versions, error codes, and default shortcut definitions.
 | Product | Lifecycle | Responsibility |
 | --- | --- | --- |
 | Quickshell (`qs -c kos`) | interactive | visual shell surfaces and presentation models |
-| `kos-platform` | systemd `--user` resident | live desktop integration and privileged adapters |
+| `kos-platform` | systemd `--user` resident | live desktop integration, privileged adapters, and bounded AI worker supervision |
+| `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after one idle minute |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
 | `kos-calendar`, `kos-todo`, `kos-weather`, `kos-music` | on demand | optional independent Qt Quick applications |

@@ -1040,6 +1040,7 @@ ApplicationWindow {
         property bool showSystemAppearance: true
         property bool showGlassMaterial: true
         property bool showIconAppearance: true
+        property bool showSpatialWallpaper: false
 
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
@@ -1049,6 +1050,7 @@ ApplicationWindow {
         property string shellStyle: "macos"
         readonly property bool isMaterialDesign: shellStyle === "material"
         property bool glassFollowsAppearanceMode: false
+        property bool spatialWallpaperEnabled: false
         property bool blurDirty: false
         property bool liquidDirty: false
         property string errorText: ""
@@ -1076,6 +1078,7 @@ ApplicationWindow {
             window.shellStyle = shellStyle
             if (state.glassFollowsAppearanceMode !== undefined)
                 glassFollowsAppearanceMode = !!state.glassFollowsAppearanceMode
+            spatialWallpaperEnabled = !!state.spatialWallpaperEnabled
             blurDirty = false
             liquidDirty = false
             errorText = ""
@@ -1292,6 +1295,66 @@ ApplicationWindow {
                                     displayPage.glassFollowsAppearanceMode
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        Text {
+            visible: displayPage.showSpatialWallpaper
+            text: "空间壁纸"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 10
+        }
+
+        Rectangle {
+            visible: displayPage.showSpatialWallpaper
+            Layout.fillWidth: true
+            implicitHeight: spatialWallpaperRow.implicitHeight + 20
+            radius: 18
+            color: theme.card
+
+            RowLayout {
+                id: spatialWallpaperRow
+                anchors.fill: parent
+                anchors.margins: 12
+                spacing: 12
+
+                SettingIcon { symbol: "◉"; tint: "#64d2ff" }
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 3
+                    Text {
+                        text: "启用空间壁纸视差"
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "模型只在本机运行。首次启用会下载并用 CPU 生成深度缓存；之后仅在壁纸变化时重新处理。"
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                LiquidControls.LiquidGlassSwitch {
+                    id: spatialWallpaperSwitch
+                    width: 64
+                    height: 25
+                    checked: displayPage.spatialWallpaperEnabled
+                    accentColor: theme.accent
+                    trackColor: theme.divider
+                    onToggled: function(checked) {
+                        if (displayPage.bridge)
+                            displayPage.bridge.updateSpatialWallpaperEnabled(checked)
+                        spatialWallpaperSwitch.checked =
+                            displayPage.spatialWallpaperEnabled
                     }
                 }
             }
@@ -2575,6 +2638,7 @@ ApplicationWindow {
             showSystemAppearance: true
             showGlassMaterial: false
             showIconAppearance: true
+            showSpatialWallpaper: true
         }
 
         Text {

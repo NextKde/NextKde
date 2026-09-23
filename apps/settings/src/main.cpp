@@ -333,6 +333,12 @@ public:
             enabled ? QStringLiteral("true") : QStringLiteral("false")});
     }
 
+    Q_INVOKABLE void updateSpatialWallpaperEnabled(bool enabled) {
+        callAppearance({
+            QStringLiteral("updateSpatialWallpaperEnabled"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
     Q_INVOKABLE void updateBarVisibilityMode(const QString &mode) {
         callAppearance({QStringLiteral("updateBarVisibilityMode"), mode});
     }
@@ -550,6 +556,8 @@ private:
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
             {QStringLiteral("glassFollowsAppearanceMode"),
                 object.value(QStringLiteral("glassFollowsAppearanceMode")).toBool(true)},
+            {QStringLiteral("spatialWallpaperEnabled"),
+                object.value(QStringLiteral("spatialWallpaperEnabled")).toBool(false)},
             {QStringLiteral("barVisibilityMode"),
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),

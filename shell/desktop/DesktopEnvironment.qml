@@ -211,6 +211,8 @@ Item {
                     JSON.stringify(AppearanceTokens.colorSchemeSwatches),
                 glassFollowsAppearanceMode:
                     AppearanceConfigService.glassFollowsAppearanceMode,
+                spatialWallpaperEnabled:
+                    AppearanceConfigService.spatialWallpaperEnabled,
                 barIntegratedWithDock:
                     AppearanceConfigService.barIntegratedWithDock,
                 barVisibilityMode: AppearanceConfigService.barVisibilityMode,
@@ -303,6 +305,11 @@ Item {
 
         function updateGlassFollowsAppearanceMode(enabled: bool): string {
             AppearanceConfigService.updateGlassFollowsAppearanceMode(enabled)
+            return snapshot()
+        }
+
+        function updateSpatialWallpaperEnabled(enabled: bool): string {
+            AppearanceConfigService.updateSpatialWallpaperEnabled(enabled)
             return snapshot()
         }
 
