@@ -1,8 +1,8 @@
 # Music architecture
 
-KOS Music is an independent Qt Quick process. It owns the local library,
-playback engine, conversion jobs, and MPRIS provider. Quickshell and the other
-standalone applications do not import its implementation.
+KOS Music is an independent Qt Quick process. It owns the local and online
+track catalog, playback engine, conversion jobs, and MPRIS provider. Quickshell
+and the other standalone applications do not import its implementation.
 
 ```text
 Qt Quick views
@@ -14,6 +14,12 @@ MusicController ---------------- MprisService
      +-- MetadataScanner/TagLib
      +-- PlaybackEngine/GStreamer playbin3 --> system audio output
      +-- Transcoder/GStreamer -------------> user-selected local file
+     +-- OnlineMusicProvider/HTTPS --------> provider metadata search
+     +-- LxSourceService/JSONL ------------> separate custom-source host
+                                                   |
+                                      Node vm + restricted lx bridge
+                                                   |
+                                           playable URL resolution
 ```
 
 ## Design research and code provenance
@@ -31,6 +37,11 @@ using their architectural lessons rather than copying their source:
 - [GNOME Amberol](https://apps.gnome.org/Amberol/) validates a focused local
   queue, direct playback controls, artwork-led presentation, and MPRIS without
   requiring an online-service architecture.
+- [SPlayer](https://github.com/imsyy/SPlayer) informed the Track identity,
+  summary/detail separation, provider boundary, bounded page lifecycle,
+  persistent mini player, dedicated Now Playing surface, and isolation of
+  untrusted LX-compatible scripts. KOS retains its native Qt/GStreamer stack;
+  no Electron implementation was ported.
 - The D-Bus surface follows the
   [MPRIS 2.2 specification](https://specifications.freedesktop.org/mpris/latest/).
 
@@ -46,7 +57,9 @@ plugins remain distribution-provided and are never redistributed by KOS.
 The QML-facing controller coordinates state but does not decode files itself.
 It restores volume, repeat, shuffle, queue order, and the current queue index;
 starts serialized folder scans; builds album/artist summaries; and translates
-UI or MPRIS actions into engine/database operations. Album identity combines
+UI or MPRIS actions into engine/database operations. It remains a QML
+compatibility facade while provider/search/source behavior lives in dedicated
+services. Album identity combines
 album title and album artist so two unrelated albums with the same title do
 not merge. Artist browsing uses track artist, falling back to album artist only
 when the track artist is absent.
@@ -67,12 +80,12 @@ known and reported as warnings. A scan never writes tags or audio files.
 
 One named Qt SQL connection owns `$XDG_DATA_HOME/kos/music/library.sqlite`.
 SQLite foreign keys, WAL, a five-second busy timeout, and schema migrations are
-enabled before use. Version 1 contains:
+enabled before use. Schema version 2 contains:
 
 | Table | Ownership |
 | --- | --- |
 | `library_roots` | Canonical folders and scan timestamps |
-| `tracks` | Paths, tags, artwork URL, fingerprints, duration, and play history |
+| `tracks` | Stable local/LX identities, provider metadata, tags, artwork, fingerprints, duration, and play history |
 | `playlists` / `playlist_items` | Named ordered sets; track deletion cascades |
 | `queue` | Durable playback order; duplicate tracks are allowed |
 | `settings` | Volume, shuffle, repeat, and current queue index |
@@ -81,6 +94,54 @@ Opening one file directly creates a track with no library root, so removing a
 folder cannot delete an unrelated explicitly opened item. Removing a library
 root cascades only its indexed tracks, queue entries, and playlist references;
 the source directory and files are never touched.
+
+Online tracks use `source + provider_id` semantics and a stable synthetic path
+such as `lx://wy/347230`. Their `source_data` stores the metadata required by
+an LX resolver. Resolved audio URLs are deliberately not stored: they are
+short-lived links and are requested again when playback starts.
+
+### OnlineMusicProvider
+
+The initial provider performs NetEase (`wy`) metadata search over HTTPS and
+maps results into the same `TrackRecord` domain type used by the local library.
+It does not obtain or cache playable URLs. Search replies are bounded by the
+network timeout and stale requests are aborted when a new query begins. This
+boundary can accept more search providers without changing queue or playback
+code.
+
+### LxSourceService and source host
+
+Users can import a local JavaScript file or an HTTPS URL compatible with LX
+Music's `user_api` request/inited contract. Scripts are SHA-256 identified,
+atomically copied under `$XDG_DATA_HOME/kos/music/sources`, explicitly
+activated, and never evaluated in the UI process. The source host exchanges
+one bounded JSON object per line with the application and exposes only the LX
+event/request/crypto/buffer compatibility bridge inside a Node `vm` context;
+`require`, `process`, and the filesystem are not exposed. A 35-second command
+deadline terminates a hung host. The small Qt JS implementation is retained as
+a legacy fallback if Node cannot be executed, but modern sources require a
+Node.js runtime because they commonly use async/await and newer syntax.
+
+Custom sources remain third-party code. The helper provides crash/timeout
+containment and reduces the directly exposed API surface, but Node's `vm` is
+not a security sandbox. Only trusted scripts should be imported. A source can
+observe the track metadata and its own HTTP traffic, may stop working, and
+grants no music copyright or redistribution rights.
+
+### LyricsService and Now Playing
+
+Lyrics are intentionally outside `MusicController` and the playback engine.
+For local tracks the service looks for a same-name `.lrc`/`.LRC` sidecar. For
+NetEase tracks it requests synchronized LRC text, writes successful responses
+atomically under the music cache, and reuses them offline. The parser accepts
+multiple timestamps per line, normalizes fractional seconds, and sorts the
+timeline. GStreamer remains the playback clock; its existing 250 ms position
+updates select the active line while QML owns scrolling and transitions.
+
+The persistent Mini Player stays outside the bounded page cache. The heavier
+Now Playing page is cache-managed, applies artwork only as a local translucent
+backdrop, and never mutates `AppTheme` or the rest of the desktop. Its lyric
+view therefore stops rendering when the page is evicted.
 
 ### PlaybackEngine
 
@@ -133,13 +194,20 @@ false.
   replacement cannot cross filesystems.
 - The queue and playlists reference track IDs with foreign-key cleanup, so a
   rescan cannot leave dangling rows.
-- No network URI, shell command, plugin download, or codec installation is
-  initiated by the application.
+- Source imports accept local files, HTTPS, and loopback HTTP for test tooling;
+  arbitrary clear-text remote import URLs are rejected. Resolved playback URLs
+  may be HTTP because existing LX sources return them.
+- Custom scripts are not given `require`, `process`, or application objects.
+  The helper is killable and all source HTTP responses are size-limited; this
+  is defense in depth, not permission to run untrusted code.
 
 ## Verification matrix
 
 `kos-music.core` covers schema persistence, incremental scans, missing-file
-cleanup, queue/playlists, filtering, sorting, and album identity.
+cleanup, queue/playlists, filtering, sorting, album identity, provider parsing,
+online-track persistence without resolved URLs, and LRC parsing/timestamp
+normalization. `kos-music.source-host`
+checks the LX request/inited contract through the real subprocess boundary.
 `kos-music.engine` decodes and plays a generated WAV through synchronized
 GStreamer, pauses, seeks, resumes, converts it with an installed encoder, and
 tests atomic overwrite. `kos-music.mpris` runs under a private session bus and
@@ -148,11 +216,19 @@ seek, `OpenUri`, and `Raise`. Version and full-QML smoke tests load the normal
 application root with software rendering. Engine/MPRIS tests make GLib critical
 warnings fatal to catch ownership mistakes.
 
+`kos-music-live-source-check` is an opt-in network integration executable. It
+searches through `OnlineMusicProvider`, imports a selected LX script, loads
+lyrics, resolves the first result, and asks the real GStreamer engine to fetch
+and decode the stream through a synchronized fake audio sink. It is intentionally not a
+default CTest because public search and third-party source endpoints are
+external and unstable.
+
 ## Deliberate boundary and future refactors
 
-Version 1 is a local single-user player. Streaming/DRM accounts, remote
-libraries, sync, and podcasts require a provider and credential boundary, not
-extensions to `MusicController`. Editing tags requires a transactional write
+The current milestone is a local single-user player plus opt-in LX custom
+sources. Remote library servers, authenticated streaming/DRM accounts, sync,
+and podcasts remain out of scope and require separate provider and credential
+boundaries, not extensions to `MusicController`. Editing tags requires a transactional write
 service with backup/conflict behavior. Gapless preloading, crossfade,
 ReplayGain, and DSP require a queue-aware engine API instead of adding policy
 to the QML layer. Very large-library pagination would replace the current

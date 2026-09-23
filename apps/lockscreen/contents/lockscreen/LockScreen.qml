@@ -551,6 +551,20 @@ Item {
         opacity: Math.max(0, root.reveal - root.dismiss)
     }
 
+    // Live lyrics are isolated behind a Loader: failure to import the
+    // read-only D-Bus helper can hide lyrics, but can never hide authentication.
+    Loader {
+        id: lyricsLoader
+        objectName: "lockLyricsLoader"
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: bottomStack.top
+        anchors.bottomMargin: Math.round(root.height * 0.045)
+        width: Math.min(root.width * 0.72, 820)
+        height: item ? item.implicitHeight : 0
+        source: "LockLyrics.qml"
+        opacity: Math.max(0, root.reveal - root.dismiss)
+    }
+
     // ---- bottom: message, password field, status -------------------------
 
     Column {

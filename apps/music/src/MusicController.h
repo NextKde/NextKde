@@ -1,6 +1,7 @@
 #pragma once
 
 #include "MusicDatabase.h"
+#include "OnlineMusicProvider.h"
 #include "PlaybackEngine.h"
 #include "TrackListModel.h"
 #include "Transcoder.h"
@@ -13,8 +14,11 @@
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include <optional>
+#include <memory>
 
 class MprisService;
+class LxSourceService;
+class LyricsService;
 
 class MusicController : public QObject {
     Q_OBJECT
@@ -23,6 +27,7 @@ class MusicController : public QObject {
     Q_PROPERTY(TrackListModel *libraryModel READ libraryModel CONSTANT)
     Q_PROPERTY(TrackListModel *queueModel READ queueModel CONSTANT)
     Q_PROPERTY(TrackListModel *playlistTracksModel READ playlistTracksModel CONSTANT)
+    Q_PROPERTY(TrackListModel *onlineModel READ onlineModel CONSTANT)
     Q_PROPERTY(QVariantList albums READ albums NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList artists READ artists NOTIFY libraryChanged)
     Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged)
@@ -32,6 +37,20 @@ class MusicController : public QObject {
     Q_PROPERTY(QString scanStatus READ scanStatus NOTIFY scanningChanged)
     Q_PROPERTY(QStringList scanWarnings READ scanWarnings NOTIFY scanningChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
+    Q_PROPERTY(bool onlineSearching READ onlineSearching NOTIFY onlineSearchingChanged)
+    Q_PROPERTY(QString onlineError READ onlineError NOTIFY onlineErrorChanged)
+    Q_PROPERTY(QVariantList musicSources READ musicSources NOTIFY musicSourcesChanged)
+    Q_PROPERTY(QStringList onlineQualities READ onlineQualities NOTIFY onlineQualitiesChanged)
+    Q_PROPERTY(QString onlineQuality READ onlineQuality WRITE setOnlineQuality NOTIFY onlineQualityChanged)
+    Q_PROPERTY(QString activeMusicSourceId READ activeMusicSourceId NOTIFY musicSourcesChanged)
+    Q_PROPERTY(QString musicSourceState READ musicSourceState NOTIFY musicSourceStateChanged)
+    Q_PROPERTY(QString musicSourceError READ musicSourceError NOTIFY musicSourceErrorChanged)
+    Q_PROPERTY(QVariantList lyrics READ lyrics NOTIFY lyricsChanged)
+    Q_PROPERTY(int currentLyricIndex READ currentLyricIndex NOTIFY currentLyricChanged)
+    Q_PROPERTY(QString currentLyric READ currentLyric NOTIFY currentLyricChanged)
+    Q_PROPERTY(QString nextLyric READ nextLyric NOTIFY currentLyricChanged)
+    Q_PROPERTY(bool lyricsLoading READ lyricsLoading NOTIFY lyricsLoadingChanged)
+    Q_PROPERTY(QString lyricsError READ lyricsError NOTIFY lyricsErrorChanged)
 
     Q_PROPERTY(bool engineAvailable READ engineAvailable CONSTANT)
     Q_PROPERTY(QString engineBackend READ engineBackend CONSTANT)
@@ -48,6 +67,8 @@ class MusicController : public QObject {
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(bool shuffle READ shuffle WRITE setShuffle NOTIFY shuffleChanged)
     Q_PROPERTY(QString repeatMode READ repeatMode WRITE setRepeatMode NOTIFY repeatModeChanged)
+    Q_PROPERTY(QString playbackMode READ playbackMode WRITE setPlaybackMode NOTIFY playbackModeChanged)
+    Q_PROPERTY(QString librarySearch READ librarySearch NOTIFY librarySearchChanged)
     Q_PROPERTY(bool canGoNext READ canGoNext NOTIFY queueChanged)
     Q_PROPERTY(bool canGoPrevious READ canGoPrevious NOTIFY queueChanged)
     Q_PROPERTY(int queueIndex READ queueIndex NOTIFY queueChanged)
@@ -65,6 +86,7 @@ public:
     TrackListModel *libraryModel();
     TrackListModel *queueModel();
     TrackListModel *playlistTracksModel();
+    TrackListModel *onlineModel();
     QVariantList albums() const;
     QVariantList artists() const;
     QVariantList playlists() const;
@@ -74,6 +96,20 @@ public:
     QString scanStatus() const;
     QStringList scanWarnings() const;
     QString errorMessage() const;
+    QStringList onlineQualities() const;
+    QString onlineQuality() const;
+    bool onlineSearching() const;
+    QString onlineError() const;
+    QVariantList musicSources() const;
+    QString activeMusicSourceId() const;
+    QString musicSourceState() const;
+    QString musicSourceError() const;
+    QVariantList lyrics() const;
+    int currentLyricIndex() const;
+    QString currentLyric() const;
+    QString nextLyric() const;
+    bool lyricsLoading() const;
+    QString lyricsError() const;
 
     bool engineAvailable() const;
     QString engineBackend() const;
@@ -90,6 +126,8 @@ public:
     double volume() const;
     bool shuffle() const;
     QString repeatMode() const;
+    QString playbackMode() const;
+    QString librarySearch() const;
     bool canGoNext() const;
     bool canGoPrevious() const;
     int queueIndex() const;
@@ -108,8 +146,15 @@ public:
     Q_INVOKABLE void rescanLibrary();
     Q_INVOKABLE void setLibraryView(const QString &mode, const QString &filterValue = {});
     Q_INVOKABLE void setSearch(const QString &search);
+    Q_INVOKABLE void searchOnline(const QString &query);
+    Q_INVOKABLE void playOnlineRow(int row);
+    Q_INVOKABLE void enqueueOnlineRow(int row);
+    Q_INVOKABLE void importMusicSource(const QString &pathOrUrl);
+    Q_INVOKABLE void activateMusicSource(const QString &sourceId);
+    Q_INVOKABLE void removeMusicSource(const QString &sourceId);
 
     Q_INVOKABLE void playTrack(qlonglong trackId);
+    void setOnlineQuality(const QString &quality);
     Q_INVOKABLE void playQueueRow(int row);
     Q_INVOKABLE void playPlaylistRow(int row);
     Q_INVOKABLE void playAlbum(const QString &album);
@@ -129,6 +174,7 @@ public:
     void setVolume(double volume);
     void setShuffle(bool shuffle);
     void setRepeatMode(const QString &mode);
+    void setPlaybackMode(const QString &mode);
 
     Q_INVOKABLE void createPlaylist(const QString &name);
     Q_INVOKABLE void renamePlaylist(qlonglong playlistId, const QString &name);
@@ -152,6 +198,17 @@ signals:
     void libraryFoldersChanged();
     void scanningChanged();
     void errorMessageChanged();
+    void onlineSearchingChanged();
+    void onlineErrorChanged();
+    void musicSourcesChanged();
+    void musicSourceStateChanged();
+    void musicSourceErrorChanged();
+    void onlineQualitiesChanged();
+    void onlineQualityChanged();
+    void lyricsChanged();
+    void currentLyricChanged();
+    void lyricsLoadingChanged();
+    void lyricsErrorChanged();
     void mprisRegisteredChanged();
     void playbackStateChanged();
     void currentTrackChanged();
@@ -161,6 +218,8 @@ signals:
     void volumeChanged();
     void shuffleChanged();
     void repeatModeChanged();
+    void playbackModeChanged();
+    void librarySearchChanged();
     void queueChanged();
     void transcodeChanged();
     void seeked(qlonglong positionMs);
@@ -176,12 +235,14 @@ private:
     void startNextScan();
     void refreshLibrary();
     void refreshGroups();
+    void applyGroupSearch();
     void refreshPlaylists();
     void refreshQueueModel();
     void refreshPlaylistModel();
     void setQueue(const QList<qint64> &trackIds, int currentIndex);
     void persistQueue();
     void startCurrentTrack();
+    qint64 storeOnlineTrack(int row);
     void advance(bool fromEndOfStream);
     QList<TrackRecord> tracksForIds(const QList<qint64> &ids) const;
     std::optional<TrackRecord> findTrack(qint64 id) const;
@@ -193,6 +254,11 @@ private:
     TrackListModel m_libraryModel;
     TrackListModel m_queueModel;
     TrackListModel m_playlistTracksModel;
+    TrackListModel m_onlineModel;
+    OnlineMusicProvider m_onlineProvider;
+    QString m_onlineQuality = QStringLiteral("128k");
+    std::unique_ptr<LxSourceService> m_sourceService;
+    std::unique_ptr<LyricsService> m_lyricsService;
     QFutureWatcher<ScanResult> m_scanWatcher;
     MprisService *m_mpris = nullptr;
     QList<TrackRecord> m_tracks;
@@ -201,6 +267,8 @@ private:
     QStringList m_pendingScanRoots;
     QVariantList m_albums;
     QVariantList m_artists;
+    QVariantList m_allAlbums;
+    QVariantList m_allArtists;
     QVariantList m_playlists;
     QStringList m_libraryFolders;
     QStringList m_scanWarnings;
@@ -209,10 +277,12 @@ private:
     QString m_scanStatus = QStringLiteral("Idle");
     QString m_errorMessage;
     QString m_repeatMode = QStringLiteral("none");
+    QString m_librarySearch;
     QString m_activeScanRoot;
     qint64 m_selectedPlaylistId = -1;
     int m_queueIndex = -1;
     bool m_ready = false;
     bool m_scanning = false;
     bool m_shuffle = false;
+    qint64 m_resolvingTrackId = -1;
 };

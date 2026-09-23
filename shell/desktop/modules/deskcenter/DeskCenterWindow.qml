@@ -1861,9 +1861,24 @@ PanelWindow {
 	                            color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.68), 0.68)
                             font.pixelSize: 10
                         }
+                        Text {
+                            id: musicLyric
+                            anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
+                            text: DockMprisService.currentLyric
+                            visible: text.length > 0
+                            elide: Text.ElideRight
+                            horizontalAlignment: Text.AlignHCenter
+                            color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
+                            font { pixelSize: 10; weight: Font.Medium }
+                        }
                         Item {
                             id: musicProgressTrack
-                            anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 12 }
+                            anchors {
+                                left: parent.left
+                                right: parent.right
+                                top: musicLyric.visible ? musicLyric.bottom : musicArtist.bottom
+                                topMargin: musicLyric.visible ? 7 : 12
+                            }
                             height: 5
                             visible: musicContent.safeLength > 0
                             WavyProgress {

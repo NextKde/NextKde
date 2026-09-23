@@ -97,6 +97,9 @@ class MusicMprisTest : public QObject {
 
 private slots:
     void exposesPropertiesAndControlsPlayback();
+    void playbackModesPersist();
+    void onlineQueueAttemptsResolveAfterRestart();
+    void onlineQualityPersistsAndRejectsInvalid();
 };
 
 void MusicMprisTest::exposesPropertiesAndControlsPlayback()
@@ -108,6 +111,11 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
     const QString inputPath = directory.filePath(QStringLiteral("mpris-tone.wav"));
     QVERIFY(writeTestWave(inputPath));
+    QFile lyricFile(directory.filePath(QStringLiteral("mpris-tone.lrc")));
+    QVERIFY(lyricFile.open(QIODevice::WriteOnly));
+    QCOMPARE(lyricFile.write("[00:00.00]First lyric\n[00:01.00]Second lyric\n"),
+             qint64(45));
+    lyricFile.close();
 
     MusicController controller;
     // Database open and MPRIS registration are deferred to the event loop.
@@ -129,6 +137,19 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
                       QStringLiteral("Metadata")));
     QCOMPARE(metadata.value(QStringLiteral("xesam:title")).toString(),
              QStringLiteral("mpris-tone"));
+    QTRY_COMPARE_WITH_TIMEOUT(controller.currentLyric(), QStringLiteral("First lyric"), 3000);
+    QVariantMap lyricMetadata = dbusMap(
+        mprisProperty(QString::fromLatin1(playerInterface), QStringLiteral("Metadata")));
+    QCOMPARE(lyricMetadata.value(QStringLiteral("xesam:asText")).toString(),
+             QStringLiteral("First lyric"));
+    QCOMPARE(lyricMetadata.value(QStringLiteral("kos:nextLyric")).toString(),
+             QStringLiteral("Second lyric"));
+    controller.seek(1500);
+    QTRY_COMPARE_WITH_TIMEOUT(controller.currentLyric(), QStringLiteral("Second lyric"), 3000);
+    lyricMetadata = dbusMap(
+        mprisProperty(QString::fromLatin1(playerInterface), QStringLiteral("Metadata")));
+    QCOMPARE(lyricMetadata.value(QStringLiteral("xesam:asText")).toString(),
+             QStringLiteral("Second lyric"));
     QCOMPARE(mprisProperty(QString::fromLatin1(playerInterface),
                            QStringLiteral("PlaybackStatus")).toString(),
              QStringLiteral("Playing"));
@@ -170,6 +191,108 @@ void MusicMprisTest::exposesPropertiesAndControlsPlayback()
     QCOMPARE(call(QString::fromLatin1(playerInterface), QStringLiteral("Stop")).type(),
              QDBusMessage::ReplyMessage);
     QTRY_COMPARE_WITH_TIMEOUT(controller.playbackState(), QStringLiteral("Stopped"), 2000);
+}
+
+void MusicMprisTest::playbackModesPersist()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    qputenv("KOS_MUSIC_FAKE_AUDIO", "1");
+    qputenv("KOS_MUSIC_DATA_DIR", directory.filePath(QStringLiteral("data")).toUtf8());
+    qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
+
+    {
+        MusicController controller;
+        QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
+        controller.setPlaybackMode(QStringLiteral("sequential"));
+        QCOMPARE(controller.playbackMode(), QStringLiteral("sequential"));
+        QCOMPARE(controller.repeatMode(), QStringLiteral("none"));
+        QVERIFY(!controller.shuffle());
+
+        controller.setPlaybackMode(QStringLiteral("playlist"));
+        QCOMPARE(controller.repeatMode(), QStringLiteral("playlist"));
+        QVERIFY(!controller.shuffle());
+
+        controller.setPlaybackMode(QStringLiteral("shuffle"));
+        QCOMPARE(controller.playbackMode(), QStringLiteral("shuffle"));
+        QCOMPARE(controller.repeatMode(), QStringLiteral("none"));
+        QVERIFY(controller.shuffle());
+
+        controller.setPlaybackMode(QStringLiteral("track"));
+        QCOMPARE(controller.playbackMode(), QStringLiteral("track"));
+        QCOMPARE(controller.repeatMode(), QStringLiteral("track"));
+        QVERIFY(!controller.shuffle());
+    }
+    QCoreApplication::processEvents();
+    {
+        MusicController controller;
+        QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
+        QCOMPARE(controller.playbackMode(), QStringLiteral("track"));
+        QCOMPARE(controller.repeatMode(), QStringLiteral("track"));
+        QVERIFY(!controller.shuffle());
+    }
+}
+
+void MusicMprisTest::onlineQueueAttemptsResolveAfterRestart()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    qputenv("KOS_MUSIC_FAKE_AUDIO", "1");
+    const QString dataPath = directory.filePath(QStringLiteral("data"));
+    qputenv("KOS_MUSIC_DATA_DIR", dataPath.toUtf8());
+    qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
+
+    {
+        MusicDatabase database;
+        QString error;
+        QVERIFY2(database.open(QDir(dataPath).filePath(QStringLiteral("library.sqlite")),
+                               &error), qPrintable(error));
+        TrackRecord online;
+        online.path = QStringLiteral("lx://wy/186016");
+        online.title = QStringLiteral("晴天");
+        online.artist = QStringLiteral("周杰伦");
+        online.source = QStringLiteral("wy");
+        online.providerId = QStringLiteral("186016");
+        online.sourceData = QStringLiteral("{}");
+        const qint64 id = database.addExternalTrack(online, &error);
+        QVERIFY2(id > 0, qPrintable(error));
+        QVERIFY2(database.setQueueTrackIds({id}, &error), qPrintable(error));
+        QVERIFY2(database.setSetting(QStringLiteral("queueIndex"), QStringLiteral("0"),
+                                     &error), qPrintable(error));
+    }
+
+    MusicController controller;
+    QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
+    QCOMPARE(controller.currentTitle(), QStringLiteral("晴天"));
+    QSignalSpy stateChanges(&controller, &MusicController::playbackStateChanged);
+    controller.play();
+    QVERIFY(stateChanges.size() >= 2); // Loading, then a classified source failure.
+    QVERIFY(controller.errorMessage().contains(
+        QStringLiteral("Choose a ready custom music source first")));
+}
+
+void MusicMprisTest::onlineQualityPersistsAndRejectsInvalid()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    qputenv("KOS_MUSIC_FAKE_AUDIO", "1");
+    qputenv("KOS_MUSIC_DATA_DIR", directory.filePath(QStringLiteral("data")).toUtf8());
+    qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
+
+    {
+        MusicController controller;
+        QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
+        controller.setOnlineQuality(QStringLiteral("320k"));
+        QCOMPARE(controller.onlineQuality(), QStringLiteral("320k"));
+        controller.setOnlineQuality(QStringLiteral("unsupported"));
+        QCOMPARE(controller.onlineQuality(), QStringLiteral("320k"));
+    }
+    QCoreApplication::processEvents();
+    {
+        MusicController controller;
+        QTRY_VERIFY_WITH_TIMEOUT(controller.ready(), 3000);
+        QCOMPARE(controller.onlineQuality(), QStringLiteral("320k"));
+    }
 }
 
 QTEST_GUILESS_MAIN(MusicMprisTest)

@@ -31,6 +31,7 @@ singleton ThemeService 1.0 DockThemeService.qml
 singleton DockModelService 1.0 DockModelService.qml
 singleton DockMprisService 1.0 DockMprisService.qml
 DockMusicPopup 1.0 DockMusicPopup.qml
+DesktopLyrics 1.0 DesktopLyrics.qml
 DockTrashConfirmPopup 1.0 DockTrashConfirmPopup.qml
 singleton AppIdentityService 1.0 AppIdentityService.qml
 singleton WindowService 1.0 WindowService.qml

@@ -179,6 +179,13 @@ MprisService::MprisService(MusicController *controller, QObject *parent)
                     {QStringLiteral("PlaybackStatus"), player->playbackStatus()},
                 });
             });
+    const auto publishMetadata = [this, controller] {
+        publishPlayerProperties({
+            {QStringLiteral("Metadata"), controller->mprisMetadata()},
+        });
+    };
+    connect(controller, &MusicController::lyricsChanged, this, publishMetadata);
+    connect(controller, &MusicController::currentLyricChanged, this, publishMetadata);
     connect(controller, &MusicController::currentTrackChanged, this,
             [this, controller, player] {
                 publishPlayerProperties({

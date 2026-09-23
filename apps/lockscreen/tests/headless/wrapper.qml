@@ -132,6 +132,19 @@ Item {
                 wrapper.check(lock.reveal > 0.9, 125)
                 wrapper.check(lock.dismiss === 0, 126)
 
+                const lyricsLoader = wrapper.findByObjectName(lock, "lockLyricsLoader")
+                if (lyricsLoader === null || lyricsLoader.status !== Loader.Ready
+                        || lyricsLoader.item === null) {
+                    Qt.exit(136)
+                } else {
+                    // No KOS Music MPRIS service exists in this isolated run.
+                    // The lyric bridge must load successfully and remain hidden.
+                    wrapper.check(lyricsLoader.item.visible === false, 137)
+                    wrapper.check(lyricsLoader.item.unwrap({value: "line"}) === "line", 138)
+                    const argumentLike = {0: {value: "line"}, length: 1}
+                    wrapper.check(lyricsLoader.item.unwrap(argumentLike) === "line", 139)
+                }
+
                 if (sessionMenuProbe.status !== Loader.Ready) {
                     Qt.exit(127)
                 } else {

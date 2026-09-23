@@ -1,9 +1,12 @@
 #include "MetadataScanner.h"
+#include "LyricsService.h"
 #include "MusicDatabase.h"
+#include "OnlineMusicProvider.h"
 #include "TrackListModel.h"
 
 #include <QDataStream>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QTemporaryDir>
 #include <QUrl>
@@ -61,6 +64,12 @@ private slots:
     void databasePersistsLibraryQueueAndPlaylists();
     void scannerSkipsUnchangedFilesAndRemovesMissingFiles();
     void trackModelFiltersAndSorts();
+    void trackModelSupportsMultiFieldUnicodeSearch();
+    void trackModelSearchesFiveThousandTracks();
+    void onlineSearchMetadataParsesAndPersists();
+    void onlineSearchRanksArtistMatches();
+    void lrcLyricsParseAndSort();
+    void unsavedOnlineTrackLoadsCachedLyrics();
 };
 
 void MusicCoreTest::databasePersistsLibraryQueueAndPlaylists()
@@ -166,6 +175,207 @@ void MusicCoreTest::trackModelFiltersAndSorts()
     model.setMode(QStringLiteral("artist"));
     QCOMPARE(model.count(), 1);
     QCOMPARE(model.trackIdAt(0), 1);
+}
+
+void MusicCoreTest::trackModelSupportsMultiFieldUnicodeSearch()
+{
+    TrackRecord original = track(QStringLiteral("/tmp/sunny.wav"),
+                                 QStringLiteral("晴天"));
+    original.id = 1;
+    original.album = QStringLiteral("叶惠美");
+    original.albumArtist = QStringLiteral("周杰伦");
+    original.genre = QStringLiteral("流行");
+
+    TrackRecord cover = track(QStringLiteral("/tmp/cover.wav"),
+                              QStringLiteral("晴天（翻唱版）"),
+                              QStringLiteral("示例歌手"));
+    cover.id = 2;
+    cover.album = QStringLiteral("翻唱合集");
+
+    TrackRecord compatibility = track(QStringLiteral("/tmp/compat.wav"),
+                                      QStringLiteral("ＡＢＣ Song"),
+                                      QStringLiteral("Case Artist"));
+    compatibility.id = 3;
+
+    TrackListModel model;
+    model.setTracks({cover, compatibility, original});
+    model.setSearch(QStringLiteral("  晴天   周杰伦  "));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.trackIdAt(0), 1);
+
+    model.setSearch(QStringLiteral("晴天"));
+    QCOMPARE(model.count(), 2);
+    QCOMPARE(model.trackIdAt(0), 1); // Exact title ranks above a cover.
+
+    model.setSearch(QStringLiteral("abc case"));
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.trackIdAt(0), 3); // NFKC folds full-width Latin letters.
+
+    QVERIFY(TrackListModel::matchesSearch(
+        {QStringLiteral("叶惠美"), QStringLiteral("周杰伦"),
+         QStringLiteral("晴天"), QStringLiteral("流行")},
+        QStringLiteral("晴天 周杰伦")));
+    QVERIFY(!TrackListModel::matchesSearch(
+        {QStringLiteral("叶惠美"), QStringLiteral("周杰伦")},
+        QStringLiteral("稻香 周杰伦")));
+
+    QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
+    model.setView(QStringLiteral("album"),
+                  QStringLiteral("叶惠美") + QChar(0x1f) + QStringLiteral("周杰伦"));
+    QCOMPARE(resetSpy.size(), 1); // Mode and filter update atomically.
+}
+
+void MusicCoreTest::trackModelSearchesFiveThousandTracks()
+{
+    QList<TrackRecord> tracks;
+    tracks.reserve(5000);
+    for (int index = 0; index < 5000; ++index) {
+        TrackRecord item = track(QStringLiteral("/tmp/%1.wav").arg(index),
+                                 QStringLiteral("Track %1").arg(index),
+                                 QStringLiteral("Artist %1").arg(index % 50));
+        item.id = index + 1;
+        item.album = QStringLiteral("Album %1").arg(index % 100);
+        tracks.append(item);
+    }
+    tracks[4321].title = QStringLiteral("晴天");
+    tracks[4321].albumArtist = QStringLiteral("周杰伦");
+
+    TrackListModel model;
+    model.setTracks(tracks);
+    QElapsedTimer timer;
+    timer.start();
+    model.setSearch(QStringLiteral("晴天 周杰伦"));
+    const qint64 elapsed = timer.elapsed();
+    QCOMPARE(model.count(), 1);
+    QCOMPARE(model.trackIdAt(0), 4322);
+    QVERIFY2(elapsed < 1500,
+             qPrintable(QStringLiteral("5000-track search took %1 ms").arg(elapsed)));
+}
+
+void MusicCoreTest::onlineSearchMetadataParsesAndPersists()
+{
+    const QByteArray payload = R"JSON({
+        "code": 200,
+        "result": {"songs": [{
+            "id": 347230,
+            "name": "Test Song",
+            "duration": 215000,
+            "artists": [{"name": "Alice"}, {"name": "Bob"}],
+            "album": {"id": 99, "name": "Test Album", "picUrl": "https://img.test/cover.jpg"}
+        }]}
+    })JSON";
+    QString error;
+    const QList<TrackRecord> parsed = OnlineMusicProvider::parseNeteaseSearch(payload, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(parsed.size(), 1);
+    QCOMPARE(parsed.first().source, QStringLiteral("wy"));
+    QCOMPARE(parsed.first().providerId, QStringLiteral("347230"));
+    QCOMPARE(parsed.first().path, QStringLiteral("lx://wy/347230"));
+    QCOMPARE(parsed.first().artist, QStringLiteral("Alice / Bob"));
+    QVERIFY(parsed.first().url.isEmpty());
+    QVERIFY(parsed.first().sourceData.contains(QStringLiteral("songmid")));
+    const QJsonObject sourceData =
+        QJsonDocument::fromJson(parsed.first().sourceData.toUtf8()).object();
+    QCOMPARE(sourceData.value(QStringLiteral("interval")).toString(), QStringLiteral("03:35"));
+    const QJsonObject meta = sourceData.value(QStringLiteral("meta")).toObject();
+    QCOMPARE(meta.value(QStringLiteral("songId")).toString(), QStringLiteral("347230"));
+    QVERIFY(!sourceData.value(QStringLiteral("types")).toArray().isEmpty());
+    QVERIFY(sourceData.value(QStringLiteral("_types")).toObject()
+                .contains(QStringLiteral("128k")));
+    QCOMPARE(meta.value(QStringLiteral("qualitys")).toArray(),
+             sourceData.value(QStringLiteral("types")).toArray());
+    QCOMPARE(meta.value(QStringLiteral("_qualitys")).toObject(),
+             sourceData.value(QStringLiteral("_types")).toObject());
+    QVERIFY(sourceData.value(QStringLiteral("typeUrl")).isObject());
+
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MusicDatabase database;
+    QVERIFY2(database.open(directory.filePath(QStringLiteral("music.sqlite")), &error),
+             qPrintable(error));
+    const qint64 id = database.addExternalTrack(parsed.first(), &error);
+    QVERIFY2(id > 0, qPrintable(error));
+    const std::optional<TrackRecord> stored = database.track(id, &error);
+    QVERIFY(stored.has_value());
+    QCOMPARE(stored->source, QStringLiteral("wy"));
+    QCOMPARE(stored->providerId, QStringLiteral("347230"));
+    QCOMPARE(stored->sourceData, parsed.first().sourceData);
+    QVERIFY(stored->url.isEmpty());
+
+    TrackRecord updated = parsed.first();
+    updated.title = QStringLiteral("Updated title");
+    QCOMPARE(database.addExternalTrack(updated, &error), id);
+    QCOMPARE(database.track(id, &error)->title, QStringLiteral("Updated title"));
+}
+
+void MusicCoreTest::onlineSearchRanksArtistMatches()
+{
+    const QByteArray payload = R"JSON({
+        "code": 200,
+        "result": {"songs": [
+            {
+                "id": 1,
+                "name": "晴天（深情版）",
+                "duration": 200000,
+                "artists": [{"name": "翻唱歌手"}],
+                "album": {"id": 1, "name": "翻唱"}
+            },
+            {
+                "id": 2,
+                "name": "晴天",
+                "duration": 269000,
+                "artists": [{"name": "周杰伦"}],
+                "album": {"id": 2, "name": "叶惠美"}
+            }
+        ]}
+    })JSON";
+    QString error;
+    const QList<TrackRecord> parsed =
+        OnlineMusicProvider::parseNeteaseSearch(payload, &error,
+                                                QStringLiteral("晴天 周杰伦"));
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(parsed.size(), 2);
+    QCOMPARE(parsed.first().providerId, QStringLiteral("2"));
+    QCOMPARE(parsed.first().artist, QStringLiteral("周杰伦"));
+}
+
+void MusicCoreTest::lrcLyricsParseAndSort()
+{
+    const QVariantList lines = LyricsService::parseLrc(QStringLiteral(
+        "[ar:Artist]\n[00:12.50][00:15.005]Second\n[00:01.2]First\ninvalid"));
+    QCOMPARE(lines.size(), 3);
+    QCOMPARE(lines.at(0).toMap().value(QStringLiteral("timeMs")).toLongLong(), 1200);
+    QCOMPARE(lines.at(0).toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("First"));
+    QCOMPARE(lines.at(1).toMap().value(QStringLiteral("timeMs")).toLongLong(), 12500);
+    QCOMPARE(lines.at(2).toMap().value(QStringLiteral("timeMs")).toLongLong(), 15005);
+}
+
+void MusicCoreTest::unsavedOnlineTrackLoadsCachedLyrics()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QFile cache(directory.filePath(QStringLiteral("wy-347230.lrc")));
+    QVERIFY(cache.open(QIODevice::WriteOnly));
+    const QByteArray cachedLyrics("[00:01.00]Cached online lyric\n");
+    QCOMPARE(cache.write(cachedLyrics), cachedLyrics.size());
+    cache.close();
+
+    TrackRecord online;
+    QCOMPARE(online.id, -1);
+    online.source = QStringLiteral("wy");
+    online.providerId = QStringLiteral("347230");
+
+    LyricsService lyrics(directory.path());
+    lyrics.load(online);
+
+    QCOMPARE(lyrics.lines().size(), 1);
+    QCOMPARE(lyrics.lines().first().toMap().value(QStringLiteral("timeMs")).toLongLong(),
+             1000);
+    QCOMPARE(lyrics.lines().first().toMap().value(QStringLiteral("text")).toString(),
+             QStringLiteral("Cached online lyric"));
+    QVERIFY(!lyrics.loading());
+    QVERIFY(lyrics.errorMessage().isEmpty());
 }
 
 QTEST_GUILESS_MAIN(MusicCoreTest)

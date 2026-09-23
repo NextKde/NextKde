@@ -11,6 +11,7 @@ Item {
     required property var groupModel
     property string groupKind: "album"
     property string emptyTitle: qsTr("No albums yet")
+    property string emptyDescription: qsTr("Add a folder and scan your local music collection.")
 
     signal openRequested(string name, string subtitle, string filterValue)
     signal playRequested(string filterValue)
@@ -20,7 +21,7 @@ Item {
         width: Math.min(parent.width - 40, 440)
         symbol: root.groupKind === "artist" ? "♙" : "▦"
         title: root.emptyTitle
-        description: qsTr("Add a folder and scan your local music collection.")
+        description: root.emptyDescription
         visible: root.groupModel.length === 0
     }
 

@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr int schemaVersion = 1;
+constexpr int schemaVersion = 2;
 
 void setError(QString *target, const QString &message)
 {
@@ -99,7 +99,7 @@ bool MusicDatabase::migrate(QString *errorMessage)
         setError(errorMessage, m_database.lastError().text());
         return false;
     }
-    const QStringList statements{
+    QStringList statements{
         QStringLiteral("CREATE TABLE IF NOT EXISTS library_roots ("
                        "id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, "
                        "added_at INTEGER NOT NULL, last_scan INTEGER NOT NULL DEFAULT 0)"),
@@ -134,6 +134,16 @@ bool MusicDatabase::migrate(QString *errorMessage)
                        "key TEXT PRIMARY KEY, value TEXT NOT NULL)"),
         QStringLiteral("PRAGMA user_version = 1"),
     };
+    if (currentVersion < 2) {
+        statements.append({
+            QStringLiteral("ALTER TABLE tracks ADD COLUMN source TEXT NOT NULL DEFAULT 'local'"),
+            QStringLiteral("ALTER TABLE tracks ADD COLUMN provider_id TEXT NOT NULL DEFAULT ''"),
+            QStringLiteral("ALTER TABLE tracks ADD COLUMN source_data TEXT NOT NULL DEFAULT ''"),
+            QStringLiteral("CREATE INDEX IF NOT EXISTS tracks_provider_idx "
+                           "ON tracks(source, provider_id)"),
+            QStringLiteral("PRAGMA user_version = 2"),
+        });
+    }
     QSqlQuery query(m_database);
     for (const QString &statement : statements) {
         if (!query.exec(statement)) {
@@ -310,7 +320,8 @@ QList<TrackRecord> MusicDatabase::allTracks(QString *errorMessage) const
     if (!query.exec(QStringLiteral(
             "SELECT id, root_id, path, url, title, artist, album, album_artist, genre, "
             "artwork_url, format, duration_ms, file_size, modified_ms, added_at, "
-            "last_played_at, track_number, disc_number, year, play_count FROM tracks"))) {
+            "last_played_at, track_number, disc_number, year, play_count, source, "
+            "provider_id, source_data FROM tracks"))) {
         fail(query, errorMessage);
         return result;
     }
@@ -325,7 +336,8 @@ std::optional<TrackRecord> MusicDatabase::track(qint64 id, QString *errorMessage
     query.prepare(QStringLiteral(
         "SELECT id, root_id, path, url, title, artist, album, album_artist, genre, "
         "artwork_url, format, duration_ms, file_size, modified_ms, added_at, "
-        "last_played_at, track_number, disc_number, year, play_count FROM tracks WHERE id = ?"));
+        "last_played_at, track_number, disc_number, year, play_count, source, "
+        "provider_id, source_data FROM tracks WHERE id = ?"));
     query.addBindValue(id);
     if (!query.exec()) {
         fail(query, errorMessage);
@@ -341,7 +353,8 @@ std::optional<TrackRecord> MusicDatabase::trackForPath(const QString &path,
     query.prepare(QStringLiteral(
         "SELECT id, root_id, path, url, title, artist, album, album_artist, genre, "
         "artwork_url, format, duration_ms, file_size, modified_ms, added_at, "
-        "last_played_at, track_number, disc_number, year, play_count FROM tracks WHERE path = ?"));
+        "last_played_at, track_number, disc_number, year, play_count, source, "
+        "provider_id, source_data FROM tracks WHERE path = ?"));
     query.addBindValue(path);
     if (!query.exec()) {
         fail(query, errorMessage);
@@ -356,20 +369,22 @@ qint64 MusicDatabase::addExternalTrack(const TrackRecord &track, QString *errorM
     query.prepare(QStringLiteral(
         "INSERT INTO tracks(root_id, path, url, title, artist, album, album_artist, genre, "
         "artwork_url, format, duration_ms, file_size, modified_ms, added_at, last_seen, "
-        "track_number, disc_number, year) "
-        "VALUES(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?) "
+        "track_number, disc_number, year, source, provider_id, source_data) "
+        "VALUES(NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(path) DO UPDATE SET url=excluded.url, title=excluded.title, "
         "artist=excluded.artist, album=excluded.album, album_artist=excluded.album_artist, "
         "genre=excluded.genre, artwork_url=excluded.artwork_url, format=excluded.format, "
         "duration_ms=excluded.duration_ms, file_size=excluded.file_size, "
         "modified_ms=excluded.modified_ms, track_number=excluded.track_number, "
-        "disc_number=excluded.disc_number, year=excluded.year"));
+        "disc_number=excluded.disc_number, year=excluded.year, source=excluded.source, "
+        "provider_id=excluded.provider_id, source_data=excluded.source_data"));
     const QVariantList values{
         nonNull(track.path), nonNull(track.url), nonNull(track.title),
         nonNull(track.artist), nonNull(track.album), nonNull(track.albumArtist),
         nonNull(track.genre), nonNull(track.artworkUrl), nonNull(track.format),
         track.durationMs, track.fileSize, track.modifiedMs,
         QDateTime::currentMSecsSinceEpoch(), track.trackNumber, track.discNumber, track.year,
+        nonNull(track.source), nonNull(track.providerId), nonNull(track.sourceData),
     };
     for (qsizetype index = 0; index < values.size(); ++index)
         query.bindValue(static_cast<int>(index), values.at(index));
@@ -577,6 +592,9 @@ TrackRecord MusicDatabase::readTrack(const QSqlQuery &query)
     track.discNumber = query.value(17).toInt();
     track.year = query.value(18).toInt();
     track.playCount = query.value(19).toInt();
+    track.source = query.value(20).toString();
+    track.providerId = query.value(21).toString();
+    track.sourceData = query.value(22).toString();
     return track;
 }
 

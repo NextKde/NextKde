@@ -23,20 +23,24 @@ KosApplicationWindow {
     property string pendingTrackTitle: ""
     property string pendingFormatId: ""
     property string pendingFormatExtension: ""
-    property real pendingSeekMs: 0
     property string statusMessage: ""
     property bool renamePlaylistMode: false
 
     readonly property bool isLibraryTrackPage:
         page === "recent" || page === "songs"
         || page === "album" || page === "artist"
+    readonly property bool isSearchableLibraryPage: isLibraryTrackPage
+        || page === "albums" || page === "artists"
     readonly property int contentIndex: {
         if (isLibraryTrackPage) return 0
         if (page === "albums") return 1
         if (page === "artists") return 2
         if (page === "queue") return 3
         if (page === "playlist") return 4
-        return 5
+        if (page === "folders") return 5
+        if (page === "online") return 6
+        if (page === "sources") return 7
+        return 8
     }
     readonly property string contentTitle: {
         if (page === "recent") return qsTr("Recently added")
@@ -46,11 +50,20 @@ KosApplicationWindow {
         if (page === "queue") return qsTr("Play queue")
         if (page === "playlist") return selectedPlaylistName
         if (page === "folders") return qsTr("Music folders")
+        if (page === "online") return qsTr("Online music")
+        if (page === "sources") return qsTr("Custom sources")
+        if (page === "nowPlaying") return qsTr("Now playing")
         return detailName
     }
     readonly property string contentSubtitle: {
         if (page === "folders")
             return qsTr("Choose which local folders are indexed")
+        if (page === "online")
+            return qsTr("Search metadata, then resolve playback through your custom source")
+        if (page === "sources")
+            return qsTr("LX Music-compatible URL resolvers")
+        if (page === "nowPlaying")
+            return music.currentAlbum
         if (page === "albums")
             return qsTr("%n album(s)", "", music.albums.length)
         if (page === "artists")
@@ -92,17 +105,6 @@ KosApplicationWindow {
             if (argument.length > 0)
                 music.openUri(activationUri(argument, workingDirectory))
         }
-    }
-
-    function formatTime(milliseconds) {
-        const seconds = Math.max(0, Math.floor(Number(milliseconds) / 1000))
-        const hours = Math.floor(seconds / 3600)
-        const minutes = Math.floor(seconds / 60) % 60
-        const rest = seconds % 60
-        if (hours > 0)
-            return hours + ":" + String(minutes).padStart(2, "0")
-                + ":" + String(rest).padStart(2, "0")
-        return minutes + ":" + String(rest).padStart(2, "0")
     }
 
     function showStatus(message) {
@@ -242,7 +244,7 @@ KosApplicationWindow {
                 text: qsTr("Playlist name")
                 color: AppTheme.mutedText
             }
-            LiquidTextField {
+            KosTextField {
                 id: playlistName
                 Layout.preferredWidth: 330
                 maximumLength: 128
@@ -433,6 +435,22 @@ KosApplicationWindow {
                     ButtonGroup.group: navigationGroup
                     onClicked: root.page = "folders"
                 }
+                KosNavigationButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Online music")
+                    symbol: "⌕"
+                    checked: root.page === "online"
+                    ButtonGroup.group: navigationGroup
+                    onClicked: root.page = "online"
+                }
+                KosNavigationButton {
+                    Layout.fillWidth: true
+                    text: qsTr("Sources")
+                    symbol: "⌁"
+                    checked: root.page === "sources"
+                    ButtonGroup.group: navigationGroup
+                    onClicked: root.page = "sources"
+                }
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -569,11 +587,15 @@ KosApplicationWindow {
                     }
                 }
 
-                LiquidTextField {
+                KosTextField {
                     id: searchField
                     Layout.preferredWidth: root.width < 1040 ? 180 : 240
-                    visible: root.isLibraryTrackPage
-                    placeholderText: qsTr("Search library…")
+                    visible: root.isSearchableLibraryPage
+                    placeholderText: root.page === "albums"
+                        ? qsTr("Search albums or contained songs…")
+                        : root.page === "artists"
+                            ? qsTr("Search artists or songs…")
+                            : qsTr("Search library…")
                     Accessible.name: qsTr("Search music library")
                     // Debounce: every keystroke otherwise rebuilds the whole
                     // library model (filter + locale-aware sort + full reset,
@@ -768,7 +790,8 @@ KosApplicationWindow {
                     cacheLimit: 3
                     pinnedIndexes: [0]
                     pages: [libraryPage, albumsPage, artistsPage,
-                            queuePage, playlistPage, foldersPage]
+                            queuePage, playlistPage, foldersPage,
+                            onlinePage, sourcesPage, nowPlayingPage]
 
                     Component {
                         id: libraryPage
@@ -793,7 +816,11 @@ KosApplicationWindow {
                         MusicGroupGrid {
                             groupModel: music.albums
                             groupKind: "album"
-                            emptyTitle: qsTr("No albums yet")
+                            emptyTitle: music.librarySearch.length > 0
+                                ? qsTr("No matching albums") : qsTr("No albums yet")
+                            emptyDescription: music.librarySearch.length > 0
+                                ? qsTr("Try another album, artist, genre, or song name.")
+                                : qsTr("Add a folder and scan your local music collection.")
                             onOpenRequested: (name, subtitle, filterValue) =>
                                 root.openAlbum(name, subtitle, filterValue)
                             onPlayRequested: filterValue => music.playAlbum(filterValue)
@@ -805,7 +832,11 @@ KosApplicationWindow {
                         MusicGroupGrid {
                             groupModel: music.artists
                             groupKind: "artist"
-                            emptyTitle: qsTr("No artists yet")
+                            emptyTitle: music.librarySearch.length > 0
+                                ? qsTr("No matching artists") : qsTr("No artists yet")
+                            emptyDescription: music.librarySearch.length > 0
+                                ? qsTr("Try another artist, album, genre, or song name.")
+                                : qsTr("Add a folder and scan your local music collection.")
                             onOpenRequested: (name, subtitle, filterValue) =>
                                 root.openArtist(name, filterValue)
                             onPlayRequested: filterValue => music.playArtist(filterValue)
@@ -961,160 +992,28 @@ KosApplicationWindow {
                             }
                         }
                     }
+
+                    Component {
+                        id: onlinePage
+                        OnlineSearchPage { musicController: music }
+                    }
+
+                    Component {
+                        id: sourcesPage
+                        MusicSourcePage { musicController: music }
+                    }
+
+                    Component {
+                        id: nowPlayingPage
+                        NowPlayingPage { musicController: music }
+                    }
                 }
             }
 
-            KosCard {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 116
-                padding: 12
-
-                contentItem: ColumnLayout {
-                    spacing: 5
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 10
-
-                        Artwork {
-                            Layout.preferredWidth: 58
-                            Layout.preferredHeight: 58
-                            source: music.currentArtworkUrl
-                            title: music.currentTitle
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Label {
-                                Layout.fillWidth: true
-                                text: music.currentTrackId >= 0
-                                    ? music.currentTitle : qsTr("Nothing playing")
-                                color: AppTheme.text
-                                font.weight: Font.DemiBold
-                                elide: Text.ElideRight
-                            }
-                            Label {
-                                Layout.fillWidth: true
-                                text: music.currentTrackId >= 0
-                                    ? (music.currentArtist.length > 0
-                                       ? music.currentArtist : qsTr("Unknown artist"))
-                                    : qsTr("Choose a track from your library")
-                                color: AppTheme.mutedText
-                                elide: Text.ElideRight
-                                font.pixelSize: 12
-                            }
-                        }
-
-                        KosToolButton {
-                            text: "⇄"
-                            checkable: true
-                            checked: music.shuffle
-                            enabled: music.queueModel.count > 1
-                            Accessible.name: qsTr("Shuffle")
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Shuffle")
-                            onClicked: music.shuffle = checked
-                        }
-                        KosToolButton {
-                            text: "│◀"
-                            enabled: music.canGoPrevious
-                            Accessible.name: qsTr("Previous track")
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Previous track")
-                            onClicked: music.previous()
-                        }
-                        KosRoundButton {
-                            Layout.preferredWidth: 46
-                            Layout.preferredHeight: 46
-                            text: music.playbackState === "Playing" ? "Ⅱ" : "▶"
-                            highlighted: true
-                            enabled: music.currentTrackId >= 0
-                            Accessible.name: music.playbackState === "Playing"
-                                ? qsTr("Pause") : qsTr("Play")
-                            ToolTip.visible: hovered
-                            ToolTip.text: music.playbackState === "Playing"
-                                ? qsTr("Pause") : qsTr("Play")
-                            onClicked: music.togglePlayPause()
-                        }
-                        KosToolButton {
-                            text: "▶│"
-                            enabled: music.canGoNext
-                            Accessible.name: qsTr("Next track")
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Next track")
-                            onClicked: music.next()
-                        }
-                        KosToolButton {
-                            text: music.repeatMode === "track" ? "↻¹"
-                                : "↻"
-                            checkable: true
-                            checked: music.repeatMode !== "none"
-                            Accessible.name: music.repeatMode === "track"
-                                ? qsTr("Repeat track on")
-                                : (music.repeatMode === "playlist"
-                                   ? qsTr("Repeat queue on") : qsTr("Repeat off"))
-                            ToolTip.visible: hovered
-                            ToolTip.text: music.repeatMode === "track"
-                                ? qsTr("Repeat track")
-                                : (music.repeatMode === "playlist"
-                                   ? qsTr("Repeat queue") : qsTr("Repeat off"))
-                            onClicked: music.repeatMode = music.repeatMode === "none"
-                                ? "playlist" : (music.repeatMode === "playlist"
-                                                ? "track" : "none")
-                        }
-                        Label {
-                            text: music.volume <= 0.01 ? "◖" : "◖))"
-                            color: AppTheme.mutedText
-                            font.pixelSize: 11
-                            Accessible.name: qsTr("Volume")
-                        }
-                        Slider {
-                            Layout.preferredWidth: root.width < 1000 ? 72 : 100
-                            from: 0
-                            to: 1
-                            value: music.volume
-                            Accessible.name: qsTr("Volume")
-                            onMoved: music.volume = value
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Label {
-                            Layout.preferredWidth: 40
-                            text: root.formatTime(music.positionMs)
-                            color: AppTheme.mutedText
-                            horizontalAlignment: Text.AlignRight
-                            font.pixelSize: 10
-                        }
-                        Slider {
-                            id: positionSlider
-                            Layout.fillWidth: true
-                            from: 0
-                            to: Math.max(1, music.durationMs)
-                            value: pressed ? root.pendingSeekMs : music.positionMs
-                            enabled: music.seekable
-                            Accessible.name: qsTr("Playback position")
-                            onPressedChanged: {
-                                if (pressed)
-                                    root.pendingSeekMs = music.positionMs
-                                else
-                                    music.seek(Math.round(root.pendingSeekMs))
-                            }
-                            onMoved: root.pendingSeekMs = value
-                        }
-                        Label {
-                            Layout.preferredWidth: 40
-                            text: root.formatTime(music.durationMs)
-                            color: AppTheme.mutedText
-                            font.pixelSize: 10
-                        }
-                    }
-                }
+            MiniPlayer {
+                musicController: music
+                compact: root.width < 920
+                onNowPlayingRequested: root.page = "nowPlaying"
             }
         }
     }

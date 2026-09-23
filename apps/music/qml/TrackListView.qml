@@ -23,6 +23,8 @@ Item {
             musicController.playQueueRow(row)
         else if (contextMode === "playlist")
             musicController.playPlaylistRow(row)
+        else if (contextMode === "online")
+            musicController.playOnlineRow(row)
         else
             musicController.playTrack(trackId)
     }
@@ -51,18 +53,24 @@ Item {
         }
         MenuItem {
             text: qsTr("Play next")
-            onTriggered: root.musicController.playTrackNext(root.menuTrackId)
+            onTriggered: root.contextMode === "online"
+                ? root.musicController.enqueueOnlineRow(root.menuRow)
+                : root.musicController.playTrackNext(root.menuTrackId)
         }
         MenuItem {
             text: qsTr("Add to queue")
-            onTriggered: root.musicController.enqueueTrack(root.menuTrackId)
+            onTriggered: root.contextMode === "online"
+                ? root.musicController.enqueueOnlineRow(root.menuRow)
+                : root.musicController.enqueueTrack(root.menuTrackId)
         }
-        MenuSeparator {}
+        MenuSeparator { visible: root.contextMode !== "online" }
         MenuItem {
+            visible: root.contextMode !== "online"
             text: qsTr("Add to playlist…")
             onTriggered: root.addToPlaylistRequested(root.menuTrackId)
         }
         MenuItem {
+            visible: root.contextMode !== "online"
             text: qsTr("Convert audio…")
             onTriggered: root.transcodeRequested(root.menuTrackId,
                                                  root.menuTrackTitle)
@@ -153,7 +161,8 @@ Item {
             required property string format
 
             readonly property bool isCurrent:
-                Number(trackId) === Number(root.musicController.currentTrackId)
+                Number(trackId) >= 0
+                && Number(trackId) === Number(root.musicController.currentTrackId)
 
             width: trackList.width
             height: 66
