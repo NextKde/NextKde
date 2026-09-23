@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.desktop.modules.common
+import "ProcessIdentity.mjs" as ProcessIdentity
 
 // AppIdentityService — the single identity boundary for applications.
 //
@@ -103,7 +104,7 @@ QtObject {
         return score;
     }
 
-    function _findEntry(rawId) {
+    function _findEntry(rawId, processHints) {
         const candidates = _candidates(rawId);
 
         // Exact IDs are authoritative.
@@ -159,9 +160,35 @@ QtObject {
         }
         if (bestEntry && bestScore >= 0)
             return bestEntry;
+
+        // The reported app id is not always recoverable from an installed entry
+        // (see ProcessIdentity.mjs), and the process is the last thing left that
+        // knows the truth. Deliberately last: an app that already resolves must
+        // keep resolving exactly the way it did.
+        const byProcess = _processEntry(processHints);
+        if (byProcess)
+            return byProcess;
+
         if (heuristicWithoutIcon)
             return heuristicWithoutIcon;
         return null;
+    }
+
+    // `Array.isArray` is false for every QML `list<T>` handed across the JS
+    // boundary (DesktopEntries.applications.values arrives as a V4Sequence), so
+    // an array literal cannot be used as the guard here: it would fail open and
+    // silently disable the caller. Duck-type the sequence instead.
+    function _isSequence(value) {
+        return !!value && typeof value === "object"
+            && typeof value.length === "number" && value.length >= 0;
+    }
+
+    function _processEntry(processHints) {
+        if (!_isSequence(processHints) || !processHints.length)
+            return null;
+        const entries = DesktopEntries.applications?.values || [];
+        return ProcessIdentity.matchEntryByHints(entries, processHints,
+            value => normalize(value), entry => _entryHasIcon(entry));
     }
 
     function _canonicalId(rawId, entry) {
@@ -173,21 +200,41 @@ QtObject {
         return /\.desktop$/i.test(value) ? value : value + ".desktop";
     }
 
-    function resolve(rawId) {
+    // The process hint belongs in the cache key: a window normally resolves once
+    // before its probe returns, and that early result must not be reused after
+    // the real process name arrives.
+    function _hintKey(processHints) {
+        if (!_isSequence(processHints) || !processHints.length)
+            return "";
+        const parts = [];
+        for (let i = 0; i < processHints.length; i++) {
+            const value = normalize(processHints[i]);
+            if (value)
+                parts.push(value);
+        }
+        return parts.join("+");
+    }
+
+    function resolve(rawId, processHints) {
         const raw = String(rawId ?? "").trim();
-        const cacheKey = _key(raw);
+        const hintKey = _hintKey(processHints);
+        const cacheKey = hintKey ? _key(raw) + "|" + hintKey : _key(raw);
         if (cacheKey && svc._cache[cacheKey])
             return svc._cache[cacheKey];
 
-        const entry = _findEntry(raw);
+        const entry = _findEntry(raw, processHints);
         const desktopId = _canonicalId(raw, entry);
         // The runtime provider may call this app "Code" while its desktop
         // entry is code.desktop. Resolve that alias here, then use the shared
         // presentation contract for names/icons/custom user edits.
         const presentation = AppPresentationService.descriptor(entry, raw);
         const presentationOverride = AppPresentationService.overrideFor(desktopId, raw);
+        // A matched entry's icon is the first fallback. The generic icon must
+        // never enter this list: it is always non-empty, so it would win the loop
+        // below and every unmatched window would paint the generic icon even
+        // when the app id itself resolves in the icon theme.
         const iconCandidates = [presentationOverride.icon,
-                                presentation.defaultIcon, raw];
+                                entry ? presentation.defaultIcon : "", raw];
         const candidates = _candidates(raw);
         for (let i = 0; i < candidates.length; i++)
             iconCandidates.push(candidates[i].replace(/\.desktop$/i, ""));

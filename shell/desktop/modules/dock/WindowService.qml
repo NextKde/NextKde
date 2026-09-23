@@ -1,8 +1,10 @@
 pragma Singleton
 import QtQuick
+import Quickshell.Io
 import Quickshell.Wayland._ToplevelManagement
 import qs.desktop.modules.platform
 import qs.desktop.modules.common
+import "ProcessIdentity.mjs" as ProcessIdentity
 import "WindowRecordIndex.mjs" as WindowRecordIndex
 
 // WindowService — provider-neutral runtime window model.
@@ -43,6 +45,12 @@ QtObject {
     property var _pendingKwinActivation: null
     property bool _kwinScriptStarted: false
     property bool _kwinSubscribePending: false
+    // Process-side identity hints, keyed by window PID. A window resolves from
+    // its reported app id first; these are consulted only when that finds
+    // nothing, because some toolkits report an id that no installed entry
+    // carries. See ProcessIdentity.mjs.
+    property var _processHintsByPid: ({})
+    property var _processProbeByPid: ({})
     property var _thumbnailUrlsByHandle: ({})
     property var _thumbnailPendingByHandle: ({})
     // A QML binding can depend on this counter to observe a map entry update.
@@ -299,7 +307,10 @@ QtObject {
             } : source;
             const old = useKwin ? oldRecords.kwin.get(handleId)
                 : oldRecords.foreign.get(toplevel);
-            const identity = AppIdentityService.resolve(toplevel.appId);
+            const windowPid = Number(toplevel.pid || 0);
+            svc._ensureProcessHints(windowPid);
+            const identity = AppIdentityService.resolve(toplevel.appId,
+                svc._processHintsByPid[windowPid]);
             // Prefer the shared themed presentation source (image://icon/<name>)
             // for live tasks too, exactly like the launcher and pinned apps.
             // DockIcon recreates its renderer on an icon-theme revision to
@@ -421,6 +432,7 @@ QtObject {
         // collision eligibility, so presentation updates notify both lanes.
         svc.placementRevision++;
         svc._pruneThumbnails(nextRecords);
+        svc._pruneProcessHints(nextRecords);
     }
 
     // Thumbnail state is keyed by KWin's window handle, which dies with the
@@ -455,6 +467,79 @@ QtObject {
         }
         if (pendingChanged)
             svc._thumbnailPendingByHandle = pending;
+    }
+
+    // ── Process identity fallback ──
+    // One probe per PID, run lazily on the first frame that needs it. The
+    // pipeline is asynchronous, so a window keeps its first (possibly generic)
+    // icon for a few milliseconds and repaints once the hints land.
+    property Component _processProbeFactory: Component {
+        Process { stdout: StdioCollector {} }
+    }
+
+    function _ensureProcessHints(pid) {
+        if (!(pid > 0))
+            return;
+        if (svc._processHintsByPid[pid] !== undefined)
+            return;
+        if (svc._processProbeByPid[pid])
+            return;
+        const probe = svc._processProbeFactory.createObject(svc, {
+            command: ProcessIdentity.probeCommand(pid)
+        });
+        const pending = Object.assign({}, svc._processProbeByPid);
+        pending[pid] = probe;
+        svc._processProbeByPid = pending;
+        probe.exited.connect(function() {
+            const hints = ProcessIdentity.parseProbeOutput(probe.stdout?.text ?? "");
+            const inFlight = Object.assign({}, svc._processProbeByPid);
+            delete inFlight[pid];
+            svc._processProbeByPid = inFlight;
+            // An empty result is cached too: a window that cannot be identified
+            // must not be probed again on every rebuild.
+            const resolved = Object.assign({}, svc._processHintsByPid);
+            resolved[pid] = hints;
+            svc._processHintsByPid = resolved;
+            probe.destroy();
+            if (hints.length)
+                svc._scheduleUpdate();
+        });
+        probe.running = true;
+    }
+
+    // Per-PID hints die with the PID: the kernel recycles PIDs, and a survivor
+    // would seed a later window with an unrelated application's identity.
+    function _pruneProcessHints(nextRecords) {
+        const live = {};
+        for (let i = 0; i < nextRecords.length; i++) {
+            const pid = nextRecords[i].pid;
+            if (pid > 0)
+                live[pid] = true;
+        }
+        let stale = false;
+        const kept = {};
+        for (const pid in svc._processHintsByPid) {
+            if (live[pid])
+                kept[pid] = svc._processHintsByPid[pid];
+            else
+                stale = true;
+        }
+        if (stale)
+            svc._processHintsByPid = kept;
+        // A probe whose PID disappeared before it reported would otherwise be
+        // kept — and that PID would never be probed again.
+        let inFlight = null;
+        for (const pid in svc._processProbeByPid) {
+            if (live[pid])
+                continue;
+            if (!inFlight)
+                inFlight = Object.assign({}, svc._processProbeByPid);
+            if (inFlight[pid])
+                inFlight[pid].destroy();
+            delete inFlight[pid];
+        }
+        if (inFlight)
+            svc._processProbeByPid = inFlight;
     }
 
     // ── Virtual desktops (KWin D-Bus, via the bridge) ──
