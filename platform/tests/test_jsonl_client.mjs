@@ -84,7 +84,7 @@ function makeClient(options = {}) {
     c.respond(id);
     assert.equal(seen.length, 1);
     assert.equal(seen[0].ok, true);
-    assert.equal(Object.keys(c.core.pending).length, 0);
+    assert.equal(c.core.pending.size, 0);
     console.log("ok  round-trip");
 }
 
@@ -101,7 +101,7 @@ function makeClient(options = {}) {
     assert.equal(seen.length, 1);
     assert.equal(seen[0].ok, false);
     assert.equal(seen[0].error.code, "disconnected");
-    assert.equal(Object.keys(c.core.pending).length, 0);
+    assert.equal(c.core.pending.size, 0);
     console.log("ok  write fails fast while disconnected (deferred)");
 }
 
@@ -113,7 +113,7 @@ function makeClient(options = {}) {
     c.core.request("test.readOther", {}, r => seen.push(r));
     assert.equal(c.written.length, 0);
     assert.equal(c.core.queue.length, 2);
-    assert.equal(Object.keys(c.core.pending).length, 2);
+    assert.equal(c.core.pending.size, 2);
 
     // Daemon comes back; _flush writes the backlog in order.
     c.socket.connected = true;
@@ -134,10 +134,10 @@ function makeClient(options = {}) {
     const id2 = c.core.request("test.read", { a: 1 }, r => seen2.push(r));
     assert.notEqual(id1, id2);
     // Only the newest request survives in pending and the queue.
-    assert.equal(c.core.pending[id1], undefined);
+    assert.equal(c.core.pending.get(id1), undefined);
     assert.equal(c.core.queue.length, 1);
     assert.equal(JSON.parse(JSON.stringify(c.core.queue[0])).requestId, id2);
-    assert.equal(c.core.queuedByKey["test.read {\"a\":1}"], id2);
+    assert.equal(c.core.queuedByKey.get("test.read {\"a\":1}"), id2);
 
     c.socket.connected = true;
     c.core.flush();
@@ -155,12 +155,12 @@ function makeClient(options = {}) {
 {
     const c = makeClient();
     const id1 = c.core.request("test.read", { a: 1 }, () => {});
-    assert.equal(Object.keys(c.core.queuedByKey).length, 0,
+    assert.equal(c.core.queuedByKey.size, 0,
         "sent request must clear its dedup key");
     const id2 = c.core.request("test.read", { a: 1 }, () => {});
     assert.notEqual(id1, id2);
-    assert.equal(c.core.pending[id1] !== undefined, true);
-    assert.equal(c.core.pending[id2] !== undefined, true);
+    assert.equal(c.core.pending.has(id1), true);
+    assert.equal(c.core.pending.has(id2), true);
     console.log("ok  dedup key does not outlive the queued state");
 }
 
@@ -174,12 +174,12 @@ function makeClient(options = {}) {
     c.core.expireRequests();
     assert.equal(seen.length, 1);
     assert.equal(seen[0].error.code, "timeout");
-    assert.equal(Object.keys(c.core.queuedByKey).length, 0,
+    assert.equal(c.core.queuedByKey.size, 0,
         "expired request must drop its dedup key");
     // A fresh read with the same key starts clean.
     const seen2 = [];
     const id = c.core.request("test.read", { a: 1 }, r => seen2.push(r));
-    assert.equal(c.core.pending[id] !== undefined, true);
+    assert.equal(c.core.pending.has(id), true);
     assert.equal(c.core.queue.length, 1);
     console.log("ok  expiry clears _queuedByKey (no stale key)");
 }
@@ -210,7 +210,7 @@ function makeClient(options = {}) {
     c.tick(600000);
     c.core.expireRequests();
     assert.equal(seen.length, 0);
-    assert.equal(Object.keys(c.core.pending).length, 1);
+    assert.equal(c.core.pending.size, 1);
     console.log("ok  timeout override 0 never expires");
 }
 
@@ -244,8 +244,8 @@ function makeClient(options = {}) {
     assert.equal(seenB.length, 1);
     assert.equal(seenB[0].error.code, "disconnected");
     assert.equal(c.core.queue.length, 0);
-    assert.equal(Object.keys(c.core.pending).length, 0);
-    assert.equal(Object.keys(c.core.queuedByKey).length, 0);
+    assert.equal(c.core.pending.size, 0);
+    assert.equal(c.core.queuedByKey.size, 0);
 
     // A failure handler that re-requests lands in the post-disconnect queue,
     // not the failed batch — exercised by snapshotting inside failAll.
@@ -284,7 +284,7 @@ function makeClient(options = {}) {
         console.warn = origWarn;
     }
     assert.equal(warnings.length, 3, "invalid lines warn and are skipped");
-    assert.equal(c.core.pending[id] !== undefined, true,
+    assert.equal(c.core.pending.has(id), true,
         "garbage must not disturb pending state");
     c.respond(id);
     assert.equal(seen.length, 1);
@@ -329,7 +329,7 @@ function makeClient(options = {}) {
     // 3 dropped, each the oldest read at the time.
     assert.equal(failed.length, 3);
     assert.ok(failed.every(r => r.error.code === "queue-overflow"));
-    assert.equal(Object.keys(c.core.pending).length, 5);
+    assert.equal(c.core.pending.size, 5);
     console.log("ok  queue cap drops oldest reads with queue-overflow");
 }
 
@@ -345,6 +345,28 @@ function makeClient(options = {}) {
     assert.throws(() => c.respond(id), /boom/);
     assert.equal(calls, 1);
     console.log("ok  callback invocation is single-shot at the seam");
+}
+
+// The pending/dedup tables must stay Maps. As plain objects they grow under
+// computed keys and are deleted back down to empty on every cycle — the write
+// pattern that walks QV4's Object::insertMember off a NULL member table and
+// segfaults the whole shell (see the note above the state tables in
+// JsonlClientCore.mjs). This regression is invisible to the cases above: every
+// object-based code path still passes here, only the shell dies. The loop
+// below then runs the empty/refill cycle that used to fault.
+{
+    const c = makeClient();
+    assert.equal(c.core.pending instanceof Map, true,
+        "pending must be a Map, not a plain object");
+    assert.equal(c.core.queuedByKey instanceof Map, true,
+        "queuedByKey must be a Map, not a plain object");
+    for (let i = 0; i < 200; i++) {
+        const id = c.core.request("test.read", { i: i }, () => {});
+        c.respond(id);
+        assert.equal(c.core.pending.size, 0);
+        assert.equal(c.core.queuedByKey.size, 0);
+    }
+    console.log("ok  tables are Maps and survive repeated empty/refill cycles");
 }
 
 console.log("all jsonl client tests passed");
