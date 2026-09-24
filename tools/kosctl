@@ -647,6 +647,11 @@ deploy_artifacts() {
         rm -rf "$shell_config/Kos/SurfaceShape"
         cp -a "$artifact_root/qml/Kos/SurfaceShape" "$shell_config/Kos/"
     fi
+    # Optional Qt Quick 3D mesh geometry used by the spatial wallpaper layer.
+    if [[ -d "$artifact_root/qml/Kos/Spatial3D" ]]; then
+        rm -rf "$shell_config/Kos/Spatial3D"
+        cp -a "$artifact_root/qml/Kos/Spatial3D" "$shell_config/Kos/"
+    fi
 
     # --- Systemd user services ---
     mkdir -p "$runtime_unit_dir"

@@ -444,6 +444,19 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/decoration-liquid-glass)
 endif()
 
+# The spatial wallpaper mesh is an optional QML extension. Keep Qt Quick 3D
+# outside the shell's mandatory dependencies so systems without it retain the
+# existing shader renderer.
+if(KOS_BUILD_PLATFORM)
+    find_package(Qt6 QUIET COMPONENTS Quick3D)
+    find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+    if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5 AND OpenCV_FOUND)
+        add_subdirectory(integrations/quickshell/spatial3d)
+    else()
+        message(STATUS "Qt Quick 3D or OpenCV not found; spatial mesh renderer disabled")
+    endif()
+endif()
+
 # No install() rules for the shell and shared QML trees, on purpose: user-side
 # deployment is owned by tools/kosctl (deploy_artifacts) and Nix's own
 # installPhase, which both copy from the source tree. Rules here would be a

@@ -1,7 +1,7 @@
 // Qt Quick ShaderEffect inputs: source and depthMap are normalized 2D textures.
-// The depth response is relative, not a metric camera translation. The shader
-// applies PreserveAspectCrop itself because Image.fillMode is not passed to a
-// ShaderEffect texture. A small extra crop reserves room for motion.
+// The depth-only fallback keeps nearby pixels almost fixed and gives distant
+// pixels a restrained curved response. The layered renderer can reveal more
+// background because it has a reconstructed image behind the foreground.
 #version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -22,17 +22,16 @@ void main()
     vec2 croppedUv = vec2(0.5) + (qt_TexCoord0 - vec2(0.5))
         * ubuf.cropScale * (1.0 - 2.0 * margin);
     float depth = texture(depthMap, croppedUv).r;
-    // Most motion translates the whole image coherently. Only the small
-    // centered component depends on depth, limiting disocclusion at edges.
-    vec2 baseOffset = ubuf.pointer * (0.0275 * ubuf.cropScale);
-    vec2 depthOffset = ubuf.pointer * ((depth - 0.5) * 0.005
-                                      * ubuf.cropScale);
-    vec2 movedUv = croppedUv + baseOffset + depthOffset;
-    float movedDepth = texture(depthMap, movedUv).r;
-    float continuity = 1.0 - smoothstep(0.04, 0.16,
-                                       abs(movedDepth - depth));
-    vec2 sampleUv = clamp(croppedUv + baseOffset
-                          + depthOffset * continuity,
+    float farWeight = 1.0 - smoothstep(0.30, 0.70, depth);
+    vec2 pointer = clamp(ubuf.pointer, vec2(-1.0), vec2(1.0));
+    vec2 sphereXY = (qt_TexCoord0 - vec2(0.5)) * 1.1;
+    float sphereZ = sqrt(max(0.01, 1.0 - dot(sphereXY, sphereXY)));
+    vec2 orbit = vec2(
+        sphereXY.x * (cos(pointer.x * 0.065) - 1.0)
+            + sphereZ * sin(pointer.x * 0.065),
+        sphereXY.y * (cos(pointer.y * 0.065) - 1.0)
+            + sphereZ * sin(pointer.y * 0.065)) * 0.055;
+    vec2 sampleUv = clamp(croppedUv - orbit * farWeight * ubuf.cropScale,
                           vec2(0.001), vec2(0.999));
     fragColor = texture(source, sampleUv) * ubuf.qt_Opacity;
 }

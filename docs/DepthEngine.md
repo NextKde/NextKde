@@ -18,26 +18,37 @@ requests generation through `qs.desktop.modules.platform`; the daemon returns
 a local depth PNG, dimensions, cache status and model contract. The request can
 take up to five minutes during the first model download or a large inference.
 
-After depth generation, the worker optionally prepares three cached spatial
-assets: a depth-guided GrabCut foreground matte, a filled background, and a
-smooth near-field motion map. The preparation contract is
-`depth-grabcut-nearestfill-handfield-v2`; its cache is in `spatial-v2/` beneath
-the depth cache entry. Asset generation is limited to 2560 pixels wide and
-rejects a subject that is too small, too large, touches the image edge, or
-disagrees strongly with the depth seed. A rejected image still returns its
-depth map. This is an image heuristic and can produce imperfect edges; it does
-not add a semantic segmentation model.
+After depth generation, the worker optionally prepares a foreground matte, a
+filled background, and a near-field motion map under `spatial-v3/`. The matte
+uses a pinned local IS-Net general-use ONNX model. A depth island checks that
+the model selected the nearby subject; depth-guided GrabCut fills small gaps
+near that subject. If model download or inference fails, the bounded GrabCut
+path remains available. The preparation contract is
+`isnet-general-use-softmatte-lowhalo-v13`; the model confidence matte is kept
+soft at the contour and the background fill halo is bounded to the expected
+parallax travel. Mismatched cached
+metadata forces regeneration. Preparation is limited to 2560 pixels wide.
+The model runs only in `kos-ai-worker`. A rejected spatial result still returns
+the depth map and leaves the normal wallpaper usable.
+
+The foreground model is the `isnet-general-use.onnx` asset from the
+[`rembg` model release](https://github.com/danielgatis/rembg/releases/tag/v0.0.0),
+originally based on [DIS / IS-Net](https://github.com/xuebinqin/DIS).
+Its pinned SHA256 is
+`60920e99c45464f2ba57bee2ad08c919a52bbf852739e96947fbb4358c0d964a`.
+The worker validates float32 NCHW input `[1,3,1024,1024]`, 12 outputs, and
+the first output's float32 shape `[1,1,1024,1024]`. Input is RGB resized to
+1024 square with OpenCV area interpolation, scaled to `[0,1]`, then shifted by
+`0.5` per channel. The first output is normalized per image and resized to the
+working image size. No Python runtime is used.
 
 When all three assets load, `DepthWallpaperLayer` composites the original
-wallpaper over the filled background. The background moves 0.5% opposite the
-foreground's 2% travel; the near-field map adds at most 1% to protruding
-parts. A 5% crop keeps all samples within the texture during motion. If asset
-preparation or loading fails, the existing depth shader remains available: it
-uses a 3.2% crop, pans most of the image together by 2.75%, and limits the
-relative depth contribution to 0.25% either way. Both shaders recreate
-Plasma's aspect-preserving center crop in texture coordinates because Qt does
-not pass an Image's `fillMode` into a `ShaderEffect` sampler. Pointer changes
-are eased over 150 ms.
+wallpaper over the filled background using the committed two-layer renderer.
+A 5% crop keeps samples within the texture during motion. If asset preparation
+or loading fails, the simpler depth shader remains available. Both shaders
+recreate Plasma's aspect-preserving center crop
+in texture coordinates because Qt does not pass an Image's `fillMode` into a
+`ShaderEffect` sampler. Pointer changes are eased over 150 ms.
 The wallpaper and depth textures are decoded at the output's physical pixel
 size so high-DPI screens do not upscale a logical-resolution image.
 The renderer lives in a separate click-through Bottom-layer window, mapped
@@ -89,7 +100,10 @@ separate automatically.
 Values are relative depth responses rather than distances; larger values
 indicate stronger near-depth response for this model. The 16-bit depth map
 remains cached independently of the renderer and is reused if the feature is
-turned off and on again. The current scene assets do not yet put widgets
+turned off and on again. Model segmentation improves the cutout but cannot
+reconstruct every hidden part of a background; complex hair, grass, and large
+occluded regions may still show artifacts during motion. The current scene
+assets do not yet put widgets
 behind foreground objects; widget occlusion needs a separate, verified mask
 and compositing path.
 
