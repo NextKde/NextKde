@@ -105,9 +105,9 @@ void LxSourceService::importSource(const QString &pathOrUrl)
         setError(tr("Only HTTPS source URLs are allowed"));
         return;
     }
-    if (m_importReply) {
-        m_importReply->abort();
-        m_importReply->deleteLater();
+    if (QNetworkReply *reply = std::exchange(m_importReply, nullptr)) {
+        reply->abort();
+        reply->deleteLater();
     }
     QNetworkRequest request(url);
     request.setTransferTimeout(20000);
