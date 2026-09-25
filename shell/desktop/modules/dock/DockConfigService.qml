@@ -94,6 +94,9 @@ QtObject {
     property string visibilityMode: "always"
     // Window grouping mode: "grouped" (macOS style - 1 icon per app) | "separate" (classic taskbar)
     property string windowGrouping: "grouped"
+    // Shell controls stay separate from the persisted application pin order.
+    property bool showLauncher: true
+    property bool showTrash: true
     // Becomes true once config load finishes (success, missing file, or parse
     // error). The auto-hide controller waits on this before its first reveal
     // decision so a saved smart/persistent dock never flashes fully shown.
@@ -212,6 +215,16 @@ QtObject {
         if (contentStyle === nextStyle)
             return false
         contentStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function updateBuiltinVisibility(id, visible) {
+        const key = id === "launcher" ? "showLauncher"
+            : id === "trash" ? "showTrash" : ""
+        if (!key || typeof visible !== "boolean" || svc[key] === visible)
+            return false
+        svc[key] = visible
         scheduleSave()
         return true
     }
@@ -503,7 +516,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 8,
+            version: 9,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -524,6 +537,8 @@ QtObject {
             visibilityMode: svc.visibilityMode,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
+            showLauncher: svc.showLauncher,
+            showTrash: svc.showTrash,
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
@@ -558,6 +573,9 @@ QtObject {
     }
 
     function _apply(obj) {
+        // Older configurations and malformed values retain the visible default.
+        svc.showLauncher = obj.showLauncher !== false
+        svc.showTrash = obj.showTrash !== false
         if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {

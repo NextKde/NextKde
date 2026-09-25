@@ -161,6 +161,11 @@ public:
         callDock({QStringLiteral("updatePosition"), position});
     }
 
+    Q_INVOKABLE void updateDockBuiltinVisibility(const QString &id, bool visible) {
+        callDock({QStringLiteral("updateBuiltinVisibility"), id,
+                  visible ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
     Q_INVOKABLE void updateDockContentStyle(const QString &style) {
         callDock({QStringLiteral("updateContentStyle"), style});
     }
@@ -468,6 +473,8 @@ private:
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
             {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},
             {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
+            {QStringLiteral("showLauncher"), object.value(QStringLiteral("showLauncher")).toBool(true)},
+            {QStringLiteral("showTrash"), object.value(QStringLiteral("showTrash")).toBool(true)},
         };
     }
 

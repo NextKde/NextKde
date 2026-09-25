@@ -21,6 +21,10 @@ option(KOS_BUILD_MUSIC "Build the Music application" OFF)
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
     if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-deskcenter.density-metrics
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/test_metrics.mjs)
+        set_tests_properties(kos-deskcenter.density-metrics PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-deskcenter.widget-layout
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_widget_layout.mjs
@@ -98,6 +102,18 @@ if(BUILD_TESTING)
         set_tests_properties(kos-shell.process-identity PROPERTIES TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-deskcenter.density-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-deskcenter.density-runtime PROPERTIES LABELS ui TIMEOUT 15)
+            add_test(NAME kos-shell.dock-builtins
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-builtins/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-builtins PROPERTIES
+                LABELS ui TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/static-work/run.mjs

@@ -653,6 +653,10 @@ ApplicationWindow {
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0
         readonly property var windowGroupings: ["grouped", "separate"]
+        property bool showLauncher: true
+        property bool showTrash: true
+        property bool stateReady: false
+        property bool builtinUpdatePending: false
         property string errorText: ""
         property bool layoutDirty: false
 
@@ -690,6 +694,9 @@ ApplicationWindow {
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
+            showLauncher = state.showLauncher !== false
+            showTrash = state.showTrash !== false
+            stateReady = true
             layoutDirty = false
             errorText = ""
         }
@@ -728,6 +735,13 @@ ApplicationWindow {
             const mode = windowGroupings[index]
             bridge.updateDockWindowGrouping(mode)
         }
+
+        function saveBuiltinVisibility(id, visible) {
+            if (!bridge || !stateReady || builtinUpdatePending)
+                return
+            builtinUpdatePending = true
+            bridge.updateDockBuiltinVisibility(id, visible)
+        }
         function refresh() {
             if (!bridge) {
                 errorText = "尚未构建 Settings 桥接程序"
@@ -760,6 +774,7 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
+                dockPage.builtinUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = dockPage.bridge.lastError
@@ -817,6 +832,113 @@ ApplicationWindow {
                                 dockPage.previewDockHeight(position)
                             }
                             onCommitRequested: dockPage.commitLayout()
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "内置图标"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: builtinRows.implicitHeight
+
+            Column {
+                id: builtinRows
+                width: parent.width
+
+                Repeater {
+                    id: builtinRepeater
+                    model: [
+                        { id: "launcher", stateKey: "showLauncher", label: "启动台", symbol: "❖", tint: "#ff9500" },
+                        { id: "trash", stateKey: "showTrash", label: "回收站", symbol: "♲", tint: "#8e8e93" }
+                    ]
+
+                    delegate: Item {
+                        id: builtinRow
+                        required property var modelData
+                        required property int index
+                        readonly property bool confirmedVisible: dockPage[modelData.stateKey]
+                        width: builtinRows.width
+                        height: 54
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
+                            spacing: 12
+                            SettingIcon {
+                                symbol: builtinRow.modelData.symbol
+                                tint: builtinRow.modelData.tint
+                            }
+                            Text {
+                                text: builtinRow.modelData.label
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                            }
+                            Item { Layout.fillWidth: true }
+                            CheckBox {
+                                id: builtinCheck
+                                objectName: "dock-" + builtinRow.modelData.id + "-checkbox"
+                                checked: builtinRow.confirmedVisible
+                                enabled: dockPage.stateReady && !dockPage.builtinUpdatePending
+                                implicitWidth: 36
+                                implicitHeight: 36
+                                padding: 6
+                                Accessible.name: builtinRow.modelData.label
+                                indicator: Rectangle {
+                                    width: 22
+                                    height: 22
+                                    x: (builtinCheck.width - width) / 2
+                                    y: (builtinCheck.height - height) / 2
+                                    radius: 5
+                                    color: builtinCheck.checked ? theme.role("primary", "#0a84ff") : theme.card
+                                    border.width: builtinCheck.checked ? 0 : 1.5
+                                    border.color: builtinCheck.hovered ? theme.primaryText : theme.tertiaryText
+                                    opacity: builtinCheck.enabled ? 1 : 0.45
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: builtinCheck.checked
+                                        text: "✓"
+                                        color: theme.role("on_primary", "#ffffff")
+                                        font.pixelSize: 16
+                                        font.weight: Font.Bold
+                                    }
+                                }
+                                contentItem: Item {}
+                                background: Rectangle {
+                                    color: "transparent"
+                                    radius: 8
+                                    border.width: builtinCheck.visualFocus ? 2 : 0
+                                    border.color: theme.role("primary", "#0a84ff")
+                                }
+                                onToggled: {
+                                    dockPage.saveBuiltinVisibility(builtinRow.modelData.id, checked)
+                                    // The confirmed snapshot stays authoritative, including
+                                    // when saving fails or another client changes the setting.
+                                    builtinCheck.checked = Qt.binding(function() {
+                                        return builtinRow.confirmedVisible
+                                    })
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                            anchors.leftMargin: 54
+                            height: 1
+                            color: theme.separator
+                            visible: builtinRow.index < builtinRepeater.count - 1
                         }
                     }
                 }
@@ -1029,6 +1151,14 @@ ApplicationWindow {
             }
         }
 
+        Text {
+            Layout.fillWidth: true
+            visible: dockPage.errorText.length > 0
+            text: dockPage.errorText
+            color: theme.role("error", "#ff453a")
+            wrapMode: Text.Wrap
+            font.pixelSize: 12
+        }
     }
 
     component DisplaySettingsPage: ColumnLayout {

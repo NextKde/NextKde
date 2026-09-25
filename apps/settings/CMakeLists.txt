@@ -48,6 +48,17 @@ if(BUILD_TESTING)
         TIMEOUT 15
     )
 
+    find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
+        HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
+    if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.builtin-checkboxes
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/builtins/tst_builtins.qml)
+        set_tests_properties(kos-settings.builtin-checkboxes PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 15)
+    endif()
+
     # The smoke test above proves the pages load; this one proves the right
     # pages were chosen, which is a separate failure mode: an installed binary
     # serving a checkout Shell would open and render the installed copy, look
