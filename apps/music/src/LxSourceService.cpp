@@ -67,6 +67,7 @@ LxSourceService::LxSourceService(QString dataPath, QObject *parent)
         failHost(message);
     });
     loadIndex();
+    m_runtimeSourceId = m_activeSourceId;
     if (!m_activeSourceId.isEmpty())
         startHost();
 }
@@ -137,6 +138,7 @@ void LxSourceService::activateSource(const QString &sourceId)
         return;
     }
     m_activeSourceId = sourceId;
+    m_runtimeSourceId = sourceId;
     for (QVariant &value : m_sources) {
         QVariantMap source = value.toMap();
         source.insert(QStringLiteral("active"),
@@ -148,6 +150,18 @@ void LxSourceService::activateSource(const QString &sourceId)
     startHost();
 }
 
+void LxSourceService::useSourceForPlayback(const QString &sourceId)
+{
+    if (sourceForId(sourceId).isEmpty())
+        return;
+    if (m_runtimeSourceId == sourceId && (m_state == QLatin1String("ready")
+        || m_state == QLatin1String("starting")))
+        return;
+    cancelResolves();
+    m_runtimeSourceId = sourceId;
+    startHost();
+}
+
 void LxSourceService::removeSource(const QString &sourceId)
 {
     for (qsizetype index = 0; index < m_sources.size(); ++index) {
@@ -156,14 +170,29 @@ void LxSourceService::removeSource(const QString &sourceId)
             continue;
         QFile::remove(source.value(QStringLiteral("path")).toString());
         m_sources.removeAt(index);
-        if (m_activeSourceId == sourceId) {
+        if (m_activeSourceId == sourceId)
             m_activeSourceId.clear();
+        if (m_runtimeSourceId == sourceId) {
+            m_runtimeSourceId.clear();
             stopHost();
             setState(QStringLiteral("inactive"));
         }
         saveIndex();
         emit sourcesChanged();
         return;
+    }
+}
+
+void LxSourceService::cancelResolves()
+{
+    for (auto it = m_pending.begin(); it != m_pending.end();) {
+        if (it->operation != QLatin1String("resolve")) {
+            ++it;
+            continue;
+        }
+        it->timer->stop();
+        it->timer->deleteLater();
+        it = m_pending.erase(it);
     }
 }
 
@@ -303,6 +332,7 @@ void LxSourceService::installScript(const QByteArray &script, const QString &ori
     if (!replaced)
         m_sources.append(metadata);
     m_activeSourceId = id;
+    m_runtimeSourceId = id;
     setError({});
     saveIndex();
     emit sourcesChanged();
@@ -313,7 +343,7 @@ void LxSourceService::installScript(const QByteArray &script, const QString &ori
 void LxSourceService::startHost()
 {
     stopHost();
-    if (m_activeSourceId.isEmpty()) {
+    if (m_runtimeSourceId.isEmpty()) {
         setState(QStringLiteral("inactive"));
         return;
     }
@@ -377,7 +407,7 @@ void LxSourceService::failHost(const QString &message)
 
 void LxSourceService::sendLoad()
 {
-    const QVariantMap source = sourceForId(m_activeSourceId);
+    const QVariantMap source = sourceForId(m_runtimeSourceId);
     QFile file(source.value(QStringLiteral("path")).toString());
     if (!file.open(QIODevice::ReadOnly)) {
         setState(QStringLiteral("error"));

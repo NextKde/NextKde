@@ -265,11 +265,13 @@ if(BUILD_TESTING)
             PkgConfig::KOS_MUSIC_TAGLIB
         )
         add_test(NAME kos-music.mpris
-            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-music-mpris-test>
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE}
+                --config-file=${CMAKE_CURRENT_SOURCE_DIR}/tests/session-bus.conf
+                -- $<TARGET_FILE:kos-music-mpris-test>
         )
         set_tests_properties(kos-music.mpris PROPERTIES
             ENVIRONMENT "G_DEBUG=fatal-criticals;KOS_MUSIC_FAKE_AUDIO=1"
-            TIMEOUT 30
+            TIMEOUT 90
             LABELS data
         )
     endif()

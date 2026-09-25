@@ -1,5 +1,6 @@
 #include "MusicController.h"
 
+#include "AudioCache.h"
 #include "LxSourceService.h"
 #include "LyricsService.h"
 #include "MetadataScanner.h"
@@ -12,6 +13,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QMap>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRandomGenerator>
 #include <QStandardPaths>
 #include <QTimer>
@@ -72,9 +75,61 @@ MusicController::MusicController(QObject *parent)
             this, &MusicController::scanFinished);
     connect(&m_engine, &PlaybackEngine::stateChanged,
             this, &MusicController::playbackStateChanged);
+    connect(this, &MusicController::playbackStateChanged, this, &MusicController::playbackStatusChanged);
+    connect(&m_engine, &PlaybackEngine::bufferingChanged, this, &MusicController::playbackStatusChanged);
+    connect(&m_engine, &PlaybackEngine::downloadCompleted, this, [this](const QString &path) {
+        if (m_audioCache)
+            m_audioCache->storeCompleted(m_engineCacheKey, path);
+    });
+    // Separate source, whole-track, and skip deadlines bound every recovery path.
+    m_attemptTimeout.setParent(this);
+    m_attemptTimeout.setObjectName(QStringLiteral("sourceAttemptTimeout"));
+    m_trackTimeout.setParent(this);
+    m_trackTimeout.setObjectName(QStringLiteral("trackPreparationTimeout"));
+    m_skipTimer.setParent(this);
+    m_skipTimer.setObjectName(QStringLiteral("failedTrackSkipDelay"));
+    m_attemptTimeout.setSingleShot(true);
+    m_attemptTimeout.setInterval(12000);
+    m_trackTimeout.setSingleShot(true);
+    m_trackTimeout.setInterval(45000);
+    m_skipTimer.setSingleShot(true);
+    m_skipTimer.setInterval(3000);
+    connect(&m_attemptTimeout, &QTimer::timeout, this, [this] {
+        schedulePlaybackFailure(tr("音源响应或缓冲超时"));
+    });
+    connect(&m_trackTimeout, &QTimer::timeout, this, [this] {
+        finishFailedTrack(tr("本曲重试已超时"));
+    });
+    connect(&m_skipTimer, &QTimer::timeout, this, &MusicController::advanceAfterFailure);
+    connect(&m_engine, &PlaybackEngine::stateChanged, this, [this] {
+        if (m_engine.state() == QLatin1String("Playing")) {
+            m_attemptTimeout.stop();
+            m_trackTimeout.stop();
+            m_recoveryStatus.clear();
+            setError({});
+            emit playbackStatusChanged();
+        } else if (m_engine.state() == QLatin1String("Error")) {
+            schedulePlaybackFailure(m_engine.errorMessage());
+        }
+    });
+    m_savePositionTimer.setInterval(5000);
+    connect(&m_savePositionTimer, &QTimer::timeout,
+            this, &MusicController::persistPlaybackPosition);
+    connect(&m_engine, &PlaybackEngine::stateChanged, this, [this] {
+        if (m_engine.state() == QLatin1String("Playing"))
+            m_savePositionTimer.start();
+        else {
+            m_savePositionTimer.stop();
+            persistPlaybackPosition();
+        }
+    });
+    connect(qApp, &QCoreApplication::aboutToQuit,
+            this, &MusicController::persistPlaybackPosition);
     connect(&m_engine, &PlaybackEngine::positionChanged,
             this, &MusicController::positionChanged);
     connect(&m_engine, &PlaybackEngine::positionChanged, this, [this] {
+        if (m_engine.state() == QLatin1String("Playing") && m_engine.positionMs() > 3000)
+            m_failedTracks.clear();
         if (m_lyricsService)
             m_lyricsService->setPositionMs(m_engine.positionMs());
     });
@@ -85,13 +140,18 @@ MusicController::MusicController(QObject *parent)
     connect(&m_engine, &PlaybackEngine::volumeChanged,
             this, &MusicController::volumeChanged);
     connect(&m_engine, &PlaybackEngine::seeked, this, [this](qint64 position) {
+        persistPlaybackPosition();
         emit seeked(position);
     });
     connect(&m_engine, &PlaybackEngine::errorMessageChanged, this, [this] {
-        if (!m_engine.errorMessage().isEmpty())
+        if (!m_engine.errorMessage().isEmpty()) {
+            if (m_audioCache && !m_pendingCacheKey.isEmpty())
+                m_audioCache->remove(m_pendingCacheKey);
+            m_usingCachedAudio = false;
             setError(m_engine.errorMessage());
+        }
     });
-    connect(&m_engine, &PlaybackEngine::endOfStream, this, [this] { advance(true); });
+    connect(&m_engine, &PlaybackEngine::endOfStream, this, [this] { m_failedTracks.clear(); advance(true); });
 
     const auto notifyTranscode = [this] { emit transcodeChanged(); };
     connect(&m_transcoder, &Transcoder::activeChanged, this, notifyTranscode);
@@ -126,6 +186,9 @@ void MusicController::initialize()
     m_sourceService = std::make_unique<LxSourceService>(m_dataPath, this);
     m_lyricsService = std::make_unique<LyricsService>(
         QDir(cachePath).filePath(QStringLiteral("lyrics")), this);
+    m_audioCache = std::make_unique<AudioCache>(
+        QDir(cachePath).filePath(QStringLiteral("audio")));
+    m_engine.setDownloadDirectory(m_audioCache->downloadDirectory());
     connect(&m_onlineProvider, &OnlineMusicProvider::searchingChanged,
             this, &MusicController::onlineSearchingChanged);
     connect(&m_onlineProvider, &OnlineMusicProvider::errorMessageChanged,
@@ -136,12 +199,21 @@ void MusicController::initialize()
             this, &MusicController::musicSourcesChanged);
     connect(m_sourceService.get(), &LxSourceService::stateChanged,
             this, &MusicController::musicSourceStateChanged);
+    connect(m_sourceService.get(), &LxSourceService::stateChanged, this, [this] {
+        if (!m_waitingForSource)
+            return;
+        if (m_sourceService->state() == QLatin1String("ready"))
+            resolveWithReadySource();
+        else if (m_sourceService->state() == QLatin1String("error"))
+            schedulePlaybackFailure(m_sourceService->errorMessage());
+    });
     connect(m_sourceService.get(), &LxSourceService::errorMessageChanged,
             this, &MusicController::musicSourceErrorChanged);
     connect(m_sourceService.get(), &LxSourceService::capabilitiesChanged,
             this, [this] {
         const QStringList qualities = onlineQualities();
-        if (!qualities.isEmpty() && !qualities.contains(m_onlineQuality)) {
+        if (m_resolvingTrackId < 0 && m_attemptName.isEmpty()
+            && !qualities.isEmpty() && !qualities.contains(m_onlineQuality)) {
             const QString fallback = qualities.contains(QStringLiteral("128k"))
                 ? QStringLiteral("128k") : qualities.first();
             if (m_onlineQuality != fallback) {
@@ -161,18 +233,13 @@ void MusicController::initialize()
             this, [this](qint64 trackId, const QUrl &url) {
         if (trackId != m_resolvingTrackId || trackId != currentTrackId())
             return;
-        m_resolvingTrackId = -1;
-        emit playbackStateChanged();
-        if (m_engine.load(url, true))
-            m_database.recordPlayed(trackId);
+        loadPreparedTrack(url);
     });
     connect(m_sourceService.get(), &LxSourceService::resolveFailed,
             this, [this](qint64 trackId, const QString &message) {
-        if (trackId == m_resolvingTrackId) {
-            m_resolvingTrackId = -1;
-            emit playbackStateChanged();
-        }
-        setError(tr("Unable to play online track: %1").arg(message));
+        if (trackId != m_resolvingTrackId || trackId != currentTrackId())
+            return;
+        schedulePlaybackFailure(message);
     });
     connect(m_lyricsService.get(), &LyricsService::lyricsChanged,
             this, &MusicController::lyricsChanged);
@@ -190,6 +257,9 @@ void MusicController::initialize()
         return;
     }
     m_ready = true;
+    m_lyricsEnabled = m_database.setting(QStringLiteral("lyricsEnabled"), QStringLiteral("true"))
+        != QLatin1String("false");
+    emit lyricsEnabledChanged();
     const QString storedOnlineQuality =
         m_database.setting(QStringLiteral("onlineQuality"), QStringLiteral("128k"))
             .trimmed().toLower();
@@ -214,13 +284,29 @@ void MusicController::initialize()
     refreshQueueModel();
     if (m_queueIndex < 0 || m_queueIndex >= m_queueIds.size())
         m_queueIndex = m_queueIds.isEmpty() ? -1 : 0;
+    const QJsonObject playback = QJsonDocument::fromJson(
+        m_database.setting(QStringLiteral("playbackPosition")).toUtf8()).object();
+    if (playback.value(QStringLiteral("trackId")).toString().toLongLong() == currentTrackId())
+        m_resumePositionMs = std::max<qint64>(0,
+            playback.value(QStringLiteral("positionMs")).toVariant().toLongLong());
     m_mpris = new MprisService(this, this);
     emit mprisRegisteredChanged();
+    emit queueChanged();
+    emit currentTrackChanged();
+    emit positionChanged();
+    emit durationChanged();
+    emit playbackStateChanged();
     emit readyChanged();
     rescanLibrary();
 }
 
-MusicController::~MusicController() = default;
+MusicController::~MusicController()
+{
+    persistPlaybackPosition();
+    disconnect(&m_engine, &PlaybackEngine::stateChanged, this, nullptr);
+    disconnect(&m_engine, &PlaybackEngine::positionChanged, this, nullptr);
+    m_engine.stop();
+}
 
 TrackListModel *MusicController::libraryModel() { return &m_libraryModel; }
 TrackListModel *MusicController::queueModel() { return &m_queueModel; }
@@ -257,7 +343,7 @@ QStringList MusicController::onlineQualities() const { return m_sourceService ? 
 QString MusicController::onlineQuality() const { return m_onlineQuality; }
 QVariantList MusicController::lyrics() const
 {
-    return m_lyricsService && m_lyricsService->loadedTrackId() == currentTrackId()
+    return m_lyricsEnabled && m_lyricsService && m_lyricsService->loadedTrackId() == currentTrackId()
         ? m_lyricsService->lines() : QVariantList{};
 }
 int MusicController::currentLyricIndex() const
@@ -290,9 +376,63 @@ QString MusicController::lyricsError() const
 bool MusicController::engineAvailable() const { return m_engine.available(); }
 QString MusicController::engineBackend() const { return m_engine.backendName(); }
 bool MusicController::mprisRegistered() const { return m_mpris && m_mpris->registered(); }
+bool MusicController::lyricsEnabled() const { return m_lyricsEnabled; }
+void MusicController::setLyricsEnabled(bool enabled)
+{
+    if (enabled == m_lyricsEnabled || !m_ready)
+        return;
+    m_lyricsEnabled = enabled;
+    m_database.setSetting(QStringLiteral("lyricsEnabled"), enabled ? QStringLiteral("true") : QStringLiteral("false"));
+    if (m_lyricsService) {
+        m_lyricsService->load(enabled ? findTrack(currentTrackId()).value_or(TrackRecord{}) : TrackRecord{});
+        m_lyricsService->setPositionMs(positionMs());
+    }
+    emit lyricsEnabledChanged();
+    emit lyricsChanged();
+    emit currentLyricChanged();
+}
+
+double MusicController::cacheProgress() const
+{
+    if (playbackState() == QLatin1String("Error") || playbackState() == QLatin1String("Stopped")
+        || m_loadedTrackId != currentTrackId()) return -1;
+    return m_usingCachedAudio ? 1 : m_engine.downloadProgress();
+}
+
+QString MusicController::playbackStatusText() const
+{
+    if (!m_recoveryStatus.isEmpty())
+        return m_recoveryStatus;
+    if (m_resolvingTrackId >= 0)
+        return tr("正在获取播放地址…");
+    if (playbackState() == QLatin1String("Error"))
+        return tr("播放失败，点击重试");
+    if (m_engine.state() == QLatin1String("Loading"))
+        return m_engine.bufferingPercent() < 100
+            ? tr("正在缓冲 %1%…").arg(m_engine.bufferingPercent())
+            : tr("正在准备播放…");
+    const auto track = findTrack(currentTrackId());
+    if (track && track->source != QLatin1String("local")) {
+        if (m_usingCachedAudio)
+            return tr("已缓存，可离线播放");
+        if (m_engine.downloadProgress() >= 1)
+            return tr("本曲已缓冲完成");
+        if (m_engine.downloadProgress() >= 0)
+            return tr("正在缓存 %1%").arg(qRound(m_engine.downloadProgress() * 100));
+        if (m_engine.state() == QLatin1String("Playing"))
+            return tr("正在在线播放");
+    }
+    return {};
+}
 QString MusicController::playbackState() const
 {
-    return m_resolvingTrackId >= 0 ? QStringLiteral("Loading") : m_engine.state();
+    if (m_preparationFailed)
+        return QStringLiteral("Error");
+    if (m_resolvingTrackId >= 0)
+        return m_playWhenReady ? QStringLiteral("Loading") : QStringLiteral("Paused");
+    if (m_loadedTrackId != currentTrackId() && m_resumePositionMs > 0)
+        return QStringLiteral("Paused");
+    return m_engine.state();
 }
 qlonglong MusicController::currentTrackId() const
 {
@@ -319,15 +459,22 @@ QString MusicController::currentArtworkUrl() const
     const auto track = findTrack(currentTrackId());
     return track ? track->artworkUrl : QString{};
 }
-qlonglong MusicController::positionMs() const { return m_engine.positionMs(); }
+qlonglong MusicController::positionMs() const
+{
+    return m_loadedTrackId == currentTrackId() && m_loadedTrackId >= 0
+        ? m_engine.positionMs() : m_resumePositionMs;
+}
 qlonglong MusicController::durationMs() const
 {
-    if (m_engine.durationMs() > 0)
+    if (m_loadedTrackId == currentTrackId() && m_engine.durationMs() > 0)
         return m_engine.durationMs();
     const auto track = findTrack(currentTrackId());
     return track ? track->durationMs : 0;
 }
-bool MusicController::seekable() const { return m_engine.seekable(); }
+bool MusicController::seekable() const
+{
+    return m_loadedTrackId >= 0 && m_loadedTrackId == currentTrackId() && m_engine.seekable();
+}
 double MusicController::volume() const { return m_engine.volume(); }
 bool MusicController::shuffle() const { return m_shuffle; }
 QString MusicController::repeatMode() const { return m_repeatMode; }
@@ -391,6 +538,9 @@ QVariantMap MusicController::mprisMetadata() const
     metadata.insert(QStringLiteral("kos:currentLyric"), lyric);
     metadata.insert(QStringLiteral("kos:nextLyric"), followingLyric);
     metadata.insert(QStringLiteral("kos:lyricIndex"), currentLyricIndex());
+    metadata.insert(QStringLiteral("kos:playbackStatus"), playbackStatusText());
+    metadata.insert(QStringLiteral("kos:playbackState"), playbackState());
+    metadata.insert(QStringLiteral("kos:lyricsEnabled"), m_lyricsEnabled);
     return metadata;
 }
 
@@ -664,6 +814,12 @@ void MusicController::removeQueueRow(int row)
         m_queueIndex = m_queueIds.size() - 1;
     }
     if (removingCurrent) {
+        cancelRecovery();
+        m_preparationFailed = false;
+        m_playWhenReady = false;
+        m_sourceService->cancelResolves();
+        m_loadedTrackId = -1;
+        m_resumePositionMs = 0;
         if (!m_queueIds.isEmpty())
             m_lyricsService->load({});
         if (m_resolvingTrackId >= 0) {
@@ -695,28 +851,59 @@ void MusicController::play()
     const auto track = findTrack(currentTrackId());
     if (!track)
         return;
-    if (track->source != QLatin1String("local")
-        || m_engine.source().isEmpty()
-        || m_engine.source() != QUrl(track->url)) {
-        startCurrentTrack();
+    m_playWhenReady = true;
+    if (m_preparationFailed) {
+        startCurrentTrack(positionMs());
+        return;
+    }
+    if (m_resolvingTrackId == track->id) {
+        if (!m_attemptTimeout.isActive()) m_attemptTimeout.start();
+        if (!m_trackTimeout.isActive()) m_trackTimeout.start();
+        emit playbackStateChanged();
+        return;
+    }
+    if (m_loadedTrackId != track->id || m_engine.source().isEmpty()
+        || m_engine.state() == QLatin1String("Error")
+        || m_engine.state() == QLatin1String("Stopped")) {
+        startCurrentTrack(positionMs());
     } else {
         m_engine.play();
     }
 }
 
-void MusicController::pause() { m_engine.pause(); }
+void MusicController::pause()
+{
+    m_playWhenReady = false;
+    m_skipTimer.stop();
+    m_attemptTimeout.stop();
+    m_trackTimeout.stop();
+    if (m_preparationFailed) m_recoveryStatus = tr("已暂停自动跳过，点击播放可重试");
+    if (m_loadedTrackId == currentTrackId())
+        m_engine.pause();
+    persistPlaybackPosition();
+    emit playbackStateChanged();
+}
 void MusicController::togglePlayPause()
 {
-    if (m_engine.state() == QLatin1String("Playing"))
+    if (playbackState() == QLatin1String("Playing")
+        || playbackState() == QLatin1String("Loading"))
         pause();
     else
         play();
 }
 void MusicController::stop()
 {
+    cancelRecovery();
+    m_playWhenReady = false;
+    m_failedTracks.clear();
+    m_preparationFailed = false;
     m_resolvingTrackId = -1;
+    if (m_sourceService)
+        m_sourceService->cancelResolves();
+    m_resumePositionMs = 0;
     emit playbackStateChanged();
     m_engine.stop();
+    persistPlaybackPosition();
 }
 void MusicController::next() { advance(false); }
 void MusicController::previous()
@@ -1186,25 +1373,217 @@ void MusicController::persistQueue()
     }
 }
 
-void MusicController::startCurrentTrack()
+QString MusicController::audioCacheKey(const TrackRecord &track) const
+{
+    return track.source + QChar(0x1f) + track.path + QChar(0x1f) + m_onlineQuality;
+}
+
+void MusicController::persistPlaybackPosition()
+{
+    if (!m_ready)
+        return;
+    const QJsonObject position{
+        {QStringLiteral("trackId"), QString::number(currentTrackId())},
+        {QStringLiteral("positionMs"), positionMs()},
+    };
+    m_database.setSetting(QStringLiteral("playbackPosition"),
+        QString::fromUtf8(QJsonDocument(position).toJson(QJsonDocument::Compact)));
+}
+
+void MusicController::loadPreparedTrack(const QUrl &url)
+{
+    if (m_resolvingTrackId != currentTrackId() || m_resolvingTrackId < 0)
+        return;
+    m_recoveryStatus.clear();
+    m_engineCacheKey = m_pendingCacheKey;
+    m_loadedTrackId = m_resolvingTrackId;
+    m_resolvingTrackId = -1;
+    if (m_engine.load(url, m_playWhenReady, m_resumePositionMs))
+        m_database.recordPlayed(m_loadedTrackId);
+    emit playbackStateChanged();
+}
+
+void MusicController::startCurrentTrack(qint64 startPositionMs)
 {
     const auto track = findTrack(currentTrackId());
     if (!track)
         return;
+    cancelRecovery();
+    if (!m_automaticAdvance) m_failedTracks.clear();
+    m_attemptName.clear();
+    m_sourceCandidates.clear();
+    m_preparationFailed = false;
+    m_sourceService->cancelResolves();
+    m_loadedTrackId = -1;
+    m_resumePositionMs = std::max<qint64>(0, startPositionMs);
+    m_playWhenReady = true;
+    m_resolvingTrackId = track->id;
+    m_engine.stop();
+    setError({});
+    persistPlaybackPosition();
     emit currentTrackChanged();
+    emit positionChanged();
+    emit seekableChanged();
     emit durationChanged();
-    m_lyricsService->load(*track);
+    m_lyricsService->load(m_lyricsEnabled ? *track : TrackRecord{});
+    m_usingCachedAudio = false;
+    m_pendingCacheKey.clear();
     if (track->source != QLatin1String("local")) {
-        m_engine.stop();
-        m_resolvingTrackId = track->id;
+        m_pendingCacheKey = audioCacheKey(*track);
+        const QString preferred = m_sourceService->activeSourceId();
+        if (!preferred.isEmpty()) m_sourceCandidates.append(preferred);
+        for (const QVariant &value : m_sourceService->sources()) {
+            const QString id = value.toMap().value(QStringLiteral("id")).toString();
+            if (!m_sourceCandidates.contains(id)) m_sourceCandidates.append(id);
+        }
+        const QUrl cached = m_audioCache->lookup(m_pendingCacheKey);
+        if (!cached.isEmpty()) {
+            m_usingCachedAudio = true;
+            loadPreparedTrack(cached);
+            return;
+        }
         emit playbackStateChanged();
-        m_sourceService->resolve(
-            track->id, track->source, track->sourceData, m_onlineQuality);
+        m_trackTimeout.start();
+        tryNextSource();
         return;
     }
+    loadPreparedTrack(QUrl(track->url));
+}
+
+void MusicController::cancelRecovery()
+{
+    ++m_attemptGeneration;
+    m_attemptTimeout.stop();
+    m_trackTimeout.stop();
+    m_skipTimer.stop();
+    m_waitingForSource = false;
+    m_failureQueued = false;
+    m_recoveryStatus.clear();
+}
+
+void MusicController::tryNextSource()
+{
+    const auto track = findTrack(currentTrackId());
+    if (!track || track->source == QLatin1String("local") || m_sourceCandidates.isEmpty()) {
+        finishFailedTrack(tr("没有可用的兼容音源"));
+        return;
+    }
+    ++m_attemptGeneration;
+    m_failureQueued = false;
+    m_sourceService->cancelResolves();
+    m_resolvingTrackId = track->id;
+    m_loadedTrackId = -1;
+    m_engine.stop();
+    m_usingCachedAudio = false;
+    const QString id = m_sourceCandidates.takeFirst();
+    m_attemptName = id;
+    for (const QVariant &value : m_sourceService->sources()) {
+        const QVariantMap source = value.toMap();
+        if (source.value(QStringLiteral("id")).toString() == id)
+            m_attemptName = source.value(QStringLiteral("name")).toString();
+    }
+    m_recoveryStatus = tr("正在尝试音源：%1…").arg(m_attemptName);
+    m_waitingForSource = true;
+    emit playbackStateChanged();
+    m_sourceService->useSourceForPlayback(id);
+    if (m_playWhenReady) {
+        m_attemptTimeout.start();
+        if (!m_trackTimeout.isActive()) m_trackTimeout.start();
+    }
+    if (m_sourceService->state() == QLatin1String("ready"))
+        resolveWithReadySource();
+}
+
+void MusicController::resolveWithReadySource()
+{
+    if (!m_waitingForSource || m_resolvingTrackId != currentTrackId())
+        return;
+    m_waitingForSource = false;
+    const auto track = findTrack(currentTrackId());
+    if (track)
+        m_sourceService->resolve(track->id, track->source, track->sourceData, m_onlineQuality);
+}
+
+void MusicController::schedulePlaybackFailure(const QString &message)
+{
+    if (m_failureQueued || m_preparationFailed || currentTrackId() < 0)
+        return;
+    m_failureQueued = true;
+    const int generation = m_attemptGeneration;
+    // Do not tear down a source/pipeline while it is dispatching its failure signal.
+    QTimer::singleShot(0, this, [this, generation, message] {
+        if (generation != m_attemptGeneration)
+            return;
+        m_failureQueued = false;
+        m_attemptTimeout.stop();
+        m_waitingForSource = false;
+        m_sourceService->cancelResolves();
+        m_playbackAttempts.append(tr("%1 · %2：%3").arg(currentTitle(),
+            m_attemptName.isEmpty() ? tr("音频文件") : m_attemptName, message.left(500)));
+        while (m_playbackAttempts.size() > 30) m_playbackAttempts.removeFirst();
+        m_resumePositionMs = positionMs();
+        if (m_playWhenReady && !m_sourceCandidates.isEmpty())
+            tryNextSource();
+        else
+            finishFailedTrack(message);
+    });
+}
+
+void MusicController::finishFailedTrack(const QString &message)
+{
+    m_playbackAttempts.append(tr("%1：%2").arg(currentTitle(), message.left(500)));
+    while (m_playbackAttempts.size() > 30) m_playbackAttempts.removeFirst();
+    cancelRecovery();
+    m_sourceService->cancelResolves();
     m_resolvingTrackId = -1;
-    if (m_engine.load(QUrl(track->url), true))
-        m_database.recordPlayed(track->id);
+    m_resumePositionMs = positionMs();
+    m_loadedTrackId = -1;
+    m_engine.stop();
+    m_preparationFailed = true;
+    m_failedTracks.insert(currentTrackId());
+    setError(message);
+    m_recoveryStatus = m_playWhenReady
+        ? tr("本曲无法播放，3 秒后按队列继续…")
+        : tr("本曲无法播放，点击重试");
+    if (m_playWhenReady) m_skipTimer.start();
+    emit playbackStateChanged();
+}
+
+void MusicController::advanceAfterFailure()
+{
+    if (!m_playWhenReady || m_queueIds.isEmpty())
+        return;
+    QList<int> candidates;
+    if (m_shuffle) {
+        for (int i = 0; i < m_queueIds.size(); ++i)
+            if (!m_failedTracks.contains(m_queueIds.at(i))) candidates.append(i);
+    } else {
+        for (int step = 1; step <= m_queueIds.size(); ++step) {
+            int index = m_queueIndex + step;
+            if (index >= m_queueIds.size()) {
+                if (m_repeatMode != QLatin1String("playlist")) break;
+                index %= m_queueIds.size();
+            }
+            if (!m_failedTracks.contains(m_queueIds.at(index))) {
+                candidates.append(index);
+                break;
+            }
+        }
+    }
+    if (candidates.isEmpty()) {
+        m_playWhenReady = false;
+        m_recoveryStatus = tr("没有更多可播放的歌曲，请检查音源后重试");
+        emit playbackStateChanged();
+        return;
+    }
+    emit userMessage(tr("已跳过无法播放的歌曲：%1").arg(currentTitle()));
+    m_queueIndex = candidates.at(m_shuffle
+        ? QRandomGenerator::global()->bounded(candidates.size()) : 0);
+    persistQueue();
+    emit queueChanged();
+    m_automaticAdvance = true;
+    startCurrentTrack();
+    m_automaticAdvance = false;
 }
 
 void MusicController::advance(bool fromEndOfStream)

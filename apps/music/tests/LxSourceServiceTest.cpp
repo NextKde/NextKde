@@ -111,6 +111,13 @@ void LxSourceServiceTest::switchesSourcesCancelsPendingAndPersists()
         QCOMPARE(restored.sources().size(), 2);
         QCOMPARE(restored.activeSourceId(), secondId);
         QTRY_COMPARE_WITH_TIMEOUT(restored.state(), QStringLiteral("ready"), 5000);
+        QSignalSpy resolved(&restored, &LxSourceService::resolved);
+        restored.resolve(44, QStringLiteral("wy"), QStringLiteral("{}"));
+        restored.cancelResolves();
+        restored.resolve(44, QStringLiteral("wy"), QStringLiteral("{}"));
+        QTRY_COMPARE_WITH_TIMEOUT(resolved.size(), 1, 5000);
+        QTest::qWait(100);
+        QCOMPARE(resolved.size(), 1);
         restored.removeSource(secondId);
         QCOMPARE(restored.state(), QStringLiteral("inactive"));
         QCOMPARE(restored.sources().size(), 1);
