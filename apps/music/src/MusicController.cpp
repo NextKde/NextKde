@@ -12,6 +12,7 @@
 #include <QDBusObjectPath>
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
 #include <QMap>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -661,6 +662,13 @@ void MusicController::enqueueOnlineRow(int row)
         enqueueTrack(id);
 }
 
+void MusicController::playOnlineNext(int row)
+{
+    const qint64 id = storeOnlineTrack(row);
+    if (id >= 0)
+        playTrackNext(id);
+}
+
 void MusicController::importMusicSource(const QString &pathOrUrl)
 {
     if (m_sourceService)
@@ -788,6 +796,11 @@ void MusicController::playTrackNext(qlonglong trackId)
 {
     if (!findTrack(trackId))
         return;
+    const int existing = m_queueIds.indexOf(trackId);
+    if (existing >= 0) {
+        moveQueueRowNext(existing);
+        return;
+    }
     const int position = std::clamp(m_queueIndex + 1, 0,
                                     static_cast<int>(m_queueIds.size()));
     m_queueIds.insert(position, trackId);
@@ -796,6 +809,107 @@ void MusicController::playTrackNext(qlonglong trackId)
     refreshQueueModel();
     persistQueue();
     emit queueChanged();
+}
+
+bool MusicController::isTrackQueued(qlonglong trackId) const
+{
+    return trackId >= 0 && m_queueIds.contains(trackId);
+}
+
+void MusicController::moveQueueRowNext(int row)
+{
+    if (row < 0 || row >= m_queueIds.size() || row == m_queueIndex
+        || row == m_queueIndex + 1)
+        return;
+    const qint64 id = m_queueIds.takeAt(row);
+    if (row < m_queueIndex) --m_queueIndex;
+    m_queueIds.insert(std::clamp(m_queueIndex + 1, 0, int(m_queueIds.size())), id);
+    refreshQueueModel();
+    persistQueue();
+    emit queueChanged();
+}
+
+QVariantMap MusicController::trackDeletionInfo(qlonglong trackId) const
+{
+    const auto track = findTrack(trackId);
+    if (!track) return {};
+    return {{QStringLiteral("id"), track->id}, {QStringLiteral("path"), track->path},
+            {QStringLiteral("title"), track->title},
+            {QStringLiteral("localFile"), track->source == QLatin1String("local")}};
+}
+
+bool MusicController::deleteTrack(qlonglong trackId, const QString &expectedPath)
+{
+    const auto track = findTrack(trackId);
+    // Keep a confirmation bound to the file the user saw, even if a scan changed IDs.
+    if (!track || expectedPath.isEmpty() || track->path != expectedPath) {
+        setError(tr("这首音乐已经发生变化，请重新打开菜单后操作。"));
+        return false;
+    }
+    QString trashPath;
+    const bool local = track->source == QLatin1String("local");
+    if (local) {
+        const QFileInfo file(track->path);
+        if (file.exists() || file.isSymLink()) {
+            if (!file.isFile() && !file.isSymLink()) {
+                setError(tr("此记录不是音频文件，无法移到回收站。"));
+                return false;
+            }
+            if (!QFile::moveToTrash(track->path, &trashPath)) {
+                setError(tr("无法将音频移到回收站，音乐库记录已保留。请检查文件权限和回收站。"));
+                return false;
+            }
+        }
+    }
+    QString error;
+    if (!m_database.removeTrack(trackId, &error)) {
+        if (!trashPath.isEmpty() && !QFile::rename(trashPath, track->path))
+            error += tr(" 音频已在回收站中，可从回收站恢复。");
+        setError(error);
+        return false;
+    }
+
+    const bool deletingCurrent = currentTrackId() == trackId;
+    const bool wasPlaying = playbackState() == QLatin1String("Playing")
+        || playbackState() == QLatin1String("Loading");
+    const int oldIndex = m_queueIndex;
+    int removedBefore = 0;
+    for (int i = 0; i < oldIndex; ++i)
+        if (m_queueIds.at(i) == trackId) ++removedBefore;
+    if (deletingCurrent) {
+        stop();
+        m_loadedTrackId = -1;
+        m_engineCacheKey.clear();
+        m_pendingCacheKey.clear();
+        m_lyricsService->load({});
+    }
+    m_queueIds.removeAll(trackId);
+    const int nextIndex = oldIndex - removedBefore;
+    const bool hasSuccessor = nextIndex >= 0 && nextIndex < m_queueIds.size();
+    m_queueIndex = m_queueIds.isEmpty() ? -1
+        : std::clamp(nextIndex, 0, int(m_queueIds.size()) - 1);
+    m_failedTracks.remove(trackId);
+    if (m_scanning) m_removedDuringScan.insert(track->path);
+    if (!local && m_audioCache) {
+        for (const QString &quality : supportedOnlineQualities())
+            m_audioCache->remove(track->source + QChar(0x1f) + track->path + QChar(0x1f) + quality);
+    }
+    refreshLibrary();
+    persistQueue();
+    persistPlaybackPosition();
+    emit queueChanged();
+    if (deletingCurrent) {
+        emit currentTrackChanged();
+        emit positionChanged();
+        emit durationChanged();
+        emit playbackStateChanged();
+        if (wasPlaying && hasSuccessor) startCurrentTrack();
+    }
+    emit trackDeleted(trackId, trashPath);
+    emit userMessage(local && !trashPath.isEmpty()
+        ? tr("已将“%1”移到回收站").arg(track->title)
+        : tr("已删除音乐“%1”").arg(track->title));
+    return true;
 }
 
 void MusicController::removeQueueRow(int row)
@@ -1158,7 +1272,15 @@ void MusicController::scanFinished()
 {
     if (!m_ready)
         return;
-    const ScanResult result = m_scanWatcher.result();
+    ScanResult result = m_scanWatcher.result();
+    // A scan that was already reading metadata must not resurrect a trashed file.
+    result.changedTracks.removeIf([this](const TrackRecord &track) {
+        return m_removedDuringScan.contains(track.path);
+    });
+    result.visitedPaths.removeIf([this](const QString &path) {
+        return m_removedDuringScan.contains(path);
+    });
+    m_removedDuringScan.clear();
     QString error;
     if (m_database.libraryRoots().contains(result.rootPath)
         && !m_database.applyScan(result, &error)) {

@@ -160,6 +160,7 @@ public:
     Q_INVOKABLE void searchOnline(const QString &query);
     Q_INVOKABLE void playOnlineRow(int row);
     Q_INVOKABLE void enqueueOnlineRow(int row);
+    Q_INVOKABLE void playOnlineNext(int row);
     Q_INVOKABLE void importMusicSource(const QString &pathOrUrl);
     Q_INVOKABLE void activateMusicSource(const QString &sourceId);
     Q_INVOKABLE void removeMusicSource(const QString &sourceId);
@@ -172,6 +173,10 @@ public:
     Q_INVOKABLE void playArtist(const QString &artist);
     Q_INVOKABLE void enqueueTrack(qlonglong trackId);
     Q_INVOKABLE void playTrackNext(qlonglong trackId);
+    Q_INVOKABLE void moveQueueRowNext(int row);
+    Q_INVOKABLE bool isTrackQueued(qlonglong trackId) const;
+    Q_INVOKABLE QVariantMap trackDeletionInfo(qlonglong trackId) const;
+    Q_INVOKABLE bool deleteTrack(qlonglong trackId, const QString &expectedPath);
     Q_INVOKABLE void removeQueueRow(int row);
     Q_INVOKABLE void clearQueue();
     Q_INVOKABLE void play();
@@ -238,6 +243,7 @@ signals:
     void seeked(qlonglong positionMs);
     void raiseRequested();
     void userMessage(const QString &message);
+    void trackDeleted(qlonglong trackId, const QString &trashPath);
 
 private slots:
     void scanFinished();
@@ -291,6 +297,7 @@ private:
     QString m_attemptName;
     QString m_recoveryStatus;
     QSet<qint64> m_failedTracks;
+    QSet<QString> m_removedDuringScan;
     int m_attemptGeneration = 0;
     bool m_waitingForSource = false;
     bool m_failureQueued = false;

@@ -103,28 +103,28 @@ KosCard {
                 ToolTip.text: qsTr("Playback mode")
                 onClicked: playbackModeMenu.popup()
 
-                Menu {
+                MusicMenu {
                     id: playbackModeMenu
                     y: -implicitHeight
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Sequential playback")
                         checkable: true
                         checked: root.musicController.playbackMode === "sequential"
                         onTriggered: root.musicController.playbackMode = "sequential"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Repeat queue")
                         checkable: true
                         checked: root.musicController.playbackMode === "playlist"
                         onTriggered: root.musicController.playbackMode = "playlist"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Repeat current track")
                         checkable: true
                         checked: root.musicController.playbackMode === "track"
                         onTriggered: root.musicController.playbackMode = "track"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Shuffle")
                         checkable: true
                         checked: root.musicController.playbackMode === "shuffle"

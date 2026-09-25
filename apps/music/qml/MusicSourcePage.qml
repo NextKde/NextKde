@@ -10,7 +10,7 @@ Item {
     id: root
     required property var musicController
 
-    Dialog {
+    MusicDialog {
         id: attemptDialog
         title: qsTr("最近的音源尝试")
         anchors.centerIn: parent
@@ -21,6 +21,8 @@ Item {
         contentItem: ScrollView {
             TextArea {
                 text: root.musicController.playbackAttempts.join("\n\n")
+                color: AppTheme.text
+                background: Rectangle { radius: AppTheme.smallRadius; color: AppTheme.fieldSurface }
                 readOnly: true
                 wrapMode: TextEdit.Wrap
                 selectByMouse: true
@@ -58,12 +60,12 @@ Item {
                 onAccepted: if (text.trim().length > 0)
                     root.musicController.importMusicSource(text.trim())
             }
-            Button {
+            KosButton {
                 text: qsTr("Import URL")
                 enabled: sourceUrl.text.trim().length > 0
                 onClicked: root.musicController.importMusicSource(sourceUrl.text.trim())
             }
-            Button {
+            KosButton {
                 text: qsTr("Import file…")
                 onClicked: sourceDialog.open()
             }
@@ -91,8 +93,9 @@ Item {
                 && root.musicController.onlineQualities.length > 0
             Label {
                 text: qsTr("Playback quality")
+                color: AppTheme.text
             }
-            ComboBox {
+            MusicComboBox {
                 id: qualityChoice
                 Layout.preferredWidth: 180
                 model: root.musicController.onlineQualities
@@ -117,7 +120,7 @@ Item {
             color: AppTheme.mutedText
             wrapMode: Text.WordWrap
         }
-        Button {
+        KosButton {
             text: qsTr("查看最近的音源尝试")
             enabled: root.musicController.playbackAttempts.length > 0
             onClicked: attemptDialog.open()
@@ -179,7 +182,7 @@ Item {
                             elide: Text.ElideRight
                         }
                     }
-                    Button {
+                    KosButton {
                         text: String(sourceDelegate.modelData.id)
                             === root.musicController.activeMusicSourceId
                             ? qsTr("Active") : qsTr("Activate")

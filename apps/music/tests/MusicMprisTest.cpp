@@ -1,6 +1,7 @@
 #include "MusicController.h"
 #include "AudioCache.h"
 #include <QProcess>
+#include <QScopeGuard>
 
 #include <QDBusConnection>
 #include <QDBusArgument>
@@ -111,6 +112,9 @@ private slots:
     void sourceFallback();
     void failedQueueRecovery_data();
     void failedQueueRecovery();
+    void deleteMusic_data();
+    void deleteMusic();
+    void queueNextMovesWithoutDuplicating();
 };
 
 void MusicMprisTest::exposesPropertiesAndControlsPlayback()
@@ -676,6 +680,178 @@ void MusicMprisTest::failedQueueRecovery()
         QVERIFY(controller.playbackState() != QLatin1String("Playing"));
         QVERIFY(!skip->isActive());
     }
+}
+
+void MusicMprisTest::deleteMusic_data()
+{
+    QTest::addColumn<QString>("scenario");
+    for (const char *scenario : {"playing", "paused", "other-track", "only-track", "missing-file", "stale-menu", "invalid-directory", "trash-unavailable", "scan-in-flight"})
+        QTest::newRow(scenario) << QString::fromLatin1(scenario);
+}
+
+void MusicMprisTest::deleteMusic()
+{
+    QFETCH(QString, scenario);
+    QTemporaryDir directory;
+    const QByteArray oldDataHome = qgetenv("XDG_DATA_HOME");
+    const auto restoreEnvironment = qScopeGuard([oldDataHome] {
+        if (oldDataHome.isNull()) qunsetenv("XDG_DATA_HOME");
+        else qputenv("XDG_DATA_HOME", oldDataHome);
+    });
+    qputenv("XDG_DATA_HOME", directory.filePath(QStringLiteral("trash-data")).toUtf8());
+    if (scenario == QLatin1String("trash-unavailable")) {
+        // A file at the data-home path cannot contain Trash, even when a Qt
+        // version tries to create missing parent directories automatically.
+        QFile blockedDataHome(QString::fromUtf8(qgetenv("XDG_DATA_HOME")));
+        QVERIFY(blockedDataHome.open(QIODevice::WriteOnly));
+    } else {
+        QVERIFY(QDir().mkpath(QString::fromUtf8(qgetenv("XDG_DATA_HOME"))));
+    }
+    const QString dataPath = directory.filePath(QStringLiteral("data"));
+    qputenv("KOS_MUSIC_DATA_DIR", dataPath.toUtf8());
+    qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
+    const QString audioDir = directory.filePath(QStringLiteral("audio"));
+    QVERIFY(QDir().mkpath(audioDir));
+    const QString first = QDir(audioDir).filePath(QStringLiteral("first.wav"));
+    const QString second = QDir(audioDir).filePath(QStringLiteral("second.wav"));
+    QVERIFY(writeTestWave(first, 12));
+    QVERIFY(writeTestWave(second, 12));
+    QList<qint64> ids;
+    qint64 playlist;
+    {
+        MusicDatabase database;
+        QVERIFY(database.open(QDir(dataPath).filePath(QStringLiteral("library.sqlite"))));
+        for (const QString &path : {first, second}) {
+            TrackRecord track;
+            track.path = path;
+            track.url = QUrl::fromLocalFile(path).toString();
+            track.title = QFileInfo(path).baseName();
+            ids.append(database.addExternalTrack(track));
+        }
+        QVERIFY(database.setQueueTrackIds(scenario == QLatin1String("only-track")
+            ? QList<qint64>{ids.first()} : QList<qint64>{ids.first(), ids.last(), ids.first()}));
+        QVERIFY(database.setSetting(QStringLiteral("queueIndex"), scenario == QLatin1String("other-track") ? QStringLiteral("1") : QStringLiteral("0")));
+        playlist = database.createPlaylist(QStringLiteral("Deletion fixture"));
+        for (qint64 id : ids) QVERIFY(database.addTrackToPlaylist(playlist, id));
+    }
+    MusicController controller;
+    QTRY_VERIFY(controller.ready());
+    controller.selectPlaylist(playlist);
+    if (scenario == QLatin1String("playing") || scenario == QLatin1String("paused")
+        || scenario == QLatin1String("other-track") || scenario == QLatin1String("only-track")) {
+        controller.play();
+        QTRY_COMPARE(controller.playbackState(), QStringLiteral("Playing"));
+        if (scenario == QLatin1String("paused")) controller.pause();
+    }
+    if (scenario == QLatin1String("missing-file")) QVERIFY(QFile::remove(first));
+    if (scenario == QLatin1String("invalid-directory")) {
+        QVERIFY(QFile::remove(first));
+        QVERIFY(QDir().mkpath(first));
+    }
+    if (scenario == QLatin1String("scan-in-flight")) controller.addLibraryFolder(audioDir);
+    const auto info = controller.trackDeletionInfo(ids.first());
+    QCOMPARE(info.value(QStringLiteral("path")).toString(), first);
+    QSignalSpy deleted(&controller, &MusicController::trackDeleted);
+    const bool succeeds = scenario != QLatin1String("stale-menu") && scenario != QLatin1String("invalid-directory")
+        && scenario != QLatin1String("trash-unavailable");
+    const bool deletedSuccessfully = controller.deleteTrack(ids.first(), scenario == QLatin1String("stale-menu")
+        ? second : first);
+    if (succeeds) QVERIFY2(deletedSuccessfully, qPrintable(controller.errorMessage()));
+    else QVERIFY(!deletedSuccessfully);
+    if (!succeeds) {
+        QCOMPARE(deleted.size(), 0);
+        QVERIFY(QFileInfo::exists(first));
+        QCOMPARE(controller.queueModel()->rowCount(), 3);
+        QCOMPARE(controller.playlistTracksModel()->rowCount(), 2);
+        return;
+    }
+    QCOMPARE(deleted.size(), 1);
+    QVERIFY(!QFileInfo::exists(first));
+    QCOMPARE(controller.queueModel()->rowCount(), scenario == QLatin1String("only-track") ? 0 : 1);
+    QCOMPARE(controller.playlistTracksModel()->rowCount(), 1);
+    QCOMPARE(controller.currentTrackId(), scenario == QLatin1String("only-track") ? -1 : ids.last());
+    if (scenario == QLatin1String("playing") || scenario == QLatin1String("other-track"))
+        QTRY_COMPARE(controller.playbackState(), QStringLiteral("Playing"));
+    if (scenario == QLatin1String("paused") || scenario == QLatin1String("only-track"))
+        QVERIFY(controller.playbackState() != QLatin1String("Playing"));
+    if (scenario == QLatin1String("scan-in-flight")) {
+        QTRY_VERIFY(!controller.scanning());
+        QVERIFY(controller.trackDeletionInfo(ids.first()).isEmpty());
+    }
+    {
+        MusicDatabase database;
+        QVERIFY(database.open(QDir(dataPath).filePath(QStringLiteral("library.sqlite"))));
+        QVERIFY(!database.trackForPath(first).has_value());
+        QCOMPARE(database.queueTrackIds(), scenario == QLatin1String("only-track") ? QList<qint64>{} : QList<qint64>{ids.last()});
+        QCOMPARE(database.playlistTrackIds(playlist), QList<qint64>{ids.last()});
+    }
+    const QString trashPath = deleted.first().at(1).toString();
+    if (scenario != QLatin1String("missing-file")) {
+        QVERIFY(!trashPath.isEmpty());
+        QFile trashed(trashPath), original(second);
+        QVERIFY(trashed.open(QIODevice::ReadOnly));
+        QVERIFY(original.open(QIODevice::ReadOnly));
+        QCOMPARE(trashed.readAll(), original.readAll());
+        trashed.close();
+        // Clean up only this test's trash entry; no user's files are selected.
+        QVERIFY(QFile::remove(trashPath));
+        const QFileInfo trashFile(trashPath);
+        const QString infoPath = QDir(trashFile.absolutePath()).filePath(
+            QStringLiteral("../info/") + trashFile.fileName() + QStringLiteral(".trashinfo"));
+        if (QFile::exists(infoPath)) QVERIFY(QFile::remove(infoPath));
+    }
+}
+
+void MusicMprisTest::queueNextMovesWithoutDuplicating()
+{
+    QTemporaryDir directory;
+    const QString dataPath = directory.filePath(QStringLiteral("data"));
+    qputenv("KOS_MUSIC_DATA_DIR", dataPath.toUtf8());
+    qputenv("KOS_MUSIC_CACHE_DIR", directory.filePath(QStringLiteral("cache")).toUtf8());
+    QList<qint64> ids;
+    {
+        MusicDatabase database;
+        QVERIFY(database.open(QDir(dataPath).filePath(QStringLiteral("library.sqlite"))));
+        for (int i = 0; i < 4; ++i) {
+            TrackRecord track;
+            track.path = directory.filePath(QStringLiteral("track-%1.wav").arg(i));
+            QVERIFY(writeTestWave(track.path, 12));
+            track.url = QUrl::fromLocalFile(track.path).toString();
+            track.title = QString::number(i);
+            ids.append(database.addExternalTrack(track));
+        }
+        QVERIFY(database.setQueueTrackIds(ids));
+        QVERIFY(database.setSetting(QStringLiteral("queueIndex"), QStringLiteral("1")));
+    }
+    MusicController controller;
+    QTRY_VERIFY(controller.ready());
+    controller.play();
+    QTRY_COMPARE(controller.playbackState(), QStringLiteral("Playing"));
+    controller.seek(2500);
+    controller.pause();
+    QTest::qWait(50);
+    const auto position = controller.positionMs();
+    controller.moveQueueRowNext(0);
+    QCOMPARE(controller.queueIndex(), 0);
+    QCOMPARE(controller.currentTrackId(), ids.at(1));
+    QCOMPARE(controller.queueModel()->rowCount(), 4);
+    QCOMPARE(controller.positionMs(), position);
+    controller.playTrackNext(ids.last());
+    QCOMPARE(controller.queueModel()->rowCount(), 4);
+    MusicDatabase database;
+    QVERIFY(database.open(QDir(dataPath).filePath(QStringLiteral("library.sqlite"))));
+    QCOMPARE(database.queueTrackIds(), QList<qint64>({ids.at(1), ids.last(), ids.first(), ids.at(2)}));
+    TrackRecord online;
+    online.path = QStringLiteral("lx://wy/next-fixture");
+    online.source = QStringLiteral("wy");
+    online.sourceData = QStringLiteral("{}");
+    online.title = QStringLiteral("Online next fixture");
+    controller.onlineModel()->setTracks({online});
+    controller.playOnlineNext(0);
+    const auto onlineId = database.trackForPath(online.path)->id;
+    QCOMPARE(database.queueTrackIds(), QList<qint64>({ids.at(1), onlineId, ids.last(), ids.first(), ids.at(2)}));
+    QCOMPARE(controller.positionMs(), position);
+    QCOMPARE(controller.playbackState(), QStringLiteral("Paused"));
 }
 
 QTEST_GUILESS_MAIN(MusicMprisTest)

@@ -78,6 +78,10 @@ kos_add_application(kos-music
         src/TrackListModel.cpp
         src/TrackListModel.h
     QML_FILES
+        qml/MusicMenu.qml
+        qml/MusicMenuItem.qml
+        qml/MusicDialog.qml
+        qml/MusicComboBox.qml
         qml/Artwork.qml
         qml/Main.qml
         qml/MiniPlayer.qml
@@ -109,6 +113,17 @@ if(BUILD_TESTING)
         set_tests_properties(kos-music.lyric-transition PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             TIMEOUT 15 LABELS ui)
+        # Match the app's pure Qt foundation, without the shell-only Quickshell singletons.
+        file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos)
+        if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos/Ui)
+            file(CREATE_LINK ${CMAKE_SOURCE_DIR}/shared/qml/foundation
+                ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos/Ui SYMBOLIC)
+        endif()
+        add_test(NAME kos-music.context-menus COMMAND ${KOS_MUSIC_QMLTESTRUNNER}
+            -import ${CMAKE_CURRENT_BINARY_DIR}/test-imports -input ${CMAKE_SOURCE_DIR}/tests/music-menu)
+        set_tests_properties(kos-music.context-menus PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+            TIMEOUT 20 LABELS ui)
     endif()
     qt_add_executable(kos-music-cache-test
         tests/AudioCacheTest.cpp

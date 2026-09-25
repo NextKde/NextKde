@@ -10,6 +10,12 @@ KosApplicationWindow {
     id: root
 
     visible: true
+    color: "transparent"
+    background: Rectangle {
+        radius: root.visibility === Window.Maximized ? 0 : AppTheme.largeRadius
+        color: AppTheme.windowSurface
+        border.color: AppTheme.border
+    }
     title: qsTr("Music")
     minimumWidth: 760
     minimumHeight: 540
@@ -19,10 +25,6 @@ KosApplicationWindow {
     property string detailSubtitle: ""
     property var selectedPlaylistId: -1
     property string selectedPlaylistName: ""
-    property var pendingTrackId: -1
-    property string pendingTrackTitle: ""
-    property string pendingFormatId: ""
-    property string pendingFormatExtension: ""
     property string statusMessage: ""
     property bool renamePlaylistMode: false
 
@@ -143,17 +145,6 @@ KosApplicationWindow {
         music.selectPlaylist(playlistId)
     }
 
-    function requestPlaylistFor(trackId) {
-        pendingTrackId = trackId
-        playlistPicker.open()
-    }
-
-    function requestTranscode(trackId, trackTitle) {
-        pendingTrackId = trackId
-        pendingTrackTitle = trackTitle
-        formatDialog.open()
-    }
-
     MusicController { id: music }
 
     Component.onCompleted: music.setLibraryView("recent")
@@ -213,7 +204,7 @@ KosApplicationWindow {
         onAccepted: music.openUri(selectedFile.toString())
     }
 
-    Dialog {
+    MusicDialog {
         id: playlistEditor
         anchors.centerIn: parent
         title: root.renamePlaylistMode ? qsTr("Rename playlist")
@@ -254,7 +245,7 @@ KosApplicationWindow {
         }
     }
 
-    Dialog {
+    MusicDialog {
         id: removePlaylistDialog
         anchors.centerIn: parent
         width: 380
@@ -274,86 +265,11 @@ KosApplicationWindow {
         }
     }
 
-    Dialog {
-        id: playlistPicker
-        anchors.centerIn: parent
-        title: qsTr("Add to playlist")
-        modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
-            if (playlistChoice.currentIndex >= 0) {
-                const selected = music.playlists[playlistChoice.currentIndex]
-                music.addTrackToPlaylist(Number(selected.id), root.pendingTrackId)
-                root.showStatus(qsTr("Added to %1").arg(String(selected.name)))
-            }
-        }
 
-        contentItem: ColumnLayout {
-            spacing: 10
-            Label {
-                text: music.playlists.length > 0
-                    ? qsTr("Choose a playlist")
-                    : qsTr("Create a playlist first")
-                color: AppTheme.mutedText
-            }
-            ComboBox {
-                id: playlistChoice
-                Layout.preferredWidth: 330
-                model: music.playlists
-                textRole: "name"
-                enabled: count > 0
-                Accessible.name: qsTr("Playlist")
-            }
-        }
-    }
 
-    Dialog {
-        id: formatDialog
-        anchors.centerIn: parent
-        title: qsTr("Convert %1").arg(root.pendingTrackTitle)
-        modal: true
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: {
-            if (formatChoice.currentIndex < 0)
-                return
-            const format = music.availableTranscodeFormats[formatChoice.currentIndex]
-            root.pendingFormatId = String(format.id)
-            root.pendingFormatExtension = String(format.extension)
-            saveConvertedDialog.defaultSuffix = root.pendingFormatExtension
-            saveConvertedDialog.nameFilters = [String(format.label)
-                                                + " (*." + String(format.extension) + ")"]
-            saveConvertedDialog.open()
-        }
 
-        contentItem: ColumnLayout {
-            spacing: 10
-            Label {
-                Layout.preferredWidth: 350
-                text: music.availableTranscodeFormats.length > 0
-                    ? qsTr("Choose an output format. Available formats reflect the encoders installed on this system.")
-                    : qsTr("No supported GStreamer encoders are installed.")
-                color: AppTheme.mutedText
-                wrapMode: Text.WordWrap
-            }
-            ComboBox {
-                id: formatChoice
-                Layout.preferredWidth: 350
-                model: music.availableTranscodeFormats
-                textRole: "label"
-                enabled: count > 0
-                Accessible.name: qsTr("Output format")
-            }
-        }
-    }
 
-    FileDialog {
-        id: saveConvertedDialog
-        title: qsTr("Save converted audio")
-        fileMode: FileDialog.SaveFile
-        onAccepted: music.transcodeTrack(root.pendingTrackId,
-                                          selectedFile.toString(),
-                                          root.pendingFormatId, true)
-    }
+
 
     KosSettingsDialog {
         id: settingsDialog
@@ -363,11 +279,13 @@ KosApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: 12
+        spacing: 4
 
         Rectangle {
             Layout.fillHeight: true
             Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            radius: AppTheme.mediumRadius
             color: AppTheme.sidebarSurface
             border.width: 1
             border.color: AppTheme.border
@@ -644,31 +562,32 @@ KosApplicationWindow {
                     ToolTip.text: qsTr("Library actions")
                     onClicked: libraryMenu.popup()
 
-                    Menu {
+                    MusicMenu {
                         id: libraryMenu
-                        MenuItem {
+                        MusicMenuItem {
                             text: qsTr("Open audio file…")
                             onTriggered: openFileDialog.open()
                         }
-                        MenuItem {
+                        MusicMenuItem {
                             text: qsTr("Add music folder…")
                             onTriggered: folderDialog.open()
                         }
-                        MenuItem {
+                        MusicMenuItem {
                             text: qsTr("Rescan library")
                             enabled: !music.scanning
                             onTriggered: music.rescanLibrary()
                         }
                         MenuSeparator {
+                            height: visible ? implicitHeight : 0
                             visible: root.page === "queue"
                                 || root.page === "playlist"
                         }
-                        MenuItem {
+                        MusicMenuItem {
                             visible: root.page === "queue"
                             text: qsTr("Clear queue")
                             onTriggered: music.clearQueue()
                         }
-                        MenuItem {
+                        MusicMenuItem {
                             visible: root.page === "playlist"
                             text: qsTr("Rename playlist…")
                             onTriggered: {
@@ -676,9 +595,10 @@ KosApplicationWindow {
                                 playlistEditor.open()
                             }
                         }
-                        MenuItem {
+                        MusicMenuItem {
                             visible: root.page === "playlist"
                             text: qsTr("Remove playlist…")
+                            destructive: true
                             onTriggered: removePlaylistDialog.open()
                         }
                     }
@@ -741,45 +661,6 @@ KosApplicationWindow {
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: visible ? 56 : 0
-                visible: music.transcoding
-                radius: AppTheme.smallRadius
-                color: AppTheme.withAlpha(AppTheme.accent, 0.11)
-                border.width: 1
-                border.color: AppTheme.withAlpha(AppTheme.accent, 0.35)
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 10
-
-                    Label {
-                        text: qsTr("Converting audio")
-                        color: AppTheme.text
-                        font.weight: Font.DemiBold
-                    }
-                    ProgressBar {
-                        Layout.fillWidth: true
-                        from: 0
-                        to: 1
-                        value: music.transcodeProgress
-                    }
-                    Label {
-                        text: Math.round(music.transcodeProgress * 100) + "%"
-                        color: AppTheme.mutedText
-                    }
-                    KosToolButton {
-                        text: "×"
-                        Accessible.name: qsTr("Cancel conversion")
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Cancel conversion")
-                        onClicked: music.cancelTranscode()
-                    }
-                }
-            }
-
             KosCard {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -805,9 +686,6 @@ KosApplicationWindow {
                             emptyDescription: music.libraryFolders.length === 0
                                 ? qsTr("Add a local music folder to start building your library.")
                                 : qsTr("Try a different search or rescan the library.")
-                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                            onTranscodeRequested: (trackId, trackTitle) =>
-                                root.requestTranscode(trackId, trackTitle)
                         }
                     }
 
@@ -851,9 +729,6 @@ KosApplicationWindow {
                             contextMode: "queue"
                             emptyTitle: qsTr("The queue is empty")
                             emptyDescription: qsTr("Add tracks from your library to create a play queue.")
-                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                            onTranscodeRequested: (trackId, trackTitle) =>
-                                root.requestTranscode(trackId, trackTitle)
                         }
                     }
 
@@ -866,9 +741,6 @@ KosApplicationWindow {
                             playlistId: root.selectedPlaylistId
                             emptyTitle: qsTr("This playlist is empty")
                             emptyDescription: qsTr("Use a track's action menu to add music here.")
-                            onAddToPlaylistRequested: trackId => root.requestPlaylistFor(trackId)
-                            onTranscodeRequested: (trackId, trackTitle) =>
-                                root.requestTranscode(trackId, trackTitle)
                         }
                     }
 
