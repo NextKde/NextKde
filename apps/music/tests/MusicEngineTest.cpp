@@ -8,6 +8,8 @@
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QUrl>
 #include <QVariantMap>
 #include <QtTest>
@@ -56,6 +58,9 @@ class MusicEngineTest : public QObject {
 private slots:
     void initTestCase();
     void decodesPlaysPausesAndSeeks();
+    void restoresPositionAfterPreroll();
+    void startsBeforeDownloadCompletes();
+    void rejectsFailedNetworkPlayback();
     void transcodesToAnInstalledFormat();
 };
 
@@ -84,10 +89,126 @@ void MusicEngineTest::decodesPlaysPausesAndSeeks()
     QVERIFY(engine.positionMs() >= 850);
     engine.pause();
     QTRY_COMPARE_WITH_TIMEOUT(engine.state(), QStringLiteral("Paused"), 3000);
+    const qint64 pausedPosition = engine.positionMs();
+    QVERIFY(pausedPosition >= 850);
+    QTest::qWait(350);
+    QCOMPARE(engine.positionMs(), pausedPosition);
     engine.play();
     QTRY_COMPARE_WITH_TIMEOUT(engine.state(), QStringLiteral("Playing"), 3000);
+    QVERIFY(engine.positionMs() >= pausedPosition);
     engine.stop();
     QCOMPARE(engine.state(), QStringLiteral("Stopped"));
+}
+
+void MusicEngineTest::restoresPositionAfterPreroll()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("resume.wav"));
+    QVERIFY(writeTestWave(path, 6000));
+    PlaybackEngine engine;
+    QSignalSpy seeked(&engine, &PlaybackEngine::seeked);
+    QVERIFY(engine.load(QUrl::fromLocalFile(path), false, 2200));
+    QTRY_COMPARE_WITH_TIMEOUT(seeked.size(), 1, 5000);
+    QTRY_COMPARE(engine.state(), QStringLiteral("Paused"));
+    QVERIFY(engine.positionMs() >= 2150);
+    QTest::qWait(300);
+    QVERIFY(engine.positionMs() >= 2150 && engine.positionMs() < 2300);
+    engine.play();
+    QTRY_COMPARE(engine.state(), QStringLiteral("Playing"));
+    QTRY_VERIFY(engine.positionMs() > 2400);
+    engine.stop();
+    QCOMPARE(engine.positionMs(), 0);
+    QVERIFY(engine.load(QUrl::fromLocalFile(path), true, 3200));
+    QTRY_COMPARE_WITH_TIMEOUT(seeked.size(), 2, 5000);
+    QTRY_COMPARE(engine.state(), QStringLiteral("Playing"));
+    QVERIFY(engine.positionMs() >= 3150);
+}
+
+void MusicEngineTest::startsBeforeDownloadCompletes()
+{
+    QTemporaryDir directory;
+    const QString path = directory.filePath(QStringLiteral("stream.wav"));
+    QVERIFY(writeTestWave(path, 20000));
+    QFile input(path);
+    QVERIFY(input.open(QIODevice::ReadOnly));
+    const QByteArray audio = input.readAll();
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    bool responseFinished = false;
+    int requests = 0;
+    connect(&server, &QTcpServer::newConnection, this, [&] {
+        auto *socket = server.nextPendingConnection();
+        connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+            socket->readAll();
+            if (socket->property("answered").toBool())
+                return;
+            socket->setProperty("answered", true);
+            ++requests;
+            socket->write("HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: "
+                + QByteArray::number(audio.size()) + "\r\nConnection: close\r\n\r\n" + audio.left(280000));
+            QTimer::singleShot(2000, socket, [&, socket] {
+                if (socket->state() != QAbstractSocket::ConnectedState)
+                    return;
+                responseFinished = true;
+                socket->write(audio.mid(280000));
+                socket->disconnectFromHost();
+            });
+        });
+    });
+    PlaybackEngine engine;
+    engine.setDownloadDirectory(directory.path());
+    QSignalSpy completed(&engine, &PlaybackEngine::downloadCompleted);
+    QSignalSpy progress(&engine, &PlaybackEngine::bufferingChanged);
+    QVERIFY(engine.load(QUrl(QStringLiteral("http://127.0.0.1:%1/track.wav").arg(server.serverPort()))));
+    QTRY_COMPARE_WITH_TIMEOUT(engine.state(), QStringLiteral("Playing"), 5000);
+    QVERIFY2(!responseFinished, "Playback waited for the entire download");
+    QCOMPARE(requests, 1); // Playback and persistent caching share one HTTP transfer.
+    QVERIFY(progress.size() > 0);
+    engine.pause();
+    QTRY_COMPARE(engine.state(), QStringLiteral("Paused"));
+    QTRY_COMPARE_WITH_TIMEOUT(engine.downloadProgress(), 1.0, 5000);
+    QCOMPARE(engine.state(), QStringLiteral("Paused"));
+    engine.play();
+    QTRY_COMPARE(engine.state(), QStringLiteral("Playing"));
+    QCOMPARE(requests, 1);
+    QByteArray actual;
+    QString completedPath;
+    connect(&engine, &PlaybackEngine::downloadCompleted, this, [&](const QString &path) {
+        completedPath = path;
+        QFile file(path);
+        if (file.open(QIODevice::ReadOnly)) actual = file.readAll();
+    });
+    engine.stop();
+    QCOMPARE(completed.size(), 1);
+    QCOMPARE(actual.size(), audio.size());
+    QCOMPARE(actual, audio);
+    QVERIFY(!QFile::exists(completedPath));
+}
+
+void MusicEngineTest::rejectsFailedNetworkPlayback()
+{
+    QTemporaryDir directory;
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    connect(&server, &QTcpServer::newConnection, this, [&] {
+        auto *socket = server.nextPendingConnection();
+        connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        connect(socket, &QTcpSocket::readyRead, socket, [socket] {
+            socket->readAll();
+            socket->write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            socket->disconnectFromHost();
+        });
+    });
+    PlaybackEngine engine;
+    engine.setDownloadDirectory(directory.path());
+    QSignalSpy completed(&engine, &PlaybackEngine::downloadCompleted);
+    QVERIFY(engine.load(QUrl(QStringLiteral("http://127.0.0.1:%1/expired").arg(server.serverPort()))));
+    QTRY_COMPARE_WITH_TIMEOUT(engine.state(), QStringLiteral("Error"), 5000);
+    QVERIFY(!engine.errorMessage().isEmpty());
+    QCOMPARE(completed.size(), 0);
+    engine.stop();
+    QVERIFY(QDir(directory.path()).entryList(QDir::Files).isEmpty());
 }
 
 void MusicEngineTest::transcodesToAnInstalledFormat()

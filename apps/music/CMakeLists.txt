@@ -19,6 +19,8 @@ if(NOT (TARGET PkgConfig::KOS_MUSIC_GSTREAMER AND TARGET PkgConfig::KOS_MUSIC_TA
 endif()
 
 set(KOS_MUSIC_CORE_SOURCES
+    src/AudioCache.cpp
+    src/AudioCache.h
     src/MetadataScanner.cpp
     src/MetadataScanner.h
     src/MusicDatabase.cpp
@@ -100,6 +102,16 @@ target_include_directories(kos-music PRIVATE
 endif()
 
 if(BUILD_TESTING)
+    qt_add_executable(kos-music-cache-test
+        tests/AudioCacheTest.cpp
+        src/AudioCache.cpp
+        src/AudioCache.h
+    )
+    target_include_directories(kos-music-cache-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(kos-music-cache-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME kos-music.cache COMMAND kos-music-cache-test)
+    set_tests_properties(kos-music.cache PROPERTIES TIMEOUT 20 LABELS data)
+
     qt_add_executable(kos-music-core-test
         tests/MusicCoreTest.cpp
         src/LyricsService.cpp
@@ -190,6 +202,7 @@ if(BUILD_TESTING)
         Qt6::Test
         PkgConfig::KOS_MUSIC_GSTREAMER
         PkgConfig::KOS_MUSIC_TAGLIB
+        Qt6::Network
     )
     add_test(NAME kos-music.engine COMMAND kos-music-engine-test)
     set_tests_properties(kos-music.engine PROPERTIES

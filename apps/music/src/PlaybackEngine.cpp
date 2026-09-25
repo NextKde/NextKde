@@ -1,11 +1,15 @@
 #include "PlaybackEngine.h"
 
 #include <QFileInfo>
+#include <QFile>
+#include <QDir>
+#include <QTemporaryFile>
 #include <QMetaObject>
 
 #include <gst/gst.h>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -58,6 +62,25 @@ PlaybackEngine::PlaybackEngine(QObject *parent)
     }
     m_bus = gst_element_get_bus(m_playbin);
     g_object_set(m_playbin, "volume", m_volume, nullptr);
+    g_object_set(m_playbin, "buffer-duration", gint64(2 * GST_SECOND),
+                 "buffer-size", 256 * 1024, nullptr);
+    // These callbacks run on streaming threads. The template is only changed
+    // before the first load; no Qt state or signals are touched here.
+    g_signal_connect(m_playbin, "deep-element-added", G_CALLBACK(+[](
+        GstBin *, GstBin *, GstElement *element, gpointer data) {
+        const auto *engine = static_cast<PlaybackEngine *>(data);
+        GstElementFactory *factory = gst_element_get_factory(element);
+        if (factory && !engine->m_downloadTemplate.isEmpty()
+            && g_str_equal(gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)), "downloadbuffer")) {
+            g_object_set(element, "temp-template", engine->m_downloadTemplate.constData(),
+                         "temp-remove", TRUE, nullptr);
+        }
+    }), this);
+    g_signal_connect(m_playbin, "source-setup", G_CALLBACK(+[](
+        GstElement *, GstElement *source, gpointer) {
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(source), "timeout"))
+            g_object_set(source, "timeout", guint(15), nullptr);
+    }), nullptr);
 
     if (qEnvironmentVariableIsSet("KOS_MUSIC_FAKE_AUDIO")) {
         if (GstElement *sink = gst_element_factory_make("fakesink", "test-audio-sink")) {
@@ -87,12 +110,33 @@ PlaybackEngine::PlaybackEngine(QObject *parent)
     m_positionTimer.setInterval(250);
     connect(&m_positionTimer, &QTimer::timeout, this,
             &PlaybackEngine::updatePosition);
+    m_downloadTimer.setInterval(500);
+    connect(&m_downloadTimer, &QTimer::timeout, this, &PlaybackEngine::updateDownloadProgress);
+    m_loadingTimeout.setInterval(30000);
+    m_loadingTimeout.setSingleShot(true);
+    connect(&m_loadingTimeout, &QTimer::timeout, this, [this] {
+        m_requestedPlaying = false;
+        gst_element_set_state(m_playbin, GST_STATE_NULL);
+        setErrorMessage(tr("Playback timed out. Check the network or audio output, then retry."));
+        setState(QStringLiteral("Error"));
+    });
+}
+
+int PlaybackEngine::bufferingPercent() const { return m_bufferingPercent; }
+double PlaybackEngine::downloadProgress() const { return m_downloadProgress; }
+
+void PlaybackEngine::setDownloadDirectory(const QString &directory)
+{
+    QTemporaryFile probe(QDir(directory).filePath(QStringLiteral(".write-test-XXXXXX")));
+    if (m_source.isEmpty() && QDir().mkpath(directory) && probe.open())
+        m_downloadTemplate = QDir(directory).filePath(QStringLiteral("stream-XXXXXX")).toUtf8();
 }
 
 PlaybackEngine::~PlaybackEngine()
 {
     if (m_playbin)
         gst_element_set_state(m_playbin, GST_STATE_NULL);
+    finishDownload();
     if (m_bus) {
         // Drop the handler before unreferencing so no queued pollBus() call
         // or in-flight bus post can touch a destroyed engine.
@@ -148,10 +192,17 @@ double PlaybackEngine::volume() const
     return m_volume;
 }
 
-bool PlaybackEngine::load(const QUrl &source, bool autoPlay)
+bool PlaybackEngine::load(const QUrl &source, bool autoPlay, qint64 startPositionMs)
 {
-    if (!m_playbin || !source.isValid())
+    if (!m_playbin)
         return false;
+    gst_element_set_state(m_playbin, GST_STATE_NULL);
+    finishDownload();
+    if (source.isEmpty() || !source.isValid()) {
+        setErrorMessage(QStringLiteral("Invalid audio URL"));
+        setState(QStringLiteral("Error"));
+        return false;
+    }
     if (source.isLocalFile() && !QFileInfo::exists(source.toLocalFile())) {
         setErrorMessage(QStringLiteral("Audio file no longer exists: %1")
                             .arg(source.toLocalFile()));
@@ -159,11 +210,27 @@ bool PlaybackEngine::load(const QUrl &source, bool autoPlay)
         return false;
     }
 
-    gst_element_set_state(m_playbin, GST_STATE_NULL);
+    const bool remote = source.scheme() == QLatin1String("http")
+        || source.scheme() == QLatin1String("https");
+    guint flags = 0;
+    g_object_get(m_playbin, "flags", &flags, nullptr);
+    constexpr guint downloadFlag = 1 << 7;
+    flags = remote && !m_downloadTemplate.isEmpty() ? flags | downloadFlag : flags & ~downloadFlag;
+    g_object_set(m_playbin, "flags", flags, nullptr);
+    m_downloading = remote && !m_downloadTemplate.isEmpty();
+    m_downloadFailed = false;
+    m_downloadProgress = -1;
+    m_bufferingPercent = remote ? 0 : 100;
+    emit bufferingChanged();
+    if (m_downloading)
+        m_downloadTimer.start();
+    else
+        m_downloadTimer.stop();
     const QByteArray encodedUri = source.toEncoded();
     g_object_set(m_playbin, "uri", encodedUri.constData(), nullptr);
     m_source = source;
-    m_positionMs = 0;
+    m_positionMs = std::max<qint64>(0, startPositionMs);
+    m_pendingPositionMs = m_positionMs > 0 ? m_positionMs : -1;
     m_durationMs = 0;
     m_seekable = false;
     m_requestedPlaying = autoPlay;
@@ -174,7 +241,7 @@ bool PlaybackEngine::load(const QUrl &source, bool autoPlay)
     emit durationChanged();
     emit seekableChanged();
     const GstStateChangeReturn result = gst_element_set_state(
-        m_playbin, autoPlay ? GST_STATE_PLAYING : GST_STATE_PAUSED);
+        m_playbin, autoPlay && m_pendingPositionMs < 0 ? GST_STATE_PLAYING : GST_STATE_PAUSED);
     if (result == GST_STATE_CHANGE_FAILURE) {
         setErrorMessage(QStringLiteral("GStreamer rejected the audio source"));
         setState(QStringLiteral("Error"));
@@ -189,7 +256,10 @@ void PlaybackEngine::play()
         return;
     m_requestedPlaying = true;
     setState(QStringLiteral("Loading"));
-    if (gst_element_set_state(m_playbin, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+    if (m_pendingPositionMs >= 0)
+        return; // Finish preroll and restore the position before starting audio.
+    if (gst_element_set_state(m_playbin, m_bufferingPercent < 100
+            ? GST_STATE_PAUSED : GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
         setErrorMessage(QStringLiteral("Unable to start playback"));
         setState(QStringLiteral("Error"));
     }
@@ -200,10 +270,12 @@ void PlaybackEngine::pause()
     if (!m_playbin || m_source.isEmpty())
         return;
     m_requestedPlaying = false;
+    updatePosition();
     if (gst_element_set_state(m_playbin, GST_STATE_PAUSED) == GST_STATE_CHANGE_FAILURE) {
         setErrorMessage(QStringLiteral("Unable to pause playback"));
         setState(QStringLiteral("Error"));
-    }
+    } else
+        setState(QStringLiteral("Paused"));
 }
 
 void PlaybackEngine::stop()
@@ -211,7 +283,11 @@ void PlaybackEngine::stop()
     if (!m_playbin)
         return;
     m_requestedPlaying = false;
-    gst_element_set_state(m_playbin, GST_STATE_READY);
+    m_pendingPositionMs = -1;
+    m_downloading = false;
+    m_downloadTimer.stop();
+    gst_element_set_state(m_playbin, GST_STATE_NULL);
+    finishDownload();
     if (m_positionMs != 0) {
         m_positionMs = 0;
         emit positionChanged();
@@ -251,6 +327,36 @@ void PlaybackEngine::pollBus()
         return;
     while (GstMessage *message = gst_bus_pop(m_bus)) {
         switch (GST_MESSAGE_TYPE(message)) {
+        case GST_MESSAGE_ELEMENT: {
+            const GstStructure *structure = gst_message_get_structure(message);
+            if (structure && gst_structure_has_name(structure, "GstCacheDownloadComplete")) {
+                const char *location = gst_structure_get_string(structure, "location");
+                if (location && m_downloading) {
+                    m_downloading = false;
+                    m_downloadProgress = 1;
+                    m_downloadTimer.stop();
+                    // Completion can precede the sparse file's final stdio flush.
+                    // Retain it until the pipeline closes before publishing a cache entry.
+                    g_object_set(GST_MESSAGE_SRC(message), "temp-remove", FALSE, nullptr);
+                    m_completedDownload = QString::fromUtf8(location);
+                    emit bufferingChanged();
+                }
+            }
+            break;
+        }
+        case GST_MESSAGE_ASYNC_DONE:
+            updateSeekable();
+            updatePosition();
+            if (m_pendingPositionMs >= 0) {
+                const qint64 position = m_pendingPositionMs;
+                m_pendingPositionMs = -1;
+                seek(position);
+                if (m_requestedPlaying)
+                    gst_element_set_state(m_playbin, GST_STATE_PLAYING);
+                else
+                    setState(QStringLiteral("Paused"));
+            }
+            break;
         case GST_MESSAGE_ERROR: {
             GError *error = nullptr;
             gchar *debug = nullptr;
@@ -278,6 +384,8 @@ void PlaybackEngine::pollBus()
         case GST_MESSAGE_BUFFERING: {
             gint percent = 100;
             gst_message_parse_buffering(message, &percent);
+            m_bufferingPercent = percent;
+            emit bufferingChanged();
             if (percent < 100 && m_requestedPlaying) {
                 gst_element_set_state(m_playbin, GST_STATE_PAUSED);
                 setState(QStringLiteral("Loading"));
@@ -316,7 +424,9 @@ void PlaybackEngine::updatePosition()
     if (!m_playbin || m_source.isEmpty())
         return;
     gint64 value = GST_CLOCK_TIME_NONE;
-    if (gst_element_query_position(m_playbin, GST_FORMAT_TIME, &value)) {
+    if (m_pendingPositionMs < 0
+        && gst_element_query_position(m_playbin, GST_FORMAT_TIME, &value)
+        && value >= 0) {
         const qint64 milliseconds = value / GST_MSECOND;
         if (milliseconds != m_positionMs) {
             m_positionMs = milliseconds;
@@ -335,13 +445,52 @@ void PlaybackEngine::setState(const QString &state)
     if (m_state == state)
         return;
     m_state = state;
+    if (state == QLatin1String("Error")) m_downloadFailed = true;
     // Position polling only matters while frames are advancing; keep the
     // timer stopped for every other state so idle playback costs no wakeups.
     if (m_state == QStringLiteral("Playing"))
         m_positionTimer.start();
     else
         m_positionTimer.stop();
+    if (m_state == QStringLiteral("Loading"))
+        m_loadingTimeout.start();
+    else
+        m_loadingTimeout.stop();
+    if (m_state == QStringLiteral("Error") || m_state == QStringLiteral("Stopped"))
+        m_downloadTimer.stop();
     emit stateChanged();
+}
+
+void PlaybackEngine::finishDownload()
+{
+    const QString path = std::exchange(m_completedDownload, {});
+    if (path.isEmpty())
+        return;
+    if (!m_downloadFailed)
+        emit downloadCompleted(path);
+    // The cache receiver moves accepted entries; rejected/unclaimed files are removed.
+    QFile::remove(path);
+}
+
+void PlaybackEngine::updateDownloadProgress()
+{
+    if (!m_downloading)
+        return;
+    GstQuery *query = gst_query_new_buffering(GST_FORMAT_PERCENT);
+    if (gst_element_query(m_playbin, query)) {
+        gint64 covered = 0;
+        for (guint i = 0; i < gst_query_get_n_buffering_ranges(query); ++i) {
+            gint64 start = 0, stop = 0;
+            if (gst_query_parse_nth_buffering_range(query, i, &start, &stop))
+                covered += std::max<gint64>(0, stop - start);
+        }
+        const double progress = std::clamp(double(covered) / GST_FORMAT_PERCENT_MAX, 0.0, 1.0);
+        if (progress != m_downloadProgress) {
+            m_downloadProgress = progress;
+            emit bufferingChanged();
+        }
+    }
+    gst_query_unref(query);
 }
 
 void PlaybackEngine::setErrorMessage(const QString &message)
