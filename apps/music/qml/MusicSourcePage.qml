@@ -10,6 +10,24 @@ Item {
     id: root
     required property var musicController
 
+    Dialog {
+        id: attemptDialog
+        title: qsTr("最近的音源尝试")
+        anchors.centerIn: parent
+        width: Math.min(root.width - 24, 680)
+        height: Math.min(root.height - 24, 420)
+        modal: true
+        standardButtons: Dialog.Close
+        contentItem: ScrollView {
+            TextArea {
+                text: root.musicController.playbackAttempts.join("\n\n")
+                readOnly: true
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+            }
+        }
+    }
+
     FileDialog {
         id: sourceDialog
         title: qsTr("Import LuoXue custom source")
@@ -91,6 +109,18 @@ Item {
             text: root.musicController.musicSourceError
             color: AppTheme.warning
             wrapMode: Text.WordWrap
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: qsTr("播放异常时会依次尝试已导入的兼容音源；每次最多等待 12 秒，整曲重试最多 45 秒，失败后 3 秒继续队列。")
+            color: AppTheme.mutedText
+            wrapMode: Text.WordWrap
+        }
+        Button {
+            text: qsTr("查看最近的音源尝试")
+            enabled: root.musicController.playbackAttempts.length > 0
+            onClicked: attemptDialog.open()
         }
 
         KosEmptyState {

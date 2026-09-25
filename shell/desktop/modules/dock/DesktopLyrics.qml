@@ -4,6 +4,7 @@ import QtQuick
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // A read-only, click-through lyric surface. One window exists per usable
 // output, but only the active output maps it so lyrics never duplicate.
@@ -21,6 +22,7 @@ Scope {
 
                 screen: modelData
                 visible: ScreenLifecycle.outputAvailable
+                    && ConfigService.desktopLyricsEnabled
                     && modelData?.name === ScreenLifecycle.activeScreen?.name
                     && currentLine.length > 0
                 color: "transparent"
@@ -48,7 +50,7 @@ Scope {
                     border.width: 1
                     border.color: Qt.rgba(1, 1, 1, 0.20)
 
-                    Text {
+                    KosLyricLine {
                         id: currentText
                         anchors { left: parent.left; right: parent.right; top: parent.top }
                         anchors.leftMargin: 22
@@ -61,7 +63,7 @@ Scope {
                         font { pixelSize: 20; weight: Font.DemiBold }
                     }
 
-                    Text {
+                    KosLyricLine {
                         id: nextText
                         anchors { left: parent.left; right: parent.right; top: currentText.bottom }
                         anchors.leftMargin: 22

@@ -222,6 +222,11 @@ QtObject {
     // the row so nothing rotates any more.
     property string infoCardMode: "carousel"
     property bool infoCardAutoRotate: true
+    property bool desktopLyricsEnabled: true
+    function updateDesktopLyricsEnabled(enabled) {
+        desktopLyricsEnabled = Boolean(enabled)
+        scheduleSave()
+    }
     readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
     // One ordered list is the whole component model. Zero items hides the
     // region, one is naturally fixed, and multiple items rotate or expand.
@@ -527,6 +532,7 @@ QtObject {
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
+            desktopLyricsEnabled: svc.desktopLyricsEnabled,
             infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
@@ -601,6 +607,8 @@ QtObject {
         }
         if (obj.infoCardAutoRotate !== undefined)
             svc.infoCardAutoRotate = Boolean(obj.infoCardAutoRotate)
+        if (obj.desktopLyricsEnabled !== undefined)
+            svc.desktopLyricsEnabled = Boolean(obj.desktopLyricsEnabled)
         if (Array.isArray(obj.infoCardOrder)) {
             svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
         } else if (obj.showWidgets === false) {

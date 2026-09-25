@@ -38,7 +38,7 @@ Item {
     property bool expanded: false
     property bool autoRotate: true
 
-    readonly property bool hasMusic: DockMprisService.hasPlayingPlayer
+    readonly property bool hasMusic: DockMprisService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property real cardGap: iconSize * 0.2
     // Visible seam between neighbouring expanded cards. Each card's painted
@@ -93,7 +93,7 @@ Item {
 
     readonly property int availablePageCount: {
         let count = 0
-        for (const candidate of pageOrder) {
+        for (const candidate of (pageOrder || [])) {
             if (cardVisible(candidate))
                 count++
         }
@@ -102,7 +102,7 @@ Item {
 
     readonly property real expandedWidth: {
         let total = 0
-        for (const candidate of pageOrder) {
+        for (const candidate of (pageOrder || [])) {
             if (!cardVisible(candidate))
                 continue
             total += iconSize * unitsFor(candidate) + cardGap + cardSpacing
@@ -116,7 +116,7 @@ Item {
 
     function availablePages() {
         const pages = []
-        for (const candidate of pageOrder) {
+        for (const candidate of (pageOrder || [])) {
             if (cardVisible(candidate))
                 pages.push(candidate)
         }
@@ -166,7 +166,7 @@ Item {
         if (!expanded)
             return pageX(candidate, cardWidth(candidate))
         let offset = 0
-        for (const other of pageOrder) {
+        for (const other of (pageOrder || [])) {
             if (other === candidate)
                 return offset
             if (cardVisible(other))
@@ -183,7 +183,7 @@ Item {
         if (!expanded)
             return page
         let start = 0
-        for (const candidate of pageOrder) {
+        for (const candidate of (pageOrder || [])) {
             if (!cardVisible(candidate))
                 continue
             const span = iconSize * unitsFor(candidate) + cardGap + cardSpacing

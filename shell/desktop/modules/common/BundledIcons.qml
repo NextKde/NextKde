@@ -31,6 +31,13 @@ QtObject {
 
     readonly property var svg: ({
 
+        // Media controls use fixed vector geometry on every font/theme.
+        "media-lyrics": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h14M5 12h9M5 18h6M18 11v8"/><path d="m15 16 3 3 3-3"/></g></svg>',
+        "media-play": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#fff" d="M7 4.5a1 1 0 0 1 1.5-.86l12 7.5a1 1 0 0 1 0 1.72l-12 7.5A1 1 0 0 1 7 19.5Z"/></svg>',
+        "media-pause": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="#fff"><rect x="5" y="4" width="5" height="16" rx="1"/><rect x="14" y="4" width="5" height="16" rx="1"/></g></svg>',
+        "media-previous": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="#fff"><rect x="4" y="5" width="3" height="14" rx="1"/><path d="M18.5 5.1a1 1 0 0 1 1.5.86v12.08a1 1 0 0 1-1.5.86L8.4 12.86a1 1 0 0 1 0-1.72Z"/></g></svg>',
+        "media-next": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="#fff"><rect x="17" y="5" width="3" height="14" rx="1"/><path d="M5.5 5.1a1 1 0 0 0-1.5.86v12.08a1 1 0 0 0 1.5.86l10.1-6.04a1 1 0 0 0 0-1.72Z"/></g></svg>',
+
         // ── 窗口控制 ──
         "window-close": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></g></svg>',
         "window-minimize": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><g fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M7 16.5h10"/></g></svg>',

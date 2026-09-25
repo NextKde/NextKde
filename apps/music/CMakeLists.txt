@@ -102,6 +102,14 @@ target_include_directories(kos-music PRIVATE
 endif()
 
 if(BUILD_TESTING)
+    find_program(KOS_MUSIC_QMLTESTRUNNER NAMES qmltestrunner qmltestrunner6 HINTS /usr/lib/qt6/bin)
+    if(KOS_MUSIC_QMLTESTRUNNER)
+        add_test(NAME kos-music.lyric-transition COMMAND ${KOS_MUSIC_QMLTESTRUNNER}
+            -input ${CMAKE_SOURCE_DIR}/tests/music-lyrics)
+        set_tests_properties(kos-music.lyric-transition PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            TIMEOUT 15 LABELS ui)
+    endif()
     qt_add_executable(kos-music-cache-test
         tests/AudioCacheTest.cpp
         src/AudioCache.cpp

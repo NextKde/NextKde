@@ -25,6 +25,7 @@ qt_add_qml_module(kos_ui
         foundation/KosSwitch.qml
         foundation/KosTextField.qml
         foundation/KosToolButton.qml
+        foundation/KosLyricLine.qml
         foundation/PageCachePolicy.js
         controls/ControlForm.qml
         controls/LiquidTextField.qml
