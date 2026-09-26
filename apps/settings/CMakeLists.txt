@@ -10,6 +10,8 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
 qt_add_executable(kos-settings
     src/main.cpp
 )
+target_include_directories(kos-settings PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../liquid-ai/include)
 
 target_link_libraries(kos-settings PRIVATE
     Qt6::Core
@@ -32,7 +34,10 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
-install(FILES main.qml DESTINATION share/kos/settings)
+install(FILES main.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
+    WallpaperGalleryTile.qml WallpaperValueMenu.qml WallpaperOptionsDialog.qml
+    WallpaperTextButton.qml WallpaperThumbnail.qml WallpaperRoundedCorners.qml
+    DESTINATION share/kos/settings)
 
 if(BUILD_TESTING)
     # The settings window ships in the core configuration, so it is not built
@@ -51,6 +56,13 @@ if(BUILD_TESTING)
     find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
         HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.wallpaper-page
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/tst_wallpaper.qml)
+        set_tests_properties(kos-settings.wallpaper-page PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 15)
+
         add_test(NAME kos-settings.builtin-checkboxes
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/builtins/tst_builtins.qml)

@@ -85,28 +85,32 @@ QtObject {
     property Connections _platformTransport: Connections {
         target: PlatformClient
         function onTransportChanged(connected) {
-            if (connected) {
-                svc._subscribeKwin()
-            } else {
-                // The platform daemon drops subscriber sockets on restart;
-                // discard its stale snapshot until the fresh bridge state is
-                // delivered after reconnection.
-                svc._kwinSubscribePending = false
-                svc._kwinReceivedInitialSnapshot = false
-                svc._kwinReceivedDesktopSnapshot = false
-                svc._lastSnapshotJson = ""
-                svc._kwinWindows = []
-                svc.desktops = []
-                svc.currentDesktopId = ""
-                // Thumbnails resolve through events, not request responses,
-                // so a dropped transport can never release them. New handles
-                // arrive with the next snapshot anyway; forget both the
-                // pending marks and the now-dead PNG paths.
-                svc._thumbnailPendingByHandle = ({})
-                svc._thumbnailUrlsByHandle = ({})
-                svc._rebuild()
-            }
+            svc._handlePlatformTransport(connected)
         }
+    }
+
+    // Losing the platform daemon must not make every running application
+    // disappear from Dock. Keep the last authoritative KWin snapshot and its
+    // virtual-desktop state as a read-only fallback; actions already fail
+    // harmlessly through PlatformClient while it is offline. Reconnection
+    // subscribes again and replaces the stale data with a fresh snapshot.
+    function _handlePlatformTransport(connected) {
+        if (connected) {
+            svc._subscribeKwin()
+            return
+        }
+        svc._kwinSubscribePending = false
+        svc._pendingKwinActivation = null
+        svc._kwinActivationTimer.stop()
+        // Thumbnail replies are event-only and cannot arrive after the socket
+        // drops. Their temporary files may also belong to the old daemon.
+        svc._thumbnailPendingByHandle = ({})
+        if (Object.keys(svc._thumbnailUrlsByHandle).length) {
+            svc._thumbnailUrlsByHandle = ({})
+            svc.thumbnailRevision++
+        }
+        console.warn("[WindowService] platform disconnected; keeping "
+            + svc.records.length + " cached windows until reconnection")
     }
 
     property Repeater _topRepeater: Repeater {

@@ -191,6 +191,10 @@ ApplicationWindow {
         {
             subtitle: "玻璃调试",
             groups: []
+        },
+        {
+            subtitle: "壁纸",
+            groups: []
         }
     ]
 
@@ -2773,7 +2777,7 @@ ApplicationWindow {
             showSystemAppearance: true
             showGlassMaterial: false
             showIconAppearance: true
-            showSpatialWallpaper: true
+            showSpatialWallpaper: false
         }
 
         Text {
@@ -3762,6 +3766,15 @@ ApplicationWindow {
                 SidebarEntry {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
+                    pageIndex: 8
+                    label: "壁纸"
+                    navSymbol: "▧"
+                    navTint: "#64d2ff"
+                }
+
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
                     pageIndex: 2
                     label: "顶栏"
                     navSymbol: "⎍"
@@ -3862,7 +3875,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 7)
+                        model: (window.currentPage >= 0 && window.currentPage <= 8)
                             ? [] : window.contentByPage[window.currentPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -3933,6 +3946,21 @@ ApplicationWindow {
                         active: window.currentPage === 7
                         visible: active
                         sourceComponent: GlassDebugPage {}
+                    }
+
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.currentPage === 8
+                        visible: active
+                        sourceComponent: WallpaperSettingsPage {
+                            bridge: (typeof settingsBridge !== "undefined")
+                                ? settingsBridge : null
+                            colors: theme
+                            onDesktopPreviewFinished: {
+                                window.showNormal()
+                                window.requestActivate()
+                            }
+                        }
                     }
 
                     Loader {

@@ -47,6 +47,10 @@ QtObject {
     readonly property int preferredScreen: Quickshell.screens.length > 1 ? 1 : 0
     property url wallpaperUrl: ""
     property string configuredWallpaperUrl: ""
+    // The desktop wallpaper owner can supply the original image after Plasma
+    // switches to its lightweight backdrop. Empty keeps the Plasma migration
+    // path used by existing sessions and standalone Kos.Ui consumers.
+    property string preferredWallpaperUrl: ""
     // Last file text each FileView delivered. The timer reloads whether or not
     // Plasma touched the file, so the full line-by-line parse only runs when
     // the bytes actually changed. `null` is the never-loaded sentinel: it can
@@ -235,6 +239,8 @@ QtObject {
     }
 
     function _readWallpaperText(content) {
+        if (preferredWallpaperUrl)
+            return
         const nextUrl = _pickWallpaperUrl(_parseWallpaperConfig(content),
             preferredScreen)
 
@@ -273,6 +279,18 @@ QtObject {
         // wallpaper file moves with it.
         _shellConfigFile.reload()
         _configFile.reload()
+    }
+
+    onPreferredWallpaperUrlChanged: {
+        if (preferredWallpaperUrl) {
+            configuredWallpaperUrl = preferredWallpaperUrl
+            _resolveWallpaperUrl(preferredWallpaperUrl)
+        } else {
+            // The Plasma file may have remained byte-identical while the
+            // override was active; force one parse when control returns.
+            _lastConfigText = null
+            _configFile.reload()
+        }
     }
 
     // `plasmashellrc` names the shell package, and Plasma derives its applets

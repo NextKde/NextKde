@@ -7,6 +7,8 @@ import qs.desktop.modules.common
 Scope {
     id: root
 
+    WallpaperPreviewBar {}
+
     // Desktop files and context menus exist independently on every usable
     // output. DeskCenterWindow itself keeps widgets restricted to the elected
     // primary screen.
@@ -24,6 +26,8 @@ Scope {
                     id: wallpaperWindow
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
+                        && (WallpaperPreviewService.active || WallpaperService.takeoverEnabled
+                            || SpatialWallpaperService.ready)
                     pointerX: widgetWindow.depthPointerX
                     pointerY: widgetWindow.depthPointerY
                 }

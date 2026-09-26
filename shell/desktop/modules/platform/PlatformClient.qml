@@ -57,6 +57,7 @@ JsonlClient {
         "network.connect": 90000,
         "network.connect-enterprise": 90000,
         "screenshot.capture": 0,
-        "depth.generate": 300000
+        "depth.generate": 300000,
+        "wallpaper.preview.desktop": 6000
     })
 }

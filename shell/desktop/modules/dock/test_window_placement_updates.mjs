@@ -41,6 +41,7 @@ const windowModel = {
 };
 const svc = { records: [], _kwinWindows: [], _nextWindowNumber: 1,
     revision: 0, placementRevision: 0, _recordsById: {},
+    _processHintsByPid: {}, _processProbeByPid: {},
     // Thumbnail state the service keeps keyed by KWin handle. `_rebuild` sweeps
     // it, so the mock has to carry the same shape or the sweep reads undefined.
     thumbnailRevision: 0, _thumbnailUrlsByHandle: {},
@@ -51,6 +52,9 @@ const context = vm.createContext({ svc, windowModel, WindowRecordIndex,
 });
 vm.runInContext(functions, context);
 for (const name of names) svc[name] = context[name];
+// Process probing is asynchronous QML runtime integration. This test covers
+// record and placement updates, so keep identity hints empty and synchronous.
+svc._ensureProcessHints = () => {};
 const window = id => ({ id, appId: id, title: id, desktops: ["desktop-1"],
     geometry: { x: 0, y: 0, width: 100, height: 100 }, visible: true });
 svc._kwinWindows = [window("one"), window("two")];

@@ -42,19 +42,38 @@ the first output's float32 shape `[1,1,1024,1024]`. Input is RGB resized to
 `0.5` per channel. The first output is normalized per image and resized to the
 working image size. No Python runtime is used.
 
-When all three assets load, `DepthWallpaperLayer` composites the original
-wallpaper over the filled background using the committed two-layer renderer.
-A 5% crop keeps samples within the texture during motion. If asset preparation
-or loading fails, the simpler depth shader remains available. Both shaders
-recreate Plasma's aspect-preserving center crop
-in texture coordinates because Qt does not pass an Image's `fillMode` into a
+When all three assets load, `DepthWallpaperLayer` prefers the optional
+Qt Quick 3D renderer. It projects the reconstructed background onto a depth
+mesh, orbits the camera around the center, and composites a mostly stationary
+original-photo foreground with the cached soft matte. The 16% image zoom keeps
+the orbit inside the source image. The foreground shader applies a bounded
+color correction only to partially transparent pixels: it estimates the
+foreground contribution using the reconstructed background color at the
+original coordinate before blending over the moving background. This reduces
+color spill without changing the matte outline. If the 3D plugin cannot load,
+the two-layer shader remains available, followed by the simpler depth shader
+when layered assets are unavailable. The shader fallback uses a 5% crop.
+The shader paths recreate Plasma's aspect-preserving center crop in texture
+coordinates because Qt does not pass an Image's `fillMode` into a
 `ShaderEffect` sampler. Pointer changes are eased over 150 ms.
-The wallpaper and depth textures are decoded at the output's physical pixel
-size so high-DPI screens do not upscale a logical-resolution image.
+In the shader fallback, wallpaper and depth textures are decoded at the
+output's physical pixel size so high-DPI screens do not upscale a
+logical-resolution image.
 The renderer lives in a separate click-through Bottom-layer window, mapped
 before the desktop widget window. KWin can therefore blur the spatial wallpaper
 behind widget glass cards. It appears only on the selected desktop output;
 errors leave the normal wallpaper in place.
+
+The design follows [waydeeper's optional perspective mesh and flat
+mode](https://github.com/EdenQwQ/waydeeper) and the foreground-color
+decontamination used by [rembg](https://github.com/danielgatis/rembg/blob/main/rembg/bg.py).
+The bounded shader correction is an approximation: the matte is a model
+confidence map, and the reconstructed background may differ from the true
+hidden scene. [3D Photo Inpainting](https://github.com/vt-vl-lab/3d-photo-inpainting)
+shows the more complete approach of filling both occluded color and depth in
+a layered image, but that pipeline would add several inference models and
+substantial cost to this CPU-first feature. Large hidden areas and fine fur or
+grass cannot be made artifact-free from one photograph with the current assets.
 
 ## Pinned model
 

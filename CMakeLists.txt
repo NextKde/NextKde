@@ -90,11 +90,26 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_record_index.mjs
         )
         set_tests_properties(kos-shell.window-record-index PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.window-transport-fallback
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_transport_fallback.mjs
+        )
+        set_tests_properties(kos-shell.window-transport-fallback PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-color-source
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_color_source.mjs
         )
         set_tests_properties(kos-shell.wallpaper-color-source PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-slideshow
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_slideshow.mjs
+        )
+        set_tests_properties(kos-shell.wallpaper-slideshow PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-preview
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_preview.mjs
+        )
+        set_tests_properties(kos-shell.wallpaper-preview PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.process-identity
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs

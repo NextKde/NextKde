@@ -25,6 +25,8 @@ qt_add_executable(kos-platform
     src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
     src/kwin/KWinBridge.h
+    src/wallpaper/PlasmaWallpaperAdapter.cpp
+    src/wallpaper/PlasmaWallpaperAdapter.h
 )
 set_target_properties(kos-platform PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib")

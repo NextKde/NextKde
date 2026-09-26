@@ -131,6 +131,7 @@ private:
     bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleTrayOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleStateOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleWallpaperOperation(QLocalSocket *socket, const QJsonObject &request);
     void startClipboardHistoryWatcher(QProcess *&watcher,
                                       const QStringList &arguments);
     void runClipboardDecode(QLocalSocket *socket, const QJsonObject &request,
