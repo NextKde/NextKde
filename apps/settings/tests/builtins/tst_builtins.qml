@@ -11,6 +11,7 @@ Item {
         property var snapshot: ({baseHeight:60, position:"bottom", contentStyle:"compact", dockStyle:"floating", visibilityMode:"smart", windowGrouping:"grouped", showLauncher:true, showTrash:true})
         property var calls: []
         signal dockSnapshotChanged(var state)
+        signal dockBuiltinVisibilityChanged(var state)
         function dockSnapshot() { dockSnapshotChanged(snapshot) }
         function updateDockBuiltinVisibility(id, visible) { calls = calls.concat([{id, visible}]) }
     }
@@ -33,15 +34,18 @@ Item {
             compare(bridge.calls[0].id, "launcher")
             compare(bridge.calls[0].visible, false)
             verify(!launcher.enabled && !trash.enabled)
+            bridge.dockSnapshotChanged(bridge.snapshot)
+            verify(!launcher.enabled && !trash.enabled,
+                "an unrelated Dock snapshot must not finish the visibility update")
             bridge.snapshot = Object.assign({},bridge.snapshot,{showLauncher:false})
-            bridge.dockSnapshot()
+            bridge.dockBuiltinVisibilityChanged(bridge.snapshot)
             verify(!launcher.checked && trash.checked)
             verify(launcher.enabled && trash.enabled)
             mouseClick(trash)
             compare(bridge.calls.length, 2)
             compare(bridge.calls[1].id, "trash")
             bridge.lastError = "save failed"
-            bridge.dockSnapshotChanged({})
+            bridge.dockBuiltinVisibilityChanged({})
             verify(trash.checked, "failed update returns to confirmed state")
             verify(trash.enabled)
             // Other clients may change the same setting after an error.

@@ -774,6 +774,11 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
+                dockPage.applyState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
+            function onDockBuiltinVisibilityChanged(state) {
                 dockPage.builtinUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
