@@ -836,6 +836,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 dockPage.previewDockHeight(position)
                             }
+                            onCanceled: { dockPage.layoutDirty = false; dockPage.refresh() }
                             onCommitRequested: dockPage.commitLayout()
                         }
                     }
@@ -980,6 +981,7 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 LiquidControls.LiquidGlassSwitch {
                     id: windowGroupingSwitch
+                    objectName: "window-grouping-switch"
                     checked: dockPage.windowGroupingIndex === 0
                     accentColor: theme.role("primary", "#0a84ff")
                     trackColor: theme.divider
@@ -988,9 +990,6 @@ ApplicationWindow {
                         if (requestedIndex !== dockPage.windowGroupingIndex) {
                             dockPage.saveWindowGrouping(requestedIndex)
                         }
-                        // The shared switch owns its checked state after a
-                        // click. Put it back to the IPC-confirmed value.
-                        windowGroupingSwitch.checked = dockPage.windowGroupingIndex === 0
                     }
                 }
             }
@@ -1421,10 +1420,6 @@ ApplicationWindow {
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 displayPage.saveGlassFollowsAppearanceMode(checked)
-                                // The shared switch owns its checked state after
-                                // a click; put it back to the IPC-confirmed value.
-                                glassFollowsAppearanceModeSwitch.checked =
-                                    displayPage.glassFollowsAppearanceMode
                             }
                         }
                     }
@@ -1525,6 +1520,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 displayPage.previewBlur(position)
                             }
+                            onCanceled: { liveBlurDebounce.stop(); displayPage.blurDirty = false; displayPage.refresh() }
                             onCommitRequested: displayPage.commitBlur()
                         }
                     }
@@ -1575,6 +1571,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 displayPage.previewLiquid(position)
                             }
+                            onCanceled: { liveLiquidDebounce.stop(); displayPage.liquidDirty = false; displayPage.refresh() }
                             onCommitRequested: displayPage.commitLiquid()
                         }
                     }
@@ -1789,6 +1786,7 @@ ApplicationWindow {
                                     currentNumber = modelData.type === "int" ? Math.round(raw)
                                         : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
                                 }
+                                onCanceled: currentNumber = Qt.binding(function() { return Number(modelData.value) })
                                 onCommitRequested: glassDebugPage.updateValue(modelData.key, currentNumber)
                             }
                             Row {
@@ -2104,6 +2102,7 @@ ApplicationWindow {
                             accentColor: theme.accent
                             Layout.preferredWidth: 190; value: iconAppearance.iconOpacity; trackColor: theme.divider
                             onPreviewChanged: function(position) { iconAppearance.iconOpacity = Math.max(0.1, position); iconAppearance.opacityDirty = true }
+                            onCanceled: { iconAppearance.opacityDirty = false; iconAppearance.refresh() }
                             onCommitRequested: iconAppearance.commitOpacity()
                         }
                     }

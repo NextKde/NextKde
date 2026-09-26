@@ -82,6 +82,17 @@ Item {
 
     signal previewChanged(real value)
     signal commitRequested(real value)
+    signal canceled()
+
+    function cancelInteraction() {
+        if (!_pressed) return
+        _pressed = false
+        _expansion = 0
+        _dragOffset = 0
+        canceled()
+    }
+    onEnabledChanged: { if (!enabled) cancelInteraction() }
+    onVisibleChanged: { if (!visible) cancelInteraction() }
 
     opacity: enabled ? 1.0 : 0.45
 
@@ -411,6 +422,7 @@ Item {
         }
 
         onReleased: function() {
+            if (!root._pressed) return
             root._pressed = false
             root._expansion = 0.0
             root._dragOffset = 0
@@ -422,10 +434,6 @@ Item {
             root.commitRequested(root.value)
         }
 
-        onCanceled: {
-            root._pressed = false
-            root._expansion = 0.0
-            root._dragOffset = 0
-        }
+        onCanceled: root.cancelInteraction()
     }
 }

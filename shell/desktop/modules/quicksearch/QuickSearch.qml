@@ -27,6 +27,9 @@ Scope {
     property string _focusReturnId: ""
     // A paste is waiting for the clipboard write, then for focus to return.
     property bool _pastePending: false
+    property int _pasteSerial: 0
+    property string _pasteTargetId: ""
+    property string _pasteHandleId: ""
 
     function normalizeMode(value) {
         return value === "app" || value === "clipboard" ? value : "window"
@@ -78,6 +81,7 @@ Scope {
     }
 
     function cancelPaste() {
+        _pasteSerial++
         _pastePending = false
         focusPollTimer.stop()
         focusPollTimer.elapsed = 0
@@ -91,12 +95,18 @@ Scope {
         cancelPaste()
         if (!item)
             return
-        if (copyOnly === true || !ClipboardService.pasteEnabled) {
+        const target = WindowService.windowById(_focusReturnId)
+        if (copyOnly === true || !ClipboardService.pasteEnabled || !target?.handleId) {
             ClipboardService.copyEntry(item)
             return
         }
+        const serial = _pasteSerial
+        _pasteTargetId = _focusReturnId
+        _pasteHandleId = target.handleId
         _pastePending = true
         ClipboardService.copyEntry(item, function(ok) {
+            if (serial !== root._pasteSerial)
+                return
             // The platform only reports success after wl-copy exited, so this
             // is the "content is in place" edge.
             if (!ok || !root._pastePending) {
@@ -109,16 +119,21 @@ Scope {
     }
 
     function injectPaste() {
-        PlatformClient.request("input.paste", {}, function(response) {
+        // Recheck immediately before dispatch; KWin checks the same identity
+        // against its actual keyboard focus when it receives this request.
+        const target = WindowService.windowById(_pasteTargetId)
+        if (open || !target || !target.handleId || target.handleId !== _pasteHandleId
+                || WindowService.activeWindowId !== _pasteTargetId)
+            return
+        PlatformClient.request("input.paste", { expectedWindowId: _pasteHandleId }, function(response) {
             if (!response?.ok)
                 console.warn("[QuickSearch] paste injection failed: "
                     + (response?.error?.message || "platform unavailable"))
         })
     }
 
-    // 40 ms per tick until the remembered window is active again. The timeout
-    // releases the request anyway: a late paste beats a click that silently
-    // does nothing.
+    // Poll only for the remembered target. Timeout, a closed target or a
+    // different active application cancels injection; the content stays copied.
     Timer {
         id: focusPollTimer
         interval: 40
@@ -126,12 +141,14 @@ Scope {
         property int elapsed: 0
         onTriggered: {
             elapsed += interval
-            const target = root._focusReturnId
-            const home = target === "" || WindowService.activeWindowId === target
-            if (home || elapsed >= 1200) {
-                stop()
-                elapsed = 0
-                root._pastePending = false
+            const target = WindowService.windowById(root._pasteTargetId)
+            const active = WindowService.activeWindowId
+            if (!root._pastePending || root.open || !target
+                    || (active && active !== root._pasteTargetId)
+                    || elapsed >= 1200) {
+                root.cancelPaste()
+            } else if (active === root._pasteTargetId) {
+                root.cancelPaste()
                 root.injectPaste()
             }
         }
@@ -147,9 +164,8 @@ Scope {
 
     QuickSearchWindow {
         screen: root.targetScreen
-        visible: root.open && ScreenLifecycle.outputAvailable
+        open: root.open && ScreenLifecycle.outputAvailable
             && root.targetScreen !== null
-        open: root.open
         mode: root.mode
         viewMode: root.viewMode
         onCloseRequested: root.hide()

@@ -1020,6 +1020,10 @@ PopupWindow {
                 panel.draggingBrightness = true
                 panel.brightnessPreview = Math.round(v * 100)
             }
+            onCanceled: {
+                panel.draggingBrightness = false
+                panel.brightnessPreview = ControlCenterService.brightnessPercent
+            }
             onCommitRequested: function(v) {
                 panel.draggingBrightness = false
                 ControlCenterService.setBrightness(Math.round(v * 100))
@@ -1111,6 +1115,10 @@ PopupWindow {
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true
                 panel.volumePreview = Math.round(v * 100)
+            }
+            onCanceled: {
+                panel.draggingVolume = false
+                panel.volumePreview = ControlCenterService.volumePercent
             }
             onCommitRequested: function(v) {
                 panel.draggingVolume = false
@@ -2338,6 +2346,9 @@ PopupWindow {
                             onPreviewChanged: function(v) {
                                 displayBrightnessRow.preview = Math.round(v * 100)
                             }
+                            onCanceled: displayBrightnessRow.preview = Qt.binding(function() {
+                                return Number(displayBrightnessRow.modelData.percent || 0)
+                            })
                             onCommitRequested: function(v) {
                                 ControlCenterService.setDisplayBrightness(
                                     displayBrightnessRow.modelData.id, Math.round(v * 100))
@@ -2520,6 +2531,10 @@ PopupWindow {
                     onPreviewChanged: function(v) {
                         panel.draggingVolume = true
                         panel.volumePreview = Math.round(v * 100)
+                    }
+                    onCanceled: {
+                        panel.draggingVolume = false
+                        panel.volumePreview = ControlCenterService.volumePercent
                     }
                     onCommitRequested: function(v) {
                         panel.draggingVolume = false
@@ -2721,6 +2736,9 @@ PopupWindow {
                                 onPreviewChanged: function(v) {
                                     appVolumeRow.volumePreview = Math.round(v * 150)
                                 }
+                                onCanceled: appVolumeRow.volumePreview = Qt.binding(function() {
+                                    return Number(appVolumeRow.modelData.percent || 0)
+                                })
                                 onCommitRequested: function(v) {
                                     if (appVolumeRow.muted) {
                                         appVolumeRow.muted = false

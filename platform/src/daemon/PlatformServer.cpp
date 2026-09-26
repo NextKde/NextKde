@@ -3972,6 +3972,14 @@ bool PlatformServer::handleInput(QLocalSocket *socket, const QJsonObject &reques
     if (operation(request) != QStringLiteral("input.paste"))
         return false;
 
+    const QString expectedWindowId = request.value(QStringLiteral("payload")).toObject()
+        .value(QStringLiteral("expectedWindowId")).toString();
+    if (QUuid(expectedWindowId).isNull()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-paste-target"),
+                QStringLiteral("粘贴目标窗口无效；内容已保留在剪贴板"), false);
+        return true;
+    }
+
     // Only a compositor-side effect may synthesise a key without uinput
     // privileges, so the chord is delegated to the KWin effect that already
     // owns this session-bus endpoint. Keeping it here means the Shell never has
@@ -3986,10 +3994,16 @@ bool PlatformServer::handleInput(QLocalSocket *socket, const QJsonObject &reques
         return true;
     }
 
-    const QDBusMessage reply = effect.call(QStringLiteral("paste"));
+    const QDBusMessage reply = effect.call(QStringLiteral("paste"), expectedWindowId);
     if (reply.type() == QDBusMessage::ErrorMessage) {
         respond(socket, request, false, {}, QStringLiteral("input-injection-failed"),
                 QStringLiteral("无法注入粘贴按键"), true);
+        return true;
+    }
+
+    if (reply.arguments().isEmpty() || !reply.arguments().first().toBool()) {
+        respond(socket, request, false, {}, QStringLiteral("paste-target-changed"),
+                QStringLiteral("焦点已改变，未自动粘贴；内容已保留在剪贴板"), false);
         return true;
     }
 

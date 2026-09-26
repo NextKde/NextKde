@@ -101,6 +101,22 @@ def main():
             fail("platform.ping did not report ready: " + buf.decode().strip(),
                  output)
 
+        # A missing target must fail before contacting KWin; a valid target on
+        # this private bus must also fail safely (there is no injection effect).
+        for payload, code in [({}, "invalid-paste-target"),
+                              ({"expectedWindowId": "not-a-window"}, "invalid-paste-target"),
+                              ({"expectedWindowId": "11111111-1111-1111-1111-111111111111"},
+                               "input-bridge-unavailable")]:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as paste_client:
+                paste_client.settimeout(10)
+                paste_client.connect(sock_path)
+                paste_client.sendall((json.dumps({"version": 1, "requestId": "paste",
+                    "operation": "input.paste", "payload": payload}) + "\n").encode())
+                with paste_client.makefile("rb") as stream:
+                    response = json.loads(stream.readline())
+                if response.get("ok") or response.get("error", {}).get("code") != code:
+                    fail("unguarded paste request did not fail safely: " + str(response), output)
+
         proc.terminate()
         try:
             proc.wait(timeout=5)

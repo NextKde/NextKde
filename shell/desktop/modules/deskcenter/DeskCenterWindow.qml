@@ -2690,6 +2690,7 @@ PanelWindow {
                 return result || (left.name || "").localeCompare(right.name || "")
             })
             saveOrder(next)
+            freeSlotDesktop.resetLayout(next)
         }
 
         function arrangeByName() {
@@ -2719,6 +2720,7 @@ PanelWindow {
             desktopLayout.orderJson = JSON.stringify(saved.filter(function(path) { return paths.indexOf(path) < 0 }))
             desktopLayout.sync()
             clearDesktopSelection()
+            freeSlotDesktop.resetLayout(ordered(screenEntries))
         }
 
         function setIconSize(size) {
@@ -3894,6 +3896,10 @@ PanelWindow {
             // the persisted desktop order. The drag demo only replaces the
             // layout algorithm, not the desktop's data pipeline.
             entries: desktopFileGrid.orderedEntries
+            savedSlots: root.desktopFiles.slotsForOutput(root.desktopOutput)
+            onLayoutCommitted: function(slots) {
+                root.desktopFiles.saveSlots(root.desktopOutput, slots)
+            }
             onMoveIntoFolderRequested: function(sourceEntries, targetFolder) {
                 root.desktopFiles.moveEntriesToFolder(sourceEntries, targetFolder)
             }

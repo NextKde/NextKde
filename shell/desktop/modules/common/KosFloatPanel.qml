@@ -98,6 +98,8 @@ Scope {
     property real anchorOffset: AppearanceTokens.motion.popupAnchorOffset
 
     property alias visible: cardWindow.visible
+    readonly property bool requestedOpen: root.animateOnShow
+        ? popupMotion.requestedOpen : cardWindow.visible
     readonly property alias width: cardWindow.width
     readonly property alias height: cardWindow.height
     readonly property bool _centered: root.centerOnScreen || root.modal
@@ -110,7 +112,7 @@ Scope {
         if (root.anchorItem && !root._centered)
             root._placeAnchored()
         cardWindow.visible = true
-        if (root.animateOnShow && !popupMotion.mapped)
+        if (root.animateOnShow)
             popupMotion.open()
     }
     function hide() {
@@ -122,7 +124,7 @@ Scope {
     }
     function open() { root.show() }
     function close() { root.hide() }
-    function toggle() { root.visible ? root.hide() : root.show() }
+    function toggle() { root.requestedOpen ? root.hide() : root.show() }
 
     property real _anchorX: 0
     property real _anchorY: 0
@@ -139,7 +141,7 @@ Scope {
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "quickshell-kosfloatpanel-overlay"
-        WlrLayershell.keyboardFocus: root.modal
+        WlrLayershell.keyboardFocus: root.modal && root.requestedOpen
             ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors { top: true; left: true; right: true; bottom: true }
         exclusionMode: ExclusionMode.Ignore
@@ -159,7 +161,7 @@ Scope {
 
         MouseArea {
             anchors.fill: parent
-            enabled: root.modal
+            enabled: root.modal && root.requestedOpen
             onClicked: {
                 root.backdropClicked()
                 if (root.dismissOnBackdrop)
@@ -262,7 +264,8 @@ Scope {
             }
         }
 
-        mask: root.modal ? null : cardRegion
+        mask: !root.requestedOpen ? emptyInputRegion : (root.modal ? null : cardRegion)
+        Region { id: emptyInputRegion }
         Region { id: cardRegion; item: cardPanel }
         Region { id: backdropBlurRegion; item: backdrop }
         // One surface carries one blur region, so "dimBlur" widens this one to

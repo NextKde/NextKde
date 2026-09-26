@@ -25,16 +25,21 @@ PanelWindow {
     // The controller already suppresses `open` while no real output exists.
     // Reading PanelWindow.screen from its own visibility binding creates a
     // Quickshell window/screen resolution cycle.
-    visible: open
+    visible: popupMotion.mapped
+    contentItem.enabled: open
+    mask: open ? null : emptyInputRegion
+    Region { id: emptyInputRegion }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     focusable: open
     anchors { top: true; left: true; right: true; bottom: true }
 
     // Fluid reveal transition
-    property real revealProgress: open ? 1.0 : 0.0
-    Behavior on revealProgress {
-        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+    readonly property real revealProgress: popupMotion.progress
+    PopupMotion {
+        id: popupMotion
+        openDuration: 220
+        closeDuration: 220
     }
 
     readonly property var desktops: WindowService.desktops || []
@@ -64,7 +69,7 @@ PanelWindow {
     }
 
     // KWin compositor backdrop blur
-    BackgroundEffect.blurRegion: (root.visible && root.open) ? overviewBlurRegion : null
+    BackgroundEffect.blurRegion: root.visible ? overviewBlurRegion : null
 
     // This is a full-output backdrop, not a rounded liquid surface. It needs
     // only an ordinary rectangular blur region and deliberately sends no
@@ -145,9 +150,6 @@ PanelWindow {
         anchors.fill: parent
         opacity: root.revealProgress
         scale: 0.96 + 0.04 * root.revealProgress
-        Behavior on scale {
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
-        }
 
         Column {
             anchors {
@@ -505,6 +507,8 @@ PanelWindow {
     }
 
     onOpenChanged: {
+        if (open) popupMotion.open()
+        else popupMotion.close()
         if (open) {
             selectedDesktopIndex = Math.max(0, root.currentDesktopIndex)
             selectedWindowIndex = 0
@@ -526,4 +530,5 @@ PanelWindow {
             root._thumbRequestQueue = []
         }
     }
+    Component.onCompleted: { if (open) popupMotion.open() }
 }

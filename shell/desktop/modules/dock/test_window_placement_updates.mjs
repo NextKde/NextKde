@@ -18,6 +18,7 @@ const WindowRecordIndex = usesIndex ? await import("./WindowRecordIndex.mjs") : 
 // mock object. Keep it to those, and let everything else be picked up
 // automatically.
 const skip = ["_scheduleUpdate", "_collectToplevels", "_consumeKwinEvent",
+    "_ensureProcessHints",
     "_enqueueKwinCommand", "_sendKwinCommand", "_subscribeKwin",
     "switchDesktop", "windowById", "windowsForApp", "thumbnailUrl",
     "requestThumbnail", "activateWindow", "minimizeWindow", "closeWindow",
@@ -41,6 +42,9 @@ const windowModel = {
 };
 const svc = { records: [], _kwinWindows: [], _nextWindowNumber: 1,
     revision: 0, placementRevision: 0, _recordsById: {},
+    // Process probes are QML runtime objects; placement tests provide the
+    // caches but never spawn a real probe while rebuilding synthetic records.
+    _processHintsByPid: {}, _processProbeByPid: {}, _ensureProcessHints() {},
     // Thumbnail state the service keeps keyed by KWin handle. `_rebuild` sweeps
     // it, so the mock has to carry the same shape or the sweep reads undefined.
     thumbnailRevision: 0, _thumbnailUrlsByHandle: {},
