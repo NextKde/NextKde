@@ -81,6 +81,9 @@ PopupWindow {
     function open(item) {
         anchorItem = item
         visible = true
+        // Refresh first so wifiDeviceName is populated before the scan runs;
+        // without it the scan request carries no ifname on a cold open.
+        NetworkService.refresh()
         NetworkService.refreshWifiNetworks()
     }
 
@@ -502,6 +505,15 @@ PopupWindow {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: panel.showNetworkDialog(modelData)
                 }
+            }
+            GlassText {
+                anchors.centerIn: parent
+                visible: NetworkService.wifiEnabled && NetworkService.wifiScanInProgress
+                    && NetworkService.nearbyWifi.length === 0
+                text: "正在扫描…"
+                color: panelSurface.secondaryForegroundColor
+                opacity: 0.5
+                font.pixelSize: 12
             }
             GlassText {
                 anchors.centerIn: parent
