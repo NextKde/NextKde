@@ -41,6 +41,19 @@ ColumnLayout {
     property bool previewWasActive: false
     signal desktopPreviewFinished()
 
+    readonly property bool bridgeCompatible: !!bridge
+        && typeof bridge.wallpaperCatalog === "function"
+        && typeof bridge.wallpaperSnapshot === "function"
+        && typeof bridge.inspectWallpaperModels === "function"
+        && typeof bridge.previewWallpaperImage === "function"
+        && typeof bridge.updateWallpaperSlideshow === "function"
+        && typeof bridge.updateWallpaperSpatialEnabled === "function"
+        && typeof bridge.prepareWallpaperSpatial === "function"
+        && typeof bridge.wallpaperImagesInFolder === "function"
+        && typeof bridge.chooseWallpaperColor === "function"
+        && typeof bridge.updateWallpaperFitMode === "function"
+        && typeof bridge.updateWallpaperTransition === "function"
+        && typeof bridge.updateWallpaperTakeoverEnabled === "function"
     readonly property int gridColumns: width >= 580 ? 3 : 2
     readonly property bool colorWallpaper: image.indexOf("/wallpaper-colors/") >= 0
     readonly property var intervals: [
@@ -84,7 +97,7 @@ ColumnLayout {
     onGalleryCategoryChanged: Qt.callLater(() => gallery.positionViewAtBeginning())
 
     function beginPreview(path) {
-        if (!bridge || previewPending)
+        if (!bridgeCompatible || previewPending)
             return
         if (!previewAvailable) {
             errorText = "当前平台服务不支持桌面预览，请先更新并重启平台服务。"
@@ -162,7 +175,7 @@ ColumnLayout {
     }
 
     function beginSpatialPreparation() {
-        if (!bridge || spatialPreparing || spatialBusy)
+        if (!bridgeCompatible || spatialPreparing || spatialBusy)
             return
         enableAfterPreparation = true
         errorText = ""
@@ -170,7 +183,7 @@ ColumnLayout {
     }
 
     function requestSpatialEnable() {
-        if (!bridge || modelsChecking || colorWallpaper)
+        if (!bridgeCompatible || modelsChecking || colorWallpaper)
             return
         if (!depthModelReady) {
             modelDialog.open()
@@ -184,7 +197,11 @@ ColumnLayout {
     }
 
     function setSlideshow(enabled, interval) {
-        if (!bridge || (enabled && slideshowPool.length < 2)) {
+        if (!bridgeCompatible) {
+            errorText = "设置程序版本过旧，请更新后再使用壁纸功能。"
+            return
+        }
+        if (enabled && slideshowPool.length < 2) {
             errorText = "自动切换至少需要两张图片，请添加文件夹或选择系统壁纸。"
             return
         }
@@ -193,16 +210,20 @@ ColumnLayout {
     }
 
     Component.onCompleted: {
-        if (bridge) {
+        if (bridgeCompatible) {
             catalogImages = bridge.wallpaperCatalog()
             bridge.wallpaperSnapshot()
             bridge.inspectWallpaperModels()
+        } else if (bridge) {
+            modelsChecking = false
+            errorText = "设置程序与壁纸界面版本不匹配，请更新设置程序。"
         }
     }
 
     Connections {
         target: page.bridge
-        enabled: page.bridge !== null
+        enabled: page.bridgeCompatible
+        ignoreUnknownSignals: true
         function onWallpaperSnapshotChanged(state) {
             page.applyState(state)
             if (page.bridge.lastError)
@@ -228,7 +249,7 @@ ColumnLayout {
         repeat: true
         running: page.previewActive || page.previewPending || page.enableAfterPreparation || page.spatialBusy
             || page.spatialPreparing || page.takeoverPending
-        onTriggered: if (page.bridge) page.bridge.wallpaperSnapshot()
+        onTriggered: if (page.bridgeCompatible) page.bridge.wallpaperSnapshot()
     }
 
     Platform.FileDialog {
@@ -236,7 +257,7 @@ ColumnLayout {
         title: "选择壁纸"
         fileMode: Platform.FileDialog.OpenFile
         nameFilters: ["图片 (*.jpg *.jpeg *.png *.webp *.bmp *.avif)"]
-        onAccepted: if (page.bridge)
+        onAccepted: if (page.bridgeCompatible)
             page.beginPreview(selectedFile.toString())
     }
 
@@ -244,7 +265,7 @@ ColumnLayout {
         id: folderDialog
         title: "选择壁纸文件夹"
         onAccepted: {
-            if (!page.bridge)
+            if (!page.bridgeCompatible)
                 return
             const images = page.bridge.wallpaperImagesInFolder(folder.toString())
             if (images.length < 1) {
@@ -281,10 +302,16 @@ ColumnLayout {
     }
 
     Rectangle {
+        id: currentWallpaperCard
+        objectName: "currentWallpaperPreviewCard"
         Layout.fillWidth: true
         implicitHeight: 88
         radius: 18
-        color: page.colors.card
+        color: currentWallpaperMouse.containsMouse
+            && currentWallpaperMouse.enabled
+            ? page.colors.divider
+            : page.colors.card
+        Behavior on color { ColorAnimation { duration: 120 } }
         RowLayout {
             anchors.fill: parent
             anchors.margins: 16
@@ -306,18 +333,34 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
                 Text {
-                    text: "当前壁纸 · 所有显示器"
+                    text: !page.bridgeCompatible
+                        ? "设置程序版本不匹配"
+                        : !page.previewAvailable
+                            ? "当前环境暂不支持桌面预览"
+                            : "临时应用到桌面，60 秒后自动恢复"
                     color: page.colors.secondaryText
                     font.pixelSize: 12
                 }
             }
-            WallpaperTextButton {
-                label: "在桌面查看"
-                colors: page.colors
-                emphasized: true
-                enabled: !!page.image && page.previewAvailable && !page.previewPending
-                onClicked: page.beginPreview(page.image)
+            Text {
+                objectName: "currentWallpaperPreviewLabel"
+                text: page.previewPending ? "正在载入…"
+                    : page.previewAvailable && page.bridgeCompatible ? "桌面预览  ›" : "不可用"
+                color: page.previewAvailable && page.bridgeCompatible
+                    ? page.colors.accent : page.colors.secondaryText
+                font.pixelSize: 13
+                font.weight: Font.Medium
             }
+        }
+        MouseArea {
+            id: currentWallpaperMouse
+            objectName: "currentWallpaperPreviewAction"
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: !!page.image && page.bridgeCompatible
+                && page.previewAvailable && !page.previewPending
+            onClicked: page.beginPreview(page.image)
         }
     }
 
@@ -343,7 +386,7 @@ ColumnLayout {
                     trackColor: page.colors.divider
                     onToggled: function(checked) {
                         if (checked) page.requestSpatialEnable()
-                        else if (page.bridge) page.bridge.updateWallpaperSpatialEnabled(false)
+                        else if (page.bridgeCompatible) page.bridge.updateWallpaperSpatialEnabled(false)
                         spatialSwitch.checked = Qt.binding(() => page.spatialEnabled)
                     }
                 }
@@ -457,7 +500,7 @@ ColumnLayout {
                 surroundingColor: page.colors.card
                 selected: modelData.color ? page.isSwatchSelected(modelData.color) : page.image === modelData.path
                 onActivated: {
-                    if (!page.bridge) return
+                    if (!page.bridgeCompatible) return
                     if (modelData.color) page.bridge.chooseWallpaperColor(modelData.color)
                     else page.beginPreview(modelData.path)
                 }
@@ -492,9 +535,9 @@ ColumnLayout {
         takeoverEnabled: page.takeoverEnabled
         takeoverAvailable: page.takeoverAvailable
         takeoverPending: page.takeoverPending
-        onFitChosen: mode => { if (page.bridge) page.bridge.updateWallpaperFitMode(mode) }
-        onTransitionChosen: style => { if (page.bridge) page.bridge.updateWallpaperTransition(style) }
-        onTakeoverChosen: enabled => { if (page.bridge) page.bridge.updateWallpaperTakeoverEnabled(enabled) }
+        onFitChosen: mode => { if (page.bridgeCompatible) page.bridge.updateWallpaperFitMode(mode) }
+        onTransitionChosen: style => { if (page.bridgeCompatible) page.bridge.updateWallpaperTransition(style) }
+        onTakeoverChosen: enabled => { if (page.bridgeCompatible) page.bridge.updateWallpaperTakeoverEnabled(enabled) }
     }
 
     Text {

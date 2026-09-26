@@ -25,14 +25,57 @@ TestCase {
         property int intervalRequested: -1
         property string fitRequested: ""
         property string transitionRequested: ""
+        property string previewRequested: ""
+        property string lastError: ""
         signal wallpaperSnapshotChanged(var state)
         signal wallpaperModelsChecked(bool depthReady, bool foregroundReady)
+        function wallpaperCatalog() { return [] }
+        function wallpaperSnapshot() {}
+        function inspectWallpaperModels() {}
+        function previewWallpaperImage(path, images) { previewRequested = path }
         function updateWallpaperSlideshow(enabled, minutes, images) {
             slideshowRequested = enabled
             intervalRequested = minutes
         }
+        function updateWallpaperSpatialEnabled(enabled) {}
+        function prepareWallpaperSpatial() {}
+        function wallpaperImagesInFolder(path) { return [] }
+        function chooseWallpaperColor(color) {}
         function updateWallpaperFitMode(mode) { fitRequested = mode }
         function updateWallpaperTransition(style) { transitionRequested = style }
+        function updateWallpaperTakeoverEnabled(enabled) {}
+    }
+
+    function test_previewActionUsesCompatibleBridge() {
+        const page = createTemporaryObject(pageComponent, null)
+        verify(page !== null)
+        page.bridge = bridgeMock
+        page.image = "/tmp/wallpaper.jpg"
+        page.previewAvailable = true
+        tryCompare(page, "bridgeCompatible", true)
+
+        const action = findChild(page, "currentWallpaperPreviewAction")
+        const label = findChild(page, "currentWallpaperPreviewLabel")
+        verify(action !== null)
+        verify(label !== null)
+        compare(action.enabled, true)
+        compare(label.text, "桌面预览  ›")
+        action.clicked(null)
+        compare(bridgeMock.previewRequested, "/tmp/wallpaper.jpg")
+    }
+
+    function test_incompatibleBridgeDisablesPreview() {
+        const page = createTemporaryObject(pageComponent, null)
+        const oldBridge = Qt.createQmlObject("import QtQuick; QtObject {}", page)
+        page.bridge = oldBridge
+        page.image = "/tmp/wallpaper.jpg"
+        page.previewAvailable = true
+
+        compare(page.bridgeCompatible, false)
+        const action = findChild(page, "currentWallpaperPreviewAction")
+        const label = findChild(page, "currentWallpaperPreviewLabel")
+        compare(action.enabled, false)
+        compare(label.text, "不可用")
     }
 
     function test_pageLoadsAndAcceptsSnapshot() {
