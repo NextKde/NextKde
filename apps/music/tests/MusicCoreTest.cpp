@@ -8,6 +8,11 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QNetworkProxy>
+#include <QNetworkReply>
+#include <QScopeGuard>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QUrl>
 #include <QtTest>
@@ -70,6 +75,8 @@ private slots:
     void onlineSearchRanksArtistMatches();
     void lrcLyricsParseAndSort();
     void unsavedOnlineTrackLoadsCachedLyrics();
+    void cancellingPendingLyricsKeepsReplacement();
+    void cancellingPendingSearchDoesNotReportFailure();
 };
 
 void MusicCoreTest::databasePersistsLibraryQueueAndPlaylists()
@@ -376,6 +383,63 @@ void MusicCoreTest::unsavedOnlineTrackLoadsCachedLyrics()
              QStringLiteral("Cached online lyric"));
     QVERIFY(!lyrics.loading());
     QVERIFY(lyrics.errorMessage().isEmpty());
+}
+
+void MusicCoreTest::cancellingPendingLyricsKeepsReplacement()
+{
+    QTemporaryDir directory;
+    QFile cached(directory.filePath(QStringLiteral("replacement.lrc")));
+    QVERIFY(cached.open(QIODevice::WriteOnly));
+    cached.write("[00:01.00]Replacement lyric\n");
+    cached.close();
+    // Hold the HTTPS CONNECT locally, so cancellation is deterministic and offline.
+    QTcpServer proxy;
+    QVERIFY(proxy.listen(QHostAddress::LocalHost));
+    LyricsService lyrics(directory.path());
+    auto *network = lyrics.findChild<QNetworkAccessManager *>();
+    QVERIFY(network);
+    network->setProxy(QNetworkProxy(QNetworkProxy::HttpProxy, QStringLiteral("127.0.0.1"), proxy.serverPort()));
+    TrackRecord online;
+    online.id = 1;
+    online.source = QStringLiteral("wy");
+    online.providerId = QStringLiteral("pending-fixture");
+    lyrics.load(online);
+    QTRY_VERIFY(proxy.hasPendingConnections());
+    QVERIFY(lyrics.loading());
+    auto *reply = network->findChild<QNetworkReply *>();
+    QVERIFY(reply);
+    QSignalSpy finished(reply, &QNetworkReply::finished);
+    TrackRecord replacement;
+    replacement.id = 2;
+    replacement.path = directory.filePath(QStringLiteral("replacement.wav"));
+    lyrics.load(replacement);
+    QCOMPARE(finished.size(), 1);
+    QCOMPARE(lyrics.loadedTrackId(), 2);
+    QVERIFY(!lyrics.loading());
+    QVERIFY(lyrics.errorMessage().isEmpty());
+    QCOMPARE(lyrics.lines().size(), 1);
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(lyrics.lines().first().toMap().value(QStringLiteral("text")).toString(), QStringLiteral("Replacement lyric"));
+}
+
+void MusicCoreTest::cancellingPendingSearchDoesNotReportFailure()
+{
+    QTcpServer proxy;
+    QVERIFY(proxy.listen(QHostAddress::LocalHost));
+    const auto originalProxy = QNetworkProxy::applicationProxy();
+    const auto restoreProxy = qScopeGuard([originalProxy] { QNetworkProxy::setApplicationProxy(originalProxy); });
+    QNetworkProxy::setApplicationProxy(QNetworkProxy(QNetworkProxy::HttpProxy, QStringLiteral("127.0.0.1"), proxy.serverPort()));
+    OnlineMusicProvider provider;
+    provider.search(QStringLiteral("pending fixture"));
+    QTRY_VERIFY(proxy.hasPendingConnections());
+    QVERIFY(provider.searching());
+    QSignalSpy errors(&provider, &OnlineMusicProvider::errorMessageChanged);
+    QSignalSpy results(&provider, &OnlineMusicProvider::resultsReady);
+    provider.search({});
+    QVERIFY(!provider.searching());
+    QVERIFY(provider.errorMessage().isEmpty());
+    QCOMPARE(errors.size(), 0);
+    QCOMPARE(results.size(), 1);
 }
 
 QTEST_GUILESS_MAIN(MusicCoreTest)

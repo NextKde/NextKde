@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Controls
 import Kos.Ui
 
@@ -15,7 +16,6 @@ Item {
         color: AppTheme.withAlpha(AppTheme.accent, AppTheme.dark ? 0.18 : 0.12)
         border.width: 1
         border.color: AppTheme.border
-        clip: true
 
         Image {
             id: image
@@ -25,7 +25,22 @@ Item {
             sourceSize.height: Math.max(64, height * 2)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            visible: status === Image.Ready
+            visible: false
+        }
+
+        Rectangle {
+            id: roundedMask
+            anchors.fill: parent
+            radius: Math.min(root.radius, width / 2, height / 2)
+            layer.enabled: true
+            visible: false
+        }
+        MultiEffect {
+            anchors.fill: parent
+            source: image
+            visible: image.status === Image.Ready
+            maskEnabled: true
+            maskSource: roundedMask
         }
 
         Label {
@@ -35,7 +50,7 @@ Item {
             color: AppTheme.withAlpha(AppTheme.accent, 0.9)
             font.pixelSize: Math.max(18, Math.min(parent.width, parent.height) * 0.36)
             font.weight: Font.DemiBold
-            visible: !image.visible
+            visible: image.status !== Image.Ready
         }
     }
 }

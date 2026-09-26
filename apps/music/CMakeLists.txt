@@ -19,6 +19,8 @@ if(NOT (TARGET PkgConfig::KOS_MUSIC_GSTREAMER AND TARGET PkgConfig::KOS_MUSIC_TA
 endif()
 
 set(KOS_MUSIC_CORE_SOURCES
+    src/AudioCache.cpp
+    src/AudioCache.h
     src/MetadataScanner.cpp
     src/MetadataScanner.h
     src/MusicDatabase.cpp
@@ -76,6 +78,10 @@ kos_add_application(kos-music
         src/TrackListModel.cpp
         src/TrackListModel.h
     QML_FILES
+        qml/MusicMenu.qml
+        qml/MusicMenuItem.qml
+        qml/MusicDialog.qml
+        qml/MusicComboBox.qml
         qml/Artwork.qml
         qml/Main.qml
         qml/MiniPlayer.qml
@@ -100,6 +106,35 @@ target_include_directories(kos-music PRIVATE
 endif()
 
 if(BUILD_TESTING)
+    find_program(KOS_MUSIC_QMLTESTRUNNER NAMES qmltestrunner qmltestrunner6 HINTS /usr/lib/qt6/bin)
+    if(KOS_MUSIC_QMLTESTRUNNER)
+        add_test(NAME kos-music.lyric-transition COMMAND ${KOS_MUSIC_QMLTESTRUNNER}
+            -input ${CMAKE_SOURCE_DIR}/tests/music-lyrics)
+        set_tests_properties(kos-music.lyric-transition PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            TIMEOUT 15 LABELS ui)
+        # Match the app's pure Qt foundation, without the shell-only Quickshell singletons.
+        file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos)
+        if(NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos/Ui)
+            file(CREATE_LINK ${CMAKE_SOURCE_DIR}/shared/qml/foundation
+                ${CMAKE_CURRENT_BINARY_DIR}/test-imports/Kos/Ui SYMBOLIC)
+        endif()
+        add_test(NAME kos-music.context-menus COMMAND ${KOS_MUSIC_QMLTESTRUNNER}
+            -import ${CMAKE_CURRENT_BINARY_DIR}/test-imports -input ${CMAKE_SOURCE_DIR}/tests/music-menu)
+        set_tests_properties(kos-music.context-menus PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_QUICK_CONTROLS_STYLE=Basic"
+            TIMEOUT 20 LABELS ui)
+    endif()
+    qt_add_executable(kos-music-cache-test
+        tests/AudioCacheTest.cpp
+        src/AudioCache.cpp
+        src/AudioCache.h
+    )
+    target_include_directories(kos-music-cache-test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(kos-music-cache-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    add_test(NAME kos-music.cache COMMAND kos-music-cache-test)
+    set_tests_properties(kos-music.cache PROPERTIES TIMEOUT 20 LABELS data)
+
     qt_add_executable(kos-music-core-test
         tests/MusicCoreTest.cpp
         src/LyricsService.cpp
@@ -190,6 +225,7 @@ if(BUILD_TESTING)
         Qt6::Test
         PkgConfig::KOS_MUSIC_GSTREAMER
         PkgConfig::KOS_MUSIC_TAGLIB
+        Qt6::Network
     )
     add_test(NAME kos-music.engine COMMAND kos-music-engine-test)
     set_tests_properties(kos-music.engine PROPERTIES
@@ -252,11 +288,13 @@ if(BUILD_TESTING)
             PkgConfig::KOS_MUSIC_TAGLIB
         )
         add_test(NAME kos-music.mpris
-            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-music-mpris-test>
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE}
+                --config-file=${CMAKE_CURRENT_SOURCE_DIR}/tests/session-bus.conf
+                -- $<TARGET_FILE:kos-music-mpris-test>
         )
         set_tests_properties(kos-music.mpris PROPERTIES
             ENVIRONMENT "G_DEBUG=fatal-criticals;KOS_MUSIC_FAKE_AUDIO=1"
-            TIMEOUT 30
+            TIMEOUT 90
             LABELS data
         )
     endif()

@@ -200,23 +200,6 @@ sudo systemctl restart sddm
 就会占住这个名字；KOS 抢不回来，通知中心会一直是空的。`install` 检测到已安装
 或已注册的第三方通知服务时会提示，按提示停用即可。
 
-## 界面预览
-
-完整桌面：DeskCenter、悬浮 Dock 与系统状态区。
-
-![KOS 完整桌面](docs/images/full-desktop.png)
-
-全屏启动台：应用搜索与网格启动。
-
-![KOS 全屏启动台](docs/images/fullscreen-launcher.png)
-
-控制中心：网络、蓝牙、亮度、音量和通知。
-
-![KOS 控制中心](docs/images/control-center.png)
-
-设置中心：调整显示、主题、顶栏、Dock、启动台与快捷键，并查看接入状态。
-
-![KOS 设置中心](docs/images/settings-center.png)
 
 ## 日常使用
 

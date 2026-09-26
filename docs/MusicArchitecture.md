@@ -1,7 +1,8 @@
 # Music architecture
 
 KOS Music is an independent Qt Quick process. It owns the local and online
-track catalog, playback engine, conversion jobs, and MPRIS provider. Quickshell
+track catalog, playback engine, and MPRIS provider. The conversion backend remains
+available to engine tests; track menus no longer expose conversion jobs. Quickshell
 and the other standalone applications do not import its implementation.
 
 ```text
@@ -98,7 +99,33 @@ the source directory and files are never touched.
 Online tracks use `source + provider_id` semantics and a stable synthetic path
 such as `lx://wy/347230`. Their `source_data` stores the metadata required by
 an LX resolver. Resolved audio URLs are deliberately not stored: they are
-short-lived links and are requested again when playback starts.
+short-lived links and are requested only when no complete audio cache entry is available.
+
+### Track actions and deletion
+
+`TrackListView` selects actions by page context. Library rows can delete music;
+queue rows can move an entry immediately after the current one or remove that entry;
+online results can play, insert next, or append; playlist rows can remove membership.
+Actions that cannot change the current queue are hidden. Inserting an already queued
+track moves its existing entry and preserves the current playback position.
+
+Deletion binds confirmation to both the track ID and the displayed path. Local files
+move to the system trash before their catalog record is removed. A trash failure leaves
+the record intact; an already missing file allows stale-record cleanup. Database foreign
+keys remove queue and playlist references, and the controller removes every matching
+in-memory queue entry. A scan already in progress filters deleted paths before applying
+its result. Deleting a playing track advances to an available successor; a paused player
+never starts automatically. Online catalog deletion removes its persistent audio cache.
+
+The music app owns its rounded menu, menu item, dialog, and quality selector components.
+Shared UI changes only add `KosLyricLine` and its module registrations. Desktop changes
+are limited to MPRIS presentation, lyric visibility/transitions and media transport
+controls in DeskCenter, Dock and Control Center. Desktop typography, desktop-file slot
+persistence, audio-service configuration and session setup are outside this boundary.
+
+Cancellation detaches each network reply before calling `abort()`, which may dispatch
+`finished` synchronously. Generation checks keep old lyrics/search results from replacing
+new content; source imports discard replies that no longer own the active request.
 
 ### OnlineMusicProvider
 
@@ -150,6 +177,35 @@ position polling are integrated into the Qt event loop; no GLib main loop is
 embedded. The public state is `Loading`, `Playing`, `Paused`, `Stopped`, or
 `Error`. Local path existence is checked before loading, seeks are bounded by
 duration, and volume is bounded to 0–150%.
+
+Pause/resume reuses the loaded track ID even when its playable URL differs from
+the online metadata URL. The controller stores the current track ID and position
+as one JSON setting every five seconds while playing and on pause, seek and exit.
+Startup restores the position without autoplay; the engine prerolls in PAUSED,
+then seeks after ASYNC_DONE before honoring the requested playback state.
+
+GStreamer progressive download uses `downloadbuffer` so playback and persistent caching
+share one HTTP transfer. `AudioCache` is a disk index keyed by stable track/quality,
+with 1 GiB LRU retention and a 256 MiB per-entry limit. The download-complete message
+can precede the sparse file's final stdio flush: the engine retains the temporary file,
+closes the pipeline on stop/track change/exit, and only then publishes it atomically.
+Errors and partial downloads are discarded. An unwritable cache uses ordinary streaming.
+The UI distinguishes resolution, buffering and download progress, with cancel and retry.
+
+The controller bounds source attempts at 12 seconds and track preparation at 45 seconds.
+`LxSourceService::useSourceForPlayback` changes only the running helper, preserving the
+saved preferred source. Incompatible platform/quality, resolver errors, host crashes,
+network errors and decoder failures all move to the next imported source. Recovery is
+queued outside signal dispatch; generation checks discard stale callbacks. Exhausted
+tracks show a 3-second notice then advance, bypassing repeat-current and avoiding songs
+already failed in this recovery run. An exhausted queue stops; a successful track clears
+the failure set. Pause/stop/selection/removal cancel pending automatic actions.
+
+The app exports preparation text/state in MPRIS metadata. Dock eligibility follows player
+presence so paused and buffering sessions remain resumable. Transport controls share
+`MediaControlButton`; `KosLyricLine` animates desktop/widget lines, while Now Playing
+uses an animated ListView highlight range. The app lyric preference persists in SQLite;
+the independent desktop-lyric preference persists in Dock configuration.
 
 Decoding and audio output are capabilities of the installed GStreamer stack.
 `KOS_MUSIC_AUDIO_SINK` may select a sink for diagnostics, while
@@ -213,7 +269,18 @@ GStreamer, pauses, seeks, resumes, converts it with an installed encoder, and
 tests atomic overwrite. `kos-music.mpris` runs under a private session bus and
 checks metadata, playback state, pause/play/stop, volume, shuffle, repeat,
 seek, `OpenUri`, and `Raise`. Version and full-QML smoke tests load the normal
-application root with software rendering. Engine/MPRIS tests make GLib critical
+application root with software rendering. Progressive HTTP fixtures verify first audio
+before download completion, one transfer, exact cached bytes, failures and cancellation.
+Data-driven controller tests cover resolver rejection/hang, late replies, blocked helpers,
+HTTP failures/stalls, invalid media, unsupported platforms, track deadlines, all playback
+modes, all-failed queues and user cancellation. A private bus without desktop service
+activation isolates these tests. `kos-music.lyric-transition` checks intermediate animation
+frames, rapid seeks and hiding. `kos-music.context-menus` exercises each page context,
+queue deduplication, confirmation/cancellation, rounded controls and quality selection.
+Controller fixtures test deletion during playback, pause and scanning, duplicate queue
+entries, the last queued track, missing files, stale confirmations and unavailable trash.
+Local proxy/HTTP fixtures cover synchronous cancellation of lyrics, search and source
+imports without depending on a remote response. Engine/MPRIS tests make GLib critical
 warnings fatal to catch ownership mistakes.
 
 `kos-music-live-source-check` is an opt-in network integration executable. It

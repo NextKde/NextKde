@@ -196,7 +196,7 @@ PopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
+                    text: DockMprisService.playbackStatus || popup.player?.trackAlbum || popup.player?.identity || "MPRIS Player"
                     color: ThemeService.foregroundColor
                     opacity: 0.48
                     elide: Text.ElideRight
@@ -327,8 +327,19 @@ PopupWindow {
             }
         }
 
-        // Use a fixed centre line instead of Row's top-aligned children: the
-        // 31px side controls and 38px play control now share one true axis.
+        // Desktop lyric visibility is independent of the app lyric preference.
+        MediaControlButton {
+            anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 21 }
+            width: 32; height: 32
+            iconName: "media-lyrics"
+            text: qsTr("桌面歌词")
+            checkable: true
+            checked: ConfigService.desktopLyricsEnabled
+            glassInk: ThemeService.foregroundColor
+            onClicked: ConfigService.updateDesktopLyricsEnabled(!ConfigService.desktopLyricsEnabled)
+        }
+
+        // 32px side controls and the 38px play control share one centre line.
         Item {
             width: 150
             height: 38
@@ -343,67 +354,35 @@ PopupWindow {
             MusicButton {
                 x: 9.5
                 anchors.verticalCenter: parent.verticalCenter
-                symbol: "⏮"
+                iconName: "media-previous"
+                text: qsTr("上一首")
                 enabled: popup.player?.canGoPrevious ?? false
-                onTriggered: DockMprisService.previous()
+                onClicked: DockMprisService.previous()
             }
             MusicButton {
                 anchors.centerIn: parent
                 primary: true
-                symbol: popup.player?.isPlaying ? "⏸" : "▶"
+                iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
+                text: popup.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                busy: DockMprisService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
-                onTriggered: DockMprisService.togglePlayPause()
+                onClicked: DockMprisService.togglePlayPause()
             }
             MusicButton {
                 x: 109.5
                 anchors.verticalCenter: parent.verticalCenter
-                symbol: "⏭"
+                iconName: "media-next"
+                text: qsTr("下一首")
                 enabled: popup.player?.canGoNext ?? false
-                onTriggered: DockMprisService.next()
+                onClicked: DockMprisService.next()
             }
         }
     }
 
-    component MusicButton: Item {
-        id: button
-        property string symbol: ""
-        property bool primary: false
-        property bool enabled: true
-        signal triggered
-        width: primary ? 38 : 31
+    component MusicButton: MediaControlButton {
+        width: primary ? 38 : 32
         height: width
-        // MPRIS may report that a track cannot go backward/forward. Keep
-        // those buttons non-clickable, but never fade them so far that the
-        // control layout becomes unreadable.
-        opacity: enabled ? 1.0 : 0.66
-        scale: mouse.pressed ? 0.90 : (mouse.containsMouse ? 1.07 : 1.0)
-        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            // Controls stay neutral glass. Cover colours belong to the
-            // complete player surface, not isolated button colour chips.
-            color: button.primary ? Qt.rgba(1, 1, 1, 0.23) : Qt.rgba(1, 1, 1, 0.12)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.34)
-            Text {
-                anchors.centerIn: parent
-                anchors.horizontalCenterOffset: button.symbol === "▶" ? 1 : 0
-                text: button.symbol
-                color: ThemeService.foregroundColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.30)
-                font.pixelSize: button.primary ? 18 : 14
-            }
-        }
-        MouseArea {
-            id: mouse
-            anchors.fill: parent
-            enabled: button.enabled
-            hoverEnabled: true
-            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: button.triggered()
-        }
+        glassInk: ThemeService.foregroundColor
     }
 
     MouseArea {

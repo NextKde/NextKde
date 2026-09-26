@@ -63,6 +63,15 @@ Item {
                 color: AppTheme.mutedText
                 wrapMode: Text.WordWrap
             }
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: qsTr("歌词"); color: AppTheme.mutedText; Layout.fillWidth: true }
+                KosSwitch {
+                    checked: root.musicController.lyricsEnabled
+                    accessibleName: qsTr("显示歌词")
+                    onToggled: (checked) => root.musicController.lyricsEnabled = checked
+                }
+            }
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -77,9 +86,11 @@ Item {
                 Label {
                     anchors.centerIn: parent
                     width: parent.width
-                    visible: !root.musicController.lyricsLoading
+                    visible: !root.musicController.lyricsEnabled || (!root.musicController.lyricsLoading
                         && root.musicController.lyrics.length === 0
-                    text: root.musicController.lyricsError.length > 0
+                        )
+                    text: !root.musicController.lyricsEnabled ? qsTr("歌词已关闭")
+                        : root.musicController.lyricsError.length > 0
                         ? root.musicController.lyricsError
                         : qsTr("No synchronized lyrics")
                     color: AppTheme.mutedText
@@ -99,6 +110,11 @@ Item {
                     preferredHighlightBegin: height * 0.42
                     preferredHighlightEnd: height * 0.58
                     highlightRangeMode: ListView.ApplyRange
+                    currentIndex: root.musicController.currentLyricIndex
+                    highlight: Item {}
+                    highlightMoveDuration: 280
+                    highlightMoveVelocity: -1
+                    highlightResizeDuration: 280
 
                     delegate: Label {
                         id: lyricDelegate
@@ -108,26 +124,21 @@ Item {
                         text: String(modelData.text ?? "")
                         color: index === root.musicController.currentLyricIndex
                             ? AppTheme.text : AppTheme.mutedText
-                        font.pixelSize: index === root.musicController.currentLyricIndex ? 22 : 17
-                        font.weight: index === root.musicController.currentLyricIndex
-                            ? Font.DemiBold : Font.Normal
+                        font.pixelSize: 22
+                        font.weight: Font.DemiBold
+                        scale: index === root.musicController.currentLyricIndex ? 1 : 0.82
+                        transformOrigin: Item.Left
                         wrapMode: Text.WordWrap
                         opacity: index === root.musicController.currentLyricIndex ? 1 : 0.62
 
                         Behavior on opacity {
                             NumberAnimation { duration: AppTheme.motionNormal }
                         }
+                        Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                        Behavior on color { ColorAnimation { duration: 240 } }
                     }
                 }
 
-                Connections {
-                    target: root.musicController
-                    function onCurrentLyricChanged() {
-                        const index = root.musicController.currentLyricIndex
-                        if (index >= 0 && index < lyricList.count)
-                            lyricList.positionViewAtIndex(index, ListView.Center)
-                    }
-                }
             }
         }
     }

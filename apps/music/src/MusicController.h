@@ -8,6 +8,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QSet>
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
@@ -19,6 +20,7 @@
 class MprisService;
 class LxSourceService;
 class LyricsService;
+class AudioCache;
 
 class MusicController : public QObject {
     Q_OBJECT
@@ -56,6 +58,10 @@ class MusicController : public QObject {
     Q_PROPERTY(QString engineBackend READ engineBackend CONSTANT)
     Q_PROPERTY(bool mprisRegistered READ mprisRegistered NOTIFY mprisRegisteredChanged)
     Q_PROPERTY(QString playbackState READ playbackState NOTIFY playbackStateChanged)
+    Q_PROPERTY(QString playbackStatusText READ playbackStatusText NOTIFY playbackStatusChanged)
+    Q_PROPERTY(QStringList playbackAttempts READ playbackAttempts NOTIFY playbackStatusChanged)
+    Q_PROPERTY(double cacheProgress READ cacheProgress NOTIFY playbackStatusChanged)
+    Q_PROPERTY(bool lyricsEnabled READ lyricsEnabled WRITE setLyricsEnabled NOTIFY lyricsEnabledChanged)
     Q_PROPERTY(qlonglong currentTrackId READ currentTrackId NOTIFY currentTrackChanged)
     Q_PROPERTY(QString currentTitle READ currentTitle NOTIFY currentTrackChanged)
     Q_PROPERTY(QString currentArtist READ currentArtist NOTIFY currentTrackChanged)
@@ -115,6 +121,11 @@ public:
     QString engineBackend() const;
     bool mprisRegistered() const;
     QString playbackState() const;
+    QString playbackStatusText() const;
+    double cacheProgress() const;
+    QStringList playbackAttempts() const { return m_playbackAttempts; }
+    bool lyricsEnabled() const;
+    void setLyricsEnabled(bool enabled);
     qlonglong currentTrackId() const;
     QString currentTitle() const;
     QString currentArtist() const;
@@ -149,6 +160,7 @@ public:
     Q_INVOKABLE void searchOnline(const QString &query);
     Q_INVOKABLE void playOnlineRow(int row);
     Q_INVOKABLE void enqueueOnlineRow(int row);
+    Q_INVOKABLE void playOnlineNext(int row);
     Q_INVOKABLE void importMusicSource(const QString &pathOrUrl);
     Q_INVOKABLE void activateMusicSource(const QString &sourceId);
     Q_INVOKABLE void removeMusicSource(const QString &sourceId);
@@ -161,6 +173,10 @@ public:
     Q_INVOKABLE void playArtist(const QString &artist);
     Q_INVOKABLE void enqueueTrack(qlonglong trackId);
     Q_INVOKABLE void playTrackNext(qlonglong trackId);
+    Q_INVOKABLE void moveQueueRowNext(int row);
+    Q_INVOKABLE bool isTrackQueued(qlonglong trackId) const;
+    Q_INVOKABLE QVariantMap trackDeletionInfo(qlonglong trackId) const;
+    Q_INVOKABLE bool deleteTrack(qlonglong trackId, const QString &expectedPath);
     Q_INVOKABLE void removeQueueRow(int row);
     Q_INVOKABLE void clearQueue();
     Q_INVOKABLE void play();
@@ -211,6 +227,8 @@ signals:
     void lyricsErrorChanged();
     void mprisRegisteredChanged();
     void playbackStateChanged();
+    void playbackStatusChanged();
+    void lyricsEnabledChanged();
     void currentTrackChanged();
     void positionChanged();
     void durationChanged();
@@ -225,6 +243,7 @@ signals:
     void seeked(qlonglong positionMs);
     void raiseRequested();
     void userMessage(const QString &message);
+    void trackDeleted(qlonglong trackId, const QString &trashPath);
 
 private slots:
     void scanFinished();
@@ -241,7 +260,16 @@ private:
     void refreshPlaylistModel();
     void setQueue(const QList<qint64> &trackIds, int currentIndex);
     void persistQueue();
-    void startCurrentTrack();
+    void startCurrentTrack(qint64 startPositionMs = 0);
+    void loadPreparedTrack(const QUrl &url);
+    void tryNextSource();
+    void resolveWithReadySource();
+    void schedulePlaybackFailure(const QString &message);
+    void finishFailedTrack(const QString &message);
+    void advanceAfterFailure();
+    void cancelRecovery();
+    void persistPlaybackPosition();
+    QString audioCacheKey(const TrackRecord &track) const;
     qint64 storeOnlineTrack(int row);
     void advance(bool fromEndOfStream);
     QList<TrackRecord> tracksForIds(const QList<qint64> &ids) const;
@@ -259,6 +287,21 @@ private:
     QString m_onlineQuality = QStringLiteral("128k");
     std::unique_ptr<LxSourceService> m_sourceService;
     std::unique_ptr<LyricsService> m_lyricsService;
+    std::unique_ptr<AudioCache> m_audioCache;
+    QTimer m_savePositionTimer;
+    QTimer m_attemptTimeout;
+    QTimer m_trackTimeout;
+    QTimer m_skipTimer;
+    QStringList m_sourceCandidates;
+    QStringList m_playbackAttempts;
+    QString m_attemptName;
+    QString m_recoveryStatus;
+    QSet<qint64> m_failedTracks;
+    QSet<QString> m_removedDuringScan;
+    int m_attemptGeneration = 0;
+    bool m_waitingForSource = false;
+    bool m_failureQueued = false;
+    bool m_automaticAdvance = false;
     QFutureWatcher<ScanResult> m_scanWatcher;
     MprisService *m_mpris = nullptr;
     QList<TrackRecord> m_tracks;
@@ -285,4 +328,12 @@ private:
     bool m_scanning = false;
     bool m_shuffle = false;
     qint64 m_resolvingTrackId = -1;
+    qint64 m_loadedTrackId = -1;
+    qint64 m_resumePositionMs = 0;
+    bool m_playWhenReady = true;
+    bool m_lyricsEnabled = true;
+    bool m_usingCachedAudio = false;
+    bool m_preparationFailed = false;
+    QString m_pendingCacheKey;
+    QString m_engineCacheKey;
 };

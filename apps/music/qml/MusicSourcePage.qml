@@ -10,6 +10,26 @@ Item {
     id: root
     required property var musicController
 
+    MusicDialog {
+        id: attemptDialog
+        title: qsTr("最近的音源尝试")
+        anchors.centerIn: parent
+        width: Math.min(root.width - 24, 680)
+        height: Math.min(root.height - 24, 420)
+        modal: true
+        standardButtons: Dialog.Close
+        contentItem: ScrollView {
+            TextArea {
+                text: root.musicController.playbackAttempts.join("\n\n")
+                color: AppTheme.text
+                background: Rectangle { radius: AppTheme.smallRadius; color: AppTheme.fieldSurface }
+                readOnly: true
+                wrapMode: TextEdit.Wrap
+                selectByMouse: true
+            }
+        }
+    }
+
     FileDialog {
         id: sourceDialog
         title: qsTr("Import LuoXue custom source")
@@ -40,12 +60,12 @@ Item {
                 onAccepted: if (text.trim().length > 0)
                     root.musicController.importMusicSource(text.trim())
             }
-            Button {
+            KosButton {
                 text: qsTr("Import URL")
                 enabled: sourceUrl.text.trim().length > 0
                 onClicked: root.musicController.importMusicSource(sourceUrl.text.trim())
             }
-            Button {
+            KosButton {
                 text: qsTr("Import file…")
                 onClicked: sourceDialog.open()
             }
@@ -73,8 +93,9 @@ Item {
                 && root.musicController.onlineQualities.length > 0
             Label {
                 text: qsTr("Playback quality")
+                color: AppTheme.text
             }
-            ComboBox {
+            MusicComboBox {
                 id: qualityChoice
                 Layout.preferredWidth: 180
                 model: root.musicController.onlineQualities
@@ -91,6 +112,18 @@ Item {
             text: root.musicController.musicSourceError
             color: AppTheme.warning
             wrapMode: Text.WordWrap
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: qsTr("播放异常时会依次尝试已导入的兼容音源；每次最多等待 12 秒，整曲重试最多 45 秒，失败后 3 秒继续队列。")
+            color: AppTheme.mutedText
+            wrapMode: Text.WordWrap
+        }
+        KosButton {
+            text: qsTr("查看最近的音源尝试")
+            enabled: root.musicController.playbackAttempts.length > 0
+            onClicked: attemptDialog.open()
         }
 
         KosEmptyState {
@@ -149,7 +182,7 @@ Item {
                             elide: Text.ElideRight
                         }
                     }
-                    Button {
+                    KosButton {
                         text: String(sourceDelegate.modelData.id)
                             === root.musicController.activeMusicSourceId
                             ? qsTr("Active") : qsTr("Activate")
