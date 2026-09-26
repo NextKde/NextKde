@@ -15,6 +15,11 @@ QtObject {
     property string deviceState: "unknown"
     property string connectivity: "unknown"
     property string deviceName: ""
+    // The wireless interface's ifname, reported by network.refresh
+    // independently of which device currently carries connectivity. The
+    // ethernet device wins `deviceName` whenever Wi-Fi is idle, so scans
+    // must target this name or they never run while a cable is plugged in.
+    property string wifiDeviceName: ""
     property string connectionName: ""
     property string ssid: ""
     property int signalStrength: -1
@@ -34,6 +39,10 @@ QtObject {
     signal wifiConnectionFinished(string ssid, bool success)
     signal wifiForgetFinished(string ssid, bool success)
     property bool _scanAfterWifiEnable: false
+    // Set by refreshWifiNetworks() when no wifi ifname is known yet (the
+    // first refresh is still in flight); _applySnapshot drains it once the
+    // daemon reports wifiDeviceName.
+    property bool _scanPendingDevice: false
 
     function _applySnapshot(result) {
         available = !!result.available
@@ -50,6 +59,8 @@ QtObject {
         deviceState = result.deviceState || "unknown"
         connectivity = result.connectivity || "unknown"
         deviceName = result.deviceName || ""
+        if (result.wifiDeviceName !== undefined)
+            wifiDeviceName = String(result.wifiDeviceName)
         connectionName = result.connectionName || ""
         ssid = result.ssid || ""
         // network.refresh never carries real ipv4/signalStrength (nmcli's
@@ -65,6 +76,12 @@ QtObject {
         } else {
             ipv4 = ""
             signalStrength = -1
+        }
+        // A scan requested before the first refresh knew the wifi ifname
+        // drains here once the snapshot supplies it.
+        if (_scanPendingDevice && wifiDeviceName) {
+            _scanPendingDevice = false
+            refreshWifiNetworks()
         }
     }
 
@@ -98,10 +115,21 @@ QtObject {
     }
 
     function refreshWifiNetworks() {
-        if (wifiScanInProgress || !deviceName || connectionType !== "wifi" || !wifiEnabled)
+        // Scan the wifi interface itself, not whichever device currently
+        // carries connectivity: with ethernet plugged in `connectionType`
+        // is "ethernet" and `deviceName` the NIC, which is exactly the
+        // state where the list must still show nearby APs. If the first
+        // refresh has not delivered wifiDeviceName yet, queue the scan.
+        const device = wifiDeviceName
+        if (!device) {
+            _scanPendingDevice = wifiEnabled && !wifiScanInProgress
+            return
+        }
+        _scanPendingDevice = false
+        if (wifiScanInProgress || !wifiEnabled)
             return
         wifiScanInProgress = true
-        PlatformClient.request("network.scan", { device: deviceName }, function(response) {
+        PlatformClient.request("network.scan", { device: device }, function(response) {
             wifiScanInProgress = false
             if (!response?.ok)
                 return
@@ -113,13 +141,17 @@ QtObject {
 
     function connectWifi(ssid, password, savedProfileUuid) {
         const target = String(ssid || "").trim()
-        if (wifiConnectInProgress || !target || !deviceName)
+        // Wi-Fi connections must target the wireless interface, not whichever
+        // device currently carries connectivity: with ethernet plugged in
+        // `deviceName` is the NIC and ActivateConnection would resolve the
+        // wired path, and NM rejects activating a wifi profile on it.
+        if (wifiConnectInProgress || !target || !wifiDeviceName)
             return false
         wifiConnectInProgress = true
         wifiConnectSsid = target
         wifiConnectError = ""
         PlatformClient.request("network.connect", { ssid: target, password: String(password || ""),
-            savedProfileUuid: String(savedProfileUuid || ""), device: deviceName }, function(response) {
+            savedProfileUuid: String(savedProfileUuid || ""), device: wifiDeviceName }, function(response) {
             const success = !!response?.ok
             wifiConnectInProgress = false
             wifiConnectError = success ? "" : "无法连接，请检查密码或网络状态"
@@ -133,13 +165,14 @@ QtObject {
     function connectEnterpriseWifi(ssid, identity, password, eapMethod, anonymousIdentity) {
         const target = String(ssid || "").trim()
         const method = String(eapMethod || "").toLowerCase()
-        if (wifiConnectInProgress || !target || !identity || !password || !deviceName
+        // Same as connectWifi: the wireless interface, not `deviceName`.
+        if (wifiConnectInProgress || !target || !identity || !password || !wifiDeviceName
                 || ["peap", "ttls"].indexOf(method) < 0)
             return false
         wifiConnectInProgress = true
         wifiConnectSsid = target
         wifiConnectError = ""
-        PlatformClient.request("network.connect-enterprise", { ssid: target, device: deviceName,
+        PlatformClient.request("network.connect-enterprise", { ssid: target, device: wifiDeviceName,
             identity: String(identity), password: String(password), eapMethod: method,
             anonymousIdentity: String(anonymousIdentity || "") }, function(response) {
             const success = !!response?.ok
@@ -159,8 +192,13 @@ QtObject {
         wifiDisconnectError = ""
         PlatformClient.request("network.disconnect", { device: deviceName }, function(response) {
             wifiDisconnectInProgress = false
-            if (response?.ok)
+            if (response?.ok) {
                 refresh()
+                // The radio only learns the full AP set after the link is
+                // down; rescan shortly after disconnect so the list is not
+                // stuck at the one previously-connected SSID.
+                wifiPostDisconnectScanTimer.restart()
+            }
             else
                 wifiDisconnectError = "无法断开当前 Wi‑Fi"
         })

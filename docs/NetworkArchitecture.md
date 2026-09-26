@@ -16,6 +16,9 @@ Consumers use these properties:
   `unknown`.
 - `connectivity`: `full`, `portal`, `limited`, `none`, or `unknown`.
 - `deviceName`, `connectionName`, `ssid`, `signalStrength`, `ipv4`.
+- `wifiDeviceName`: the wireless interface's ifname, reported even when the
+  selected device is ethernet (or nothing is connected). Scan requests must
+  use this name; `deviceName` only tracks the device carrying connectivity.
 
 `deviceState` means a link/profile state. `connectivity` is the independent
 NetworkManager Internet reachability check; UI must preserve that distinction.

@@ -817,6 +817,12 @@ NetworkWorkerResult networkRefreshWorker()
     // overridden by the activated one.
     QVariantMap selected;
     QString selectedPath;
+    // Record the first wireless interface separately: the selected device
+    // answers "what carries connectivity" (ethernet wins while Wi-Fi is
+    // idle), but the shell's Wi-Fi list needs the radio's ifname even when
+    // it is not the selected device. Empty when no usable wifi hardware
+    // exists.
+    QString wifiDeviceName;
     for (const QDBusObjectPath &devicePath : devicePaths) {
         watched.insert(devicePath.path());
         const QVariantMap device = nmGetAll(bus, devicePath.path(),
@@ -824,6 +830,8 @@ NetworkWorkerResult networkRefreshWorker()
         const uint type = device.value(QStringLiteral("DeviceType")).toUInt();
         if (type != 1 && type != 2)
             continue;
+        if (type == 2 && wifiDeviceName.isEmpty())
+            wifiDeviceName = device.value(QStringLiteral("Interface")).toString();
         const uint state = device.value(QStringLiteral("State")).toUInt();
         if (selected.isEmpty() || state == 100) {
             selected = device;
@@ -882,6 +890,7 @@ NetworkWorkerResult networkRefreshWorker()
          type == 2 ? QStringLiteral("wifi")
                    : type == 1 ? QStringLiteral("ethernet") : QStringLiteral("none")},
         {QStringLiteral("deviceName"), selected.value(QStringLiteral("Interface")).toString()},
+        {QStringLiteral("wifiDeviceName"), wifiDeviceName},
         {QStringLiteral("connectionName"), connectionName},
         {QStringLiteral("deviceState"), deviceState},
         {QStringLiteral("ssid"), ssid},
@@ -4437,57 +4446,50 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                     QStringLiteral("网络设备无效"), false);
             return true;
         }
+        // A rescan can legitimately take several seconds on a busy radio; the
+        // panel also fires one at open plus retries. Dedupe concurrent scans
+        // for the same interface behind one nmcli invocation instead of
+        // double-rescanning the radio.
+        const QString scanKey = QStringLiteral("network.scan:") + device;
+        if (queueIfInFlight(scanKey, socket, request))
+            return true;
         // Resolve saved profiles before the RF scan so matching rows can carry
         // their immutable UUID. `connection show` accepts only summary fields;
         // NetworkManager uses NAME as the Wi-Fi profile identifier by default.
         // This metadata is optional: failure must not hide otherwise valid APs.
-        const QPointer<QLocalSocket> guardedSocket(socket);
         auto *profiles = new QProcess(this);
         profiles->setProgram(QStringLiteral("nmcli"));
         profiles->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
                                 QStringLiteral("UUID,TYPE,NAME"),
                                 QStringLiteral("connection"), QStringLiteral("show")});
         armProcessWatchdog(profiles, 10000);
-        connect(profiles, &QProcess::errorOccurred, this,
-                [this, guardedSocket, request, profiles](QProcess::ProcessError) {
-            // A crash also emits finished(); drop that connection so the
-            // chain neither advances nor answers the same request twice.
-            QObject::disconnect(profiles, &QProcess::finished, this, nullptr);
-            respond(guardedSocket.data(), request, false, {}, QStringLiteral("network-scan-failed"),
-                    QStringLiteral("Wi‑Fi 扫描失败"), true);
-            profiles->deleteLater();
-        });
-        connect(profiles, &QProcess::finished, this,
-                [this, guardedSocket, request, device, profiles](int profileExit,
-                                                          QProcess::ExitStatus) {
-            const QHash<QString, QString> savedProfiles = parseSavedWifiProfiles(
-                profiles->readAllStandardOutput(), profileExit);
-            profiles->deleteLater();
+        const QPointer<QProcess> profilesGuard(profiles);
+        auto startScan = [this, scanKey, device](const QHash<QString, QString> &savedProfiles) {
             auto *scan = new QProcess(this);
             scan->setProgram(QStringLiteral("nmcli"));
             scan->setArguments({QStringLiteral("-t"), QStringLiteral("-f"),
                                 QStringLiteral("IN-USE,SSID,SIGNAL,SECURITY"),
                                 QStringLiteral("device"), QStringLiteral("wifi"),
                                 QStringLiteral("list"), QStringLiteral("ifname"), device,
-                                QStringLiteral("--rescan"), QStringLiteral("auto")});
+                                QStringLiteral("--rescan"), QStringLiteral("yes")});
             // A rescan can legitimately take several seconds on a busy radio.
             armProcessWatchdog(scan, 25000);
             connect(scan, &QProcess::errorOccurred, this,
-                    [this, guardedSocket, request, scan](QProcess::ProcessError) {
+                    [this, scanKey, scan](QProcess::ProcessError) {
                 QObject::disconnect(scan, &QProcess::finished, this, nullptr);
-                respond(guardedSocket.data(), request, false, {}, QStringLiteral("network-scan-failed"),
-                        QStringLiteral("Wi‑Fi 扫描失败"), true);
+                completeInFlight(scanKey, false, {}, QStringLiteral("network-scan-failed"),
+                                 QStringLiteral("Wi‑Fi 扫描失败"), true, 0);
                 scan->deleteLater();
             });
             connect(scan, &QProcess::finished, this,
-                    [this, guardedSocket, request, savedProfiles, scan](int scanExit,
-                                                                  QProcess::ExitStatus) {
+                    [this, scanKey, savedProfiles, scan](int scanExit,
+                                                         QProcess::ExitStatus) {
                 const QJsonObject result = parseNetworkScan(
                     scan->readAllStandardOutput(), scanExit);
                 scan->deleteLater();
                 if (scanExit != 0) {
-                    respond(guardedSocket.data(), request, false, {}, QStringLiteral("network-scan-failed"),
-                            QStringLiteral("Wi‑Fi 扫描失败"), true);
+                    completeInFlight(scanKey, false, {}, QStringLiteral("network-scan-failed"),
+                                     QStringLiteral("Wi‑Fi 扫描失败"), true, 0);
                     return;
                 }
                 QJsonArray networks = result.value(QStringLiteral("networks")).toArray();
@@ -4500,9 +4502,28 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                 }
                 QJsonObject normalized{{QStringLiteral("available"), true},
                                        {QStringLiteral("networks"), networks}};
-                respond(guardedSocket.data(), request, true, normalized);
+                completeInFlight(scanKey, true, normalized, {}, {}, true, 0);
             });
             scan->start();
+        };
+        connect(profiles, &QProcess::errorOccurred, this,
+                [profilesGuard, profiles, startScan](QProcess::ProcessError) {
+            // A crash also emits finished(); drop that connection so the
+            // chain neither advances nor answers the same request twice.
+            // Profile metadata is optional: continue the RF scan with no
+            // saved profiles rather than failing the whole request.
+            QObject::disconnect(profiles, &QProcess::finished, nullptr, nullptr);
+            if (profilesGuard)
+                profiles->deleteLater();
+            startScan({});
+        });
+        connect(profiles, &QProcess::finished, this,
+                [startScan, profiles](int profileExit,
+                                      QProcess::ExitStatus) {
+            const QHash<QString, QString> savedProfiles = parseSavedWifiProfiles(
+                profiles->readAllStandardOutput(), profileExit);
+            profiles->deleteLater();
+            startScan(savedProfiles);
         });
         profiles->start();
         return true;

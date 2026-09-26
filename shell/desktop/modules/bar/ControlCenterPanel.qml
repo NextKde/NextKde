@@ -56,6 +56,7 @@ PopupWindow {
     property bool draggingBrightness: false
     property bool sessionModalVisible: false
     property string pendingConfirmAction: ""
+    property string confirmActionLabel: ""
     property alias logoutConfirmationVisible: panel.sessionModalVisible
     property string activeSubmenu: ""
     property bool submenuOpen: false
@@ -270,8 +271,10 @@ PopupWindow {
         _triggerTransitionGuard()
         if (panel.pendingConfirmAction === "")
             sessionConfirm.close()
-        else
+        else {
+            panel.confirmActionLabel = panel.pendingConfirmAction
             sessionConfirm.open()
+        }
     }
 
     function toggle(item) {
@@ -1534,9 +1537,9 @@ PopupWindow {
                     anchors.centerIn: parent
                     width: 26
                     height: 26
-                    name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
+                    name: BundledIcons.roleName(panel.confirmActionLabel === "poweroff"
                         ? "powerOff"
-                        : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
+                        : (panel.confirmActionLabel === "reboot" ? "reboot" : "logout"))
                     color: sessionConfirm.contentForegroundColor
                 }
             }
@@ -1549,8 +1552,8 @@ PopupWindow {
                     right: parent.right
                 }
                 horizontalAlignment: Text.AlignHCenter
-                text: panel.pendingConfirmAction === "poweroff" ? "确定要关机吗？"
-                    : (panel.pendingConfirmAction === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
+                text: panel.confirmActionLabel === "poweroff" ? "确定要关机吗？"
+                    : (panel.confirmActionLabel === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
                 color: sessionConfirm.contentForegroundColor
                 font { pixelSize: 16; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -1607,8 +1610,8 @@ PopupWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: panel.pendingConfirmAction === "poweroff" ? "关机"
-                            : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
+                        text: panel.confirmActionLabel === "poweroff" ? "关机"
+                            : (panel.confirmActionLabel === "reboot" ? "重启" : "注销")
                         color: "#ff3b30"
                         font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
