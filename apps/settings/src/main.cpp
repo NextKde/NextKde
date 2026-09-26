@@ -230,6 +230,10 @@ public:
         callAppearance({QStringLiteral("updateGlassStyle"), style});
     }
 
+    Q_INVOKABLE void updateWidgetStyle(const QString &style) {
+        callAppearance({QStringLiteral("updateWidgetStyle"), style});
+    }
+
     Q_INVOKABLE void updateGlassPresetParameter(const QString &name, double value) {
         callAppearance({
             QStringLiteral("updateGlassPresetParameter"), name,
@@ -549,6 +553,7 @@ private:
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble(0.5)},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString(QStringLiteral("#a855f7"))},
             {QStringLiteral("shellStyle"), object.value(QStringLiteral("shellStyle")).toString()},
+            {QStringLiteral("widgetStyle"), object.value(QStringLiteral("widgetStyle")).toString(QStringLiteral("color"))},
             {QStringLiteral("materialColorScheme"),
                 object.value(QStringLiteral("materialColorScheme")).toString(QStringLiteral("monet"))},
             {QStringLiteral("materialAccentName"),

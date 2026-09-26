@@ -207,6 +207,7 @@ Item {
                 // the value as an object and fall back to its previous tint.
                 iconTintColor: IconAppearanceService.tintColor.toString(),
                 shellStyle: AppearanceConfigService.shellStyle,
+                widgetStyle: AppearanceConfigService.widgetStyle,
                 materialColorScheme:
                     AppearanceConfigService.materialColorScheme,
                 materialAccentName: AppearanceTokens.materialAccentName,
@@ -295,6 +296,11 @@ Item {
 
         function updateShellStyle(style: string): string {
             AppearanceConfigService.updateShellStyle(style)
+            return snapshot()
+        }
+
+        function updateWidgetStyle(style: string): string {
+            AppearanceConfigService.updateWidgetStyle(style)
             return snapshot()
         }
 

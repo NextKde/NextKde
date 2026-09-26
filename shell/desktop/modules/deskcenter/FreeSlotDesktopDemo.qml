@@ -95,6 +95,7 @@ Item {
     readonly property var visibleSlots: dragActive ? previewSlots : slots
     signal moveIntoFolderRequested(var sourceEntries, var targetFolder)
     signal contextMenuRequested(var entry, point pos)
+    signal backgroundPressAndHold()
     signal openRequested(var entry)
     signal activityRequested()
     signal externalUrlsDropped(var urls, int action)
@@ -705,6 +706,8 @@ Item {
 
     MouseArea {
         id: backgroundSelection
+        objectName: "desktop-background-selection"
+        property bool held: false
         x: root.validX
         y: root.validY
         width: root.validWidth
@@ -717,6 +720,7 @@ Item {
         }
 
         onPressed: function(mouse) {
+            held = false
             if (mouse.button === Qt.RightButton) {
                 root.selectedIds = []
                 root.contextMenuRequested(null, rootPoint(mouse))
@@ -737,7 +741,7 @@ Item {
                 root.selectedIds = []
         }
         onPositionChanged: function(mouse) {
-            if (!(mouse.buttons & Qt.LeftButton))
+            if (held || !(mouse.buttons & Qt.LeftButton))
                 return
             const point = rootPoint(mouse)
             root.selectionEnd = point
@@ -747,6 +751,13 @@ Item {
                 root.selectionBoxActive = true
             if (root.selectionBoxActive)
                 root.updateBoxSelection()
+        }
+        onPressAndHold: function(mouse) {
+            if (mouse.button !== Qt.LeftButton || root.selectionBoxActive
+                    || mouse.modifiers !== Qt.NoModifier)
+                return
+            held = true
+            root.backgroundPressAndHold()
         }
         onReleased: function(mouse) {
             if (root.selectionBoxActive) {
