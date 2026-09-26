@@ -161,6 +161,14 @@ public:
         callDock({QStringLiteral("updatePosition"), position});
     }
 
+    Q_INVOKABLE void updateDockBuiltinVisibility(const QString &id, bool visible) {
+        callShell(QStringLiteral("dock-settings"),
+                  {QStringLiteral("updateBuiltinVisibility"), id,
+                   visible ? QStringLiteral("true") : QStringLiteral("false")},
+                  QStringLiteral("Dock 图标显示设置请求失败"),
+                  RequestKind::DockBuiltinVisibility);
+    }
+
     Q_INVOKABLE void updateDockContentStyle(const QString &style) {
         callDock({QStringLiteral("updateContentStyle"), style});
     }
@@ -415,6 +423,7 @@ signals:
     void entryChanged();
     void bannerDismissedChanged();
     void dockSnapshotChanged(const QVariantMap &snapshot);
+    void dockBuiltinVisibilityChanged(const QVariantMap &snapshot);
     void appearanceSnapshotChanged(const QVariantMap &snapshot);
     void launcherSnapshotChanged(const QVariantMap &snapshot);
     void shortcutsSnapshotChanged(const QVariantMap &snapshot);
@@ -428,6 +437,7 @@ private:
     // request maps to exactly one signal.
     enum class RequestKind {
         Dock,
+        DockBuiltinVisibility,
         Appearance,
         Launcher,
         Shortcuts,
@@ -468,6 +478,8 @@ private:
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
             {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},
             {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
+            {QStringLiteral("showLauncher"), object.value(QStringLiteral("showLauncher")).toBool(true)},
+            {QStringLiteral("showTrash"), object.value(QStringLiteral("showTrash")).toBool(true)},
         };
     }
 
@@ -1024,6 +1036,9 @@ private:
         case RequestKind::Dock:
             emit dockSnapshotChanged(snapshotFromReply(payload));
             break;
+        case RequestKind::DockBuiltinVisibility:
+            emit dockBuiltinVisibilityChanged(snapshotFromReply(payload));
+            break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
             break;
@@ -1062,6 +1077,9 @@ private:
         switch (kind) {
         case RequestKind::Dock:
             emit dockSnapshotChanged({});
+            break;
+        case RequestKind::DockBuiltinVisibility:
+            emit dockBuiltinVisibilityChanged({});
             break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged({});

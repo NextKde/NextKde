@@ -87,11 +87,18 @@ Item {
                 iconTintColor: ConfigService.iconTintColor,
                 visibilityMode,
                 windowGrouping,
+                showLauncher: ConfigService.showLauncher,
+                showTrash: ConfigService.showTrash,
             })
         }
 
         function updateLayout(height: real): string {
             ConfigService.updateLayout(height)
+            return snapshot()
+        }
+
+        function updateBuiltinVisibility(id: string, visible: bool): string {
+            ConfigService.updateBuiltinVisibility(id, visible)
             return snapshot()
         }
 

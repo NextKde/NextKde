@@ -1,4 +1,5 @@
 import QtQuick
+import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Widgets
@@ -14,11 +15,20 @@ Item {
     property real validY: 0
     property real validWidth: width
     property real validHeight: height
-    property real cellWidth: 112
-    property real cellHeight: 114
-    property real cellGap: 16
+    property real baseCellWidth: 112
+    property real baseCellHeight: 114
+    property string density: "comfortable"
     property real iconVisualSize: 68
-    readonly property real iconVisualTop: 8
+    readonly property var gridMetrics: DesktopGridMetrics.metrics(baseCellWidth,
+        baseCellHeight, iconVisualSize, density, titleFontMetrics.height)
+    readonly property real cellWidth: gridMetrics.cellWidth
+    readonly property real cellHeight: gridMetrics.cellHeight
+    readonly property real cellGap: gridMetrics.gap
+    readonly property real iconVisualTop: gridMetrics.iconTop
+    readonly property real labelTop: iconVisualTop + iconVisualSize + gridMetrics.labelGap
+    readonly property real contentWidth: Math.min(108, cellWidth - 8)
+    readonly property real contentHeight: cellHeight - 4
+    FontMetrics { id: titleFontMetrics }
     readonly property real columnPitch: cellWidth + cellGap
     readonly property real rowPitch: cellHeight + cellGap
     readonly property int columnCount: Math.max(1,
@@ -36,6 +46,7 @@ Item {
     property var previewSlots: ({})
     property bool dragActive: false
     property bool layoutResetPending: false
+    property bool layoutReflowPending: false
     property bool initialized: false
     property var lastDropId: null
     property var selectedIds: []
@@ -199,8 +210,8 @@ Item {
         const minY = Math.min(selectionStart.y, selectionEnd.y)
         const maxY = Math.max(selectionStart.y, selectionEnd.y)
         const next = selectionBase.slice()
-        const visualWidth = 108
-        const visualHeight = 104
+        const visualWidth = contentWidth
+        const visualHeight = contentHeight
         for (let index = 0; index < entryIds.length; ++index) {
             const id = entryIds[index]
             const slot = visibleSlots[id]
@@ -208,7 +219,7 @@ Item {
                 continue
             const point = pointForSlot(slot)
             const itemX = point.x + (cellWidth - visualWidth) / 2
-            const itemY = point.y + 3
+            const itemY = point.y + 2
             const intersects = itemX < maxX && itemX + visualWidth > minX
                 && itemY < maxY && itemY + visualHeight > minY
             if (intersects && next.indexOf(id) < 0)
@@ -526,8 +537,26 @@ Item {
         slots = initial
         previewSlots = initial
         layoutResetPending = false
+        layoutReflowPending = false
         initialized = true
     }
+
+    // Geometry can change without a new filesystem snapshot. Reconcile
+    // capacity so newly available slots appear and hidden entries stay in bounds.
+    function reflowLayout() {
+        if (dragActive) {
+            layoutReflowPending = true
+            return
+        }
+        slots = DesktopGridMetrics.reflowSlots(entryIds, slots, capacity)
+        previewSlots = slots
+        layoutReflowPending = false
+        selectedIds = selectedIds.filter(function(id) { return slots[id] !== undefined })
+        if (renamingId && slots[renamingId] === undefined)
+            renamingId = ""
+    }
+
+    onCapacityChanged: Qt.callLater(reflowLayout)
 
     function clearFolderTarget() {
         targetFolder = ""
@@ -627,6 +656,8 @@ Item {
         dragActive = false
         if (layoutResetPending)
             resetLayout(entries)
+        else if (layoutReflowPending)
+            reflowLayout()
         else
             previewSlots = slots
         activeDragIds = []
@@ -962,9 +993,8 @@ Item {
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 2
-                    width: Math.min(108, parent.width - 8)
-                    height: Math.min(root.rowPitch - 4,
-                        Math.max(104, fileNameLabel.y + fileNameLabel.implicitHeight + 6))
+                    width: root.contentWidth
+                    height: root.contentHeight
                     radius: 12
                     color: root.isSelected(delegateRoot.itemId)
                         ? Qt.rgba(0.18, 0.42, 0.78, 0.38)
@@ -1175,9 +1205,9 @@ Item {
                     anchors {
                         horizontalCenter: parent.horizontalCenter
                         top: parent.top
-                        topMargin: root.iconVisualTop + root.iconVisualSize + 3
+                        topMargin: root.labelTop
                     }
-                    width: Math.min(94, parent.width - 18)
+                    width: Math.min(94, parent.width - 14)
                     implicitHeight: fileTitleText.implicitHeight
                     height: implicitHeight
                     visible: root.renamingId !== delegateRoot.itemId
@@ -1201,6 +1231,7 @@ Item {
                     }
                     Text {
                         id: fileTitleText
+                        font: titleFontMetrics.font
                         x: fileTitleIcon.visible
                             ? fileTitleIcon.implicitWidth + 2 : 0
                         width: parent.width - x
@@ -1219,7 +1250,7 @@ Item {
                     anchors {
                         horizontalCenter: parent.horizontalCenter
                         top: parent.top
-                        topMargin: root.iconVisualTop + root.iconVisualSize + 1
+                        topMargin: root.labelTop
                     }
                     width: Math.min(parent.width - 12,
                         Math.max(72, inlineRenameInput.contentWidth + 18))
@@ -1278,9 +1309,8 @@ Item {
                     id: interactionRegion
                     x: (parent.width - width) / 2
                     y: 2
-                    width: Math.min(108, parent.width - 8)
-                    height: Math.min(root.rowPitch - 4,
-                        Math.max(104, fileNameLabel.y + fileNameLabel.implicitHeight + 6))
+                    width: root.contentWidth
+                    height: root.contentHeight
                     z: 109
 
                     HoverHandler {

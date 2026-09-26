@@ -48,6 +48,8 @@ function clamp(value, min, max) {
 //   windowCount — number of open (non-pinned) window icons
 //   hasInfoSlot — whether the right-side information slot is occupied
 //   screenWidth — current screen width in pixels
+//   hasAccessories — retain height and edge padding for an accessory-only row;
+//                    the caller adds the accessories' reserved widths.
 //
 // Returns: {
 //   dockHeight, iconSize, dockWidth,
@@ -65,7 +67,8 @@ export function computeLayout(
     availableLength,
     proportions = {},
     maxLengthRatio = MAX_WIDTH_RATIO,
-    infoUnitsOverride = INFO_UNITS
+    infoUnitsOverride = INFO_UNITS,
+    hasAccessories = false
 ) {
     const p = {
         vpad:    Number.isFinite(Number(proportions?.vpad))    ? Number(proportions.vpad)    : DEFAULT_PROPORTIONS.vpad,
@@ -83,7 +86,7 @@ export function computeLayout(
     // Count only dividers that are actually visible. Reserving space for a
     // hidden boundary made sparse docks a few pixels wider than their content.
     const dividerCount = (pinnedCount > 0 && windowCount > 0 ? 1 : 0)
-        + (hasInfoSlot ? 1 : 0)
+        + (hasInfoSlot && pinnedCount + windowCount > 0 ? 1 : 0)
 
     // ── Item counts ──
     const appIconCount = pinnedCount + windowCount
@@ -91,11 +94,12 @@ export function computeLayout(
     const itemCount = pinnedCount + windowCount + dividerCount + (hasInfoSlot ? 1 : 0)
 
     // Guard: nothing to show
-    if (iconUnits <= 0) {
+    if (iconUnits <= 0 && !hasAccessories) {
         return {
             dockHeight: 0, iconSize: 0, dockWidth: 0,
             itemSpacing: 0, hPadding: 0, vPadding: 0, dividerMargin: 0,
-            pillRadius: 0, iconUnits: 0, infoUnits: 0, dividerCount: 0
+            pillRadius: 0, activeBackgroundGap: 0,
+            iconUnits: 0, infoUnits: 0, dividerCount: 0
         }
     }
 
@@ -111,7 +115,7 @@ export function computeLayout(
     const scaleFactor =
           iconUnits
         + (appIconCount + (hasInfoSlot ? 1 : 0)) * 2 * ACTIVE_BG_GAP_RATIO
-        + (itemCount - 1) * p.spacing
+        + Math.max(0, itemCount - 1) * p.spacing
         + 2 * dividerCount * p.divmargin
         + 2 * p.hpad
 

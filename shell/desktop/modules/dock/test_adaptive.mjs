@@ -60,6 +60,24 @@ const crowded = computeLayout(60, 80, 80, true, 800);
 if (crowded.iconSize !== MIN_ICON_SIZE)
     errors++, console.log('FAIL: crowded layout did not clamp to icon floor');
 
+// Both built-in icons can be hidden, leaving only an information card or no
+// content at all. Neither state should reserve a separator or yield NaN gaps.
+const infoOnly = computeLayout(60, 0, 0, true, 1920);
+if (infoOnly.dividerCount !== 0)
+    errors++, console.log('FAIL: information-only dock has a leading divider');
+const empty = computeLayout(60, 0, 0, false, 1920);
+if (empty.activeBackgroundGap !== 0)
+    errors++, console.log('FAIL: empty dock has an invalid background gap');
+
+// With both built-ins hidden, an integrated tray must keep a usable height
+// even when no application or information card occupies the core row.
+const trayOnly = computeLayout(60, 0, 0, false, 1920, {}, 0.98, 4, true);
+if (trayOnly.dockHeight !== normal.dockHeight || trayOnly.iconSize !== normal.iconSize
+        || trayOnly.iconUnits !== 0 || trayOnly.dividerCount !== 0)
+    errors++, console.log('FAIL: accessory-only dock lost its usable height');
+if (trayOnly.dockWidth <= 0 || !Number.isFinite(trayOnly.dockWidth))
+    errors++, console.log('FAIL: accessory-only dock has invalid edge padding');
+
 console.log(errors ? '\n' + errors + ' FAILED'
     : '\nAll ' + (cases.length + 3) + ' passed');
 process.exit(errors ? 1 : 0);

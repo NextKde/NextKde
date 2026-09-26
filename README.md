@@ -323,6 +323,10 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 
 更详细的说明见 [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md)。
 
+桌面图标可独立调整大小与间距，操作和布局说明见
+[桌面图标间距](docs/DesktopIcons.md)。Dock 内置图标的独立显示选项见
+[Dock 配置说明](docs/DockArchitecture.md)。
+
 ## 下一步计划
 
 - 更完善的多显示器布局与每屏独立设置。

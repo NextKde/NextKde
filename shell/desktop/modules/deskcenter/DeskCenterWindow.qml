@@ -2719,6 +2719,13 @@ PanelWindow {
             desktopLayout.sync()
         }
 
+        function setIconSpacing(spacing) {
+            if (["comfortable", "compact", "dense"].indexOf(spacing) < 0)
+                return
+            desktopLayout.iconSpacing = spacing
+            desktopLayout.sync()
+        }
+
         function displayName(entry) {
             const name = entry?.title || entry?.name || ""
             if (desktopLayout.showExtensions || entry?.kind === "folder")
@@ -3072,6 +3079,10 @@ PanelWindow {
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px, "placeholder-dot"))
                 root.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
+                const spacingKids = [["comfortable", "宽松"], ["compact", "紧凑"], ["dense", "更紧凑"]]
+                    .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
+                        desktopLayout.iconSpacing === value, "placeholder-dot"))
+                root.push(_ctxSub("图标间距", spacingKids, "arrange"))
                 root.push(_ctxAct("刷新", "refresh", "view-refresh"))
             }
             return root
@@ -3110,6 +3121,7 @@ PanelWindow {
                 desktopLayout.sync()
                 break
             case "setIconSize": setIconSize(v); break
+            case "setIconSpacing": setIconSpacing(v); break
             case "refresh": triggerContextAction("refresh"); break
             }
         }
@@ -3851,8 +3863,9 @@ PanelWindow {
             validY: desktopFileGrid.y
             validWidth: desktopFileGrid.width
             validHeight: desktopFileGrid.height
-            cellWidth: desktopFileGrid.itemWidth
-            cellHeight: desktopFileGrid.itemHeight
+            baseCellWidth: desktopFileGrid.itemWidth
+            baseCellHeight: desktopFileGrid.itemHeight
+            density: desktopFileGrid.desktopLayout.iconSpacing
             iconVisualSize: desktopFileGrid.iconSize + 12
             showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache

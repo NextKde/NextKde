@@ -35,10 +35,10 @@ Item {
     // ═══════════════════════════════════════════════════════════
     // Inputs (from services / parent)
     // ═══════════════════════════════════════════════════════════
-    // The app launcher is a permanent visual slot before persisted pinned apps.
-    // Include it in adaptive width fitting, but never in the model used for
-    // drag-reordering or persistence.
-    readonly property int pinnedCount: DockModelService.pinnedCount + 2
+    // Visible shell controls take layout slots, but never enter the app pin model.
+    readonly property int pinnedCount: DockModelService.pinnedCount
+        + (ConfigService.showLauncher ? 1 : 0)
+        + (ConfigService.showTrash ? 1 : 0)
     readonly property int windowCount: DockModelService.windowCount
     function infoCardSelected(id) {
         return ConfigService.infoCardOrder.indexOf(id) >= 0
@@ -93,6 +93,15 @@ Item {
     readonly property int accessoryCount:
         (leadingAccessoryLoader.active ? 1 : 0)
         + (trailingAccessoryLoader.active ? 1 : 0)
+    readonly property bool hasCoreContent: pinnedCount + windowCount > 0 || hasInfo
+    readonly property bool leadingAccessoryDividerVisible:
+        leadingAccessoryLoader.active && (hasCoreContent || trailingAccessoryLoader.active)
+    readonly property bool trailingAccessoryDividerVisible:
+        trailingAccessoryLoader.active && hasCoreContent
+    readonly property int accessoryDividerCount:
+        (leadingAccessoryDividerVisible ? 1 : 0) + (trailingAccessoryDividerVisible ? 1 : 0)
+    readonly property int accessoryGapCount: Math.max(0,
+        accessoryCount + accessoryDividerCount - (hasCoreContent ? 0 : 1))
     readonly property real accessoryContentWidth:
         leadingAccessoryLoader.width + trailingAccessoryLoader.width
     // Some accessories fold their content vertically when enough Dock height
@@ -161,7 +170,8 @@ Item {
         Math.max(baseHeight, availableLength - estimatedAccessoryWidth),
         proportions,
         vertical ? AdaptiveMath.MAX_HEIGHT_RATIO : AdaptiveMath.MAX_WIDTH_RATIO,
-        infoSlotUnits
+        infoSlotUnits,
+        accessoryCount > 0
     )
 
     readonly property int computedDockHeight: _layout.dockHeight
@@ -171,7 +181,8 @@ Item {
     // only by relaxed content, between apps/windows and trailing components.
     readonly property int naturalDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
-        + accessoryCount * (2 + dividerMargin * 2 + itemSpacing * 2))
+        + accessoryDividerCount * (2 + dividerMargin * 2)
+        + accessoryGapCount * itemSpacing)
     readonly property int computedDockWidth: fillsAvailableLength
         ? Math.max(naturalDockWidth, availableLength)
         : naturalDockWidth
@@ -334,7 +345,7 @@ Item {
     // Content row
     // ═══════════════════════════════════════════════════════════
 
-    opacity: iconUnits > 0 ? 1.0 : 0.0
+    opacity: iconUnits > 0 || accessoryCount > 0 ? 1.0 : 0.0
     Behavior on opacity {
         NumberAnimation {
             duration: DockAnimation.dockFadeDuration
@@ -509,7 +520,7 @@ Item {
             dockHeight: container.computedDockHeight
             dividerWidth: 2
             sideMargin: container.dividerMargin
-            visible: leadingAccessoryLoader.active
+            visible: container.leadingAccessoryDividerVisible
         }
 
         // ── Pinned apps ──
@@ -518,6 +529,11 @@ Item {
         // immutable with respect to pinned-app ordering.
         DockIcon {
             id: appLauncherIcon
+            visible: ConfigService.showLauncher
+            onVisibleChanged: {
+                if (!visible)
+                    DockModelService.setDockPopupVisible(appLauncherContextMenu, false)
+            }
             magnificationRoot: container
             magnificationPointer: container.magnificationPointer
             targetScreen: container.targetScreen
@@ -549,10 +565,16 @@ Item {
             onContextRequested: DockModelService.openDockPopup(appLauncherContextMenu)
         }
 
-        // Permanent shell control, kept on the left with the app launcher and
-        // intentionally outside the pinned-app model and its drag ordering.
+        // Shell control, intentionally outside the pinned-app drag ordering.
         DockIcon {
             id: trashIcon
+            visible: ConfigService.showTrash
+            onVisibleChanged: {
+                if (!visible) {
+                    DockModelService.setDockPopupVisible(trashContextMenu, false)
+                    DockModelService.setDockPopupVisible(trashConfirmPopup, false)
+                }
+            }
             magnificationRoot: container
             magnificationPointer: container.magnificationPointer
             targetScreen: container.targetScreen
@@ -581,6 +603,7 @@ Item {
 
         Connections {
             target: DockTrashService
+            enabled: ConfigService.showTrash
             function onDepositReceived() {
                 trashIcon.acknowledgeAttention()
             }
@@ -830,7 +853,7 @@ Item {
             lineColor: Qt.rgba(1, 1, 1, 1)
             lineOpacity: 0.46
             lineRadius: 999
-            visible: pinnedRepeater.count > 0 && windowsRepeater.count > 0
+            visible: container.pinnedCount > 0 && container.windowCount > 0
         }
 
         // ── Unpinned window tasks ──
@@ -886,7 +909,7 @@ Item {
             dockHeight: container.computedDockHeight
             dividerWidth: 2
             sideMargin: container.dividerMargin
-            visible: container.hasInfo
+            visible: container.hasInfo && (container.pinnedCount + container.windowCount > 0)
         }
 
         // ── Shared music / weather / clock / temperature information slot ──
@@ -925,7 +948,7 @@ Item {
             dockHeight: container.computedDockHeight
             dividerWidth: 2
             sideMargin: container.dividerMargin
-            visible: trailingAccessoryLoader.active
+            visible: container.trailingAccessoryDividerVisible
         }
 
         Loader {
