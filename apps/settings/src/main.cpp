@@ -193,6 +193,11 @@ public:
                 QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot,
                 QDir::Name | QDir::IgnoreCase);
             for (const QFileInfo &entry : entries) {
+                // These tiny solid images exist only as Plasma placeholders
+                // while KOS owns the actual wallpaper. They are not user
+                // wallpapers and make the gallery look like broken tiles.
+                if (entry.fileName().startsWith(QStringLiteral("KOS-Backdrop-")))
+                    continue;
                 if (entry.isFile()) {
                     if (formats.contains(QStringLiteral("*.") + entry.suffix().toLower()))
                         catalog.append(entry.absoluteFilePath());
@@ -709,9 +714,26 @@ private:
         if (payload.isEmpty())
             return {};
         QJsonParseError parseError;
-        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        QByteArray json = payload.toUtf8();
+        QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的壁纸配置"));
+            // Some Quickshell builds may write an informational line before
+            // the IPC return value. Recover the JSON object instead of
+            // rejecting an otherwise valid wallpaper snapshot.
+            const qsizetype firstBrace = json.indexOf('{');
+            const qsizetype lastBrace = json.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                json = json.mid(firstBrace, lastBrace - firstBrace + 1);
+                document = QJsonDocument::fromJson(json, &parseError);
+            }
+        }
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            QString detail = payload.simplified();
+            if (detail.size() > 140)
+                detail = detail.left(137) + QStringLiteral("...");
+            setLastError(QStringLiteral("壁纸 IPC 返回内容无法解析（%1）：%2")
+                .arg(parseError.errorString(), detail.isEmpty()
+                    ? QStringLiteral("空响应") : detail));
             return {};
         }
         const QJsonObject object = document.object();

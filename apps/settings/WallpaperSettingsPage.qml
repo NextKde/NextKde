@@ -540,12 +540,30 @@ ColumnLayout {
         onTakeoverChosen: enabled => { if (page.bridgeCompatible) page.bridge.updateWallpaperTakeoverEnabled(enabled) }
     }
 
-    Text {
+    Rectangle {
         visible: !!(page.errorText || page.spatialError || page.takeoverError)
         Layout.fillWidth: true
-        text: page.errorText || page.spatialError || page.takeoverError
-        color: "#ff453a"
-        font.pixelSize: 12
-        wrapMode: Text.Wrap
+        implicitHeight: errorMessage.implicitHeight + 22
+        radius: 12
+        color: Qt.rgba(1, 0.28, 0.24, 0.10)
+        RowLayout {
+            id: errorMessage
+            anchors.fill: parent
+            anchors.margins: 11
+            spacing: 9
+            Text {
+                text: "!"
+                color: "#d93025"
+                font.pixelSize: 14
+                font.weight: Font.Bold
+            }
+            Text {
+                Layout.fillWidth: true
+                text: page.errorText || page.spatialError || page.takeoverError
+                color: "#b42318"
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+        }
     }
 }

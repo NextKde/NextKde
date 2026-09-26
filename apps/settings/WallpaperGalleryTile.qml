@@ -33,7 +33,7 @@ Rectangle {
             ? "file://" + tile.imagePath : tile.imagePath)
         sourceSize: Qt.size(Math.max(1, tile.width * 2),
                             Math.max(1, tile.height * 2))
-        fillMode: Image.PreserveAspectFit
+        fillMode: Image.PreserveAspectCrop
         asynchronous: true
         smooth: true
         visible: !tile.isSwatch
@@ -44,8 +44,8 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: 29
-        color: "#c420252d"
+        height: 32
+        color: "#b8141922"
     }
 
     Column {
