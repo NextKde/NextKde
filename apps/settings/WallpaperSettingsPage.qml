@@ -21,6 +21,7 @@ ColumnLayout {
     property bool slideshowEnabled: false
     property int slideshowIntervalMinutes: 15
     property bool takeoverEnabled: false
+    property bool takeoverAvailable: false
     property bool takeoverPending: false
     property string takeoverError: ""
     property bool spatialEnabled: false
@@ -36,6 +37,7 @@ ColumnLayout {
     property string galleryCategory: "system"
     property bool previewActive: false
     property bool previewPending: false
+    property bool previewAvailable: false
     property bool previewWasActive: false
     signal desktopPreviewFinished()
 
@@ -84,6 +86,10 @@ ColumnLayout {
     function beginPreview(path) {
         if (!bridge || previewPending)
             return
+        if (!previewAvailable) {
+            errorText = "当前平台服务不支持桌面预览，请先更新并重启平台服务。"
+            return
+        }
         errorText = ""
         const paths = galleryItems.filter(item => item.path).map(item => item.path)
         const index = paths.indexOf(path)
@@ -124,6 +130,7 @@ ColumnLayout {
             return
         previewActive = !!state.previewActive
         previewPending = !!state.previewPending
+        previewAvailable = !!state.previewAvailable
         if (previewWasActive && !previewActive && !previewPending)
             desktopPreviewFinished()
         previewWasActive = previewActive || previewPending
@@ -137,6 +144,7 @@ ColumnLayout {
         slideshowIntervalMinutes = Number(state.slideshowIntervalMinutes || 15)
         storedSlideshowImages = parseImages(state.slideshowImages)
         takeoverEnabled = !!state.takeoverEnabled
+        takeoverAvailable = !!state.takeoverAvailable
         takeoverPending = !!state.takeoverPending
         takeoverError = String(state.takeoverError || "")
         spatialEnabled = !!state.spatialEnabled
@@ -307,7 +315,7 @@ ColumnLayout {
                 label: "在桌面查看"
                 colors: page.colors
                 emphasized: true
-                enabled: !!page.image && !page.previewPending
+                enabled: !!page.image && page.previewAvailable && !page.previewPending
                 onClicked: page.beginPreview(page.image)
             }
         }
@@ -482,6 +490,7 @@ ColumnLayout {
         fitMode: page.fitMode
         transition: page.transition
         takeoverEnabled: page.takeoverEnabled
+        takeoverAvailable: page.takeoverAvailable
         takeoverPending: page.takeoverPending
         onFitChosen: mode => { if (page.bridge) page.bridge.updateWallpaperFitMode(mode) }
         onTransitionChosen: style => { if (page.bridge) page.bridge.updateWallpaperTransition(style) }

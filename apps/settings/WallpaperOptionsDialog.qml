@@ -9,6 +9,7 @@ Dialog {
     property string fitMode: "crop"
     property string transition: "cinematic"
     property bool takeoverEnabled: false
+    property bool takeoverAvailable: false
     property bool takeoverPending: false
     signal fitChosen(string mode)
     signal transitionChosen(string style)
@@ -94,7 +95,7 @@ Dialog {
                     label: "由 KOS 显示壁纸"
                     LiquidControls.LiquidGlassSwitch {
                         id: toggle
-                        enabled: !dialog.takeoverPending
+                        enabled: dialog.takeoverAvailable && !dialog.takeoverPending
                         checked: dialog.takeoverEnabled
                         accentColor: dialog.colors.accent
                         trackColor: dialog.colors.divider
@@ -108,7 +109,9 @@ Dialog {
         }
         Text {
             Layout.fillWidth: true
-            text: "关闭 KOS 壁纸后恢复 Plasma 壁纸。开启空间壁纸会暂停自动切换。"
+            text: dialog.takeoverAvailable
+                ? "关闭 KOS 壁纸后恢复 Plasma 壁纸。开启空间壁纸会暂停自动切换。"
+                : "当前平台服务版本不支持壁纸接管，请更新后再使用。"
             color: dialog.colors.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap

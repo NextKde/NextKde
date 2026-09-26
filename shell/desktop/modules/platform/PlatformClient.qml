@@ -8,6 +8,36 @@ import Quickshell
 // — is JsonlClient; only the socket path, the read/write split and the
 // per-operation timeouts below are specific to this daemon.
 JsonlClient {
+    property var capabilities: []
+    property bool capabilityProbeComplete: false
+
+    function supports(operation) {
+        return capabilities.indexOf(String(operation)) >= 0
+    }
+
+    function probeCapabilities() {
+        capabilityProbeComplete = false
+        capabilities = []
+        request("platform.ping", {}, function(response) {
+            if (!response?.ok)
+                return
+            const advertised = response.result?.capabilities
+            capabilities = Array.isArray(advertised) ? advertised : []
+            capabilityProbeComplete = true
+        })
+    }
+
+    onTransportChanged: function(isConnected) {
+        if (isConnected)
+            probeCapabilities()
+        else {
+            capabilityProbeComplete = false
+            capabilities = []
+        }
+    }
+
+    Component.onCompleted: if (connected) probeCapabilities()
+
     // KOS_PLATFORM_SOCKET redirects the shell to a development daemon (kosctl
     // dev); unset in the installed layout.
     socketPath: Quickshell.env("KOS_PLATFORM_SOCKET")

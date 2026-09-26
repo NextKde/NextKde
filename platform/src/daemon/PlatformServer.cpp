@@ -5149,7 +5149,14 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         return;
     }
     if (op == QStringLiteral("platform.ping")) {
-        respond(socket, request, true, QJsonObject{{QStringLiteral("ready"), true}});
+        respond(socket, request, true, QJsonObject{
+            {QStringLiteral("ready"), true},
+            {QStringLiteral("capabilities"), QJsonArray{
+                QStringLiteral("wallpaper.plasma.proxy"),
+                QStringLiteral("wallpaper.plasma.restore"),
+                QStringLiteral("wallpaper.preview.desktop"),
+            }},
+        });
         return;
     }
     if (op == QStringLiteral("depth.generate")) {

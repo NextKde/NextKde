@@ -100,6 +100,13 @@ def main():
         if reply.get("result", {}).get("ready") is not True:
             fail("platform.ping did not report ready: " + buf.decode().strip(),
                  output)
+        capabilities = reply.get("result", {}).get("capabilities", [])
+        for capability in ("wallpaper.preview.desktop",
+                           "wallpaper.plasma.proxy",
+                           "wallpaper.plasma.restore"):
+            if capability not in capabilities:
+                fail("platform.ping missing capability " + capability + ": "
+                     + buf.decode().strip(), output)
 
         proc.terminate()
         try:
