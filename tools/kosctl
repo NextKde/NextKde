@@ -117,7 +117,7 @@ record_kwin_plugin_api_version() {
 
 usage() {
     cat <<'EOF'
-Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|dev|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
+Usage: ./tools/kosctl <doctor|build|install [lockscreen|apps]|start|dev [shell|settings]|run|uninstall [lockscreen]|glass-settings|nix [build|install|start|shell]|nix-status|shortcuts install|shortcuts uninstall>
 
 NixOS remote install:
   git clone <repo> && cd Nextkde
@@ -886,6 +886,32 @@ dev_all() {
     printf 'Starting source Shell with system platform and data services\n'
     QML2_IMPORT_PATH="$build_dir/qml${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
         exec "$qs_bin" -p "$project_dir/shell"
+}
+
+# Runs the just-built Settings binary against this checkout's QML and source
+# Shell. This is the single supported wallpaper-settings development entry:
+# launching the desktop file would intentionally use the installed binary and
+# installed QML, while invoking a build artifact without KOS_SHELL_DIR could
+# connect to one tree and render another.
+dev_settings() {
+    local executable="$build_dir/apps/settings/kos-settings"
+    local runtime_dir=${XDG_RUNTIME_DIR:-/tmp}
+    if [[ ! -x "$executable" ]]; then
+        printf 'Settings build not found: %s\n' "$executable" >&2
+        printf 'Build it first: ./tools/kosctl build\n' >&2
+        return 1
+    fi
+    if [[ ! -S "$runtime_dir/kos-platform.sock" ]]; then
+        printf 'Missing platform socket: %s/kos-platform.sock\n' "$runtime_dir" >&2
+        printf 'Start it first: systemctl --user start kos-platform.service\n' >&2
+        return 1
+    fi
+    printf 'Starting Settings development session\n'
+    printf '  executable: %s\n' "$executable"
+    printf '  QML tree:   %s/apps/settings\n' "$project_dir"
+    printf '  Shell tree: %s/shell\n' "$project_dir"
+    printf '  platform:   %s/kos-platform.sock\n' "$runtime_dir"
+    KOS_SHELL_DIR="$project_dir/shell" exec "$executable"
 }
 
 remember_blur_state() {
@@ -1696,7 +1722,12 @@ case "${1:-}" in
             *) usage >&2; exit 2 ;;
         esac ;;
     start) start_all ;;
-    dev) dev_all ;;
+    dev)
+        case "${2:-shell}" in
+            shell) dev_all ;;
+            settings) dev_settings ;;
+            *) usage >&2; exit 2 ;;
+        esac ;;
     run) run_shell "${2:-}" ;;
     uninstall)
         case "${2:-}" in
