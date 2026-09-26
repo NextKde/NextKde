@@ -287,11 +287,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Current user configuration fields (schema version 3):
+Core user configuration fields (schema version 9):
 
 ```json
 {
-  "version": 3,
+  "version": 9,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -307,7 +307,9 @@ Current user configuration fields (schema version 3):
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
   "visibilityMode": "always",
-  "windowGrouping": "grouped"
+  "windowGrouping": "grouped",
+  "showLauncher": true,
+  "showTrash": true
 }
 ```
 
@@ -319,6 +321,25 @@ new presentation code reads `dockItems` and the shell-wide
 `IconAppearanceService`. Legacy `smartHideEnabled: true` migrates to `"smart"`,
 legacy `autoHide: true` to `"persistent"`, with `"smart"` winning if both were
 set.
+
+Schema 9 adds `showLauncher` and `showTrash`. Both default to `true` for old
+configurations; only an explicit boolean `false` hides an icon. Settings uses
+`dock-settings.updateBuiltinVisibility(id, visible)` with `launcher` or `trash`.
+These controls remain outside `dockItems`: hiding one does not change pinned
+applications, disable the launcher, or change the contents of the trash.
+The Dock excludes hidden controls from both its row and adaptive slot count.
+Settings presents these independent choices as checkboxes, with both selected
+by default. Updates stay disabled until a configuration snapshot arrives;
+failed IPC calls restore the last confirmed selection. Closing an icon also
+closes its open menu. An information-only or accessory-only Dock retains usable
+dimensions without reserving orphan dividers; an entirely empty Dock has zero
+height.
+
+`kos-shell.dock-builtins` checks defaults, independent changes and persistence
+across a reload. `kos-settings.builtin-checkboxes` uses the actual Settings page
+with a simulated bridge to exercise clicks, pending state, failed replies and
+later snapshots. It runs when Qt's `qmltestrunner` is installed. Adaptive layout
+tests cover information-only, accessory-only and empty content.
 
 Persist:
 

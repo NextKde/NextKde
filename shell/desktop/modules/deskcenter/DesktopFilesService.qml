@@ -31,6 +31,7 @@ QtObject {
         category: "DesktopFiles"
         property string orderJson: "[]"
         property int iconSize: 56
+        property string iconSpacing: "comfortable"
         property bool showExtensions: true
         property string folderCustomJson: "{}"
     }
