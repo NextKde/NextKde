@@ -44,7 +44,7 @@ Item {
         return ConfigService.infoCardOrder.indexOf(id) >= 0
     }
     readonly property bool hasPlayingMusic: infoCardSelected("music")
-        && DockMprisService.hasPlayingPlayer
+        && DockMprisService.hasPlayer
     readonly property bool hasWeather: infoCardSelected("weather")
         && WeatherService.available
     // Side Dock Stack information keeps its clock page. The separate

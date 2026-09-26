@@ -199,26 +199,18 @@ Item {
                 }
             }
 
-            // Play/pause overlay on art (compact mode mostly)
-            Rectangle {
-                anchors.centerIn: parent
-                width: 18
-                height: 18
-                radius: 9
-                color: Qt.rgba(0, 0, 0, 0.55)
+            MediaControlButton {
+                anchors.fill: parent
                 visible: widget.isCompact
-                Text {
-                    anchors.centerIn: parent
-                    text: widget.player?.isPlaying ? "⏸" : "▶"
-                    color: "white"
-                    font.pixelSize: 10
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: DockMprisService.togglePlayPause()
-                }
+                primary: true
+                iconSize: Math.max(14, widget.iconSize * 0.36)
+                iconName: widget.player?.isPlaying ? "media-pause" : "media-play"
+                text: widget.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                enabled: widget.player?.canTogglePlaying ?? false
+                busy: DockMprisService.loading
+                onClicked: DockMprisService.togglePlayPause()
             }
+
         }
 
         // ── Track info + controls (full mode) ──
@@ -307,7 +299,7 @@ Item {
                 }
 
                 DockPlayBtn {
-                    enabled: widget.player !== null
+                    enabled: widget.player?.canTogglePlaying ?? false
                     isPlaying: widget.player?.isPlaying ?? false
                 }
 
@@ -397,91 +389,34 @@ Item {
     // their liquid feel: the Dock window provides the real backdrop blur,
     // while these circles provide a translucent body, specular top edge and
     // press depth. The play button is deliberately one step larger.
-    component DockControlButton: Item {
-        id: control
-        property bool enabled: true
-        property bool primary: false
-        property string symbol: ""
-        property var trigger: null
-        property bool hovered: false
-        property bool pressed: false
-
-        width: primary ? Math.max(25, widget.iconSize * 0.58)
-                       : Math.max(21, widget.iconSize * 0.49)
+    component DockControlButton: MediaControlButton {
+        width: primary ? Math.max(27, widget.iconSize * 0.62)
+                       : Math.max(24, widget.iconSize * 0.54)
         height: width
-        opacity: enabled ? 1.0 : 0.35
-        scale: pressed ? 0.90 : (hovered ? 1.06 : 1.0)
+        iconSize: primary ? Math.max(14, widget.iconSize * 0.34)
+                          : Math.max(12, widget.iconSize * 0.28)
         anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-
-        Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: width / 2
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, ThemeService.isDark ? 0.24 : 0.56)
-            gradient: Gradient {
-                orientation: Gradient.Vertical
-                GradientStop {
-                    position: 0
-                    color: widget.artworkTint(artworkPalette.primary,
-                        primary ? 0.76 : 0.52)
-                }
-                GradientStop {
-                    position: 0.45
-                    color: Qt.rgba(1, 1, 1, primary ? 0.25 : 0.16)
-                }
-                GradientStop {
-                    position: 1
-                    color: Qt.rgba(0, 0, 0, primary ? 0.32 : 0.22)
-                }
-            }
-
-            Text {
-                anchors.centerIn: parent
-                anchors.horizontalCenterOffset: symbol === "▶" ? 1 : 0
-                text: symbol
-                color: enabled ? ThemeService.foregroundColor : ThemeService.dividerColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.30)
-                font.pixelSize: primary ? Math.max(14, widget.iconSize * 0.34)
-                                        : Math.max(11, widget.iconSize * 0.27)
-                font.weight: Font.DemiBold
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: control.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            enabled: control.enabled
-            onContainsMouseChanged: control.hovered = containsMouse
-            onPressed: control.pressed = true
-            onReleased: control.pressed = false
-            onCanceled: control.pressed = false
-            onClicked: {
-                if (control.trigger)
-                    control.trigger()
-            }
-        }
+        glassInk: ThemeService.foregroundColor
     }
 
     component DockPrevBtn: DockControlButton {
-        symbol: "⏮"
-        trigger: DockMprisService.previous
+        iconName: "media-previous"
+        text: qsTr("上一首")
+        onClicked: DockMprisService.previous()
     }
 
     component DockPlayBtn: DockControlButton {
         property bool isPlaying: false
         primary: true
-        symbol: isPlaying ? "⏸" : "▶"
-        trigger: DockMprisService.togglePlayPause
+        iconName: isPlaying ? "media-pause" : "media-play"
+        text: isPlaying ? qsTr("暂停") : qsTr("播放")
+        busy: DockMprisService.loading
+        onClicked: DockMprisService.togglePlayPause()
     }
 
     component DockNextBtn: DockControlButton {
-        symbol: "⏭"
-        trigger: DockMprisService.next
+        iconName: "media-next"
+        text: qsTr("下一首")
+        onClicked: DockMprisService.next()
     }
 }

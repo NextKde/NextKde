@@ -16,8 +16,8 @@ QtObject {
     // ── Active player ──
     property MprisPlayer activePlayer: null
     property bool hasPlayer: activePlayer !== null
-    // A paused player remains controllable through MPRIS, but it should not
-    // occupy the Dock's live information slot or take part in its carousel.
+    // Playing controls player priority; visibility uses hasPlayer so paused
+    // and buffering sessions remain available for resume.
     property bool hasPlayingPlayer: false
     property bool _rebuildingPlayers: false
     property int _startupRefreshCount: 0
@@ -25,6 +25,14 @@ QtObject {
     // without emitting a trackArtUrl notify signal. Consumers bind this
     // revision to refresh cover art and palettes after a track change.
     property int metadataRevision: 0
+    readonly property string playbackStatus: {
+        const revision = metadataRevision
+        return metadataString("kos:playbackStatus")
+    }
+    readonly property bool loading: {
+        const revision = metadataRevision
+        return metadataString("kos:playbackState") === "Loading"
+    }
     property string _metadataSignature: ""
     readonly property string currentLyric: {
         const revision = metadataRevision
@@ -95,7 +103,8 @@ QtObject {
         const player = activePlayer
         const signature = [player?.trackArtUrl ?? "", player?.trackTitle ?? "",
             player?.trackArtist ?? "", metadataString("kos:currentLyric"),
-            metadataString("kos:nextLyric"), player?.isPlaying ?? false].join("\u001f")
+            metadataString("kos:nextLyric"), metadataString("kos:playbackStatus"),
+            metadataString("kos:playbackState"), player?.isPlaying ?? false].join("\u001f")
         if (signature !== _metadataSignature) {
             _metadataSignature = signature
             metadataRevision++
@@ -166,7 +175,7 @@ QtObject {
     // ── Playback helpers ──
     function togglePlayPause() {
         if (!activePlayer) return
-        if (activePlayer.isPlaying) {
+        if (activePlayer.isPlaying || loading) {
             activePlayer.pause()
         } else {
             activePlayer.play()

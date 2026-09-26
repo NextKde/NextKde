@@ -15,8 +15,6 @@ Item {
     property string emptyTitle: qsTr("No music here yet")
     property string emptyDescription: qsTr("Add a music folder or choose another view.")
 
-    signal addToPlaylistRequested(var trackId)
-    signal transcodeRequested(var trackId, string title)
 
     function playRow(row, trackId) {
         if (contextMode === "queue")
@@ -30,65 +28,112 @@ Item {
     }
 
     // One shared menu for the whole list. Giving every delegate its own Menu
-    // with eight MenuItems costs ~8 objects per row and is rebuilt on every
+    // with many MenuItems costs extra objects per row and is rebuilt on every
     // model reset; a single instance just re-targets the row/track it was
     // opened for.
     property int menuRow: -1
     property var menuTrackId: -1
     property string menuTrackTitle: ""
+    property bool menuTrackQueued: false
+    property var deletionInfo: ({})
 
     function openTrackMenu(row, trackId, title, sourceItem) {
         menuRow = row
         menuTrackId = trackId
         menuTrackTitle = title
+        menuTrackQueued = musicController.isTrackQueued(trackId)
         trackMenu.popup(sourceItem)
     }
 
-    Menu {
-        id: trackMenu
+    Connections {
+        target: root.trackModel
+        function onModelReset() { trackMenu.close() }
+    }
 
-        MenuItem {
-            text: qsTr("Play now")
+    MusicMenu {
+        id: trackMenu
+        objectName: "trackContextMenu"
+        MusicMenuItem {
+            text: qsTr("立即播放")
             onTriggered: root.playRow(root.menuRow, root.menuTrackId)
         }
-        MenuItem {
-            text: qsTr("Play next")
-            onTriggered: root.contextMode === "online"
-                ? root.musicController.enqueueOnlineRow(root.menuRow)
-                : root.musicController.playTrackNext(root.menuTrackId)
+        MusicMenuItem {
+            text: root.contextMode === "queue" ? qsTr("移到下一首") : qsTr("下一首播放")
+            visible: root.contextMode === "queue"
+                ? root.menuRow !== root.musicController.queueIndex && root.menuRow !== root.musicController.queueIndex + 1
+                : root.contextMode === "online" || Number(root.menuTrackId) !== Number(root.musicController.currentTrackId)
+            onTriggered: {
+                if (root.contextMode === "online") root.musicController.playOnlineNext(root.menuRow)
+                else if (root.contextMode === "queue") root.musicController.moveQueueRowNext(root.menuRow)
+                else root.musicController.playTrackNext(root.menuTrackId)
+            }
         }
-        MenuItem {
-            text: qsTr("Add to queue")
+        MusicMenuItem {
+            text: qsTr("加入播放队列")
+            visible: root.contextMode !== "queue" && !root.menuTrackQueued
             onTriggered: root.contextMode === "online"
                 ? root.musicController.enqueueOnlineRow(root.menuRow)
                 : root.musicController.enqueueTrack(root.menuTrackId)
         }
-        MenuSeparator { visible: root.contextMode !== "online" }
-        MenuItem {
-            visible: root.contextMode !== "online"
-            text: qsTr("Add to playlist…")
-            onTriggered: root.addToPlaylistRequested(root.menuTrackId)
-        }
-        MenuItem {
-            visible: root.contextMode !== "online"
-            text: qsTr("Convert audio…")
-            onTriggered: root.transcodeRequested(root.menuTrackId,
-                                                 root.menuTrackTitle)
-        }
-        MenuSeparator {
+        MenuSeparator { visible: root.contextMode !== "online"; height: visible ? implicitHeight : 0 }
+        MusicMenuItem {
             visible: root.contextMode === "queue"
-                || root.contextMode === "playlist"
-        }
-        MenuItem {
-            visible: root.contextMode === "queue"
-            text: qsTr("Remove from queue")
+            text: qsTr("从队列移除")
             onTriggered: root.musicController.removeQueueRow(root.menuRow)
         }
-        MenuItem {
+        MusicMenuItem {
             visible: root.contextMode === "playlist"
-            text: qsTr("Remove from playlist")
-            onTriggered: root.musicController.removeTrackFromPlaylist(
-                             root.playlistId, root.menuTrackId)
+            text: qsTr("从歌单移除")
+            onTriggered: root.musicController.removeTrackFromPlaylist(root.playlistId, root.menuTrackId)
+        }
+        MusicMenuItem {
+            visible: root.contextMode === "library"
+            text: qsTr("删除音乐…")
+            destructive: true
+            onTriggered: {
+                root.deletionInfo = root.musicController.trackDeletionInfo(root.menuTrackId)
+                if (root.deletionInfo.path) deleteDialog.open()
+            }
+        }
+    }
+
+    MusicDialog {
+        id: deleteDialog
+        objectName: "deleteMusicDialog"
+        anchors.centerIn: parent
+        width: Math.min(root.width - 24, 420)
+        title: qsTr("删除音乐？")
+        onAccepted: root.musicController.deleteTrack(root.deletionInfo.id, root.deletionInfo.path)
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                Layout.fillWidth: true
+                text: String(root.deletionInfo.title ?? "")
+                color: AppTheme.text
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+            }
+            Label {
+                Layout.fillWidth: true
+                text: root.deletionInfo.localFile
+                    ? qsTr("本地音频将移到回收站，可在回收站恢复。歌曲也会从音乐库、播放队列和所有歌单中移除。")
+                    : qsTr("歌曲及其音频缓存将从本机移除，同时清理播放队列和歌单中的记录。")
+                color: AppTheme.mutedText
+                wrapMode: Text.WordWrap
+            }
+        }
+        footer: DialogButtonBox {
+            padding: 14
+            spacing: 8
+            background: Item {}
+            KosButton { text: qsTr("取消"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+            KosButton {
+                text: root.deletionInfo.localFile ? qsTr("移到回收站") : qsTr("删除")
+                destructive: true
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+            }
+            onAccepted: deleteDialog.accept()
+            onRejected: deleteDialog.reject()
         }
     }
 

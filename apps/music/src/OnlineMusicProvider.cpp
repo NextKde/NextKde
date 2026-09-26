@@ -9,6 +9,7 @@
 #include <QUrlQuery>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 
@@ -70,12 +71,11 @@ QString OnlineMusicProvider::errorMessage() const { return m_errorMessage; }
 void OnlineMusicProvider::search(const QString &query, int limit)
 {
     const QString cleaned = query.trimmed();
-    if (m_reply) {
-        m_reply->abort();
-        m_reply->deleteLater();
-        m_reply = nullptr;
-    }
     ++m_generation;
+    if (QNetworkReply *reply = std::exchange(m_reply, nullptr)) {
+        reply->abort();
+        reply->deleteLater();
+    }
     if (cleaned.isEmpty()) {
         setSearching(false);
         setError({});

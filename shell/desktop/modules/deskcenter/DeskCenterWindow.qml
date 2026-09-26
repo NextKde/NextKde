@@ -1861,10 +1861,10 @@ PanelWindow {
 	                            color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.68), 0.68)
                             font.pixelSize: 10
                         }
-                        Text {
+                        KosLyricLine {
                             id: musicLyric
                             anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
-                            text: DockMprisService.currentLyric
+                            text: DockMprisService.loading ? DockMprisService.playbackStatus : DockMprisService.currentLyric
                             visible: text.length > 0
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
@@ -1933,109 +1933,33 @@ PanelWindow {
                                 bottom: parent.bottom
                                 bottomMargin: 2
                             }
-                            height: 30
-                            spacing: 14
+                            height: 36
+                            spacing: 10
                             Repeater {
-                                model: ["⏮", musicContent.player?.isPlaying ? "⏸" : "▶", "⏭"]
-                                delegate: Item {
-                            required property var modelData
-                            required property int index
-                            readonly property bool controlEnabled: musicContent.hasPlayer
-                                && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
-                                    : index === 2 ? (musicContent.player?.canGoNext ?? false)
-                                    : (musicContent.player?.canTogglePlaying ?? false))
-                            readonly property bool isPlay: index === 1
-                            width: isPlay ? 32 : 26
-                            height: width
-                            y: (parent.height - height) / 2
-
-                            // A Material icon button, which is a shape before it
-                            // is a colour: a circle at rest that squeezes into a
-                            // squircle while held, and scales down with it. That
-                            // press morph is the recognisable half of the form --
-                            // the filled variety for play (primary container), the
-                            // standard one for the skips (secondary container).
-                            // The glass forms keep the plain disc: the morph is
-                            // gated on the tonal form, not on the press alone.
-                            Rectangle {
-                                id: buttonFace
-                                anchors.fill: parent
-                                readonly property bool held: controlArea.pressed
-                                    && controlArea.containsMouse
-                                radius: AppearanceTokens.isMaterial && buttonFace.held
-                                    ? width * 0.3 : width / 2
-                                color: {
-                                    const base = AppearanceTokens.surface.pick(
-                                        parent.isPlay
-                                            ? AppearanceTokens.colors.primaryContainer
-                                            : AppearanceTokens.colors.secondaryContainer,
-                                        parent.isPlay
-                                            ? Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.24 : 0.10)
-                                            : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.12 : 0.055))
-                                    // Material's state layer: the container is
-                                    // overlaid with its own ink, 8% on hover and
-                                    // 12% while held, instead of changing colour.
-                                    if (!AppearanceTokens.isMaterial)
-                                        return base
-                                    const ink = parent.isPlay
-                                        ? AppearanceTokens.colors.primaryContainerForeground
-                                        : AppearanceTokens.colors.secondaryContainerForeground
-                                    const layer = buttonFace.held ? 0.12
-                                        : (controlArea.containsMouse ? 0.08 : 0.0)
-                                    return Qt.rgba(base.r + (ink.r - base.r) * layer,
-                                        base.g + (ink.g - base.g) * layer,
-                                        base.b + (ink.b - base.b) * layer, base.a)
-                                }
-                                scale: AppearanceTokens.isMaterial && buttonFace.held ? 0.90 : 1.0
-                                Behavior on radius {
-                                    NumberAnimation {
-                                        duration: AppearanceTokens.motion.fastDuration
-                                        easing.type: AppearanceTokens.motion.standardEasing
+                                // Keep delegates alive when play/pause changes.
+                                model: 3
+                                delegate: DeskMediaButton {
+                                    required property int index
+                                    primary: index === 1
+                                    busy: index === 1 && DockMprisService.loading
+                                    iconName: index === 0 ? "media-previous"
+                                        : index === 2 ? "media-next"
+                                        : musicContent.player?.isPlaying ? "media-pause" : "media-play"
+                                    text: index === 0 ? qsTr("上一首")
+                                        : index === 2 ? qsTr("下一首")
+                                        : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                                    enabled: musicContent.hasPlayer
+                                        && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
+                                            : index === 2 ? (musicContent.player?.canGoNext ?? false)
+                                            : (musicContent.player?.canTogglePlaying ?? false))
+                                    glassInk: AppearanceTokens.content.onBackdrop
+                                        ? IconAppearanceService.glassContentColor(0.88)
+                                        : Qt.rgba(1, 1, 1, 0.88)
+                                    onClicked: {
+                                        if (index === 0) DockMprisService.previous()
+                                        else if (index === 1) DockMprisService.togglePlayPause()
+                                        else DockMprisService.next()
                                     }
-                                }
-                                Behavior on scale {
-                                    NumberAnimation {
-                                        duration: AppearanceTokens.motion.fastDuration
-                                        easing.type: AppearanceTokens.motion.standardEasing
-                                    }
-                                }
-                                Behavior on color {
-                                    ColorAnimation { duration: AppearanceTokens.motion.fastDuration }
-                                }
-                            }
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData
-                                // Material pairs a container with its own ink: the
-                                // play button sits on primaryContainer and the
-                                // skips on secondaryContainer, so each reads the
-                                // matching on-container role instead of the
-                                // generic surface ink. Glass keeps its light ink.
-                                color: AppearanceTokens.surface.pick(
-                                    index === 1
-                                        ? AppearanceTokens.colors.primaryContainerForeground
-                                        : AppearanceTokens.colors.secondaryContainerForeground,
-                                    AppearanceTokens.content.onBackdrop
-                                        ? IconAppearanceService.glassContentColor(parent.controlEnabled ? 0.88 : 0.28)
-                                        : Qt.rgba(1, 1, 1, parent.controlEnabled ? 0.88 : 0.28))
-                                font {
-                                    family: "SF Pro Display"
-                                    pixelSize: index === 1 ? 15 : 11
-                                    weight: Font.DemiBold
-                                }
-                            }
-                            MouseArea {
-                                id: controlArea
-                                anchors.fill: parent
-                                enabled: parent.controlEnabled
-                                hoverEnabled: AppearanceTokens.isMaterial
-                                cursorShape: parent.controlEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                onClicked: {
-                                    if (index === 0) DockMprisService.previous()
-                                    else if (index === 1) DockMprisService.togglePlayPause()
-                                    else DockMprisService.next()
-                                }
-                            }
                         }
                     }
                         }

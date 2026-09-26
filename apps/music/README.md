@@ -18,8 +18,9 @@ The native player is functional:
 - Play through GStreamer `playbin3`, with pause, seek, volume, persistent queue,
   play-next, shuffle, and track/queue repeat.
 - Create, rename, remove, and play playlists.
-- Export audio through the GStreamer encoders installed on the system. FLAC,
-  Vorbis, Opus, WAV, and MP3 appear only when their required elements exist.
+- Use context-specific menus: trash library files, reorder/remove queue entries,
+  insert/append online results, and remove playlist membership. Conversion and
+  add-to-playlist entries are removed from the UI.
 - Expose `org.mpris.MediaPlayer2.kosmusic` for media keys and desktop clients,
   including metadata, position, seek, volume, shuffle, repeat, `OpenUri`, and
   `Raise`.
@@ -56,15 +57,42 @@ back in if the launcher is not visible immediately.
   by the system. KOS Music does not bundle codec binaries.
 
 The scanner recognizes a broad set of TagLib-supported extensions, but a file
-is playable or exportable only when the matching GStreamer decoder/encoder is
-installed. The conversion dialog reports the encoders detected at runtime.
+is playable only when the matching GStreamer decoder is installed. The conversion
+backend remains independently tested but has no entry point in the music UI.
 
 ## Data and integration
 
 The database defaults to `$XDG_DATA_HOME/kos/music/library.sqlite` (normally
 `~/.local/share/kos/music/library.sqlite`), with imported sources in `sources/`.
-Artwork and lyrics are cached below `$XDG_CACHE_HOME/kos/music/{artwork,lyrics}`. Tests may override these paths with
+Artwork, lyrics and online audio are cached below `$XDG_CACHE_HOME/kos/music/{artwork,lyrics,audio}`. Tests may override these paths with
 `KOS_MUSIC_DATA_DIR` and `KOS_MUSIC_CACHE_DIR`.
+
+Online tracks play while downloading through one GStreamer transfer, with preparation,
+buffering and cache progress, cancellation and retry controls. Complete downloads are
+published after the stream closes and its final writes are flushed. Stable track/quality
+keys avoid resolving expiring URLs again. Persistent audio uses a 1 GiB LRU budget and
+256 MiB per-entry limit; an unwritable cache does not prevent streaming. Partial or
+failed responses are never published. Pause/resume preserves position; progress is
+saved every five seconds, on pause/seek and exit, and restored without autoplay.
+
+Failures try the imported sources in preference order without changing the saved
+preferred source. Each attempt has a 12-second deadline and track preparation has a
+45-second budget. Exhausted tracks show a three-second skip notice and advance in
+queue order (or shuffle), ignoring repeat-current for failed songs. An all-failed queue
+stops rather than looping. Pause/stop, manual selection and queue removal cancel recovery.
+The source page exposes recent attempt diagnostics.
+
+Lyrics animate between lines and have a persistent app toggle; the Dock popup also
+has a desktop-lyrics toggle. Horizontal and side Dock players remain available while
+paused or buffering. Desktop, Dock and Control Center share vector transport buttons
+with fixed hit targets.
+
+Library deletion confirms the file, moves local audio to the system trash, and removes
+queue and playlist references. A failed trash operation preserves the library record;
+an already missing file allows stale-record cleanup. Deleting a playing track advances
+to its successor; deleting while paused never starts playback. In-flight scans cannot
+restore deleted entries. Menus, menu items, dialogs, quality choices, sidebar and
+artwork use rounded surfaces.
 
 MPRIS `OpenUri` accepts only local `file:` URIs. MPRIS registration requires
 the desktop session D-Bus. A service-name collision does not stop the player;
@@ -74,7 +102,7 @@ it only disables external MPRIS control for that instance.
 
 Included are local folders/files, incremental metadata scans, embedded cover
 art, albums/artists, playlists, a durable queue and settings, common playback
-controls, MPRIS, and explicit audio conversion with atomic output replacement.
+controls, MPRIS, and confirmed deletion of local audio to the system trash.
 Online support currently means platform metadata search plus on-demand LX
 custom-source resolution; it does not include remote music libraries.
 

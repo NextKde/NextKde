@@ -396,6 +396,14 @@ qint64 MusicDatabase::addExternalTrack(const TrackRecord &track, QString *errorM
     return stored ? stored->id : -1;
 }
 
+bool MusicDatabase::removeTrack(qint64 trackId, QString *errorMessage)
+{
+    QSqlQuery query(m_database);
+    query.prepare(QStringLiteral("DELETE FROM tracks WHERE id = ?"));
+    query.addBindValue(trackId);
+    return query.exec() ? true : fail(query, errorMessage);
+}
+
 bool MusicDatabase::recordPlayed(qint64 trackId, QString *errorMessage)
 {
     QSqlQuery query(m_database);

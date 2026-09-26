@@ -186,6 +186,7 @@ MprisService::MprisService(MusicController *controller, QObject *parent)
     };
     connect(controller, &MusicController::lyricsChanged, this, publishMetadata);
     connect(controller, &MusicController::currentLyricChanged, this, publishMetadata);
+    connect(controller, &MusicController::playbackStatusChanged, this, publishMetadata);
     connect(controller, &MusicController::currentTrackChanged, this,
             [this, controller, player] {
                 publishPlayerProperties({

@@ -27,9 +27,11 @@ public:
 
     void importSource(const QString &pathOrUrl);
     void activateSource(const QString &sourceId);
+    void useSourceForPlayback(const QString &sourceId);
     void removeSource(const QString &sourceId);
     void resolve(qint64 trackId, const QString &platform,
                  const QString &sourceData, const QString &quality = QStringLiteral("128k"));
+    void cancelResolves();
 
 signals:
     void sourcesChanged();
@@ -67,6 +69,7 @@ private:
     QString m_sourcesPath;
     QVariantList m_sources;
     QString m_activeSourceId;
+    QString m_runtimeSourceId;
     QString m_state = QStringLiteral("inactive");
     QString m_errorMessage;
     QHash<QString, QStringList> m_supportedQualities;

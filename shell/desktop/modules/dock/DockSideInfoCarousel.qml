@@ -34,7 +34,7 @@ Item {
     property bool showTemperature: true
     property bool expanded: false
     property bool autoRotate: true
-    readonly property bool hasMusic: DockMprisService.hasPlayingPlayer
+    readonly property bool hasMusic: DockMprisService.hasPlayer
     readonly property bool hasWeather: WeatherService.available
     readonly property var player: DockMprisService.activePlayer
     readonly property url artworkSource: {
@@ -80,7 +80,7 @@ Item {
 
     function availablePages() {
         const pages = []
-        for (const candidate of pageOrder) {
+        for (const candidate of (pageOrder || [])) {
             if (pageAvailable(candidate))
                 pages.push(candidate)
         }

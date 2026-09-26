@@ -5,6 +5,8 @@
 #include <QJsonObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QtTest>
 
 namespace {
@@ -54,6 +56,7 @@ class LxSourceServiceTest final : public QObject {
 
 private slots:
     void switchesSourcesCancelsPendingAndPersists();
+    void replacingPendingImportDoesNotCrash();
 };
 
 void LxSourceServiceTest::switchesSourcesCancelsPendingAndPersists()
@@ -111,11 +114,58 @@ void LxSourceServiceTest::switchesSourcesCancelsPendingAndPersists()
         QCOMPARE(restored.sources().size(), 2);
         QCOMPARE(restored.activeSourceId(), secondId);
         QTRY_COMPARE_WITH_TIMEOUT(restored.state(), QStringLiteral("ready"), 5000);
+        QSignalSpy resolved(&restored, &LxSourceService::resolved);
+        restored.resolve(44, QStringLiteral("wy"), QStringLiteral("{}"));
+        restored.cancelResolves();
+        restored.resolve(44, QStringLiteral("wy"), QStringLiteral("{}"));
+        QTRY_COMPARE_WITH_TIMEOUT(resolved.size(), 1, 5000);
+        QTest::qWait(100);
+        QCOMPARE(resolved.size(), 1);
         restored.removeSource(secondId);
         QCOMPARE(restored.state(), QStringLiteral("inactive"));
         QCOMPARE(restored.sources().size(), 1);
         QVERIFY(restored.activeSourceId().isEmpty());
     }
+}
+
+void LxSourceServiceTest::replacingPendingImportDoesNotCrash()
+{
+    QTemporaryDir directory;
+    const QString scriptPath = directory.filePath(QStringLiteral("replacement.js"));
+    QVERIFY(writeSource(scriptPath, QStringLiteral("Replacement"), QStringLiteral("https://audio.test/file.mp3"), 0));
+    QFile script(scriptPath);
+    QVERIFY(script.open(QIODevice::ReadOnly));
+    const QByteArray body = script.readAll();
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    int requests = 0;
+    connect(&server, &QTcpServer::newConnection, this, [&] {
+        while (auto *socket = server.nextPendingConnection()) {
+            connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+            connect(socket, &QTcpSocket::readyRead, socket, [&, socket] {
+                const QByteArray request = socket->readAll();
+                if (socket->property("received").toBool()) return;
+                socket->setProperty("received", true);
+                ++requests;
+                if (request.contains("/replacement")) {
+                    socket->write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: "
+                        + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+                    socket->disconnectFromHost();
+                }
+            });
+        }
+    });
+    LxSourceService service(directory.filePath(QStringLiteral("data")));
+    const QString base = QStringLiteral("http://127.0.0.1:%1/").arg(server.serverPort());
+    service.importSource(base + QStringLiteral("hang"));
+    QTRY_COMPARE(requests, 1);
+    QSignalSpy errors(&service, &LxSourceService::errorMessageChanged);
+    service.importSource(base + QStringLiteral("replacement"));
+    QTRY_COMPARE_WITH_TIMEOUT(service.state(), QStringLiteral("ready"), 5000);
+    QCOMPARE(requests, 2);
+    QCOMPARE(errors.size(), 0);
+    QCOMPARE(service.sources().size(), 1);
+    QVERIFY(!sourceId(service.sources(), QStringLiteral("Replacement")).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(LxSourceServiceTest)

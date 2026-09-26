@@ -32,10 +32,11 @@ void LyricsService::load(const TrackRecord &track)
 {
     ++m_generation;
     m_loadedTrackId = track.id;
-    if (m_reply) {
-        m_reply->abort();
-        m_reply->deleteLater();
-        m_reply = nullptr;
+    if (QNetworkReply *reply = std::exchange(m_reply, nullptr)) {
+        // abort() may emit finished synchronously. Keep the cancelled reply
+        // independent of the member that the completion handler updates.
+        reply->abort();
+        reply->deleteLater();
     }
     m_lines.clear();
     m_currentLineIndex = -1;

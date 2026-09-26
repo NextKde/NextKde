@@ -132,13 +132,8 @@ PopupWindow {
         ? AppearanceConfigService.effectiveDockLiquid
         : AppearanceConfigService.effectiveBarLiquid
 
-    // Compact counterpart to the Dock player's transport controls. It keeps
-    // the same circular glass treatment but is sized for this small panel.
-    // Uses the shared LiquidGlassButton for a pure-QML liquid glass effect.
-    component MediaControlButton: LiquidControls.LiquidGlassButton {
-        property bool controlEnabled: true
-        enabled: controlEnabled
-        iconColor: ThemeService.foregroundColor
+    component TransportButton: MediaControlButton {
+        glassInk: ThemeService.foregroundColor
         width: primary ? 40 : 32
         height: width
     }
@@ -714,7 +709,7 @@ PopupWindow {
             }
             GlassText {
                 width: parent.width
-                text: panel.player?.trackArtist || "媒体控制"
+                text: DockMprisService.loading ? DockMprisService.playbackStatus : panel.player?.trackArtist || "媒体控制"
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
                 opacity: 0.70
@@ -726,24 +721,28 @@ PopupWindow {
             height: 40
             spacing: 12
             
-            MediaControlButton {
+            TransportButton {
                 anchors.verticalCenter: parent.verticalCenter
-                symbol: "⏮"
-                controlEnabled: panel.player?.canGoPrevious ?? false
-                onTriggered: DockMprisService.previous()
+                iconName: "media-previous"
+                text: qsTr("上一首")
+                enabled: panel.player?.canGoPrevious ?? false
+                onClicked: DockMprisService.previous()
             }
-            MediaControlButton {
+            TransportButton {
                 anchors.verticalCenter: parent.verticalCenter
                 primary: true
-                symbol: panel.player?.isPlaying ? "⏸" : "▶"
-                controlEnabled: panel.player !== null
-                onTriggered: DockMprisService.togglePlayPause()
+                iconName: panel.player?.isPlaying ? "media-pause" : "media-play"
+                text: panel.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                busy: DockMprisService.loading
+                enabled: panel.player?.canTogglePlaying ?? false
+                onClicked: DockMprisService.togglePlayPause()
             }
-            MediaControlButton {
+            TransportButton {
                 anchors.verticalCenter: parent.verticalCenter
-                symbol: "⏭"
-                controlEnabled: panel.player?.canGoNext ?? false
-                onTriggered: DockMprisService.next()
+                iconName: "media-next"
+                text: qsTr("下一首")
+                enabled: panel.player?.canGoNext ?? false
+                onClicked: DockMprisService.next()
             }
         }
     }

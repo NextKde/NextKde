@@ -21,7 +21,7 @@ KosCard {
     }
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 116
+    Layout.preferredHeight: root.musicController.playbackStatusText.length > 0 ? 142 : 116
     padding: 12
 
     contentItem: ColumnLayout {
@@ -103,28 +103,28 @@ KosCard {
                 ToolTip.text: qsTr("Playback mode")
                 onClicked: playbackModeMenu.popup()
 
-                Menu {
+                MusicMenu {
                     id: playbackModeMenu
                     y: -implicitHeight
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Sequential playback")
                         checkable: true
                         checked: root.musicController.playbackMode === "sequential"
                         onTriggered: root.musicController.playbackMode = "sequential"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Repeat queue")
                         checkable: true
                         checked: root.musicController.playbackMode === "playlist"
                         onTriggered: root.musicController.playbackMode = "playlist"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Repeat current track")
                         checkable: true
                         checked: root.musicController.playbackMode === "track"
                         onTriggered: root.musicController.playbackMode = "track"
                     }
-                    MenuItem {
+                    MusicMenuItem {
                         text: qsTr("Shuffle")
                         checkable: true
                         checked: root.musicController.playbackMode === "shuffle"
@@ -134,6 +134,15 @@ KosCard {
                 }
             }
 
+            KosToolButton {
+                text: qsTr("歌词")
+                checkable: true
+                checked: root.musicController.lyricsEnabled
+                Accessible.name: qsTr("显示歌词")
+                ToolTip.visible: hovered
+                ToolTip.text: checked ? qsTr("关闭歌词") : qsTr("开启歌词")
+                onClicked: root.musicController.lyricsEnabled = !root.musicController.lyricsEnabled
+            }
             KosToolButton {
                 text: "│◀"
                 enabled: root.musicController.canGoPrevious
@@ -147,7 +156,6 @@ KosCard {
                     : (root.musicController.playbackState === "Playing" ? "Ⅱ" : "▶")
                 highlighted: true
                 enabled: root.musicController.currentTrackId >= 0
-                    && root.musicController.playbackState !== "Loading"
                 Accessible.name: root.musicController.playbackState === "Playing"
                     ? qsTr("Pause") : qsTr("Play")
                 onClicked: root.musicController.togglePlayPause()
@@ -166,6 +174,43 @@ KosCard {
                 value: root.musicController.volume
                 Accessible.name: qsTr("Volume")
                 onMoved: root.musicController.volume = value
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            visible: root.musicController.playbackStatusText.length > 0
+            spacing: 8
+            BusyIndicator {
+                Layout.preferredWidth: 18
+                Layout.preferredHeight: 18
+                running: root.musicController.playbackState === "Loading"
+                visible: running
+            }
+            Label {
+                text: root.musicController.playbackStatusText
+                color: AppTheme.mutedText
+                font.pixelSize: 12
+            }
+            ProgressBar {
+                Layout.fillWidth: true
+                from: 0; to: 1
+                value: Math.max(0, root.musicController.cacheProgress)
+                indeterminate: root.musicController.cacheProgress < 0
+                visible: root.musicController.playbackState === "Loading"
+                    || (root.musicController.cacheProgress >= 0 && root.musicController.cacheProgress < 1)
+            }
+            Item { Layout.fillWidth: true; visible: root.musicController.playbackState === "Error" }
+            KosToolButton {
+                text: qsTr("重试")
+                visible: root.musicController.playbackState === "Error"
+                onClicked: root.musicController.play()
+            }
+            KosToolButton {
+                text: qsTr("取消")
+                visible: root.musicController.playbackState === "Loading"
+                    || root.musicController.playbackState === "Error"
+                onClicked: root.musicController.stop()
             }
         }
 
