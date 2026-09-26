@@ -185,8 +185,9 @@ Item {
 
         onReleased: {
             root._pressed = false
-            root.triggered()
         }
+
+        onClicked: root.triggered()
 
         onCanceled: {
             root._pressed = false

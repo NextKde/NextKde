@@ -251,6 +251,25 @@ if(BUILD_TESTING)
     # only check that keeps shared/contracts/platform.v1.md, ShortcutsService's
     # default table and the daemon's generated handler in agreement.
     find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
+    find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
+        HINTS /usr/lib/qt6/bin)
+    find_program(KOS_INTERACTION_QUICKSHELL NAMES quickshell)
+    if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-ui.interaction-controls
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_controls.qml)
+        set_tests_properties(kos-ui.interaction-controls PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
+    endif()
+    if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
+        add_test(NAME kos-ui.interaction-runtime
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-runtime/run.py)
+        add_test(NAME kos-ui.widget-experience
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-experience/run.py)
+        set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience PROPERTIES
+            LABELS ui TIMEOUT 60 RUN_SERIAL TRUE)
+    endif()
     if(KOS_PYTHON_EXECUTABLE)
         add_test(NAME kos-platform.contracts
             COMMAND ${KOS_PYTHON_EXECUTABLE}

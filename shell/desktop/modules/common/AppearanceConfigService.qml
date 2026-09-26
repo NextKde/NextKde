@@ -135,6 +135,9 @@ QtObject {
     // "macos" matches the shell geometry that predates selectable styles,
     // so upgrading an existing installation does not unexpectedly reshape it.
     property string shellStyle: "macos"
+    // Widget artwork is independent of application icon colouring.
+    property string widgetStyle: "color" // "color" | "glass"
+    property bool _widgetStyleResolved: false
     // Global colour-scheme preference shared by every shell style. The Dock
     // settings page historically persisted this value in DockConfigService;
     // that service mirrors the legacy value here during migration.
@@ -170,6 +173,35 @@ QtObject {
     function isValidShellStyle(value) {
         return value === "windows12" || value === "macos"
             || value === "material"
+    }
+
+    function isValidWidgetStyle(value) {
+        return value === "color" || value === "glass"
+    }
+
+    function updateWidgetStyle(rawStyle) {
+        const style = String(rawStyle)
+        if (!isValidWidgetStyle(style))
+            return false
+        const changed = widgetStyle !== style || !_widgetStyleResolved
+        _widgetStyleResolved = true
+        widgetStyle = style
+        if (changed)
+            saveTimer.restart()
+        return changed
+    }
+
+    // v29 takes a one-time copy of the old icon-driven appearance. Wait for
+    // both asynchronous loads so startup order cannot change the migration.
+    function _migrateWidgetStyle() {
+        if (!ready || _widgetStyleResolved || !IconAppearanceService.ready)
+            return
+        updateWidgetStyle(IconAppearanceService.mode === "color" ? "color" : "glass")
+    }
+
+    property Connections widgetStyleMigration: Connections {
+        target: IconAppearanceService
+        function onReadyChanged() { service._migrateWidgetStyle() }
     }
 
     function isValidThemeMode(value) {
@@ -557,8 +589,10 @@ QtObject {
     }
 
     function _save() {
+        if (!service._widgetStyleResolved)
+            return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 28,
+            version: 29,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -593,6 +627,7 @@ QtObject {
             blurStrength: service.globalBlurStrength,
             liquidStrength: service.globalLiquidStrength,
             shellStyle: service.shellStyle,
+            widgetStyle: service.widgetStyle,
             themeMode: service.themeMode,
             materialColorScheme: service.materialColorScheme,
             glassFollowsAppearanceMode: service.glassFollowsAppearanceMode,
@@ -671,6 +706,7 @@ QtObject {
                     const globalLiquid = service._normalized(object.globalLiquidStrength
                         ?? object.liquidStrength ?? object.dockLiquidStrength)
                     const style = String(object.shellStyle ?? "")
+                    const widgetStyle = String(object.widgetStyle ?? "")
                     const themeMode = String(object.themeMode ?? "")
                     const colorScheme = String(object.materialColorScheme ?? "")
                     const hasBarIntegration = typeof object.barIntegratedWithDock === "boolean"
@@ -703,6 +739,10 @@ QtObject {
                         service.materialPresetBlurStrength = materialBlur
                     if (service.isValidShellStyle(style))
                         service.shellStyle = style
+                    if (service.isValidWidgetStyle(widgetStyle)) {
+                        service.widgetStyle = widgetStyle
+                        service._widgetStyleResolved = true
+                    }
                     if (service.isValidThemeMode(themeMode))
                         service.themeMode = themeMode
                     // v27 adds the Material colour source. Files written before
@@ -831,7 +871,8 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 28
+                    if (Number(object.version) !== 29
+                            || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
                             || !service.isValidMaterialColorScheme(colorScheme)
@@ -847,6 +888,7 @@ QtObject {
                 }
             }
             service.ready = true
+            service._migrateWidgetStyle()
             service.effectSyncTimer.restart()
             service.dockAnimationEffectSyncTimer.restart()
         })

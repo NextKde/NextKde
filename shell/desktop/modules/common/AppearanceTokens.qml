@@ -352,7 +352,7 @@ QtObject {
         // plate). False only for a colour-artwork card in the glass form, where
         // the card paints its own gradient.
         readonly property bool onBackdrop: tokens.surface.paintInQml
-            || IconAppearanceService.mode !== "color"
+            || AppearanceConfigService.widgetStyle === "glass"
 
         // Ink for shell chrome that always sits on the shell's own backdrop
         // (Bar, Dock, Control Centre, glass panels). Unlike ink() this never

@@ -57,6 +57,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-settings.builtin-checkboxes PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 15)
+        add_test(NAME kos-settings.widget-appearance
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/widgets/tst_widgets.qml)
+        set_tests_properties(kos-settings.widget-appearance PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 15)
     endif()
 
     # The smoke test above proves the pages load; this one proves the right

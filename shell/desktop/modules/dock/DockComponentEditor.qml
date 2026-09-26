@@ -244,8 +244,6 @@ PopupWindow {
                         ThemeService.foregroundColor.b, 0.18)
                     onToggled: function(enabled) {
                         ConfigService.updateInfoCardAutoRotate(enabled)
-                        autoRotateSwitch.checked =
-                            ConfigService.infoCardAutoRotate
                     }
                 }
             }

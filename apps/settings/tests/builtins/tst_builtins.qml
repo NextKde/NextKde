@@ -10,14 +10,38 @@ Item {
         property string lastError: ""
         property var snapshot: ({baseHeight:60, position:"bottom", contentStyle:"compact", dockStyle:"floating", visibilityMode:"smart", windowGrouping:"grouped", showLauncher:true, showTrash:true})
         property var calls: []
+        property var groupingCalls: []
         signal dockSnapshotChanged(var state)
         signal dockBuiltinVisibilityChanged(var state)
         function dockSnapshot() { dockSnapshotChanged(snapshot) }
         function updateDockBuiltinVisibility(id, visible) { calls = calls.concat([{id, visible}]) }
+        function updateDockWindowGrouping(mode) { groupingCalls = groupingCalls.concat([mode]) }
     }
     TestCase {
         name: "SettingsBuiltins"
         when: windowShown
+        function test_grouping_binding() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage:3})
+            verify(app !== null)
+            const control = findChild(app.contentItem, "window-grouping-switch")
+            verify(control !== null)
+            const scroll = findChild(app.contentItem, "settings-page-scroll")
+            scroll.contentY = control.mapToItem(scroll.contentItem, 0, 0).y - 100
+            verify(waitForRendering(control))
+            mouseClick(control)
+            compare(bridge.groupingCalls.length, 1)
+            compare(bridge.groupingCalls[0], "separate")
+            verify(control.checked, "only the snapshot confirms the switch")
+            bridge.snapshot = Object.assign({}, bridge.snapshot, {windowGrouping:"separate"})
+            bridge.dockSnapshot()
+            verify(!control.checked, "asynchronous acknowledgement updates the switch")
+            bridge.snapshot = Object.assign({}, bridge.snapshot, {windowGrouping:"grouped"})
+            bridge.dockSnapshot()
+            verify(control.checked, "external changes keep the binding")
+            app.destroy()
+        }
         function test_selection() {
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())

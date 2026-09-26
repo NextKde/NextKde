@@ -30,6 +30,7 @@ QtObject {
         location: "file://" + Quickshell.stateDir + "/deskcenter-desktop-files.ini"
         category: "DesktopFiles"
         property string orderJson: "[]"
+        property string slotLayoutsJson: "{}"
         property int iconSize: 56
         property string iconSpacing: "comfortable"
         property bool showExtensions: true
@@ -38,6 +39,45 @@ QtObject {
 
     function entriesForOutput(output) {
         return DesktopOutputs.entriesForOutput(entries, output, availableOutputs, defaultOutput)
+    }
+
+    function slotLayouts() {
+        try {
+            const value = JSON.parse(layout.slotLayoutsJson)
+            return value && typeof value === "object" && !Array.isArray(value) ? value : ({})
+        } catch (_) { return ({}) }
+    }
+
+    function slotsForOutput(output) {
+        return slotLayouts()[output] || ({})
+    }
+
+    function saveSlots(output, slots) {
+        if (!output) return
+        const maps = slotLayouts()
+        maps[output] = slots
+        const encoded = JSON.stringify(maps)
+        if (layout.slotLayoutsJson === encoded) return
+        layout.slotLayoutsJson = encoded
+        layout.sync()
+    }
+
+    function migrateLayoutPath(oldPath, newPath) {
+        const maps = slotLayouts()
+        for (const output of Object.keys(maps)) {
+            const slots = maps[output]
+            if (slots && Number.isInteger(slots[oldPath])) {
+                slots[newPath] = slots[oldPath]
+                delete slots[oldPath]
+            }
+        }
+        layout.slotLayoutsJson = JSON.stringify(maps)
+        try {
+            const order = JSON.parse(layout.orderJson)
+            if (Array.isArray(order))
+                layout.orderJson = JSON.stringify(order.map(path => path === oldPath ? newPath : path))
+        } catch (_) {}
+        layout.sync()
     }
 
     function configureOutputs() {
@@ -204,6 +244,7 @@ QtObject {
             return true
         lastError = ""
         _platform("file.rename", { source: entry.path, target: target }, function(result) {
+            service.migrateLayoutPath(entry.path, result.path || target)
             if (onSuccess)
                 onSuccess(result.path || target)
             requestDesktopRefresh()

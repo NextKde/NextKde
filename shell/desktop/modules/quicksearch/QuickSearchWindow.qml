@@ -23,13 +23,11 @@ PanelWindow {
     // Keep this deliberately minimal: QuickSearch is a high-frequency
     // shortcut surface, so a brief fade is clearer and faster than a sheet
     // transition or scale animation.
-    property real revealProgress: open ? 1.0 : 0.0
-
-    Behavior on revealProgress {
-        NumberAnimation {
-            duration: 90
-            easing.type: Easing.OutCubic
-        }
+    readonly property real revealProgress: popupMotion.progress
+    PopupMotion {
+        id: popupMotion
+        openDuration: 90
+        closeDuration: 90
     }
 
     signal closeRequested
@@ -150,9 +148,13 @@ PanelWindow {
     readonly property int gridColumnCount: 5
     readonly property int visibleGridRowCount: Math.min(3, Math.ceil(resultCount / gridColumnCount))
 
-    visible: open
+    visible: popupMotion.mapped
     color: "transparent"
-    focusable: true
+    focusable: open
+    WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    contentItem.enabled: open
+    mask: open ? null : emptyInputRegion
+    Region { id: emptyInputRegion }
     // Blur only the compact search card; the rest of the screen remains an
     // untouched, transparent Spotlight-style surface.
     BackgroundEffect.blurRegion: (root.visible && dialog.radius > 0)
@@ -379,6 +381,8 @@ PanelWindow {
     }
 
     onOpenChanged: {
+        if (open) popupMotion.open()
+        else popupMotion.close()
         if (open) {
             reset();
             if (mode === "clipboard") {
@@ -387,6 +391,7 @@ PanelWindow {
             }
         }
     }
+    Component.onCompleted: { if (open) popupMotion.open() }
     onModeChanged: {
         if (open)
             reset();
@@ -551,6 +556,7 @@ PanelWindow {
 
             TextInput {
                 id: searchInput
+                objectName: "quicksearch-input"
                 anchors {
                     left: fieldPill.left
                     leftMargin: 44
@@ -592,7 +598,8 @@ PanelWindow {
                     } else if (event.key === Qt.Key_Tab) {
                         root.modeCycleRequested();
                         event.accepted = true;
-                    } else if (event.key === Qt.Key_Delete) {
+                    } else if (event.key === Qt.Key_Delete && control
+                               && (event.modifiers & Qt.ShiftModifier)) {
                         if (root.mode === "clipboard") {
                             root.deleteCurrentSelection();
                             event.accepted = true;

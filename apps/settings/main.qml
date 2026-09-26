@@ -836,6 +836,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 dockPage.previewDockHeight(position)
                             }
+                            onCanceled: { dockPage.layoutDirty = false; dockPage.refresh() }
                             onCommitRequested: dockPage.commitLayout()
                         }
                     }
@@ -980,6 +981,7 @@ ApplicationWindow {
                 Item { Layout.fillWidth: true }
                 LiquidControls.LiquidGlassSwitch {
                     id: windowGroupingSwitch
+                    objectName: "window-grouping-switch"
                     checked: dockPage.windowGroupingIndex === 0
                     accentColor: theme.role("primary", "#0a84ff")
                     trackColor: theme.divider
@@ -988,9 +990,6 @@ ApplicationWindow {
                         if (requestedIndex !== dockPage.windowGroupingIndex) {
                             dockPage.saveWindowGrouping(requestedIndex)
                         }
-                        // The shared switch owns its checked state after a
-                        // click. Put it back to the IPC-confirmed value.
-                        windowGroupingSwitch.checked = dockPage.windowGroupingIndex === 0
                     }
                 }
             }
@@ -1421,10 +1420,6 @@ ApplicationWindow {
                             trackColor: theme.divider
                             onToggled: function(checked) {
                                 displayPage.saveGlassFollowsAppearanceMode(checked)
-                                // The shared switch owns its checked state after
-                                // a click; put it back to the IPC-confirmed value.
-                                glassFollowsAppearanceModeSwitch.checked =
-                                    displayPage.glassFollowsAppearanceMode
                             }
                         }
                     }
@@ -1525,6 +1520,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 displayPage.previewBlur(position)
                             }
+                            onCanceled: { liveBlurDebounce.stop(); displayPage.blurDirty = false; displayPage.refresh() }
                             onCommitRequested: displayPage.commitBlur()
                         }
                     }
@@ -1575,6 +1571,7 @@ ApplicationWindow {
                             onPreviewChanged: function(position) {
                                 displayPage.previewLiquid(position)
                             }
+                            onCanceled: { liveLiquidDebounce.stop(); displayPage.liquidDirty = false; displayPage.refresh() }
                             onCommitRequested: displayPage.commitLiquid()
                         }
                     }
@@ -1789,6 +1786,7 @@ ApplicationWindow {
                                     currentNumber = modelData.type === "int" ? Math.round(raw)
                                         : Math.round(raw / Number(modelData.step)) * Number(modelData.step)
                                 }
+                                onCanceled: currentNumber = Qt.binding(function() { return Number(modelData.value) })
                                 onCommitRequested: glassDebugPage.updateValue(modelData.key, currentNumber)
                             }
                             Row {
@@ -1863,6 +1861,89 @@ ApplicationWindow {
         Text {
             visible: glassDebugPage.errorText.length > 0
             text: glassDebugPage.errorText
+            color: "#ff453a"
+            font.pixelSize: 12
+        }
+    }
+
+    component WidgetAppearanceSection: ColumnLayout {
+        id: widgetAppearance
+        Layout.fillWidth: true
+        spacing: 7
+        property var bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
+        property string style: "color"
+        property bool loaded: false
+
+        Connections {
+            target: widgetAppearance.bridge
+            function onAppearanceSnapshotChanged(state) {
+                if (!state || (state.widgetStyle !== "color" && state.widgetStyle !== "glass"))
+                    return
+                widgetAppearance.style = state.widgetStyle
+                widgetAppearance.loaded = true
+            }
+        }
+        Component.onCompleted: {
+            if (bridge)
+                bridge.appearanceSnapshot()
+        }
+
+        Text {
+            text: "小组件外观"
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 58
+            radius: 18
+            color: theme.card
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "▦"; tint: "#5ac8fa" }
+                Text { text: "卡片样式"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                Item { Layout.fillWidth: true }
+                SettingsNavBar {
+                    objectName: "widget-style-picker"
+                    model: [{ id: "color", label: "彩色卡片" }, { id: "glass", label: "玻璃" }]
+                    itemWidthOverride: 78
+                    currentIndex: widgetAppearance.style === "glass" ? 1 : 0
+                    disabled: !widgetAppearance.loaded || window.materialForm
+                    onSelectionChanged: function(index) {
+                        // LiquidNavBar.select() assigns currentIndex. Restore
+                        // the binding so failures and later snapshots still
+                        // show the confirmed Shell value.
+                        currentIndex = Qt.binding(function() {
+                            return widgetAppearance.style === "glass" ? 1 : 0
+                        })
+                        if (widgetAppearance.bridge)
+                            widgetAppearance.bridge.updateWidgetStyle(index === 1 ? "glass" : "color")
+                    }
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            Layout.rightMargin: 13
+            text: window.materialForm
+                ? "Material Design 使用主题色卡片；其他主题可单独选择彩色卡片或玻璃。"
+                : "玻璃效果跟随主题中的材质设置。此选项不会改变应用图标颜色。"
+            wrapMode: Text.Wrap
+            color: theme.secondaryText
+            font.pixelSize: 12
+        }
+        Text {
+            Layout.fillWidth: true
+            Layout.leftMargin: 13
+            text: widgetAppearance.bridge ? widgetAppearance.bridge.lastError : ""
+            visible: text.length > 0
+            wrapMode: Text.Wrap
             color: "#ff453a"
             font.pixelSize: 12
         }
@@ -2021,6 +2102,7 @@ ApplicationWindow {
                             accentColor: theme.accent
                             Layout.preferredWidth: 190; value: iconAppearance.iconOpacity; trackColor: theme.divider
                             onPreviewChanged: function(position) { iconAppearance.iconOpacity = Math.max(0.1, position); iconAppearance.opacityDirty = true }
+                            onCanceled: { iconAppearance.opacityDirty = false; iconAppearance.refresh() }
                             onCommitRequested: iconAppearance.commitOpacity()
                         }
                     }
@@ -2710,6 +2792,11 @@ ApplicationWindow {
             showSystemAppearance: true
             showGlassMaterial: false
             showIconAppearance: true
+        }
+
+        WidgetAppearanceSection {
+            Layout.topMargin: 12
+            Layout.bottomMargin: 12
         }
 
         Text {
@@ -3766,6 +3853,7 @@ ApplicationWindow {
 
             Flickable {
                 id: pageScroll
+                objectName: "settings-page-scroll"
                 anchors.fill: parent
                 anchors.leftMargin: 30
                 anchors.rightMargin: 30
