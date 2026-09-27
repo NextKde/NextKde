@@ -5,6 +5,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
 import qs.desktop.modules.applauncher
+import qs.desktop.modules.notifications
 
 ShellRoot {
     id: test
@@ -46,6 +47,7 @@ ShellRoot {
             cardScale: 0.9
             Item { id: probeChild; width: 10; height: 10 }
         }
+        LiquidGlassPanel { id: scrimProbe; visible: false; scrimLevel: "balanced" }
     }
     RoundedBlurRegion { id: region; item: geometryItem; radius: 10 }
     ControlCenterPanel { id: center; anchorItem: anchorItem }
@@ -58,6 +60,54 @@ ShellRoot {
     ContextMenu { id: menu; anchorItem: anchorItem }
     DockInfoPopup { id: info; anchorItem: anchorItem; page: 2 }
     AppLauncherWindow { id: launcher; outputAvailable: false }
+
+    QtObject {
+        id: notificationGroups
+        property ListModel groupsModel: ListModel {}
+        property int sidecarRevision: 0
+        property var dismissed: []
+        property var notice: ({
+            summary: "Notification motion", body: "The glass stays with the card.",
+            appName: "Motion test", image: "", appIcon: "", urgency: 2,
+            expireTimeout: 0, actions: [], hasInlineReply: false
+        })
+        function latestForKey(key) {
+            return dismissed.indexOf(key) < 0 ? notice : null
+        }
+        function dismissGroupByKey(key) {
+            dismissed = dismissed.concat([key])
+            sidecarRevision++
+            for (let index = 0; index < groupsModel.count; ++index) {
+                if (groupsModel.get(index).groupKey === key) {
+                    groupsModel.remove(index)
+                    return
+                }
+            }
+        }
+        function expireGroupByKey(key) { dismissGroupByKey(key) }
+    }
+    NotificationWindow { id: notifications; groupService: notificationGroups; visible: true; exitDuration: 600 }
+
+    function checkNotificationGlass(expectedCount) {
+        const cards = notifications.visibleCards
+        check(cards.length === expectedCount, "notification delegates survive until their slide finishes: "
+            + cards.length + " vs " + expectedCount)
+        const blur = notifications.BackgroundEffect.blurRegion
+        check(blur !== null && blur.regions.length === expectedCount,
+            "blur includes every live card, including removed model rows")
+        for (const card of cards) {
+            const region = card.notificationBlurRegion
+            const expected = card.mapToItem(null, Qt.rect(0, 0, card.width, card.height))
+            check(region.item === card && Math.abs(region.itemRect.x - expected.x) < 0.01
+                && Math.abs(region.itemRect.y - expected.y) < 0.01
+                && Math.abs(region.itemRect.height - expected.height) < 0.01,
+                "notification blur follows each card's slide and displacement")
+            if (card.removing) {
+                check(!card.enabled && card.displaySummary === "Notification motion",
+                    "departing card retains its content without accepting input")
+            }
+        }
+    }
 
     Connections {
         target: center
@@ -111,6 +161,14 @@ ShellRoot {
         check(launcherLayout.width === stableLayoutWidth
             && launcherLayout.height === stableLayoutHeight,
             "grid layout remains fixed throughout the panel animation")
+        const surface = findItem(launcherFrame, "launcher-glass-surface")
+        const content = findItem(launcherFrame, "launcher-motion-content")
+        const progress = launcher.contentRevealProgress
+        check(launcherFrame.opacity === 1 && content.opacity === progress,
+            "launcher content fades once without leaving an empty dark panel")
+        check(Math.abs(surface.blurRegion.scrimCap - surface._effectiveScrimCap * progress) < 0.0001
+            && Math.abs(surface.blurRegion.scrimDecay - surface._effectiveScrimDecay * progress) < 0.0001,
+            "native glass tint fades with the same progress as the launcher content")
         const blur = launcher.BackgroundEffect.blurRegion
         check(blur !== null && blur.item === launcherFrame,
             "native blur follows the animated frame instead of the full-sized layout")
@@ -126,6 +184,28 @@ ShellRoot {
             && Math.abs(launcherFrame.y + launcherFrame.height * launcher.panelOriginY
             - stableLayoutHeight * launcher.panelOriginY) < 0.01,
             "the panel keeps its Dock edge or central origin fixed")
+    }
+
+    function checkScrimOpacity() {
+        check(scrimProbe.blurRegion.scrimCap === 0.47 && scrimProbe.blurRegion.scrimDecay === 0.75,
+            "panels without a reveal retain their existing glass tint")
+        for (const opacity of [-1, 0, 0.4, 1, 2]) {
+            scrimProbe.scrimOpacity = opacity
+            const bounded = Math.max(0, Math.min(1, opacity))
+            check(Math.abs(scrimProbe.blurRegion.scrimCap - 0.47 * bounded) < 0.0001
+                && Math.abs(scrimProbe.blurRegion.scrimDecay - 0.75 * bounded) < 0.0001,
+                "adaptive tint scales both its cap and decay and clamps reveal opacity")
+            scrimProbe.scrimFixed = true
+            check(scrimProbe.blurRegion.scrimDecay === 2, "fixed tint preserves its protocol mode")
+            scrimProbe.scrimGraphite = true
+            check(scrimProbe.blurRegion.scrimDecay === 3, "graphite tint preserves its protocol mode")
+            scrimProbe.scrimPearl = true
+            check(scrimProbe.blurRegion.scrimDecay === 4, "pearl tint preserves its protocol mode")
+            scrimProbe.scrimPearl = false
+            scrimProbe.scrimGraphite = false
+            scrimProbe.scrimFixed = false
+        }
+        scrimProbe.scrimOpacity = 1
     }
 
     function checkGeometry() {
@@ -147,6 +227,7 @@ ShellRoot {
                 console.log("POPUP_MOTION_STAGE " + test.stage)
                 switch (test.stage++) {
                 case 0:
+                    checkScrimOpacity()
                     checkGeometry()
                     check(probeChild.parent !== contentProbe
                         && probeChild.parent.opacity === 0.25
@@ -349,9 +430,53 @@ ShellRoot {
                         test.stage = 18
                         interval = 40
                     } else {
-                        console.log("POPUP_MOTION_PASS")
-                        Qt.quit()
+                        interval = 40
                     }
+                    break
+                case 24:
+                    notificationGroups.groupsModel.append({groupKey: "first", count: 1, collapsed: true})
+                    notificationGroups.groupsModel.append({groupKey: "second", count: 1, collapsed: true})
+                    interval = 280
+                    break
+                case 25:
+                    checkNotificationGlass(2)
+                    notifications.visibleCards.find(card => card.groupKey === "first").close(false)
+                    interval = 80
+                    break
+                case 26:
+                    checkNotificationGlass(2)
+                    check(notificationGroups.groupsModel.count === 1, "dismiss removes the model row immediately")
+                    check(notifications.visibleCards.some(card => card.removing && card.x > 0),
+                        "removed notification and its blur continue sliding together")
+                    check(notifications.mask.regions.length === 1, "departing card releases its input region")
+                    interval = 600
+                    break
+                case 27:
+                    checkNotificationGlass(1)
+                    notifications.visibleCards[0].close(true)
+                    interval = 80
+                    break
+                case 28:
+                    checkNotificationGlass(1)
+                    check(notificationGroups.groupsModel.count === 0 && notifications.mask.regions.length === 0,
+                        "last notification keeps its exiting blur without blocking input")
+                    notificationGroups.groupsModel.append({groupKey: "replacement", count: 1, collapsed: true})
+                    interval = 50
+                    break
+                case 29:
+                    checkNotificationGlass(2)
+                    interval = 600
+                    break
+                case 30:
+                    checkNotificationGlass(1)
+                    notifications.visibleCards[0].close(false)
+                    interval = 650
+                    break
+                case 31:
+                    check(notifications.visibleCards.length === 0 && notifications.BackgroundEffect.blurRegion === null,
+                        "notification blur is released only after the last delegate exits")
+                    console.log("POPUP_MOTION_PASS")
+                    Qt.quit()
                     break
                 }
             } catch (error) {

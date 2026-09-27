@@ -1164,7 +1164,6 @@ PanelWindow {
             y: (launcherRevealClip.height - height) * root.panelOriginY
             visible: root.panelVisible && root.contentRevealProgress > 0
             enabled: root.open
-            opacity: root.contentRevealProgress
             clip: true
 
             Item {
@@ -1182,6 +1181,7 @@ PanelWindow {
                 // KWin alone renders the blur, refraction and highlights.
                 LiquidGlassPanel {
                     id: launcherSurface
+                    objectName: "launcher-glass-surface"
                     x: -background.x
                     y: -background.y
                     width: launcherCard.width
@@ -1189,19 +1189,19 @@ PanelWindow {
                     radius: Math.min(background.radius, width / 2, height / 2)
                     blurAnchor: launcherCard
                     layer.enabled: fallbackEnabled && continuousCorners
-                    // Use the exact same surface profile as the Dock. The
-                    // launcher contributes geometry only; it has no private
-                    // material adjustment.
+                    opacity: fallbackEnabled ? root.contentRevealProgress : 1
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
+                    scrimOpacity: root.contentRevealProgress
                 }
 
                 Item {
                     id: launcherContent
+                    objectName: "launcher-motion-content"
                     anchors.fill: parent
                     focus: root.open && !root.externalDialogOpen
-                    opacity: Math.max(0, (root.contentRevealProgress - 0.15) / 0.85)
+                    opacity: root.contentRevealProgress
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it

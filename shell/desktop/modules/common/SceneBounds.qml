@@ -27,6 +27,11 @@ QtObject {
     onItemChanged: rebuild()
     Component.onCompleted: rebuild()
 
+    property Timer parentSync: Timer {
+        interval: 0
+        onTriggered: root.rebuild()
+    }
+
     property Instantiator watchers: Instantiator {
         model: root.sources
         delegate: Connections {
@@ -44,7 +49,7 @@ QtObject {
             function onXScaleChanged() { root.update() }
             function onYScaleChanged() { root.update() }
             function onAngleChanged() { root.update() }
-            function onParentChanged() { Qt.callLater(root.rebuild) }
+            function onParentChanged() { root.parentSync.restart() }
         }
     }
 }

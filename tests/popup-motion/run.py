@@ -26,7 +26,7 @@ def run():
                    KOS_DATA_SOCKET=str(root / "no-data.sock"), QT_QPA_PLATFORM="wayland")
         try:
             result = subprocess.run(["quickshell", "--path", str(root), "--no-color"],
-                                    env=env, capture_output=True, text=True, timeout=30)
+                                    env=env, capture_output=True, text=True, timeout=40)
         except subprocess.TimeoutExpired as error:
             raise AssertionError((error.stdout or b"").decode(errors="replace")
                                  + (error.stderr or b"").decode(errors="replace")) from error
@@ -34,10 +34,11 @@ def run():
         assert result.returncode == 0 and "POPUP_MOTION_PASS" in output, output
         assert not re.search(
             r"POPUP_MOTION_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|"
-            r"is not a type|Binding loop|is not a function", output), output
+            r"is not a type|Binding loop|is not a function|invalid context", output), output
         print("PASS: Control Center navigation, confirmation, close/reopen; popup input lifetime; "
               "menu navigation; launcher exit; transformed blur geometry; stable navigation glass; "
-              "Dock info backdrop; card content routing; launcher panel geometry in six presentations")
+              "Dock info backdrop; card content routing; launcher geometry and tint in six presentations; "
+              "notification blur lifetime, dismissal, expiry and arrival during exit")
 
 
 if __name__ == "__main__":
