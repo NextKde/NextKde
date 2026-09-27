@@ -31,6 +31,17 @@ Item {
     property real cardScale: 1.0
     property real contentOpacity: 1.0
     property real contentOffsetY: 0
+    // Sub-page morph geometry. During a page transition the host animates a
+    // card between its full rectangle and the source control it grew from
+    // (the Wi-Fi pill, the brightness slider, ...). `morphRect` is the card's
+    // current visible window in CARD coordinates: it starts at the full card
+    // and shrinks toward the source. The glass and the blur region follow it,
+    // while `cardContent` keeps its natural size and is clipped, so the card
+    // reads as collapsing into the capsule instead of squashing its content.
+    // A zero/empty rect means "no morph" and behaves exactly like before.
+    property rect morphRect: Qt.rect(0, 0, -1, -1)
+    readonly property rect _morph: morphRect.width > 0 && morphRect.height > 0
+        ? morphRect : Qt.rect(0, 0, root.width, root.height)
     // Hosts with their own tonal fill can still use this item solely to
     // publish a KWin blur shape, without stacking a second QML material.
     property bool fallbackEnabled: AppearanceTokens.surface.paintInQml
@@ -46,6 +57,15 @@ Item {
     readonly property bool isControlCenterCard: true
     // Host shows/hides a card (submenus and the session sheet toggle this).
     property bool cardShown: true
+    // Which navigation page this card belongs to. The panel multiplies the
+    // card's opacity by that page's crossfade factor, so a card fades with
+    // its page -- glass and content together. "" is the primary page.
+    property string pageTag: ""
+    // How opaque the KWin glass backing is, 0..1. The QML card Item's own
+    // opacity never reaches the compositor blur/scrim shape, so a page fade
+    // must drive this separately or the frosted silhouette lingers after the
+    // content has already faded out. 1 keeps every non-animated card exact.
+    property real glassOpacity: 1.0
 
     // The item whose x/y are this card's position in the surface. Defaults to
     // the card itself (fine when placed directly in the panel window, as
@@ -55,6 +75,11 @@ Item {
     // RoundedBlurRegion reads item.x/y verbatim, so a zero-positioned card
     // would misplace the blur region to the window origin.
     property Item blurAnchor: root
+    // During a morph the card keeps publishing only the shrink window: the
+    // glass and its blur region are clipped to `_morph`, so KWin frosts the
+    // capsule-sized rectangle, not the full panel silhouette.
+    clip: _morph.width < width || _morph.height < height
+        || _morph.x !== 0 || _morph.y !== 0
 
     // Content's adaptive foreground ink, from this card's glass.
     readonly property color materialForegroundColor: cardGlass.foregroundColor
@@ -66,6 +91,17 @@ Item {
     width: cardWidth
     height: cardHeight
     visible: root.cardShown
+
+    // Geometry anchor the glass and its compositor shape publish from. During
+    // a morph this is the shrinking window `_morph`; at rest it collapses to
+    // the full card so an unmorphed card publishes exactly its own rectangle.
+    Item {
+        id: morphAnchor
+        x: root._morph.x
+        y: root._morph.y
+        width: root._morph.width
+        height: root._morph.height
+    }
 
     // This card's exact compositor shape, used by the panel to build the
     // single window blur region (the union of all cards).
@@ -89,7 +125,7 @@ Item {
         // root.blurAnchor defaults to this card; a wrapper-embedded card (the
         // desk widgets) overrides it to point at the wrapper that holds the
         // true surface offset.
-        blurAnchor: root.blurAnchor
+        blurAnchor: root.morphRect.width > 0 ? morphAnchor : root.blurAnchor
         radius: Math.max(1, Math.min(
             Math.round(root.cardRadius),
             Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
@@ -99,6 +135,10 @@ Item {
         // Same see-through scrim posture as the Dock: on, at the subtle level.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
         scrimLevel: root.cardScrimLevel
+        // Fades the KWin scrim with the page crossfade so the frosted glass
+        // does not outlive the QML content during a navigation. A card not in
+        // a transition keeps the default 1 and renders exactly as before.
+        scrimOpacity: root.glassOpacity
         ambientPrimary: WallpaperColorSource.primary
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier

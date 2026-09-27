@@ -40,8 +40,10 @@ const submenuCard = panel.slice(
     panel.indexOf("id: submenuCard"),
     panel.indexOf("// Navigation Header")
 )
-assert.match(submenuCard, /cardShown:.*panel\.displayedSubmenu/,
-    "the outgoing submenu stays rendered until the page transition commits")
+assert.match(submenuCard, /cardShown:\s*panel\.submenuShownPage\s*!==\s*""/,
+    "the submenu card stays mapped while its page renders on either side of a crossfade")
+assert.match(submenuCard, /pageTag:\s*panel\.submenuShownPage/,
+    "the submenu card belongs to the page it is currently rendering")
 assert.match(panel, /visible:\s*popupMotion\.mapped/,
     "the window remains mapped for its exit animation")
 assert.match(panel, /readonly property bool open:\s*popupMotion\.requestedOpen/,
@@ -62,9 +64,15 @@ assert.match(card, /Item\s*\{\s*id: root\s*default property alias content: cardC
 assert.match(card, /opacity:\s*root\.contentOpacity/,
     "content opacity is independent of the native glass")
 const placement = panel.slice(panel.indexOf("function placeCard"), panel.indexOf("property bool _internalTransition"))
-assert.match(placement, /c\.opacity = Qt\.binding\(function\(\)\s*\{\s*return popupMotion\.progress\s*\}/,
-    "navigation never fades the native card")
+assert.match(placement, /c\.opacity = Qt\.binding\(function\(\)\s*\{\s*return panel\.pageFactor\(c\.pageTag\)\s*\}/,
+    "a card fades glass and content together with its page")
+assert.match(panel, /crossfade:\s*true/,
+    "page navigation is a single continuous crossfade, not exit-then-enter")
 assert.doesNotMatch(panel, /popupMotion\.progress > 0 && pageMotion\.progress > 0/,
     "navigation never drops the compositor blur region")
+assert.match(card, /scrimOpacity:\\s*root\\.glassOpacity/,
+    \"the KWin scrim fades with the card's page factor, not just its content\")
+assert.match(placement, /c\\.glassOpacity = Qt\\.binding\\(function\\(\\)\\s*\\{\\s*return panel\\.pageFactor\\(c\\.pageTag\\)\\s*\\}/,
+    \"a card's compositor glass fades with its page so no blurred ghost is left\")
 
 console.log("control-center submenu state contract: ok")

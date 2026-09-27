@@ -24,6 +24,17 @@ PopupWindow {
     color: "transparent"
     grabFocus: popupMotion.interactive
     visible: popupMotion.mapped
+    // The whole surface animates as one block: opacity + a small scale around
+    // the anchor edge. Animating the shared contentItem instead of each card's
+    // x/y/scale keeps every card's compositor blur shape locked to the same
+    // transform, so the frosted silhouettes move together instead of drifting
+    // as a dozen independent regions.
+    contentItem.opacity: popupMotion.progress
+    contentItem.scale: AppearanceTokens.motion.popupStartScale
+        + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+    contentItem.transformOrigin: !panel.dockHosted ? Item.Top
+        : panel.dockEdge === "left" ? Item.Left
+        : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     contentItem.enabled: popupMotion.interactive
     mask: popupMotion.interactive ? null : emptyRegion
     anchor {
@@ -59,6 +70,10 @@ PopupWindow {
     readonly property string displayedSubmenu: pageMotion.displayedPage
     readonly property real revealProgress: popupMotion.progress
     readonly property real pageProgress: pageMotion.progress
+    // Page currently fading out during a crossfade, "" once the transition
+    // settles. Cards bound to it stay mapped (and fade) instead of being cut
+    // the frame the new page commits.
+    readonly property string outgoingPage: pageMotion.outgoingPage
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
     // A standalone top Bar grows downward, so controls come first. A panel
     // hosted by a bottom/side Dock grows away from the Dock, so keep the
@@ -156,7 +171,65 @@ PopupWindow {
         id: pageMotion
         page: panel.requestedPage
         enabled: popupMotion.requestedOpen
+        // One continuous crossfade per navigation: the incoming page maps
+        // immediately and fades in while the outgoing page's cards fade out,
+        // so there is never an empty-glass frame between the two.
+        crossfade: true
     }
+
+    // The page the submenu card is currently rendering: the displayed page
+    // when it is a submenu, otherwise the outgoing page while it still holds
+    // one (its content and height must survive the fade-out unchanged).
+    readonly property string submenuShownPage:
+        ["wifi", "bluetooth", "brightness", "sound"].indexOf(panel.displayedSubmenu) >= 0
+            ? panel.displayedSubmenu
+            : (["wifi", "bluetooth", "brightness", "sound"].indexOf(panel.outgoingPage) >= 0
+                ? panel.outgoingPage : "")
+
+    // Per-page crossfade factor: 1 while a page is fully in, progress while it
+    // fades in, (1 - progress) while it fades out, 0 when it owns neither side
+    // of the transition. Multiplied into a card's opacity so glass AND content
+    // fade together -- a card that only faded its content would leave a lit
+    // glass shell hanging over the incoming page.
+    function pageFactor(page) {
+        if (pageMotion.displayedPage === page)
+            return pageMotion.progress
+        if (pageMotion.outgoingPage === page)
+            return 1 - pageMotion.progress
+        return 0
+    }
+
+    // Whether a card belonging to `page` stays mapped. Incoming pages map
+    // immediately; an outgoing page unmaps only once its fade has fully
+    // landed, because its KWin blur region has no opacity of its own -- the
+    // scrim fade (glassOpacity) is what retires the glass, and keeping the
+    // card mapped to the last frame lets that fade finish instead of leaving
+    // a frozen blurred silhouette that pops away a few frames early.
+    function cardMapped(page) {
+        if (pageMotion.displayedPage === page)
+            return true
+        return pageMotion.outgoingPage === page && pageMotion.progress < 0.995
+    }
+
+    // The capsule a sub-page grows out of / collapses back into, in panel
+    // coordinates. Returning to the primary page is a shrink into that source
+    // rect rather than a flat fade: the submenu card morphs onto the Wi-Fi
+    // pill (or the brightness/sound slider) it was opened from.
+    readonly property var submenuSourceRects: ({
+        "wifi":       Qt.rect(336 - 179 - 137, 20  + mainControlsOffsetY, 137, 59),
+        "bluetooth":  Qt.rect(336 - 179 - 137, 87  + mainControlsOffsetY, 137, 59),
+        "brightness": Qt.rect(336 - 20  - 296, 217 + mainControlsOffsetY, 296, 57),
+        "sound":      Qt.rect(336 - 20  - 296, 282 + mainControlsOffsetY, 296, 57)
+    })
+
+    // 0 when the sub-page is at full size, 1 when it has fully collapsed onto
+    // its source capsule. Drives the submenu card's morphRect interpolation.
+    // Ease matches the crossfade so geometry and opacity stay in lockstep.
+    readonly property real submenuMorph: submenuShownPage === "" ? 0
+        : (pageMotion.displayedPage === panel.submenuShownPage
+            ? (1 - pageMotion.progress)
+            : (pageMotion.outgoingPage === panel.submenuShownPage
+                ? pageMotion.progress : 0))
 
     // No panel-wide glass slab: the window blur region is the UNION of every
     // card's blurRegion, so KWin blurs behind the cards (real frosted glass)
@@ -219,7 +292,7 @@ PopupWindow {
                 // false) own their own cardShown instead.
                 if (c.managedByCoordinator) {
                     c.cardShown = Qt.binding(function() {
-                        return panel.displayedSubmenu === ""
+                        return panel.cardMapped("")
                     })
                 }
                 panel.placeCard(c)
@@ -228,29 +301,59 @@ PopupWindow {
     }
     function placeCard(c) {
         c.x = Qt.binding(function() {
-            const direction = panel.dockHosted && panel.dockEdge === "left" ? -1
-                : panel.dockHosted && panel.dockEdge === "right" ? 1 : 0
             return panel.controlCenterWidth - c.offsetRight - c.width
-                + direction * (1 - popupMotion.progress) * 16
         })
         c.y = Qt.binding(function() {
-            const direction = panel.notificationFirst ? 1 : -1
-            return c.offsetTop + direction * (1 - popupMotion.progress) * 16
+            return c.offsetTop
         })
+        // Page-level visibility lives on the card itself (glass + content
+        // fade together); the window-level reveal rides on contentItem.
         c.opacity = Qt.binding(function() {
-            return popupMotion.progress
+            return panel.pageFactor(c.pageTag)
         })
-        c.scale = Qt.binding(function() {
-            return 0.97 + 0.03 * popupMotion.progress
+        // The compositor glass has no opacity of its own; drive its scrim
+        // from the same page factor so the frosted silhouette fades with the
+        // card instead of persisting as a blurred ghost after unmap.
+        c.glassOpacity = Qt.binding(function() {
+            return panel.pageFactor(c.pageTag)
+        })
+        // The submenu card morphs through morphRect (geometry), not a uniform
+        // Item scale: applying the 0.96 breathing scale on top of a collapse
+        // that already carries the card to a capsule would double-shrink it
+        // off the source. Only the primary page's cards take the scale nudge.
+        const isSubmenu = c === submenuCard
+        // Mirror of the entrance: the incoming page grows 0.96→1 while the
+        // outgoing page shrinks 1→0.96 over the same progress. The submenu
+        // card skips this -- its collapse is expressed by morphRect geometry,
+        // and stacking an Item scale on top would double-shrink it.
+        c.scale = isSubmenu ? 1 : Qt.binding(function() {
+            if (pageMotion.displayedPage === c.pageTag)
+                return 0.96 + 0.04 * pageMotion.progress
+            if (pageMotion.outgoingPage === c.pageTag)
+                return 1 - 0.04 * pageMotion.progress
+            return 1
         })
         c.contentOpacity = Qt.binding(function() {
-            return pageMotion.progress
+            return panel.pageFactor(c.pageTag)
         })
         c.contentOffsetY = Qt.binding(function() {
+            // Only the incoming page slides into place. An outgoing page
+            // fades exactly where it sits: drifting its content would peel it
+            // away from the compositor blur shape the card still publishes,
+            // which reads as the frosting being left behind, shifted to one
+            // side of the departing panel.
+            // The submenu card's displacement is already carried by its
+            // morphRect collapse; adding the slide would drift it off the
+            // capsule it is shrinking into.
+            if (isSubmenu)
+                return 0
+            if (pageMotion.displayedPage !== c.pageTag)
+                return 0
             return (panel.notificationFirst ? 1 : -1) * (1 - pageMotion.progress) * 8
         })
         c.enabled = Qt.binding(function() {
             return popupMotion.interactive && pageMotion.interactive
+                && panel.displayedSubmenu === c.pageTag
         })
     }
 
@@ -1321,10 +1424,6 @@ PopupWindow {
         }
     }
 
-    // ── Card 10 (Sub-panel): Power & Session Management ──────────────
-    // The power/session page: Lock, Suspend, Switch User, Logout, Reboot and
-    // Power Off in one list. It uses the same slot and the same card material as
-    // the Wi-Fi/Bluetooth pages -- the coordinator-managed cards hide while it is
     // open, so the two interfaces never stack on top of each other.
     ControlCenterCard {
         id: sessionCard
@@ -1340,9 +1439,10 @@ PopupWindow {
         cardWidth: 296
         cardHeight: 340
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10))
-        // Hidden while a confirmation is up: the dialog owns the screen then, and
-        // leaving the list card mapped would strand an empty glass slab behind it.
-        cardShown: panel.displayedSubmenu === "session"
+        pageTag: "session"
+        // Stays mapped while the sheet is the outgoing side of a crossfade, so
+        // it fades out instead of snapping away the frame the next page commits.
+        cardShown: panel.cardMapped("session")
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1694,13 +1794,57 @@ PopupWindow {
             ? panel.controlCenterHeight - 20 - submenuCard.cardHeight
             : 20
         offsetRight: 20
-        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
+        // Roundness interpolates toward the source capsule while the card
+        // shrinks, so the collapsing panel ends flush with the control it
+        // returns to instead of staying a rounded slab.
+        readonly property real _baseRadius:
+            AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
+        cardRadius: _baseRadius + (_sourceRadius - _baseRadius) * panel.submenuMorph
+        // The capsule it returns to: Wi-Fi/Bluetooth pills are near-circular
+        // (29.5) and the brightness/sound sliders use the extraLarge token.
+        readonly property real _sourceRadius:
+            panel.submenuShownPage === "wifi" || panel.submenuShownPage === "bluetooth"
+                ? 29.5 : AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
-        cardHeight: panel.displayedSubmenu === "wifi" ? 360
-            : (panel.displayedSubmenu === "bluetooth" ? 340
-            : (panel.displayedSubmenu === "brightness" ? 280
-            : (panel.displayedSubmenu === "sound" ? 420 : 280)))
-        cardShown: ["wifi", "bluetooth", "brightness", "sound"].indexOf(panel.displayedSubmenu) >= 0
+        // Driven by the page the card is actually rendering (incoming or
+        // outgoing), so a fade-out keeps its height and a fade-in grows to
+        // the new page's height with a smooth Behavior instead of a jump.
+        cardHeight: panel.submenuShownPage === "wifi" ? 360
+            : (panel.submenuShownPage === "bluetooth" ? 340
+            : (panel.submenuShownPage === "brightness" ? 280
+            : (panel.submenuShownPage === "sound" ? 420 : 280)))
+        Behavior on cardHeight {
+            // Only animate between real pages. Once the card unmaps (the
+            // crossfade finished), the resting height snaps in place
+            // immediately -- animating it would run a pointless resize on an
+            // invisible card and force the next open to grow from stale
+            // geometry.
+            enabled: submenuCard.visible
+            NumberAnimation {
+                duration: AppearanceTokens.motion.normalDuration
+                easing.type: Easing.OutCubic
+            }
+        }
+        pageTag: panel.submenuShownPage
+        cardShown: panel.submenuShownPage !== ""
+            && panel.cardMapped(panel.submenuShownPage)
+        // Collapse-into-source morph: the card's visible window slides from its
+        // full rectangle down onto the capsule that spawned this page, and the
+        // reverse on open. The source rect is in panel coordinates, so subtract
+        // the card's own position to express it in card-local space.
+        morphRect: {
+            const src = panel.submenuSourceRects[panel.submenuShownPage]
+            if (!src)
+                return Qt.rect(0, 0, -1, -1)
+            const t = panel.submenuMorph
+            const cx = submenuCard.x
+            const cy = submenuCard.y
+            const x = (src.x - cx) * t
+            const y = (src.y - cy) * t
+            const w = submenuCard.width + (src.width - submenuCard.width) * t
+            const h = submenuCard.height + (src.height - submenuCard.height) * t
+            return Qt.rect(x, y, w, h)
+        }
 
         // Navigation Header
         Item {
@@ -1757,10 +1901,10 @@ PopupWindow {
                     leftMargin: 8
                     verticalCenter: parent.verticalCenter
                 }
-                text: panel.displayedSubmenu === "wifi" ? "Wi‑Fi"
-                    : (panel.displayedSubmenu === "bluetooth" ? "蓝牙"
-                    : (panel.displayedSubmenu === "brightness" ? "显示亮度"
-                    : (panel.displayedSubmenu === "sound" ? "声音" : "")))
+                text: panel.submenuShownPage === "wifi" ? "Wi‑Fi"
+                    : (panel.submenuShownPage === "bluetooth" ? "蓝牙"
+                    : (panel.submenuShownPage === "brightness" ? "显示亮度"
+                    : (panel.submenuShownPage === "sound" ? "声音" : "")))
                 color: AppearanceTokens.content.glassInk()
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -1768,7 +1912,7 @@ PopupWindow {
             // Right toggle switch for Wi-Fi and Bluetooth
             Rectangle {
                 id: submenuToggleSwitch
-                visible: panel.displayedSubmenu === "wifi" || panel.displayedSubmenu === "bluetooth"
+                visible: panel.submenuShownPage === "wifi" || panel.submenuShownPage === "bluetooth"
                 anchors {
                     right: parent.right
                     verticalCenter: parent.verticalCenter
@@ -1776,9 +1920,9 @@ PopupWindow {
                 width: 38
                 height: 22
                 radius: 11
-                readonly property bool isChecked: panel.displayedSubmenu === "wifi"
+                readonly property bool isChecked: panel.submenuShownPage === "wifi"
                     ? NetworkService.wifiEnabled : ControlCenterService.bluetoothPowered
-                readonly property bool inProgress: panel.displayedSubmenu === "wifi"
+                readonly property bool inProgress: panel.submenuShownPage === "wifi"
                     ? NetworkService.wifiToggleInProgress : ControlCenterService.bluetoothChangeInProgress
 
                 color: isChecked
@@ -1802,9 +1946,9 @@ PopupWindow {
                     cursorShape: Qt.PointingHandCursor
                     enabled: !submenuToggleSwitch.inProgress
                     onClicked: {
-                        if (panel.displayedSubmenu === "wifi") {
+                        if (panel.submenuShownPage === "wifi") {
                             NetworkService.setWifiEnabled(!NetworkService.wifiEnabled)
-                        } else if (panel.displayedSubmenu === "bluetooth") {
+                        } else if (panel.submenuShownPage === "bluetooth") {
                             ControlCenterService.setBluetoothEnabled(!ControlCenterService.bluetoothPowered)
                         }
                     }
@@ -1830,7 +1974,7 @@ PopupWindow {
         // ── View A: Wi-Fi ──
         Item {
             id: wifiSubmenuView
-            visible: panel.displayedSubmenu === "wifi"
+            visible: panel.submenuShownPage === "wifi"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
@@ -2099,7 +2243,7 @@ PopupWindow {
         // ── View B: Bluetooth ──
         Item {
             id: bluetoothSubmenuView
-            visible: panel.displayedSubmenu === "bluetooth"
+            visible: panel.submenuShownPage === "bluetooth"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
@@ -2329,7 +2473,7 @@ PopupWindow {
         // ── View C: Per-display brightness ──
         Item {
             id: brightnessSubmenuView
-            visible: panel.displayedSubmenu === "brightness"
+            visible: panel.submenuShownPage === "brightness"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 8
@@ -2438,7 +2582,7 @@ PopupWindow {
         // ── View D: Sound ──
         Item {
             id: soundSubmenuView
-            visible: panel.displayedSubmenu === "sound"
+            visible: panel.submenuShownPage === "sound"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
