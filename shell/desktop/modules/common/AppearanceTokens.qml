@@ -505,9 +505,7 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
-        // Whether a popup plays its entrance at all. Currently the macOS form's
-        // trait; a host asks this instead of naming the style.
-        readonly property bool popupAnimatesOnShow: tokens.isMacos
+        readonly property bool popupAnimatesOnShow: true
         // Whether the shell draws the extra faces a form brings with it -- the
         // Dock clock's dial, for instance. Same reason as above.
         readonly property bool drawsFormDecorations: tokens.isMacos

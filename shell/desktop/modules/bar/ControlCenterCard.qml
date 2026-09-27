@@ -13,6 +13,7 @@ import "../../../Kos/Ui"
 // ControlCenterCoordinator.
 Item {
     id: root
+    default property alias content: cardContent.data
 
     // ── Grid position & size (top-right origin, matching the old coordinator) ──
     property int offsetTop: 0
@@ -28,6 +29,8 @@ Item {
     property color cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, Qt.rgba(1, 1, 1, 0.20))
     property real cardOpacity: 1.0
     property real cardScale: 1.0
+    property real contentOpacity: 1.0
+    property real contentOffsetY: 0
     // Hosts with their own tonal fill can still use this item solely to
     // publish a KWin blur shape, without stacking a second QML material.
     property bool fallbackEnabled: AppearanceTokens.surface.paintInQml
@@ -102,12 +105,13 @@ Item {
         material: "regular"
 
         // Concrete card content (declared by the card instance), above the glass.
-        default property alias content: cardContent.data
         Item {
             id: cardContent
             anchors.fill: parent
             visible: root.cardOpacity > 0.001
             scale: root.cardScale
+            opacity: root.contentOpacity
+            transform: Translate { y: root.contentOffsetY }
         }
     }
 }

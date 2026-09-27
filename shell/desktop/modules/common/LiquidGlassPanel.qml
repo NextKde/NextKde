@@ -107,6 +107,7 @@ Item {
     // a bright wallpaper (black tint) and dark text over a dark one (white
     // tint) both stay legible.
     property bool scrimEnabled: false
+    property real scrimOpacity: 1.0
     // Named readability/transparency tradeoff, expressed as how far the scrim
     // is allowed to ramp at the backdrop extreme:
     //   "subtle"      a hint at most, keeps the surface almost fully see-through,
@@ -217,10 +218,11 @@ Item {
         shapeEnabled: root.visible && root.useKwinEffect && !root.tonal
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
-        scrimCap: root._effectiveScrimCap
+        scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))
         scrimDecay: root.scrimPearl ? 4.0
             : (root.scrimGraphite ? 3.0
-            : (root.scrimFixed ? 2.0 : root._effectiveScrimDecay)
+            : (root.scrimFixed ? 2.0 : root._effectiveScrimDecay
+                * Math.max(0, Math.min(1, root.scrimOpacity)))
             )
         // Per-surface blur strength (protocol v4 set_blur). Silent unless the host
         // opts in, which is why every existing caller renders unchanged.

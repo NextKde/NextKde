@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-Dialog {
+KosDialog {
     id: root
 
     property string editingId: ""

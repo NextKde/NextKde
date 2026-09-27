@@ -17,20 +17,14 @@ import "../../../Kos/Ui"
 // up as a visible mid-animation hitch (the compositor's synchronous resize
 // landed inside the 200ms slide). A constant surface eliminates it.
 //
-// A tall transparent Overlay window would normally intercept clicks across
-// the whole right edge even when empty. We avoid that with `mask: Region`:
-// the input region is shaped to the ListView's contentItem, so only the area
-// actually covered by cards is clickable -- transparent gaps pass through.
-//
 // The ListModel carries only primitive roles; live Notification objects are
 // fetched from groupService by groupKey (see NotificationGroupService --
-// ListModel cannot store object arrays). Closing a card calls dismiss/expire
-// on the group; the service rebuilds the model and ListView's own remove
-// Transition plays the exit slide.
+// ListModel cannot store object arrays).
 PanelWindow {
     id: root
 
     required property var groupService
+    property int exitDuration: 200
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
@@ -49,57 +43,24 @@ PanelWindow {
 
     implicitWidth: 350
 
-    // Shape the input region to the list content so the transparent parts of
-    // the fixed-height surface don't swallow right-side clicks.
-    mask: Region {
-        item: notificationList.contentItem
+    readonly property var visibleCards: notificationList.contentItem.children.filter(child =>
+        child.notificationBlurRegion !== undefined && child.visible)
+
+    Region {
+        id: notificationBlur
+        regions: root.visibleCards.map(card => card.notificationBlurRegion)
     }
 
-    // Blur the list content area so KWin's glass effect renders real liquid
-    // glass behind each card. The track itself is a LiquidGlassPanel, so it
-    // owns its blur region and exact corner instead of a separate hand-written
-    // region. Its height only *grows* with a delay (so the glass fades in
-    // after a new card's entrance slide finishes, instead of landing before
-    // the text arrives); shrinking is immediate so removed cards don't leave a
-    // lingering glass slab.
-    LiquidGlassPanel {
-        id: blurTrack
-        anchors.top: notificationList.top
-        anchors.left: notificationList.left
-        width: notificationList.width
-        height: blurTrackHeight.value
-        radius: 28
-        // Notifications need to stay readable over whatever is beneath, so the
-        // scrim fills in rather than stay see-through.
-        scrimEnabled: true
-        scrimLevel: "balanced"
-        // A tonal theme has no compositor glass, so the panel must neither
-        // paint a material strip (KWin owns the finish) nor publish a region.
-        visible: AppearanceTokens.surface.usesKwinBlur && blurTrackHeight.value > 0
+    BackgroundEffect.blurRegion: (root.visible && root.visibleCards.length > 0
+        && AppearanceTokens.surface.usesKwinBlur) ? notificationBlur : null
 
-        QtObject {
-            id: blurTrackHeight
-            property real value: 0
-            // Grow lazily (entrance slide is 200ms), shrink immediately.
-            function sync(target) {
-                if (target >= value) {
-                    growTimer.targetValue = target
-                    growTimer.restart()
-                } else {
-                    growTimer.stop()
-                    value = target
-                }
-            }
-            property Timer growTimer: Timer {
-                property real targetValue: 0
-                interval: 100
-                onTriggered: blurTrackHeight.value = targetValue
-            }
-        }
+    Region {
+        id: notificationInput
+        regions: root.visibleCards.filter(card => !card.removing)
+            .map(card => card.notificationBlurRegion)
     }
-    BackgroundEffect.blurRegion: (root.visible && blurTrackHeight.value > 0
-        && AppearanceTokens.surface.usesKwinBlur)
-        ? blurTrack.blurRegion : null
+
+    mask: notificationInput
 
     ListView {
         id: notificationList
@@ -113,7 +74,6 @@ PanelWindow {
         spacing: 10
         interactive: false
         clip: true
-        onContentHeightChanged: blurTrackHeight.sync(contentHeight)
 
         // Entrance: opacity + x-slide. Surface size is constant, so no resize
         // lands mid-slide -- the slide stays smooth.
@@ -122,10 +82,6 @@ PanelWindow {
                 NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.InCubic }
                 NumberAnimation { property: "x"; from: 120; to: 0; duration: 200; easing.type: Easing.InCubic }
             }
-        }
-        // Exit slide to the right.
-        remove: Transition {
-            NumberAnimation { property: "x"; from: 0; to: notificationList.width + 44; duration: 200; easing.type: Easing.InCubic }
         }
         displaced: Transition {
             NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
@@ -138,6 +94,24 @@ PanelWindow {
             id: card
             required property var modelData
             required property int index
+            readonly property var notificationBlurRegion: panel.blurRegion
+            property bool removing: false
+            enabled: !removing
+            ListView.onRemove: {
+                removing = true
+                ListView.delayRemove = true
+                exitAnimation.start()
+            }
+
+            NumberAnimation {
+                id: exitAnimation
+                target: card
+                property: "x"
+                to: notificationList.width + 44
+                duration: root.exitDuration
+                easing.type: Easing.InCubic
+                onFinished: card.ListView.delayRemove = false
+            }
 
             readonly property string groupKey: modelData.groupKey
             readonly property int groupCount: modelData.count
@@ -244,11 +218,7 @@ PanelWindow {
                 anchors.fill: parent
                 radius: card.radius
                 cornerExponent: AppearanceTokens.shape.cornerExponent
-                // The track above already owns the blur region and the corner of
-                // this glass: the card is content on it, not a surface of its
-                // own. Left on, the tonal form paints a second fill over the
-                // track's frost and the card reads as two stacked finishes.
-                fallbackEnabled: false
+                blurAnchor: card
                 // Text sits directly on this card, so it carries a readable scrim over
                 // whatever backdrop it ends up on.
                 scrimEnabled: AppearanceTokens.surface.usesBackdrop
@@ -298,6 +268,9 @@ PanelWindow {
             // covers both cases. Uses groupKey (stable across rebuilds) rather
             // than card.index (which can drift during a rebuild).
             function close(expired) {
+                if (removing)
+                    return
+                removing = true
                 if (expired)
                     root.groupService.expireGroupByKey(card.groupKey)
                 else

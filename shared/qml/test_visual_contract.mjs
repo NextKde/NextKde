@@ -414,8 +414,8 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
-    "Launchpad and anchored popups consume the same entrance tokens");
+    /PopupMotion\s*\{[\s\S]*openDuration:\s*300[\s\S]*closeDuration:\s*240/,
+    "the large launcher surface uses a slower reversible entrance and exit");
 assert.match(appLauncherWindow,
     /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
     "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
@@ -423,7 +423,7 @@ assert.match(appLauncherWindow,
     /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
     "Launchpad retains one backing window while a real output is available");
 assert.match(appLauncherWindow,
-    /mask:\s*Region\s*\{[\s\S]*width:\s*root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.panelVisible \? root\.height : 0/,
+    /mask:\s*Region\s*\{[\s\S]*width:\s*root\.open && root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.open && root\.panelVisible \? root\.height : 0/,
     "the closed Launchpad backing surface cannot intercept desktop input");
 assert.match(appLauncherWindow,
     /anchors\s*\{[\s\S]*top:\s*true[\s\S]*left:\s*true[\s\S]*right:\s*true[\s\S]*bottom:\s*true[\s\S]*implicitWidth:\s*launcherWidth[\s\S]*implicitHeight:\s*launcherHeight/,
@@ -431,6 +431,10 @@ assert.match(appLauncherWindow,
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
     "the closed Launchpad surface never publishes a compositor blur region");
+assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
+    "launcher native glass follows the animated card, not the fixed layout");
+assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
+    "the launcher backdrop expands and contracts with its contents");
 assert.match(appIconSource,
     /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");

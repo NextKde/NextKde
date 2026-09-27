@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Dialog {
+KosDialog {
     id: root
     objectName: "kosSettingsDialog"
 

@@ -10,7 +10,7 @@ import "../../../Kos/Ui"
 // First Bluetooth picker stage: known/paired devices can be connected or
 // disconnected here. Pairing discovery and PIN workflows stay out of this
 // compact popup until their full interaction can be implemented safely.
-PopupWindow {
+AnimatedPopupWindow {
     id: panel
 
     property Item anchorItem: null
@@ -19,7 +19,10 @@ PopupWindow {
     implicitWidth: 300
     implicitHeight: 340
     color: "transparent"
-    grabFocus: true
+    grabFocus: interactive
+    motionOrigin: !dockHosted ? Item.Top
+        : dockEdge === "left" ? Item.Left
+        : dockEdge === "right" ? Item.Right : Item.Bottom
     anchor {
         item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
@@ -42,20 +45,20 @@ PopupWindow {
     // its exact SurfaceShape below; a hand-written stepped region would only
     // approximate the corner and drop the shape declaration.
     readonly property int blurRadius: Math.max(1, Math.min(20, Math.floor(300 / 2)))
-    BackgroundEffect.blurRegion: (panel.visible
+    BackgroundEffect.blurRegion: (panel.visible && panel.revealProgress > 0
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? surface.blurRegion : null
 
     function open(item) {
         anchorItem = item
-        visible = true
+        show()
         ControlCenterService.refresh()
         ControlCenterService.refreshBluetoothDevices()
     }
 
     function close() {
-        visible = false
+        hide()
     }
 
     Connections {

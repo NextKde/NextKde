@@ -262,8 +262,10 @@ Item {
             return
         }
         carousel.hoveredPage = pointerPage
-        if (infoPopup.visible)
+        if (infoPopup.requestedOpen)
             infoPopupOpenDelay.stop()
+        else if (infoPopup.visible)
+            DockModelService.openDockPopup(infoPopup)
     }
 
     HoverHandler {
