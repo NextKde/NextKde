@@ -11,6 +11,19 @@ ShellRoot {
     property int stage: 0
     property real savedProgress: 0
     property int stableGlassChecks: 0
+    property int launcherVariant: 0
+    property var launcherFrame: null
+    property var launcherLayout: null
+    property real stableLayoutWidth: 0
+    property real stableLayoutHeight: 0
+    readonly property var launcherVariants: [
+        {mode: "bottom", edge: "bottom"},
+        {mode: "bottomWide", edge: "bottom"},
+        {mode: "bottom", edge: "left"},
+        {mode: "bottom", edge: "right"},
+        {mode: "center", edge: "bottom"},
+        {mode: "fullscreen", edge: "bottom"}
+    ]
 
     FloatingWindow {
         id: host
@@ -77,6 +90,42 @@ ShellRoot {
     function check(condition, message) {
         if (!condition)
             throw new Error(message)
+    }
+
+    function findItem(item, name) {
+        if (item.objectName === name)
+            return item
+        for (const child of item.children || []) {
+            const found = findItem(child, name)
+            if (found)
+                return found
+        }
+        return null
+    }
+
+    function checkLauncherFrame() {
+        check(launcherFrame.width > 0 && launcherFrame.height > 0
+            && launcherFrame.width < stableLayoutWidth
+            && launcherFrame.height < stableLayoutHeight,
+            "the actual glass panel expands/contracts, not just its foreground")
+        check(launcherLayout.width === stableLayoutWidth
+            && launcherLayout.height === stableLayoutHeight,
+            "grid layout remains fixed throughout the panel animation")
+        const blur = launcher.BackgroundEffect.blurRegion
+        check(blur !== null && blur.item === launcherFrame,
+            "native blur follows the animated frame instead of the full-sized layout")
+        const expected = launcherFrame.mapToItem(null,
+            Qt.rect(0, 0, launcherFrame.width, launcherFrame.height))
+        check(Math.abs(blur.itemRect.x - expected.x) < 0.01
+            && Math.abs(blur.itemRect.y - expected.y) < 0.01
+            && Math.abs(blur.itemRect.width - expected.width) < 0.01
+            && Math.abs(blur.itemRect.height - expected.height) < 0.01,
+            "blur geometry matches the current visible frame")
+        check(Math.abs(launcherFrame.x + launcherFrame.width * launcher.panelOriginX
+            - stableLayoutWidth * launcher.panelOriginX) < 0.01
+            && Math.abs(launcherFrame.y + launcherFrame.height * launcher.panelOriginY
+            - stableLayoutHeight * launcher.panelOriginY) < 0.01,
+            "the panel keeps its Dock edge or central origin fixed")
     }
 
     function checkGeometry() {
@@ -226,7 +275,7 @@ ShellRoot {
                     menu.hide()
                     menu.show()
                     launcher.open = true
-                    interval = 250
+                    interval = 380
                     break
                 case 15:
                     check(menu.visible, "context menu close can reverse")
@@ -250,8 +299,59 @@ ShellRoot {
                         "the detail popup releases blur after closing")
                     check(!popup.visible && !menu.visible, "popups unmap after closing")
                     check(launcher.contentRevealProgress === 1, "launcher exit can reverse")
-                    console.log("POPUP_MOTION_PASS")
-                    Qt.quit()
+                    launcher.open = false
+                    launcher.outputAvailable = true
+                    interval = 300
+                    break
+                case 18:
+                    AppLauncherConfigService.displayMode = launcherVariants[launcherVariant].mode
+                    AppLauncherService.dockPosition = launcherVariants[launcherVariant].edge
+                    AppLauncherService.dockWidth = 800
+                    AppLauncherService.dockHeight = 60
+                    launcherFrame = findItem(launcher.contentItem, "launcher-motion-frame")
+                    launcherLayout = findItem(launcher.contentItem, "launcher-stable-layout")
+                    check(launcherFrame !== null && launcherLayout !== null, "launcher frame loads")
+                    launcher.open = true
+                    interval = 65
+                    break
+                case 19:
+                    stableLayoutWidth = launcherLayout.width
+                    stableLayoutHeight = launcherLayout.height
+                    checkLauncherFrame()
+                    interval = 350
+                    break
+                case 20:
+                    check(launcherFrame.width === stableLayoutWidth
+                        && launcherFrame.height === stableLayoutHeight, "panel settles to full size")
+                    launcher.open = false
+                    check(!launcherFrame.enabled, "exit immediately disables card input")
+                    check(launcherFrame.width === stableLayoutWidth, "close starts without a geometry jump")
+                    interval = 70
+                    break
+                case 21:
+                    checkLauncherFrame()
+                    savedProgress = launcher.contentRevealProgress
+                    launcher.open = true
+                    check(launcher.contentRevealProgress === savedProgress, "panel geometry reverses continuously")
+                    interval = 330
+                    break
+                case 22:
+                    check(launcherFrame.width === stableLayoutWidth
+                        && launcherFrame.height === stableLayoutHeight, "reopening restores full panel size")
+                    launcher.open = false
+                    interval = 300
+                    break
+                case 23:
+                    check(!launcherFrame.visible && launcher.BackgroundEffect.blurRegion === null,
+                        "panel collapses completely before its blur is removed")
+                    launcherVariant++
+                    if (launcherVariant < launcherVariants.length) {
+                        test.stage = 18
+                        interval = 40
+                    } else {
+                        console.log("POPUP_MOTION_PASS")
+                        Qt.quit()
+                    }
                     break
                 }
             } catch (error) {

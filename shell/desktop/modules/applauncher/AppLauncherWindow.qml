@@ -88,6 +88,13 @@ PanelWindow {
         && AppLauncherService.dockPosition !== "right"
     readonly property bool dockAtLeft: AppLauncherService.dockPosition === "left"
     readonly property bool dockAtRight: AppLauncherService.dockPosition === "right"
+    readonly property real panelOriginX: isBottomMode
+        ? (dockAtLeft ? 0 : dockAtRight ? 1 : 0.5) : 0.5
+    readonly property real panelOriginY: isBottomMode && dockAtBottom ? 1 : 0.5
+    readonly property real panelWidthProgress: isBottomMode && dockAtBottom
+        ? 0.35 + 0.65 * contentRevealProgress : contentRevealProgress
+    readonly property real panelHeightProgress: isBottomMode && !dockAtBottom
+        ? 0.35 + 0.65 * contentRevealProgress : contentRevealProgress
 
     Component.onCompleted: console.log("[AppLauncherWindow] created")
     onOpenChanged: {
@@ -107,6 +114,8 @@ PanelWindow {
 
     PopupMotion {
         id: popupMotion
+        openDuration: 300
+        closeDuration: 240
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -164,7 +173,7 @@ PanelWindow {
     // coalesced here instead of becoming work on the launcher's opening frame.
     Timer {
         id: applicationCatalogRefresh
-        interval: root.open ? AppearanceTokens.motion.popupOpenDuration + 20 : 750
+        interval: root.open ? popupMotion.openDuration + 20 : 750
         repeat: false
         running: true
         onTriggered: {
@@ -1105,8 +1114,6 @@ PanelWindow {
         }
     }
 
-    // Keep a fixed card geometry while testing the compositor path: changing
-    // this clip every frame is precisely what used to exercise the artefact.
     Item {
         id: launcherRevealClip
         anchors.fill: root.isFullscreenMode ? parent : undefined
@@ -1128,6 +1135,7 @@ PanelWindow {
         // extra wheel receiver at all.
         Loader {
             active: root.isFullscreenMode
+            enabled: root.open && root.contentRevealProgress > 0.95
             anchors.fill: parent
             z: 90
             sourceComponent: Component {
@@ -1149,14 +1157,23 @@ PanelWindow {
 
         Item {
             id: launcherCard
-            anchors.fill: parent
-            visible: root.panelVisible
+            objectName: "launcher-motion-frame"
+            width: launcherRevealClip.width * root.panelWidthProgress
+            height: launcherRevealClip.height * root.panelHeightProgress
+            x: (launcherRevealClip.width - width) * root.panelOriginX
+            y: (launcherRevealClip.height - height) * root.panelOriginY
+            visible: root.panelVisible && root.contentRevealProgress > 0
             enabled: root.open
-            opacity: 1.0
+            opacity: root.contentRevealProgress
+            clip: true
 
             Item {
                 id: background
-                anchors.fill: parent
+                objectName: "launcher-stable-layout"
+                width: launcherRevealClip.width
+                height: launcherRevealClip.height
+                x: (launcherCard.width - width) * root.panelOriginX
+                y: (launcherCard.height - height) * root.panelOriginY
                 property real radius: root.isFullscreenMode ? 0
                     : (AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28))
 
@@ -1165,13 +1182,13 @@ PanelWindow {
                 // KWin alone renders the blur, refraction and highlights.
                 LiquidGlassPanel {
                     id: launcherSurface
-                    anchors.fill: parent
-                    radius: background.radius
-                    // The card is anchored centre/bottom inside the full-output
-                    // surface, so the panel's own x/y read 0. Anchor the region
-                    // to the clip that carries the card's real offset (the old
-                    // working declaration read this same container's x/y).
-                    blurAnchor: launcherRevealClip
+                    x: -background.x
+                    y: -background.y
+                    width: launcherCard.width
+                    height: launcherCard.height
+                    radius: Math.min(background.radius, width / 2, height / 2)
+                    blurAnchor: launcherCard
+                    layer.enabled: fallbackEnabled && continuousCorners
                     // Use the exact same surface profile as the Dock. The
                     // launcher contributes geometry only; it has no private
                     // material adjustment.
@@ -1180,13 +1197,11 @@ PanelWindow {
                     scrimLevel: "balanced"
                 }
 
-                // This foreground layer deliberately excludes the backdrop
-                // material. Its animation cannot change the Wayland blur region.
                 Item {
                     id: launcherContent
                     anchors.fill: parent
                     focus: root.open && !root.externalDialogOpen
-                    opacity: root.contentRevealProgress
+                    opacity: Math.max(0, (root.contentRevealProgress - 0.15) / 0.85)
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
@@ -1213,23 +1228,12 @@ PanelWindow {
                         }
                         event.accepted = true;
                     }
-                    // A subtle settle zoom + slide up from the dock direction
-                    // as the foreground fades in. Both fold into the same
-                    // contentRevealProgress Behavior; the backdrop blur stays
-                    // fixed at full card size, so this never fights it.
                     transform: [
                         Scale {
-                            origin.x: launcherContent.width / 2
-                            origin.y: launcherContent.height / 2
-                            xScale: AppearanceTokens.motion.popupStartScale
-                                + (1 - AppearanceTokens.motion.popupStartScale)
-                                    * root.contentRevealProgress
-                            yScale: AppearanceTokens.motion.popupStartScale
-                                + (1 - AppearanceTokens.motion.popupStartScale)
-                                    * root.contentRevealProgress
-                        },
-                        Translate {
-                            y: Math.round((root.isFullscreenMode ? 60 : 200) * (1.0 - root.contentRevealProgress))
+                            origin.x: launcherContent.width * root.panelOriginX
+                            origin.y: launcherContent.height * root.panelOriginY
+                            xScale: root.contentRevealProgress
+                            yScale: root.contentRevealProgress
                         }
                     ]
 
@@ -2867,6 +2871,7 @@ PanelWindow {
     // material controls. The shared glass configuration decides whether KWin
     // renders blur or refraction for this declared surface.
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && root.panelVisible
+        && launcherCard.visible && launcherCard.width >= 1 && launcherCard.height >= 1
         && (AppearanceConfigService.effectiveDockBlur > 0.005
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? launcherSurface.blurRegion

@@ -37,7 +37,7 @@ def run():
             r"is not a type|Binding loop|is not a function", output), output
         print("PASS: Control Center navigation, confirmation, close/reopen; popup input lifetime; "
               "menu navigation; launcher exit; transformed blur geometry; stable navigation glass; "
-              "Dock info backdrop; card content routing")
+              "Dock info backdrop; card content routing; launcher panel geometry in six presentations")
 
 
 if __name__ == "__main__":

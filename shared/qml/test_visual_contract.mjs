@@ -414,8 +414,8 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /PopupMotion\s*\{[\s\S]*popupStartScale/,
-    "Launchpad and anchored popups consume the same entrance tokens");
+    /PopupMotion\s*\{[\s\S]*openDuration:\s*300[\s\S]*closeDuration:\s*240/,
+    "the large launcher surface uses a slower reversible entrance and exit");
 assert.match(appLauncherWindow,
     /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
     "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
@@ -431,6 +431,10 @@ assert.match(appLauncherWindow,
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
     "the closed Launchpad surface never publishes a compositor blur region");
+assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
+    "launcher native glass follows the animated card, not the fixed layout");
+assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
+    "the launcher backdrop expands and contracts with its contents");
 assert.match(appIconSource,
     /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
