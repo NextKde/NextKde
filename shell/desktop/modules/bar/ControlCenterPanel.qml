@@ -219,17 +219,34 @@ PopupWindow {
         "wifi":       Qt.rect(336 - 179 - 137, 20  + mainControlsOffsetY, 137, 59),
         "bluetooth":  Qt.rect(336 - 179 - 137, 87  + mainControlsOffsetY, 137, 59),
         "brightness": Qt.rect(336 - 20  - 296, 217 + mainControlsOffsetY, 296, 57),
-        "sound":      Qt.rect(336 - 20  - 296, 282 + mainControlsOffsetY, 296, 57)
+        "sound":      Qt.rect(336 - 20  - 296, 282 + mainControlsOffsetY, 296, 57),
+        // Power/session sheet returns to the power-key capsule (slotCard3:
+        // offsetRight 142, offsetTop 155, 52x52) so it morphs back into the
+        // button it was opened from exactly like the Wi-Fi/BT pills.
+        "session":    Qt.rect(336 - 142 - 52, 155 + mainControlsOffsetY, 52, 52)
     })
 
     // 0 when the sub-page is at full size, 1 when it has fully collapsed onto
     // its source capsule. Drives the submenu card's morphRect interpolation.
     // Ease matches the crossfade so geometry and opacity stay in lockstep.
-    readonly property real submenuMorph: submenuShownPage === "" ? 0
-        : (pageMotion.displayedPage === panel.submenuShownPage
-            ? (1 - pageMotion.progress)
-            : (pageMotion.outgoingPage === panel.submenuShownPage
-                ? pageMotion.progress : 0))
+    // 0 when a page is at full size, 1 when it has fully collapsed onto its
+    // source capsule. Drives a card's morphRect interpolation; the ease matches
+    // the crossfade so geometry and opacity stay in lockstep. Works for every
+    // page that has a submenuSourceRects entry (wifi/bluetooth/brightness/sound
+    // on the shared submenu card, "session" on the power sheet).
+    function pageMorph(page) {
+        if (page === "")
+            return 0
+        if (pageMotion.displayedPage === page)
+            return 1 - pageMotion.progress
+        if (pageMotion.outgoingPage === page)
+            return pageMotion.progress
+        return 0
+    }
+    readonly property real submenuMorph: pageMorph(submenuShownPage)
+    // The power/session sheet morphs back into the power-key capsule, using the
+    // same rule as the submenu card's collapse-into-source.
+    readonly property real sessionMorph: pageMorph("session")
 
     // No panel-wide glass slab: the window blur region is the UNION of every
     // card's blurRegion, so KWin blurs behind the cards (real frosted glass)
@@ -317,16 +334,17 @@ PopupWindow {
         c.glassOpacity = Qt.binding(function() {
             return panel.pageFactor(c.pageTag)
         })
-        // The submenu card morphs through morphRect (geometry), not a uniform
-        // Item scale: applying the 0.96 breathing scale on top of a collapse
-        // that already carries the card to a capsule would double-shrink it
-        // off the source. Only the primary page's cards take the scale nudge.
-        const isSubmenu = c === submenuCard
+        // Cards that morph through morphRect (the shared submenu card and the
+        // session sheet) collapse by geometry, not a uniform Item scale:
+        // applying the 0.96 breathing scale on top of a collapse that already
+        // carries the card to a capsule would double-shrink it off the source.
+        // Only the primary page's cards take the scale nudge.
+        const morphsToSource = c === submenuCard || c === sessionCard
         // Mirror of the entrance: the incoming page grows 0.96→1 while the
-        // outgoing page shrinks 1→0.96 over the same progress. The submenu
-        // card skips this -- its collapse is expressed by morphRect geometry,
+        // outgoing page shrinks 1→0.96 over the same progress. Morphing cards
+        // skip this -- their collapse is expressed by morphRect geometry,
         // and stacking an Item scale on top would double-shrink it.
-        c.scale = isSubmenu ? 1 : Qt.binding(function() {
+        c.scale = morphsToSource ? 1 : Qt.binding(function() {
             if (pageMotion.displayedPage === c.pageTag)
                 return 0.96 + 0.04 * pageMotion.progress
             if (pageMotion.outgoingPage === c.pageTag)
@@ -342,10 +360,10 @@ PopupWindow {
             // away from the compositor blur shape the card still publishes,
             // which reads as the frosting being left behind, shifted to one
             // side of the departing panel.
-            // The submenu card's displacement is already carried by its
+            // A morphing card's displacement is already carried by its
             // morphRect collapse; adding the slide would drift it off the
             // capsule it is shrinking into.
-            if (isSubmenu)
+            if (morphsToSource)
                 return 0
             if (pageMotion.displayedPage !== c.pageTag)
                 return 0
@@ -1435,7 +1453,17 @@ PopupWindow {
             ? panel.controlCenterHeight - 20 - sessionCard.cardHeight
             : 20
         offsetRight: 20
-        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
+        // Roundness interpolates toward the power-key capsule while the sheet
+        // shrinks, so the collapsing panel lands flush with the button it was
+        // opened from -- the same morph the Wi-Fi/Bluetooth submenu card uses.
+        readonly property real _baseRadius:
+            AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
+        // slotCard3 (the power key) is a 52px capsule whose cardRadius is
+        // pick(extraLarge, 26); match that exact token so the collapsed sheet
+        // lands flush with the button's real corner in both glass and material.
+        readonly property real _sourceRadius:
+            AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
+        cardRadius: _baseRadius + (_sourceRadius - _baseRadius) * panel.sessionMorph
         cardWidth: 296
         cardHeight: 340
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10))
@@ -1443,6 +1471,23 @@ PopupWindow {
         // Stays mapped while the sheet is the outgoing side of a crossfade, so
         // it fades out instead of snapping away the frame the next page commits.
         cardShown: panel.cardMapped("session")
+        // Collapse-into-source morph, identical in shape to the submenu card:
+        // the visible window slides from the full sheet down onto the power-key
+        // capsule (and back out on open). The source rect is in panel
+        // coordinates, so subtract the card's own position for card-local space.
+        morphRect: {
+            const src = panel.submenuSourceRects["session"]
+            if (!src)
+                return Qt.rect(0, 0, -1, -1)
+            const t = panel.sessionMorph
+            const cx = sessionCard.x
+            const cy = sessionCard.y
+            const x = (src.x - cx) * t
+            const y = (src.y - cy) * t
+            const w = sessionCard.width + (src.width - sessionCard.width) * t
+            const h = sessionCard.height + (src.height - sessionCard.height) * t
+            return Qt.rect(x, y, w, h)
+        }
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
