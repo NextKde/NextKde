@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 import re
@@ -5,11 +6,13 @@ import shutil
 import subprocess
 import tempfile
 
+from wayland_trace import check_launcher_commits
+
 
 REPO = Path(__file__).resolve().parents[2]
 
 
-def run():
+def run(verify_wayland=False):
     with tempfile.TemporaryDirectory(prefix="kos-popup-motion-") as directory:
         root = Path(directory)
         runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
@@ -24,6 +27,8 @@ def run():
                    XDG_STATE_HOME=str(root / "state"), XDG_RUNTIME_DIR=str(root / "runtime"),
                    KOS_PLATFORM_SOCKET=str(root / "no-platform.sock"),
                    KOS_DATA_SOCKET=str(root / "no-data.sock"), QT_QPA_PLATFORM="wayland")
+        if verify_wayland:
+            env["WAYLAND_DEBUG"] = "client"
         try:
             result = subprocess.run(["quickshell", "--path", str(root), "--no-color"],
                                     env=env, capture_output=True, text=True, timeout=40)
@@ -35,6 +40,9 @@ def run():
         assert not re.search(
             r"POPUP_MOTION_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|"
             r"is not a type|Binding loop|is not a function|invalid context", output), output
+        if verify_wayland:
+            frames = check_launcher_commits(output)
+            print(f"PASS: glass and blur agree at {frames} Wayland frame commits in six launcher presentations")
         print("PASS: Control Center navigation, confirmation, close/reopen; popup input lifetime; "
               "menu navigation; launcher exit; transformed blur geometry; stable navigation glass; "
               "Dock info backdrop; card content routing; launcher geometry and tint in six presentations; "
@@ -42,4 +50,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verify-wayland", action="store_true",
+                        help="also verify native frame commits (requires the KOS KWin glass effect)")
+    run(parser.parse_args().verify_wayland)

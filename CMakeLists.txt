@@ -275,6 +275,13 @@ if(BUILD_TESTING)
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-experience/run.py)
         add_test(NAME kos-ui.popup-motion
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/popup-motion/run.py)
+        if(KOS_BUILD_KWIN_PLUGINS)
+            add_test(NAME kos-ui.surface-shape-sync
+                COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/popup-motion/run.py --verify-wayland)
+            set_tests_properties(kos-ui.surface-shape-sync PROPERTIES
+                ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
+                LABELS "ui;kwin" TIMEOUT 60 RUN_SERIAL TRUE)
+        endif()
         set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience kos-ui.popup-motion PROPERTIES
             LABELS ui TIMEOUT 60 RUN_SERIAL TRUE)
     endif()
