@@ -15,9 +15,11 @@ qt_add_qml_module(kos_ui
         foundation/KosApplicationWindow.qml
         foundation/KosButton.qml
         foundation/KosCard.qml
+        foundation/KosDialog.qml
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
         foundation/KosPageCache.qml
+        foundation/KosPageMotion.qml
         foundation/KosRoundButton.qml
         foundation/KosSettingsDialog.qml
         foundation/KosSlider.qml

@@ -32,16 +32,9 @@ PanelWindow {
     // Keep visibility independent from PanelWindow.screen: screen resolution
     // depends on the backing surface and would form a binding loop here.
     property bool outputAvailable: false
-    // Opening animates the foreground only (fade + slight scale + slide up);
-    // closing is atomic because the compositor backdrop blur cannot fade in
-    // lockstep with a QML layer. The blur region stays fixed at full card size
-    // throughout.
-    //
-    // Driven imperatively: onOpenChanged snaps to 0 and starts a NumberAnimation
-    // to 1.0 so the transition reliably plays every time the window shows.
-    property real contentRevealProgress: 0.0
+    readonly property real contentRevealProgress: popupMotion.progress
     property bool gridEntranceActive: false
-    readonly property bool panelVisible: open && (AppLauncherService.dockWidth > 0 || isFullscreenMode || isCenterMode)
+    readonly property bool panelVisible: popupMotion.mapped && (AppLauncherService.dockWidth > 0 || isFullscreenMode || isCenterMode)
 
     readonly property string displayMode: AppLauncherConfigService.displayMode
     readonly property var layoutProfile: AppLauncherConfigService.profileForMode(displayMode)
@@ -100,25 +93,20 @@ PanelWindow {
     onOpenChanged: {
         console.log("[AppLauncherWindow] received open=" + open);
         if (open) {
+            if (root.panelVisible)
+                searchFocusTimer.restart();
             if (applicationsDirty)
                 applicationCatalogRefresh.restart();
             root.cancelFullscreenPageTransition();
             root.syncPagerSlots();
-            contentRevealProgress = 0.0;
-            openForeground.restart();
+            popupMotion.open();
         } else {
-            contentRevealProgress = 0.0;
+            popupMotion.close();
         }
     }
 
-    NumberAnimation {
-        id: openForeground
-        target: root
-        property: "contentRevealProgress"
-        from: 0.0
-        to: 1.0
-        duration: AppearanceTokens.motion.popupOpenDuration
-        easing.type: Easing.OutCubic
+    PopupMotion {
+        id: popupMotion
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -908,8 +896,8 @@ PanelWindow {
     mask: Region {
         x: 0
         y: 0
-        width: root.panelVisible ? root.width : 0
-        height: root.panelVisible ? root.height : 0
+        width: root.open && root.panelVisible ? root.width : 0
+        height: root.open && root.panelVisible ? root.height : 0
     }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore

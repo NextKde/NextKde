@@ -1,4 +1,7 @@
 module qs.desktop.modules.common
+AnimatedPopupWindow 1.0 AnimatedPopupWindow.qml
+PageMotion 1.0 PageMotion.qml
+SceneBounds 1.0 SceneBounds.qml
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
 MaterialFlower 1.0 MaterialFlower.qml

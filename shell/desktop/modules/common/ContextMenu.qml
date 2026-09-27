@@ -15,7 +15,7 @@ PopupWindow {
     property bool placeBelow: false
     // Global AppMenu uses the same macOS motion as Control Center and anchors
     // the popup to the clicked item's horizontal centre.
-    property bool macosPopupMotion: false
+    property bool macosPopupMotion: true
     property bool centerBelowAnchor: false
     property real centerBelowOffset: 0
     property var customAnchorEdges: null
@@ -57,6 +57,13 @@ PopupWindow {
     // first the back row appeared over the old page, then the page changed.
     property var page: ({ items: [], parents: [] })
     readonly property bool atRoot: root.page.parents.length === 0
+    readonly property var displayedPage: pageMotion.displayedPage || root.page
+
+    PageMotion {
+        id: pageMotion
+        page: root.page
+        enabled: root.visible && (!root.macosPopupMotion || popupMotion.requestedOpen)
+    }
 
     function setItems(items) {
         root.rootItems = items || []
@@ -117,7 +124,7 @@ PopupWindow {
     }
     function setDockPopupVisible(shouldOpen) {
         if (shouldOpen)
-            ContextMenuCoordinator.open(root)
+            root.show()
         else
             root.hide()
     }
@@ -127,7 +134,7 @@ PopupWindow {
     // reliably in this PopupWindow, so derive the surface height from the same
     // menu data that drives the Repeater.
     readonly property real menuContentHeight: {
-        const items = root.page.items || []
+        const items = root.displayedPage.items || []
         let total = 0
         let visibleRows = 0
         function addRow(height) {
@@ -136,7 +143,7 @@ PopupWindow {
             total += height
             visibleRows++
         }
-        if (root.page.parents.length > 0)
+        if (root.displayedPage.parents.length > 0)
             addRow(38)
         for (let i = 0; i < items.length; ++i) {
             const item = items[i]
@@ -156,7 +163,9 @@ PopupWindow {
     implicitWidth: 240
     implicitHeight: root.menuContentHeight + 12
     color: "transparent"
-    grabFocus: true
+    grabFocus: !root.macosPopupMotion || popupMotion.interactive
+    mask: root.macosPopupMotion && !popupMotion.interactive ? emptyInputRegion : null
+    Region { id: emptyInputRegion }
 
     anchor {
         item: root.anchorItem
@@ -192,6 +201,7 @@ PopupWindow {
             if (!root.macosPopupMotion)
                 ContextMenuCoordinator.open(root)
             root.page = ({ items: root.rootItems, parents: [] })
+            pageMotion.reset(root.page)
             root.aboutToShow()
             if (root.macosPopupMotion && !popupMotion.mapped)
                 popupMotion.open()
@@ -217,7 +227,7 @@ PopupWindow {
     // Both forms publish this. A tonal menu wants the same backdrop frost a
     // glass one does, and gets it without a SurfaceShape -- so there is nothing
     // to exclude here.
-    BackgroundEffect.blurRegion: root.visible ? glass.blurRegion : null
+    BackgroundEffect.blurRegion: root.visible && glass.opacity > 0 ? glass.blurRegion : null
 
     LiquidGlassPanel {
         id: glass
@@ -238,8 +248,8 @@ PopupWindow {
                 + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
             : 1
         transformOrigin: Item.Top
-        opacity: root.macosPopupMotion ? popupMotion.progress : 1
-        enabled: !root.macosPopupMotion || popupMotion.interactive
+        opacity: (root.macosPopupMotion ? popupMotion.progress : 1) * pageMotion.progress
+        enabled: (!root.macosPopupMotion || popupMotion.interactive) && pageMotion.interactive
         transform: Translate {
             y: (root.macosPopupMotion && popupMotion.progress < 0.999)
                 ? Math.round((1 - popupMotion.progress) * AppearanceTokens.motion.popupAnchorOffset)
@@ -259,7 +269,7 @@ PopupWindow {
 
             MenuItemRow {
                 width: parent.width
-                visible: root.page.parents.length > 0
+                visible: root.displayedPage.parents.length > 0
                 icon: "back"
                 label: "返回"
                 foregroundColor: root.effectiveForegroundColor
@@ -268,7 +278,7 @@ PopupWindow {
 
             Repeater {
                 id: menuRepeater
-                model: root.page.items
+                model: root.displayedPage.items
                 delegate: MenuItemRow {
                     required property var modelData
                     // Items may carry a live QsMenuEntry (DBusMenu tray

@@ -261,13 +261,21 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.interaction-controls PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 20)
+        add_test(NAME kos-ui.shared-motion
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_motion.qml)
+        set_tests_properties(kos-ui.shared-motion PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
         add_test(NAME kos-ui.interaction-runtime
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-runtime/run.py)
         add_test(NAME kos-ui.widget-experience
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/widget-experience/run.py)
-        set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience PROPERTIES
+        add_test(NAME kos-ui.popup-motion
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/popup-motion/run.py)
+        set_tests_properties(kos-ui.interaction-runtime kos-ui.widget-experience kos-ui.popup-motion PROPERTIES
             LABELS ui TIMEOUT 60 RUN_SERIAL TRUE)
     endif()
     if(KOS_PYTHON_EXECUTABLE)

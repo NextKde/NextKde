@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
+import "../../shared/qml/foundation" as Foundation
 import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
 
 ApplicationWindow {
@@ -16,7 +17,18 @@ ApplicationWindow {
     color: theme.background
 
     property int currentPage: 1
+    readonly property int displayedPage: pageMotion.displayedPage === ""
+        ? currentPage : pageMotion.displayedPage
     property string searchText: ""
+
+    Foundation.KosPageMotion {
+        id: pageMotion
+        page: window.currentPage
+        onDisplayedPageChanged: {
+            if (pageScroll)
+                pageScroll.contentY = 0
+        }
+    }
 
     // The shell owns the style; the pages read it from here and so does this
     // window's own palette. `materialSeed` is the accent the shell derived from
@@ -3853,6 +3865,9 @@ ApplicationWindow {
 
             Flickable {
                 id: pageScroll
+                opacity: pageMotion.progress
+                enabled: pageMotion.interactive
+                transform: Translate { x: Foundation.AppTheme.reduceMotion ? 0 : 12 * (1 - pageMotion.progress) }
                 objectName: "settings-page-scroll"
                 anchors.fill: parent
                 anchors.leftMargin: 30
@@ -3879,15 +3894,15 @@ ApplicationWindow {
                     }
 
                     Text {
-                        text: window.contentByPage[window.currentPage].subtitle
+                        text: window.contentByPage[window.displayedPage].subtitle
                         color: theme.primaryText
                         font.pixelSize: 24
                         font.weight: Font.Bold
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.currentPage >= 0 && window.currentPage <= 7)
-                            ? [] : window.contentByPage[window.currentPage].groups
+                        model: (window.displayedPage >= 0 && window.displayedPage <= 7)
+                            ? [] : window.contentByPage[window.displayedPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
                             Layout.fillWidth: true
@@ -3933,49 +3948,49 @@ ApplicationWindow {
                     // page actually being shown.
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 4
+                        active: window.displayedPage === 4
                         visible: active
                         sourceComponent: LauncherSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 5
+                        active: window.displayedPage === 5
                         visible: active
                         sourceComponent: ShortcutsSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 6
+                        active: window.displayedPage === 6
                         visible: active
                         sourceComponent: IntegrationStatusPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 7
+                        active: window.displayedPage === 7
                         visible: active
                         sourceComponent: GlassDebugPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 3
+                        active: window.displayedPage === 3
                         visible: active
                         sourceComponent: DockSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 2
+                        active: window.displayedPage === 2
                         visible: active
                         sourceComponent: BarSettingsPage {}
                     }
 
                     Loader {
                         Layout.fillWidth: true
-                        active: window.currentPage === 1
+                        active: window.displayedPage === 1
                         visible: active
                         sourceComponent: ThemeSettingsPage {}
                     }

@@ -4,11 +4,12 @@ import Quickshell.Wayland
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
-PopupWindow {
+AnimatedPopupWindow {
     id: popup
 
     property Item anchorItem: null
     property bool pointerInside: popupMouse.containsMouse
+    motionOrigin: Item.Bottom
 
     implicitWidth: 336
     implicitHeight: 196

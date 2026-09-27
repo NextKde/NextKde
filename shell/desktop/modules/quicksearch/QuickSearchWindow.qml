@@ -788,7 +788,12 @@ PanelWindow {
         // Settings popover panel
         Rectangle {
             id: settingsPopover
-            visible: root.mode === "clipboard" && root.clipboardSettingsOpen
+            opacity: root.mode === "clipboard" && root.clipboardSettingsOpen ? 1 : 0
+            visible: (root.mode === "clipboard" && root.clipboardSettingsOpen) || opacity > 0
+            enabled: root.mode === "clipboard" && root.clipboardSettingsOpen
+            scale: 0.96 + 0.04 * opacity
+            transformOrigin: Item.TopRight
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
             z: 20
             width: 320
             height: settingsContent.implicitHeight + 24

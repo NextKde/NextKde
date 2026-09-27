@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 // Full MPRIS control surface shown above DockMusicPlayer. It is deliberately a
 // PopupWindow: Dock's adaptive height stays untouched while the player gets a
 // proper focusable, interactive surface.
-PopupWindow {
+AnimatedPopupWindow {
     id: popup
 
     property Item anchorItem: null
@@ -19,6 +19,7 @@ PopupWindow {
             ? player.trackArtUrl : BundledIcons.source("default-cover")
     }
     property bool pointerInside: popupMouse.containsMouse
+    motionOrigin: Item.Bottom
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     readonly property real safeLength: player?.lengthSupported
@@ -392,5 +393,5 @@ PopupWindow {
         acceptedButtons: Qt.NoButton
     }
 
-    BackgroundEffect.blurRegion: popup.visible ? surface.blurRegion : null
+    BackgroundEffect.blurRegion: popup.visible && popup.revealProgress > 0 ? surface.blurRegion : null
 }

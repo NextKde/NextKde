@@ -414,7 +414,7 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /duration:\s*AppearanceTokens\.motion\.popupOpenDuration[\s\S]*popupStartScale/,
+    /PopupMotion\s*\{[\s\S]*popupStartScale/,
     "Launchpad and anchored popups consume the same entrance tokens");
 assert.match(appLauncherWindow,
     /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
@@ -423,7 +423,7 @@ assert.match(appLauncherWindow,
     /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
     "Launchpad retains one backing window while a real output is available");
 assert.match(appLauncherWindow,
-    /mask:\s*Region\s*\{[\s\S]*width:\s*root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.panelVisible \? root\.height : 0/,
+    /mask:\s*Region\s*\{[\s\S]*width:\s*root\.open && root\.panelVisible \? root\.width : 0[\s\S]*height:\s*root\.open && root\.panelVisible \? root\.height : 0/,
     "the closed Launchpad backing surface cannot intercept desktop input");
 assert.match(appLauncherWindow,
     /anchors\s*\{[\s\S]*top:\s*true[\s\S]*left:\s*true[\s\S]*right:\s*true[\s\S]*bottom:\s*true[\s\S]*implicitWidth:\s*launcherWidth[\s\S]*implicitHeight:\s*launcherHeight/,

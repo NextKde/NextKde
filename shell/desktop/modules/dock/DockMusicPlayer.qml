@@ -102,7 +102,7 @@ Item {
         repeat: false
         onTriggered: {
             if (!musicHover.hovered && !musicPopup.pointerInside)
-                musicPopup.visible = false
+                musicPopup.hide()
         }
     }
 

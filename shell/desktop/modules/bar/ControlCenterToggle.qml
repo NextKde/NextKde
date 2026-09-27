@@ -31,6 +31,9 @@ Item {
         opacity: IconAppearanceService.mode !== "color"
             ? IconAppearanceService.opacity * (root.panelOpen ? 1.0 : 0.88)
             : (root.panelOpen ? 1.0 : 0.88)
+        scale: hoverArea.pressed ? 0.90 : hoverArea.containsMouse ? 1.06 : 1
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
     }
     MouseArea {
         id: hoverArea

@@ -322,7 +322,10 @@ PanelWindow {
         id: widgetEditToolbar
         objectName: "widget-edit-toolbar"
         z: 200
-        visible: root.editMode
+        opacity: root.editMode ? 1 : 0
+        visible: root.editMode || opacity > 0
+        enabled: root.editMode
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
         anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
         spacing: 8
 
@@ -371,7 +374,12 @@ PanelWindow {
         id: widgetLibrary
         objectName: "widget-library"
         z: 190
-        visible: root.editMode && root.widgetLibraryOpen
+        opacity: root.editMode && root.widgetLibraryOpen ? 1 : 0
+        visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
+        enabled: root.editMode && root.widgetLibraryOpen
+        scale: 0.96 + 0.04 * opacity
+        transformOrigin: Item.TopRight
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: Easing.OutCubic } }
         anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
         width: 430
         height: 116
@@ -3985,13 +3993,16 @@ PanelWindow {
         Rectangle {
             id: desktopDialogScrim
             anchors.fill: parent
-            visible: openWithDialog.visible
+            visible: openWithMotion.mapped
+            opacity: openWithMotion.progress
             color: Qt.rgba(0, 0, 0, 0.22)
             z: 29
             // Modal prompts should never let an outside click activate or
             // rearrange a desktop icon underneath them.
-            MouseArea { anchors.fill: parent }
+            MouseArea { anchors.fill: parent; enabled: openWithMotion.interactive }
         }
+
+        PopupMotion { id: openWithMotion }
 
         Rectangle {
             id: openWithDialog
@@ -3999,7 +4010,10 @@ PanelWindow {
             width: 340
             height: 250
             radius: 16
-            visible: false
+            visible: openWithMotion.mapped
+            opacity: openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.progress
+            enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }
             z: 31
@@ -4010,12 +4024,12 @@ PanelWindow {
             }
             function show(target) {
                 entry = target
-                visible = false
+                openWithMotion.close()
                 root.desktopFiles.queryOpenWith(target, function(info) {
                     if (openWithDialog.entry?.path !== target?.path)
                         return
                     openWithDialog.selectedHandler = info.defaultId || info.handlers[0] || ""
-                    openWithDialog.visible = true
+                    openWithMotion.open()
                 })
             }
             Text {
@@ -4082,20 +4096,20 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData === "取消") openWithDialog.visible = false
+                                if (modelData === "取消") openWithMotion.close()
                                 else if (openWithDialog.selectedHandler) {
                                     if (modelData === "仅此一次")
                                         root.desktopFiles.launchWith(openWithDialog.entry, openWithDialog.selectedHandler)
                                     else
                                         root.desktopFiles.setDefaultOpenWith(root.desktopFiles.openWith.mime, openWithDialog.selectedHandler)
-                                    openWithDialog.visible = false
+                                    openWithMotion.close()
                                 }
                             }
                         }
                     }
                 }
             }
-            Keys.onEscapePressed: openWithDialog.visible = false
+            Keys.onEscapePressed: openWithMotion.close()
         }
 
     }

@@ -37,8 +37,8 @@ Item {
     property bool controlCenterLoaded: false
     readonly property var controlCenter: controlCenterLoader.item
     readonly property bool controlCenterOpen: controlCenter?.isOpen ?? false
-    readonly property bool anyPanelOpen: (networkPanel?.visible ?? false)
-        || (bluetoothPanel?.visible ?? false) || root.controlCenterOpen
+    readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
+        || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
 
     // Report panel visibility into the service singleton so its fast refresh
     // only runs while a panel is actually showing the data. A count (not a
@@ -105,11 +105,11 @@ Item {
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
-                sharedPanelOpen: networkPanel.visible
-                    || bluetoothPanel.visible || root.controlCenterOpen
+                sharedPanelOpen: networkPanel.requestedOpen
+                    || bluetoothPanel.requestedOpen || root.controlCenterOpen
                 onPanelToggleRequested: {
                     bluetoothPanel.close()
-                    if (!networkPanel.visible)
+                    if (!networkPanel.requestedOpen)
                         root.closeControlCenter()
                     networkPanel.toggle(networkStatus)
                 }

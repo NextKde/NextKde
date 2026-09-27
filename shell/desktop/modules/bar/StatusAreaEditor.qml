@@ -8,7 +8,7 @@ import "../../../Kos/Ui"
 // The status area is edited where it is seen. Visibility is changed by the
 // cards themselves and drag order is persisted by the same service used by
 // Alt+drag on the live tray. Control Center remains the required end anchor.
-PopupWindow {
+AnimatedPopupWindow {
     id: editor
 
     property Item anchorItem: null
@@ -38,11 +38,10 @@ PopupWindow {
         return arranged
     }
 
-    visible: false
     implicitWidth: 424
     implicitHeight: 146
     color: "transparent"
-    grabFocus: true
+    grabFocus: interactive
     anchor {
         item: editor.anchorItem
         edges: Edges.Bottom
@@ -52,7 +51,7 @@ PopupWindow {
 
     function openFor(item) {
         anchorItem = item
-        visible = true
+        show()
     }
 
     Item {
@@ -99,7 +98,7 @@ PopupWindow {
                             editor.foregroundColor)
                         font { pixelSize: 11; weight: Font.DemiBold }
                     }
-                    TapHandler { onTapped: editor.visible = false }
+                    TapHandler { onTapped: editor.hide() }
                 }
             }
 
