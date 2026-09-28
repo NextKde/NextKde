@@ -226,6 +226,10 @@ ApplicationWindow {
         {
             subtitle: "服务和组件",
             groups: []
+        },
+        {
+            subtitle: "前台调度",
+            groups: []
         }
     ]
 
@@ -466,6 +470,1166 @@ ApplicationWindow {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
         }
+    }
+
+    // 滑杆行：拖动即时预览、松手才提交（LiquidSlider preview/commit 模型）。
+    // current 绑定 IPC 快照值；提交后快照回读，_preview 归位。
+    // （inline component 不能嵌套，放页面组件外层）
+    component StageSliderRow: RowLayout {
+        id: sliderRow
+        property string label: ""
+        property string unit: ""
+        property real minV: 0
+        property real maxV: 100
+        property real current: 0
+        // 小数位（0 = 整数步进与显示，现状；>0 用于倍率类参数如悬停放大）
+        property int decimals: 0
+        property bool active: true
+        property var onCommit: null
+        property real _preview: -1
+        readonly property real _shown: _preview >= 0 ? _preview : current
+
+        Layout.fillWidth: true
+        spacing: 8
+
+        Text {
+            text: sliderRow.label
+            color: sliderRow.active ? theme.primaryText : theme.secondaryText
+            font.pixelSize: 13
+            Layout.preferredWidth: 148
+        }
+        Text {
+            text: sliderRow.decimals > 0
+                ? sliderRow._shown.toFixed(sliderRow.decimals) + sliderRow.unit
+                : Math.round(sliderRow._shown) + sliderRow.unit
+            color: theme.secondaryText
+            font.pixelSize: 12
+            Layout.preferredWidth: 46
+            horizontalAlignment: Text.AlignRight
+        }
+        LiquidControls.LiquidSlider {
+            accentColor: theme.accent
+            trackColor: theme.divider
+            Layout.fillWidth: true
+            opacity: sliderRow.active ? 1.0 : 0.4
+            enabled: sliderRow.active
+            value: sliderRow.maxV > sliderRow.minV
+                ? (sliderRow._shown - sliderRow.minV)
+                  / (sliderRow.maxV - sliderRow.minV) : 0
+            onPreviewChanged: function(position) {
+                sliderRow._preview = sliderRow.minV
+                    + position * (sliderRow.maxV - sliderRow.minV)
+            }
+            onCommitRequested: function(position) {
+                sliderRow._preview = -1
+                if (sliderRow.onCommit) {
+                    const v = sliderRow.minV
+                        + position * (sliderRow.maxV - sliderRow.minV)
+                    sliderRow.onCommit(sliderRow.decimals > 0
+                        ? Number(v.toFixed(sliderRow.decimals))
+                        : Math.round(v))
+                }
+            }
+        }
+    }
+
+    // ── 前台调度（fg-sched）页 ──────────────────────────────────────
+    // 冻结默认全面停用：后台只做资源限制（nice/效率核/IO，异构才限核）。本页管理：
+    // ① 冻结开关（重开时最小化窗口 180s 后 SIGSTOP）
+    // ② "后台全资源运行"名单（never_demote_apps——名单内应用切后台后
+    //    保持前台档参数，不降级不限核）
+    // ③ 台前侧栏与切换动画的全部可调参数（stage-config IPC 实时生效）
+    // 资源配置写 ~/.config/fg-sched/config.json，root 守护 mtime 轮询 ≤5s
+    // 生效；动画/侧栏参数走 shell 的 stage-config IPC，即时生效。
+    component FgSchedSettingsPage: ColumnLayout {
+        id: fgSchedPage
+
+        Layout.fillWidth: true
+        spacing: 8
+        property var bridge: (typeof settingsBridge !== "undefined")
+            ? settingsBridge : null
+        property var snapshot: ({})
+        property var stageSnapshot: ({})
+        property var runningApps: []
+        property string newApp: ""
+
+        // 类名 → 人类可读名（运行清单里查得到就显示应用名）
+        function appNameFor(cls) {
+            const apps = runningApps
+            for (let i = 0; i < apps.length; i++) {
+                if (apps[i].appId === cls)
+                    return apps[i].name
+            }
+            return cls
+        }
+
+        function stageSet(key, value) {
+            if (bridge)
+                bridge.stageConfigSet(key, String(value))
+        }
+
+        function refresh() {
+            if (!bridge)
+                return
+            bridge.fgSchedSnapshot()
+            bridge.fgSchedRunningApps()
+            bridge.fgSchedMemStatus()
+            bridge.stageConfigSnapshot()
+        }
+
+        function gb(kb) {
+            return (kb / 1048576).toFixed(1) + " GB"
+        }
+
+        Connections {
+            target: fgSchedPage.bridge
+            enabled: fgSchedPage.bridge !== null
+            function onFgSchedSnapshotChanged(snap) {
+                fgSchedPage.snapshot = snap || {}
+            }
+            function onFgSchedRunningAppsChanged(apps) {
+                fgSchedPage.runningApps = apps || []
+            }
+            function onFgSchedMemStatusChanged(st) {
+                fgSchedPage.memStatus = st || {}
+            }
+            function onStageConfigChanged(snap) {
+                fgSchedPage.stageSnapshot = snap || {}
+            }
+        }
+
+        property var memStatus: ({})
+
+        // 内存状态 5s 轮询（页面激活期间）
+        Timer {
+            interval: 5000
+            repeat: true
+            running: fgSchedPage.bridge !== null
+            onTriggered: fgSchedPage.bridge !== null && fgSchedPage.bridge.fgSchedMemStatus()
+        }
+
+        Component.onCompleted: refresh()
+
+        // ── 说明卡 ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: introColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: introColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 4
+
+                Text {
+                    text: "前台调度"
+                    color: theme.primaryText
+                    font { pixelSize: 15; weight: Font.DemiBold }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "前台应用获得高 CPU 优先级与防杀保护；切到后台 10 秒后"
+                          + "自动降低资源优先级（nice "
+                          + (fgSchedPage.snapshot.bgNice !== undefined ? "+" + fgSchedPage.snapshot.bgNice : "+5")
+                          + "、磁盘 IO 降为低优先"
+                          + "；若为大小核异构 CPU，后台自动限制到效率核）。"
+                          + "名单内的应用切后台后保持全速。改动约 5 秒内自动生效。"
+                    color: theme.secondaryText
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // ── 台前侧栏（开关 + 侧栏卡动效，全部即时生效） ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: stageColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: stageColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "台前侧栏"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "启用台前调度侧栏"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "左侧常驻窗口卡片栏；收进/呼出的切换动画随之切换"
+                                  + "（也可在右上角控制中心开关）。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.snapshot.stageEnabled !== false
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.bridge.stageSidebarSet(checked)
+                            // 开关自持状态；回读 IPC 确认值（同 dock 页惯例）
+                            checked = fgSchedPage.snapshot.stageEnabled !== false
+                        }
+                    }
+                }
+
+                // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）
+                StageSliderRow {
+                    label: "卡片倾斜角度"
+                    unit: "°"
+                    minV: 0
+                    maxV: 60
+                    active: fgSchedPage.stageSnapshot.layoutMode !== "adaptive" ? false : true
+                    current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
+                        ? fgSchedPage.stageSnapshot.tiltAngle : 22
+                    onCommit: function(v) { fgSchedPage.stageSet("tiltAngle", v) }
+                }
+
+                StageSliderRow {
+                    label: "卡片间距"
+                    unit: " px"
+                    minV: 4
+                    maxV: 48
+                    current: fgSchedPage.stageSnapshot.cardSpacing !== undefined
+                        ? fgSchedPage.stageSnapshot.cardSpacing : 16
+                    onCommit: function(v) { fgSchedPage.stageSet("cardSpacing", v) }
+                }
+
+                StageSliderRow {
+                    label: "卡片高度"
+                    unit: " px"
+                    minV: 100
+                    maxV: 220
+                    current: fgSchedPage.stageSnapshot.cardHeight !== undefined
+                        ? fgSchedPage.stageSnapshot.cardHeight : 148
+                    onCommit: function(v) { fgSchedPage.stageSet("cardHeight", v) }
+                }
+
+                StageSliderRow {
+                    label: "悬停放大"
+                    unit: "×"
+                    minV: 1.0
+                    maxV: 1.2
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.hoverScale !== undefined
+                        ? fgSchedPage.stageSnapshot.hoverScale : 1.05
+                    onCommit: function(v) { fgSchedPage.stageSet("hoverScale", v) }
+                }
+
+                StageSliderRow {
+                    label: "点击响应延迟"
+                    unit: " ms"
+                    minV: 60
+                    maxV: 500
+                    current: fgSchedPage.stageSnapshot.engageDelay !== undefined
+                        ? fgSchedPage.stageSnapshot.engageDelay : 170
+                    onCommit: function(v) { fgSchedPage.stageSet("engageDelay", v) }
+                }
+
+                StageSliderRow {
+                    label: "悬停驻留"
+                    unit: " ms"
+                    minV: 0
+                    maxV: 800
+                    current: fgSchedPage.stageSnapshot.hoverDwellDelay !== undefined
+                        ? fgSchedPage.stageSnapshot.hoverDwellDelay : 200
+                    onCommit: function(v) { fgSchedPage.stageSet("hoverDwellDelay", v) }
+                }
+
+                StageSliderRow {
+                    label: "卡片入场动效"
+                    unit: " ms"
+                    minV: 100
+                    maxV: 800
+                    current: fgSchedPage.stageSnapshot.cardEnterDuration !== undefined
+                        ? fgSchedPage.stageSnapshot.cardEnterDuration : 240
+                    onCommit: function(v) { fgSchedPage.stageSet("cardEnterDuration", v) }
+                }
+
+                StageSliderRow {
+                    label: "倾斜动效"
+                    unit: " ms"
+                    minV: 100
+                    maxV: 800
+                    current: fgSchedPage.stageSnapshot.tiltAnimDuration !== undefined
+                        ? fgSchedPage.stageSnapshot.tiltAnimDuration : 250
+                    onCommit: function(v) { fgSchedPage.stageSet("tiltAnimDuration", v) }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "自动收编后台窗口"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "切换活动窗口后，把非活动窗口自动最小化收进侧栏"
+                                  + "（同应用窗口豁免）。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageSnapshot.autoMinimize !== false
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("autoMinimize", checked)
+                            checked = fgSchedPage.stageSnapshot.autoMinimize !== false
+                        }
+                    }
+                }
+
+                StageSliderRow {
+                    label: "自动收编延迟"
+                    unit: " ms"
+                    minV: 200
+                    maxV: 3000
+                    active: fgSchedPage.stageSnapshot.autoMinimize !== false
+                    current: fgSchedPage.stageSnapshot.autoMinDelay !== undefined
+                        ? fgSchedPage.stageSnapshot.autoMinDelay : 650
+                    onCommit: function(v) { fgSchedPage.stageSet("autoMinDelay", v) }
+                }
+
+                Text {
+                    text: "卡片布局"
+                    color: theme.primaryText
+                    font.pixelSize: 13
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { id: "scroll", label: "完整滚动（默认）",
+                              detail: "卡片完整显示、永不重叠；固定可见数量等分侧栏，滚轮翻页（无滚动条），底部位置点+窗数提示" },
+                            { id: "adaptive", label: "自适应缩小",
+                              detail: "卡片全部完整显示，随窗口数量等比缩小" },
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: layoutLabel.implicitWidth + 22
+                            height: 28
+                            radius: 9
+                            property bool isActive: fgSchedPage.stageSnapshot.layoutMode === modelData.id
+                            color: isActive
+                                ? theme.selectedContainer
+                                : (layoutMouse.containsMouse
+                                    ? theme.searchField : theme.sidebar)
+                            border.width: isActive ? 2 : 0
+                            border.color: theme.accent
+
+                            Text {
+                                id: layoutLabel
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: parent.isActive
+                                    ? theme.selectedForeground : theme.primaryText
+                                font { pixelSize: 12; weight: Font.Medium }
+                            }
+
+                            MouseArea {
+                                id: layoutMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.stageSet(
+                                    "layoutMode", modelData.id)
+                            }
+                        }
+                    }
+                }
+
+                StageSliderRow {
+                    label: "静置倾斜角"
+                    unit: "°"
+                    minV: 0
+                    maxV: 45
+                    decimals: 1
+                    active: fgSchedPage.stageSnapshot.layoutMode !== "scroll" ? false : true
+                    current: fgSchedPage.stageSnapshot.deckRestTilt !== undefined
+                        ? fgSchedPage.stageSnapshot.deckRestTilt : 10
+                    onCommit: function(v) { fgSchedPage.stageSet("deckRestTilt", v) }
+                }
+
+                StageSliderRow {
+                    label: "退避距离"
+                    unit: " px"
+                    minV: 4
+                    maxV: 60
+                    active: fgSchedPage.stageSnapshot.layoutMode !== "scroll" ? false : true
+                    current: fgSchedPage.stageSnapshot.deckSidePeek !== undefined
+                        ? fgSchedPage.stageSnapshot.deckSidePeek : 20
+                    onCommit: function(v) { fgSchedPage.stageSet("deckSidePeek", v) }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "聚焦压暗退避卡片"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "悬停聚焦时把退避的卡片压暗以突出主体；关闭则退避卡片保持原亮度。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageSnapshot.focusDim === true
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("focusDim", checked)
+                            checked = fgSchedPage.stageSnapshot.focusDim === true
+                        }
+                    }
+                }
+
+                // adaptive 专属（scroll 模式下卡在槽内本就居中，禁用防误导）
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+                    opacity: fgSchedPage.stageSnapshot.layoutMode === "adaptive" ? 1.0 : 0.45
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "卡片垂直居中"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "自适应模式：卡片放得下时在侧栏垂直居中，贴满时顶部锚定。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        enabled: fgSchedPage.stageSnapshot.layoutMode === "adaptive"
+                        checked: fgSchedPage.stageSnapshot.centerCards !== false
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("centerCards", checked)
+                            checked = fgSchedPage.stageSnapshot.centerCards !== false
+                        }
+                    }
+                }
+
+                // 活体流（实验性）：PipeWire 实时画面，默认关——本机（安卓
+                // 容器）GPU 预算红线，悬停建流即被宿主杀桌面；换更强硬件后开启
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "活体流（实验性）"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "悬停时经 PipeWire 直显窗口实时画面（其余显示静态快照）。⚠️ 本机勿开：GPU 负载过高会被宿主杀桌面，仅限硬件更强的设备。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageSnapshot.thumbLiveStream === true
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("thumbLiveStream", checked)
+                            checked = fgSchedPage.stageSnapshot.thumbLiveStream === true
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 玻璃质感（卡面：圆角/背板/受光/描边/辉光/纵深/缩略图清晰度） ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: glassColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: glassColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "玻璃质感"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+
+                StageSliderRow {
+                    label: "卡片圆角"
+                    unit: " px"
+                    minV: 0
+                    maxV: 24
+                    current: fgSchedPage.stageSnapshot.cardRadius !== undefined
+                        ? fgSchedPage.stageSnapshot.cardRadius : 14
+                    onCommit: function(v) { fgSchedPage.stageSet("cardRadius", v) }
+                }
+
+                StageSliderRow {
+                    label: "背板浓度"
+                    unit: ""
+                    minV: 0.2
+                    maxV: 0.95
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.cardTint !== undefined
+                        ? fgSchedPage.stageSnapshot.cardTint : 0.55
+                    onCommit: function(v) { fgSchedPage.stageSet("cardTint", v) }
+                }
+
+                StageSliderRow {
+                    label: "顶部受光"
+                    unit: ""
+                    minV: 0
+                    maxV: 0.3
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.cardTopLight !== undefined
+                        ? fgSchedPage.stageSnapshot.cardTopLight : 0.07
+                    onCommit: function(v) { fgSchedPage.stageSet("cardTopLight", v) }
+                }
+
+                StageSliderRow {
+                    label: "描边亮度"
+                    unit: ""
+                    minV: 0
+                    maxV: 0.4
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.cardBorder !== undefined
+                        ? fgSchedPage.stageSnapshot.cardBorder : 0.13
+                    onCommit: function(v) { fgSchedPage.stageSet("cardBorder", v) }
+                }
+
+                StageSliderRow {
+                    label: "聚焦辉光强度"
+                    unit: ""
+                    minV: 0
+                    maxV: 0.4
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.cardGlow !== undefined
+                        ? fgSchedPage.stageSnapshot.cardGlow : 0.13
+                    onCommit: function(v) { fgSchedPage.stageSet("cardGlow", v) }
+                }
+
+                StageSliderRow {
+                    label: "纵深压暗"
+                    unit: ""
+                    minV: 0
+                    maxV: 0.6
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.cardDepth !== undefined
+                        ? fgSchedPage.stageSnapshot.cardDepth : 0.38
+                    onCommit: function(v) { fgSchedPage.stageSet("cardDepth", v) }
+                }
+
+                StageSliderRow {
+                    label: "缩略图清晰度"
+                    unit: " px"
+                    minV: 160
+                    maxV: 640
+                    current: fgSchedPage.stageSnapshot.thumbSize !== undefined
+                        ? fgSchedPage.stageSnapshot.thumbSize : 320
+                    onCommit: function(v) { fgSchedPage.stageSet("thumbSize", v) }
+                }
+            }
+        }
+
+        // ── 收编与刷新节拍（收编两拍延迟 / 桌面去抖 / 实时刷新间隔） ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: demoteColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: demoteColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "收编与刷新节拍"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+
+                StageSliderRow {
+                    label: "收编快照等待"
+                    unit: " ms"
+                    minV: 100
+                    maxV: 1500
+                    current: fgSchedPage.stageSnapshot.demoteCaptureDelay !== undefined
+                        ? fgSchedPage.stageSnapshot.demoteCaptureDelay : 300
+                    onCommit: function(v) { fgSchedPage.stageSet("demoteCaptureDelay", v) }
+                }
+
+                StageSliderRow {
+                    label: "收编派发延迟"
+                    unit: " ms"
+                    minV: 10
+                    maxV: 200
+                    current: fgSchedPage.stageSnapshot.demoteDispatchDelay !== undefined
+                        ? fgSchedPage.stageSnapshot.demoteDispatchDelay : 30
+                    onCommit: function(v) { fgSchedPage.stageSet("demoteDispatchDelay", v) }
+                }
+
+                StageSliderRow {
+                    label: "桌面收编去抖"
+                    unit: " ms"
+                    minV: 50
+                    maxV: 1000
+                    current: fgSchedPage.stageSnapshot.desktopFocusDebounce !== undefined
+                        ? fgSchedPage.stageSnapshot.desktopFocusDebounce : 150
+                    onCommit: function(v) { fgSchedPage.stageSet("desktopFocusDebounce", v) }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "收编两拍：先等快照（多窗连拍需要时间）、矩形落盘后再延迟派发最小化"
+                          + "（与展开动画对拍）。"
+                    color: theme.secondaryText
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // ── 窗口切换动画（时长 + 缓动曲线，reconfigure 即时生效） ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: animColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: animColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "窗口切换动画"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+
+                StageSliderRow {
+                    label: "动画时长"
+                    unit: " ms"
+                    minV: 120
+                    maxV: 2000
+                    current: fgSchedPage.stageSnapshot.animDuration !== undefined
+                        ? fgSchedPage.stageSnapshot.animDuration : 420
+                    onCommit: function(v) { fgSchedPage.stageSet("animDuration", v) }
+                }
+
+                StageSliderRow {
+                    label: "飞行玻璃透明度"
+                    unit: "×"
+                    minV: 0.3
+                    maxV: 1.0
+                    decimals: 2
+                    current: fgSchedPage.stageSnapshot.glassOpacity !== undefined
+                        ? fgSchedPage.stageSnapshot.glassOpacity : 0.65
+                    onCommit: function(v) { fgSchedPage.stageSet("glassOpacity", v) }
+                }
+
+                Text {
+                    text: "缓动曲线"
+                    color: theme.primaryText
+                    font.pixelSize: 13
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { id: "OutCubic", label: "快出缓停（默认）" },
+                            { id: "OutQuad", label: "更平缓" },
+                            { id: "InOutCubic", label: "慢-快-慢" },
+                            { id: "OutBack", label: "末端回弹" },
+                            { id: "InOutQuad", label: "柔和两端" },
+                            { id: "Linear", label: "匀速" },
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: curveLabel.implicitWidth + 22
+                            height: 28
+                            radius: 9
+                            property bool isActive: fgSchedPage.stageSnapshot.animEasing === modelData.id
+                            color: isActive
+                                ? theme.selectedContainer
+                                : (curveMouse.containsMouse
+                                    ? theme.searchField : theme.sidebar)
+                            border.width: isActive ? 2 : 0
+                            border.color: theme.accent
+
+                            Text {
+                                id: curveLabel
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: parent.isActive
+                                    ? theme.selectedForeground : theme.primaryText
+                                font { pixelSize: 12; weight: Font.Medium }
+                            }
+
+                            MouseArea {
+                                id: curveMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.stageSet(
+                                    "animEasing", modelData.id)
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: "窗口从卡片长出/缩回的动画；改动画时长与曲线立即生效，"
+                          + "也可用命令行 stage-anim 临时调节。飞行玻璃透明度："
+                          + "窗口在卡片↔桌面途中呈半透明（透见桌面），落地凝实；"
+                          + "1.00 = 关闭玻璃感。"
+                    color: theme.secondaryText
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // ── 冻结开关 ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: freezeRow.implicitHeight + 32
+
+            RowLayout {
+                id: freezeRow
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 12
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "冻结最小化的窗口"
+                        color: theme.primaryText
+                        font { pixelSize: 14; weight: Font.Medium }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "收进侧栏 3 分钟后整树暂停（省 CPU，恢复偶发异常）。"
+                            + "默认停用：后台仅限制资源，绝不暂停进程。"
+                        color: theme.secondaryText
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                    }
+                }
+
+                LiquidControls.LiquidGlassSwitch {
+                    Layout.alignment: Qt.AlignVCenter
+                    accentColor: theme.accent
+                    checked: fgSchedPage.snapshot.freezeEnabled === true
+                    onToggled: function(checked) {
+                        fgSchedPage.bridge.fgSchedSetFreeze(checked)
+                    }
+                }
+            }
+        }
+
+        // ── 后台内存节省 ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: reclaimColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: reclaimColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "后台内存节省"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    // 三档选择：关 / 标准 / 激进 / 极限
+                    Repeater {
+                        model: [
+                            { id: "off", label: "关闭",
+                              detail: "后台不动内存" },
+                            { id: "once", label: "标准",
+                              detail: "切后台 60 秒后压缩一次（冷页挤进 zram，切回时略慢一拍）" },
+                            { id: "aggressive", label: "激进压缩",
+                              detail: "进入后台持续压缩（每 5 分钟重压），内存占用降到最低" },
+                            { id: "kill", label: "极限",
+                              detail: "先持续压缩，后台 10 分钟后直接结束应用——内存归零。未保存工作会丢失（浏览器可恢复会话）；konsole/ZCode 默认豁免" }
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: reclaimLabel.implicitHeight
+                                + reclaimDetail.implicitHeight + 22
+                            radius: 10
+                            property bool isActive: fgSchedPage.snapshot.reclaimMode === modelData.id
+                            color: isActive
+                                ? theme.selectedContainer
+                                : (reclaimMouse.containsMouse
+                                    ? theme.searchField : theme.sidebar)
+                            border.width: isActive ? 2 : 0
+                            border.color: theme.accent
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 2
+
+                                Text {
+                                    id: reclaimLabel
+                                    text: modelData.label
+                                    color: parent.parent.isActive
+                                        ? theme.selectedForeground : theme.primaryText
+                                    font { pixelSize: 13; weight: Font.DemiBold }
+                                }
+                                Text {
+                                    id: reclaimDetail
+                                    Layout.fillWidth: true
+                                    text: modelData.detail
+                                    color: theme.secondaryText
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+
+                            MouseArea {
+                                id: reclaimMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.bridge.fgSchedSetReclaim(modelData.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── 内存状态 ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: memColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: memColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: "内存状态"
+                        color: theme.primaryText
+                        font { pixelSize: 14; weight: Font.Medium }
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: "刷新"
+                        color: fgSchedMemMouse.containsMouse
+                            ? theme.accent : theme.secondaryText
+                        font.pixelSize: 12
+
+                        MouseArea {
+                            id: fgSchedMemMouse
+                            anchors.fill: parent
+                            anchors.margins: -6
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: fgSchedPage.bridge.fgSchedMemStatus()
+                        }
+                    }
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: {
+                        const st = fgSchedPage.memStatus
+                        if (st.memAvailableKb === undefined)
+                            return "读取中…"
+                        return "可用内存 " + fgSchedPage.gb(st.memAvailableKb)
+                            + " / " + fgSchedPage.gb(st.memTotalKb)
+                    }
+                    color: theme.primaryText
+                    font.pixelSize: 13
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: {
+                        const st = fgSchedPage.memStatus
+                        if (st.zramOrigKb === undefined)
+                            return "zram 压缩池不可读"
+                        const ratio = st.zramComprKb > 0
+                            ? (st.zramOrigKb / st.zramComprKb).toFixed(1) : "—"
+                        return "压缩池（zram）：已压 " + fgSchedPage.gb(st.zramComprKb)
+                            + "（原 " + fgSchedPage.gb(st.zramOrigKb)
+                            + "，压缩比 " + ratio + ":1）"
+                    }
+                    color: theme.secondaryText
+                    font.pixelSize: 12
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: fgSchedPage.snapshot.reclaimMode === "kill"
+                        ? "极限模式：后台应用先被持续压缩，10 分钟后直接结束进程"
+                          + "（内存归零）。数据安全靠应用自身的会话恢复；"
+                          + "豁免名单外的应用一律会杀——有未保存工作时请把它加进"
+                          + "下方名单。"
+                        : "激进模式会把后台应用的内存页反复压进压缩池：内存占用大幅下降，"
+                          + "代价是切回该应用时画面停顿一瞬（页面从压缩池换回）。"
+                    color: fgSchedPage.snapshot.reclaimMode === "kill" ? "#ff9f0a" : theme.tertiaryText
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // ── 后台全资源运行名单 ──
+        Rectangle {
+            Layout.fillWidth: true
+            radius: 14
+            color: theme.card
+            implicitHeight: listColumn.implicitHeight + 32
+
+            ColumnLayout {
+                id: listColumn
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 10
+
+                Text {
+                    text: "后台全资源运行名单"
+                    color: theme.primaryText
+                    font { pixelSize: 14; weight: Font.Medium }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "名单内的应用切到后台后不降级、不限核（跑常驻服务、"
+                          + "挂机下载、后台 agent 用）。填应用类名"
+                          + "（如 org.kde.konsole），或从下面出现过的应用里选。"
+                    color: theme.secondaryText
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                }
+
+                // 名单行
+                Repeater {
+                    model: fgSchedPage.snapshot.fullResources || []
+
+                    delegate: RowLayout {
+                        required property string modelData
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            Layout.alignment: Qt.AlignVCenter
+                            color: theme.accent
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: appNameFor(modelData)
+                            color: theme.primaryText
+                            font.pixelSize: 13
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            text: modelData
+                            color: theme.tertiaryText
+                            font.pixelSize: 10
+                            elide: Text.ElideMiddle
+                            Layout.maximumWidth: 130
+                        }
+                        Text {
+                            text: "移除"
+                            color: "#ff453a"
+                            font.pixelSize: 12
+
+                            MouseArea {
+                                anchors.fill: parent
+                                anchors.margins: -6
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.bridge.fgSchedRemoveFull(parent.parent.modelData)
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    visible: (fgSchedPage.snapshot.fullResources || []).length === 0
+                    text: "名单为空：所有应用后台都会被限制资源"
+                    color: theme.tertiaryText
+                    font.pixelSize: 12
+                }
+
+                // 分隔线
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: theme.separator
+                }
+
+                // 从当前运行的应用添加
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    ComboBox {
+                        id: knownAppsBox
+                        Layout.fillWidth: true
+                        model: fgSchedPage.runningApps
+                        textRole: "name"
+                        valueRole: "appId"
+                        enabled: count > 0
+                        displayText: count > 0
+                            ? currentText : "点右侧刷新，扫描当前运行的应用"
+                        font.pixelSize: 12
+                    }
+
+                    Button {
+                        text: fgSchedPage.runningApps.length > 0 ? "添加" : "刷新"
+                        enabled: fgSchedPage.runningApps.length === 0
+                            || (knownAppsBox.count > 0
+                                && knownAppsBox.currentValue !== undefined
+                                && knownAppsBox.currentValue.length > 0)
+                        onClicked: {
+                            if (fgSchedPage.runningApps.length === 0) {
+                                fgSchedPage.refresh()
+                            } else if (knownAppsBox.currentValue) {
+                                fgSchedPage.bridge.fgSchedAddFull(
+                                            knownAppsBox.currentValue)
+                            }
+                        }
+                    }
+                }
+
+                // 手动输入
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    TextField {
+                        id: manualInput
+                        Layout.fillWidth: true
+                        placeholderText: "手动输入类名，如 org.kde.konsole"
+                        font.pixelSize: 12
+                        onAccepted: {
+                            if (text.trim().length > 0) {
+                                fgSchedPage.bridge.fgSchedAddFull(text)
+                                text = ""
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: "添加"
+                        enabled: manualInput.text.trim().length > 0
+                        onClicked: {
+                            fgSchedPage.bridge.fgSchedAddFull(manualInput.text)
+                            manualInput.text = ""
+                        }
+                    }
+                }
+            }
+        }
+
+        Item { Layout.preferredHeight: 4 }
     }
 
     component IntegrationStatusPage: ColumnLayout {
@@ -4154,6 +5318,15 @@ ApplicationWindow {
                     }
                 }
 
+                SidebarEntry {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 1
+                    pageIndex: 8
+                    label: "前台调度"
+                    navSymbol: "⏵"
+                    navTint: "#ff9f0a"
+                }
+
                 Item {
                     Layout.fillHeight: true
                 }
@@ -4312,6 +5485,13 @@ ApplicationWindow {
                                 window.requestActivate()
                             }
                         }
+                    }
+
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 10
+                        visible: active
+                        sourceComponent: FgSchedSettingsPage {}
                     }
 
                     Loader {

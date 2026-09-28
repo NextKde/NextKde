@@ -9,6 +9,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
 import qs.desktop.modules.platform
+import qs.desktop.modules.stage
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
@@ -1286,6 +1287,78 @@ PopupWindow {
         }
     }
 
+    // ── Card 9a: Stage mode toggle（前台调度总开关，常驻）─────────────
+    // 常驻行卡：notificationFirst 布局下位于历史卡下方（历史卡压矮到 178，
+    // 本行 206..250，主控制区 258 起，互不重叠；非 notificationFirst 同理
+    // 落在 533..577）。开=窗口收进/呼出自左侧 Stage 侧栏；关=经典
+    // magiclamp dock 动画。切换逻辑在 StageModeService。
+    ControlCenterCard {
+        id: stageModeCard
+        coordinator: coordinator
+        visible: cardShown && coordinator.cardAnchor !== null
+        // 历史卡显示时排在其下（206/533），历史为空隐藏时顶到其位（20/347）
+        offsetTop: panel.notificationFirst
+            ? (ControlCenterService.historyGroups.length > 0 ? 206 : 20)
+            : (ControlCenterService.historyGroups.length > 0 ? 533 : 347)
+        offsetRight: 20
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
+        cardWidth: 296
+        cardHeight: 44
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
+
+        Rectangle {
+            id: stageDisc
+            width: 34; height: 34; radius: 17
+            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveFill
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: stagePointer.containsMouse && !stagePointer.pressed ? 1.0 : 0.92
+            Behavior on color { ColorAnimation { duration: 140 } }
+
+            Image {
+                anchors.centerIn: parent
+                width: 18; height: 18
+                source: BundledIcons.source("window")
+                sourceSize.width: 36; sourceSize.height: 36
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    colorization: 1.0
+                    colorizationColor: StageModeService.enabled
+                        ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
+                }
+            }
+        }
+
+        GlassText {
+            anchors { left: stageDisc.right; leftMargin: 10; verticalCenter: parent.verticalCenter }
+            text: "前台调度"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        }
+
+        GlassText {
+            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+            text: StageModeService.enabled ? "已开启" : "已关闭"
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
+            opacity: StageModeService.enabled ? 0.9 : 0.5
+            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        }
+
+        MouseArea {
+            id: stagePointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: StageModeService.toggle()
+        }
+    }
+
     // ── Card 9: Notification history ─────────────────────────────────
     // Session history grouped by app: dismissed/expired banners and DND
     // notifications (which are never shown) land here. Each group header
@@ -1304,7 +1377,8 @@ PopupWindow {
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
-        cardHeight: 230
+        // 230 → 178：给常驻的"前台调度"行卡（下方 44px）让位，两者共存
+        cardHeight: 178
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid

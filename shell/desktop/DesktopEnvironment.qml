@@ -10,6 +10,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
 import qs.desktop.modules.wallpaper
 import qs.desktop.modules.overview
+import qs.desktop.modules.stage
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import qs.desktop.modules.shortcuts
@@ -669,6 +670,7 @@ Item {
     }
     AppLauncher {}
     Overview {}
+    StageSidebar {}
     IpcHandler {
         target: "desktop"
         function toggle(): void { WindowService.toggleShowDesktop() }

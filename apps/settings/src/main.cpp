@@ -46,6 +46,7 @@
 #include <QVariantMap>
 #include <QUrl>
 #include <algorithm>
+#include <functional>
 
 namespace {
 
@@ -927,6 +928,229 @@ public:
         callAppearance({QStringLiteral("resetGlassPreset"), style});
     }
 
+    // ── 前台调度（fg-sched）页 ──
+    // 配置就是 ~/.config/fg-sched/config.json：直接读写，root 守护对 mtime
+    // 轮询自动应用（≤5s），无需任何信号/特权通道。knownApps 来自守护维护的
+    // known-apps.json（出现过的 resourceClass）。
+    static QString fgSchedConfigPath() {
+        return QDir::homePath() + QStringLiteral("/.config/fg-sched/config.json");
+    }
+    static QString fgSchedKnownAppsPath() {
+        return QDir::homePath() + QStringLiteral("/.config/fg-sched/known-apps.json");
+    }
+
+    static bool writeFgSchedConfig(
+            const std::function<void(QJsonObject &)> &mutate) {
+        QJsonObject obj;
+        {
+            QFile in(fgSchedConfigPath());
+            if (in.open(QIODevice::ReadOnly))
+                obj = QJsonDocument::fromJson(in.readAll()).object();
+        }
+        mutate(obj);
+        QSaveFile out(fgSchedConfigPath());
+        if (!out.open(QIODevice::WriteOnly))
+            return false;
+        out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+        return out.commit();
+    }
+
+    // 实时运行应用清单：走 shell 的 fg-sched IPC（WindowService 全量窗口，
+    // 去重成 {name, appId}），供"从运行应用添加"下拉框使用。
+    Q_INVOKABLE void fgSchedRunningApps() {
+        callShell(QStringLiteral("fg-sched"), {QStringLiteral("runningApps")},
+                  QStringLiteral("运行应用清单请求失败"), RequestKind::FgSchedApps);
+    }
+
+    Q_INVOKABLE void fgSchedSnapshot() {        QVariantMap out;
+        QJsonObject obj;
+        {
+            QFile in(fgSchedConfigPath());
+            if (in.open(QIODevice::ReadOnly))
+                obj = QJsonDocument::fromJson(in.readAll()).object();
+        }
+        out.insert(QStringLiteral("freezeEnabled"),
+                   obj.value(QStringLiteral("freeze_minimized_after_s")).toInt() > 0);
+        out.insert(QStringLiteral("reclaimMode"),
+                   obj.value(QStringLiteral("reclaim")).toObject()
+                       .value(QStringLiteral("mode")).toString(QStringLiteral("once")));
+        QStringList full;
+        const auto fullArray = obj.value(QStringLiteral("never_demote_apps")).toArray();
+        for (const auto &v : fullArray)
+            full << v.toString();
+        out.insert(QStringLiteral("fullResources"), full);
+        const auto bg = obj.value(QStringLiteral("background")).toObject();
+        out.insert(QStringLiteral("bgNice"), bg.value(QStringLiteral("nice")).toDouble());
+        // affinity_cpus 三态：显式数组原样列出；"auto"/缺省 = 守护启动时
+        // 自动探测（异构→效率核，同构→不限核）。UI 只需知道模式不必知道
+        // 具体核号，跨机器通用。
+        const auto cpuValue = bg.value(QStringLiteral("affinity_cpus"));
+        if (cpuValue.isArray()) {
+            QStringList cpus;
+            const auto cpuArray = cpuValue.toArray();
+            for (const auto &v : cpuArray)
+                cpus << QString::number(v.toInt());
+            out.insert(QStringLiteral("bgCpus"), cpus.join(QStringLiteral(",")));
+            out.insert(QStringLiteral("bgCpusAuto"), false);
+        } else {
+            out.insert(QStringLiteral("bgCpus"), QStringLiteral("auto"));
+            out.insert(QStringLiteral("bgCpusAuto"), true);
+        }
+        QStringList known;
+        QFile knownFile(fgSchedKnownAppsPath());
+        if (knownFile.open(QIODevice::ReadOnly)) {
+            const auto arr = QJsonDocument::fromJson(knownFile.readAll()).array();
+            for (const auto &v : arr)
+                known << v.toString();
+        }
+        out.insert(QStringLiteral("knownApps"), known);
+        // 台前侧栏总开关的落盘态（StageModeService 的 stage-mode flag）
+        QFile stageFlag(QDir::homePath()
+                        + QStringLiteral("/.config/fg-sched/stage-mode"));
+        if (stageFlag.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QString flagValue = QString::fromUtf8(stageFlag.readAll())
+                                          .trimmed();
+            out.insert(QStringLiteral("stageEnabled"),
+                       flagValue != QStringLiteral("0"));
+        } else {
+            out.insert(QStringLiteral("stageEnabled"), true);
+        }
+        emit fgSchedSnapshotChanged(out);
+    }
+
+    Q_INVOKABLE void fgSchedSetFreeze(bool on) {
+        if (!writeFgSchedConfig([&](QJsonObject &obj) {
+                obj.insert(QStringLiteral("freeze_minimized_after_s"), on ? 180 : 0);
+            }))
+            return;
+        fgSchedSnapshot();
+    }
+
+    // 后台内存压缩模式：off=不动内存；once=切后台压一次；aggressive=持续压到最低
+    Q_INVOKABLE void fgSchedSetReclaim(const QString &mode) {
+        if (mode != QStringLiteral("off") && mode != QStringLiteral("once")
+                && mode != QStringLiteral("aggressive")
+                && mode != QStringLiteral("kill"))
+            return;
+        if (!writeFgSchedConfig([&](QJsonObject &obj) {
+                QJsonObject rec = obj.value(QStringLiteral("reclaim")).toObject();
+                rec.insert(QStringLiteral("mode"), mode);
+                obj.insert(QStringLiteral("reclaim"), rec);
+            }))
+            return;
+        fgSchedSnapshot();
+    }
+
+    // ── 台前调度（stage）参数：全部走 shell 的 stage-config IPC ──
+    // set 的应答就是整份新快照；shell 侧负责钳位/持久化/kwinrc 投影
+    // （窗口动画时长与曲线经 reconfigureEffect 即时生效）。
+    void callStage(const QStringList &arguments) {
+        callShell(QStringLiteral("stage-config"), arguments,
+                  QStringLiteral("台前调度参数请求失败"), RequestKind::StageConfig);
+    }
+
+    Q_INVOKABLE void stageConfigSnapshot() {
+        callStage({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE void stageConfigSet(const QString &key, const QString &value) {
+        callStage({QStringLiteral("set"), key, value});
+    }
+
+    // 台前侧栏总开关：复用 stage-sidebar 的 show/hide
+    Q_INVOKABLE void stageSidebarSet(bool on) {
+        callShell(QStringLiteral("stage-sidebar"),
+                  {on ? QStringLiteral("show") : QStringLiteral("hide")},
+                  QStringLiteral("台前侧栏开关请求失败"), RequestKind::StageConfig);
+    }
+
+    QVariantMap stageConfigFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(
+            payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("台前调度参数返回无效"));
+            return {};
+        }
+        setLastError({});
+        QVariantMap out;
+        const QJsonObject object = document.object();
+        for (auto it = object.begin(); it != object.end(); ++it)
+            out.insert(it.key(), it.value().toVariant());
+        return out;
+    }
+
+    // 内存状态：/proc/meminfo + 宿主 zram mm_stat（bytes: orig compr ...）
+    Q_INVOKABLE void fgSchedMemStatus() {
+        QVariantMap out;
+        QFile f(QStringLiteral("/proc/meminfo"));
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const auto lines = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'));
+            for (const QString &line : lines) {
+                const int colon = line.indexOf(QLatin1Char(':'));
+                if (colon <= 0)
+                    continue;
+                const QString key = line.left(colon);
+                const qint64 kb = line.mid(colon + 1)
+                                      .split(QLatin1Char(' '), Qt::SkipEmptyParts)
+                                      .value(0).toLongLong();
+                if (key == QLatin1String("MemTotal"))
+                    out.insert(QStringLiteral("memTotalKb"), kb);
+                else if (key == QLatin1String("MemAvailable"))
+                    out.insert(QStringLiteral("memAvailableKb"), kb);
+                else if (key == QLatin1String("SwapTotal"))
+                    out.insert(QStringLiteral("swapTotalKb"), kb);
+                else if (key == QLatin1String("SwapFree"))
+                    out.insert(QStringLiteral("swapFreeKb"), kb);
+            }
+        }
+        QFile z(QStringLiteral("/sys/block/zram0/mm_stat"));
+        if (z.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const auto fields = QString::fromUtf8(z.readAll())
+                                    .split(QLatin1Char(' '), Qt::SkipEmptyParts);
+            if (fields.size() >= 3) {
+                out.insert(QStringLiteral("zramOrigKb"),
+                           fields.value(0).toLongLong() / 1024);
+                out.insert(QStringLiteral("zramComprKb"),
+                           fields.value(1).toLongLong() / 1024);
+            }
+        }
+        emit fgSchedMemStatusChanged(out);
+    }
+
+    Q_INVOKABLE void fgSchedAddFull(const QString &klass) {
+        const QString trimmed = klass.trimmed();
+        if (trimmed.isEmpty())
+            return;
+        if (!writeFgSchedConfig([&](QJsonObject &obj) {
+                auto arr = obj.value(QStringLiteral("never_demote_apps")).toArray();
+                for (const auto &v : arr) {
+                    if (v.toString() == trimmed)
+                        return;
+                }
+                arr.append(trimmed);
+                obj.insert(QStringLiteral("never_demote_apps"), arr);
+            }))
+            return;
+        fgSchedSnapshot();
+    }
+
+    Q_INVOKABLE void fgSchedRemoveFull(const QString &klass) {
+        if (!writeFgSchedConfig([&](QJsonObject &obj) {
+                auto arr = obj.value(QStringLiteral("never_demote_apps")).toArray();
+                QJsonArray kept;
+                for (const auto &v : arr) {
+                    if (v.toString() != klass)
+                        kept.append(v);
+                }
+                obj.insert(QStringLiteral("never_demote_apps"), kept);
+            }))
+            return;
+        fgSchedSnapshot();
+    }
+
     // One appearance request feeds both products the debug page needs: the
     // spec table is local (kwinrc + the cached shell snapshot), while the
     // preset style label names which preset that snapshot belongs to, so it
@@ -1132,6 +1356,10 @@ signals:
     void systemAppearanceApplied(bool accepted);
     // 后台缩略图生成完毕;页面收到后重新求值瓦片缩略图绑定,下次直接命中缓存。
     void wallpaperThumbnailChanged();
+    void fgSchedSnapshotChanged(const QVariantMap &snapshot);
+    void fgSchedRunningAppsChanged(const QVariantList &apps);
+    void fgSchedMemStatusChanged(const QVariantMap &status);
+    void stageConfigChanged(const QVariantMap &snapshot);
 
 private:
     // What the requesting page wants back once the IPC reply lands: every
@@ -1148,6 +1376,8 @@ private:
         Integration,
         GlassDebug,
         ApplySystemAppearance,
+        FgSchedApps,
+        StageConfig,
     };
 
     QVariantMap snapshotFromReply(const QString &payload) {
@@ -1942,6 +2172,29 @@ private:
             emit systemAppearanceApplied(accepted);
             break;
         }
+        case RequestKind::FgSchedApps: {
+            QVariantList apps;
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(
+                payload.toUtf8(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && document.isArray()) {
+                const auto arr = document.array();
+                for (const auto &v : arr) {
+                    const auto o = v.toObject();
+                    apps.append(QVariantMap{
+                        {QStringLiteral("name"),
+                         o.value(QStringLiteral("name")).toString()},
+                        {QStringLiteral("appId"),
+                         o.value(QStringLiteral("appId")).toString()},
+                    });
+                }
+            }
+            emit fgSchedRunningAppsChanged(apps);
+            break;
+        }
+        case RequestKind::StageConfig:
+            emit stageConfigChanged(stageConfigFromReply(payload));
+            break;
         }
     }
 
@@ -1983,6 +2236,12 @@ private:
             break;
         case RequestKind::ApplySystemAppearance:
             emit systemAppearanceApplied(false);
+            break;
+        case RequestKind::FgSchedApps:
+            emit fgSchedRunningAppsChanged({});
+            break;
+        case RequestKind::StageConfig:
+            emit stageConfigChanged({});
             break;
         }
     }

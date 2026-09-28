@@ -48,4 +48,9 @@ qsb --qt6 -o layered_wallpaper.frag.qsb layered_wallpaper.frag
 echo "Compiling spatial foreground fragment shader..."
 qsb --qt6 -o spatial_foreground.frag.qsb spatial_foreground.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb"
+echo "Compiling stage tilt shader..."
+# 台前侧栏卡片的真透视倾斜（共享灭点），纯函数孪生在
+# ../../modules/stage/stage-geometry.mjs 的 tiltProject/tiltUnproject。
+qsb --qt6 -o stage_tilt.frag.qsb stage_tilt.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb"

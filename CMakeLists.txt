@@ -187,6 +187,16 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/test_geometry.mjs)
         set_tests_properties(kos-shell.dock-reveal-geometry PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.stage-geometry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs
+        )
+        set_tests_properties(kos-shell.stage-geometry PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.stage-groups
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_groups.mjs
+        )
+        set_tests_properties(kos-shell.stage-groups PROPERTIES TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-reveal-runtime
@@ -440,6 +450,7 @@ if(BUILD_TESTING)
             kos-shell.window-placement-updates
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.process-identity
+            kos-shell.stage-geometry kos-shell.stage-groups
             kos-shell.appearance-config kos-shell.dock-adaptive
             kos-shell.dock-autohide kos-deskcenter.desktop-outputs
             kos-shell.screen-selection

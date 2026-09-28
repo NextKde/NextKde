@@ -380,7 +380,10 @@ private:
         });
 
         QVariantMap options;
-        options.insert(QStringLiteral("include-decoration"), true);
+        // 不含窗口装饰：缩略图要纯内容——带装饰时每张缩略图顶部都有一截
+        // 标题栏+应用图标（台前卡片"最上面覆盖着图标"的根源），实时模式
+        // 下内容持续刷新、那条静止的图标条格外显眼
+        options.insert(QStringLiteral("include-decoration"), false);
         // ScreenShot2 writes raw pixels to this descriptor after its D-Bus
         // reply describes the image dimensions and QImage format.
         QDBusUnixFileDescriptor writePipe(dbusWriteFd);

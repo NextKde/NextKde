@@ -386,6 +386,18 @@ QtObject {
         if (record)
             AppNotificationService.clearForApp(record.identity.desktopId,
                 record.identity.name);
+        // macOS 语义：dock 点应用 = 整组一起出来（原子 activate-group，
+        // 连续单窗 activate 会在 WindowService 的合并槽里互相覆盖）。
+        // 兜底：身份解析不出 desktopId 的应用 windowsForApp 会返回空组，
+        // 必须回退单窗激活，否则 dock 点了没反应。
+        if (record) {
+            const group = WindowService.windowsForApp(record.identity.desktopId)
+                .map(function(w) { return w.windowId; });
+            if (group.indexOf(windowId) >= 0) {
+                WindowService.activateGroup(group, windowId);
+                return;
+            }
+        }
         WindowService.activateWindow(windowId);
     }
 

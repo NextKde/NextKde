@@ -48,3 +48,7 @@ apps/lockscreen/tests/headless/lock.png
 # config it writes into the checkout.
 .reasonix/
 reasonix.toml
+
+# Session-local assistant metadata + local effect build dir
+.mimosa/
+vendor/kwin-effects-stageanim/build/

@@ -25,11 +25,22 @@ QtObject {
     // Pure geometry updates retain the presentation array and its objects.
     property int placementRevision: 0
     property string activeWindowId: ""
+    // KWin's real active window (unfiltered scan in the bridge snapshot):
+    // non-empty while ANY window holds focus, including transient dialogs
+    // that never enter `records`. Empty = genuinely nothing active (desktop).
+    property string kwinActiveId: ""
 
     // Forwarded by the KWin input effect through this service's existing local
     // bridge. Consumers use the global logical coordinates for outside-click
     // dismissal; the event itself is never consumed by KWin.
     signal globalPointerPressed(real x, real y, int button, real timestamp)
+
+    // Activation requested by this process (dock icon/preview/menu click):
+    // emitted the instant the click happens, before the bridge command is
+    // queued. Stage's sidebar uses it to run the simultaneous swap without
+    // waiting for the change to round-trip through the 120ms-debounced
+    // snapshot path.
+    signal activationRequested(string windowId)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -579,6 +590,14 @@ QtObject {
             ? (_thumbnailUrlsByHandle[record.handleId] ?? "") : "";
     }
 
+    // KWin 的稳定窗口 UUID（PlasmaWindow uuid / internalId 去花括号）——
+    // zkde_screencast 单窗口流的 uuid 口径（ScreencastingRequest 同源）。
+    // shell 句柄（window-N）不是 KWin id，直传会静默开不出流。
+    function handleIdOf(windowId) {
+        const record = windowById(windowId);
+        return record?.provider === "kwin" ? (record.handleId ?? "") : "";
+    }
+
     function requestThumbnail(windowId) {
         const record = windowById(windowId);
         if (!record) {
@@ -607,11 +626,81 @@ QtObject {
             console.warn("[WindowService] activate missing windowId=" + windowId);
             return;
         }
+        activationRequested(windowId);
         if (record.provider === "kwin") {
             _enqueueKwinCommand({ action: "activate", id: record.handleId });
             return;
         }
         try { record.toplevel.activate(); } catch (e) {}
+    }
+
+    // 整组一起展开（macOS 语义）：同应用全部窗口还原抬升、focusId 最后激活
+    // 拿焦点。必须走单个 activate-group 原子命令——连续的 activate 会被
+    // _kwinActivationTimer 的单槽合并吞掉兄弟窗的还原（dock/侧栏两条入口
+    // 都踩过）。activationRequested 只对 focus 窗发一次（stage 退位交换）。
+    function activateGroup(windowIds, focusId) {
+        const ids = [];
+        for (let i = 0; i < windowIds.length; i++) {
+            const record = windowById(windowIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                ids.push(record.handleId);
+            } else {
+                try { record.toplevel.activate(); } catch (e) {}
+            }
+        }
+        if (ids.length === 0)
+            return;
+        const focusRecord = windowById(focusId);
+        const focusHandle = focusRecord?.provider === "kwin"
+            ? focusRecord.handleId : ids[ids.length - 1];
+        activationRequested(focusId);
+        _sendKwinCommand({ action: "activate-group", ids: ids,
+            focusId: focusHandle });
+    }
+
+    // 同拍交换（点击卡片）：激活目标组 + 收编退位组走**一条原子命令**——
+    // 分开发会按桥的 50ms 命令轮询一拍一条，收编比激活晚一拍起跑（实测
+    // 50ms，实时模式肉眼可见的"慢半拍"）。activationRequested 只对焦点窗
+    // 发一次（stage 退位交换 / dock 路径都依赖它）。
+    function engageSwap(activateIds, focusId, minimizeIds) {
+        const actHandles = [];
+        for (let i = 0; i < activateIds.length; i++) {
+            const record = windowById(activateIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                actHandles.push(record.handleId);
+            } else {
+                try { record.toplevel.activate(); } catch (e) {}
+            }
+        }
+        if (actHandles.length === 0)
+            return;
+        const minHandles = [];
+        for (let m = 0; m < minimizeIds.length; m++) {
+            const record = windowById(minimizeIds[m]);
+            if (record?.provider === "kwin")
+                minHandles.push(record.handleId);
+        }
+        const focusRecord = windowById(focusId);
+        const focusHandle = focusRecord?.provider === "kwin"
+            ? focusRecord.handleId : actHandles[actHandles.length - 1];
+        activationRequested(focusId);
+        _sendKwinCommand({ action: "engage-swap", ids: actHandles,
+            focusId: focusHandle, minimizeIds: minHandles });
+    }
+
+    // 实时卡片停泊：收编窗静默还原后移到屏幕外（保持渲染=缩略图实时，
+    // 桌面不摊满应用）；几何复位在桥的激活路径（activate/activate-group/
+    // engage-swap）自动完成
+    function parkWindow(windowId, value) {
+        const record = windowById(windowId);
+        if (!record || record.provider !== "kwin")
+            return;
+        _sendKwinCommand({ action: "park", id: record.handleId,
+            value: value !== false });
     }
 
     function minimizeWindow(windowId, value) {
@@ -636,6 +725,18 @@ QtObject {
             if (!record.toplevel?.minimized)
                 minimizeWindow(record.windowId, true);
         }
+
+    // 实时卡片模式的压底标记：静默还原的后台窗压到桌面底层（keepBelow），
+    // 不遮正在使用的窗口；整组激活时桥侧自动摘掉
+    function keepBelowWindow(windowId, below) {
+        const record = windowById(windowId);
+        if (!record || record.provider !== "kwin")
+            return;
+        _enqueueKwinCommand({
+            action: "keep-below",
+            id: record.handleId,
+            value: below === undefined ? true : below
+        });
     }
 
     function closeWindow(windowId) {
@@ -696,14 +797,18 @@ QtObject {
                         // Coalesce redundant snapshots. The KWin script already
                         // publishes only on change, but a second filter here
                         // keeps the model rebuild rate bounded even if a future
-                        // provider stops deduplicating.
-                        const snapshotJson = JSON.stringify(event.windows);
+                        // provider stops deduplicating. activeId joins the key:
+                        // focus moving onto an untracked dialog changes nothing
+                        // in `windows` but must still reach consumers.
+                        const snapshotJson = JSON.stringify(event.windows)
+                            + "#" + (event.activeId ?? "");
                         if (snapshotJson === svc._lastSnapshotJson)
                             return;
                         svc._lastSnapshotJson = snapshotJson;
                         // Keep activation direct. Virtual-desktop transient
                         // filtering is handled separately; delaying this
                         // authoritative list also delayed focus changes.
+                        svc.kwinActiveId = String(event.activeId ?? "");
                         svc._kwinWindows = event.windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;

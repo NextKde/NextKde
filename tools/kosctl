@@ -1186,6 +1186,10 @@ install_kwin_plugins() {
     local manifest_entry
     local -a system_entries=()
     local -a stale_entries=()
+    # rm-then-cp must only rm what this staged tree reinstalls. Entries carried
+    # forward into the manifest from an opt-in component (the decoration) are
+    # not staged here, so sourcing the list from the manifest itself would rm
+    # the installed binary and never copy it back.
     while IFS= read -r manifest_entry; do
         [[ -z "$manifest_entry" ]] && continue
         case "$manifest_entry" in
@@ -1195,7 +1199,7 @@ install_kwin_plugins() {
                 return 1
                 ;;
         esac
-    done < "$kwin_manifest"
+    done < <(find "$stage_dir" \( -type f -o -type l \) -printf '/%P\n' | sort -u)
     # Entries the previous install shipped and this one does not.
     while IFS= read -r manifest_entry; do
         [[ -z "$manifest_entry" ]] && continue

@@ -1,0 +1,7 @@
+module qs.desktop.modules.stage
+
+StageSidebar 1.0 StageSidebar.qml
+StageCard 1.0 StageCard.qml
+StageSidebarWindow 1.0 StageSidebarWindow.qml
+singleton StageModeService 1.0 StageModeService.qml
+singleton StageConfigService 1.0 StageConfigService.qml
