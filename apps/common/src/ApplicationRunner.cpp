@@ -1,4 +1,5 @@
 #include "KosApp/ApplicationRunner.h"
+#include "KosApp/ApplicationQmlReloader.h"
 #include "ApplicationActivation.h"
 #include "ApplicationPreferences.h"
 
@@ -7,6 +8,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
@@ -62,7 +64,32 @@ int run(int argc, char *argv[], const Metadata &metadata)
     parser.addPositionalArgument(QStringLiteral("urls"),
                                  QStringLiteral("Files or URLs to open."),
                                  QStringLiteral("[urls...]") );
+    QCommandLineOption watchOption(
+        QStringLiteral("watch-qml"),
+        QStringLiteral("Load the QML entry point from a source directory and "
+                       "rebuild the window when it changes (development)."),
+        QStringLiteral("path"));
+    parser.addOption(watchOption);
     parser.process(application);
+
+    // Development entry selection: --watch-qml (or KOS_APP_QML_DIR) runs the
+    // QML from a source tree instead of the copy compiled into the binary and
+    // rebuilds the window whenever that tree changes. The path may name the
+    // directory holding Main.qml or the entry file itself.
+    QString watchPath = parser.value(watchOption);
+    if (watchPath.isEmpty())
+        watchPath = qEnvironmentVariable("KOS_APP_QML_DIR");
+    QString entryFile;
+    if (!watchPath.isEmpty()) {
+        entryFile = QFileInfo(watchPath).isDir()
+            ? QDir(watchPath).filePath(QStringLiteral("Main.qml"))
+            : watchPath;
+        entryFile = QDir::cleanPath(QFileInfo(entryFile).absoluteFilePath());
+        if (!QFileInfo::exists(entryFile)) {
+            qCritical().noquote() << "QML entry point not found:" << entryFile;
+            return EXIT_FAILURE;
+        }
+    }
 
     QStringList activationArguments = application.arguments().mid(1);
     activationArguments.removeAll(QStringLiteral("--smoke-test"));
@@ -76,8 +103,11 @@ int run(int argc, char *argv[], const Metadata &metadata)
         }
     }
     ApplicationActivation activation(metadata.dbusServiceName);
+    // A watch run is a development instance of the same application: it must
+    // neither forward its arguments to nor displace the user's running copy.
     const bool isolatedTestRun = parser.isSet(smokeTestOption)
-        || parser.isSet(screenshotOption);
+        || parser.isSet(screenshotOption)
+        || !entryFile.isEmpty();
     if (!isolatedTestRun) {
         const auto activationResult = activation.acquireOrForward(
             activationArguments);
@@ -115,32 +145,77 @@ int run(int argc, char *argv[], const Metadata &metadata)
     initialProperties.insert(
         QStringLiteral("applicationSettings"),
         QVariant::fromValue(static_cast<QObject *>(&preferences)));
-    engine.setInitialProperties(initialProperties);
+    if (metadata.prepareEngine)
+        metadata.prepareEngine(engine, initialProperties);
     QObject::connect(&engine, &QQmlEngine::warnings, &application,
                      [](const QList<QQmlError> &warnings) {
                          for (const QQmlError &warning : warnings)
                              qWarning().noquote() << warning.toString();
                      });
+    // Startup aborts on a root that does not build; a hot reload must not --
+    // the running window is worth more than a strict failure, and the next
+    // change that compiles brings the new tree up.
+    bool startupComplete = false;
     QObject::connect(
         &engine,
         &QQmlApplicationEngine::objectCreationFailed,
         &application,
-        [](const QUrl &url) {
+        [&startupComplete](const QUrl &url) {
             qCritical() << "QML object creation failed for" << url;
-            QCoreApplication::exit(EXIT_FAILURE);
+            if (!startupComplete)
+                QCoreApplication::exit(EXIT_FAILURE);
         },
         Qt::QueuedConnection);
 
-    engine.loadFromModule(metadata.qmlUri, QStringLiteral("Main"));
+    const auto loadRoot = [&engine, &initialProperties, &metadata, &entryFile] {
+        // Initial properties are re-applied on every load: a rebuilt window
+        // must receive the same controllers as the first one.
+        engine.setInitialProperties(initialProperties);
+        if (entryFile.isEmpty())
+            engine.loadFromModule(metadata.qmlUri, QStringLiteral("Main"));
+        else
+            engine.load(QUrl::fromLocalFile(entryFile));
+    };
+
+    loadRoot();
     if (engine.rootObjects().isEmpty()) {
         qCritical() << "Unable to load the application QML root for"
-                    << metadata.qmlUri;
+                    << (entryFile.isEmpty() ? metadata.qmlUri : entryFile);
         return EXIT_FAILURE;
     }
 
-    QObject *rootObject = engine.rootObjects().constFirst();
-    auto *window = qobject_cast<QQuickWindow *>(rootObject);
-    if (window) {
+    // Activation dispatches to whichever root exists at call time and is
+    // connected with the application as context, so it keeps working across a
+    // hot reload instead of ending with the window it was attached to.
+    const auto dispatchActivation = [&engine](const QStringList &arguments,
+                                              const QString &workingDirectory) {
+        QObject *rootObject = engine.rootObjects().isEmpty()
+            ? nullptr : engine.rootObjects().constFirst();
+        if (!rootObject)
+            return;
+        if (arguments.contains(QStringLiteral("--settings"))) {
+            if (QObject *settingsDialog = rootObject->findChild<QObject *>(
+                    QStringLiteral("kosSettingsDialog"))) {
+                QMetaObject::invokeMethod(settingsDialog, "open");
+            }
+        }
+        const bool invoked = QMetaObject::invokeMethod(
+            rootObject, "handleActivation",
+            Q_ARG(QVariant, QVariant::fromValue(arguments)),
+            Q_ARG(QVariant, QVariant::fromValue(workingDirectory)));
+        if (!invoked)
+            qWarning() << "Unable to dispatch activation to the QML root";
+    };
+    QObject::connect(&activation, &ApplicationActivation::activationRequested,
+                     &application, dispatchActivation);
+
+    // (Re)hooks the window after every load: a rebuilt window needs the same
+    // native effects and activation target as the first one. The effects
+    // connections are rooted at the window, so they end with it.
+    const auto wireRoot = [&activation, &preferences](QObject *rootObject) {
+        auto *window = qobject_cast<QQuickWindow *>(rootObject);
+        if (!window)
+            return;
         activation.setWindow(window);
 #if defined(KOS_HAVE_KWINDOWSYSTEM)
         const auto applyWindowEffects = [window, &preferences] {
@@ -162,31 +237,45 @@ int run(int argc, char *argv[], const Metadata &metadata)
                          });
         QTimer::singleShot(0, window, applyWindowEffects);
 #endif
-    }
-
-    const auto dispatchActivation = [rootObject](const QStringList &arguments,
-                                                 const QString &workingDirectory) {
-        if (arguments.contains(QStringLiteral("--settings"))) {
-            if (QObject *settingsDialog = rootObject->findChild<QObject *>(
-                    QStringLiteral("kosSettingsDialog"))) {
-                QMetaObject::invokeMethod(settingsDialog, "open");
-            }
-        }
-        const bool invoked = QMetaObject::invokeMethod(
-            rootObject, "handleActivation",
-            Q_ARG(QVariant, QVariant::fromValue(arguments)),
-            Q_ARG(QVariant, QVariant::fromValue(workingDirectory)));
-        if (!invoked)
-            qWarning() << "Unable to dispatch activation to the QML root";
     };
-    QObject::connect(&activation, &ApplicationActivation::activationRequested,
-                     rootObject, dispatchActivation);
+
+    QObject *rootObject = engine.rootObjects().constFirst();
+    auto *window = qobject_cast<QQuickWindow *>(rootObject);
+    wireRoot(rootObject);
+    if (!entryFile.isEmpty())
+        qInfo().noquote() << metadata.applicationName << ": loading QML from"
+                          << entryFile << "(watch mode, reloads on change)";
+    startupComplete = true;
+
     if (!activationArguments.isEmpty())
         QTimer::singleShot(0, rootObject,
                            [dispatchActivation, activationArguments] {
                                dispatchActivation(activationArguments,
                                                   QDir::currentPath());
                            });
+
+    // Inert unless the QML came from a source tree, which is the only case
+    // where there is something to watch.
+    ApplicationQmlReloader reloader(
+        &engine, QUrl::fromLocalFile(entryFile),
+        entryFile.isEmpty()
+            ? QStringList{}
+            : QStringList{QFileInfo(entryFile).absolutePath()},
+        [&engine, &loadRoot, &wireRoot, &startupComplete] {
+            startupComplete = false;
+            const QList<QObject *> roots = engine.rootObjects();
+            for (QObject *root : roots)
+                delete root;
+            engine.clearComponentCache();
+            loadRoot();
+            if (engine.rootObjects().isEmpty())
+                return false;
+            wireRoot(engine.rootObjects().constFirst());
+            startupComplete = true;
+            return true;
+        },
+        metadata.applicationName);
+    reloader.start();
 
     if (parser.isSet(screenshotOption)) {
         const QString screenshotPath = parser.value(screenshotOption);

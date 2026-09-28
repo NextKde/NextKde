@@ -28,6 +28,12 @@ KosApplicationWindow {
     property string statusMessage: ""
     property bool renamePlaylistMode: false
 
+    // Owned by the process, not by the QML tree: created in src/main.cpp and
+    // injected through the runner's initial properties, so a --watch-qml
+    // reload rebuilds the window while playback, the queue, the library
+    // connection, and the MPRIS registration survive.
+    property var music: null
+
     readonly property bool isLibraryTrackPage:
         page === "recent" || page === "songs"
         || page === "album" || page === "artist"
@@ -144,8 +150,6 @@ KosApplicationWindow {
         page = "playlist"
         music.selectPlaylist(playlistId)
     }
-
-    MusicController { id: music }
 
     Component.onCompleted: music.setLibraryView("recent")
 

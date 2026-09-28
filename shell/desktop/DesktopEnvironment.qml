@@ -26,7 +26,7 @@ Item {
             return JSON.stringify({
                 image: WallpaperService.wallpaperUrl.toString(),
                 previewActive: WallpaperPreviewService.active,
-                previewPending: WallpaperPreviewService.pending || WallpaperPreviewService.restoring,
+                previewPending: WallpaperPreviewService.pending,
                 previewError: WallpaperPreviewService.errorMessage,
                 previewAvailable: WallpaperPreviewService.available,
                 fitMode: WallpaperService.fitMode,

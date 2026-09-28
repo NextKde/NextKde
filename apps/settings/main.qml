@@ -3766,6 +3766,7 @@ ApplicationWindow {
                 SidebarEntry {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
+                    visible: false
                     pageIndex: 8
                     label: "壁纸"
                     navSymbol: "▧"

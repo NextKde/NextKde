@@ -44,6 +44,19 @@ The uninstalled executable is below `.build/music-dev/apps/music/`. The install
 step also adds `kos-music.desktop`; update the desktop database or sign out and
 back in if the launcher is not visible immediately.
 
+### QML hot reload (development)
+
+Iterate on `qml/` without rebuilding:
+
+```bash
+.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+```
+
+Saving a file rebuilds the window (after a compile gate, so broken text never
+tears the current window down). The controller is created in C++ and injected
+into QML, so a reload does not interrupt playback, the queue, the library
+connection, or MPRIS. See the [application workspace notes](../README.md).
+
 ## Dependencies
 
 - Qt 6 Core, Gui, QML/Quick, Quick Controls, Quick Dialogs, Concurrent, D-Bus,

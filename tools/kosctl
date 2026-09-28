@@ -10,9 +10,11 @@ glass_build_dir="$build_dir/kwin-effects-glass"
 kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
-kwin_decoration_state="$prefix/share/kos/kwin-decoration-state"
-# KWin reads the selected decoration from this legacy config group even though
-# KDecoration3 plugins install into an `org.kde.kdecoration3` directory.
+# Where KWin records which decoration is selected. Nothing here writes it: the
+# decoration is installed, never chosen, and uninstall only reads the key to
+# tell the user when it is about to remove a plugin their kwinrc still names.
+# KWin reads it from this legacy config group even though KDecoration3 plugins
+# install into an `org.kde.kdecoration3` directory.
 kwin_decoration_group=org.kde.kdecoration2
 kwin_plugin_api_stamp="$build_dir/kwin-plugin-api-version"
 kwin_plugin_api_version=""
@@ -74,18 +76,6 @@ kwin_plugins_enabled() {
     esac
 }
 
-kwin_decoration_requested() {
-    case "${KOS_INSTALL_KWIN_DECORATION:-0}" in
-        1|ON|on|TRUE|true|YES|yes) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
-kwin_decoration_installed() {
-    [[ -s "$kwin_manifest" ]] \
-        && grep -q '/kos_liquid_glass\.so$' "$kwin_manifest"
-}
-
 # KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
 # includes KWIN_PLUGIN_VERSION_STRING. Distribution upgrades can retain the
 # timestamps of installed headers, which means Ninja may incorrectly reuse
@@ -133,10 +123,11 @@ Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
 screen. The SDDM sign-in theme (apps/sddm) is not installed by kosctl while its
 greeter integration is being reworked; see the README for the status.
 
-Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_INSTALL_KWIN_DECORATION, GOPROXY
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
 
-The Liquid Glass window decoration is opt-in. To install and select it:
-  KOS_INSTALL_KWIN_DECORATION=1 ./tools/kosctl install
+The KOS window decoration is installed with the KWin plugins but is not
+selected by anything here. Choose it in System Settings > Window Decorations;
+the window buttons belong to it and are drawn only while it is selected.
 EOF
 }
 
@@ -941,7 +932,10 @@ enable_kwin_effects() {
     kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
         false --type bool --notify false
     local effect
-    for effect in kos_dock_window_animation kos_context_menu_input glass; do
+    # kos_bridge draws the window button panel, and draws nothing at all until
+    # the KOS decoration is selected -- so enabling it costs a user who wants
+    # that decoration nothing, and there is no switch to forget afterwards.
+    for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
         # --notify false: only write kwinrc. --notify true would send a D-Bus
         # signal asking the RUNNING compositor to re-read the config, which is
         # exactly the disruption install must avoid.
@@ -951,67 +945,27 @@ enable_kwin_effects() {
     printf 'KWin effects enabled in kwinrc; they load on the next KWin/session start.\n'
 }
 
-remember_decoration_state() {
-    [[ -e "$kwin_decoration_state" ]] && return 0
-    local prior_library="" prior_theme=""
-    if command -v kreadconfig6 >/dev/null 2>&1; then
-        prior_library=$(kreadconfig6 --file kwinrc \
-            --group "$kwin_decoration_group" --key library --default "")
-        prior_theme=$(kreadconfig6 --file kwinrc \
-            --group "$kwin_decoration_group" --key theme --default "")
-    fi
-    {
-        printf 'library=%s\n' "$prior_library"
-        printf 'theme=%s\n' "$prior_theme"
-    } > "$kwin_decoration_state"
+# The decoration selection is the user's, not this script's: install never
+# writes it, so uninstall has nothing of its own to put back. Removing the
+# plugin while kwinrc still names it is worth saying out loud all the same --
+# KWin falls back to a decoration it can load, but the choice is now stale.
+warn_kos_decoration_selected() {
+    command -v kreadconfig6 >/dev/null 2>&1 || return 0
+    [[ "$(kreadconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key library --default '')" == kos_decoration ]] || return 0
+    printf 'kwinrc still selects kos_decoration, whose plugin is being removed.\n'
+    printf 'Choose another one in System Settings > Window Decorations.\n'
 }
 
-# Selects the KOS Liquid Glass decoration in kwinrc only, mirroring
-# enable_kwin_effects: it never touches the running compositor, so window
-# decorations keep their current look until the next KWin/session start.
-enable_kos_decoration() {
-    command -v kwriteconfig6 >/dev/null 2>&1 || return 0
-    remember_decoration_state
-    # kos_liquid_glass is a compiled KDecoration3 plugin, so it is named by
-    # `library` alone. `theme` only applies to plugins that host several themes
-    # (org.kde.kwin.aurorae); leaving a stale theme key behind would make KWin
-    # look for an Aurorae package that no longer exists.
-    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-        --key library kos_liquid_glass --notify false
-    kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-        --key theme --delete --notify false
-    # Glass supplies the material behind the whole window, not just the title
-    # bar, so an application can leave its own background fully transparent and
-    # still sit on the same glass as the Dock and the Bar. In this build the
-    # option applies only to windows with a server-side decoration, which is
-    # what keeps it away from the layer-shell panels whose full-screen surface
-    # would otherwise blur the wallpaper away.
-    kwriteconfig6 --file kwinrc --group Effect-blurplus --key BlurDecorations \
-        true --type bool --notify false
-    printf 'KOS Liquid Glass decoration selected in kwinrc; it loads on the next KWin/session start.\n'
-}
-
-restore_decoration_state() {
-    command -v kwriteconfig6 >/dev/null 2>&1 || return 0
-    local prior_library="" prior_theme=""
-    if [[ -r "$kwin_decoration_state" ]]; then
-        prior_library=$(sed -n 's/^library=//p' "$kwin_decoration_state" | head -n 1)
-        prior_theme=$(sed -n 's/^theme=//p' "$kwin_decoration_state" | head -n 1)
-    fi
-    if [[ -n "$prior_library" ]]; then
-        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-            --key library "$prior_library" --notify true
-    else
-        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-            --key library --delete --notify true
-    fi
-    if [[ -n "$prior_theme" ]]; then
-        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-            --key theme "$prior_theme" --notify true
-    else
-        kwriteconfig6 --file kwinrc --group "$kwin_decoration_group" \
-            --key theme --delete --notify true
-    fi
+# The Liquid Glass decoration is gone from the tree, so its plugin file is
+# removed as a stale entry. A kwinrc that still names it would then point at
+# nothing, and this is the only place that knows the name it used to have.
+warn_replaced_decoration_selected() {
+    command -v kreadconfig6 >/dev/null 2>&1 || return 0
+    [[ "$(kreadconfig6 --file kwinrc --group "$kwin_decoration_group" \
+            --key library --default '')" == kos_liquid_glass ]] || return 0
+    printf 'kwinrc still selects kos_liquid_glass, which no longer exists.\n'
+    printf 'Choose KOS or another one in System Settings > Window Decorations.\n'
 }
 
 # Applies the just-installed effect binaries to the RUNNING compositor.
@@ -1027,7 +981,7 @@ reload_kwin_effects() {
     "$qdbus_bin" org.kde.KWin /Effects \
         org.kde.kwin.Effects.unloadEffect blur >/dev/null 2>&1 || true
     local effect
-    for effect in kos_dock_window_animation kos_context_menu_input glass; do
+    for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
         "$qdbus_bin" org.kde.KWin /Effects \
             org.kde.kwin.Effects.loadEffect "$effect" >/dev/null 2>&1 || true
     done
@@ -1043,6 +997,8 @@ install_kwin_plugins() {
         printf '  imports = [ inputs.kos.nixosModules.kos ];\n'
         printf '  services.kos.enable = true;\n'
         printf 'Then run: sudo nixos-rebuild switch\n'
+        printf 'The KOS window decoration is installed with the plugins; select it in\n'
+        printf 'System Settings > Window Decorations.\n'
         enable_kwin_effects
         return 0
     fi
@@ -1055,15 +1011,12 @@ install_kwin_plugins() {
     rm -rf -- "$stage_dir"
     mkdir -p "$stage_dir" "$(dirname "$kwin_manifest")"
 
-    local prior_decoration_managed=0
-    if kwin_decoration_installed; then
-        prior_decoration_managed=1
-    fi
-
     # Keep the previous manifest so files this install no longer ships can be
     # removed. Without it a component that changes shape leaves orphans behind
     # in /usr -- the QML Aurorae package that preceded the compiled decoration
-    # plugin would keep being discovered by KWin as a second theme.
+    # plugin would keep being discovered by KWin as a second theme, and the
+    # Liquid Glass decoration that was replaced by the KOS one would keep being
+    # offered in the decoration list.
     local previous_manifest="$build_dir/kwin-system-files.manifest.previous"
     if [[ -s "$kwin_manifest" ]]; then
         sort -u "$kwin_manifest" > "$previous_manifest"
@@ -1073,23 +1026,17 @@ install_kwin_plugins() {
 
     DESTDIR="$stage_dir" cmake --install "$build_dir" \
         --prefix "$kwin_system_prefix" --component kwin_plugins
-    if kwin_decoration_requested; then
-        DESTDIR="$stage_dir" cmake --install "$build_dir" \
-            --prefix "$kwin_system_prefix" --component kwin_decoration
-    fi
+    # The window decoration is part of the KWin plugins, not an extra: the
+    # effect draws the window controls only on windows the KOS decoration is
+    # wearing, so a system with the effect and no decoration has no window
+    # buttons at all. Selecting it is still the user's, and nothing here does.
+    DESTDIR="$stage_dir" cmake --install "$build_dir" \
+        --prefix "$kwin_system_prefix" --component kwin_decoration
     DESTDIR="$stage_dir" cmake --install "$glass_build_dir" \
         --prefix "$kwin_system_prefix"
 
     find "$stage_dir" \( -type f -o -type l \) -printf '/%P\n' \
         | sort -u > "$kwin_manifest"
-    # An opt-in decoration remains entirely opt-in: a later ordinary install
-    # must neither remove its binary nor take ownership of the user's current
-    # KWin decoration selection. Keep its manifest entry so it is not treated
-    # as stale below. Running the opt-in command again updates it explicitly.
-    if ! kwin_decoration_requested && (( prior_decoration_managed )); then
-        grep '/kos_liquid_glass\.so$' "$previous_manifest" >> "$kwin_manifest"
-        sort -u -o "$kwin_manifest" "$kwin_manifest"
-    fi
     if [[ ! -s "$kwin_manifest" ]]; then
         printf 'KWin plugin staging produced no files\n' >&2
         return 1
@@ -1163,13 +1110,11 @@ install_kwin_plugins() {
             | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
     fi
     enable_kwin_effects
-    if kwin_decoration_requested; then
-        enable_kos_decoration
-        printf 'Installed and enabled KOS Dock Animation, Context Menu Input, Glass, and Liquid Glass decoration.\n'
-    else
-        printf 'Installed and enabled KOS Dock Animation, Context Menu Input, and Glass.\n'
-        printf 'Liquid Glass window decoration was left unchanged (opt in with KOS_INSTALL_KWIN_DECORATION=1 to install or update it).\n'
-    fi
+    printf 'Installed and enabled KOS Bridge, Dock Animation, Context Menu Input, and Glass.\n'
+    printf 'Installed the KOS window decoration without selecting it: pick it in\n'
+    printf 'System Settings > Window Decorations, which is also where the window\n'
+    printf 'buttons appear and disappear with it.\n'
+    warn_replaced_decoration_selected
 }
 
 # ---- optional: lock screen and standalone apps ---------------------------
@@ -1509,14 +1454,13 @@ restore_blur_state() {
 uninstall_kwin_plugins() {
     # A user-only installation (KOS_BUILD_KWIN_PLUGINS=OFF) must not change
     # the user's existing KWin effect configuration during uninstall.
-    if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" \
-            && ! -e "$kwin_decoration_state" ]]; then
+    if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" ]]; then
         return 0
     fi
 
     local effect
     if command -v kwriteconfig6 >/dev/null 2>&1; then
-        for effect in kos_dock_window_animation kos_context_menu_input glass; do
+        for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
             if [[ -n "$qdbus_bin" ]]; then
                 "$qdbus_bin" org.kde.KWin /Effects \
                     org.kde.kwin.Effects.unloadEffect "$effect" >/dev/null 2>&1 || true
@@ -1525,7 +1469,6 @@ uninstall_kwin_plugins() {
                 --key "${effect}Enabled" --delete --notify || true
         done
         restore_blur_state
-        restore_decoration_state
     fi
 
     if [[ -s "$kwin_manifest" ]]; then
@@ -1547,7 +1490,10 @@ uninstall_kwin_plugins() {
             sudo rm -f -- "${system_files[@]}"
         fi
     fi
-    rm -f "$kwin_manifest" "$kwin_effect_state" "$kwin_decoration_state"
+    rm -f "$kwin_manifest" "$kwin_effect_state"
+    # Last, and about the plugin file just removed rather than about anything
+    # this script wrote: it never wrote the decoration selection.
+    warn_kos_decoration_selected
 }
 
 uninstall() {

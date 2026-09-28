@@ -22,7 +22,7 @@
         inherit (kos-desktop.passthru)
           shell-data-service kos-settings kos-platform kosctl
           kwin-dock-window-animation kwin-context-menu-input kwin-effects-glass
-          kwin-decoration-liquid-glass;
+          kwin-kos-bridge kwin-kos-decoration;
         default = kos-desktop;
       };
 
@@ -41,11 +41,17 @@
           weather = {
             enable = lib.mkEnableOption "KOS Weather standalone application";
           };
-          decoration.enable = lib.mkEnableOption "the KOS Liquid Glass KWin window decoration";
         };
 
         config = lib.mkIf cfg.enable {
           # System-wide packages: binaries + KWin plugins + kosctl + kos-ctl
+          #
+          # The window decoration is one of the plugins, not an option: the KOS
+          # Bridge effect draws the window buttons only on windows wearing it,
+          # so installing the effect without the decoration would leave the
+          # session with no window buttons at all. Installing it is not the same
+          # as selecting it — that stays with the user, in System Settings >
+          # Window Decorations, and so does turning it back off.
           environment.systemPackages = [
             kos
             kos.passthru.kosctl
@@ -53,8 +59,8 @@
             kos.passthru.kwin-dock-window-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
-          ] ++ lib.optionals cfg.decoration.enable [
-            kos.passthru.kwin-decoration-liquid-glass
+            kos.passthru.kwin-kos-bridge
+            kos.passthru.kwin-kos-decoration
           ] ++ lib.optionals cfg.weather.enable [
             kos.passthru.weather
           ];

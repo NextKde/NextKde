@@ -7,8 +7,6 @@ import qs.desktop.modules.common
 Scope {
     id: root
 
-    WallpaperPreviewBar {}
-
     // Desktop files and context menus exist independently on every usable
     // output. DeskCenterWindow itself keeps widgets restricted to the elected
     // primary screen.
@@ -26,8 +24,7 @@ Scope {
                     id: wallpaperWindow
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
-                        && (WallpaperPreviewService.active || WallpaperService.takeoverEnabled
-                            || SpatialWallpaperService.ready)
+                        && (WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
                     pointerX: widgetWindow.depthPointerX
                     pointerY: widgetWindow.depthPointerY
                 }
@@ -37,6 +34,13 @@ Scope {
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
                     spatialWallpaperActive: wallpaperWindow.active
+                }
+
+                // Map after the ordinary desktop surfaces so the transient
+                // scene covers every QML surface on this output.
+                WallpaperPreviewBar {
+                    screen: outputScope.modelData
+                    visible: ScreenLifecycle.outputAvailable && WallpaperPreviewService.active
                 }
             }
         }

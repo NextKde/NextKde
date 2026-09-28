@@ -3,6 +3,8 @@ add_library(kos_app_core STATIC
     src/ApplicationActivation.h
     src/ApplicationPreferences.cpp
     src/ApplicationPreferences.h
+    src/ApplicationQmlReloader.cpp
+    include/KosApp/ApplicationQmlReloader.h
     src/ApplicationRunner.cpp
 )
 

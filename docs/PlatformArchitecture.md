@@ -19,22 +19,34 @@ The KWin script is installed as data and loaded by the daemon. Its private
 session-D-Bus object is `org.kos.Platform` at `/Platform`; Shell never calls
 that object directly. KWin effects under `integrations/kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
-`integrations/kwin/decoration-liquid-glass` is a KDecoration3 plugin rather
+`integrations/kwin/kos-decoration` is a KDecoration3 plugin rather
 than an effect: it installs to the `org.kde.kdecoration3` plugin directory.
-When explicitly installed with `KOS_INSTALL_KWIN_DECORATION=1`, `kosctl`
-selects it through `[org.kde.kdecoration2] library=kos_liquid_glass` in
-`kwinrc`. A normal install and `kosctl start` leave any existing decoration
-untouched.
+`kosctl install` installs it with the effects and never writes the selection:
+choosing it is the user's, through `[org.kde.kdecoration2] library` in
+`kwinrc` (System Settings ▸ Window Decorations). The bridge effect reads that
+same key, so the window buttons exist exactly while this decoration is
+selected — including on client-side decorated windows, which get no panel with
+any other decoration selected.
 
-It is compiled C++ rather than a QML Aurorae theme for one reason:
-`KDecoration3::Decoration::setBorderRadius()` is the only way to make KWin clip
-a window — the client's own opaque content included — to rounded corners, and
-`org.kde.kwin.aurorae.so` does not link that symbol at all. A QML theme can
-only round the rectangle it paints inside its own title bar strip, so the
-window's bottom two corners stay square no matter what the QML says.
+It draws a title bar and a caption and stops there: no buttons (the kos-bridge
+effect draws the panel over them instead), no glass, and no shape of its own.
+In particular it does not call
+`KDecoration3::Decoration::setBorderRadius()`. That call is how KWin clips a
+window — the client's own opaque content included — which means making it
+*replaces* whatever shape the window had before this decoration was selected:
+Breeze keeps its corner rounding and its outline in user settings
+(`~/.config/breezerc`, `[Common] RoundedCorners` / `OutlineEnabled`), and a
+decoration that paints neither has no business overriding them. The title bar
+is painted square for the same reason: a corner drawn inside it cannot know
+the shape the window actually ends up with, so any radius there disagrees with
+KWin's clip along the diagonal.
 
-The frosted material is likewise not painted here. The decoration publishes its
-title bar via `setBlurRegion()` and the Glass effect blurs what is behind it.
+The frosted material is likewise not painted here — the title bar is an opaque
+fill in the window's own colour, and no blur region is published. It has to be
+opaque: the kos-bridge effect reads that strip back to choose the button
+panel's tint, so a translucent bar over the compositor's blur would tint the
+panel from a blend of the bar and whatever sits behind the window.
+
 Glass deliberately has two rendering paths. A surface that declares a shape
 receives the full liquid/soft material; every other window receives only the
 blur result, Quickshell surfaces that declare nothing included -- which is how

@@ -34,6 +34,16 @@
 
 namespace {
 
+// Quickshell IPC parses each CLI argument as JSON. An array literal is
+// expanded into multiple function arguments, so a JSON list destined for a
+// QML string parameter must itself be passed as a JSON string literal.
+QString ipcStringArgument(const QString &value)
+{
+    const QByteArray wrapped = QJsonDocument(QJsonArray{value}).toJson(
+        QJsonDocument::Compact);
+    return QString::fromUtf8(wrapped.mid(1, wrapped.size() - 2));
+}
+
 bool cachedModelVerified(const QString &path, const char *expectedSha256)
 {
     QFile file(path);
@@ -273,8 +283,10 @@ public:
         }
         QJsonArray paths;
         for (const QString &image : images.mid(0, 120)) paths.append(image);
+        const QString listJson = QString::fromUtf8(
+            QJsonDocument(paths).toJson(QJsonDocument::Compact));
         callWallpaper({QStringLiteral("previewImage"), QFileInfo(path).absoluteFilePath(),
-            QString::fromUtf8(QJsonDocument(paths).toJson(QJsonDocument::Compact))});
+            ipcStringArgument(listJson)});
     }
 
     Q_INVOKABLE void chooseWallpaperColor(const QString &hex) {
@@ -326,11 +338,12 @@ public:
         QJsonArray paths;
         for (const QString &path : images.mid(0, 120))
             paths.append(path);
+        const QString listJson = QString::fromUtf8(
+            QJsonDocument(paths).toJson(QJsonDocument::Compact));
         callWallpaper({QStringLiteral("setSlideshow"),
                        enabled ? QStringLiteral("true") : QStringLiteral("false"),
                        QString::number(minutes),
-                       QString::fromUtf8(QJsonDocument(paths).toJson(
-                           QJsonDocument::Compact))});
+                       ipcStringArgument(listJson)});
     }
 
     Q_INVOKABLE void updateWallpaperSpatialEnabled(bool enabled) {

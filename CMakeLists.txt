@@ -12,7 +12,7 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(KOS_BUILD_PLATFORM "Build the KOS platform daemon and settings app" ON)
-option(KOS_BUILD_KWIN_PLUGINS "Build the two KWin effect plugins" ON)
+option(KOS_BUILD_KWIN_PLUGINS "Build the KWin plugins and the window decoration" ON)
 option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
@@ -472,7 +472,8 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/quickshell/surface-shape)
     add_subdirectory(integrations/kwin/dock-window-animation)
     add_subdirectory(integrations/kwin/context-menu-input)
-    add_subdirectory(integrations/kwin/decoration-liquid-glass)
+    add_subdirectory(integrations/kwin/kos-bridge)
+    add_subdirectory(integrations/kwin/kos-decoration)
 endif()
 
 # The spatial wallpaper mesh is an optional QML extension. Keep Qt Quick 3D

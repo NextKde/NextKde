@@ -40,6 +40,18 @@ cmake --install .build/music-dev --prefix "$HOME/.local"
 未安装的可执行文件位于 `.build/music-dev/apps/music/`。安装步骤还会添加
 `kos-music.desktop`；若启动器没有立即出现，可刷新桌面数据库或重新登录。
 
+### QML 热重载（开发）
+
+改 `qml/` 无需重编即可看效果：
+
+```bash
+.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+```
+
+保存后窗口自动重建（先做编译校验，坏代码不会拆掉现有窗口）。播放控制器
+由 C++ 持有并注入 QML，热重载不会中断播放、队列、曲库连接与 MPRIS。
+详见[应用工作区说明](../README.zh-CN.md)。
+
 ## 依赖
 
 - Qt 6 Core、Gui、QML/Quick、Quick Controls、Quick Dialogs、Concurrent、

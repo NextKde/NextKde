@@ -100,7 +100,7 @@ ColumnLayout {
         if (!bridgeCompatible || previewPending)
             return
         if (!previewAvailable) {
-            errorText = "当前平台服务不支持桌面预览，请先更新并重启平台服务。"
+            errorText = "当前没有可用的显示器，无法启动壁纸预览。"
             return
         }
         errorText = ""
@@ -337,7 +337,7 @@ ColumnLayout {
                         ? "设置程序版本不匹配"
                         : !page.previewAvailable
                             ? "当前环境暂不支持桌面预览"
-                            : "临时应用到桌面，60 秒后自动恢复"
+                            : "进入全屏模拟桌面，应用后才会更换壁纸"
                     color: page.colors.secondaryText
                     font.pixelSize: 12
                 }

@@ -9,16 +9,20 @@ layout(std140, binding = 0) uniform buf {
     float direction;
 } ubuf;
 
-// A short, soft reveal grows across the actual desktop. No noise, blur loop
-// or continuously running effect: the layer is discarded after the transition.
+// A diagonal glass light sweep reveals the next still image. This stays a
+// single texture sample per pixel; the effect is inactive between changes.
 void main() {
     vec2 uv = qt_TexCoord0;
-    vec2 focus = vec2(ubuf.direction < 0.0 ? 0.76 : 0.24, 0.52);
-    float edge = length((uv - focus) * vec2(1.0, 1.12));
-    float front = mix(-0.12, 1.16, ubuf.progress);
-    float coverage = 1.0 - smoothstep(front - 0.07, front + 0.07, edge);
+    float sweepAxis = uv.x + uv.y * 0.22;
+    if (ubuf.direction < 0.0)
+        sweepAxis = 1.0 - uv.x + uv.y * 0.22;
+    float front = mix(-0.16, 1.22, ubuf.progress);
+    float distanceToFront = sweepAxis - front;
+    float coverage = 1.0 - smoothstep(-0.045, 0.045, distanceToFront);
     vec4 pixel = texture(source, uv);
-    float glint = exp(-pow((edge - front) / 0.065, 2.0));
-    pixel.rgb += vec3(0.055, 0.075, 0.085) * glint * pixel.a;
+    float halo = exp(-pow(distanceToFront / 0.095, 2.0));
+    float glint = exp(-pow(distanceToFront / 0.022, 2.0));
+    pixel.rgb += vec3(0.025, 0.085, 0.11) * halo * pixel.a;
+    pixel.rgb += vec3(0.11, 0.42, 0.52) * glint * pixel.a;
     fragColor = pixel * coverage * ubuf.qt_Opacity;
 }
