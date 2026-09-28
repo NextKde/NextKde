@@ -339,21 +339,17 @@ Item {
                     }
                 }
 
-                PopupWindow {
+                AnimatedPopupWindow {
                     id: trayTooltip
-                    visible: trayMouse.containsMouse && !trayMenu.visible
+                    motionOrigin: !root.dockHosted ? Item.Top
+                        : root.dockEdge === "left" ? Item.Left
+                        : root.dockEdge === "right" ? Item.Right : Item.Bottom
+                    requestedOpen: trayMouse.containsMouse && !trayMenu.visible
                         && trayItem.tooltip.length > 0
                     implicitWidth: tooltipText.implicitWidth + 16
                     implicitHeight: tooltipText.implicitHeight + 10
                     color: "transparent"
 
-                    Connections {
-                        target: ScreenLifecycle
-                        function onOutputAvailableChanged() {
-                            if (!ScreenLifecycle.outputAvailable)
-                                trayTooltip.visible = false
-                        }
-                    }
                     anchor {
                         item: trayItem
                         edges: root.popupEdge

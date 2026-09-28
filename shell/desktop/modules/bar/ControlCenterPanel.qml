@@ -16,22 +16,16 @@ import "../../../shared/qml/controls" as LiquidControls
 // Its geometry intentionally stays small enough for a top-bar popup while
 // preserving the reference's two-column, pill-and-media-card hierarchy.
 //
-// PER-CARD INDEPENDENT GLASS: instead of one PopupWindow with a single blur
-// slab, each card is its own PopupWindow (ControlCenterCard) with its own
-// compositor blur region. KWin's blur is per-window, so each card blurs
-// exactly what is behind it (wallpaper AND open windows) and the gaps
-// between cards show the real desktop - the iOS "hollow" control center.
-// ControlCenterCoordinator owns the group so all cards open/close together.
 PopupWindow {
     id: panel
 
-    // ── Single-block windowing ──
-    // One window, one glass block, cards laid out by simple anchors inside it.
-    // This replaces the per-card PopupWindow + ControlCenterCoordinator model.
     implicitWidth: panel.controlCenterWidth
     implicitHeight: panel.controlCenterHeight
     color: "transparent"
-    grabFocus: true
+    grabFocus: popupMotion.interactive
+    visible: popupMotion.mapped
+    contentItem.enabled: popupMotion.interactive
+    mask: popupMotion.interactive ? null : emptyRegion
     anchor {
         item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
@@ -56,9 +50,15 @@ PopupWindow {
     property bool draggingBrightness: false
     property bool sessionModalVisible: false
     property string pendingConfirmAction: ""
+    property string confirmActionLabel: ""
     property alias logoutConfirmationVisible: panel.sessionModalVisible
     property string activeSubmenu: ""
     property bool submenuOpen: false
+    readonly property string requestedPage: sessionModalVisible
+        ? (pendingConfirmAction !== "" ? "confirm" : "session") : activeSubmenu
+    readonly property string displayedSubmenu: pageMotion.displayedPage
+    readonly property real revealProgress: popupMotion.progress
+    readonly property real pageProgress: pageMotion.progress
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
     // A standalone top Bar grows downward, so controls come first. A panel
     // hosted by a bottom/side Dock grows away from the Dock, so keep the
@@ -96,9 +96,6 @@ PopupWindow {
         submenuOpen = false
         sessionModalVisible = false
         pendingConfirmAction = ""
-        // The current control center is one window with no outgoing submenu
-        // animation. Keeping the old page identity here makes the next toggle
-        // mistake an invisible panel for an open Wi-Fi submenu.
         activeSubmenu = ""
         coordinator.modalActive = false
     }
@@ -138,17 +135,27 @@ PopupWindow {
         height: width
     }
 
-    // Stubbed coordinator: the single block replaces the N-card orchestration.
-    // Keeps the same surface (open/close/modal/cardAnchor) so existing call
-    // sites and card content compile; openAll/closeAll now just show/hide this
-    // one window.
     QtObject {
         id: coordinator
-        property bool open: panel.visible
+        readonly property bool open: popupMotion.requestedOpen
         property bool modalActive: false
         property var cardAnchor: panel.anchorItem
-        function openAll() { panel.visible = true }
-        function closeAll(closingModal) { panel.visible = false }
+        function openAll() {
+            if (!popupMotion.mapped)
+                pageMotion.reset(panel.requestedPage)
+            popupMotion.open()
+        }
+        function closeAll(closingModal) { popupMotion.close() }
+    }
+
+    PopupMotion {
+        id: popupMotion
+    }
+
+    PageMotion {
+        id: pageMotion
+        page: panel.requestedPage
+        enabled: popupMotion.requestedOpen
     }
 
     // No panel-wide glass slab: the window blur region is the UNION of every
@@ -188,7 +195,8 @@ PopupWindow {
     }
     // A tonal/non-glass theme draws its own surface and publishes no shapes, so
     // the window must not ask KWin for a backdrop either.
-    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && panel.visible)
+    BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur && panel.visible
+        && popupMotion.progress > 0)
         ? cardsBlurRegion : null
 
     // Position the cards at their grid offsets (top-right origin). One pass on
@@ -211,7 +219,7 @@ PopupWindow {
                 // false) own their own cardShown instead.
                 if (c.managedByCoordinator) {
                     c.cardShown = Qt.binding(function() {
-                        return !panel.submenuOpen && !panel.sessionModalVisible
+                        return panel.displayedSubmenu === ""
                     })
                 }
                 panel.placeCard(c)
@@ -220,10 +228,29 @@ PopupWindow {
     }
     function placeCard(c) {
         c.x = Qt.binding(function() {
+            const direction = panel.dockHosted && panel.dockEdge === "left" ? -1
+                : panel.dockHosted && panel.dockEdge === "right" ? 1 : 0
             return panel.controlCenterWidth - c.offsetRight - c.width
+                + direction * (1 - popupMotion.progress) * 16
         })
         c.y = Qt.binding(function() {
-            return c.offsetTop
+            const direction = panel.notificationFirst ? 1 : -1
+            return c.offsetTop + direction * (1 - popupMotion.progress) * 16
+        })
+        c.opacity = Qt.binding(function() {
+            return popupMotion.progress
+        })
+        c.scale = Qt.binding(function() {
+            return 0.97 + 0.03 * popupMotion.progress
+        })
+        c.contentOpacity = Qt.binding(function() {
+            return pageMotion.progress
+        })
+        c.contentOffsetY = Qt.binding(function() {
+            return (panel.notificationFirst ? 1 : -1) * (1 - pageMotion.progress) * 8
+        })
+        c.enabled = Qt.binding(function() {
+            return popupMotion.interactive && pageMotion.interactive
         })
     }
 
@@ -270,8 +297,10 @@ PopupWindow {
         _triggerTransitionGuard()
         if (panel.pendingConfirmAction === "")
             sessionConfirm.close()
-        else
+        else {
+            panel.confirmActionLabel = panel.pendingConfirmAction
             sessionConfirm.open()
+        }
     }
 
     function toggle(item) {
@@ -378,6 +407,8 @@ PopupWindow {
     ControlCenterCard {
         id: wifiCard
         coordinator: coordinator
+        cardScale: wifiPagePointer.pressed ? 0.97 : wifiPagePointer.containsMouse ? 1.015 : 1
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
         offsetTop: 20 + panel.mainControlsOffsetY
         offsetRight: 179
         cardRadius: 29.5
@@ -395,6 +426,7 @@ PopupWindow {
                 ? ThemeService.tileActiveFill
                 : (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05)))
             opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
             scale: wifiTogglePointer.pressed ? 0.92
                 : (wifiTogglePointer.containsMouse ? 1.04 : 1.0)
             Behavior on color { ColorAnimation { duration: 140 } }
@@ -446,7 +478,7 @@ PopupWindow {
                 }
 
                 RotationAnimation on rotation {
-                    running: NetworkService.wifiToggleInProgress
+                    running: wifiBusySpinner.visible && NetworkService.wifiToggleInProgress
                     loops: Animation.Infinite
                     from: 0; to: 360
                     duration: 900
@@ -489,6 +521,7 @@ PopupWindow {
             font { pixelSize: 14; weight: Font.Bold }
         }
         MouseArea {
+            id: wifiPagePointer
             anchors {
                 top: parent.top
                 right: parent.right
@@ -497,6 +530,7 @@ PopupWindow {
                 leftMargin: 49
             }
             enabled: NetworkService.available
+            hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: panel.networkRequested()
         }
@@ -507,6 +541,8 @@ PopupWindow {
     ControlCenterCard {
         id: bluetoothCard
         coordinator: coordinator
+        cardScale: bluetoothPagePointer.pressed ? 0.97 : bluetoothPagePointer.containsMouse ? 1.015 : 1
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
         offsetTop: 87 + panel.mainControlsOffsetY
         offsetRight: 179
         cardRadius: 29.5
@@ -599,7 +635,7 @@ PopupWindow {
                 }
 
                 RotationAnimation on rotation {
-                    running: ControlCenterService.bluetoothChangeInProgress
+                    running: bluetoothBusySpinner.visible && ControlCenterService.bluetoothChangeInProgress
                     loops: Animation.Infinite
                     from: 0; to: 360
                     duration: 900
@@ -639,6 +675,7 @@ PopupWindow {
             font { pixelSize: 14; weight: Font.Bold }
         }
         MouseArea {
+            id: bluetoothPagePointer
             anchors {
                 top: parent.top
                 right: parent.right
@@ -647,6 +684,7 @@ PopupWindow {
                 leftMargin: 49
             }
             enabled: ControlCenterService.bluetoothAvailable
+            hoverEnabled: true
             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: panel.bluetoothRequested()
         }
@@ -1020,6 +1058,10 @@ PopupWindow {
                 panel.draggingBrightness = true
                 panel.brightnessPreview = Math.round(v * 100)
             }
+            onCanceled: {
+                panel.draggingBrightness = false
+                panel.brightnessPreview = ControlCenterService.brightnessPercent
+            }
             onCommitRequested: function(v) {
                 panel.draggingBrightness = false
                 ControlCenterService.setBrightness(Math.round(v * 100))
@@ -1111,6 +1153,10 @@ PopupWindow {
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true
                 panel.volumePreview = Math.round(v * 100)
+            }
+            onCanceled: {
+                panel.draggingVolume = false
+                panel.volumePreview = ControlCenterService.volumePercent
             }
             onCommitRequested: function(v) {
                 panel.draggingVolume = false
@@ -1296,14 +1342,13 @@ PopupWindow {
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10))
         // Hidden while a confirmation is up: the dialog owns the screen then, and
         // leaving the list card mapped would strand an empty glass slab behind it.
-        cardShown: panel.sessionModalVisible && panel.pendingConfirmAction === ""
+        cardShown: panel.displayedSubmenu === "session"
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
         // ── VIEW 1: 6-action Grid ──
         Item {
             anchors.fill: parent
-            visible: panel.pendingConfirmAction === ""
 
             // Header: same shape as the Wi-Fi/Bluetooth pages -- back button on the
             // left, identity on the right -- instead of a title with a close box.
@@ -1427,6 +1472,8 @@ PopupWindow {
                         required property var modelData
                         width: actionsList.width
                         height: 44
+                        scale: sessionRow.pressed ? 0.98 : 1
+                        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
 
                         Rectangle {
                             anchors.fill: parent
@@ -1534,9 +1581,9 @@ PopupWindow {
                     anchors.centerIn: parent
                     width: 26
                     height: 26
-                    name: BundledIcons.roleName(panel.pendingConfirmAction === "poweroff"
+                    name: BundledIcons.roleName(panel.confirmActionLabel === "poweroff"
                         ? "powerOff"
-                        : (panel.pendingConfirmAction === "reboot" ? "reboot" : "logout"))
+                        : (panel.confirmActionLabel === "reboot" ? "reboot" : "logout"))
                     color: sessionConfirm.contentForegroundColor
                 }
             }
@@ -1549,8 +1596,8 @@ PopupWindow {
                     right: parent.right
                 }
                 horizontalAlignment: Text.AlignHCenter
-                text: panel.pendingConfirmAction === "poweroff" ? "确定要关机吗？"
-                    : (panel.pendingConfirmAction === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
+                text: panel.confirmActionLabel === "poweroff" ? "确定要关机吗？"
+                    : (panel.confirmActionLabel === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
                 color: sessionConfirm.contentForegroundColor
                 font { pixelSize: 16; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -1607,8 +1654,8 @@ PopupWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: panel.pendingConfirmAction === "poweroff" ? "关机"
-                            : (panel.pendingConfirmAction === "reboot" ? "重启" : "注销")
+                        text: panel.confirmActionLabel === "poweroff" ? "关机"
+                            : (panel.confirmActionLabel === "reboot" ? "重启" : "注销")
                         color: "#ff3b30"
                         font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
@@ -1649,11 +1696,11 @@ PopupWindow {
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 22)
         cardWidth: 296
-        cardHeight: panel.activeSubmenu === "wifi" ? 360
-            : (panel.activeSubmenu === "bluetooth" ? 340
-            : (panel.activeSubmenu === "brightness" ? 280
-            : (panel.activeSubmenu === "sound" ? 420 : 280)))
-        cardShown: panel.submenuOpen
+        cardHeight: panel.displayedSubmenu === "wifi" ? 360
+            : (panel.displayedSubmenu === "bluetooth" ? 340
+            : (panel.displayedSubmenu === "brightness" ? 280
+            : (panel.displayedSubmenu === "sound" ? 420 : 280)))
+        cardShown: ["wifi", "bluetooth", "brightness", "sound"].indexOf(panel.displayedSubmenu) >= 0
 
         // Navigation Header
         Item {
@@ -1671,6 +1718,8 @@ PopupWindow {
             // Back button
             Rectangle {
                 id: submenuBackBtn
+                scale: submenuBackMouse.pressed ? 0.92 : 1
+                Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
                 width: 26
                 height: 26
                 radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 13)
@@ -1708,10 +1757,10 @@ PopupWindow {
                     leftMargin: 8
                     verticalCenter: parent.verticalCenter
                 }
-                text: panel.activeSubmenu === "wifi" ? "Wi‑Fi"
-                    : (panel.activeSubmenu === "bluetooth" ? "蓝牙"
-                    : (panel.activeSubmenu === "brightness" ? "显示亮度"
-                    : (panel.activeSubmenu === "sound" ? "声音" : "")))
+                text: panel.displayedSubmenu === "wifi" ? "Wi‑Fi"
+                    : (panel.displayedSubmenu === "bluetooth" ? "蓝牙"
+                    : (panel.displayedSubmenu === "brightness" ? "显示亮度"
+                    : (panel.displayedSubmenu === "sound" ? "声音" : "")))
                 color: AppearanceTokens.content.glassInk()
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -1719,7 +1768,7 @@ PopupWindow {
             // Right toggle switch for Wi-Fi and Bluetooth
             Rectangle {
                 id: submenuToggleSwitch
-                visible: panel.activeSubmenu === "wifi" || panel.activeSubmenu === "bluetooth"
+                visible: panel.displayedSubmenu === "wifi" || panel.displayedSubmenu === "bluetooth"
                 anchors {
                     right: parent.right
                     verticalCenter: parent.verticalCenter
@@ -1727,9 +1776,9 @@ PopupWindow {
                 width: 38
                 height: 22
                 radius: 11
-                readonly property bool isChecked: panel.activeSubmenu === "wifi"
+                readonly property bool isChecked: panel.displayedSubmenu === "wifi"
                     ? NetworkService.wifiEnabled : ControlCenterService.bluetoothPowered
-                readonly property bool inProgress: panel.activeSubmenu === "wifi"
+                readonly property bool inProgress: panel.displayedSubmenu === "wifi"
                     ? NetworkService.wifiToggleInProgress : ControlCenterService.bluetoothChangeInProgress
 
                 color: isChecked
@@ -1753,9 +1802,9 @@ PopupWindow {
                     cursorShape: Qt.PointingHandCursor
                     enabled: !submenuToggleSwitch.inProgress
                     onClicked: {
-                        if (panel.activeSubmenu === "wifi") {
+                        if (panel.displayedSubmenu === "wifi") {
                             NetworkService.setWifiEnabled(!NetworkService.wifiEnabled)
-                        } else if (panel.activeSubmenu === "bluetooth") {
+                        } else if (panel.displayedSubmenu === "bluetooth") {
                             ControlCenterService.setBluetoothEnabled(!ControlCenterService.bluetoothPowered)
                         }
                     }
@@ -1781,7 +1830,7 @@ PopupWindow {
         // ── View A: Wi-Fi ──
         Item {
             id: wifiSubmenuView
-            visible: panel.activeSubmenu === "wifi"
+            visible: panel.displayedSubmenu === "wifi"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
@@ -2050,7 +2099,7 @@ PopupWindow {
         // ── View B: Bluetooth ──
         Item {
             id: bluetoothSubmenuView
-            visible: panel.activeSubmenu === "bluetooth"
+            visible: panel.displayedSubmenu === "bluetooth"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
@@ -2280,7 +2329,7 @@ PopupWindow {
         // ── View C: Per-display brightness ──
         Item {
             id: brightnessSubmenuView
-            visible: panel.activeSubmenu === "brightness"
+            visible: panel.displayedSubmenu === "brightness"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 8
@@ -2338,6 +2387,9 @@ PopupWindow {
                             onPreviewChanged: function(v) {
                                 displayBrightnessRow.preview = Math.round(v * 100)
                             }
+                            onCanceled: displayBrightnessRow.preview = Qt.binding(function() {
+                                return Number(displayBrightnessRow.modelData.percent || 0)
+                            })
                             onCommitRequested: function(v) {
                                 ControlCenterService.setDisplayBrightness(
                                     displayBrightnessRow.modelData.id, Math.round(v * 100))
@@ -2386,7 +2438,7 @@ PopupWindow {
         // ── View D: Sound ──
         Item {
             id: soundSubmenuView
-            visible: panel.activeSubmenu === "sound"
+            visible: panel.displayedSubmenu === "sound"
             anchors {
                 top: submenuDivider.bottom
                 topMargin: 6
@@ -2520,6 +2572,10 @@ PopupWindow {
                     onPreviewChanged: function(v) {
                         panel.draggingVolume = true
                         panel.volumePreview = Math.round(v * 100)
+                    }
+                    onCanceled: {
+                        panel.draggingVolume = false
+                        panel.volumePreview = ControlCenterService.volumePercent
                     }
                     onCommitRequested: function(v) {
                         panel.draggingVolume = false
@@ -2721,6 +2777,9 @@ PopupWindow {
                                 onPreviewChanged: function(v) {
                                     appVolumeRow.volumePreview = Math.round(v * 150)
                                 }
+                                onCanceled: appVolumeRow.volumePreview = Qt.binding(function() {
+                                    return Number(appVolumeRow.modelData.percent || 0)
+                                })
                                 onCommitRequested: function(v) {
                                     if (appVolumeRow.muted) {
                                         appVolumeRow.muted = false

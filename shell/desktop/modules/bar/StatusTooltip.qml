@@ -5,7 +5,7 @@ import qs.desktop.modules.common
 // Edge-aware tooltip shared by built-in status items. A PopupWindow is used
 // instead of Qt Quick Controls ToolTip because tray items can live in separate
 // layer-shell windows on any Dock edge.
-PopupWindow {
+AnimatedPopupWindow {
     id: root
 
     property Item anchorItem: null
@@ -16,7 +16,10 @@ PopupWindow {
     property string secondaryText: ""
     property int minimumWidth: 0
 
-    visible: root.shown && ScreenLifecycle.outputAvailable && root.anchorItem !== null
+    requestedOpen: root.shown && ScreenLifecycle.outputAvailable && root.anchorItem !== null
+    motionOrigin: !root.dockHosted ? Item.Top
+        : root.dockEdge === "left" ? Item.Left
+        : root.dockEdge === "right" ? Item.Right : Item.Bottom
     implicitWidth: Math.max(root.minimumWidth, tooltipColumn.implicitWidth + 18)
     implicitHeight: tooltipColumn.implicitHeight + 12
     color: "transparent"

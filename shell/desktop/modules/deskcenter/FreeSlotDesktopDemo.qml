@@ -43,6 +43,8 @@ Item {
     // layout: delegates animate it immediately, but it becomes durable only
     // when a valid drop is committed.
     property var slots: ({})
+    property var savedSlots: ({})
+    signal layoutCommitted(var slots)
     property var previewSlots: ({})
     property bool dragActive: false
     property bool layoutResetPending: false
@@ -95,6 +97,7 @@ Item {
     readonly property var visibleSlots: dragActive ? previewSlots : slots
     signal moveIntoFolderRequested(var sourceEntries, var targetFolder)
     signal contextMenuRequested(var entry, point pos)
+    signal backgroundPressAndHold()
     signal openRequested(var entry)
     signal activityRequested()
     signal externalUrlsDropped(var urls, int action)
@@ -503,6 +506,7 @@ Item {
         lastDropId = id
         slots = next
         previewSlots = next
+        layoutCommitted(copySlots(slots))
     }
 
     function commitGroupDrop(pointX, pointY) {
@@ -515,6 +519,7 @@ Item {
                 activeDragAnchorIndex, targetSlot)
         lastDropId = anchorId
         slots = previewSlots
+        layoutCommitted(copySlots(slots))
     }
 
     function resetLayout(sourceEntries) {
@@ -539,24 +544,34 @@ Item {
         layoutResetPending = false
         layoutReflowPending = false
         initialized = true
+        layoutCommitted(copySlots(slots))
     }
 
     // Geometry can change without a new filesystem snapshot. Reconcile
     // capacity so newly available slots appear and hidden entries stay in bounds.
-    function reflowLayout() {
+    function reflowLayout(sourceEntries) {
         if (dragActive) {
             layoutReflowPending = true
             return
         }
-        slots = DesktopGridMetrics.reflowSlots(entryIds, slots, capacity)
+        // Snapshot signals can precede entryIds reevaluation. Preserve path
+        // placements; only explicit Arrange/Reset discards the existing map.
+        const ids = (sourceEntries || entries).map(entry => entry.path)
+        slots = DesktopGridMetrics.reflowSlots(ids,
+            Object.assign({}, savedSlots, slots), capacity)
         previewSlots = slots
         layoutReflowPending = false
         selectedIds = selectedIds.filter(function(id) { return slots[id] !== undefined })
         if (renamingId && slots[renamingId] === undefined)
             renamingId = ""
+        initialized = true
     }
 
     onCapacityChanged: Qt.callLater(reflowLayout)
+    onSavedSlotsChanged: {
+        if (!dragActive) slots = copySlots(savedSlots)
+        reflowLayout(entries)
+    }
 
     function clearFolderTarget() {
         targetFolder = ""
@@ -705,6 +720,8 @@ Item {
 
     MouseArea {
         id: backgroundSelection
+        objectName: "desktop-background-selection"
+        property bool held: false
         x: root.validX
         y: root.validY
         width: root.validWidth
@@ -717,6 +734,7 @@ Item {
         }
 
         onPressed: function(mouse) {
+            held = false
             if (mouse.button === Qt.RightButton) {
                 root.selectedIds = []
                 root.contextMenuRequested(null, rootPoint(mouse))
@@ -737,7 +755,7 @@ Item {
                 root.selectedIds = []
         }
         onPositionChanged: function(mouse) {
-            if (!(mouse.buttons & Qt.LeftButton))
+            if (held || !(mouse.buttons & Qt.LeftButton))
                 return
             const point = rootPoint(mouse)
             root.selectionEnd = point
@@ -747,6 +765,13 @@ Item {
                 root.selectionBoxActive = true
             if (root.selectionBoxActive)
                 root.updateBoxSelection()
+        }
+        onPressAndHold: function(mouse) {
+            if (mouse.button !== Qt.LeftButton || root.selectionBoxActive
+                    || mouse.modifiers !== Qt.NoModifier)
+                return
+            held = true
+            root.backgroundPressAndHold()
         }
         onReleased: function(mouse) {
             if (root.selectionBoxActive) {
@@ -908,9 +933,9 @@ Item {
         }
     }
 
-    Component.onCompleted: syncEntryModel(entries)
+    Component.onCompleted: { reflowLayout(entries); syncEntryModel(entries) }
     onEntriesChanged: {
-        resetLayout(entries)
+        reflowLayout(entries)
         syncEntryModel(entries)
     }
 

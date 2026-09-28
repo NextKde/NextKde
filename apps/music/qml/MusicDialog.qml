@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import Kos.Ui
 
-Dialog {
+KosDialog {
     id: root
     padding: 20
     modal: true

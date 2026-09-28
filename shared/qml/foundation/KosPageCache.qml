@@ -101,10 +101,16 @@ FocusScope {
 
             anchors.fill: parent
             sourceComponent: root.pages[index]
-            active: root.isCached(index)
+            active: root.isCached(index) || opacity > 0
             asynchronous: root.asynchronous && index !== root.currentIndex
-            visible: index === root.currentIndex
-            focus: visible
+            opacity: index === root.currentIndex && status === Loader.Ready ? 1 : 0
+            visible: opacity > 0 || index === root.currentIndex
+            enabled: index === root.currentIndex
+            focus: enabled && status === Loader.Ready
+            Behavior on opacity {
+                NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic }
+            }
+            transform: Translate { x: AppTheme.reduceMotion ? 0 : 12 * (1 - pageLoader.opacity) }
 
             onLoaded: root.pageLoaded(index, item)
             onActiveChanged: {

@@ -8,6 +8,8 @@ QtObject {
     property real progress: 0
     property bool requestedOpen: false
     property bool mapped: false
+    property int openDuration: AppearanceTokens.motion.popupOpenDuration
+    property int closeDuration: AppearanceTokens.motion.popupCloseDuration
     readonly property bool interactive: requestedOpen && progress > 0.01
     signal closed()
 
@@ -20,6 +22,7 @@ QtObject {
     function close() {
         requestedOpen = false
         if (!mapped || progress <= 0) {
+            animation.stop()
             progress = 0
             mapped = false
             closed()
@@ -40,8 +43,7 @@ QtObject {
         animation.from = progress
         animation.to = targetProgress
         const fullDuration = targetProgress > progress
-            ? AppearanceTokens.motion.popupOpenDuration
-            : AppearanceTokens.motion.popupCloseDuration
+            ? openDuration : closeDuration
         animation.duration = Math.max(1,
             Math.round(fullDuration * Math.abs(targetProgress - progress)))
         animation.easing.type = targetProgress > progress

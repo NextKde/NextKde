@@ -190,7 +190,7 @@ KosApplicationWindow {
         onDeleteRequested: uid => pim.removeTodo(uid)
     }
 
-    Dialog {
+    KosDialog {
         id: listDialog
 
         parent: root.contentItem

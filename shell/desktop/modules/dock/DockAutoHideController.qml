@@ -41,6 +41,7 @@ Item {
     // Outputs
     // ────────────────────────────────────────────────────────────
     property string phase: "Bootstrapping"
+    property bool _completed: false
     // Start hidden: the saved mode is only known after config loads, so a
     // persistent/smart dock must never flash fully shown during boot. The
     // boot-resolve step then reveals (or stays hidden) per the real mode.
@@ -165,10 +166,14 @@ Item {
     }
 
     function _animateTo(target) {
-        if (target === ctl.revealProgress)
+        if (ctl._anim.running && ctl._animTarget === target)
             return
-        ctl._animTarget = target
         ctl._anim.stop()
+        ctl._animTarget = target
+        if (target === ctl.revealProgress) {
+            ctl._onAnimationFinished()
+            return
+        }
         const distance = Math.abs(target - ctl.revealProgress)
         const full = target > ctl.revealProgress
             ? DockAnimation.smartHideRevealDuration
@@ -180,12 +185,16 @@ Item {
         ctl._anim.easing.type = target > ctl.revealProgress
             ? DockAnimation.smartHideRevealEasing
             : DockAnimation.smartHideHideEasing
+        ctl._setPhase(target > ctl.revealProgress ? "Showing" : "Hiding")
         ctl._anim.start()
     }
 
     function _onAnimationFinished() {
         if (ctl._animTarget <= 0) {
             ctl._setPhase("Hidden")
+            // Input may have changed within the debounce interval.
+            if (!ctl.policyWantsHidden || ctl.hasInhibitor)
+                ctl._animateTo(1)
             return
         }
         // Reached full reveal.
@@ -228,7 +237,7 @@ Item {
         ctl._hidePendingTimer.start()
     }
 
-    function _enterHiding() { ctl._animateTo(0) }
+    function _enterHiding() { ctl._animateTo(ctl.policyWantsHidden && !ctl.hasInhibitor ? 0 : 1) }
 
     function _enterShownOrHeld() {
         ctl._setPhase(ctl.policyWantsHidden ? "Held" : "Shown")
@@ -240,11 +249,12 @@ Item {
     // shown at startup.
     // ────────────────────────────────────────────────────────────
     function _tryResolveBoot(forced) {
+        if (!ctl._completed || ctl.phase !== "Bootstrapping") return
+        if (!ctl.configReady && !forced) return
         if (ctl.mode === "always") {
             ctl._enterAlwaysShown()
             return
         }
-        if (!ctl.configReady && !forced) return
         if (ctl.mode === "smart" && !ctl.windowDataReady && !forced) return
 
         ctl._bootTimeout.stop()
@@ -271,6 +281,7 @@ Item {
     // Main transition dispatch
     // ────────────────────────────────────────────────────────────
     function _doEvaluate() {
+        ctl._recomputeConflict()
         if (ctl.mode === "always") {
             // Only force-show once the saved mode is confirmed; during boot the
             // real mode may still be smart/persistent.
@@ -384,7 +395,7 @@ Item {
         ctl._tempHoldTimer.stop()
         ctl._temporaryRevealHold = false
         ctl._handleHovered = false
-        ctl.revealProgress = ctl.mode === "always" ? 1 : 0
+        ctl.revealProgress = ctl.configReady && ctl.mode === "always" ? 1 : 0
         ctl._setPhase("Bootstrapping")
         ctl._bootTimeout.restart()
         ctl._recomputeConflict()
@@ -395,10 +406,14 @@ Item {
     // Input plumbing
     // ────────────────────────────────────────────────────────────
     onModeChanged: ctl._scheduleEvaluate()
+    readonly property string _screenGeometryKey: targetScreen
+        ? [targetScreen.x, targetScreen.y, targetScreen.width, targetScreen.height].join(":") : ""
+    on_ScreenGeometryKeyChanged: ctl._scheduleEvaluate()
     onTargetScreenChanged: ctl._scheduleEvaluate()
     onPositionChanged: ctl._scheduleEvaluate()
     onDockWidthChanged: ctl._scheduleEvaluate()
     onDockHeightChanged: ctl._scheduleEvaluate()
+    onEdgeMarginChanged: ctl._scheduleEvaluate()
     onPointerInsideDockChanged: ctl._scheduleEvaluate()
     on_HandleHoveredChanged: ctl._scheduleEvaluate()
     onEditingChanged: ctl._scheduleEvaluate()
@@ -429,6 +444,7 @@ Item {
     }
 
     Component.onCompleted: {
+        ctl._completed = true
         ctl._bootTimeout.start()
         ctl._tryResolveBoot(false)
     }

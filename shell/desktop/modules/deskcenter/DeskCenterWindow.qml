@@ -80,6 +80,18 @@ PanelWindow {
     property bool timerView: false
     property bool editMode: false
     property bool widgetLibraryOpen: false
+
+    function enterWidgetEditMode(openLibrary) {
+        desktopFileGrid.clearDesktopSelection()
+        root.widgetLibraryOpen = openLibrary
+        root.editMode = true
+        desktopFileGrid.activateKeyboard()
+    }
+
+    function leaveWidgetEditMode() {
+        root.widgetLibraryOpen = false
+        root.editMode = false
+    }
     readonly property var widgetLabels: ({
         clock: "时钟", weather: "天气", calendar: "日历", todo: "待办",
         system: "系统", activity: "活动", music: "音乐"
@@ -315,16 +327,20 @@ PanelWindow {
             }
             desktopFileGrid.clearDesktopSelection()
         }
-        onPressAndHold: {
-            root.widgetLibraryOpen = false
-            root.editMode = true
+        onPressAndHold: function(mouse) {
+            if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier)
+                root.enterWidgetEditMode(false)
         }
     }
 
     Row {
         id: widgetEditToolbar
+        objectName: "widget-edit-toolbar"
         z: 200
-        visible: root.editMode
+        opacity: root.editMode ? 1 : 0
+        visible: root.editMode || opacity > 0
+        enabled: root.editMode
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
         anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
         spacing: 8
 
@@ -361,10 +377,8 @@ PanelWindow {
                     onTapped: {
                         if (modelData.id === "add")
                             root.widgetLibraryOpen = !root.widgetLibraryOpen
-                        else {
-                            root.widgetLibraryOpen = false
-                            root.editMode = false
-                        }
+                        else
+                            root.leaveWidgetEditMode()
                     }
                 }
             }
@@ -373,8 +387,14 @@ PanelWindow {
 
     Rectangle {
         id: widgetLibrary
+        objectName: "widget-library"
         z: 190
-        visible: root.editMode && root.widgetLibraryOpen
+        opacity: root.editMode && root.widgetLibraryOpen ? 1 : 0
+        visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
+        enabled: root.editMode && root.widgetLibraryOpen
+        scale: 0.96 + 0.04 * opacity
+        transformOrigin: Item.TopRight
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: Easing.OutCubic } }
         anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
         width: 430
         height: 116
@@ -397,6 +417,7 @@ PanelWindow {
                 model: DeskCenterConfigService.defaultOrder
                 delegate: Rectangle {
                     required property string modelData
+                    objectName: "widget-library-" + modelData
                     readonly property bool active:
                         !AppearanceConfigService.isDeskCenterWidgetHidden(modelData)
                     width: 54; height: 82
@@ -444,6 +465,7 @@ PanelWindow {
 
     Repeater {
         id: widgetRepeater
+        objectName: "desktop-widget-repeater"
         model: root.screen?.name === ScreenLifecycle.activeScreen?.name ? root.widgetDefinitions : []
 
         delegate: DeskWidgetCard {
@@ -479,10 +501,7 @@ PanelWindow {
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
-                onTapped: {
-                    root.widgetLibraryOpen = false
-                    root.editMode = true
-                }
+                onTapped: root.enterWidgetEditMode(false)
             }
 
             DragHandler {
@@ -591,10 +610,11 @@ PanelWindow {
             // card even though only one could be shown.
             Item {
                 id: widgetContentLayer
+                objectName: "widget-content-layer"
                 anchors.fill: parent
-                // Both monochrome modes use white/gray content. Tint belongs
-                // to the card material, never to the widget foreground.
-                layer.enabled: IconAppearanceService.mode !== "color"
+                // Glass widgets use monochrome content independently of the
+                // application icons. Colour cards retain their own artwork.
+                layer.enabled: AppearanceConfigService.widgetStyle === "glass"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
@@ -687,18 +707,16 @@ PanelWindow {
                     Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
                     // A Canvas reads the scheme only when it paints, so a
                     // shell-style switch (material -> macos) or a colour-source
-                    // switch has to ask for a repaint explicitly. The date and
-                    // icon-tint hooks above do not cover it, which is why the
-                    // hands used to keep the previous theme's colours.
+                    // switch has to ask for a repaint explicitly, independently
+                    // of both the date tick and the widget surface switch.
                     Connections {
                         target: AppearanceTokens
                         function onColorRevisionChanged() { analogClock.requestPaint() }
                         function onIsMaterialChanged() { analogClock.requestPaint() }
                     }
 	                    Connections {
-	                        target: IconAppearanceService
-	                        function onModeChanged() { analogClock.requestPaint() }
-	                        function onTintColorChanged() { analogClock.requestPaint() }
+	                        target: AppearanceTokens.content
+	                        function onOnBackdropChanged() { analogClock.requestPaint() }
                     }
                 }
 
@@ -770,9 +788,8 @@ PanelWindow {
                                 function onTimerDurationChanged() { timerProgress.requestPaint() }
 	                            }
 	                            Connections {
-	                                target: IconAppearanceService
-	                                function onModeChanged() { timerProgress.requestPaint() }
-	                                function onTintColorChanged() { timerProgress.requestPaint() }
+	                                target: AppearanceTokens.content
+	                                function onOnBackdropChanged() { timerProgress.requestPaint() }
 	                            }
                             Component.onCompleted: requestPaint()
                         }
@@ -992,7 +1009,7 @@ PanelWindow {
                             source: BundledIcons.source("weather-cloud")
                             fillMode: Image.PreserveAspectFit
 	                            smooth: true
-	                            layer.enabled: IconAppearanceService.mode !== "color"
+	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
 	                            layer.effect: MultiEffect {
                                 saturation: -1.0
                                 colorization: 0
@@ -1007,7 +1024,7 @@ PanelWindow {
                             source: BundledIcons.source("weather-cloud-wide")
                             fillMode: Image.PreserveAspectFit
 	                            smooth: true
-	                            layer.enabled: IconAppearanceService.mode !== "color"
+	                            layer.enabled: AppearanceConfigService.widgetStyle === "glass"
 	                            layer.effect: MultiEffect {
                                 saturation: -1.0
                                 colorization: 0
@@ -1334,9 +1351,8 @@ PanelWindow {
                             function onStorageValueChanged() { activityCanvas.requestPaint() }
 	                        }
 	                        Connections {
-	                            target: IconAppearanceService
-	                            function onModeChanged() { activityCanvas.requestPaint() }
-	                            function onTintColorChanged() { activityCanvas.requestPaint() }
+	                            target: AppearanceTokens.content
+	                            function onOnBackdropChanged() { activityCanvas.requestPaint() }
 	                        }
                     }
 
@@ -1615,7 +1631,7 @@ PanelWindow {
                                         // Theme icon: synchronous, see AppIcon.qml.
                                         asynchronous: false
 	                                        anchors { left: appUsageRow.left; verticalCenter: appUsageRow.verticalCenter }
-	                                        layer.enabled: IconAppearanceService.mode !== "color"
+	                                        layer.enabled: AppearanceConfigService.widgetStyle === "glass"
 	                                        layer.effect: MultiEffect {
 	                                            saturation: 0
 	                                            colorization: 1
@@ -1832,7 +1848,7 @@ PanelWindow {
                                 layer.effect: MultiEffect {
                                     maskEnabled: true
                                     maskSource: musicArtworkMask
-                                    saturation: IconAppearanceService.mode === "color" ? 0.0 : -1.0
+                                    saturation: AppearanceConfigService.widgetStyle === "color" ? 0.0 : -1.0
                                 }
                             }
                             Rectangle {
@@ -2075,8 +2091,8 @@ PanelWindow {
                             }
                             onVisibleChanged: requestPaint()
                             Connections {
-                                target: IconAppearanceService
-                                function onModeChanged() { todoHeader.requestPaint() }
+                                target: AppearanceTokens.content
+                                function onOnBackdropChanged() { todoHeader.requestPaint() }
                             }
                         }
                         Text {
@@ -2228,8 +2244,8 @@ PanelWindow {
                         ctx.fill()
 	                }
 	                Connections {
-	                    target: IconAppearanceService
-	                    function onModeChanged() { calendarHeader.requestPaint() }
+	                    target: AppearanceTokens.content
+	                    function onOnBackdropChanged() { calendarHeader.requestPaint() }
 	                }
                 }
                 Rectangle {
@@ -2352,6 +2368,7 @@ PanelWindow {
     // columns from right to left and rows from top to bottom.
     Item {
         id: desktopFileGrid
+        objectName: "desktop-file-grid"
         x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
         y: root.topInset
         width: root.width - x - root.rightInset
@@ -2696,6 +2713,7 @@ PanelWindow {
                 return result || (left.name || "").localeCompare(right.name || "")
             })
             saveOrder(next)
+            freeSlotDesktop.resetLayout(next)
         }
 
         function arrangeByName() {
@@ -2725,6 +2743,7 @@ PanelWindow {
             desktopLayout.orderJson = JSON.stringify(saved.filter(function(path) { return paths.indexOf(path) < 0 }))
             desktopLayout.sync()
             clearDesktopSelection()
+            freeSlotDesktop.resetLayout(ordered(screenEntries))
         }
 
         function setIconSize(size) {
@@ -3078,6 +3097,8 @@ PanelWindow {
                 root.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
             } else {
                 // desktop background
+                root.push(_ctxAct("添加小组件…", "addWidgets", "arrange"))
+                root.push(_ctxAct("编辑小组件", "editWidgets", "edit-rename"))
                 root.push(_ctxAct("新建文件", "newFile", "document-new"))
                 root.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
                 root.push(_ctxAct("粘贴", "paste", "edit-paste"))
@@ -3112,6 +3133,8 @@ PanelWindow {
             const path = e?.path ?? ""
             const v = item?.value
             switch (cmd) {
+            case "addWidgets": root.enterWidgetEditMode(true); break
+            case "editWidgets": root.enterWidgetEditMode(false); break
             case "openEntry": triggerContextAction("openEntry"); break
             case "rename": triggerContextAction("rename"); break
             case "setColor": setFolderColor(path, v); break
@@ -3179,6 +3202,11 @@ PanelWindow {
             anchors.fill: parent
             focus: true
             Keys.onPressed: function(event) {
+                if (event.key === Qt.Key_Escape && root.editMode) {
+                    root.leaveWidgetEditMode()
+                    event.accepted = true
+                    return
+                }
                 if (desktopFileGrid.handleClipboardShortcut(event))
                     return
                 if (event.key === Qt.Key_Return && !desktopFileGrid.renamingPath
@@ -3891,6 +3919,10 @@ PanelWindow {
             // the persisted desktop order. The drag demo only replaces the
             // layout algorithm, not the desktop's data pipeline.
             entries: desktopFileGrid.orderedEntries
+            savedSlots: root.desktopFiles.slotsForOutput(root.desktopOutput)
+            onLayoutCommitted: function(slots) {
+                root.desktopFiles.saveSlots(root.desktopOutput, slots)
+            }
             onMoveIntoFolderRequested: function(sourceEntries, targetFolder) {
                 root.desktopFiles.moveEntriesToFolder(sourceEntries, targetFolder)
             }
@@ -3909,6 +3941,7 @@ PanelWindow {
                 root.desktopFiles.openEntry(entry)
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
+            onBackgroundPressAndHold: root.enterWidgetEditMode(false)
             onExternalUrlsDropped: function(urls, action) {
                 root.desktopFiles.importExternalUrls(urls, action, root.desktopOutput)
             }
@@ -3975,13 +4008,16 @@ PanelWindow {
         Rectangle {
             id: desktopDialogScrim
             anchors.fill: parent
-            visible: openWithDialog.visible
+            visible: openWithMotion.mapped
+            opacity: openWithMotion.progress
             color: Qt.rgba(0, 0, 0, 0.22)
             z: 29
             // Modal prompts should never let an outside click activate or
             // rearrange a desktop icon underneath them.
-            MouseArea { anchors.fill: parent }
+            MouseArea { anchors.fill: parent; enabled: openWithMotion.interactive }
         }
+
+        PopupMotion { id: openWithMotion }
 
         Rectangle {
             id: openWithDialog
@@ -3989,7 +4025,10 @@ PanelWindow {
             width: 340
             height: 250
             radius: 16
-            visible: false
+            visible: openWithMotion.mapped
+            opacity: openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.progress
+            enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }
             z: 31
@@ -4000,12 +4039,12 @@ PanelWindow {
             }
             function show(target) {
                 entry = target
-                visible = false
+                openWithMotion.close()
                 root.desktopFiles.queryOpenWith(target, function(info) {
                     if (openWithDialog.entry?.path !== target?.path)
                         return
                     openWithDialog.selectedHandler = info.defaultId || info.handlers[0] || ""
-                    openWithDialog.visible = true
+                    openWithMotion.open()
                 })
             }
             Text {
@@ -4072,20 +4111,20 @@ PanelWindow {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData === "取消") openWithDialog.visible = false
+                                if (modelData === "取消") openWithMotion.close()
                                 else if (openWithDialog.selectedHandler) {
                                     if (modelData === "仅此一次")
                                         root.desktopFiles.launchWith(openWithDialog.entry, openWithDialog.selectedHandler)
                                     else
                                         root.desktopFiles.setDefaultOpenWith(root.desktopFiles.openWith.mime, openWithDialog.selectedHandler)
-                                    openWithDialog.visible = false
+                                    openWithMotion.close()
                                 }
                             }
                         }
                     }
                 }
             }
-            Keys.onEscapePressed: openWithDialog.visible = false
+            Keys.onEscapePressed: openWithMotion.close()
         }
 
     }

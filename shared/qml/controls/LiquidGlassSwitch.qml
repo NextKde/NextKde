@@ -98,8 +98,9 @@ Item {
 
     function toggle() {
         if (!enabled) return
-        root.checked = !root.checked
-        root.toggled(root.checked)
+        // The owner confirms the value (often asynchronously). Never replace
+        // its checked binding with a local assignment.
+        root.toggled(!root.checked)
         wobbleAnim.restart()
     }
 
@@ -140,6 +141,7 @@ Item {
     // Thumb shadow (fades out as thumb expands into glass)
     Rectangle {
         id: thumbShadow
+        objectName: "switch-thumb-shadow"
         // 以中心点为基准，与 glassThumb 保持一致
         x: 3 + root._thumbX - (width - root.thumbWidth) / 2
         anchors.verticalCenter: parent.verticalCenter
@@ -156,6 +158,7 @@ Item {
     // The glass thumb/lens
     Item {
         id: glassThumb
+        objectName: "switch-glass-thumb"
         // 展开时保持中心点不变，而不是左上角
         x: 3 + root._thumbX - (width - root.thumbWidth) / 2
         anchors.verticalCenter: parent.verticalCenter
@@ -163,13 +166,6 @@ Item {
         // Size animates from pill to expanded lens with squash-stretch
         width: root.thumbWidth * (1 + 0.4 * root._expansion) * (1 - 0.2 * root._stretch)
         height: root.thumbHeight * (1 + 0.4 * root._expansion) * (1 + 0.3 * root._stretch)
-
-        Behavior on x {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
-            }
-        }
 
         // Layer 1: Base white pill (fades out when expanding)
         Rectangle {
@@ -377,8 +373,9 @@ Item {
         onReleased: {
             root._pressed = false
             root._expansion = 0.0
-            root.toggle()
         }
+
+        onClicked: root.toggle()
 
         onCanceled: {
             root._pressed = false

@@ -9,7 +9,7 @@ import "../../../shared/qml/controls" as LiquidControls
 // Contextual editor for the information area. It edits the cards themselves:
 // active cards are ordered at the front, unused cards remain available in the
 // same visual tray, and dragging an active card changes the live Dock order.
-PopupWindow {
+AnimatedPopupWindow {
     id: editor
 
     property Item anchorItem: null
@@ -29,11 +29,11 @@ PopupWindow {
         return active
     }
 
-    visible: false
+    motionOrigin: Item.Bottom
     implicitWidth: 456
     implicitHeight: 204
     color: "transparent"
-    grabFocus: true
+    grabFocus: interactive
 
     anchor {
         item: editor.anchorItem
@@ -94,7 +94,7 @@ PopupWindow {
                             ThemeService.foregroundColor)
                         font { pixelSize: 11; weight: Font.DemiBold }
                     }
-                    TapHandler { onTapped: editor.visible = false }
+                    TapHandler { onTapped: editor.hide() }
                 }
             }
 
@@ -244,8 +244,6 @@ PopupWindow {
                         ThemeService.foregroundColor.b, 0.18)
                     onToggled: function(enabled) {
                         ConfigService.updateInfoCardAutoRotate(enabled)
-                        autoRotateSwitch.checked =
-                            ConfigService.infoCardAutoRotate
                     }
                 }
             }

@@ -10,7 +10,7 @@ import "../../../Kos/Ui"
 // Network card shared by the future top control centre. Wi-Fi selection and
 // credential UI are implemented here first; the actual NetworkManager write
 // operation is intentionally deferred until this interaction is validated.
-PopupWindow {
+AnimatedPopupWindow {
     id: panel
 
     property Item anchorItem: null
@@ -39,7 +39,10 @@ PopupWindow {
     // A password field lives in this separate Wayland popup surface. It must
     // explicitly own keyboard focus; otherwise the Bar's prior focus target
     // can keep receiving text even after the modal appears.
-    grabFocus: true
+    grabFocus: interactive
+    motionOrigin: !dockHosted ? Item.Top
+        : dockEdge === "left" ? Item.Left
+        : dockEdge === "right" ? Item.Right : Item.Bottom
     anchor {
         item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
@@ -64,14 +67,14 @@ PopupWindow {
     // region decides which background pixels are captured and the effect draws
     // the exact outline from the shape — no separate hand-written region.
     readonly property int blurRadius: Math.max(1, Math.min(19, Math.floor(310 / 2)))
-    BackgroundEffect.blurRegion: (panel.visible
+    BackgroundEffect.blurRegion: (panel.visible && panel.revealProgress > 0
         && (AppearanceConfigService.effectiveBarBlur > 0.005
             || AppearanceConfigService.effectiveBarLiquid > 0.005))
         ? panelSurface.blurRegion : null
 
     function toggle(item) {
         anchorItem = item
-        if (visible) {
+        if (requestedOpen) {
             close()
         } else {
             open(item)
@@ -80,7 +83,10 @@ PopupWindow {
 
     function open(item) {
         anchorItem = item
-        visible = true
+        show()
+        // Refresh first so wifiDeviceName is populated before the scan runs;
+        // without it the scan request carries no ifname on a cold open.
+        NetworkService.refresh()
         NetworkService.refreshWifiNetworks()
     }
 
@@ -88,7 +94,7 @@ PopupWindow {
     // transient state whenever another top-bar panel takes its place.
     function close() {
         closeNetworkDialog()
-        visible = false
+        hide()
     }
 
     Connections {
@@ -153,6 +159,13 @@ PopupWindow {
 
     function closeNetworkDialog() {
         networkDialogOverlay.close()
+        requestedPassword = ""
+        passwordInput.clear()
+        if (!networkDialogOverlay.visible)
+            resetNetworkDialog()
+    }
+
+    function resetNetworkDialog() {
         selectedNetwork = null
         requestedUsername = ""
         requestedPassword = ""
@@ -505,6 +518,15 @@ PopupWindow {
             }
             GlassText {
                 anchors.centerIn: parent
+                visible: NetworkService.wifiEnabled && NetworkService.wifiScanInProgress
+                    && NetworkService.nearbyWifi.length === 0
+                text: "正在扫描…"
+                color: panelSurface.secondaryForegroundColor
+                opacity: 0.5
+                font.pixelSize: 12
+            }
+            GlassText {
+                anchors.centerIn: parent
                 visible: NetworkService.wifiEnabled && !NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
                 text: "未发现可用 Wi‑Fi"
@@ -554,6 +576,10 @@ PopupWindow {
         dismissOnBackdrop: false
         contentPadding: 0
         onBackdropClicked: panel.closeNetworkDialog()
+        onAboutToHide: {
+            if (!networkDialogOverlay.requestedOpen)
+                panel.resetNetworkDialog()
+        }
 
         Item {
             id: networkDialog

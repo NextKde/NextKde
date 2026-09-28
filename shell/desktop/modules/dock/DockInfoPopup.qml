@@ -13,10 +13,7 @@ import "../../../Kos/Ui"
 // the panel reads as belonging to the card it describes. Moving between cards
 // swaps the content in place instead of closing and reopening.
 //
-// Visibility is animated: DockModelService flips `visible`, and this panel
-// eases its own content in from the anchor with a spring, then eases out
-// before the window is actually hidden.
-PopupWindow {
+AnimatedPopupWindow {
     id: popup
 
     property Item anchorItem: null
@@ -24,13 +21,15 @@ PopupWindow {
     property int page: -1
     property bool pointerInside: false
 
-    visible: false
+    motionOrigin: Item.Bottom
     // Geometry is decided up front: a PopupWindow does not reflow its content
     // the way an in-window Item does.
     implicitWidth: 288
     implicitHeight: popup.rowCount > 0 ? popup.rowCount * 26 + 62 : 1
     color: "transparent"
     grabFocus: false
+    BackgroundEffect.blurRegion: popup.visible && popup.revealProgress > 0
+        && AppearanceTokens.surface.usesKwinBlur ? infoSurface.blurRegion : null
 
     anchor {
         item: popup.anchorItem
@@ -61,46 +60,7 @@ PopupWindow {
         return ""
     }
 
-    // Spring reveal. 0 → 1 grows out of the anchor; 1 → 0 folds back into it.
-    property real reveal: 0
-    property bool closing: false
-
-    Behavior on reveal {
-        NumberAnimation {
-            duration: 260
-            easing.type: Easing.OutBack
-            easing.overshoot: 1.35
-        }
-    }
-
-    onVisibleChanged: {
-        if (visible) {
-            closing = false
-            reveal = 1
-        } else {
-            reveal = 0
-        }
-    }
-
-    // Ask to be hidden. The window stays mapped until the fold-out finishes,
-    // otherwise the panel would blink away instead of animating out.
-    function requestClose() {
-        if (!visible || closing)
-            return
-        closing = true
-        reveal = 0
-        closeTimer.restart()
-    }
-
-    Timer {
-        id: closeTimer
-        interval: 280
-        repeat: false
-        onTriggered: {
-            if (popup.closing)
-                popup.visible = false
-        }
-    }
+    function requestClose() { hide() }
 
     function percent(value) {
         return Math.round(Math.max(0, Math.min(1, Number(value))) * 100) + "%"
@@ -164,11 +124,10 @@ PopupWindow {
         anchors.fill: parent
         // Grow out of the anchor: the panel sits above the card, so it scales
         // from its own bottom edge.
-        opacity: popup.reveal
-        scale: 0.86 + 0.14 * popup.reveal
         transformOrigin: Item.Bottom
 
         LiquidGlassPanel {
+            id: infoSurface
             anchors.fill: parent
             radius: 18
             cornerExponent: 2.35

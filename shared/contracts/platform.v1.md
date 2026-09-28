@@ -28,8 +28,10 @@ Current operation groups are:
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
   `clipboard.history.delete`, `clipboard.history.clear`
-- `input.paste` (synthesise Ctrl+V into the focused window through the KWin
-  effect; a desktop-level injection, never a clipboard data operation)
+- `input.paste` (`expectedWindowId`: KWin window UUID, required; the effect
+  injects Ctrl+V only if that window still owns keyboard focus. Missing targets,
+  changed focus and an older effect without the guarded method fail without
+  injection. This is a desktop action, never a clipboard data operation.)
 - `clipboard.thumb`, `clipboard.pinned.list`, `clipboard.pinned.add`,
   `clipboard.pinned.remove`, `clipboard.pinned.copy` (entry previews and a pin
   store under `$XDG_STATE_HOME/quickshell/<shell id>/clipboard`; every file is

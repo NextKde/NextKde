@@ -352,7 +352,7 @@ QtObject {
         // plate). False only for a colour-artwork card in the glass form, where
         // the card paints its own gradient.
         readonly property bool onBackdrop: tokens.surface.paintInQml
-            || IconAppearanceService.mode !== "color"
+            || AppearanceConfigService.widgetStyle === "glass"
 
         // Ink for shell chrome that always sits on the shell's own backdrop
         // (Bar, Dock, Control Centre, glass panels). Unlike ink() this never
@@ -505,9 +505,7 @@ QtObject {
         readonly property int standardEasing: tokens.isMaterial
             ? Easing.OutQuart : Easing.OutCubic
         readonly property bool springEnabled: tokens.isMacos
-        // Whether a popup plays its entrance at all. Currently the macOS form's
-        // trait; a host asks this instead of naming the style.
-        readonly property bool popupAnimatesOnShow: tokens.isMacos
+        readonly property bool popupAnimatesOnShow: true
         // Whether the shell draws the extra faces a form brings with it -- the
         // Dock clock's dial, for instance. Same reason as above.
         readonly property bool drawsFormDecorations: tokens.isMacos

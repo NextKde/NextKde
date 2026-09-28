@@ -32,7 +32,7 @@ Item {
     property color endColor: "transparent"
     property bool showSurface: true
     property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
-    readonly property bool usesColorArtwork: IconAppearanceService.mode === "color"
+    readonly property bool usesColorArtwork: AppearanceConfigService.widgetStyle === "color"
     readonly property real radius: AppearanceTokens.widget.radius
 
     // The active form's surface policy. Everything below reads this instead of

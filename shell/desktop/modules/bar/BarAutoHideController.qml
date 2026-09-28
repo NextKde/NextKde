@@ -35,6 +35,7 @@ Item {
     // Outputs
     // ────────────────────────────────────────────────────────────
     property string phase: "Bootstrapping"
+    property bool _completed: false
     property real revealProgress: 0.0
     readonly property bool hidden: ctl.phase === "Hidden"
     // Auto-hide modes are overlays: only the permanently visible mode reserves
@@ -148,10 +149,14 @@ Item {
     }
 
     function _animateTo(target) {
-        if (target === ctl.revealProgress)
+        if (ctl._anim.running && ctl._animTarget === target)
             return
-        ctl._animTarget = target
         ctl._anim.stop()
+        ctl._animTarget = target
+        if (target === ctl.revealProgress) {
+            ctl._onAnimationFinished()
+            return
+        }
         const distance = Math.abs(target - ctl.revealProgress)
         const full = target > ctl.revealProgress
             ? DockAnimation.smartHideRevealDuration
@@ -173,6 +178,9 @@ Item {
     function _onAnimationFinished() {
         if (ctl._animTarget <= 0) {
             ctl._setPhase("Hidden")
+            // Input may have changed within the debounce interval.
+            if (!ctl.policyWantsHidden || ctl.hasInhibitor)
+                ctl._animateTo(1)
             return
         }
         // Reached full reveal.
@@ -230,11 +238,12 @@ Item {
     // shown at startup.
     // ────────────────────────────────────────────────────────────
     function _tryResolveBoot(forced) {
+        if (!ctl._completed || ctl.phase !== "Bootstrapping") return
+        if (!ctl.configReady && !forced) return
         if (ctl.mode === "always") {
             ctl._enterAlwaysShown()
             return
         }
-        if (!ctl.configReady && !forced) return
         if (ctl.mode === "smart" && !ctl.windowDataReady && !forced) return
 
         ctl._bootTimeout.stop()
@@ -259,6 +268,7 @@ Item {
     // Main transition dispatch
     // ────────────────────────────────────────────────────────────
     function _doEvaluate() {
+        ctl._recomputeConflict()
         if (ctl.mode === "always") {
             if (ctl.configReady && ctl.phase !== "Shown")
                 ctl._enterAlwaysShown()
@@ -367,7 +377,7 @@ Item {
         ctl._tempHoldTimer.stop()
         ctl._temporaryRevealHold = false
         ctl._handleHovered = false
-        ctl.revealProgress = ctl.mode === "always" ? 1 : 0
+        ctl.revealProgress = ctl.configReady && ctl.mode === "always" ? 1 : 0
         ctl._setPhase("Bootstrapping")
         ctl._bootTimeout.restart()
         ctl._recomputeConflict()
@@ -378,6 +388,9 @@ Item {
     // Input plumbing
     // ────────────────────────────────────────────────────────────
     onModeChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
+    readonly property string _screenGeometryKey: targetScreen
+        ? [targetScreen.x, targetScreen.y, targetScreen.width, targetScreen.height].join(":") : ""
+    on_ScreenGeometryKeyChanged: ctl._scheduleEvaluate()
     onTargetScreenChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
     onBarHeightChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
     onPointerInsideBarChanged: ctl._scheduleEvaluate()
@@ -404,6 +417,7 @@ Item {
     }
 
     Component.onCompleted: {
+        ctl._completed = true
         ctl._bootTimeout.start()
         ctl._tryResolveBoot(false)
     }

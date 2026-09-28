@@ -35,6 +35,17 @@ ComboBox {
         checked: root.currentIndex === index
     }
     popup: Popup {
+        id: popup
+        property real revealProgress: 0
+        opacity: revealProgress
+        scale: AppTheme.reduceMotion ? 1 : 0.98 + 0.02 * revealProgress
+        transformOrigin: Item.Top
+        enter: Transition {
+            NumberAnimation { target: popup; property: "revealProgress"; to: 1; duration: AppTheme.motionNormal; easing.type: Easing.OutCubic }
+        }
+        exit: Transition {
+            NumberAnimation { target: popup; property: "revealProgress"; to: 0; duration: AppTheme.motionFast; easing.type: Easing.InCubic }
+        }
         y: root.height + 4
         width: root.width
         padding: 6

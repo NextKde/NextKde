@@ -3,14 +3,6 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
 
-// The Control Center is one window now. The per-card motion model that used to
-// gate this contract (a card reporting motionClosed so the panel could clear
-// activeSubmenu and unpin the primary cards) is gone, so the assertions below
-// follow the closed-form state machine that replaced it:
-//
-// There is no outgoing submenu animation in the single-window implementation.
-// Both close paths must synchronously clear activeSubmenu; otherwise toggle()
-// sees an invisible stale page as open and consumes the next button press.
 const here = dirname(fileURLToPath(import.meta.url))
 const panel = readFileSync(join(here, "ControlCenterPanel.qml"), "utf8")
 const card = readFileSync(join(here, "ControlCenterCard.qml"), "utf8")
@@ -48,8 +40,14 @@ const submenuCard = panel.slice(
     panel.indexOf("id: submenuCard"),
     panel.indexOf("// Navigation Header")
 )
-assert.match(submenuCard, /cardShown:\s*panel\.submenuOpen/,
-    "the submenu page is driven straight off submenuOpen")
+assert.match(submenuCard, /cardShown:.*panel\.displayedSubmenu/,
+    "the outgoing submenu stays rendered until the page transition commits")
+assert.match(panel, /visible:\s*popupMotion\.mapped/,
+    "the window remains mapped for its exit animation")
+assert.match(panel, /readonly property bool open:\s*popupMotion\.requestedOpen/,
+    "toggle state uses intent rather than the still-mapped closing surface")
+assert.match(panel, /PageMotion\s*\{[\s\S]*?page:\s*panel\.requestedPage/,
+    "one page motion owns presentation independently from logical navigation")
 assert.match(submenuCard, /coordinator:\s*coordinator/)
 assert.match(submenuCard, /managedByCoordinator:\s*false/,
     "the submenu card opts out of the retired coordinator model")
@@ -59,5 +57,14 @@ assert.match(card, /visible:\s*root\.cardShown\b/,
     "card visibility is exactly cardShown")
 assert.doesNotMatch(card, /visuallySuppressed|motionMapped/,
     "cards carry no leftover suppression state")
+assert.match(card, /Item\s*\{\s*id: root\s*default property alias content: cardContent\.data/,
+    "external card content belongs to the animated host")
+assert.match(card, /opacity:\s*root\.contentOpacity/,
+    "content opacity is independent of the native glass")
+const placement = panel.slice(panel.indexOf("function placeCard"), panel.indexOf("property bool _internalTransition"))
+assert.match(placement, /c\.opacity = Qt\.binding\(function\(\)\s*\{\s*return popupMotion\.progress\s*\}/,
+    "navigation never fades the native card")
+assert.doesNotMatch(panel, /popupMotion\.progress > 0 && pageMotion\.progress > 0/,
+    "navigation never drops the compositor blur region")
 
 console.log("control-center submenu state contract: ok")

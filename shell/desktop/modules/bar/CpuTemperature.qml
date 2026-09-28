@@ -79,23 +79,17 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: detailsPopup.visible = !detailsPopup.visible
+        onClicked: detailsPopup.requestedOpen = !detailsPopup.requestedOpen
     }
 
-    PopupWindow {
+    AnimatedPopupWindow {
         id: temperatureTooltip
-        visible: hoverArea.containsMouse && root.available && !detailsPopup.visible
+        motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
+        requestedOpen: hoverArea.containsMouse && root.available && !detailsPopup.requestedOpen
         implicitWidth: tooltipText.implicitWidth + 16
         implicitHeight: tooltipText.implicitHeight + 10
         color: "transparent"
 
-        Connections {
-            target: ScreenLifecycle
-            function onOutputAvailableChanged() {
-                if (!ScreenLifecycle.outputAvailable)
-                    temperatureTooltip.visible = false
-            }
-        }
         anchor {
             item: root
             edges: root.dockHosted ? Edges.Top : Edges.Bottom
@@ -126,20 +120,13 @@ Item {
 
     // A click opens the persistent, iStat-style sensor dashboard. Hover still
     // keeps the compact one-line tooltip for a quick glance.
-    PopupWindow {
+    AnimatedPopupWindow {
         id: detailsPopup
-        visible: false
+        motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
         implicitWidth: 360
         implicitHeight: 670
         color: "transparent"
 
-        Connections {
-            target: ScreenLifecycle
-            function onOutputAvailableChanged() {
-                if (!ScreenLifecycle.outputAvailable)
-                    detailsPopup.visible = false
-            }
-        }
         anchor {
             item: root
             edges: root.dockHosted ? Edges.Top : Edges.Bottom
@@ -204,7 +191,7 @@ Item {
                             id: closeMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: detailsPopup.visible = false
+                            onClicked: detailsPopup.hide()
                         }
                     }
                 }
