@@ -13,6 +13,9 @@ config/dock/config.json
 # Local build outputs
 .build/
 apps/settings/build/
+integrations/kwin/kos-bridge/build/
+integrations/kwin/kos-decoration/build/
+experiments/gpu-depth-orbit-poc/shaders/*.qsb
 /.workbuddy/memory
 
 # Sandboxed tooling rewrites `rm` into a trash move, so anything deleted from
