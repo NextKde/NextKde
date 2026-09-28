@@ -162,6 +162,32 @@ export function mergeOrder(order, liveKeys) {
     return next
 }
 
+// ── 换位提交门（dispatch 与记录翻转之间隔 100-250ms）──
+// 派发时把预测顺序只喂特效发布；顺序表本体若提前转正，间隙里的对账
+// （派发拍的缩略图事件恰好落在这个窗口）会按"新顺序"排"旧记录"——
+// 被点槽位空置、邻卡顶位（N−1 布局），真快照到达再弹回 = 换位抽动。
+// 换位请求在此排队，等退位组键真正出现在 sideGroups 的那次对账才
+// applySwapOrder 转正，与模型变更同拍落地。TTL 内未进场（最小化被拦/
+// 窗口已关）的换位作废；急速连点各自独立排队，无单槽互踩。
+
+export const SWAP_COMMIT_TTL_MS = 2000
+
+// 提交到期的换位（纯核，由 syncCards 每次对账调用）：demoted 已到场
+// （arrivedKeys 含它）的换位逐个转正进 order；未到场的按 TTL 保留，
+// 超时的作废。返回 { order, swaps } 由调用方写回。
+export function commitDueSwaps(order, swaps, arrivedKeys, now) {
+    let next = order
+    const kept = []
+    for (let i = 0; i < swaps.length; i++) {
+        const swap = swaps[i]
+        if (arrivedKeys.indexOf(swap.demoted) >= 0)
+            next = applySwapOrder(next, swap.clicked, swap.demoted)
+        else if (now - swap.at < SWAP_COMMIT_TTL_MS)
+            kept.push(swap)
+    }
+    return { order: next, swaps: kept }
+}
+
 // ── ListModel 对账 ──
 
 // 组数组 → 模型期望行（idsJson 序列化；同 key 去重保首个）。

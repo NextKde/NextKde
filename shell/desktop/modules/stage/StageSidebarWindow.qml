@@ -221,7 +221,8 @@ PanelWindow {
                 if (root._engageQueue[q].appKey === root._lastDispatchedKey)
                     root._engageQueue.splice(q, 1)
             }
-            root._pendingDemotedKey = ""
+            root._pendingSwaps = root._pendingSwaps.filter(
+                swap => swap.clicked !== root._lastDispatchedKey)
             root._lastDispatchedKey = ""
             console.warn("[StageSidebar] engage-swap failed, card reset ("
                 + "ticket=" + ticket + ")")
@@ -504,13 +505,21 @@ PanelWindow {
             for (let g = 0; g < minimizeIds.length; g++)
                 WindowService.requestThumbnail(minimizeIds[g])
         }
-        // 换位落地：预测顺序表直接转正（派发时刻=转正时刻，无中间窗口）
-        // + 重发布（退位组矩形=被点槽位，在最小化派发前进文件）+ 退位键
-        // 保护（组进侧栏前不被对账剪掉）
-        root._groupOrder = StageGroups.applySwapOrder(root._groupOrder,
+        // 换位两拍：预测顺序表只喂本次发布（退位组矩形=被点槽位，必须在
+        // 最小化派发前进文件）；**顺序表本体不在此刻转正**——转正提前于
+        // 记录翻转的话，间隙里的任何一次对账（派发时拍的缩略图事件恰好
+        // 落在这个窗口）会按"被点组已走"重排旧记录：邻卡先顶进被点槽位
+        // （N−1 布局）、真快照到达再弹回 = 换位抽动。转正由 syncCards 的
+        // 提交门在退位组真正进场的那一次对账里完成（与模型变更同拍）。
+        const predictedOrder = StageGroups.applySwapOrder(root._groupOrder,
             entry.appKey, skipDemote ? "" : demotedKey)
-        root._pendingDemotedKey = skipDemote ? "" : demotedKey
-        publishSimulatedLayout(entry.appKey)
+        if (!skipDemote && demotedKey) {
+            const swaps = root._pendingSwaps.slice()
+            swaps.push({ clicked: entry.appKey, demoted: demotedKey,
+                at: Date.now() })
+            root._pendingSwaps = swaps
+        }
+        publishSimulatedLayout(entry.appKey, predictedOrder)
         // 整组一起展开（macOS 语义）：原子 engage-swap——还原抬升、代表窗
         // 拿焦点、退位组同拍收编，一条命令一个 tick 处理完（分开会按桥
         // 50ms 轮询一拍一条，收编慢半拍）。activationRequested 只发一次
@@ -534,24 +543,17 @@ PanelWindow {
         }
         console.info("[StageSidebar] engage " + entry.appKey
             + " demote=" + (skipDemote ? "none" : demotedId))
-        // 兜底：2 秒后仍没等到退位组进侧栏（最小化被拦等）就解除换位保护，
-        // 防幽灵键常驻顺序表
-        if (root._pendingDemotedKey !== "")
-            root._pendingDemoteGuard.restart()
         // 队列还有剩余：下一个 engageDelay 拍继续
         if (root._engageQueue.length > 0)
             root._engageDispatchTimer.restart()
     }
 
-    property Timer _pendingDemoteGuard: Timer {
-        interval: 2000
-        onTriggered: root._pendingDemotedKey = ""
-    }
-
-    // 换位保护：派发→退位组进侧栏的窗口内，syncCards 的 mergeOrder 会把
-    // 刚换进槽位的键当"已消失"剪掉（缩略图事件在这窗口内就会触发对账）
-    // ——换位被抹、退位卡永远落尾部。键进侧栏或 2s 兜底后解除。
-    property string _pendingDemotedKey: ""
+    // 换位提交门（派发→记录翻转的缓冲队列）：每项 {clicked, demoted, at}。
+    // syncCards 开头检查——退位组键已出现在 sideGroups（记录已确认最小化）
+    // 的那次对账，把 applySwapOrder 转正进顺序表，与 desired 计算同拍；
+    // 2 秒未到场的换位作废（最小化被拦/窗口关闭）。急速连点各自独立入队，
+    // 先到先转正——无单槽互踩。
+    property var _pendingSwaps: []
 
     function engageCard(slot) {
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
@@ -717,6 +719,11 @@ PanelWindow {
                 property real slotX: StageGeo.CARD_X_INSET
                 property alias cardItem: card
                 property bool dimmed: false
+                // 首拍落位守卫：delegate 诞生在 y=0（列顶），若首赋值也走
+                // Behavior，新收编的卡会从列顶滑进槽位——窗口正向槽位飞、
+                // 卡片却先出现在最上面再滑下来 = "收起时先到顶再突兀移动"
+                // （首拍直接落位，后续重排照常动画）。
+                property bool placed: false
                 // 共享透视的地平线偏移：卡中心相对滚动视口中心的 y 距离
                 //（全部属性可通知，绑定随滚动/布局动画逐帧刷新）
                 readonly property real planeYOff:
@@ -740,8 +747,9 @@ PanelWindow {
                 transformOrigin: Item.TopLeft
                 // 平滑过渡：牌堆重排/聚焦/退位/滚轮翻动全部带阻尼。
                 // ⚠️ 全属性同一时长——聚焦时"退让缩小"与"主体放大"必须
-                // 同拍起止，分两种时长会看出先缩后放的两段感（实测踩过）
-                Behavior on y { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
+                // 同拍起止，分两种时长会看出先缩后放的两段感（实测踩过）。
+                // y 的 Behavior 只对已落位的卡生效（见 slot.placed）。
+                Behavior on y { enabled: slot.placed; NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
                 Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
                 visible: true
@@ -1056,8 +1064,13 @@ PanelWindow {
                 // 排查的最终结论）。缩放/x 的变化是 TopLeft 外扩（区域只
                 // 向外长，卡内指针数学上不可能被挤出）；y 是唯一危险的
                 // 自由度，冻结到悬停解除。滚动轮次全员平移（见函数头）。
-                if (i !== h)
+                if (i !== h) {
+                    // 首拍落位：placed 尚为 false 时 Behavior 禁用，y 直接
+                    // 跳到槽位（新卡不播"列顶→槽位"滑入）；写完置位，后续
+                    // 重排照常动画。
                     slot.y = lay.positions[i] ?? 0
+                    slot.placed = true
+                }
                 slot.slotScale = lay.scales[i] ?? 1
                 // +GLOW_PAD：slot 在放宽的视口里，补偿视口 x 偏移保持视觉位置
                 slot.slotX = (cards.width - slot.width * slot.slotScale) / 2
@@ -1080,7 +1093,9 @@ PanelWindow {
             const slot = cardRepeater.itemAt(i)
             if (!slot)
                 continue
+            // 首拍落位（scroll 分支同款：placed 为 false 时 Behavior 禁用）
             slot.y = lay.positions[i] ?? 0
+            slot.placed = true
             slot.slotScale = lay.scale
             slot.slotX = (cards.width - slot.width * lay.scale) / 2
                 + StageGeo.GLOW_PAD
@@ -1159,20 +1174,25 @@ PanelWindow {
     property int totalWindows: 0
 
     function syncCards() {
+        // 换位提交门：预测顺序（派发时只喂了发布）在这里等记录确认——退位
+        // 组键已进 sideGroups 的这一次对账，把 applySwapOrder 转正进顺序表，
+        // 与下面的 desired 计算同拍（顺序表变更与模型变更原子落地，中间
+        // 对账永远看到的都是自洽的 [旧序+旧记录] 或 [新序+新记录]）。
+        if (root._pendingSwaps.length > 0) {
+            const committed = StageGroups.commitDueSwaps(root._groupOrder,
+                root._pendingSwaps,
+                root.sideGroups.map(g => g.key), Date.now())
+            root._groupOrder = committed.order
+            root._pendingSwaps = committed.swaps
+        }
         // desired 按顺序表排序——点击换位（applySwapOrder）由此落到可见
         // 模型上（历史 bug：排序只在发布路径，卡片从未真换过位，窗口飞向
         // 被点槽位而卡片留在 records 顺序位 = 用户看到的"飞错位置再滑动"）
         const desired = StageGroups.buildModelRows(
             StageGroups.sortByOrder(root._groupOrder, root.sideGroups))
         // 组顺序表对账：剪除已消失 + 补全新组（只 prune 会退化成空表，
-        // 见 stage-groups.mjs 的 mergeOrder 注释）；待退位键在派发窗口内
-        // 保护（见 _pendingDemotedKey 注释），进侧栏后解除保护
+        // 见 stage-groups.mjs 的 mergeOrder 注释）
         const liveKeys = desired.map(d => d.appKey)
-        if (root._pendingDemotedKey !== ""
-                && liveKeys.indexOf(root._pendingDemotedKey) < 0)
-            liveKeys.push(root._pendingDemotedKey)
-        else if (root._pendingDemotedKey !== "")
-            root._pendingDemotedKey = ""
         root._groupOrder = StageGroups.mergeOrder(root._groupOrder,
             liveKeys)
         const current = []

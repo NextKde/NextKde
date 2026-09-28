@@ -6,6 +6,7 @@ import {
     groupKeyOf, isOnDesktop, isSameProcess, isSameApp,
     groupRecords, pickRepresentative, decorateGroups,
     orderIndex, sortByOrder, applySwapOrder, pruneOrder, mergeOrder,
+    SWAP_COMMIT_TTL_MS, commitDueSwaps,
     buildModelRows, planModelSync,
 } from "./stage-groups.mjs";
 
@@ -159,6 +160,44 @@ check("mergeOrder keeps known order, appends new",
     mergeOrder(["c", "a"], ["a", "b", "c"]), ["c", "a", "b"]);
 check("mergeOrder prunes dead",
     mergeOrder(["c", "dead", "a"], ["a", "c"]), ["c", "a"]);
+
+// commitDueSwaps：换位提交门——退位键到场才转正，未到场按 TTL 保留，
+// 超时作废（dispatch 与记录翻转隔 100-250ms，提前转正会让中间对账按
+// 新序排旧记录 = 邻卡顶位再弹回的换位抽动）
+const t0 = 1000000;
+check("commit: due swap lands in order",
+    commitDueSwaps(["chrome", "zcode"],
+        [{ clicked: "chrome", demoted: "kate", at: t0 }],
+        ["kate", "zcode"], t0 + 500),
+    { order: ["kate", "zcode"], swaps: [] });
+check("commit: demoted not arrived → order untouched, swap kept",
+    commitDueSwaps(["chrome", "zcode"],
+        [{ clicked: "chrome", demoted: "kate", at: t0 }],
+        ["zcode"], t0 + 500),
+    { order: ["chrome", "zcode"],
+        swaps: [{ clicked: "chrome", demoted: "kate", at: t0 }] });
+check("commit: expired swap dropped",
+    commitDueSwaps(["chrome", "zcode"],
+        [{ clicked: "chrome", demoted: "kate", at: t0 }],
+        ["zcode"], t0 + SWAP_COMMIT_TTL_MS + 1),
+    { order: ["chrome", "zcode"], swaps: [] });
+check("commit: pending swap survives just inside TTL",
+    commitDueSwaps(["a"], [{ clicked: "a", demoted: "b", at: t0 }], [],
+        t0 + SWAP_COMMIT_TTL_MS - 1),
+    { order: ["a"], swaps: [{ clicked: "a", demoted: "b", at: t0 }] });
+check("commit: mixed batch — first due, second pending",
+    commitDueSwaps(["a", "b"],
+        [{ clicked: "a", demoted: "x", at: t0 },
+         { clicked: "b", demoted: "y", at: t0 + 10 }],
+        ["x", "b"], t0 + 100),
+    { order: ["x", "b"],
+        swaps: [{ clicked: "b", demoted: "y", at: t0 + 10 }] });
+check("commit: rapid alternation — both due, sequential commits",
+    commitDueSwaps(["a", "b"],
+        [{ clicked: "a", demoted: "x", at: t0 },
+         { clicked: "b", demoted: "y", at: t0 + 10 }],
+        ["x", "y"], t0 + 100),
+    { order: ["x", "y"], swaps: [] });
 
 // ── 模型对账 ──
 check("CARD_FIELDS shape", CARD_FIELDS,
