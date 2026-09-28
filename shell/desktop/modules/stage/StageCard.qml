@@ -21,8 +21,9 @@ import "stage-geometry.mjs" as StageGeo
 // 动效状态机：
 //   入场 = 从窗口方向滑进侧栏（shown 翻转驱动一次）
 //   悬停 = 放大 + 提亮 + 辉光 + 关闭钮浮现（放大是指向卡片的即时反馈）
-//   点击 = engageStarted() → 窗口编排（同拍收编）→ engaging 原地淡出并
-//          保持倾斜，把姿态交棒给窗口动画；engageTimer 到点发 engageFired()
+//   点击 = engageClicked() → 窗口编排（入队 + 同拍收编）→ engaging 原地
+//          淡出并保持倾斜，把姿态交棒给窗口动画（派发在窗口侧队列，
+//          engageDelay 到点统一处理——见 StageSidebarWindow._engageQueue）
 Item {
     id: card
 
@@ -41,10 +42,8 @@ Item {
     // 窗口侧聚焦键（hoveredKey 下传）：活体流判定与布局同源
     property string focusKey: ""
 
-    // 点击（请求编排：快照 + 预测卡位 + 锁定退位窗）
+    // 点击（请求编排：入队，窗口侧 engageDelay 到点派发）
     signal engageClicked()
-    // 展开延迟到点（真正派发激活 + 最小化）
-    signal engageFired()
     // 悬停进出（窗口侧据此聚焦布局：悬停卡原位放大置顶、其余原位退避）
     signal hovered(bool over)
     // 关闭按钮：关闭组内全部窗口
@@ -74,12 +73,9 @@ Item {
     Behavior on opacity { NumberAnimation { duration: engaging ? 180 : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     Behavior on scale { NumberAnimation { duration: StageConfigService.cardEnterDuration + 20; easing.type: Easing.OutCubic } }
 
-    // 展开延迟：先播倾斜淡出动画再真激活，读作"卡片旋转成窗口"；
-    // 时长（默认 170ms）在设置应用前台调度页可调
-    property Timer engageTimer: Timer {
-        interval: StageConfigService.engageDelay
-        onTriggered: card.engageFired()
-    }
+    // 展开延迟派发改由窗口级队列 Timer 承担（round35 NEW-1/NEW-5：挂在
+    // delegate 上的定时器会在派发窗口内随 delegate 销毁而丢派发），
+    // 卡片淡出动画由 engaging 驱动的 opacity/tilt Behavior 承担。
 
     // ── 倾角状态机（角度交给着色器做真透视）：scroll = 静置统一倾角
     // （deckRestTilt，可调到 45°）、悬停聚焦放平便于阅读、交棒保持倾角

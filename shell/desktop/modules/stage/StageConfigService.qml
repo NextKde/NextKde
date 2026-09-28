@@ -163,11 +163,30 @@ QtObject {
         return snapshotJson()
     }
 
-    // kwinrc 投影 + 即时 reconfigure（不重启 KWin / shell）
+    // kwinrc 投影 + 即时 reconfigure（不重启 KWin / shell）。
+    // 写手命令队列（round35 NEW-3）：滑杆连续 commit 时 Quickshell 的
+    // Process 在运行中重设 command 是彻底 no-op（命令静默丢弃、特效拿旧
+    // 值）——一律入队，exited 回调串行取下一条。勿改用 exec()（会 SIGTERM
+    // 杀在跑的链，留下部分写入）。
+    property var _writerQueue: []
+
+    function _enqueueWriter(argv) {
+        _writerQueue.push(argv)
+        if (!_writer.running)
+            _startNextWriter()
+    }
+
+    function _startNextWriter() {
+        if (_writerQueue.length === 0)
+            return
+        _writer.command = _writerQueue.shift()
+        _writer.running = true
+    }
+
     function _pushEffectConfig() {
         if (!_writer)
             return
-        _writer.command = ["bash", "-c",
+        _enqueueWriter(["bash", "-c",
             "kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key AnimationDuration " + animDuration
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
@@ -178,8 +197,7 @@ QtObject {
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key GlassOpacity " + glassOpacity
             + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects"
-            + ".reconfigureEffect " + StageModeService.effectId]
-        _writer.running = true
+            + ".reconfigureEffect " + StageModeService.effectId])
     }
 
     function _save() {
@@ -216,7 +234,10 @@ QtObject {
     // QtObject 没有默认属性，Process 经 Component 工厂实例化
     // （同 WindowService / StageModeService 写法）
     property Component _procFactory: Component {
-        Process { stdout: StdioCollector {} }
+        Process {
+            stdout: StdioCollector {}
+            onExited: svc._startNextWriter()
+        }
     }
 
     property var _writer: null

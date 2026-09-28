@@ -58,18 +58,37 @@ QtObject {
         + " && kwriteconfig6 --file kwinrc --group Plugins --key kos_dock_window_animationEnabled true")
     }
 
+    // 写手命令队列（round35 NEW-3）：Quickshell 的 Process 在运行中重设
+    // command+running=true 是彻底 no-op（命令静默丢弃）。bash 链实测
+    // 200-500ms，快速 toggle/启动对齐撞车就会丢命令——一律入队，exited
+    // 回调串行取下一条。勿改用 Quickshell 的 exec() 便捷方法（它会
+    // SIGTERM 杀掉在跑的链，kwriteconfig 半途而死留下部分写入）。
+    property var _writerQueue: []
+
+    function _enqueueWriter(argv) {
+        _writerQueue.push(argv)
+        if (!_writer.running)
+            _startNextWriter()
+    }
+
+    function _startNextWriter() {
+        if (_writerQueue.length === 0)
+            return
+        _writer.command = _writerQueue.shift()
+        _writer.running = true
+    }
+
     function setEnabled(v) {
         if (!_writer || v === svc.enabled)
             return
         enabled = v
         revision++
-        _writer.command = ["bash", "-c",
+        _enqueueWriter(["bash", "-c",
             "mkdir -p " + flagDir
             + " && printf '%s' '" + (v ? "1" : "0") + "' > " + flagPath
             + " && " + (v ? targetRectCmd : clearTargetRectCmd)
             + " && " + swapEffectsCmd(v)
-            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect " + effectId]
-        _writer.running = true
+            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect " + effectId])
         console.info("[StageMode] enabled=" + v)
     }
 
@@ -78,18 +97,20 @@ QtObject {
     // 首启对齐：目标矩形 + 两特效加载态二选一。必须等读取进程带回落盘态后
     // 再执行，否则会拿默认值对齐（落盘是"关"、默认是"开"的场景会开错方向）。
     function _alignWithPersistedMode() {
-        _writer.command = ["bash", "-c",
+        _enqueueWriter(["bash", "-c",
             (enabled ? targetRectCmd : clearTargetRectCmd)
             + " && " + swapEffectsCmd(enabled)
-            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect " + effectId]
-        _writer.running = true
+            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect " + effectId])
         console.info("[StageMode] startup align enabled=" + enabled)
     }
 
     // QtObject 没有默认属性，Process 不能直接作子对象——用 Component 工厂
     // 实例化（同 WindowService 的 probe factory 写法）。
     property Component _procFactory: Component {
-        Process { stdout: StdioCollector {} }
+        Process {
+            stdout: StdioCollector {}
+            onExited: svc._startNextWriter()
+        }
     }
 
     property var _writer: null

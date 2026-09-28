@@ -486,8 +486,10 @@ PanelWindow {
     // Thumbnail requests are paced instead of fired in one burst so opening
     // the overview does not fan out N KWin captures at once. WindowService
     // already deduplicates per window via its pending map; this timer only
-    // spreads the capture work across frames. No completion signal is needed:
-    // a failed request simply leaves its placeholder until the next open.
+    // spreads the capture work across frames. Capture failures are
+    // transient (screenshot-authorization gap while kos-platform restarts,
+    // windows closing mid-capture, KWin restarting with a broken pipe) and
+    // are picked up by thumbRetryTimer below.
     property var _thumbRequestQueue: []
 
     Timer {
@@ -503,6 +505,39 @@ PanelWindow {
             // a burst that stalls the daemon or the overview's own reveal.
             for (let i = 0; i < 3 && root._thumbRequestQueue.length > 0; i++)
                 WindowService.requestThumbnail(root._thumbRequestQueue.shift())
+        }
+    }
+
+    // Re-request windows that still have no thumbnail while the overview is
+    // open. A failed first capture used to pin its card to the app-icon
+    // placeholder until the user closed and reopened the overview; these
+    // failures are transient, so a paced retry converges every card to real
+    // window content. It also refills everything after a kos-platform
+    // restart clears the thumbnail URL cache mid-session. Windows whose
+    // record is not KWin-backed can never produce a thumbnail; skipping
+    // them keeps the timer from warn-spamming requestThumbnail().
+    Timer {
+        id: thumbRetryTimer
+        interval: 1200
+        repeat: true
+        running: root.open
+        onTriggered: {
+            const windows = root.currentWindows
+            const seen = ({})
+            const queue = []
+            for (let i = 0; i < windows.length; i++) {
+                const record = windows[i]
+                const id = record.windowId
+                if (seen[id] || record.provider !== "kwin")
+                    continue
+                seen[id] = true
+                if (WindowService.thumbnailUrl(id) === "")
+                    queue.push(id)
+            }
+            if (queue.length === 0)
+                return
+            root._thumbRequestQueue = queue
+            thumbRequestPacer.restart()
         }
     }
 

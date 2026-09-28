@@ -41,6 +41,12 @@ QtObject {
     // waiting for the change to round-trip through the 120ms-debounced
     // snapshot path.
     signal activationRequested(string windowId)
+    // Bridge command receipt (round35 NEW-2): fired for every action echo
+    // from the KWin script. found=false means the command could not be
+    // applied (window gone / bridge not ready); consumers that gate UI state
+    // on command success (stage engage) reset on this instead of staying
+    // stuck when the command was lost.
+    signal commandFinished(string action, string ticket, bool found)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -664,7 +670,7 @@ QtObject {
     // 分开发会按桥的 50ms 命令轮询一拍一条，收编比激活晚一拍起跑（实测
     // 50ms，实时模式肉眼可见的"慢半拍"）。activationRequested 只对焦点窗
     // 发一次（stage 退位交换 / dock 路径都依赖它）。
-    function engageSwap(activateIds, focusId, minimizeIds) {
+    function engageSwap(activateIds, focusId, minimizeIds, ticket) {
         const actHandles = [];
         for (let i = 0; i < activateIds.length; i++) {
             const record = windowById(activateIds[i]);
@@ -689,7 +695,8 @@ QtObject {
             ? focusRecord.handleId : actHandles[actHandles.length - 1];
         activationRequested(focusId);
         _sendKwinCommand({ action: "engage-swap", ids: actHandles,
-            focusId: focusHandle, minimizeIds: minHandles });
+            focusId: focusHandle, minimizeIds: minHandles,
+            ticket: ticket || undefined });
     }
 
     // 实时卡片停泊：收编窗静默还原后移到屏幕外（保持渲染=缩略图实时，
@@ -793,6 +800,15 @@ QtObject {
                 if (event.type !== "snapshot")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));
+                // Command receipts (round35 NEW-2): the bridge echoes every
+                // command's outcome (action + optional shell ticket). Only
+                // consumers that need confirmation subscribe; snapshot state
+                // self-corrects everything else.
+                if (event.type === "action") {
+                    svc.commandFinished(String(event.action ?? ""),
+                        String(event.ticket ?? ""), !!event.found);
+                    return;
+                }
                 if (event.type === "snapshot" && Array.isArray(event.windows)) {
                         // Coalesce redundant snapshots. The KWin script already
                         // publishes only on change, but a second filter here

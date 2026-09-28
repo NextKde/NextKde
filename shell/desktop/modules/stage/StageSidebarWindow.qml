@@ -153,6 +153,7 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
+        _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
         const activeId = WindowService.activeWindowId
         if (!activeId)
             return
@@ -202,12 +203,35 @@ PanelWindow {
             root._prevActiveId = current
             root._autoMinTimer.restart()
         }
+        // 派发失败自愈（round35 NEW-2）：engage-swap 丢了（守护重启/桥缺席）
+        // 时激活不会发生、被点组不离开侧栏、targetId 不变——engaging 的
+        // opacity 0 会永久卡住（"卡片消失"的状态残留同型）。按票根外的
+        // 最近派发键复位交棒中的卡，并清退位保护与同键在途队列。
+        function onCommandFinished(action, ticket, found) {
+            if (action !== "engage-swap" || found
+                    || root._lastDispatchedKey === "")
+                return
+            for (let i = 0; i < cardRepeater.count; i++) {
+                const slot = cardRepeater.itemAt(i)
+                if (slot?.appKey === root._lastDispatchedKey
+                        && slot.cardItem)
+                    slot.cardItem.engaging = false
+            }
+            for (let q = root._engageQueue.length - 1; q >= 0; q--) {
+                if (root._engageQueue[q].appKey === root._lastDispatchedKey)
+                    root._engageQueue.splice(q, 1)
+            }
+            root._pendingDemotedKey = ""
+            root._lastDispatchedKey = ""
+            console.warn("[StageSidebar] engage-swap failed, card reset ("
+                + "ticket=" + ticket + ")")
+        }
     }
 
     // ── dock 点击的同拍收编：订阅 WindowService.activationRequested ──
     // 点击瞬间就锁退位窗（不等 KWin 事件经桥 120ms 防抖绕回来）。卡片点
-    // 击路径（_dispatchEngage 内部激活）用 _engagingDispatch 防重入，维持
-    // 自己的 engageDelay 卡片交棒时序。
+    // 击路径（_dispatchNextEngage 内部激活）用 _engagingDispatch 防重入，
+    // 维持自己的 engageDelay 卡片交棒时序。
     property bool _engagingDispatch: false
 
     function activateWithSwap(windowId) {
@@ -286,6 +310,7 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
+        _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
         const currentId = WindowService.currentDesktopId
         const records = WindowService.records || []
         const targets = []
@@ -327,11 +352,12 @@ PanelWindow {
         // 兄弟正在还原，保留它们会把已排除的组当"最小化兄弟"捞回来，
         // 变成尾部的幻影卡（还原/收编双双飞错，实测）
         let keepActiveMin = false
+        let activeRec = null
         if (!excludeKey) {
-            const aRec = WindowService.windowById(
+            activeRec = WindowService.windowById(
                 WindowService.activeWindowId)
-            if (aRec) {
-                excludeKey = StageGroups.groupKeyOf(aRec)
+            if (activeRec) {
+                excludeKey = StageGroups.groupKeyOf(activeRec)
                 keepActiveMin = true
             }
         }
@@ -361,6 +387,48 @@ PanelWindow {
                 columnX: cards.x,
                 cardHeight: StageConfigService.cardHeight },
             records, root._lastCardRects)
+        // round35 NEW-4：活动组"ghost 槽位"。活动组被排除在视图布局外
+        //（round33 幻影卡修复的正确代价），但非 shell 发起的最小化（标题
+        // 栏按钮/dock toggle，shell 无法预发布）在事件时刻读 targets 文件
+        // ——若该组上次作为卡片的槽位已变（上方卡被关掉/换位重排），动画
+        // 会飞向陈旧矩形。按"活动组假想插回布局"的槽位补写矩形：只进
+        // targets 文件（_lastCardRects 仅被 _writeTargetsFile 消费，无
+        // 视图回流路径），视图布局完全不变。
+        if (keepActiveMin) {
+            const allGroups = StageGroups.groupRecords(records,
+                { requirePid: true })
+            let ghostEntry = null
+            for (let g = 0; g < allGroups.length; g++) {
+                if (allGroups[g].key === excludeKey) {
+                    ghostEntry = allGroups[g]
+                    break
+                }
+            }
+            if (ghostEntry) {
+                // 按顺序表算 ghost 槽位序号（含自身）——其余视图组的
+                // 相对次序与视图布局一致
+                const order = root._groupOrder
+                const gIdx = StageGroups.orderIndex(order, excludeKey)
+                let pos = 0
+                for (let g = 0; g < groups.length; g++)
+                    if (StageGroups.orderIndex(order, groups[g].key) < gIdx)
+                        pos++
+                const ghostLay = StageConfigService.layoutMode === "scroll"
+                    ? StageGeo.scrollLayout(cards.height,
+                        groups.length + 1, {
+                            cardHeight: StageConfigService.cardHeight,
+                            spacing: StageConfigService.cardSpacing,
+                            scroll: root.scrollOffset,
+                        })
+                    : _layout(groups.length + 1)
+                root._lastCardRects = StageGeo.computeTargetRects(
+                    [ghostEntry], ghostLay,
+                    { columnY: cards.y, columnWidth: cards.width,
+                        columnX: cards.x,
+                        cardHeight: StageConfigService.cardHeight },
+                    records, root._lastCardRects)
+            }
+        }
         _writeTargetsFile()
     }
 
@@ -391,40 +459,88 @@ PanelWindow {
             { targets: targets, suppress: [] }))
     }
 
-    function _dispatchEngage(clickedId, idsJson) {
-        const t = root._pendingEngageMinimize
-        root._pendingEngageMinimize = []
-        root._engagingDispatch = true
-        // 换位落地：预测顺序表转正 + 重发布（退位组矩形=被点槽位，在
-        // 最小化派发前进文件）+ 退位键保护（组进侧栏前不被对账剪掉）
-        if (root._pendingSwapOrder) {
-            root._groupOrder = root._pendingSwapOrder
-            root._pendingSwapOrder = null
+    // ── engage 派发队列（round35 NEW-1）：点击只入队 + 卡片淡出交棒，
+    // engageDelay 到点由窗口级单 Timer 逐个派发，**派发时刻**才重算退位
+    // 组/预测顺序表（动画全部在派发后才起跑，预测挪晚无损，反而消灭
+    // "点击时刻快照过期"整类问题）。旧实现把待办挂在五个无属主单槽上，
+    // 极速连点（间隔 < engageDelay）时后一次点击顶掉前一次的全部待办
+    // = 丢派发/飞错位/丢收编（round35 审计 NEW-1 实锤）。
+    property var _engageQueue: []
+    // 最近派发的被点组键（NEW-2 回执失败复位 engaging 用）
+    property string _lastDispatchedKey: ""
+
+    property Timer _engageDispatchTimer: Timer {
+        interval: StageConfigService.engageDelay
+        onTriggered: root._dispatchNextEngage()
+    }
+
+    function _dispatchNextEngage() {
+        const entry = root._engageQueue.shift()
+        if (!entry)
+            return
+        root._lastDispatchedKey = entry.appKey
+        // 退位判定在派发时刻做（点击到派发之间没有任何激活派发，活动窗
+        // 未变；豁免规则与旧点击时刻版一致：同组/同应用/已最小化豁免）
+        const demotedId = WindowService.activeWindowId
+        let skipDemote = true
+        let demotedKey = ""
+        let minimizeIds = []
+        if (demotedId && demotedId !== entry.targetId) {
+            const dRec = WindowService.windowById(demotedId)
+            const aRec = WindowService.windowById(entry.targetId)
+            const sameGroup = JSON.parse(entry.idsJson || "[]")
+                .indexOf(demotedId) >= 0
+            if (!dRec?.toplevel?.minimized && !sameGroup
+                    && !StageGroups.isSameApp(dRec, aRec,
+                        _appOf(demotedId), _appOf(entry.targetId))) {
+                skipDemote = false
+                demotedKey = dRec ? StageGroups.groupKeyOf(dRec) : ""
+            }
         }
-        root._pendingDemotedKey = root._pendingEngageDemotedKey
-        publishSimulatedLayout(root._pendingEngageKey)
+        if (!skipDemote) {
+            // 整组快照此刻拍（窗口仍可见，不截黑帧）——比旧版（点击时刻
+            // 拍）晚 engageDelay，仍在可见窗口内
+            minimizeIds = _demoteGroupIds(demotedId)
+            for (let g = 0; g < minimizeIds.length; g++)
+                WindowService.requestThumbnail(minimizeIds[g])
+        }
+        // 换位落地：预测顺序表直接转正（派发时刻=转正时刻，无中间窗口）
+        // + 重发布（退位组矩形=被点槽位，在最小化派发前进文件）+ 退位键
+        // 保护（组进侧栏前不被对账剪掉）
+        root._groupOrder = StageGroups.applySwapOrder(root._groupOrder,
+            entry.appKey, skipDemote ? "" : demotedKey)
+        root._pendingDemotedKey = skipDemote ? "" : demotedKey
+        publishSimulatedLayout(entry.appKey)
         // 整组一起展开（macOS 语义）：原子 engage-swap——还原抬升、代表窗
-        // 拿焦点、退位组同拍收编，一条命令一个 tick 处理完（分开发会按桥
+        // 拿焦点、退位组同拍收编，一条命令一个 tick 处理完（分开会按桥
         // 50ms 轮询一拍一条，收编慢半拍）。activationRequested 只发一次
         //（代表窗），_engagingDispatch 挡掉回环。
         let ids = []
         try {
-            ids = JSON.parse(idsJson || "[]")
+            ids = JSON.parse(entry.idsJson || "[]")
         } catch (e) {
             ids = []
         }
-        if (ids.indexOf(clickedId) < 0)
-            ids.push(clickedId)
-        WindowService.engageSwap(ids, clickedId, t)
+        if (ids.indexOf(entry.targetId) < 0)
+            ids.push(entry.targetId)
+        root._engagingDispatch = true
+        WindowService.engageSwap(ids, entry.targetId, minimizeIds,
+            "eng-" + Date.now())
         root._engagingDispatch = false
-        for (let i = 0; i < t.length; i++)
-            WindowService.minimizeWindow(t[i], true)
-        root._pendingEngageKey = ""
-        root._pendingEngageDemotedKey = ""
+        // kwin 记录已随原子命令收编（NEW-7），仅 foreign 兜底逐条发
+        for (let i = 0; i < minimizeIds.length; i++) {
+            if (WindowService.windowById(minimizeIds[i])?.provider !== "kwin")
+                WindowService.minimizeWindow(minimizeIds[i], true)
+        }
+        console.info("[StageSidebar] engage " + entry.appKey
+            + " demote=" + (skipDemote ? "none" : demotedId))
         // 兜底：2 秒后仍没等到退位组进侧栏（最小化被拦等）就解除换位保护，
         // 防幽灵键常驻顺序表
         if (root._pendingDemotedKey !== "")
             root._pendingDemoteGuard.restart()
+        // 队列还有剩余：下一个 engageDelay 拍继续
+        if (root._engageQueue.length > 0)
+            root._engageDispatchTimer.restart()
     }
 
     property Timer _pendingDemoteGuard: Timer {
@@ -432,23 +548,10 @@ PanelWindow {
         onTriggered: root._pendingDemotedKey = ""
     }
 
-    // ── 同拍交换：点卡片时"放大被点窗"与"收编退位窗"同一节拍并行 ──
-    // 点击瞬间锁定退位窗（当前活动窗，同组豁免）、先请求它的快照（此时还
-    // 可见，不会截到黑帧）并仿真切换后的布局落盘；engageDelay 到点后激活
-    // 与最小化同一拍派发，两段动画并行。
-    property var _pendingEngageMinimize: []
-    // 换位保护：点击→派发（170ms）窗口内退位组还没进侧栏，syncCards 的
-    // mergeOrder 会把刚换进槽位的键当"已消失"剪掉（缩略图事件在这窗口
-    // 内就会触发对账）——换位被抹、退位卡永远落尾部。键进侧栏或派发完
-    // 成后解除。
+    // 换位保护：派发→退位组进侧栏的窗口内，syncCards 的 mergeOrder 会把
+    // 刚换进槽位的键当"已消失"剪掉（缩略图事件在这窗口内就会触发对账）
+    // ——换位被抹、退位卡永远落尾部。键进侧栏或 2s 兜底后解除。
     property string _pendingDemotedKey: ""
-    // 换位两段式：预测顺序表只给点击瞬间的预测发布用；持久 _groupOrder
-    // 到派发时才转正——若点击就转正，派发前的中间全量发布会把仍挂着卡
-    // 的被点组当"新组"追加到尾部、其矩形被改写成底部 = 还原动画从底部
-    // 放大的根因（实测）。派发时转正 + 退位键保护。
-    property var _pendingSwapOrder: null
-    property string _pendingEngageKey: ""
-    property string _pendingEngageDemotedKey: ""
 
     function engageCard(slot) {
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
@@ -459,43 +562,13 @@ PanelWindow {
             return
         card.engaging = true
         _cancelPendingDemote()
-        const demotedId = WindowService.activeWindowId
-        let skipDemote = true
-        let demotedKey = ""
-        if (demotedId && demotedId !== slot.targetId) {
-            const dRec = WindowService.windowById(demotedId)
-            const aRec = WindowService.windowById(slot.targetId)
-            const sameGroup = JSON.parse(slot.idsJson || "[]")
-                .indexOf(demotedId) >= 0
-            if (!dRec?.toplevel?.minimized && !sameGroup
-                    && !StageGroups.isSameApp(dRec, aRec,
-                        _appOf(demotedId), _appOf(slot.targetId))) {
-                skipDemote = false
-                demotedKey = dRec ? StageGroups.groupKeyOf(dRec) : ""
-            }
-        }
-        // 位置交换（两段式）：预测表只进本次预测发布，持久表派发时转正
-        //（见 _pendingSwapOrder 注释——被点组的还原起止点 = 被点槽位）
-        const predicted = StageGroups.applySwapOrder(root._groupOrder,
-            slot.appKey, skipDemote ? "" : demotedKey)
-        root._pendingSwapOrder = predicted
-        root._pendingEngageKey = slot.appKey
-        root._pendingEngageDemotedKey = skipDemote ? "" : demotedKey
-        if (!skipDemote) {
-            // 整组快照先行 + 布局仿真落盘（退位组的组卡位）；派发走卡片的
-            // engageTimer（与卡片倾斜淡出动画对拍，慢于交换路径的 30ms），
-            // 全组同拍最小化——一起飞回同一张组卡
-            const group = _demoteGroupIds(demotedId)
-            for (let g = 0; g < group.length; g++)
-                WindowService.requestThumbnail(group[g])
-            root._pendingEngageMinimize = group
-        } else {
-            root._pendingEngageMinimize = []
-        }
-        publishSimulatedLayout(slot.appKey, predicted)
-        console.info("[StageSidebar] engage " + slot.appKey
-            + " demote=" + (skipDemote ? "none" : demotedId))
-        card.engageTimer.start()
+        // 只入队；退位判定/快照/预测表全部挪到派发时刻（见队列注释）
+        root._engageQueue.push({ appKey: slot.appKey,
+            targetId: slot.targetId, idsJson: slot.idsJson })
+        // 首条入队才启动计时（后续条目由派发尾链触发，保持每 engageDelay
+        // 一拍的节奏）
+        if (root._engageQueue.length === 1)
+            root._engageDispatchTimer.restart()
     }
 
     // 无头验证钩子（同 dock-debug 惯例）：模拟点击第一张卡走完整同拍交换
@@ -696,8 +769,6 @@ PanelWindow {
                             root._cardHover(slot.appKey, true)
                     }
                     onEngageClicked: root.engageCard(slot)
-                    onEngageFired: root._dispatchEngage(slot.targetId,
-                        slot.idsJson)
                     onCloseAllRequested: root.closeGroup(slot.idsJson)
                 }
             }
@@ -784,7 +855,10 @@ PanelWindow {
             }
         }
 
-        onHeightChanged: root.layoutCards()
+        onHeightChanged: {
+            root.layoutCards()
+            root._geometryRepublish.restart()
+        }
     }
 
     // ── 布局排布 ──
@@ -813,6 +887,14 @@ PanelWindow {
     // 滚动停止后重发布目标矩形（去抖 120ms：滚动途中窗口不收编，
     // 矩形只在与屏幕卡面对齐时才有意义）
     property Timer _scrollRepublish: Timer {
+        interval: 120
+        onTriggered: root.publishSimulatedLayout("")
+    }
+
+    // 高度/屏幕变化后 targets 文件随动（round35 NEW-10）：onHeightChanged
+    // 只重排视图不重发布，分辨率切换/open 瞬间首发布会拿到未定高度——
+    // 去抖 120ms 等高度稳定后补一份新鲜矩形（与 _scrollRepublish 同款）
+    property Timer _geometryRepublish: Timer {
         interval: 120
         onTriggered: root.publishSimulatedLayout("")
     }
@@ -1007,7 +1089,10 @@ PanelWindow {
             slot.dimmed = false
         }
     }
-    onHeightChanged: layoutCards()
+    onHeightChanged: {
+        layoutCards()
+        _geometryRepublish.restart()
+    }
 
     // ── 缩略图请求节奏（照抄 Overview：80ms 一拍、每拍 ≤3 张） ──
     property var _thumbRequestQueue: []
