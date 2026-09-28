@@ -897,8 +897,15 @@ QtObject {
             if (!response?.ok)
                 console.warn("[WindowService] KWin subscription failed: "
                     + (response?.error?.message || "platform unavailable"))
-            else
+            else {
                 svc._sendKwinCommand({ action: "desktops" })
+                // The replayed cache can predate the current focus (a
+                // no-focus instant leaves every window activated=false and
+                // no later windowActivated event corrects it) — ask the
+                // bridge for a fresh authoritative snapshot. Seeds
+                // activeWindowId after shell restarts.
+                svc._sendKwinCommand({ action: "refresh-snapshot" })
+            }
         })
     }
 
