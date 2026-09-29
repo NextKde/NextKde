@@ -300,6 +300,44 @@ Item {
                 elide: Text.ElideRight
             }
 
+            // 拆分钮（合并卡才有）：右键的可见等价物。芯片里画两张错位
+            // 小卡表达"拆开"；热区在根层（splitHit），本层只画
+            Rectangle {
+                id: cardSplit
+                anchors {
+                    right: cardClose.left
+                    rightMargin: 4
+                    verticalCenter: parent.verticalCenter
+                }
+                width: 20
+                height: 20
+                radius: 10
+                visible: card.merged
+                color: splitHit.containsMouse ? "#f59e0b" : "transparent"
+                opacity: card.isHovered ? 1.0 : 0.0
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+
+                // 两张错位小卡（纯 Rectangle，不依赖字体字形）
+                Rectangle {
+                    width: 9; height: 9; radius: 2
+                    anchors.centerIn: parent
+                    anchors.horizontalCenterOffset: -1.5
+                    anchors.verticalCenterOffset: -1.5
+                    color: "transparent"
+                    border.width: 1.4
+                    border.color: "white"
+                }
+                Rectangle {
+                    width: 9; height: 9; radius: 2
+                    anchors.centerIn: parent
+                    anchors.horizontalCenterOffset: 1.5
+                    anchors.verticalCenterOffset: 1.5
+                    color: splitHit.containsMouse ? "#ffffff" : "transparent"
+                    border.width: 1.4
+                    border.color: "white"
+                }
+            }
+
             Rectangle {
                 id: cardClose
                 anchors {
@@ -566,6 +604,25 @@ Item {
         onClicked: card.closeAllRequested()
     }
 
+    // 拆分热区：与 closeHit 同款根层原理（plane 层内不收输入）。位置与
+    // 头部拆分钮对齐（closeHit 右缘 6 + 钮 20 + 间隙 4 = rightMargin 30）
+    MouseArea {
+        id: splitHit
+        z: 1
+        width: 22
+        height: 22
+        anchors {
+            top: parent.top
+            right: parent.right
+            topMargin: 7
+            rightMargin: 31
+        }
+        visible: card.merged
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: card.ungroupRequested()
+    }
+
     // ── 左下角窗口图标排（macOS Stage Manager 同款）：一窗一图标并列。
     // ⚠️ 正视、独立图层：声明在 ShaderEffect 之后（画在其上）、不进 plane
     // 的透视纹理——图标永远不随卡片倾斜（用户定稿："正视，和卡片不应是
@@ -605,6 +662,9 @@ Item {
             MouseArea {
                 id: iconSlot
                 required property int index
+                // ⚠️ 必须显式排 x：Repeater 子项默认全叠在 x=0——"并列"
+                // 变成一摞（实测：合并卡图标叠成一枚）
+                x: index * (iconRow.iconSize + iconRow.iconGap)
                 width: iconRow.iconSize
                 height: iconRow.iconSize
                 hoverEnabled: true

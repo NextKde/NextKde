@@ -23,32 +23,24 @@ PanelWindow {
 
     WlrLayershell.namespace: "quickshell-stagebar"
     WlrLayershell.layer: WlrLayer.Top
-    // reserveStrip（stage-config 可调）：开=整条侧栏条保留（最大化窗从
-    // 条外开始，左侧不被卡片辉光覆盖）；关=纯悬浮卡片——窗口可铺满
-    // 全宽/滑进卡片下方，卡片浮在窗上，输入只挡卡面（mask 只罩卡片
-    // 实际范围）
-    exclusionMode: StageConfigService.reserveStrip
-        ? ExclusionMode.Normal : ExclusionMode.Ignore
-    exclusiveZone: StageConfigService.reserveStrip
-        ? StageGeo.PANEL_WIDTH : 0
+    // 全屏透明浮层（2026-09-30 用户定稿"完完全全不用侧边栏，卡片就是
+    // 卡片"）：无保留区、无边框——悬停放大/倾斜投影/扇叠背板/拖拽越界
+    // 全都不会再被窗缘裁掉（旧 280px 窗实测裁掉扇叠）。输入只挡卡面
+    //（mask 只罩卡片实际范围，文件尾），其余区域点击穿透到桌面。
+    // ⚠️ reserveStrip 键废弃（全屏浮层天然无保留区），仅为配置兼容保留。
+    exclusionMode: ExclusionMode.Ignore
+    exclusiveZone: 0
 
     property bool open: false
 
-    visible: open
+    // 启动台打开时整窗隐藏：全屏浮层若留在原位会盖在启动台内容上
+    //（旧窄条不重叠所以无所谓，全屏必须躲）
+    visible: open && !AppLauncherService.open
     color: "transparent"
-    // 常驻侧（stage-config side）：right 时整窗锚右缘，exclusiveZone 由
-    // layer-shell 按锚定边解释，内容层各自镜像（StageCard/深度渐变/图标排）
+    // 常驻侧（stage-config side）：right 时卡片列锚屏幕右缘（内容层
+    // 各自镜像：StageCard/深度渐变/图标排）；窗体本身恒全屏
     readonly property bool rightSide: StageConfigService.side === "right"
-    anchors {
-        top: true
-        bottom: true
-        left: !root.rightSide
-        right: root.rightSide
-    }
-    // 窗宽 = 常驻条 + 两侧溢出余量：悬停放大 + 辉光 + 倾斜投影超出卡面
-    // 13~20px，窗缘硬切会显出"边界"（实测踩过）。exclusiveZone 仍只占
-    // 常驻条宽；余量区的输入由文件尾的 mask 穿透到桌面。
-    implicitWidth: StageGeo.PANEL_WIDTH + StageGeo.CARD_OVERFLOW_MARGIN * 2
+    anchors { top: true; bottom: true; left: true; right: true }
 
     // ── 舞台视角的活动窗 ──
     // 桥的活动窗在 shell 覆盖层（启动台）拿走焦点时会变空——但桌面上的
@@ -716,8 +708,6 @@ PanelWindow {
         root._lastCardRects = StageGeo.computeTargetRects(groups, lay,
             { columnY: cards.y, columnWidth: cards.width,
                 columnX: cards.x,
-                originX: root.rightSide
-                    ? (root.screen?.width ?? 0) - root.width : 0,
                 cardHeight: StageConfigService.cardHeight },
             records, root._lastCardRects)
         // round35 NEW-4：活动组"ghost 槽位"。活动组被排除在视图布局外
@@ -767,8 +757,6 @@ PanelWindow {
                     [ghostEntry], ghostAt,
                     { columnY: cards.y, columnWidth: cards.width,
                         columnX: cards.x,
-                        originX: root.rightSide
-                            ? (root.screen?.width ?? 0) - root.width : 0,
                         cardHeight: StageConfigService.cardHeight },
                     records, root._lastCardRects)
             }
@@ -1165,18 +1153,19 @@ PanelWindow {
     // 辉光余量（首/末卡的辉光外扩 ~19px 不出窗缘）。
     Item {
         id: cards
+        // 卡片列：固定条宽、贴常驻侧（全屏浮层下 cards.x 即屏幕绝对 x，
+        // 特效矩形/hit 区域都从它推）
         anchors {
-            // 原来锚在"Stage"标题下方（标题已删，用户要求）；顶距保留
-            // 标题时代的等效间距（14+字高≈14+18）
             top: parent.top
             topMargin: 46
-            left: parent.left
-            leftMargin: StageGeo.CARD_OVERFLOW_MARGIN
-            right: parent.right
-            rightMargin: StageGeo.CARD_OVERFLOW_MARGIN
+            left: root.rightSide ? undefined : parent.left
+            leftMargin: root.rightSide ? 0 : StageGeo.CARD_OVERFLOW_MARGIN
+            right: root.rightSide ? parent.right : undefined
+            rightMargin: root.rightSide ? StageGeo.CARD_OVERFLOW_MARGIN : 0
             bottom: parent.bottom
             bottomMargin: 18
         }
+        width: StageGeo.PANEL_WIDTH
 
         // 指针监测：光标离开整个堆叠区（卡片之间的空隙/露边）时统一收悬停
         MouseArea {
@@ -1987,7 +1976,7 @@ PanelWindow {
     // 滚动/拖拽变化时由 layoutCards 尾部刷新；无卡=零高全穿透。
     Item {
         id: stripHitRegion
-        x: StageGeo.CARD_OVERFLOW_MARGIN
+        x: StageGeo.CARD_OVERFLOW_MARGIN   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
         y: 0
         width: StageGeo.PANEL_WIDTH
         height: 0
@@ -2015,6 +2004,7 @@ PanelWindow {
             stripHitRegion.height = 0
             return
         }
+        stripHitRegion.x = cards.x
         stripHitRegion.y = Math.max(0, Math.floor(top) - StageGeo.GLOW_PAD)
         stripHitRegion.height = Math.ceil(bottom - stripHitRegion.y)
             + StageGeo.GLOW_PAD
