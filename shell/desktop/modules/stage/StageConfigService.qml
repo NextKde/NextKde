@@ -44,6 +44,9 @@ QtObject {
         "tiltAnimDuration": { type: "int", min: 100, max: 800, def: 250 },
         "engageDelay":  { type: "int", min: 60, max: 500, def: 170 },
         "autoMinimize": { type: "bool", def: true },
+        // 保留整条侧栏条（exclusiveZone）：关=卡片纯悬浮，最大化/普通窗
+        // 可铺满全宽、滑到卡片下方（卡片浮在窗上、输入只挡卡面）
+        "reserveStrip": { type: "bool", def: true },
         "autoMinDelay": { type: "int", min: 200, max: 3000, def: 650 },
         "demoteCaptureDelay": { type: "int", min: 100, max: 1500, def: 300 },
         "demoteDispatchDelay": { type: "int", min: 10, max: 200, def: 30 },
@@ -100,6 +103,7 @@ QtObject {
     property int tiltAnimDuration: 250
     property int engageDelay: 170
     property bool autoMinimize: true
+    property bool reserveStrip: true
     property int autoMinDelay: 650
     // 收编节拍：先拍快照（capture 等待多窗连拍完成）→ 矩形落盘 →
     // dispatch 后派发最小化（特效起跑延迟，与展开动画对拍）

@@ -24,10 +24,14 @@ PanelWindow {
 
     WlrLayershell.namespace: "quickshell-stagebar"
     WlrLayershell.layer: WlrLayer.Top
-    exclusionMode: ExclusionMode.Normal
-    // 保留区含两侧溢出余量：最大化的窗从余量之外开始，左侧不会被
-    // 悬停辉光盖住（实测踩过"放大窗口左缘被卡片辉光覆盖"）
-    exclusiveZone: StageGeo.PANEL_WIDTH // 实验：临时回 240
+    // reserveStrip（stage-config 可调）：开=整条侧栏条保留（最大化窗从
+    // 条外开始，左侧不被卡片辉光覆盖）；关=纯悬浮卡片——窗口可铺满
+    // 全宽/滑进卡片下方，卡片浮在窗上，输入只挡卡面（mask 只罩卡片
+    // 实际范围）
+    exclusionMode: StageConfigService.reserveStrip
+        ? ExclusionMode.Normal : ExclusionMode.Ignore
+    exclusiveZone: StageConfigService.reserveStrip
+        ? StageGeo.PANEL_WIDTH : 0
 
     property bool open: false
 

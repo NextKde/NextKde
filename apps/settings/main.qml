@@ -825,6 +825,40 @@ ApplicationWindow {
                     onCommit: function(v) { fgSchedPage.stageSet("autoMinDelay", v) }
                 }
 
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+
+                    ColumnLayout {
+                        spacing: 2
+                        Layout.fillWidth: true
+
+                        Text {
+                            text: "保留侧栏条"
+                            color: theme.primaryText
+                            font.pixelSize: 13
+                        }
+
+                        Text {
+                            text: "关闭后卡片纯悬浮：窗口可铺满全宽、滑到卡片"
+                                  + "下方（卡片浮在窗上，点击只挡卡面）。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageSnapshot.reserveStrip !== false
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("reserveStrip", checked)
+                            checked = fgSchedPage.stageSnapshot.reserveStrip !== false
+                        }
+                    }
+                }
+
                 Text {
                     text: "卡片布局"
                     color: theme.primaryText
