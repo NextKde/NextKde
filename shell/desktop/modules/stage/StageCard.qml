@@ -262,54 +262,96 @@ Item {
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)
 
-            // ── 活体流（round30 迁移）：Plasma 6 任务栏官方路径 ──
+            // ── 活体流（round30 迁移 / round36 占空比节流）──
             // ScreencastingRequest{uuid} 走 zkde_screencast 协议开单窗口
-            // PipeWire 流（KWin 对停泊@屏幕外的窗口 refOffscreenRendering
-            // 持续出帧——停泊方案与活体流天然契合）；PipeWireSourceItem
-            // 渲染。保守档：只流转悬停/交棒中的卡（其余显示定格截图），
-            // 容器 GPU 预算紧（freedreno），多并发流吞吐未验证。
-            // 悬停判定源 = 窗口侧 hoveredKey（聚焦布局同一来源；卡片自己的
-            // MouseArea isHovered 只反映真指针、无头调试钩子触不到）。
+            // PipeWire 流；PipeWireSourceItem 渲染。悬停判定源 = 窗口侧
+            // hoveredKey（聚焦布局同一来源；卡片自己的 MouseArea isHovered
+            // 无头调试钩子触不到，且多卡瞬时命中会破"单流"约束，故不参与）。
+            //
+            // ⚠️ round36 占空比节流：kpipewire 无 fps 旋钮（API 只有
+            // nodeId/allowDmaBuf/state），本机容器 GPU 预算红线（round31
+            // 悬停即被宿主杀桌面）。nodeId 可运行时改写 = 消费者可拔插：
+            // 连接 streamOnMs 抓新鲜帧（断开前 grabToImage 定格最后一帧，
+            // 防闪烁）→ 断开 streamOffMs（无消费者 = WirePlumber 撤链 =
+            // KWin 停止离屏渲染，源节点挂起零成本）。平均负载 ≈ 占空比 ×
+            // 单流全速，GPUTotalUsed（/proc/meminfo）可实测对账。
             readonly property bool liveWanted:
-                card.focusKey === card.appKey
-                    || card.engaging || card.isHovered
+                card.focusKey === card.appKey || card.engaging
+            property bool streamOn: false     // 占空比相位：true=连接消费
+            property string liveGrabUrl: ""   // 断开前定格的最后一帧
 
             ScreencastingRequest {
                 id: streamRequest
                 // ⚠️ uuid 口径 = KWin internalId（record.handleId）= PlasmaWindow
                 // uuid；shell 句柄（window-N）直传会静默开不出流（实测）。
-                // 清空即释放流（offscreen rendering 随之停止）。
-                // ⚠️ 本机默认禁用（thumbLiveStream=false）：容器 GPU 预算
-                // 红线，悬停建流渲染即被宿主杀桌面（2026-09-28 实测）
+                // liveWanted 期间源常驻（无消费者时挂起，不渲染）。
+                // ⚠️ 默认禁用（thumbLiveStream=false）：容器 GPU 预算红线
                 uuid: thumbCard.liveWanted && StageConfigService.thumbLiveStream
                     ? WindowService.handleIdOf(card.targetId) : ""
-                onUuidChanged: (newUuid) => console.info(
-                    "[StageCard] stream request uuid=" + newUuid
-                    + " (node " + nodeId + ")")
                 onNodeIdChanged: if (nodeId > 0)
                     console.info("[StageCard] stream node ready: " + nodeId
                         + " for " + card.appKey)
             }
 
+            // 相位定时器：on 相位到期 → 抓帧定格 → 断开（off 相位）；
+            // off 到期 → 重连。liveWanted 消失即停摆并复位。
+            property Timer streamCycle: Timer {
+                interval: thumbCard.streamOn
+                    ? StageConfigService.streamCycleOnMs
+                    : StageConfigService.streamCycleOffMs
+                onTriggered: {
+                    if (!thumbCard.liveWanted
+                            || !StageConfigService.thumbLiveStream)
+                        return
+                    if (thumbCard.streamOn) {
+                        // 断开前把活体帧定格进 preview（异步 grab，回调
+                        // 晚于一拍也无碍——preview 旧帧兜底）
+                        if (liveStream.ready)
+                            liveStream.grabToImage(function(result) {
+                                thumbCard.liveGrabUrl = result.url
+                            })
+                        thumbCard.streamOn = false
+                    } else {
+                        thumbCard.streamOn = true
+                    }
+                    restart()
+                }
+            }
+
+            onLiveWantedChanged: {
+                liveGrabUrl = ""
+                if (liveWanted && StageConfigService.thumbLiveStream) {
+                    streamOn = true   // 首相位即连接（别先空等 off 周期）
+                    streamCycle.restart()
+                } else {
+                    streamOn = false
+                    streamCycle.stop()
+                }
+            }
+
             PipeWireSourceItem {
                 id: liveStream
                 anchors.fill: parent
-                visible: streamRequest.nodeId > 0 && ready
-                nodeId: streamRequest.nodeId
+                visible: streamRequest.nodeId > 0 && ready && thumbCard.streamOn
+                // 占空比消费：off 相位拔掉消费者（源保留挂起）
+                nodeId: thumbCard.streamOn ? streamRequest.nodeId : 0
                 // freedreno + 容器 GPU 栈 dmabuf 坑多（Chromium 纹理损坏
-                // 同源），保守关闭；迁移验证后再试开
+                // 同源），保守关闭；SHM 走系统内存，VRAM 占用最小
                 allowDmaBuf: false
-                onStateChanged: console.info("[StageCard] stream state="
-                    + state + " err=" + error() + " for " + card.appKey)
             }
 
             Image {
                 id: preview
                 anchors.fill: parent
-                // 活体流就绪时让位（避免双绘）；流断开自动回来兜底
-                visible: !!parent.thumbUrl && !liveStream.visible
-                source: parent.thumbUrl
-                // 同步解码 + 禁缓存：实时模式周期换新 PNG 时不留异步空白间隙（闪烁根源）
+                // 活体流就绪时让位（避免双绘）；流断开自动回来兜底。
+                // 优先显示占空比断开前定格的活体帧（最小化窗口无人交互，
+                // 内容不再变化，定格帧即最新），否则收编快照
+                visible: !liveStream.visible
+                    && !!(thumbCard.liveGrabUrl !== ""
+                        ? thumbCard.liveGrabUrl : parent.thumbUrl)
+                source: thumbCard.liveGrabUrl !== ""
+                    ? thumbCard.liveGrabUrl : parent.thumbUrl
+                // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
                 asynchronous: false
                 cache: false
                 sourceSize: Qt.size(StageConfigService.thumbSize,

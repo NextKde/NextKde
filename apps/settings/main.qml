@@ -969,8 +969,9 @@ ApplicationWindow {
                     }
                 }
 
-                // 活体流（实验性）：PipeWire 实时画面，默认关——本机（安卓
-                // 容器）GPU 预算红线，悬停建流即被宿主杀桌面；换更强硬件后开启
+                // 活体流（round36 占空比节流）：PipeWire 实时画面——连接抓
+                // 帧→断开渲染循环，平均负载 ≈ 占空比 × 单流全速，本机实测
+                // 可控（3 分钟 soak 存活、显存无爬升）
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -980,13 +981,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "活体流（实验性）"
+                            text: "活体流"
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "悬停时经 PipeWire 直显窗口实时画面（其余显示静态快照）。⚠️ 本机勿开：GPU 负载过高会被宿主杀桌面，仅限硬件更强的设备。"
+                            text: "悬停的卡片经 PipeWire 直显窗口实时画面（其余显示静态快照）。占空比节流：连接抓帧→断开渲染循环，断开期间定格最后一帧。若桌面仍被杀（GPU 预算），调长断开时长或关闭。"
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1002,6 +1003,28 @@ ApplicationWindow {
                             checked = fgSchedPage.stageSnapshot.thumbLiveStream === true
                         }
                     }
+                }
+
+                StageSliderRow {
+                    label: "连接抓帧时长"
+                    unit: " ms"
+                    minV: 80
+                    maxV: 1000
+                    active: fgSchedPage.stageSnapshot.thumbLiveStream === true
+                    current: fgSchedPage.stageSnapshot.streamCycleOnMs !== undefined
+                        ? fgSchedPage.stageSnapshot.streamCycleOnMs : 250
+                    onCommit: function(v) { fgSchedPage.stageSet("streamCycleOnMs", v) }
+                }
+
+                StageSliderRow {
+                    label: "断开休止时长"
+                    unit: " ms"
+                    minV: 200
+                    maxV: 5000
+                    active: fgSchedPage.stageSnapshot.thumbLiveStream === true
+                    current: fgSchedPage.stageSnapshot.streamCycleOffMs !== undefined
+                        ? fgSchedPage.stageSnapshot.streamCycleOffMs : 750
+                    onCommit: function(v) { fgSchedPage.stageSet("streamCycleOffMs", v) }
                 }
             }
         }

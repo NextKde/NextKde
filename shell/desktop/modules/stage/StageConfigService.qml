@@ -49,10 +49,11 @@ QtObject {
         "demoteDispatchDelay": { type: "int", min: 10, max: 200, def: 30 },
         "desktopFocusDebounce": { type: "int", min: 50, max: 1000, def: 150 },
         // 活体流（zkde_screencast PipeWire 实时画面）：⚠️ 默认禁用——
-        // 本容器（安卓宿主）GPU 预算极紧，悬停建流渲染即被宿主杀桌面
-        //（2026-09-28 实测定案）。协议链路本身全通（见 AGENTS round30/31），
-        // 硬件更强的机器可开。
+        // 本容器（安卓宿主）GPU 预算极紧。round36 起带占空比节流
+        //（连接抓帧→断开渲染，见 StageCard），实测可控后可开。
         "thumbLiveStream": { type: "bool", def: false },
+        "streamCycleOnMs": { type: "int", min: 80, max: 1000, def: 250 },
+        "streamCycleOffMs": { type: "int", min: 200, max: 5000, def: 750 },
         // 窗口动画特效（stageanim）的 kwinrc 投影
         "animDuration": { type: "int", min: 120, max: 2000, def: 420 },
         "glassOpacity": { type: "real", min: 0.3, max: 1.0, def: 0.65 },
@@ -109,6 +110,10 @@ QtObject {
     // 伪实时（thumbLive：keepBelow 后台重拍 + 静默最小化悬停预备）已整体
     // 删除——只留静态快照与活体流两态（2026-09-28 用户定案）
     property bool thumbLiveStream: false
+    // 占空比节流（round36）：on=连接消费抓帧时长，off=断开（KWin 停止
+    // 离屏渲染）时长；平均负载 ≈ on/(on+off) × 单流全速
+    property int streamCycleOnMs: 250
+    property int streamCycleOffMs: 750
     property int animDuration: 420
     // 飞行玻璃透明度：窗口在卡片↔桌面途中半透明透见桌面，落地凝实；
     // 1.0 = 关闭玻璃感（全程不透明，纯淡出）
