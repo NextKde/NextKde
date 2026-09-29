@@ -1248,6 +1248,7 @@ PanelWindow {
             scroll: Math.round(root.scrollOffset),
             maxScroll: Math.round(root._maxScroll),
             totalWin: root.totalWindows, order: root._groupOrder,
+            hitRegion: [stripHitRegion.y, stripHitRegion.height],
             slots: slots })
     }
 
@@ -1367,6 +1368,7 @@ PanelWindow {
             root._maxScroll = lay.scrollMax
             if (root.scrollOffset > root._maxScroll)
                 root.scrollOffset = root._maxScroll
+            _updateHitRegionExtent()
             return
         }
         const lay = _layout(n)
@@ -1407,6 +1409,7 @@ PanelWindow {
             slot.z = n - i
             slot.dimmed = false
         }
+        _updateHitRegionExtent()
     }
     onHeightChanged: {
         layoutCards()
@@ -1561,17 +1564,42 @@ PanelWindow {
         publishSimulatedLayout("")
     }
 
-    // 输入遮罩：只有常驻条区域可交互，两侧溢出余量（辉光渲染区）的
-    // 点击穿透到桌面/窗口（BarWindow 同款手法）
+    // 输入遮罩：只罩住**卡片实际占据的纵向范围**——整条全高遮罩会把
+    // 首卡上方/末卡下方的大片透明区也变成输入黑洞，滑进侧栏下的窗口
+    // 那部分就点不到（实测"程序有一部分在侧边栏那边点不到"）。排布/
+    // 滚动/拖拽变化时由 layoutCards 尾部刷新；无卡=零高全穿透。
     Item {
         id: stripHitRegion
         x: StageGeo.CARD_OVERFLOW_MARGIN
         y: 0
         width: StageGeo.PANEL_WIDTH
-        height: root.height
+        height: 0
         visible: false
     }
     mask: Region {
         Region { item: stripHitRegion }
+    }
+
+    function _updateHitRegionExtent() {
+        let top = Infinity, bottom = -Infinity
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const s = cardRepeater.itemAt(i)
+            if (!s || !s.visible)
+                continue
+            const wy = cards.y + s.y
+            const wh = s.height * (s.slotScale || 1)
+            if (wy < top)
+                top = wy
+            if (wy + wh > bottom)
+                bottom = wy + wh
+        }
+        if (top === Infinity) {
+            stripHitRegion.y = 0
+            stripHitRegion.height = 0
+            return
+        }
+        stripHitRegion.y = Math.max(0, Math.floor(top) - StageGeo.GLOW_PAD)
+        stripHitRegion.height = Math.ceil(bottom - stripHitRegion.y)
+            + StageGeo.GLOW_PAD
     }
 }
