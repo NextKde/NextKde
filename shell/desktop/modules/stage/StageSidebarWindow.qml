@@ -88,8 +88,13 @@ PanelWindow {
         console.info("[StageSidebar] merge " + fromKey + " -> " + toKey)
     }
 
-    // 右键合并卡 = 拆散回各自的应用卡
+    // 右键合并卡 = 拆散回各自的应用卡。拆出的新卡做"迸开"入场：
+    // 错峰（每张错 70ms）从窗口侧滑入——同时冒出来是死板感（用户：
+    // "拆分动画没有灵动的感觉"）
     function splitGroupByKey(key) {
+        const beforeKeys = ({})
+        for (let i = 0; i < cardModel.count; i++)
+            beforeKeys[cardModel.get(i).appKey] = true
         const next = StageGroups.splitGroup(root._mergeOverrides,
             WindowService.records || [], key)
         if (next === root._mergeOverrides)
@@ -97,7 +102,47 @@ PanelWindow {
         root._mergeOverrides = next
         root._saveMerges()
         syncCards()
+        _burstNewCards(beforeKeys)
         console.info("[StageSidebar] split " + key)
+    }
+
+    property var _burstQueue: []   // [{ card: StageCard, at: ms }]
+    property Timer _burstTimer: Timer {
+        interval: 45
+        repeat: true
+        onTriggered: {
+            const now = Date.now()
+            const remaining = []
+            for (let i = 0; i < root._burstQueue.length; i++) {
+                const item = root._burstQueue[i]
+                if (!item.card)
+                    continue   // delegate 动画窗口内被销毁（组又变了）
+                if (now >= item.at)
+                    item.card.shown = true
+                else
+                    remaining.push(item)
+            }
+            root._burstQueue = remaining
+            if (remaining.length === 0)
+                stop()
+        }
+    }
+
+    function _burstNewCards(beforeKeys) {
+        let k = 0
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const s = cardRepeater.itemAt(i)
+            if (!s || beforeKeys[s.appKey])
+                continue
+            const c = s.cardItem
+            if (!c)
+                continue
+            c.shown = false   // 压回入场起点（Component.onCompleted 已置 true）
+            root._burstQueue.push({ card: c, at: Date.now() + k * 70 })
+            k++
+        }
+        if (k > 0)
+            root._burstTimer.restart()
     }
 
     readonly property var sideGroups: {

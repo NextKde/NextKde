@@ -1,4 +1,5 @@
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Quickshell.Widgets
 import org.kde.pipewire
 import org.kde.taskmanager
@@ -363,14 +364,22 @@ Item {
             }
         }
 
-        // 缩略图视口：填满整卡（沉浸式——整卡就是窗口内容，无内框；
-        // 圆角随卡裁切）。未就绪的占位态透出卡背（plate 深色调）当底
+        // 缩略图视口：填满整卡（沉浸式——整卡就是窗口内容，无内框）。
+        // ⚠️ Rectangle.clip 是矩形裁切：满卡后直角缩略图会盖住卡背的
+        // 圆角（"卡片变矩形"实测）——层 + OpacityMask 按卡圆角抠 alpha
+        //（遮罩源是旁边的隐形圆角矩形，sibling 锚定到同区域）
         Rectangle {
-            id: thumbCard
+            id: thumbMask
             anchors.fill: plate
             radius: plate.radius
-            color: "transparent"
-            clip: true
+            visible: false
+        }
+        Item {
+            id: thumbCard
+            anchors.fill: plate
+            layer.enabled: true
+            layer.smooth: true
+            layer.effect: OpacityMask { maskSource: thumbMask }
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)
 
