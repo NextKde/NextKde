@@ -969,9 +969,9 @@ ApplicationWindow {
                     }
                 }
 
-                // 活体流（round36 占空比节流）：PipeWire 实时画面——连接抓
-                // 帧→断开渲染循环，平均负载 ≈ 占空比 × 单流全速，本机实测
-                // 可控（3 分钟 soak 存活、显存无爬升）
+                // 活体流（round39 占空比节流）：无头 soak 存活但真实负载
+                //（重绘频繁窗口）下用户实测仍会被宿主杀桌面——本机默认关，
+                // 保留给硬件更强的设备
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -981,13 +981,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "活体流"
+                            text: "活体流（实验性）"
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "悬停的卡片经 PipeWire 直显窗口实时画面（其余显示静态快照）。占空比节流：连接抓帧→断开渲染循环，断开期间定格最后一帧。若桌面仍被杀（GPU 预算），调长断开时长或关闭。"
+                            text: "悬停的卡片经 PipeWire 直显窗口实时画面（其余显示静态快照）。⚠️ 本机勿开：即使占空比节流（连接抓帧→断开渲染），重绘频繁的窗口仍可能触发宿主杀桌面；仅限硬件更强的设备。"
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
