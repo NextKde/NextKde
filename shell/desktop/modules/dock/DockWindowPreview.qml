@@ -28,8 +28,20 @@ PopupWindow {
 
     readonly property var effectiveWindows: {
         WindowService.revision
-        if (preview.windows && preview.windows.length > 0)
-            return preview.windows
+        // 快照数组只当"打开时刻的身份键"用：DockIcon 的一次性赋值不随
+        // 窗口生死更新，直接返回旧数组 = close_all 关掉全部窗口后预览条
+        // 残留死记录、"清空自动收起"永不可达（审计 🟡）。每次按 windowId
+        // 现查重建——全关后 length 归 0 → dismissDockPopupImmediately。
+        if (preview.windows && preview.windows.length > 0) {
+            const out = []
+            for (let i = 0; i < preview.windows.length; i++) {
+                const win = WindowService.windowById(
+                    preview.windows[i].windowId)
+                if (win)
+                    out.push(win)
+            }
+            return out
+        }
         if (preview.appId)
             return WindowService.windowsForApp(preview.appId)
         if (preview.windowId) {
@@ -71,7 +83,10 @@ PopupWindow {
     function requestAllThumbnails() {
         const list = preview.effectiveWindows
         for (let i = 0; i < list.length; i++) {
-            if (list[i]?.windowId)
+            // 已有图的不再重拍：effectiveWindows 现在每次 revision 重建
+            //（新数组身份），本函数会被频繁触发——重拍守卫把它变 no-op
+            if (list[i]?.windowId
+                    && !WindowService.thumbnailUrl(list[i].windowId))
                 WindowService.requestThumbnail(list[i].windowId)
         }
     }

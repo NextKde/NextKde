@@ -280,6 +280,10 @@ PopupWindow {
             slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
             slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
             slotCard8.visible ? slotCard8.blurRegion : emptyRegion,
+            // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
+            // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
+            // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
+            stageModeCard.visible ? stageModeCard.blurRegion : emptyRegion,
             sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
             submenuCard.visible ? submenuCard.blurRegion : emptyRegion
         ]
@@ -1430,6 +1434,7 @@ PopupWindow {
                 // One group per app: a compact header + its notification rows.
                 delegate: Column {
                     required property var modelData
+                    required property int index
                     width: historyList.width
 
                     Row {
@@ -1458,6 +1463,7 @@ PopupWindow {
                             model: modelData.items
                             delegate: Item {
                                 required property var modelData
+                                required property int index
                                 width: historyList.width
                                 height: rowSummary.implicitHeight + (rowBody.visible ? rowBody.implicitHeight + 1 : 0)
 
@@ -1689,6 +1695,7 @@ PopupWindow {
 
                     delegate: Item {
                         required property var modelData
+                        required property int index
                         width: actionsList.width
                         height: 44
                         scale: sessionRow.pressed ? 0.98 : 1
@@ -2179,6 +2186,7 @@ PopupWindow {
 
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
                         width: submenuWifiList.width
                         height: 42
                         radius: 10
@@ -2445,6 +2453,7 @@ PopupWindow {
 
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
                         width: submenuBtList.width
                         height: 42
                         radius: 10
@@ -2619,6 +2628,7 @@ PopupWindow {
                 delegate: Item {
                         id: displayBrightnessRow
                         required property var modelData
+                        required property int index
                         width: brightnessDisplayList.width
                         height: 82
                         property real preview: Number(modelData.percent || 0)
@@ -2956,6 +2966,7 @@ PopupWindow {
                         delegate: Item {
                             id: appVolumeRow
                             required property var modelData
+                            required property int index
                             width: parent.width
                             height: 58
                             property int volumePreview: Number(modelData.percent || 0)

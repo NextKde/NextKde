@@ -1344,13 +1344,11 @@ PanelWindow {
                     readonly property var labels: ["CPU", "内存", "存储"]
                     readonly property var icons: ["cpu", "memory", "drive-harddisk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
-	                    readonly property var colors: AppearanceTokens.surface.pick([AppearanceTokens.colors.primary.toString(),
-	                           AppearanceTokens.colors.tertiary.toString(),
-	                           AppearanceTokens.colors.secondary.toString()], AppearanceTokens.content.onBackdrop)
-	                        ? [IconAppearanceService.glassContentColor().toString(),
-	                           IconAppearanceService.glassContentColor().toString(),
-	                           IconAppearanceService.glassContentColor().toString()]
-	                        : ["#ff375f", "#30d158", "#64d2ff"]
+                    readonly property var colors: AppearanceTokens.content.onBackdrop
+                        ? [IconAppearanceService.glassContentColor().toString(),
+                           IconAppearanceService.glassContentColor().toString(),
+                           IconAppearanceService.glassContentColor().toString()]
+                        : ["#ff375f", "#30d158", "#64d2ff"]
 
                     function detailFor(metric) {
                         if (metric === 0)
@@ -1375,9 +1373,9 @@ PanelWindow {
                             ctx.lineWidth = AppearanceTokens.surface.pick(
                                 Math.max(6, width * 0.085), Math.max(5, width * 0.065))
                             ctx.lineCap = "round"
-	                            ctx.strokeStyle = AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant.toString(), AppearanceTokens.content.onBackdrop)
-	                                ? IconAppearanceService.glassContentColor(0.25).toString()
-	                                : Qt.rgba(0.19, 0.17, 0.2, 0.12)
+                            ctx.strokeStyle = AppearanceTokens.content.onBackdrop
+                                ? IconAppearanceService.glassContentColor(0.25).toString()
+                                : Qt.rgba(0.19, 0.17, 0.2, 0.12)
                             ctx.beginPath()
                             ctx.arc(center, center, radius, 0, Math.PI * 2)
                             ctx.stroke()
@@ -1527,8 +1525,9 @@ PanelWindow {
                             id: memoryTrendLabel
                             anchors { left: parent.left; top: parent.top }
                             text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
-	                            color: AppearanceTokens.content.ink(activityRings.hoveredMetric === 1)
-                                ? Qt.rgba(0.12, 0.50, 0.31, 0.84) : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+	                            color: activityRings.hoveredMetric === 1
+                                ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
+                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1548,8 +1547,9 @@ PanelWindow {
                             id: cpuTrendLabel
                             anchors { left: parent.left; top: parent.top }
                             text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
-	                            color: AppearanceTokens.content.ink(activityRings.hoveredMetric === 0)
-                                ? Qt.rgba(0.76, 0.14, 0.23, 0.84) : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+	                            color: activityRings.hoveredMetric === 0
+                                ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
+                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -3114,12 +3114,12 @@ PanelWindow {
             const custom = folderCustomFor(path)
             const curColor = custom?.color ?? ""
             const curEmoji = custom?.emoji ?? ""
-            const root = []
+            const items = []
 
             if (e) {
-                root.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
+                items.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
                 if (selectedEntries().length === 1)
-                    root.push(_ctxAct("重命名", "rename", "edit-rename"))
+                    items.push(_ctxAct("重命名", "rename", "edit-rename"))
 
                 // 自定义外观 applies to every desktop entry. The path-based
                 // storage retains the setting across filesystem snapshots.
@@ -3136,7 +3136,7 @@ PanelWindow {
                     appearKids.push(_ctxSub(catTitle, rows, categoryIcon))
                 }
                 appearKids.push(_ctxAct("移除自定义", "removeCustom", "edit-clear"))
-                root.push(_ctxSub("自定义外观", appearKids, "customize-appearance"))
+                items.push(_ctxSub("自定义外观", appearKids, "customize-appearance"))
 
                 // 打开方式（动态）
                 if (canChooseOpenWith(e)) {
@@ -3147,40 +3147,40 @@ PanelWindow {
                             owKids.push({ icon: "placeholder-dot", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
                     }
                     owKids.push(_ctxAct("其他应用程序…", "openWithMore", ""))
-                    root.push(_ctxSub("打开方式", owKids, "open-with"))
+                    items.push(_ctxSub("打开方式", owKids, "open-with"))
                 }
 
-                root.push(_ctxAct("复制", "copy", "edit-copy"))
-                root.push(_ctxAct("剪切", "cut", "edit-cut"))
-                root.push(_ctxAct("移到废纸篓", "trash", "user-trash"))
-                root.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
+                items.push(_ctxAct("复制", "copy", "edit-copy"))
+                items.push(_ctxAct("剪切", "cut", "edit-cut"))
+                items.push(_ctxAct("移到废纸篓", "trash", "user-trash"))
+                items.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
             } else {
                 // desktop background
-                root.push(_ctxAct("添加小组件…", "addWidgets", "arrange"))
-                root.push(_ctxAct("编辑小组件", "editWidgets", "edit-rename"))
-                root.push(_ctxAct("新建文件", "newFile", "document-new"))
-                root.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
-                root.push(_ctxAct("粘贴", "paste", "edit-paste"))
+                items.push(_ctxAct("添加小组件…", "addWidgets", "arrange"))
+                items.push(_ctxAct("编辑小组件", "editWidgets", "edit-rename"))
+                items.push(_ctxAct("新建文件", "newFile", "document-new"))
+                items.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
+                items.push(_ctxAct("粘贴", "paste", "edit-paste"))
                 const arrange = [
                     _ctxAct("按名称", "arrangeByName", "sort-name"), _ctxAct("按类型", "arrangeByType", "sort-type"),
                     _ctxAct("按修改时间（最新）", "arrangeModifiedNew", "clock"),
                     _ctxAct("按修改时间（最早）", "arrangeModifiedOld", "clock")
                 ]
-                root.push(_ctxSub("整理方式", arrange, "arrange"))
-                root.push(_ctxAct("重置图标排序", "resetLayout", "reset-layout"))
-                root.push(_ctxCheck("显示文件扩展名", "toggleExtensions", null,
+                items.push(_ctxSub("整理方式", arrange, "arrange"))
+                items.push(_ctxAct("重置图标排序", "resetLayout", "reset-layout"))
+                items.push(_ctxCheck("显示文件扩展名", "toggleExtensions", null,
                     desktopLayout.showExtensions, "text-x-generic"))
                 const sizeKids = [[40, "小"], [56, "中"], [72, "大"]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px, "placeholder-dot"))
-                root.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
+                items.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
                 const spacingKids = [["comfortable", "宽松"], ["compact", "紧凑"], ["dense", "更紧凑"]]
                     .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
                         desktopLayout.iconSpacing === value, "placeholder-dot"))
-                root.push(_ctxSub("图标间距", spacingKids, "arrange"))
-                root.push(_ctxAct("刷新", "refresh", "view-refresh"))
+                items.push(_ctxSub("图标间距", spacingKids, "arrange"))
+                items.push(_ctxAct("刷新", "refresh", "view-refresh"))
             }
-            return root
+            return items
         }
 
         function setContextMenuItems() {

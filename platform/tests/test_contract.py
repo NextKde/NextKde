@@ -16,9 +16,13 @@ SHORTCUTS_SERVICE = ROOT / "shell/desktop/modules/shortcuts/ShortcutsService.qml
 def test_shortcuts_service_defaults() -> None:
     text = SHORTCUTS_SERVICE.read_text()
     ids = re.findall(r'id: "(net\.local\.kos-[^"]+)"', text)
-    assert len(ids) == 6, f"expected 6 KOS shortcuts, found {ids}"
+    assert len(ids) == 7, f"expected 7 KOS shortcuts, found {ids}"
     assert len(ids) == len(set(ids))
-    for required in ("net.local.kos-launcher", "net.local.kos-window-switcher"):
+    for required in (
+        "net.local.kos-launcher",
+        "net.local.kos-window-switcher",
+        "net.local.kos-stage",
+    ):
         assert required in ids
 
 

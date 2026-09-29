@@ -740,8 +740,10 @@ QtObject {
             if (!record.toplevel?.minimized)
                 minimizeWindow(record.windowId, true);
         }
+    }
 
-    // 整组原子最小化（直发不过合并槽）：逐窗命令在桥侧 50ms/条排队，
+    // 整组原子最小化：逐窗命令在桥侧 50ms/条排队（shell 侧的合并槽只
+    // 作用于 activate，minimize 本就直发——真正的串行化瓶颈在桥），
     // N 窗收编管线会被拖到 N*50ms——比显示桌面开关的防抖还长（打断窗口
     // 的根源，实测踩过）。多窗批量一律走这里，单窗路径用 minimizeWindow。
     function minimizeGroup(windowIds, value) {

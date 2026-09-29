@@ -245,8 +245,17 @@ QtObject {
                 })
                 brightnessDisplays = updated
                 if (updated.length > 0) {
-                    brightnessPercent = Number(updated[0].percent || 0)
-                    brightnessBacklightName = updated[0].label || updated[0].id || ""
+                    // 主读数跟"被调节的那块屏"：外接屏行调节后回写
+                    // displays[0] 会让滑条预览跳到 1 号屏的值（审计 🟡）
+                    let primary = updated[0]
+                    for (let i = 0; i < updated.length; i++) {
+                        if (updated[i].id === brightnessPrimaryDisplayId) {
+                            primary = updated[i]
+                            break
+                        }
+                    }
+                    brightnessPercent = Number(primary.percent || 0)
+                    brightnessBacklightName = primary.label || primary.id || ""
                 }
             }
             refresh()

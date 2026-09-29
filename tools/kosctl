@@ -774,7 +774,16 @@ deploy_artifacts() {
         sed "s|@CMAKE_INSTALL_FULL_LIBEXECDIR@|$prefix/libexec|g" \
             "$project_dir/services/data-service/systemd/kos-data.service.in" \
             > "$runtime_unit_dir/kos-data.service"
-        sed "s|@QS_EXEC@|$qs_bin|g" \
+        # 惰性重解析：脚本顶部的 qs_bin 在 ensure_build_dependencies 装
+        # quickshell 之前求值过（全新机器首装=空），写出的 unit 是
+        # ExecStart= --no-duplicate … 的坏 unit，下次登录桌面静默起不来
+        local qs_bin_now
+        qs_bin_now=$(command -v qs || command -v quickshell || true)
+        if [[ -z "$qs_bin_now" ]]; then
+            printf 'kosctl: quickshell not found -- install it (kosctl doctor) and re-run install\n' >&2
+            exit 1
+        fi
+        sed "s|@QS_EXEC@|$qs_bin_now|g" \
             "$project_dir/packaging/systemd/kos-shell.service.in" \
             > "$runtime_unit_dir/kos-shell.service"
     fi

@@ -1450,12 +1450,25 @@ void MusicController::refreshQueueModel()
 {
     const QList<TrackRecord> queueTracks = tracksForIds(m_queueIds);
     if (queueTracks.size() != m_queueIds.size()) {
+        // 消失的曲目可能在当前曲之前：只钳尾部越界会让"当前曲"静默变成
+        // 另一首（索引不回退、currentTrackChanged 也不发）——按删除点
+        // 之前的数量回退，与 deleteTrack() 的 removedBefore 同一语义
+        int removedBefore = 0;
+        for (int i = 0; i <= m_queueIndex && i < m_queueIds.size(); ++i) {
+            const qint64 id = m_queueIds.at(i);
+            const auto stillExists = std::any_of(queueTracks.cbegin(), queueTracks.cend(),
+                                                 [&id](const TrackRecord &track) { return track.id == id; });
+            if (!stillExists)
+                ++removedBefore;
+        }
         m_queueIds.clear();
         for (const TrackRecord &track : queueTracks)
             m_queueIds.append(track.id);
+        m_queueIndex -= removedBefore;
         if (m_queueIndex >= m_queueIds.size())
             m_queueIndex = m_queueIds.isEmpty() ? -1 : m_queueIds.size() - 1;
         persistQueue();
+        emit currentTrackChanged();
     }
     m_queueModel.setTracks(queueTracks);
 }
