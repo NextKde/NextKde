@@ -76,7 +76,8 @@ Item {
     transformOrigin: Item.TopLeft
     Component.onCompleted: shown = true
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
-    Behavior on y { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
+    // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
+    // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
     Behavior on opacity { NumberAnimation { duration: engaging ? 180 : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // 缩放带过冲（OutBack）：悬停放大/入场有弹性回弹；位置类刻意保持
     // OutCubic——x/y 过冲会越过槽位触发悬停丢失（kill 循环前科）
@@ -96,8 +97,10 @@ Item {
     // （deckRestTilt，可调到 45°）、悬停聚焦放平便于阅读、交棒保持倾角
     //（kwinrc TiltAngle 同源投影给展开窗口动画）；adaptive = 平铺、
     // 悬停/点击才倾斜（tiltAngle）。
-    readonly property bool deckMode: StageConfigService.layoutMode === "scroll"
-    property real tiltCur: deckMode
+    // ⚠️ schema 键 deckRestTilt/deckSidePeek 是牌堆时代遗名（持久化配置
+    // 不能改名），现役语义都属 scroll 模式。
+    readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
+    property real tiltCur: scrollMode
         ? ((isHovered && !engaging) ? 0 : StageConfigService.deckRestTilt)
         : ((isHovered || engaging) ? StageConfigService.tiltAngle : 0)
     Behavior on tiltCur {
@@ -114,14 +117,6 @@ Item {
     readonly property bool isHovered: cardMouse.containsMouse
         || closeHit.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
-    // 指针在卡内的位置（cards 坐标系）——排障日志用
-    readonly property string mousePos: {
-        const p = cardMouse.mapToItem(card, cardMouse.mouseX, cardMouse.mouseY)
-        const g = card.mapToItem(null, 0, 0)
-        return Math.round(p.x) + "," + Math.round(p.y) + "@card("
-            + Math.round(g.x) + "," + Math.round(g.y) + " s"
-            + card.scale.toFixed(2) + ")"
-    }
     // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
     readonly property bool glowOn: card.isHovered || card.engaging
 
@@ -445,13 +440,17 @@ Item {
         onPressed: function(mouse) {
             pressSceneY = mapToItem(null, mouse.x, mouse.y).y
             dragArmed = false
+            // 每次按压重置：界外松手（拖拽中指针移出卡面）只发 released
+            // 不发 clicked，wasDrag 若留到下一次按压会吞掉那次正常点击
+            wasDrag = false
         }
         onPositionChanged: function(mouse) {
             if (!(mouse.buttons & Qt.LeftButton))
                 return
             const sceneY = mapToItem(null, mouse.x, mouse.y).y
             if (!dragArmed) {
-                if (Math.abs(sceneY - pressSceneY) > 12) {
+                if (Math.abs(sceneY - pressSceneY)
+                        > StageGeo.DRAG_PICK_THRESHOLD) {
                     dragArmed = true
                     card.dragStarted(sceneY)
                 }
@@ -493,9 +492,6 @@ Item {
         }
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: {
-            console.info("[CardCloseDBG] clicked appKey=" + card.appKey)
-            card.closeAllRequested()
-        }
+        onClicked: card.closeAllRequested()
     }
 }

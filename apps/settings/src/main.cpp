@@ -1065,20 +1065,31 @@ public:
     }
 
     QVariantMap stageConfigFromReply(const QString &payload) {
+        // 空应答 = void IPC 复用本 Kind（stage-sidebar show/hide）或传输
+        // 失败——不是"参数被清空"。回 last-good，别把整页滑杆打成默认值
         if (payload.isEmpty())
-            return {};
+            return m_lastStageConfig;
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(
             payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
             setLastError(QStringLiteral("台前调度参数返回无效"));
-            return {};
+            return m_lastStageConfig;
+        }
+        const QJsonObject object = document.object();
+        // set 失败应答 {ok:false,error:...} 不带参数：报错并保持 last-good
+        if (object.value(QStringLiteral("ok")).toBool(false) == false
+                && object.contains(QStringLiteral("error"))
+                && !object.contains(QStringLiteral("revision"))) {
+            setLastError(object.value(QStringLiteral("error")).toString(
+                QStringLiteral("台前调度参数写入失败")));
+            return m_lastStageConfig;
         }
         setLastError({});
         QVariantMap out;
-        const QJsonObject object = document.object();
         for (auto it = object.begin(); it != object.end(); ++it)
             out.insert(it.key(), it.value().toVariant());
+        m_lastStageConfig = out;
         return out;
     }
 
@@ -2241,7 +2252,8 @@ private:
             emit fgSchedRunningAppsChanged({});
             break;
         case RequestKind::StageConfig:
-            emit stageConfigChanged({});
+            // 传输失败同样回 last-good：QML 只需要信号离开 pending 态
+            emit stageConfigChanged(stageConfigFromReply({}));
             break;
         }
     }
@@ -2282,6 +2294,12 @@ private:
     // page poll must not pile up another.
     bool m_integrationPending = false;
     bool m_modelInspectionPending = false;
+
+    // Last-good stage config snapshot. Void IPCs routed through this request
+    // kind (stage-sidebar show/hide) and failed set() replies produce no
+    // payload — echoing them back would blank the page's sliders down to
+    // schema defaults while the shell-side state is untouched.
+    QVariantMap m_lastStageConfig;
 };
 
 namespace {

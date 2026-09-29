@@ -380,7 +380,10 @@ PanelWindow {
         // 实测踩过）；改用 editMode 守卫：长按进了挂件编辑模式，release
         // 的 clicked 自然跳过。
         onClicked: function(mouse) {
-            if (mouse.button === Qt.LeftButton && !root.editMode)
+            // 修饰键守卫与网格入口（FreeSlotDesktopDemo）同款：Ctrl/Shift+
+            // 点击是选择语义，不该翻转显示桌面
+            if (mouse.button === Qt.LeftButton && !root.editMode
+                    && mouse.modifiers === Qt.NoModifier)
                 StageModeService.deskRevealToggleRequested()
         }
         onPressAndHold: function(mouse) {

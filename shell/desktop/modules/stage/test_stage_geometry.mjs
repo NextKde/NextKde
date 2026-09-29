@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import {
     PANEL_WIDTH, CARD_WIDTH_INSET, CARD_HEIGHT, CARD_X_INSET, PANEL_ORIGIN_Y,
-    DECK_RETREAT as RETREAT_DEFAULT, TILT_FOCAL,
+    SCROLL_RETREAT as RETREAT_DEFAULT, TILT_FOCAL,
     tiltProject, tiltUnproject,
     adaptiveLayout, scrollLayout, computeTargetRects, tiltHeadroom,
 } from "./stage-geometry.mjs";
@@ -21,7 +21,7 @@ check("CARD_WIDTH_INSET", CARD_WIDTH_INSET, 24);
 check("CARD_HEIGHT", CARD_HEIGHT, 148);
 check("CARD_X_INSET", CARD_X_INSET, 12);
 check("PANEL_ORIGIN_Y", PANEL_ORIGIN_Y, 35);
-check("DECK_RETREAT default", RETREAT_DEFAULT, 20);
+check("SCROLL_RETREAT default", RETREAT_DEFAULT, 20);
 
 check("computeTargetRects: dims.cardHeight scales rect height",
     computeTargetRects(
@@ -34,7 +34,9 @@ check("computeTargetRects: dims.cardHeight scales rect height",
 // 4 张放进 560 高 → scale = (560-3*12)/(4*148) = 0.8818…
 let lay = adaptiveLayout(560, 4);
 assert.ok(Math.abs(lay.scale - (560 - 36) / 592) < 1e-9, "adaptive scale");
-check("adaptive: pos1 = s*148+12", lay.positions[1],
+// 两侧同取整：actual 是未取整浮点（二进制下 524/592*148 不保证精确等于
+// 目标整数），单侧 round 的锚点靠整除运气，换参数就会假红
+check("adaptive: pos1 = s*148+12", Math.round(lay.positions[1]),
     Math.round((560 - 36) / 592 * 148 + 12));
 check("adaptive clamp min 0.3", adaptiveLayout(100, 4).scale, 0.3);
 // 放得下（scale=1）+ center=true：整列下移居中，间距不变

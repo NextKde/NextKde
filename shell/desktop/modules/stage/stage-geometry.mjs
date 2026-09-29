@@ -20,7 +20,12 @@ export const PANEL_ORIGIN_Y = 35        // 面板窗口原点 = 顶栏(35px)之�
 export const HOVER_SCALE = 1.05
 export const PERSPECTIVE_FOCAL = 900    // ⚠️ 特效 stageanim 同名常量必须同步
 
-export const DECK_RETREAT = 20           // 聚焦退避：其余卡从原位向两侧平移的像素
+export const SCROLL_RETREAT = 20        // 聚焦退避：其余卡从原位向两侧平移的像素
+// ── 拖拽排序（StageCard 与 StageSidebarWindow 共用；阈值/视觉同源）──
+export const DRAG_PICK_THRESHOLD = 12   // 按下位移超过此值才算拖拽（否则是点击）
+export const DRAG_SCALE = 1.06          // 被拖卡微放大（与悬停 HOVER_SCALE 同量级）
+export const DRAG_Z = 999               // 被拖卡置顶 z（盖过全部槽位 z = n-i）
+export const DRAG_EDGE_RATIO = 0.5      // 拖拽 y 的上下钳位（半个卡高出界余量）
 // 辉光裁剪放宽：滚动视口只裁上下（滚动方向），左右各放宽这么多——
 // 悬停辉光外扩 13px×放大 1.05 + 倾斜投影后 ≈19px 超出卡面 inset，
 // 整条 clip 会把辉光侧边切掉（要与 CARD_OVERFLOW_MARGIN 同步核算）
@@ -54,11 +59,18 @@ export function tiltUnproject(px, py, angleRad, focal, yOff) {
 // ── 自适应布局（adaptive）：全部完整显示，整体等比缩小到恰好放下 ──
 // center：放得下时（scale=1 且有富余）整列垂直居中；贴满自动退回顶部锚定。
 // 返回 { positions[], scale }。
+// NaN 防线：availH 在"高度纪元未定"窗口期可能还不是有限值（面板尺寸未
+// 稳定），NaN 会顺着 scale/positions 一路污染到特效矩形——回退为"放得下"。
+function _finiteAvailH(availH, count, cardHeight, spacing) {
+    return Number.isFinite(availH)
+        ? availH : Math.max(count, 1) * (cardHeight + spacing)
+}
 export function adaptiveLayout(availH, count, cardHeight = CARD_HEIGHT,
                                 spacing = 12, center = false) {
     const positions = []
-    if (count <= 0)
+    if (!(count > 0))
         return { positions, scale: 1 }
+    availH = _finiteAvailH(availH, count, cardHeight, spacing)
     const scale = Math.max(0.3, Math.min(1,
         (availH - (count - 1) * spacing) / (count * cardHeight)))
     for (let i = 0; i < count; i++)
@@ -95,16 +107,17 @@ function _centerPositions(positions, availH, contentBottom) {
 export function scrollLayout(availH, count, opts = {}) {
     const ch = opts.cardHeight ?? CARD_HEIGHT
     const spacing = opts.spacing ?? 12
-    const scroll = Math.max(0, opts.scroll ?? 0)
+    const scroll = Number.isFinite(opts.scroll) ? Math.max(0, opts.scroll) : 0
     const h = (opts.hoveredIndex >= 0 && opts.hoveredIndex < count)
         ? opts.hoveredIndex : -1
     const positions = []
     const scales = []
     const zs = []
     const dims = []
-    if (count <= 0)
+    if (!(count > 0))
         return { positions, scales, zs, dims, scale: 1,
             pitch: ch + spacing, scrollMax: 0 }
+    availH = _finiteAvailH(availH, count, ch, spacing)
     // 基础槽位（未滚动）：固定间距；放得下整块居中，放不下顶锚
     const pitch = ch + spacing
     const contentH = (count - 1) * pitch + ch
@@ -127,9 +140,9 @@ export function scrollLayout(availH, count, opts = {}) {
     // 会让悬停卡向内收缩、把指针从卡缘挤出（悬停丢失→回弹→驻留→再聚焦
     // 的慢振荡）。聚焦只许放大或等大。
     const focusScale = Math.max(opts.focusScale ?? 1.0, 1)
-    const retreat = opts.retreat ?? DECK_RETREAT
+    const retreat = opts.retreat ?? SCROLL_RETREAT
     // 悬停卡锚定当前视觉位置（hoverY）；缺省回退滚动后的基础槽位
-    const hy = (opts.hoverY !== undefined && opts.hoverY !== null)
+    const hy = Number.isFinite(opts.hoverY)
         ? opts.hoverY : baseY(h) - scroll
     for (let i = 0; i < count; i++) {
         if (i === h) {

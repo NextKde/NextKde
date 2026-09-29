@@ -97,8 +97,13 @@ QtObject {
     property Connections _platformEvents: Connections {
         target: PlatformClient
         function onEventReceived(eventName, payload) {
+            // window.action = 命令回执（publishAction）：engage-swap 派发
+            // 失败自愈（stage 侧 engaging 卡复位）依赖它——漏掉这个过滤
+            // 项会让整条回执链变成死代码（桥一路发到 shell 门口被丢弃）
             if (eventName === "window.snapshot" || eventName === "desktops"
-                    || eventName === "thumbnail" || eventName === "global-pointer-press")
+                    || eventName === "thumbnail"
+                    || eventName === "global-pointer-press"
+                    || eventName === "window.action")
                 svc._consumeKwinEvent(payload)
         }
     }
@@ -819,8 +824,12 @@ QtObject {
                         // provider stops deduplicating. activeId joins the key:
                         // focus moving onto an untracked dialog changes nothing
                         // in `windows` but must still reach consumers.
+                        // activeDesktop 同理：桌面表面（quickshell）不在
+                        // windows 里，它拿走/交还焦点时 windows 与 activeId
+                        // 都不变——漏键会把桌面聚焦状态冻结在旧值。
                         const snapshotJson = JSON.stringify(event.windows)
-                            + "#" + (event.activeId ?? "");
+                            + "#" + (event.activeId ?? "")
+                            + "#" + (event.activeDesktop ? 1 : 0);
                         if (snapshotJson === svc._lastSnapshotJson)
                             return;
                         svc._lastSnapshotJson = snapshotJson;

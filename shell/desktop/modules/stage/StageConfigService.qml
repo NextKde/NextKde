@@ -134,7 +134,7 @@ QtObject {
     }
 
     // schema 类型转换 + 钳位（set 与 _load 共用）；非法值返回 null
-    // （bool 永远合法，false 是有效值不是失败）
+    //（bool 也一样：只有真/假布尔字面量合法）
     function _coerce(s, value) {
         if (s.type === "int" || s.type === "real") {
             let v = Number(value)
@@ -143,9 +143,19 @@ QtObject {
             v = Math.max(s.min, Math.min(s.max, v))
             return s.type === "int" ? Math.round(v) : v
         }
-        if (s.type === "bool")
-            return (value === true || value === "true" || value === 1
+        if (s.type === "bool") {
+            // 收严到枚举式判定：true/"true"/1/"1" → true，false/"false"/
+            // 0/"0" → false，其余 null 走 error 路径——与 int/real/enum 的
+            // "非法返回 null"契约一致（原实现任意垃圾值静默转 false 且
+            // set 报 ok，IPC 手误不报错直接翻转开关）
+            if (value === true || value === "true" || value === 1
                     || value === "1")
+                return true
+            if (value === false || value === "false" || value === 0
+                    || value === "0")
+                return false
+            return null
+        }
         if (s.type === "enum") {
             const v = String(value)
             return s.values.indexOf(v) >= 0 ? v : null
@@ -177,12 +187,21 @@ QtObject {
     // Process 在运行中重设 command 是彻底 no-op（命令静默丢弃、特效拿旧
     // 值）——一律入队，exited 回调串行取下一条。勿改用 exec()（会 SIGTERM
     // 杀在跑的链，留下部分写入）。
+    // ⚠️ 本队列是全 shell 唯一的 kwinrc 写通道（StageModeService 的
+    // 开关/对齐链也走 enqueueBashChain 入这里）：kwriteconfig6 是整文件
+    // 读改写、无跨进程写锁，两条队列并发时后完成者会抹掉先完成者刚写的
+    // 键（审计 P1：启动对齐窗口期 Target*/特效参数互相丢失即此）。
     property var _writerQueue: []
 
     function _enqueueWriter(argv) {
         _writerQueue.push(argv)
         if (!_writer.running)
             _startNextWriter()
+    }
+
+    // 跨服务入口：StageModeService 的特效装卸/对齐链经此串行化
+    function enqueueBashChain(argv) {
+        _enqueueWriter(argv)
     }
 
     function _startNextWriter() {
@@ -192,21 +211,35 @@ QtObject {
         _writer.running = true
     }
 
+    // 写完读回校验（历史事故：两个 --key 挤进一条 kwriteconfig6 把值写
+    // 串——GlassOpacity 被写成 25）。失配只告警不回滚：链本身成功说明
+    // 写入完成，失配意味着键被别的写手覆盖或拼错，打出来给人看。
+    function _verifyKeyCmd(key, expected): string {
+        // 失配信息走 stderr（stdout 无人看）；写手对任何 stderr 输出都会
+        // 告警，见 _procFactory 的 onExited
+        return " && v=$(kreadconfig6 --file kwinrc --group Effect-stageanim"
+            + " --key " + key + "); if [ \"$v\" != \"" + expected
+            + "\" ]; then echo '[StageConfig] kwinrc verify " + key
+            + " expected " + expected + " got'\"$v\" >&2; fi"
+    }
+
     function _pushEffectConfig() {
         if (!_writer)
             return
+        const tilt = layoutMode === "scroll" ? deckRestTilt : tiltAngle
         _enqueueWriter(["bash", "-c",
             "kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key AnimationDuration " + animDuration
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key EasingCurve " + animEasing
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
-                    + " --key TiltAngle " + (layoutMode === "scroll"
-                        ? deckRestTilt : tiltAngle)
+            + " --key TiltAngle " + tilt
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key GlassOpacity " + glassOpacity
             + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects"
-            + ".reconfigureEffect " + StageModeService.effectId])
+            + ".reconfigureEffect " + StageModeService.effectId
+            + _verifyKeyCmd("TiltAngle", tilt)
+            + _verifyKeyCmd("GlassOpacity", glassOpacity)])
     }
 
     function _save() {
@@ -241,11 +274,25 @@ QtObject {
     }
 
     // QtObject 没有默认属性，Process 经 Component 工厂实例化
-    // （同 WindowService / StageModeService 写法）
+    //（同 WindowService / StageModeService 写法）。stderr 接出来 + 退出码
+    // 检查：bash 链任一步失败（qdbus 拒连/kwriteconfig 出错）原本无声
+    // 无息——半装卸态 + 零日志是排障黑洞（审计 P1）
     property Component _procFactory: Component {
         Process {
             stdout: StdioCollector {}
-            onExited: svc._startNextWriter()
+            stderr: StdioCollector {}
+            onExited: function(exitCode) {
+                // 退出码非零 = 链断裂；stderr 有内容 = 链走完但有告警
+                //（kwinrc 验值失配等）——两种都要落 journal
+                const err = stderr.text.trim()
+                if (exitCode !== 0)
+                    console.warn("[StageConfig] kwinrc writer chain failed"
+                        + " exit=" + exitCode + " stderr: " + err)
+                else if (err !== "")
+                    console.warn("[StageConfig] kwinrc writer warning: "
+                        + err)
+                svc._startNextWriter()
+            }
         }
     }
 

@@ -2,7 +2,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import org.kde.taskmanager
-import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 import qs.desktop.modules.applauncher
@@ -67,6 +66,11 @@ PanelWindow {
         return StageGroups.decorateGroups(
             StageGroups.groupRecords(WindowService.records || [], {
                 desktopId: WindowService.currentDesktopId,
+                // requirePid 与发布侧对齐：无 pid 但有 caption 的表面
+                //（桥 includeWindow 放行）能进 records，视图成卡会把它
+                // 计入 count、发布侧却无矩形无槽位——两侧 count 差 1，
+                // auto 路径布局整体错位
+                requirePid: true,
                 skipWindowId: root.stageActiveId,
                 excludeKey: activeRec ? StageGroups.groupKeyOf(activeRec) : "",
                 excludeKeepMinimized: true,
@@ -147,12 +151,10 @@ PanelWindow {
     property Timer _minimizeDispatchTimer: Timer {
         interval: StageConfigService.demoteDispatchDelay
         onTriggered: {
-            const t = root._pendingMinimize
-            root._pendingMinimize = []
-            console.info("[DeskRevealDBG] dispatch minimize count=" + t.length
-                + " ids=" + JSON.stringify(t))
-            for (let i = 0; i < t.length; i++)
-                WindowService.minimizeWindow(t[i], true)
+        const t = root._pendingMinimize
+        root._pendingMinimize = []
+        for (let i = 0; i < t.length; i++)
+            WindowService.minimizeWindow(t[i], true)
             // 最小化已派发＝窗口开始飞进卡：此刻放出被扣住的卡（同拍）
             if (root._deskHoldActive) {
                 root._deskHoldActive = false
@@ -377,10 +379,8 @@ PanelWindow {
             // 点击自带 toggle 路径（DeskCenter onClicked）——同一次点击的
             // 焦点变化不该再触发第二次收编（实测：两路互相 cancel 在途
             // 批次，快速点击时状态翻车）。只兜不经过点击的聚焦转移。
-            if (Date.now() - root._lastDeskToggleAt < 1200) {
-                console.info("[DeskRevealDBG] timer yielded (recent toggle)")
+            if (Date.now() - root._lastDeskToggleAt < 1200)
                 return
-            }
             if (WindowService.activeWindowId === ""
                     && (WindowService.kwinActiveId === ""
                         || WindowService.kwinActiveDesktop)
@@ -402,6 +402,11 @@ PanelWindow {
                 const g = groups[i]
                 if (!g.targetId)
                     continue
+                // 最小化代表窗截到黑帧（_queueAllThumbnails 同款守卫）：
+                // 对它重试会把黑帧灌进缩略图缓存，占位符恶化成永久黑块
+                const rep = WindowService.windowById(g.targetId)
+                if (rep?.toplevel?.minimized)
+                    continue
                 if (!WindowService.thumbnailUrl(g.targetId))
                     WindowService.requestThumbnail(g.targetId)
             }
@@ -420,15 +425,11 @@ PanelWindow {
     property real _lastDeskToggleAt: 0
 
     function toggleDeskReveal() {
-        console.info("[DeskRevealDBG] toggle enter set="
-            + deskCollectedIds.length + " lastAt=" + root._lastDeskToggleAt)
         if (!StageModeService.enabled || !open)
             return
         const now = Date.now()
-        if (now - root._lastDeskToggleAt < 400) {
-            console.info("[DeskRevealDBG] toggle debounced")
+        if (now - root._lastDeskToggleAt < 400)
             return
-        }
         root._lastDeskToggleAt = now
         if (deskCollectedIds.length > 0) {
             const ids = deskCollectedIds
@@ -463,8 +464,6 @@ PanelWindow {
             if (StageGroups.isOnDesktop(r, currentId))
                 targets.push(r)
         }
-        console.info("[DeskRevealDBG] collect targets=" + targets.length
-            + " recordSet=" + recordSet + " set=" + deskCollectedIds.length)
         if (targets.length === 0)
             return false
         const ids = targets.map(r => r.windowId)
@@ -576,8 +575,17 @@ PanelWindow {
                             scroll: root.scrollOffset,
                         })
                     : _layout(groups.length + 1)
+                // computeTargetRects 按数组下标取 lay.positions[g]——直接
+                // 传 [ghostEntry] 下标恒 0，pos 算完即丢，ghost 矩形永远
+                // 落最顶槽（审计 P0）。单槽位布局对象让下标 0 = ghost 槽位；
+                // 只写 ghost 组的矩形，其余组保持首段发布的可见卡槽位。
+                const ghostAt = Object.assign({}, ghostLay, {
+                    positions: [ghostLay.positions[pos] ?? 0],
+                })
+                if (ghostLay.scales)
+                    ghostAt.scales = [ghostLay.scales[pos]]
                 root._lastCardRects = StageGeo.computeTargetRects(
-                    [ghostEntry], ghostLay,
+                    [ghostEntry], ghostAt,
                     { columnY: cards.y, columnWidth: cards.width,
                         columnX: cards.x,
                         cardHeight: StageConfigService.cardHeight },
@@ -592,7 +600,7 @@ PanelWindow {
 
     // ── 组顺序表：卡片点击 = 位置交换（退位组补到被点槽位），顺序由本表
     // 决定，而不是 records 顺序。维护点：滚轮翻动（直接重建）、engageCard
-    // 的 applySwapOrder、syncCards 的 pruneOrder（实现都在 stage-groups.mjs）。
+    // 的 applySwapOrder、syncCards 的 mergeOrder（实现都在 stage-groups.mjs）。
     property var _groupOrder: []
 
     // 设置页改动（倾斜角/间距/布局模式都会挪动卡片几何）→ 立即重排并重发布
@@ -721,6 +729,10 @@ PanelWindow {
     function _beginCardDrag(slot, index, sceneY) {
         if (root.dragKey !== "" || slot.cardItem.engaging)
             return
+        // 驻留定时器一并作废：按下后 12px 内进拖拽时驻留可能还在跑，
+        // 到点仍会设 hoveredKey → 拖拽结束该卡命中 y 冻结分支不归位
+        root._dwellKey = ""
+        root._hoverDwellTimer.stop()
         root.hoveredKey = ""
         root.dragKey = slot.appKey
         root.dragFromIndex = index
@@ -736,20 +748,24 @@ PanelWindow {
             return
         root.dragFromIndex = index   // 对账就地换主后行号可能变
         const want = cards.mapFromItem(null, 0, sceneY).y - root.dragGrabOffset
-        root.dragY = Math.max(-StageConfigService.cardHeight * 0.5,
-            Math.min(cards.height - StageConfigService.cardHeight * 0.5, want))
+        const edge = StageConfigService.cardHeight * StageGeo.DRAG_EDGE_RATIO
+        root.dragY = Math.max(-edge,
+            Math.min(cards.height - edge, want))
         // 逐帧跟手：被拖卡的 y 直接赋值（其 Behavior 已在拖拽中禁用）。
         // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
         // 布局会拖累跟手帧率
         slot.y = root.dragY
-        // 目标槽 = 基础槽位里离被拖卡最近的
+        // 目标槽 = 基础槽位里离被拖卡最近的（与视图同款布局：adaptive
+        // 的槽位按缩放间距排，拿 scrollLayout 算会整体错位）
         const n = cardModel.count
-        const lay = StageGeo.scrollLayout(cards.height, n, {
-            cardHeight: StageConfigService.cardHeight,
-            spacing: StageConfigService.cardSpacing,
-            scroll: root.scrollOffset,
-            hoveredIndex: -1,
-        })
+        const lay = StageConfigService.layoutMode === "scroll"
+            ? StageGeo.scrollLayout(cards.height, n, {
+                cardHeight: StageConfigService.cardHeight,
+                spacing: StageConfigService.cardSpacing,
+                scroll: root.scrollOffset,
+                hoveredIndex: -1,
+            })
+            : _layout(n)
         let best = index, bestDist = Infinity
         for (let i = 0; i < n; i++) {
             const d = Math.abs((lay.positions[i] ?? 0) - root.dragY)
@@ -791,8 +807,9 @@ PanelWindow {
                     + " -> slot " + to)
             }
         }
-        syncCards()   // 模型移动 + layoutCards 动画收敛到新槽位
-        publishSimulatedLayout("__desk-collect-no-exclude__")  // 矩形随新槽位
+        syncCards()   // 模型移动 + layoutCards 动画收敛 + 矩形重发布（自动
+        // 排除活动组——活动组没有卡，烤进布局就是 N+1 幻影卡，整列矩形
+        // 错一个槽；哨兵键只属于桌面收编路径，那里全员即将最小化）
     }
 
     function engageCard(slot) {
@@ -858,12 +875,11 @@ PanelWindow {
     }
 
     function closeGroup(idsJson) {
-        console.info("[CardCloseDBG] closeGroup idsJson=" + idsJson)
         let ids = []
         try {
             ids = JSON.parse(idsJson || "[]")
         } catch (e) {
-            console.warn("[CardCloseDBG] parse failed: " + e)
+            console.warn("[StageSidebar] closeGroup parse failed: " + e)
             return
         }
         for (let i = 0; i < ids.length; i++)
@@ -1190,16 +1206,6 @@ PanelWindow {
         // 拖拽让位打架；拖拽布局自己管
         if (root.dragKey !== "")
             return
-        let m = ""
-        for (let i = 0; i < cardRepeater.count; i++) {
-            const s = cardRepeater.itemAt(i)
-            if (s && s.cardItem.appKey === key) {
-                m = " mouse=" + s.cardItem.mousePos
-                break
-            }
-        }
-        console.info("[StageSidebar] hover call key=" + key
-            + " over=" + over + " cur=" + root.hoveredKey + m)
         if (over) {
             if (root.hoveredKey !== key) {
                 root._dwellKey = key
@@ -1281,17 +1287,6 @@ PanelWindow {
             }
             const heightEpochChanged = cards.height !== root._layoutHeight
             root._layoutHeight = cards.height
-            if (!scrollPass && (h >= 0 || root.hoveredKey !== ""
-                    || heightEpochChanged))
-                console.info("[StageSidebar] layout n=" + n + " h=" + h
-                    + " key=" + root.hoveredKey + " cardsH="
-                    + Math.round(cards.height) + " yProp="
-                    + (h >= 0 && cardRepeater.itemAt(h)
-                        ? Math.round(cardRepeater.itemAt(h).y) : "-")
-                    + " yVisual="
-                    + (h >= 0 && cardRepeater.itemAt(h)
-                        ? Math.round(cardRepeater.itemAt(h)
-                            .mapToItem(cards, 0, 0).y) : "-"))
             const lay = StageGeo.scrollLayout(cards.height, n, {
                 cardHeight: StageConfigService.cardHeight,
                 spacing: StageConfigService.cardSpacing,
@@ -1318,10 +1313,11 @@ PanelWindow {
                     slot.placed = true
                     if (i === root.dragFromIndex) {
                         slot.y = root.dragY
-                        slot.slotScale = 1.06
-                        slot.slotX = (cards.width - slot.width * 1.06) / 2
+                        slot.slotScale = StageGeo.DRAG_SCALE
+                        slot.slotX = (cards.width
+                            - slot.width * StageGeo.DRAG_SCALE) / 2
                             + StageGeo.GLOW_PAD
-                        slot.z = 999
+                        slot.z = StageGeo.DRAG_Z
                         slot.dimmed = false
                         continue
                     }
@@ -1376,10 +1372,11 @@ PanelWindow {
                 slot.placed = true
                 if (i === root.dragFromIndex) {
                     slot.y = root.dragY
-                    slot.slotScale = 1.06
-                    slot.slotX = (cards.width - slot.width * 1.06) / 2
+                    slot.slotScale = StageGeo.DRAG_SCALE
+                    slot.slotX = (cards.width
+                        - slot.width * StageGeo.DRAG_SCALE) / 2
                         + StageGeo.GLOW_PAD
-                    slot.z = 999
+                    slot.z = StageGeo.DRAG_Z
                     slot.dimmed = false
                     continue
                 }
@@ -1406,10 +1403,9 @@ PanelWindow {
         }
         _updateHitRegionExtent()
     }
-    onHeightChanged: {
-        layoutCards()
-        _geometryRepublish.restart()
-    }
+    // 根窗口 onHeightChanged 不另设：cards 锚满窗体（上下留辉光余量），
+    // 窗高变化必然带动 cards 高度 → cards.onHeightChanged 已覆盖，同帧
+    // 两轮 layoutCards + 两轮 geometryRepublish 是纯浪费
 
     // ── 缩略图请求节奏（照抄 Overview：80ms 一拍、每拍 ≤3 张） ──
     property var _thumbRequestQueue: []

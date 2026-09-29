@@ -6,19 +6,23 @@ import "stage-geometry.mjs" as StageGeo
 
 // StageModeService — 前台调度（Stage 侧栏）总开关。
 // 状态落盘 ~/.config/fg-sched/stage-mode（"1"/"0"），同一文件被 fg-schedd
-// 的 sweep 读取作冻结门控。
+// 的 sweep 读取作冻结门控。旗标语义全链路统一为「显式 "0" = 关，其余
+// （缺失/空/"1"/损坏内容）= 开」——shell 读取与设置页读取同判，文件内容
+// 异常时两边不会各说各话。
 // 最小化动画方向由自研 KWin 特效 stageanim（vendor/kwin-effects-stageanim，
 // magiclamp 魔改）承担。目标矩形按窗口解析：
 //   ① shell 发布的每窗卡片矩形（stage-targets.json，按 KWin internalId）
 //   ② 全局侧栏矩形（kwinrc [Effect-stageanim] Target*，开=写入/关=清空）
 //   ③ 都没有 → magiclamp 原版回落（光标/面板方向 ≈ dock）
 // magiclamp 永久停用（stageanim 两模式全包）。改配置后 reconfigure 即生效。
+// ⚠️ 所有 kwinrc 写入经 StageConfigService.enqueueBashChain 串行——
+// kwriteconfig6 整文件读改写无锁，双队列并发会互相抹键（审计 P1）；
+// 失败检测（退出码/stderr 告警）也集中在那边的写手 Process 上。
 QtObject {
     id: svc
 
     // 启动时由读取进程用落盘态覆盖；文件缺失/为空 = 默认开
     property bool enabled: true
-    property int revision: 0
 
     readonly property string flagDir: Quickshell.env("HOME") + "/.config/fg-sched"
     readonly property string flagPath: flagDir + "/stage-mode"
@@ -63,32 +67,11 @@ QtObject {
         + " && kwriteconfig6 --file kwinrc --group Plugins --key kos_dock_window_animationEnabled true")
     }
 
-    // 写手命令队列（round35 NEW-3）：Quickshell 的 Process 在运行中重设
-    // command+running=true 是彻底 no-op（命令静默丢弃）。bash 链实测
-    // 200-500ms，快速 toggle/启动对齐撞车就会丢命令——一律入队，exited
-    // 回调串行取下一条。勿改用 Quickshell 的 exec() 便捷方法（它会
-    // SIGTERM 杀掉在跑的链，kwriteconfig 半途而死留下部分写入）。
-    property var _writerQueue: []
-
-    function _enqueueWriter(argv) {
-        _writerQueue.push(argv)
-        if (!_writer.running)
-            _startNextWriter()
-    }
-
-    function _startNextWriter() {
-        if (_writerQueue.length === 0)
-            return
-        _writer.command = _writerQueue.shift()
-        _writer.running = true
-    }
-
     function setEnabled(v) {
-        if (!_writer || v === svc.enabled)
+        if (v === svc.enabled)
             return
         enabled = v
-        revision++
-        _enqueueWriter(["bash", "-c",
+        StageConfigService.enqueueBashChain(["bash", "-c",
             "mkdir -p " + flagDir
             + " && printf '%s' '" + (v ? "1" : "0") + "' > " + flagPath
             + " && " + (v ? targetRectCmd : clearTargetRectCmd)
@@ -102,7 +85,7 @@ QtObject {
     // 首启对齐：目标矩形 + 两特效加载态二选一。必须等读取进程带回落盘态后
     // 再执行，否则会拿默认值对齐（落盘是"关"、默认是"开"的场景会开错方向）。
     function _alignWithPersistedMode() {
-        _enqueueWriter(["bash", "-c",
+        StageConfigService.enqueueBashChain(["bash", "-c",
             (enabled ? targetRectCmd : clearTargetRectCmd)
             + " && " + swapEffectsCmd(enabled)
             + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect " + effectId])
@@ -110,24 +93,20 @@ QtObject {
     }
 
     // QtObject 没有默认属性，Process 不能直接作子对象——用 Component 工厂
-    // 实例化（同 WindowService 的 probe factory 写法）。
+    // 实例化（kwinrc 写手已收敛到 StageConfigService，这里只剩旗标读取器）。
     property Component _procFactory: Component {
         Process {
             stdout: StdioCollector {}
-            onExited: svc._startNextWriter()
         }
     }
 
-    property var _writer: null
-
     Component.onCompleted: {
-        _writer = _procFactory.createObject(svc)
         const reader = _procFactory.createObject(svc,
             { command: ["cat", svc.flagPath] })
         reader.exited.connect(function() {
             const t = (reader.stdout?.text ?? "").trim()
             if (t.length > 0)
-                svc.enabled = (t === "1")
+                svc.enabled = (t !== "0")
             svc._alignWithPersistedMode()
             reader.destroy()
         })
