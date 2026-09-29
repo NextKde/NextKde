@@ -112,7 +112,7 @@ Item {
     // 1.0 → 按钮随 5% 缩放位移 → 指针脱出 → 再放大 = 抽搐循环（实测），
     // 且点击永远落空。合成后指针在卡内任何位置（含关闭钮）卡片姿态稳定。
     readonly property bool isHovered: cardMouse.containsMouse
-        || closeMouse.containsMouse
+        || closeHit.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
     // 指针在卡内的位置（cards 坐标系）——排障日志用
     readonly property string mousePos: {
@@ -239,7 +239,9 @@ Item {
                 width: 20
                 height: 20
                 radius: 10
-                color: closeMouse.containsMouse ? "#ef4444" : "transparent"
+                // 悬停高亮由根层热区驱动（本视觉树渲染进 visible:false
+                // 的透视层，层内 MouseArea 不收输入）
+                color: closeHit.containsMouse ? "#ef4444" : "transparent"
                 opacity: card.isHovered ? 1.0 : 0.0
                 Behavior on opacity { NumberAnimation { duration: 120 } }
 
@@ -250,13 +252,6 @@ Item {
                     color: "white"
                 }
 
-                MouseArea {
-                    id: closeMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: card.closeAllRequested()
-                }
             }
         }
 
@@ -477,6 +472,30 @@ Item {
                 return
             }
             card.engageClicked()
+        }
+    }
+
+    // 关闭钮热区必须在卡根层级：视觉树渲染进 visible:false 的透视层
+    //（plane，着色器源），层内 MouseArea 不收输入——整卡 cardMouse 把
+    // 点击全接走（"关闭按钮点不动"的根因）。plane/plate 与根坐标 1:1
+    // 对齐（plane.x=-16/plate.x=16 抵消），热区与视觉钮重合（外扩 2px
+    // 容差）。
+    MouseArea {
+        id: closeHit
+        z: 1
+        width: 24
+        height: 24
+        anchors {
+            top: parent.top
+            right: parent.right
+            topMargin: 6
+            rightMargin: 6
+        }
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: {
+            console.info("[CardCloseDBG] clicked appKey=" + card.appKey)
+            card.closeAllRequested()
         }
     }
 }

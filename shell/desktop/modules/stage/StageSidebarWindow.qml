@@ -858,10 +858,12 @@ PanelWindow {
     }
 
     function closeGroup(idsJson) {
+        console.info("[CardCloseDBG] closeGroup idsJson=" + idsJson)
         let ids = []
         try {
             ids = JSON.parse(idsJson || "[]")
         } catch (e) {
+            console.warn("[CardCloseDBG] parse failed: " + e)
             return
         }
         for (let i = 0; i < ids.length; i++)
