@@ -208,4 +208,20 @@ const farMid = tiltProject(108, 0, 10 * Math.PI / 180, TILT_FOCAL, 400).y
 check("tilt: near/far edges split vertically off-horizon",
     Math.abs(nearMid - farMid) > 5, true)
 
+// ── originX（右侧常驻的窗口原点偏移）──
+{
+    const groups = [{ key: "a", wins: [win("w9", "h9", 10)] }];
+    const dimsBase = { columnY: 41, columnWidth: 240, columnX: 20,
+        cardHeight: 148 };
+    const left = computeTargetRects(groups, { positions: [0], scale: 1 },
+        dimsBase, [win("w9", "h9", 10)], {});
+    const right = computeTargetRects(groups, { positions: [0], scale: 1 },
+        Object.assign({}, dimsBase, { originX: 1920 - 280 }),
+        [win("w9", "h9", 10)], {});
+    check("originX default = window-relative", left["h9"].x,
+        Math.round(20 + (240 - Math.round(216)) / 2));
+    check("originX shifts rect to screen coords", right["h9"].x,
+        left["h9"].x + 1920 - 280);
+}
+
 console.log(`stage-geometry: ${cases.length} checks passed`);

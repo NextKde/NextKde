@@ -911,6 +911,57 @@ ApplicationWindow {
                     }
                 }
 
+                Text {
+                    text: "侧栏位置"
+                    color: theme.primaryText
+                    font.pixelSize: 13
+                }
+
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Repeater {
+                        model: [
+                            { id: "left", label: "屏幕左侧（默认）" },
+                            { id: "right", label: "屏幕右侧" },
+                        ]
+
+                        delegate: Rectangle {
+                            required property var modelData
+                            required property int index
+                            width: sideLabel.implicitWidth + 22
+                            height: 28
+                            radius: 9
+                            property bool isActive: fgSchedPage.stageSnapshot.side === modelData.id
+                            color: isActive
+                                ? theme.selectedContainer
+                                : (sideMouse.containsMouse
+                                    ? theme.searchField : theme.sidebar)
+                            border.width: isActive ? 2 : 0
+                            border.color: theme.accent
+
+                            Text {
+                                id: sideLabel
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: parent.isActive
+                                    ? theme.selectedForeground : theme.primaryText
+                                font { pixelSize: 12; weight: Font.Medium }
+                            }
+
+                            MouseArea {
+                                id: sideMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.stageSet(
+                                    "side", modelData.id)
+                            }
+                        }
+                    }
+                }
+
                 StageSliderRow {
                     label: "静置倾斜角"
                     unit: "°"

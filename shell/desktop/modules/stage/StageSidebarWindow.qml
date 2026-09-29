@@ -36,7 +36,15 @@ PanelWindow {
 
     visible: open
     color: "transparent"
-    anchors { top: true; left: true; bottom: true }
+    // 常驻侧（stage-config side）：right 时整窗锚右缘，exclusiveZone 由
+    // layer-shell 按锚定边解释，内容层各自镜像（StageCard/深度渐变/图标排）
+    readonly property bool rightSide: StageConfigService.side === "right"
+    anchors {
+        top: true
+        bottom: true
+        left: !root.rightSide
+        right: root.rightSide
+    }
     // 窗宽 = 常驻条 + 两侧溢出余量：悬停放大 + 辉光 + 倾斜投影超出卡面
     // 13~20px，窗缘硬切会显出"边界"（实测踩过）。exclusiveZone 仍只占
     // 常驻条宽；余量区的输入由文件尾的 mask 穿透到桌面。
@@ -657,6 +665,8 @@ PanelWindow {
         root._lastCardRects = StageGeo.computeTargetRects(groups, lay,
             { columnY: cards.y, columnWidth: cards.width,
                 columnX: cards.x,
+                originX: root.rightSide
+                    ? (root.screen?.width ?? 0) - root.width : 0,
                 cardHeight: StageConfigService.cardHeight },
             records, root._lastCardRects)
         // round35 NEW-4：活动组"ghost 槽位"。活动组被排除在视图布局外
@@ -706,6 +716,8 @@ PanelWindow {
                     [ghostEntry], ghostAt,
                     { columnY: cards.y, columnWidth: cards.width,
                         columnX: cards.x,
+                        originX: root.rightSide
+                            ? (root.screen?.width ?? 0) - root.width : 0,
                         cardHeight: StageConfigService.cardHeight },
                     records, root._lastCardRects)
             }
@@ -931,6 +943,13 @@ PanelWindow {
     }
 
     function engageCard(slot) {
+        engageCardWindow(slot, slot.targetId)
+    }
+
+    // 点卡 / 点左下角窗口图标共用的入列口：iconWindowId 传图标命中的那扇
+    // 窗时焦点钉它（macOS Stage Manager：图标排是逐窗直达），点卡面用
+    // 代表窗。整组还原语义不变，只有 focus 目标不同。
+    function engageCardWindow(slot, iconWindowId) {
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
         if (!StageModeService.enabled || !open)
             return
@@ -946,8 +965,13 @@ PanelWindow {
         root._deskUndoWatch = null
         root._deskUndoWatchTimer.stop()
         // 只入队；退位判定/快照/预测表全部挪到派发时刻（见队列注释）
+        const ids = JSON.parse(slot.idsJson || "[]")
+        // 图标窗必须还在组里（窗口可能刚关，idsJson 是上一轮快照）
+        const focusId = iconWindowId !== slot.targetId
+                && ids.indexOf(iconWindowId) >= 0
+            ? iconWindowId : slot.targetId
         root._engageQueue.push({ appKey: slot.appKey,
-            targetId: slot.targetId, idsJson: slot.idsJson })
+            targetId: focusId, idsJson: slot.idsJson })
         // 首条入队才启动计时（后续条目由派发尾链触发，保持每 engageDelay
         // 一拍的节奏）
         if (root._engageQueue.length === 1)
@@ -1162,6 +1186,9 @@ PanelWindow {
                     }
                     onDragReleased: root._endCardDrag(slot)
                     onCloseAllRequested: root.closeGroup(slot.idsJson)
+                    onIconActivated: function(windowId) {
+                        root.engageCardWindow(slot, windowId)
+                    }
                 }
             }
         }

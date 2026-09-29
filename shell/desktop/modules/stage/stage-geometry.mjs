@@ -189,7 +189,10 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
             + (lay.positions[g] ?? 0))
         const h = Math.round(cardHeight * s)
         const w = Math.round((dims.columnWidth - CARD_WIDTH_INSET) * s)
-        const x = Math.round((dims.columnX ?? 0)
+        // originX = 面板窗在屏幕上的原点 x：左侧常驻=0；右侧常驻时窗口
+        // 锚在屏幕右缘，矩形必须加窗口原点才是特效要的屏幕坐标（缺省 0
+        // 兼容旧调用与既有测试锚点）
+        const x = Math.round((dims.originX ?? 0) + (dims.columnX ?? 0)
             + (dims.columnWidth - w) / 2)
         const wins = groups[g].wins
         for (let wI = 0; wI < wins.length; wI++) {

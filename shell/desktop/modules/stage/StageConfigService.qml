@@ -22,6 +22,11 @@ QtObject {
         // 布局（scroll = 完整滚动：卡片完整显示不重叠，固定可见数 + 滚轮翻页）
         "layoutMode":   { type: "enum", values: ["scroll", "adaptive"],
                           def: "scroll" },
+        // 常驻侧：left = 屏幕左缘（默认）；right = 屏幕右缘（macOS
+        // Stage Manager 的位置设置同款）。切换会翻窗口锚点/卡片镜像/
+        // 特效回退矩形，三处联动见各自文件
+        "side":         { type: "enum", values: ["left", "right"],
+                          def: "left" },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
         "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
         "centerCards":  { type: "bool", def: true },
@@ -71,6 +76,7 @@ QtObject {
     // 等分视口，超出滚轮翻页无滚动条，底部位置点+窗数提示）；adaptive =
     // 自适应缩小（全部完整显示，等比缩小到恰好放下）
     property string layoutMode: "scroll"
+    property string side: "left"
     property int cardHeight: 148
     property int cardSpacing: 16
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定

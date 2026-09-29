@@ -36,12 +36,19 @@ QtObject {
     // 控制通道。
     signal deskRevealToggleRequested()
 
-    // 侧栏条矩形（屏幕逻辑坐标：顶栏之下、左侧常驻条；几何常量同源
-    // stage-geometry.mjs。X 带溢出余量偏移（面板窗比常驻条宽，内容列
-    // 居中）。TargetHeight 1059 是历史全局回退矩形的实测值，仅作特效
-    // 第三级回落，不随面板几何变化）
+    // 侧栏条矩形（屏幕逻辑坐标：顶栏之下、常驻条；几何常量同源
+    // stage-geometry.mjs。X = 面板窗原点 + 溢出余量：左侧=余量本身；
+    // 右侧=屏宽−窗宽+余量（面板窗锚右缘，窗宽 = 常驻条 + 两侧余量）。
+    // TargetHeight 1059 是历史全局回退矩形的实测值，仅作特效第三级
+    // 回落，不随面板几何变化）
+    readonly property int _screenW: Quickshell.screens.length > 0
+        ? Quickshell.screens[0].width : 1920
     readonly property string targetRectCmd: ""
-        + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX " + StageGeo.CARD_OVERFLOW_MARGIN
+        + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX "
+        + (StageConfigService.side === "right"
+            ? String(_screenW - StageGeo.PANEL_WIDTH
+                - StageGeo.CARD_OVERFLOW_MARGIN)
+            : String(StageGeo.CARD_OVERFLOW_MARGIN))
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY " + StageGeo.PANEL_ORIGIN_Y
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + StageGeo.PANEL_WIDTH
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight 1059"
@@ -82,6 +89,19 @@ QtObject {
 
     function toggle() { setEnabled(!enabled) }
 
+    // 侧栏位置切换：只重投影全局回退矩形（每窗矩形由 shell 窗口侧的
+    // originX 现算，不落 kwinrc），reconfigure 让特效重读。
+    // ⚠️ 不能写 Connections 子对象——QtObject 没有默认属性容纳子项
+    //（同 Process 直挂的坑，crash-loop 实测），Component.onCompleted
+    // 里手动 connect
+    function _onSideChanged() {
+        StageConfigService.enqueueBashChain(["bash", "-c",
+            (enabled ? targetRectCmd : clearTargetRectCmd)
+            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects"
+            + ".reconfigureEffect " + effectId])
+        console.info("[StageMode] side=" + StageConfigService.side)
+    }
+
     // 首启对齐：目标矩形 + 两特效加载态二选一。必须等读取进程带回落盘态后
     // 再执行，否则会拿默认值对齐（落盘是"关"、默认是"开"的场景会开错方向）。
     function _alignWithPersistedMode() {
@@ -101,6 +121,7 @@ QtObject {
     }
 
     Component.onCompleted: {
+        StageConfigService.sideChanged.connect(svc._onSideChanged)
         const reader = _procFactory.createObject(svc,
             { command: ["cat", svc.flagPath] })
         reader.exited.connect(function() {

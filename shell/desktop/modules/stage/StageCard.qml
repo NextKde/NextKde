@@ -55,6 +55,24 @@ Item {
     signal hovered(bool over)
     // 关闭按钮：关闭组内全部窗口
     signal closeAllRequested()
+    // 点击左下角的窗口小图标：直达该扇窗（macOS Stage Manager 同语义，
+    // 走 engage 管线但焦点钉在被点窗口）
+    signal iconActivated(string windowId)
+
+    // 组内窗口 id（idsJson 解析一次；图标排一窗一图标）
+    readonly property var windowIds: {
+        try {
+            return JSON.parse(idsJson || "[]")
+        } catch (e) {
+            return []
+        }
+    }
+    // 图标排最多并列数，更多收进 "+N"（排满会把卡面顶穿）
+    readonly property int maxIconSlots: 5
+
+    // 右侧常驻（stage-config side）：内容整体镜像——入场方向/扇叠方向/
+    // 图标排/深度渐变都翻到对侧
+    readonly property bool rightSide: StageConfigService.side === "right"
 
     width: parent ? parent.width
                   : StageGeo.PANEL_WIDTH - StageGeo.CARD_WIDTH_INSET
@@ -67,7 +85,12 @@ Item {
     // delegate 重建归零——必须在此显式交还卡片姿态，否则卡片永远停在
     // 透明态，看起来就是"卡片消失了"
     onTargetIdChanged: engaging = false
-    x: StageGeo.CARD_X_INSET + (shown ? 0 : 70)
+    // x 入列方向镜像：左侧从右滑入（+70），右侧从左滑入（−70）——都从
+    // 桌面一侧进条
+    x: rightSide
+        ? (parent ? parent.width - width - StageGeo.CARD_X_INSET : 0)
+            - (shown ? 0 : 70)
+        : StageGeo.CARD_X_INSET + (shown ? 0 : 70)
     opacity: engaging ? 0.0 : (shown ? 1.0 : 0.0)
     scale: shown ? (isHovered ? StageConfigService.hoverScale : 1.0) : 0.86
     // 悬停放大从左上角外扩（与 slot 的 TopLeft 缩放同向）：上边钉死、只向
@@ -116,6 +139,7 @@ Item {
     // 且点击永远落空。合成后指针在卡内任何位置（含关闭钮）卡片姿态稳定。
     readonly property bool isHovered: cardMouse.containsMouse
         || closeHit.containsMouse
+        || iconRowHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
     // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
     readonly property bool glowOn: card.isHovered || card.engaging
@@ -132,6 +156,34 @@ Item {
         height: parent.height + 44
         layer.enabled: true
         layer.smooth: true
+
+        // ── 扇叠背板（macOS Stage Manager 同语义）：同应用多窗 = 一前
+        // 一后的卡片簇。声明在 plate 之前 = 画在卡背之下；随卡面一起被
+        // 透视投影（它们本来就是"卡片"）。方向镜像：条在右时朝屏缘一侧
+        // 探出。悬停时间距微扩（卡片簇"吸气"的即时反馈）。最多露 2 张，
+        // 更多的用左下角图标排表达 ──
+        Repeater {
+            model: Math.min(card.count - 1, 2)
+            Rectangle {
+                required property int index
+                readonly property real off: (index + 1)
+                    * (card.isHovered ? 11 : 8)
+                x: card.rightSide ? plate.x - off : plate.x + off
+                y: plate.y - off
+                width: plate.width
+                height: plate.height
+                radius: plate.radius
+                color: Qt.rgba(0.03, 0.05, 0.09,
+                    StageConfigService.cardTint * (0.85 - index * 0.25))
+                border.width: 1
+                border.color: Qt.rgba(255, 255, 255,
+                    StageConfigService.cardBorder * (0.8 - index * 0.25))
+                opacity: card.engaging ? 0.0 : 1.0
+                Behavior on opacity { NumberAnimation { duration: 160 } }
+                Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+            }
+        }
 
         // 背板（原根 Rectangle 的颜色/描边/圆角，随卡面一起被透视投影）
         Rectangle {
@@ -365,33 +417,22 @@ Item {
                 smooth: true
             }
 
-            // 缩略图未就绪时的占位
-            Column {
+            // 缩略图未就绪时的占位：只留标题文本居中——应用图标改由左下
+            // 角的正视图标排承担（居中大图标是旧占位形态，用户定稿移除）
+            Text {
                 anchors.centerIn: parent
                 visible: !preview.visible && !liveStream.visible
-                spacing: 6
-
-                IconImage {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: 30
-                    height: 30
-                    source: card.iconSource || ""
-                    asynchronous: false
-                }
-
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width - 12
-                    text: card.title || "窗口"
-                    color: Qt.rgba(1, 1, 1, 0.40)
-                    font.pixelSize: 10
-                    elide: Text.ElideRight
-                    horizontalAlignment: Text.AlignHCenter
-                }
+                width: Math.min(parent.width - 16, contentWidth)
+                text: card.title || "窗口"
+                color: Qt.rgba(1, 1, 1, 0.40)
+                font.pixelSize: 10
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
             }
         }
 
-        // 深度渐变：远侧压暗盖在内容之上，增强"退到侧边"的纵深（悬停/点击时淡出）
+        // 深度渐变：远侧压暗盖在内容之上，增强"退到侧边"的纵深（悬停/点击时淡出）。
+        // 压暗侧 = 屏缘侧（左条压左、右条压右），条在右时整个翻转
         Rectangle {
             anchors.fill: plate
             radius: plate.radius
@@ -399,9 +440,15 @@ Item {
                 orientation: Gradient.Horizontal
                 GradientStop {
                     position: 0.0
-                    color: Qt.rgba(0, 0, 0, StageConfigService.cardDepth)
+                    color: card.rightSide ? Qt.rgba(0, 0, 0, 0.0)
+                        : Qt.rgba(0, 0, 0, StageConfigService.cardDepth)
                 }
                 GradientStop { position: 0.75; color: Qt.rgba(0, 0, 0, 0.0) }
+                GradientStop {
+                    position: 1.0
+                    color: card.rightSide ? Qt.rgba(0, 0, 0, StageConfigService.cardDepth)
+                        : Qt.rgba(0, 0, 0, 0.0)
+                }
             }
             opacity: (card.isHovered || card.engaging) ? 0.0 : 1.0
             Behavior on opacity { NumberAnimation { duration: 250 } }
@@ -493,5 +540,86 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: card.closeAllRequested()
+    }
+
+    // ── 左下角窗口图标排（macOS Stage Manager 同款）：一窗一图标并列。
+    // ⚠️ 正视、独立图层：声明在 ShaderEffect 之后（画在其上）、不进 plane
+    // 的透视纹理——图标永远不随卡片倾斜（用户定稿："正视，和卡片不应是
+    // 一个图层，像小图标盖住卡片左下角"）。点击直达那扇窗。条在右时整
+    // 排镜像到右下角。悬停合入 isHovered（指针移到图标上卡片姿态不塌）。
+    Item {
+        id: iconRow
+        z: 2
+        readonly property int iconSize: 24
+        readonly property int visibleCount:
+            Math.min(card.windowIds.length, card.maxIconSlots)
+        readonly property real rowWidth:
+            visibleCount * iconSize + Math.max(0, visibleCount - 1) * 5
+        height: iconSize
+        anchors {
+            bottom: parent.bottom
+            bottomMargin: -5
+            left: card.rightSide ? undefined : parent.left
+            leftMargin: card.rightSide ? 0 : -5
+            right: card.rightSide ? parent.right : undefined
+            rightMargin: card.rightSide ? -5 : 0
+        }
+        width: rowWidth
+
+        // 悬停垫片（不截点击）：指针在排内任意位置 = 卡片保持悬停姿态
+        MouseArea {
+            id: iconRowHover
+            anchors.fill: parent
+            anchors.margins: -3
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+        }
+
+        Repeater {
+            model: iconRow.visibleCount
+            MouseArea {
+                id: iconSlot
+                required property int index
+                width: iconRow.iconSize
+                height: iconRow.iconSize
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: card.iconActivated(card.windowIds[index])
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 7
+                    color: iconSlot.containsMouse
+                        ? Qt.rgba(0.16, 0.20, 0.30, 0.98)
+                        : Qt.rgba(0.07, 0.09, 0.14, 0.92)
+                    border.width: 1
+                    border.color: iconSlot.containsMouse
+                        ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
+                        : Qt.rgba(1, 1, 1, 0.22)
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    IconImage {
+                        anchors.centerIn: parent
+                        width: 17
+                        height: 17
+                        source: card.iconSource || ""
+                        asynchronous: false
+                    }
+                }
+            }
+        }
+
+        // 更多窗口收进 "+N"
+        Text {
+            visible: card.windowIds.length > card.maxIconSlots
+            anchors {
+                verticalCenter: parent.verticalCenter
+                left: card.rightSide ? undefined : parent.right
+                leftMargin: 5
+                right: card.rightSide ? parent.left : undefined
+                rightMargin: 5
+            }
+            text: "+" + (card.windowIds.length - card.maxIconSlots)
+            color: Qt.rgba(1, 1, 1, 0.65)
+            font { pixelSize: 10; weight: Font.DemiBold }
+        }
     }
 }
