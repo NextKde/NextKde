@@ -8,6 +8,7 @@ import {
     orderIndex, sortByOrder, applySwapOrder, pruneOrder, mergeOrder, moveOrderKey,
     SWAP_COMMIT_TTL_MS, commitDueSwaps,
     buildModelRows, planModelSync,
+    applyMerge, splitGroup, pruneOverrides,
 } from "./stage-groups.mjs";
 
 const cases = [];
@@ -201,7 +202,8 @@ check("commit: rapid alternation — both due, sequential commits",
 
 // ── 模型对账 ──
 check("CARD_FIELDS shape", CARD_FIELDS,
-    ["targetId", "pid", "appName", "title", "iconSource", "count", "idsJson"]);
+    ["targetId", "pid", "appName", "title", "iconSource", "count",
+     "idsJson", "iconsJson", "merged"]);
 
 function row(appKey, over = {}) {
     return Object.assign({ appKey, targetId: "t-" + appKey, pid: 1,
@@ -260,7 +262,8 @@ check("buildModelRows: fields + dedup",
             iconSource: "i", count: 1, ids: ["t3"] },
     ]),
     [{ appKey: "a", targetId: "t1", pid: 5, appName: "A", title: "x",
-        iconSource: "i", count: 2, idsJson: '["t1","t2"]' }]);
+        iconSource: "i", count: 2, idsJson: '["t1","t2"]',
+        iconsJson: '[]', merged: false }]);
 
 // moveOrderKey：拖拽换位
 check("move 前移尾→头", moveOrderKey(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
@@ -269,5 +272,46 @@ check("move 中移一位", moveOrderKey(["a", "b", "c"], "b", 2), ["a", "c", "b"
 check("move 原地不动", moveOrderKey(["a", "b"], "a", 0), ["a", "b"]);
 check("move 索引越界原样", moveOrderKey(["a", "b"], "a", 5), ["a", "b"]);
 check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
+
+
+// ── 自由组合（覆盖键层）──
+{
+    const mk = (id, h, did) => ({ windowId: id, handleId: h, pid: 10,
+        toplevel: {}, identity: { desktopId: did },
+        iconSource: "icon-" + did });
+    const recs = [mk("w1", "h1", "a"), mk("w2", "h2", "b"),
+        mk("w3", "h3", "a")];
+
+    // 覆盖键优先于自然键
+    check("override key wins", groupKeyOf(recs[0], { h1: "b" }), "b");
+    check("override miss falls back", groupKeyOf(recs[1], { h1: "b" }), "b");
+
+    // 合并：fromKey 组全部并进 toKey；from===to 无变化返回原引用
+    let ov = applyMerge({}, recs, "a", "b");
+    check("merge writes both windows", ov, { h1: "b", h3: "b" });
+    check("merge self is no-op", applyMerge(ov, recs, "b", "b"), ov);
+
+    // 分组：合成一张 merged 卡，每窗图标齐全
+    const groups = groupRecords(recs, { overrides: ov });
+    check("merged into one group", groups.length, 1);
+    check("group key is target", groups[0].key, "b");
+    check("group merged flag", groups[0].merged, true);
+    const rows = buildModelRows(decorateGroups(groups, () => ""));
+    check("row icons per window", JSON.parse(rows[0].iconsJson),
+        ["icon-a", "icon-b", "icon-a"]);
+
+    // 拆散：组内覆盖全部清除
+    ov = splitGroup(ov, recs, "b");
+    check("split clears overrides", ov, {});
+    const regrouped = groupRecords(recs, { overrides: ov });
+    check("split restores natural groups", regrouped.length, 2);
+
+    // 剪枝：死窗口的覆盖项清掉
+    check("prune drops dead handles",
+        pruneOverrides({ h1: "b", h9: "x" }, { h1: 1 }), { h1: "b" });
+    check("prune all-live is no-op ref",
+        pruneOverrides({ h1: "b" }, { h1: 1 }),
+        { h1: "b" });
+}
 
 console.log(`stage-groups: ${cases.length} checks passed`);

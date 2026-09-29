@@ -66,6 +66,48 @@ PanelWindow {
     // 一张卡；代表窗口优先未最小化、其次已有缩略图的。）
     // macOS 语义：前台应用整体不打折为卡——只排除活动窗本身的话，主窗
     // 在前、同组子窗的卡还挂在栏里（用户实测踩过）。
+    // ── 自由组合层 ──
+    // overrides: { handleId: groupKey }——用户把不同应用的窗口拖进同一
+    // 张卡。键用 KWin internalId（窗口生命周期内稳定，shell 重启不丢）；
+    // 落盘 stage/merges.json，syncCards 尾部剪枝死窗口项。
+    readonly property string _mergesPath: Quickshell.stateDir + "/stage/merges.json"
+    property var _mergeOverrides: ({})
+    // 拖拽合并手势的当前候选（被拖卡压在谁上面）；"" = 无（走换位）
+    property string _dropMergeKey: ""
+
+    function _effKey(rec) {
+        return StageGroups.groupKeyOf(rec, root._mergeOverrides)
+    }
+
+    function _saveMerges() {
+        JsonConfigStore.writePath(root._mergesPath, JSON.stringify(
+            { version: 1, merges: root._mergeOverrides }))
+    }
+
+    // 拖 A 卡放到 B 卡上 = 合并（B 的组键收养 A 的全部窗口）
+    function mergeGroups(fromKey, toKey) {
+        const next = StageGroups.applyMerge(root._mergeOverrides,
+            WindowService.records || [], fromKey, toKey)
+        if (next === root._mergeOverrides)
+            return
+        root._mergeOverrides = next
+        root._saveMerges()
+        syncCards()   // 顺序表里消失的键由 mergeOrder 剪掉
+        console.info("[StageSidebar] merge " + fromKey + " -> " + toKey)
+    }
+
+    // 右键合并卡 = 拆散回各自的应用卡
+    function splitGroupByKey(key) {
+        const next = StageGroups.splitGroup(root._mergeOverrides,
+            WindowService.records || [], key)
+        if (next === root._mergeOverrides)
+            return
+        root._mergeOverrides = next
+        root._saveMerges()
+        syncCards()
+        console.info("[StageSidebar] split " + key)
+    }
+
     readonly property var sideGroups: {
         WindowService.revision
         root.stageActiveId
@@ -73,6 +115,7 @@ PanelWindow {
         const activeRec = WindowService.windowById(root.stageActiveId)
         return StageGroups.decorateGroups(
             StageGroups.groupRecords(WindowService.records || [], {
+                overrides: root._mergeOverrides,
                 desktopId: WindowService.currentDesktopId,
                 // requirePid 与发布侧对齐：无 pid 但有 caption 的表面
                 //（桥 includeWindow 放行）能进 records，视图成卡会把它
@@ -80,7 +123,7 @@ PanelWindow {
                 // auto 路径布局整体错位
                 requirePid: true,
                 skipWindowId: root.stageActiveId,
-                excludeKey: activeRec ? StageGroups.groupKeyOf(activeRec) : "",
+                excludeKey: activeRec ? root._effKey(activeRec) : "",
                 excludeKeepMinimized: true,
             }),
             id => WindowService.thumbnailUrl(id))
@@ -106,7 +149,7 @@ PanelWindow {
         const rec = WindowService.windowById(demotedId)
         if (!rec)
             return []
-        const key = StageGroups.groupKeyOf(rec)
+        const key = root._effKey(rec)
         const currentId = WindowService.currentDesktopId
         const records = WindowService.records || []
         const ids = []
@@ -114,7 +157,7 @@ PanelWindow {
             const r = records[i]
             if (r.toplevel?.minimized)
                 continue
-            if (StageGroups.groupKeyOf(r) !== key)
+            if (root._effKey(r) !== key)
                 continue
             if (!StageGroups.isOnDesktop(r, currentId))
                 continue
@@ -226,14 +269,14 @@ PanelWindow {
         if (root.deskCollectedIds.indexOf(activeId) >= 0)
             return
         const activeRec = WindowService.windowById(activeId)
-        const activeGroup = activeRec ? StageGroups.groupKeyOf(activeRec) : ""
+        const activeGroup = activeRec ? root._effKey(activeRec) : ""
         // 外科手术式作废：只从在途批次剔除"现在成了活动应用"的窗口
         //（round35 的病＝刚展开的应用被迟到批次收走），其余保留——
         // 桌面收编/整组退位批次不该被一次无关的激活周期整批清掉。
         if (root._pendingMinimize.length > 0 && activeGroup !== "") {
             root._pendingMinimize = root._pendingMinimize.filter(id => {
                 const r = WindowService.windowById(id)
-                return !(r && StageGroups.groupKeyOf(r) === activeGroup)
+                return !(r && root._effKey(r) === activeGroup)
             })
             if (root._pendingMinimize.length === 0) {
                 root._captureThenMinTimer.stop()
@@ -251,7 +294,7 @@ PanelWindow {
                 continue
             // 同应用豁免双保险：同组，或同进程（XWayland 弹窗的身份解析
             // 常与主窗对不上，pid 不会骗人）
-            if (StageGroups.groupKeyOf(r) === activeGroup)
+            if (root._effKey(r) === activeGroup)
                 continue
             if (StageGroups.isSameProcess(r, activeRec))
                 continue
@@ -365,6 +408,10 @@ PanelWindow {
         if (!rec || rec.toplevel?.minimized)
             return
         const activeRec = WindowService.windowById(windowId)
+        // 同卡豁免：目标窗与退位窗已在同一张卡（同应用，或用户合并的
+        // 自由组）＝整卡一起向前，无退位可言
+        if (_effKey(rec) === _effKey(activeRec))
+            return
         // 同应用豁免双保险（同 applyAutoMinimize）
         if (StageGroups.isSameApp(rec, activeRec,
                 _appOf(demotedId), _appOf(windowId)))
@@ -399,6 +446,9 @@ PanelWindow {
         if (rec?.toplevel?.minimized)
             return
         const activeRec = WindowService.windowById(activeId)
+        // 同卡豁免（合并组同卡＝无退位；同 activateWithSwap）
+        if (_effKey(rec) === _effKey(activeRec))
+            return
         // 同应用豁免双保险（对话框安全，与 applyAutoMinimize 同规则）
         if (StageGroups.isSameApp(rec, activeRec,
                 _appOf(demotedId), _appOf(activeId)))
@@ -644,7 +694,8 @@ PanelWindow {
         const groups = StageGroups.sortByOrder(
             orderOverride || root._groupOrder,
             StageGroups.groupRecords(records,
-                { requirePid: true, excludeKey: excludeKey,
+                { requirePid: true, overrides: root._mergeOverrides,
+                  excludeKey: excludeKey,
                   excludeKeepMinimized: keepActiveMin }))
         // 基础布局发布，不掺悬停态：聚焦缩放是 TopLeft 原点（y 不动，
         // "从放大位长出"无损），而退避（±deckSidePeek）是鼠标扫过的瞬态
@@ -678,7 +729,7 @@ PanelWindow {
         // 视图回流路径），视图布局完全不变。
         if (keepActiveMin) {
             const allGroups = StageGroups.groupRecords(records,
-                { requirePid: true })
+                { requirePid: true, overrides: root._mergeOverrides })
             let ghostEntry = null
             for (let g = 0; g < allGroups.length; g++) {
                 if (allGroups[g].key === excludeKey) {
@@ -787,7 +838,7 @@ PanelWindow {
                     && !StageGroups.isSameApp(dRec, aRec,
                         _appOf(demotedId), _appOf(entry.targetId))) {
                 skipDemote = false
-                demotedKey = dRec ? StageGroups.groupKeyOf(dRec) : ""
+                demotedKey = dRec ? root._effKey(dRec) : ""
             }
         }
         if (!skipDemote) {
@@ -864,6 +915,7 @@ PanelWindow {
         root._dwellKey = ""
         root._hoverDwellTimer.stop()
         root.hoveredKey = ""
+        root._dropMergeKey = ""
         root.dragKey = slot.appKey
         root.dragFromIndex = index
         root.dragToIndex = index
@@ -885,9 +937,32 @@ PanelWindow {
         // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
         // 布局会拖累跟手帧率
         slot.y = root.dragY
+        // 合并候选检测：被拖卡中心压在另一张卡的卡面上 = 自由组合手势
+        //（拖到卡上=并组，拖到间隙=换位，两种落点视觉可分）
+        const n = cardModel.count
+        const centerY = root.dragY + StageConfigService.cardHeight * 0.5
+        let mergeKey = ""
+        for (let i = 0; i < n; i++) {
+            if (i === root.dragFromIndex)
+                continue
+            const s = cardRepeater.itemAt(i)
+            if (!s)
+                continue
+            if (centerY >= s.y
+                    && centerY <= s.y + StageConfigService.cardHeight) {
+                mergeKey = s.appKey
+                break
+            }
+        }
+        if (mergeKey !== root._dropMergeKey) {
+            root._dropMergeKey = mergeKey
+            layoutCards()   // 高亮目标卡 / 其余卡停止让位预览
+            return
+        }
+        if (root._dropMergeKey !== "")
+            return   // 合并悬停中：不更新换位目标（松手即合并）
         // 目标槽 = 基础槽位里离被拖卡最近的（与视图同款布局：adaptive
         // 的槽位按缩放间距排，拿 scrollLayout 算会整体错位）
-        const n = cardModel.count
         const lay = StageConfigService.layoutMode === "scroll"
             ? StageGeo.scrollLayout(cards.height, n, {
                 cardHeight: StageConfigService.cardHeight,
@@ -905,6 +980,24 @@ PanelWindow {
             root.dragToIndex = best
             layoutCards()
         }
+    }
+
+    // 无头合并/拆分钩子（按槽位下标；自由组合链路验证用）
+    function debugMerge(fromIndex, toIndex): string {
+        const a = cardRepeater.itemAt(fromIndex)
+        const b = cardRepeater.itemAt(toIndex)
+        if (!a || !b)
+            return "no slot"
+        root.mergeGroups(a.appKey, b.appKey)
+        return JSON.stringify({ order: root._groupOrder })
+    }
+
+    function debugSplit(index): string {
+        const a = cardRepeater.itemAt(index)
+        if (!a)
+            return "no slot"
+        root.splitGroupByKey(a.appKey)
+        return JSON.stringify({ order: root._groupOrder })
     }
 
     // 无头拖拽模拟：跳过阈值/跟手（纯视觉），走完 begin→目标槽→end 的
@@ -925,10 +1018,17 @@ PanelWindow {
         if (root.dragKey !== slot.appKey)
             return
         const key = root.dragKey
-        const to = root.dragToIndex
+        const mergeKey = root._dropMergeKey
+        root._dropMergeKey = ""
         root.dragKey = ""
         root.dragFromIndex = -1
         root.dragToIndex = -1
+        // 合并落点：压在别的卡上松手 = 并组（不走换位）
+        if (mergeKey !== "" && mergeKey !== key) {
+            root.mergeGroups(key, mergeKey)
+            return
+        }
+        const to = root.dragToIndex
         if (to >= 0) {
             const next = StageGroups.moveOrderKey(root._groupOrder, key, to)
             if (next !== root._groupOrder) {
@@ -1108,6 +1208,8 @@ PanelWindow {
                 required property string iconSource
                 required property int count
                 required property string idsJson
+                required property string iconsJson
+                required property bool merged
 
                 // 统一等比缩放：设计宽 = 列宽 − inset，slotX 按缩放居中
                 //（聚焦/退位与 adaptive 缩小共用本机制）
@@ -1166,6 +1268,9 @@ PanelWindow {
                     iconSource: slot.iconSource
                     count: slot.count
                     idsJson: slot.idsJson
+                    iconsJson: slot.iconsJson
+                    merged: slot.merged
+                    dropHovered: root._dropMergeKey === slot.appKey
                     perspectiveYOff: slot.planeYOff
                     // 活体流判定源：窗口侧聚焦键（与布局同源，无头调试可触达）
                     focusKey: root.hoveredKey
@@ -1186,6 +1291,7 @@ PanelWindow {
                     }
                     onDragReleased: root._endCardDrag(slot)
                     onCloseAllRequested: root.closeGroup(slot.idsJson)
+                    onUngroupRequested: root.splitGroupByKey(slot.appKey)
                     onIconActivated: function(windowId) {
                         root.engageCardWindow(slot, windowId)
                     }
@@ -1499,6 +1605,17 @@ PanelWindow {
                         slot.dimmed = false
                         continue
                     }
+                    // 合并悬停中：其余卡钉在各自基础槽位（目标卡不能从
+                    // 指针下移走），只高亮目标（dropHovered 走 delegate 绑定）
+                    if (root._dropMergeKey !== "") {
+                        slot.y = lay.positions[i] ?? 0
+                        slot.slotScale = 1
+                        slot.slotX = (cards.width - slot.width) / 2
+                            + StageGeo.GLOW_PAD
+                        slot.z = n - i
+                        slot.dimmed = false
+                        continue
+                    }
                     let pi = i < root.dragFromIndex ? i : i - 1
                     if (pi >= root.dragToIndex)
                         pi += 1
@@ -1555,6 +1672,15 @@ PanelWindow {
                         - slot.width * StageGeo.DRAG_SCALE) / 2
                         + StageGeo.GLOW_PAD
                     slot.z = StageGeo.DRAG_Z
+                    slot.dimmed = false
+                    continue
+                }
+                if (root._dropMergeKey !== "") {
+                    slot.y = lay.positions[i] ?? 0
+                    slot.slotScale = lay.scale
+                    slot.slotX = (cards.width - slot.width * lay.scale) / 2
+                        + StageGeo.GLOW_PAD
+                    slot.z = n - i
                     slot.dimmed = false
                     continue
                 }
@@ -1657,6 +1783,21 @@ PanelWindow {
 
     Component.onCompleted: {
         stageActiveId = WindowService.activeWindowId
+        // 自由组合落盘加载：读到的覆盖表就位后再对账一次（首帧先按自然
+        // 组显示，不阻塞启动）
+        JsonConfigStore.readPath(root._mergesPath, function(data, exists) {
+            if (exists) {
+                try {
+                    const obj = JSON.parse(data)
+                    if (obj && obj.merges && typeof obj.merges === "object") {
+                        root._mergeOverrides = obj.merges
+                        syncCards()
+                    }
+                } catch (e) {
+                    console.warn("[StageSidebar] bad merges.json: " + e)
+                }
+            }
+        })
         syncCards()
     }
 
@@ -1795,6 +1936,19 @@ PanelWindow {
         for (let i = 0; i < cardModel.count; i++)
             total += cardModel.get(i).count
         root.totalWindows = total
+        // 覆盖表剪枝：窗口销毁后它的合并项随之作废（handleId 不在存活集）
+        const records = WindowService.records || []
+        if (records.length > 0) {
+            const liveHandles = ({})
+            for (let i = 0; i < records.length; i++)
+                liveHandles[records[i].handleId] = true
+            const pruned = StageGroups.pruneOverrides(
+                root._mergeOverrides, liveHandles)
+            if (pruned !== root._mergeOverrides) {
+                root._mergeOverrides = pruned
+                root._saveMerges()
+            }
+        }
         layoutCards()
         publishSimulatedLayout("")
     }

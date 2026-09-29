@@ -7,13 +7,18 @@
 // ListModel 角色 / delegate required property 的唯一出处（appKey 是主键，
 // 不进差异比较）。新增卡片字段：加这里 + buildModelRows + 两处 required。
 export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
-    "iconSource", "count", "idsJson"]
+    "iconSource", "count", "idsJson", "iconsJson", "merged"]
 
 // ── 分组 ──
 
 // 组键：desktopId 优先（同应用堆一张卡），无身份退 rawAppId，再退 pid
 // （KWin 内部表面无身份时同 pid 的窗仍归同一张卡——pid 不会骗人）。
-export function groupKeyOf(r) {
+// overrides（自由组合层）：{ handleId: groupKey }——用户把不同应用的
+// 窗口手动拖进同一张卡。键用 KWin internalId（handleId，窗口生命周期内
+// 稳定，shell 重启不丢）；命中覆盖键的窗口归入指定组，未命中走自然键。
+export function groupKeyOf(r, overrides) {
+    if (overrides && overrides[r.handleId])
+        return overrides[r.handleId]
     return r.identity?.desktopId || r.identity?.rawAppId
         || ("pid:" + r.pid)
 }
@@ -57,7 +62,7 @@ export function groupRecords(records, opts = {}) {
             continue
         if (opts.desktopId !== undefined && !isOnDesktop(r, opts.desktopId))
             continue
-        const key = groupKeyOf(r)
+        const key = groupKeyOf(r, opts.overrides)
         if (opts.excludeKey && key === opts.excludeKey
                 && !(opts.excludeKeepMinimized && r.toplevel?.minimized))
             continue
@@ -65,9 +70,24 @@ export function groupRecords(records, opts = {}) {
         if (!wins) {
             wins = []
             byKey[key] = wins
-            groups.push({ key: key, pid: r.pid || 0, wins: wins })
+            groups.push({ key: key, pid: r.pid || 0, wins: wins,
+                merged: false })
         }
         wins.push(r)
+    }
+    // 自由组合标记：组内任一窗口的覆盖键 ≠ 其自然键 = 这是一张合并卡
+    if (opts.overrides) {
+        for (let g = 0; g < groups.length; g++) {
+            const wins = groups[g].wins
+            for (let w = 0; w < wins.length; w++) {
+                if (opts.overrides[wins[w].handleId]
+                        && opts.overrides[wins[w].handleId]
+                            !== groupKeyOf(wins[w])) {
+                    groups[g].merged = true
+                    break
+                }
+            }
+        }
     }
     return groups
 }
@@ -96,6 +116,7 @@ export function decorateGroups(groups, thumbnailUrlOf) {
         grp.iconSource = rep.iconSource || ""
         grp.count = grp.wins.length
         grp.ids = grp.wins.map(w => w.windowId)
+        grp.icons = grp.wins.map(w => w.iconSource || "")
     }
     return groups
 }
@@ -220,6 +241,8 @@ export function buildModelRows(groups) {
             iconSource: g.iconSource || "",
             count: g.count || 1,
             idsJson: JSON.stringify(g.ids || []),
+            iconsJson: JSON.stringify(g.icons || []),
+            merged: !!g.merged,
         })
     }
     return rows
@@ -285,4 +308,51 @@ export function planModelSync(current, desired) {
     }
     return { removes: removes, updates: updates, appends: appends,
         moves: moves }
+}
+
+
+// ── 自由组合（用户手动合并/拆分卡片组）──
+// 返回新覆盖表（不可变风格：无变化返回原引用，调用方据此跳过保存）
+
+// 把 fromKey 组的全部窗口并进 toKey 组
+export function applyMerge(overrides, records, fromKey, toKey) {
+    if (!fromKey || !toKey || fromKey === toKey)
+        return overrides
+    const out = Object.assign({}, overrides)
+    let changed = false
+    for (let i = 0; i < records.length; i++) {
+        const r = records[i]
+        if (groupKeyOf(r, overrides) === fromKey) {
+            out[r.handleId] = toKey
+            changed = true
+        }
+    }
+    return changed ? out : overrides
+}
+
+// 拆散 key 组：组内全部窗口的覆盖清除，回到各自的自然应用卡
+export function splitGroup(overrides, records, key) {
+    const out = Object.assign({}, overrides)
+    let changed = false
+    for (let i = 0; i < records.length; i++) {
+        const r = records[i]
+        if (overrides[r.handleId] && groupKeyOf(r, overrides) === key) {
+            delete out[r.handleId]
+            changed = true
+        }
+    }
+    return changed ? out : overrides
+}
+
+// 剪掉已销毁窗口的覆盖项（handleId 不在存活集 = 窗口没了）
+export function pruneOverrides(overrides, liveHandleIds) {
+    const out = {}
+    let changed = false
+    for (const k in overrides) {
+        if (liveHandleIds[k])
+            out[k] = overrides[k]
+        else
+            changed = true
+    }
+    return changed ? out : overrides
 }

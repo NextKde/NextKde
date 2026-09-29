@@ -35,6 +35,11 @@ Item {
     required property string iconSource
     required property int count // 组内窗口数（>1 显示角标）
     required property string idsJson // 组内全部窗口 id 的 JSON 数组
+    // 每窗图标（与 idsJson 平行；自由合并组内各应用图标不同）
+    required property string iconsJson
+    required property bool merged // 自由合并卡（右键拆分）
+    // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
+    property bool dropHovered: false
 
     // 共享透视：卡中心相对滚动视口中心（= 共享地平线）的 y 偏移，slot 下传
     property real perspectiveYOff: 0
@@ -58,11 +63,21 @@ Item {
     // 点击左下角的窗口小图标：直达该扇窗（macOS Stage Manager 同语义，
     // 走 engage 管线但焦点钉在被点窗口）
     signal iconActivated(string windowId)
+    // 右键合并卡 = 拆散回各自的应用卡
+    signal ungroupRequested()
 
-    // 组内窗口 id（idsJson 解析一次；图标排一窗一图标）
+    // 组内窗口 id 与逐窗图标（合并组内各应用图标不同，逐窗取）
     readonly property var windowIds: {
         try {
             return JSON.parse(idsJson || "[]")
+        } catch (e) {
+            return []
+        }
+    }
+    readonly property var windowIcons: {
+        try {
+            const arr = JSON.parse(iconsJson || "[]")
+            return Array.isArray(arr) ? arr : []
         } catch (e) {
             return []
         }
@@ -167,7 +182,7 @@ Item {
             Rectangle {
                 required property int index
                 readonly property real off: (index + 1)
-                    * (card.isHovered ? 11 : 8)
+                    * ((card.isHovered || card.dropHovered) ? 11 : 8)
                 x: card.rightSide ? plate.x - off : plate.x + off
                 y: plate.y - off
                 width: plate.width
@@ -194,14 +209,16 @@ Item {
             height: parent.height - 44
             radius: StageConfigService.cardRadius
             // 背板浓度：静置 cardTint，悬停自动 ×1.3 提亮（上限 0.95）
-            color: card.isHovered
+            color: (card.isHovered || card.dropHovered)
                 ? Qt.rgba(0.10, 0.13, 0.20,
                     Math.min(0.95, StageConfigService.cardTint * 1.3))
                 : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
-            border.width: 1
-            border.color: card.glowOn
-                ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
-                : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
+            border.width: card.dropHovered ? 2 : 1
+            border.color: card.dropHovered
+                ? Qt.rgba(0.45, 0.85, 1.0, 0.95)
+                : card.glowOn
+                    ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
+                    : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
 
@@ -480,6 +497,7 @@ Item {
         id: cardMouse
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         property real pressSceneY: 0
         property bool dragArmed: false
@@ -512,7 +530,13 @@ Item {
                 card.dragReleased()
             }
         }
-        onClicked: {
+        onClicked: function(mouse) {
+            // 右键合并卡 = 拆散回各自的应用卡（左键照常 engage）
+            if (mouse.button === Qt.RightButton) {
+                if (card.merged)
+                    card.ungroupRequested()
+                return
+            }
             if (wasDrag) {
                 wasDrag = false
                 return
@@ -600,7 +624,7 @@ Item {
                         anchors.centerIn: parent
                         width: 17
                         height: 17
-                        source: card.iconSource || ""
+                        source: card.windowIcons[index] || card.iconSource || ""
                         asynchronous: false
                     }
                 }

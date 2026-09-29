@@ -55,6 +55,13 @@ Scope {
         function debugGeom(): string { return stageWindow.debugGeom() }
         // 显示桌面开关状态机快照（抗打断排障）
         function deskState(): string { return stageWindow.deskState() }
+        // 无头合并/拆分（自由组合链路验证）：debugMerge <from> <to> / debugSplit <i>
+        function debugMerge(fromIndex: int, toIndex: int): string {
+            return stageWindow.debugMerge(fromIndex, toIndex)
+        }
+        function debugSplit(index: int): string {
+            return stageWindow.debugSplit(index)
+        }
         // round30 调研探针：对第 index 张卡的窗口发起 zkde_screencast 活体流
         // 请求，journal 里看 stream probe nodeId=（>0 = 授权+协议全通）
         function debugStreamProbe(index: int): string {
