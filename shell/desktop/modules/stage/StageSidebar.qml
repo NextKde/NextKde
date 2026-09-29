@@ -47,6 +47,10 @@ Scope {
         }
         // 显示桌面开关（与空桌面左键同路径）：收编全部 / 整组放出来
         function deskReveal(): void { stageWindow.toggleDeskReveal() }
+        // 无头拖拽模拟：debugDrag <from> <to>（顺序表转正+矩形重发布链路）
+        function debugDrag(fromIndex: int, toIndex: int): string {
+            return stageWindow.debugDrag(fromIndex, toIndex)
+        }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
         // round30 调研探针：对第 index 张卡的窗口发起 zkde_screencast 活体流

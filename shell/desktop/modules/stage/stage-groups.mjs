@@ -162,6 +162,18 @@ export function mergeOrder(order, liveKeys) {
     return next
 }
 
+// 拖拽换位：把 key 移到 toIndex（其余键保持相对顺序）。key 不在表中、
+// 索引越界或原地不动时原样返回（调用方靠引用相等判断"没变化"）。
+export function moveOrderKey(order, key, toIndex) {
+    const from = order.indexOf(key)
+    if (from < 0 || toIndex < 0 || toIndex >= order.length || from === toIndex)
+        return order
+    const next = order.slice()
+    next.splice(from, 1)
+    next.splice(toIndex, 0, key)
+    return next
+}
+
 // ── 换位提交门（dispatch 与记录翻转之间隔 100-250ms）──
 // 派发时把预测顺序只喂特效发布；顺序表本体若提前转正，间隙里的对账
 // （派发拍的缩略图事件恰好落在这个窗口）会按"新顺序"排"旧记录"——

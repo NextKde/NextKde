@@ -44,6 +44,13 @@ Item {
 
     // 点击（请求编排：入队，窗口侧 engageDelay 到点派发）
     signal engageClicked()
+    // 拖拽排序：按下后位移超过阈值（12px）才算拖拽；发生过拖拽的这次
+    // 按压不再触发 engageClicked（点击/拖拽二选一）。传**场景坐标**——
+    // 卡内坐标会随卡片移动而漂移（指针没动、卡动了，卡内 y 就变了），
+    // 用它算位移会互相抵消＝"拖过一张卡就拖不动"（实测踩过）。
+    signal dragStarted(real sceneY)
+    signal dragMoved(real sceneY)
+    signal dragReleased()
     // 悬停进出（窗口侧据此聚焦布局：悬停卡原位放大置顶、其余原位退避）
     signal hovered(bool over)
     // 关闭按钮：关闭组内全部窗口
@@ -437,6 +444,39 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
-        onClicked: card.engageClicked()
+        property real pressSceneY: 0
+        property bool dragArmed: false
+        property bool wasDrag: false
+        onPressed: function(mouse) {
+            pressSceneY = mapToItem(null, mouse.x, mouse.y).y
+            dragArmed = false
+        }
+        onPositionChanged: function(mouse) {
+            if (!(mouse.buttons & Qt.LeftButton))
+                return
+            const sceneY = mapToItem(null, mouse.x, mouse.y).y
+            if (!dragArmed) {
+                if (Math.abs(sceneY - pressSceneY) > 12) {
+                    dragArmed = true
+                    card.dragStarted(sceneY)
+                }
+                return
+            }
+            card.dragMoved(sceneY)
+        }
+        onReleased: {
+            if (dragArmed) {
+                dragArmed = false
+                wasDrag = true
+                card.dragReleased()
+            }
+        }
+        onClicked: {
+            if (wasDrag) {
+                wasDrag = false
+                return
+            }
+            card.engageClicked()
+        }
     }
 }

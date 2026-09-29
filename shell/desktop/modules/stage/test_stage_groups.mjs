@@ -5,7 +5,7 @@ import {
     CARD_FIELDS,
     groupKeyOf, isOnDesktop, isSameProcess, isSameApp,
     groupRecords, pickRepresentative, decorateGroups,
-    orderIndex, sortByOrder, applySwapOrder, pruneOrder, mergeOrder,
+    orderIndex, sortByOrder, applySwapOrder, pruneOrder, mergeOrder, moveOrderKey,
     SWAP_COMMIT_TTL_MS, commitDueSwaps,
     buildModelRows, planModelSync,
 } from "./stage-groups.mjs";
@@ -261,5 +261,13 @@ check("buildModelRows: fields + dedup",
     ]),
     [{ appKey: "a", targetId: "t1", pid: 5, appName: "A", title: "x",
         iconSource: "i", count: 2, idsJson: '["t1","t2"]' }]);
+
+// moveOrderKey：拖拽换位
+check("move 前移尾→头", moveOrderKey(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
+check("move 后移头→尾", moveOrderKey(["a", "b", "c"], "a", 2), ["b", "c", "a"]);
+check("move 中移一位", moveOrderKey(["a", "b", "c"], "b", 2), ["a", "c", "b"]);
+check("move 原地不动", moveOrderKey(["a", "b"], "a", 0), ["a", "b"]);
+check("move 索引越界原样", moveOrderKey(["a", "b"], "a", 5), ["a", "b"]);
+check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
 
 console.log(`stage-groups: ${cases.length} checks passed`);

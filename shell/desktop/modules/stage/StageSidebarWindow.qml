@@ -705,6 +705,92 @@ PanelWindow {
     // 先到先转正——无单槽互踩。
     property var _pendingSwaps: []
 
+    // ── 拖拽排序：按下位移超阈值（StageCard 内 12px）进入。被拖卡 y 直接
+    // 跟手（其槽位 Behavior 在拖拽中禁用），其余卡按"预览顺序"实时让位
+    //（Behavior 保持=平滑移位）；松手转正顺序表 + syncCards + 矩形重发布。
+    property string dragKey: ""
+    property int dragFromIndex: -1   // 被拖卡当前模型行（=可见槽序）
+    property int dragToIndex: -1     // 悬停目标槽
+    property real dragY: 0           // 被拖卡视觉 y（列坐标）
+    property real dragGrabOffset: 0  // 抓取偏移（指针列坐标 − 卡 y）
+
+    function _beginCardDrag(slot, index, sceneY) {
+        if (root.dragKey !== "" || slot.cardItem.engaging)
+            return
+        root.hoveredKey = ""
+        root.dragKey = slot.appKey
+        root.dragFromIndex = index
+        root.dragToIndex = index
+        // 抓取偏移 = 指针列坐标 − 卡当前 y（保持指尖抓在按下的位置）
+        root.dragGrabOffset = cards.mapFromItem(null, 0, sceneY).y - slot.y
+        root.dragY = slot.y
+        layoutCards()
+    }
+
+    function _updateCardDrag(slot, index, sceneY) {
+        if (root.dragKey !== slot.appKey)
+            return
+        root.dragFromIndex = index   // 对账就地换主后行号可能变
+        const want = cards.mapFromItem(null, 0, sceneY).y - root.dragGrabOffset
+        root.dragY = Math.max(-StageConfigService.cardHeight * 0.5,
+            Math.min(cards.height - StageConfigService.cardHeight * 0.5, want))
+        // 逐帧跟手：被拖卡的 y 直接赋值（其 Behavior 已在拖拽中禁用）。
+        // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
+        // 布局会拖累跟手帧率
+        slot.y = root.dragY
+        // 目标槽 = 基础槽位里离被拖卡最近的
+        const n = cardModel.count
+        const lay = StageGeo.scrollLayout(cards.height, n, {
+            cardHeight: StageConfigService.cardHeight,
+            spacing: StageConfigService.cardSpacing,
+            scroll: root.scrollOffset,
+            hoveredIndex: -1,
+        })
+        let best = index, bestDist = Infinity
+        for (let i = 0; i < n; i++) {
+            const d = Math.abs((lay.positions[i] ?? 0) - root.dragY)
+            if (d < bestDist) { bestDist = d; best = i }
+        }
+        if (best !== root.dragToIndex) {
+            root.dragToIndex = best
+            layoutCards()
+        }
+    }
+
+    // 无头拖拽模拟：跳过阈值/跟手（纯视觉），走完 begin→目标槽→end 的
+    // 提交链路（顺序表转正 + syncCards + 矩形重发布）
+    function debugDrag(fromIndex, toIndex) {
+        const slot = cardRepeater.itemAt(fromIndex)
+        if (!slot)
+            return "no slot at " + fromIndex
+        const scene0 = slot.mapToItem(null, 0, 0).y
+        _beginCardDrag(slot, fromIndex, scene0)
+        root.dragToIndex = Math.max(0, Math.min(cardModel.count - 1, toIndex))
+        layoutCards()
+        _endCardDrag(slot)
+        return JSON.stringify({ order: root._groupOrder })
+    }
+
+    function _endCardDrag(slot) {
+        if (root.dragKey !== slot.appKey)
+            return
+        const key = root.dragKey
+        const to = root.dragToIndex
+        root.dragKey = ""
+        root.dragFromIndex = -1
+        root.dragToIndex = -1
+        if (to >= 0) {
+            const next = StageGroups.moveOrderKey(root._groupOrder, key, to)
+            if (next !== root._groupOrder) {
+                root._groupOrder = next
+                console.info("[StageSidebar] drag reorder key=" + key
+                    + " -> slot " + to)
+            }
+        }
+        syncCards()   // 模型移动 + layoutCards 动画收敛到新槽位
+        publishSimulatedLayout("__desk-collect-no-exclude__")  // 矩形随新槽位
+    }
+
     function engageCard(slot) {
         // 面板隐藏/模式关闭后不可从不可见卡片派发展开
         if (!StageModeService.enabled || !open)
@@ -857,6 +943,7 @@ PanelWindow {
                 id: slot
 
                 // 字段清单单一出处：stage-groups.mjs 的 CARD_FIELDS
+                required property int index
                 required property string appKey
                 required property string targetId
                 required property int pid
@@ -902,7 +989,12 @@ PanelWindow {
                 // ⚠️ 全属性同一时长——聚焦时"退让缩小"与"主体放大"必须
                 // 同拍起止，分两种时长会看出先缩后放的两段感（实测踩过）。
                 // y 的 Behavior 只对已落位的卡生效（见 slot.placed）。
-                Behavior on y { enabled: slot.placed; NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
+                Behavior on y {
+                    // 拖拽中的被拖卡必须逐帧跟手（Behavior=橡皮筋延迟）；
+                    // 其余卡的 Behavior 保持——让位/回弹平滑
+                    enabled: slot.placed && root.dragKey !== slot.appKey
+                    NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic }
+                }
                 Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
                 Behavior on scale { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
                 visible: true
@@ -930,6 +1022,13 @@ PanelWindow {
                             root._cardHover(slot.appKey, true)
                     }
                     onEngageClicked: root.engageCard(slot)
+                    onDragStarted: function(sceneY) {
+                        root._beginCardDrag(slot, slot.index, sceneY)
+                    }
+                    onDragMoved: function(sceneY) {
+                        root._updateCardDrag(slot, slot.index, sceneY)
+                    }
+                    onDragReleased: root._endCardDrag(slot)
                     onCloseAllRequested: root.closeGroup(slot.idsJson)
                 }
             }
@@ -1092,6 +1191,10 @@ PanelWindow {
     // y≈-41/10），归位滑动会把卡片从指针下方带走 → 悬停丢失 → 全部弹回
     //（"从外面放到第一/最后一张只高亮不退避"的 kill 实锤）。
     function _cardHover(key, over) {
+        // 拖拽期间指针必然在被拖卡上——悬停聚焦布局会让其余卡退避，和
+        // 拖拽让位打架；拖拽布局自己管
+        if (root.dragKey !== "")
+            return
         let m = ""
         for (let i = 0; i < cardRepeater.count; i++) {
             const s = cardRepeater.itemAt(i)
@@ -1198,7 +1301,7 @@ PanelWindow {
                 spacing: StageConfigService.cardSpacing,
                 scroll: root.scrollOffset,
                 retreat: StageConfigService.deckSidePeek,
-                hoveredIndex: h,
+                hoveredIndex: root.dragKey !== "" ? -1 : h,
                 // 锚定**视觉**位置（mapToItem 含在途动画），不是属性 y——
                 // 飞行途中两者不一致，锚属性值会让卡片从指针下方滑走。
                 // 聚焦矩形从视觉位置由 TopLeft 向外生长，悬停点必然仍在卡内。
@@ -1208,10 +1311,35 @@ PanelWindow {
                     ? cardRepeater.itemAt(h).mapToItem(cards, 0, 0).y
                     : undefined,
             })
+            // 拖拽排序：被拖卡跟手（y=dragY），其余按"抽出再插回目标槽"
+            // 的预览顺序落基础槽位（让位实时可见）；槽位 z 抬满、微放大
+            const dragging = root.dragKey !== ""
             for (let i = 0; i < n; i++) {
                 const slot = cardRepeater.itemAt(i)
                 if (!slot)
                     continue
+                if (dragging) {
+                    slot.placed = true
+                    if (i === root.dragFromIndex) {
+                        slot.y = root.dragY
+                        slot.slotScale = 1.06
+                        slot.slotX = (cards.width - slot.width * 1.06) / 2
+                            + StageGeo.GLOW_PAD
+                        slot.z = 999
+                        slot.dimmed = false
+                        continue
+                    }
+                    let pi = i < root.dragFromIndex ? i : i - 1
+                    if (pi >= root.dragToIndex)
+                        pi += 1
+                    slot.y = lay.positions[pi] ?? 0
+                    slot.slotScale = lay.scales[pi] ?? 1
+                    slot.slotX = (cards.width - slot.width * slot.slotScale) / 2
+                        + StageGeo.GLOW_PAD
+                    slot.z = n - pi
+                    slot.dimmed = false
+                    continue
+                }
                 // ⚠️ 悬停卡的 y 冻结（跳过赋值，scrollPass 除外）：聚焦
                 // 期间任何 y 位移都会把卡从指针下方带走 = kill 循环（五轮
                 // 排查的最终结论）。缩放/x 的变化是 TopLeft 外扩（区域只
@@ -1242,10 +1370,33 @@ PanelWindow {
             return
         }
         const lay = _layout(n)
+        const dragging = root.dragKey !== ""
         for (let i = 0; i < n; i++) {
             const slot = cardRepeater.itemAt(i)
             if (!slot)
                 continue
+            if (dragging) {
+                slot.placed = true
+                if (i === root.dragFromIndex) {
+                    slot.y = root.dragY
+                    slot.slotScale = 1.06
+                    slot.slotX = (cards.width - slot.width * 1.06) / 2
+                        + StageGeo.GLOW_PAD
+                    slot.z = 999
+                    slot.dimmed = false
+                    continue
+                }
+                let pi = i < root.dragFromIndex ? i : i - 1
+                if (pi >= root.dragToIndex)
+                    pi += 1
+                slot.y = lay.positions[pi] ?? 0
+                slot.slotScale = lay.scale
+                slot.slotX = (cards.width - slot.width * lay.scale) / 2
+                    + StageGeo.GLOW_PAD
+                slot.z = n - pi
+                slot.dimmed = false
+                continue
+            }
             // 首拍落位（scroll 分支同款：placed 为 false 时 Behavior 禁用）
             slot.y = lay.positions[i] ?? 0
             slot.placed = true
