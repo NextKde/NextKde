@@ -29,6 +29,9 @@ QtObject {
     // non-empty while ANY window holds focus, including transient dialogs
     // that never enter `records`. Empty = genuinely nothing active (desktop).
     property string kwinActiveId: ""
+    // KWin 活动窗是自己的全屏桌面表面（挂件层/壁纸）＝"焦点在桌面上"
+    // 而不是"未跟踪 transient"——桌面聚焦语义的判据（见 window-bridge.js）
+    property bool kwinActiveDesktop: false
 
     // Forwarded by the KWin input effect through this service's existing local
     // bridge. Consumers use the global logical coordinates for outside-click
@@ -825,6 +828,7 @@ QtObject {
                         // filtering is handled separately; delaying this
                         // authoritative list also delayed focus changes.
                         svc.kwinActiveId = String(event.activeId ?? "");
+                        svc.kwinActiveDesktop = !!event.activeDesktop;
                         svc._kwinWindows = event.windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;

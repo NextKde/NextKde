@@ -13,6 +13,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.wallpaper
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import qs.desktop.modules.stage
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
@@ -372,6 +373,15 @@ PanelWindow {
                 return
             }
             desktopFileGrid.clearDesktopSelection()
+        }
+        // 空桌面左键＝显示桌面开关：台前侧栏把桌面应用全部带动画收进
+        // 卡，再点一次整组放出来。⚠️ 不能在 onPressAndHold 里吞事件来
+        // 防误触——按住超 800ms 的"慢点击"会被一起吞掉（点击全部失效，
+        // 实测踩过）；改用 editMode 守卫：长按进了挂件编辑模式，release
+        // 的 clicked 自然跳过。
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.LeftButton && !root.editMode)
+                StageModeService.deskRevealToggleRequested()
         }
         onPressAndHold: function(mouse) {
             if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier)
@@ -3988,6 +3998,12 @@ PanelWindow {
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
             onBackgroundPressAndHold: root.enterWidgetEditMode(false)
+            // 空桌面普通单击＝显示桌面开关（挂件编辑模式除外）。这个
+            // MouseArea 盖住绝大部分桌面，是比背景捕获器更主要的入口。
+            onBackgroundPlainClicked: {
+                if (!root.editMode)
+                    StageModeService.deskRevealToggleRequested()
+            }
             onExternalUrlsDropped: function(urls, action) {
                 root.desktopFiles.importExternalUrls(urls, action, root.desktopOutput)
             }

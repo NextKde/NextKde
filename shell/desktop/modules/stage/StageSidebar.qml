@@ -45,6 +45,8 @@ Scope {
         function debugHover(index: int, over: bool): string {
             return stageWindow.debugHover(index, over)
         }
+        // 显示桌面开关（与空桌面左键同路径）：收编全部 / 整组放出来
+        function deskReveal(): void { stageWindow.toggleDeskReveal() }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
         // round30 调研探针：对第 index 张卡的窗口发起 zkde_screencast 活体流

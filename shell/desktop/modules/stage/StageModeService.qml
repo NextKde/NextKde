@@ -27,6 +27,11 @@ QtObject {
     // ~/.local/bin/stage-anim 脚本头部需手动同步，旧代卸载流程见 AGENTS.md）
     readonly property string effectId: "stageanim13"
 
+    // 显示桌面开关：DeskCenter 空区左键 → 台前侧栏收编/放出来回切换。
+    // 走单例信号：DeskCenter 与侧栏分属两个模块，这是它们之间唯一的
+    // 控制通道。
+    signal deskRevealToggleRequested()
+
     // 侧栏条矩形（屏幕逻辑坐标：顶栏之下、左侧常驻条；几何常量同源
     // stage-geometry.mjs。X 带溢出余量偏移（面板窗比常驻条宽，内容列
     // 居中）。TargetHeight 1059 是历史全局回退矩形的实测值，仅作特效

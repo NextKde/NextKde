@@ -5,6 +5,7 @@ import org.kde.taskmanager
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import qs.desktop.modules.applauncher
 import "stage-geometry.mjs" as StageGeo
 import "stage-groups.mjs" as StageGroups
 
@@ -38,6 +39,17 @@ PanelWindow {
     // 常驻条宽；余量区的输入由文件尾的 mask 穿透到桌面。
     implicitWidth: StageGeo.PANEL_WIDTH + StageGeo.CARD_OVERFLOW_MARGIN * 2
 
+    // ── 舞台视角的活动窗 ──
+    // 桥的活动窗在 shell 覆盖层（启动台）拿走焦点时会变空——但桌面上的
+    // 应用一个都没动。此刻冻结"最后一个真实活动应用"：活动组照样不出
+    // 卡（否则窗口还在桌面、卡却先冒出来＝幽灵卡），交换/收编路径也不
+    // 跑。覆盖层关掉后焦点回到哪个应用就正常跟随哪个。
+    readonly property bool shellOverlayActive: AppLauncherService.open
+    property string stageActiveId: ""
+    // 桌面聚焦期间的"扣卡"：true 时 stageActiveId 保持冻结（活动组的卡
+    // 不先冒出来），收编派发最小化的同一拍（或 600ms 兜底）释放
+    property bool _deskHoldActive: false
+
     // ── 分组：当前桌面上除"活动应用整组"外的窗口，按应用堆叠 ──
     // （分组规则见 stage-groups.mjs：同 desktopId / rawAppId / 同 pid 归
     // 一张卡；代表窗口优先未最小化、其次已有缩略图的。）
@@ -45,12 +57,13 @@ PanelWindow {
     // 在前、同组子窗的卡还挂在栏里（用户实测踩过）。
     readonly property var sideGroups: {
         WindowService.revision
-        WindowService.activeWindowId
-        const activeRec = WindowService.windowById(WindowService.activeWindowId)
+        root.stageActiveId
+        root._deskHoldActive
+        const activeRec = WindowService.windowById(root.stageActiveId)
         return StageGroups.decorateGroups(
             StageGroups.groupRecords(WindowService.records || [], {
                 desktopId: WindowService.currentDesktopId,
-                skipWindowId: WindowService.activeWindowId,
+                skipWindowId: root.stageActiveId,
                 excludeKey: activeRec ? StageGroups.groupKeyOf(activeRec) : "",
                 excludeKeepMinimized: true,
             }),
@@ -104,11 +117,14 @@ PanelWindow {
     //                     （自动收编路径：多窗连拍需要时间）
     //   delayed = false → 立即发布 → 30ms 派发
     //                     （交换路径：单窗即时拍）
-    function captureAndDemote(ids, excludeKey, delayed) {
+    function captureAndDemote(ids, excludeKey, delayed, captureDelayMs) {
         for (let i = 0; i < ids.length; i++)
             WindowService.requestThumbnail(ids[i])
         root._pendingMinimize = ids
+        root._pendingPublishExcludeKey = excludeKey
         if (delayed) {
+            _captureThenMinTimer.interval = captureDelayMs > 0
+                ? captureDelayMs : StageConfigService.demoteCaptureDelay
             _captureThenMinTimer.restart()
         } else {
             publishSimulatedLayout(excludeKey)
@@ -116,20 +132,47 @@ PanelWindow {
         }
     }
 
+    // 延迟路径的发布排除键（captureAndDemote 落下，计时器拍使用）。
+    // 旧实现硬编码 ""＝自动排除活动组——桌面收编时被扣卡冻结的活动组
+    // 正是要收编的对象，它的矩形被排除后不更新，特效读到上一轮的陈旧
+    // 矩形：窗口飞向旧槽位、卡出现在新槽位（实测"飞到第一张卡位置，
+    // 第三张卡才突然出现"）。
+    property string _pendingPublishExcludeKey: ""
+
     property var _pendingMinimize: []
     property Timer _minimizeDispatchTimer: Timer {
         interval: StageConfigService.demoteDispatchDelay
         onTriggered: {
             const t = root._pendingMinimize
             root._pendingMinimize = []
+            console.info("[DeskRevealDBG] dispatch minimize count=" + t.length
+                + " ids=" + JSON.stringify(t))
             for (let i = 0; i < t.length; i++)
                 WindowService.minimizeWindow(t[i], true)
+            // 最小化已派发＝窗口开始飞进卡：此刻放出被扣住的卡（同拍）
+            if (root._deskHoldActive) {
+                root._deskHoldActive = false
+                root._deskHoldReleaseTimer.stop()
+                root.stageActiveId = WindowService.activeWindowId
+            }
+        }
+    }
+
+    // 桌面聚焦的"扣卡"兜底释放：没有收编走（自动收编关/无目标）时，
+    // 别把活动组排除一直扣着
+    property Timer _deskHoldReleaseTimer: Timer {
+        interval: 600
+        onTriggered: {
+            if (root._deskHoldActive) {
+                root._deskHoldActive = false
+                root.stageActiveId = WindowService.activeWindowId
+            }
         }
     }
     property Timer _captureThenMinTimer: Timer {
         interval: StageConfigService.demoteCaptureDelay
         onTriggered: {
-            root.publishSimulatedLayout("")
+            root.publishSimulatedLayout(root._pendingPublishExcludeKey)
             root._minimizeDispatchTimer.restart()
         }
     }
@@ -153,10 +196,14 @@ PanelWindow {
         if (!StageModeService.enabled || !open
                 || !StageConfigService.autoMinimize)
             return
-        _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
         const activeId = WindowService.activeWindowId
         if (!activeId)
+            // 空活动窗＝桌面聚焦：此刻在途的往往是桌面收编批次
+            //（focus 路径 150ms 起拍、330ms 才派发），取消它＝最小化
+            // 永远不落地（"卡出现了程序没收回去"的根因，实测竞态差
+            // ~10ms）。真正的属主取消留给有新活动窗的分支。
             return
+        _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
         const activeRec = WindowService.windowById(activeId)
         const activeGroup = activeRec ? StageGroups.groupKeyOf(activeRec) : ""
         const currentId = WindowService.currentDesktopId
@@ -185,15 +232,37 @@ PanelWindow {
         target: WindowService
         function onActiveWindowIdChanged() {
             const current = WindowService.activeWindowId
+            // 覆盖层（启动台）拿走焦点：活动窗变空但桌面应用没动——
+            // 冻结舞台活动窗、不走任何切换/收编路径。
+            if (current === "" && root.shellOverlayActive) {
+                root._desktopFocusTimer.stop()
+                return
+            }
+            if (current === "" && (WindowService.kwinActiveId === ""
+                    || WindowService.kwinActiveDesktop)) {
+                // 桌面聚焦：保持活动组排除（卡不先冒出来），等收编派发
+                // 最小化的同一拍再放出卡（动画和谐：窗口起飞=卡出现）；
+                // 若最终没有收编走（自动收编关/无目标），短延迟后照常放出
+                root._deskHoldActive = true
+                root._deskHoldReleaseTimer.restart()
+            } else {
+                root._deskHoldActive = false
+                root._deskHoldReleaseTimer.stop()
+                root.stageActiveId = current
+            }
             if (root._prevActiveId && root._prevActiveId !== current) {
                 if (root.hasWindowId(root._prevActiveId))
                     WindowService.requestThumbnail(root._prevActiveId)
-                // 活动窗变空有两种含义，必须区分：
-                // ① KWin 真的无活动窗（kwinActiveId 也为空）= 点了桌面 → 收编
-                // ② 焦点在未跟踪窗上（桥快照过滤掉的 transient 弹窗，如
-                //    wemeet 扫码小窗；kwinActiveId 非空）→ 什么都不做
+                // 活动窗变空有三种含义，必须区分：
+                // ① 焦点在桌面上（kwinActiveId 为空＝真无活动窗，或
+                //    kwinActiveDesktop＝活动窗是我们自己的全屏桌面表面，
+                //    点桌面后正是这种）→ 收编
+                // ② 覆盖层拿走焦点（启动台）→ 上面已经 return，走不到这
+                // ③ 焦点在未跟踪窗上（transient 弹窗；kwinActiveId 非空
+                //    且非桌面表面）→ 什么都不做
                 if (current === "") {
-                    if (WindowService.kwinActiveId === "")
+                    if (WindowService.kwinActiveId === ""
+                            || WindowService.kwinActiveDesktop)
                         root._desktopFocusTimer.restart()
                 } else {
                     root._desktopFocusTimer.stop()
@@ -294,23 +363,91 @@ PanelWindow {
             activeRec ? StageGroups.groupKeyOf(activeRec) : "", false)
     }
 
-    // ── 桌面聚焦：全部应用窗收进侧栏（Stage Manager 语义） ──
+    // ── 桌面聚焦 / 显示桌面开关（Stage Manager 语义的"收进去/放出来"）──
     // KOS 桌面图标层不可激活，点空白处后 KWin 无 activated 记录。
     // ⚠️ "无活动窗"必须去抖 150ms 且核对 kwinActiveId：XWayland 焦点交接
     //（如 wemeet 扫码小窗）与未跟踪 transient 窗都会造成空活动窗快照。
     property Timer _desktopFocusTimer: Timer {
         interval: StageConfigService.desktopFocusDebounce
         onTriggered: {
+            // 点击自带 toggle 路径（DeskCenter onClicked）——同一次点击的
+            // 焦点变化不该再触发第二次收编（实测：两路互相 cancel 在途
+            // 批次，快速点击时状态翻车）。只兜不经过点击的聚焦转移。
+            if (Date.now() - root._lastDeskToggleAt < 1200) {
+                console.info("[DeskRevealDBG] timer yielded (recent toggle)")
+                return
+            }
             if (WindowService.activeWindowId === ""
-                    && WindowService.kwinActiveId === "")
-                root.collapseToStrip()
+                    && (WindowService.kwinActiveId === ""
+                        || WindowService.kwinActiveDesktop)
+                    && StageConfigService.autoMinimize)
+                root._collectDesktopToStrip(true)
         }
     }
 
-    function collapseToStrip() {
-        if (!StageModeService.enabled || !open
-                || !StageConfigService.autoMinimize)
+    // 缩略图失败重试：截图授权空档（kosctl install→start 间隙、守护重启）
+    // 里失败的请求不会自愈，卡会永远停在图标占位符。开着侧栏时周期补拍
+    // 没图的代表窗（成功即停——decorateGroups 每轮重选代表）。
+    property Timer _thumbRetryTimer: Timer {
+        interval: 1500
+        running: root.open
+        repeat: true
+        onTriggered: {
+            const groups = root.sideGroups
+            for (let i = 0; i < groups.length; i++) {
+                const g = groups[i]
+                if (!g.targetId)
+                    continue
+                if (!WindowService.thumbnailUrl(g.targetId))
+                    WindowService.requestThumbnail(g.targetId)
+            }
+        }
+    }
+
+    // 显示桌面开关：DeskCenter 空区左键（经 StageModeService 信号转发）
+    // 触发。第一次＝全部应用窗带动画收进卡；再点一次＝整组放出来、
+    // 最后激活先前的活动窗。点击某张卡＝退出开关态（选了那个应用）。
+    property var deskCollectedIds: []
+    property string deskCollectedFocusId: ""
+    // 最近一次 toggle 的时刻：①双击防抖——第一次的收编管线 330ms 才
+    // 落地，紧接的第二击会在"窗口还没进卡"时反向恢复（用户看到的就是
+    // "卡出现了、程序没收回去"）；②焦点定时器的收编在 toggle 后让路
+    // 1.2s——同一次点击不该走两条收编路（互相 cancelPendingDemote 打架）。
+    property real _lastDeskToggleAt: 0
+
+    function toggleDeskReveal() {
+        console.info("[DeskRevealDBG] toggle enter set="
+            + deskCollectedIds.length + " lastAt=" + root._lastDeskToggleAt)
+        if (!StageModeService.enabled || !open)
             return
+        const now = Date.now()
+        if (now - root._lastDeskToggleAt < 400) {
+            console.info("[DeskRevealDBG] toggle debounced")
+            return
+        }
+        root._lastDeskToggleAt = now
+        if (deskCollectedIds.length > 0) {
+            const ids = deskCollectedIds
+            const focusId = deskCollectedFocusId
+            _exitDeskReveal()
+            // 杀掉在途最小化批次：迟到的派发会把刚放出来的窗口又收走
+            _cancelPendingDemote()
+            WindowService.activateGroup(ids, focusId)
+            console.info("[StageSidebar] desk reveal: restore "
+                + ids.length + " window(s)")
+            return
+        }
+        _collectDesktopToStrip(true)
+    }
+
+    function _exitDeskReveal() {
+        deskCollectedIds = []
+        deskCollectedFocusId = ""
+    }
+
+    function _collectDesktopToStrip(recordSet) {
+        if (!StageModeService.enabled || !open)
+            return false
         _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
         const currentId = WindowService.currentDesktopId
         const records = WindowService.records || []
@@ -322,11 +459,24 @@ PanelWindow {
             if (StageGroups.isOnDesktop(r, currentId))
                 targets.push(r)
         }
+        console.info("[DeskRevealDBG] collect targets=" + targets.length
+            + " recordSet=" + recordSet + " set=" + deskCollectedIds.length)
         if (targets.length === 0)
-            return
-        captureAndDemote(targets.map(r => r.windowId), "", false)
+            return false
+        const ids = targets.map(r => r.windowId)
+        if (recordSet) {
+            deskCollectedIds = ids
+            deskCollectedFocusId = root.stageActiveId || ids[0]
+        }
+        // 哨兵键：桌面收编要让**每个组**的矩形都发布（含被扣卡冻结的
+        // 活动组）——publishSimulatedLayout 的空键=自动排除活动组，会把
+        // 刚要收编的组排除掉，特效回落陈旧矩形。快照等待 120ms：缩略图
+        // 实测 10-30ms 即达（自动收编的 300ms 是给多窗连拍+pacer 留的，
+        // 桌面收编通常 1-3 扇，且点击后的手感优先）
+        captureAndDemote(ids, "__desk-collect-no-exclude__", true, 120)
         console.info("[StageSidebar] collapse to strip: "
-            + targets.length + " window(s)")
+            + ids.length + " window(s)")
+        return true
     }
 
     // ── 布局仿真发布：按"切换后的分组布局"给每个窗口发布它的组卡矩形 ──
@@ -356,7 +506,7 @@ PanelWindow {
         let activeRec = null
         if (!excludeKey) {
             activeRec = WindowService.windowById(
-                WindowService.activeWindowId)
+                root.stageActiveId)
             if (activeRec) {
                 excludeKey = StageGroups.groupKeyOf(activeRec)
                 keepActiveMin = true
@@ -563,6 +713,9 @@ PanelWindow {
         if (card.engaging)
             return
         card.engaging = true
+        // 点卡＝主动选了某个应用，退出"显示桌面"开关态（其余最小化窗
+        // 保留为普通卡，下次点桌面不再整组放出来）
+        _exitDeskReveal()
         _cancelPendingDemote()
         // 只入队；退位判定/快照/预测表全部挪到派发时刻（见队列注释）
         root._engageQueue.push({ appKey: slot.appKey,
@@ -1160,7 +1313,45 @@ PanelWindow {
     onSideGroupsChanged: syncCards()
 
     // 初始求值不触发 changed 信号，挂载时先对账一次
-    Component.onCompleted: syncCards()
+    Connections {
+        target: StageModeService
+        // DeskCenter 空区左键 → 显示桌面开关（DeskCenter 与本窗分属两个
+        // 模块，StageModeService 单例是唯一控制通道）
+        function onDeskRevealToggleRequested() { root.toggleDeskReveal() }
+    }
+
+    Connections {
+        target: AppLauncherService
+        // 覆盖层关在桌面上（点外部关闭/启动应用后又回桌面）：此刻活动窗
+        // 已是空且不会再变——手动补一次桌面聚焦判定
+        function onOpenChanged() {
+            if (!AppLauncherService.open
+                    && WindowService.activeWindowId === ""
+                    && root._prevActiveId !== "")
+                root._desktopFocusTimer.restart()
+        }
+    }
+
+    Component.onCompleted: {
+        stageActiveId = WindowService.activeWindowId
+        syncCards()
+    }
+
+    // 启动一致性：shell 重启后焦点可能无处安放（无活动窗）而桌面还有
+    // 可见窗——这正是"卡出现了、程序却还在桌面"的幽灵态。按桌面聚焦
+    // 语义收编并记入开关集（下次点桌面＝整组放出来）。
+    property Timer _bootConsistencyTimer: Timer {
+        interval: 1500
+        repeat: false
+        running: root.open
+        onTriggered: {
+            if (WindowService.activeWindowId === ""
+                    && (WindowService.kwinActiveId === ""
+                        || WindowService.kwinActiveDesktop)
+                    && StageConfigService.autoMinimize)
+                root._collectDesktopToStrip(true)
+        }
+    }
 
     // ── 增量卡片模型（按应用分组） ──
     // sideGroups 是派生数组，任何窗口元数据变化都会生成新数组 → Repeater

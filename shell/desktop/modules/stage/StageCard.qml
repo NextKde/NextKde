@@ -71,7 +71,15 @@ Item {
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     Behavior on y { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     Behavior on opacity { NumberAnimation { duration: engaging ? 180 : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
-    Behavior on scale { NumberAnimation { duration: StageConfigService.cardEnterDuration + 20; easing.type: Easing.OutCubic } }
+    // 缩放带过冲（OutBack）：悬停放大/入场有弹性回弹；位置类刻意保持
+    // OutCubic——x/y 过冲会越过槽位触发悬停丢失（kill 循环前科）
+    Behavior on scale {
+        NumberAnimation {
+            duration: StageConfigService.cardEnterDuration + 40
+            easing.type: Easing.OutBack
+            easing.overshoot: 1.2
+        }
+    }
 
     // 展开延迟派发改由窗口级队列 Timer 承担（round35 NEW-1/NEW-5：挂在
     // delegate 上的定时器会在派发窗口内随 delegate 销毁而丢派发），
