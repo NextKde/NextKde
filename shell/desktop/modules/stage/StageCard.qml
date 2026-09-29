@@ -182,7 +182,8 @@ Item {
             Rectangle {
                 required property int index
                 readonly property real off: (index + 1)
-                    * ((card.isHovered || card.dropHovered) ? 11 : 8)
+                    * StageConfigService.fanSpacing
+                    * ((card.isHovered || card.dropHovered) ? 1.4 : 1)
                 x: card.rightSide ? plate.x - off : plate.x + off
                 y: plate.y - off
                 width: plate.width
@@ -286,10 +287,15 @@ Item {
                     rightMargin: 6
                     verticalCenter: parent.verticalCenter
                 }
+                // 名称可关（stage-config showCardTitle）：关=纯窗口内容。
+                // 沉浸缩略图上白字需要描边兜可读性
+                visible: StageConfigService.showCardTitle
                 text: card.count > 1
                     ? (card.appName || card.title || "应用") + " ×" + card.count
                     : (card.appName || card.title || "应用")
                 color: "white"
+                style: Text.Outline
+                styleColor: Qt.rgba(0, 0, 0, 0.55)
                 font { pixelSize: 11; weight: Font.Bold }
                 elide: Text.ElideRight
             }
@@ -319,19 +325,13 @@ Item {
             }
         }
 
-        // 缩略图视口
+        // 缩略图视口：填满整卡（沉浸式——整卡就是窗口内容，无内框；
+        // 圆角随卡裁切）。未就绪的占位态透出卡背（plate 深色调）当底
         Rectangle {
             id: thumbCard
-            anchors {
-                top: cardHeader.bottom
-                topMargin: 6
-                left: plate.left
-                right: plate.right
-                bottom: plate.bottom
-                margins: 8
-            }
-            radius: 9
-            color: Qt.rgba(0, 0, 0, 0.35)
+            anchors.fill: plate
+            radius: plate.radius
+            color: "transparent"
             clip: true
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)
@@ -574,11 +574,12 @@ Item {
     Item {
         id: iconRow
         z: 2
-        readonly property int iconSize: 24
+        readonly property int iconSize: StageConfigService.stripIconSize
+        readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
         readonly property int visibleCount:
             Math.min(card.windowIds.length, card.maxIconSlots)
         readonly property real rowWidth:
-            visibleCount * iconSize + Math.max(0, visibleCount - 1) * 5
+            visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
         height: iconSize
         anchors {
             bottom: parent.bottom
@@ -611,7 +612,7 @@ Item {
                 onClicked: card.iconActivated(card.windowIds[index])
                 Rectangle {
                     anchors.fill: parent
-                    radius: 7
+                    radius: width / 3
                     color: iconSlot.containsMouse
                         ? Qt.rgba(0.16, 0.20, 0.30, 0.98)
                         : Qt.rgba(0.07, 0.09, 0.14, 0.92)
@@ -622,8 +623,8 @@ Item {
                     Behavior on color { ColorAnimation { duration: 120 } }
                     IconImage {
                         anchors.centerIn: parent
-                        width: 17
-                        height: 17
+                        width: parent.width * 0.7
+                        height: parent.width * 0.7
                         source: card.windowIcons[index] || card.iconSource || ""
                         asynchronous: false
                     }

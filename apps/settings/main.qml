@@ -963,6 +963,60 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
+                    label: "合并卡扇叠间距"
+                    unit: " px"
+                    minV: 2
+                    maxV: 24
+                    active: true
+                    current: fgSchedPage.stageSnapshot.fanSpacing !== undefined
+                        ? fgSchedPage.stageSnapshot.fanSpacing : 8
+                    onCommit: function(v) { fgSchedPage.stageSet("fanSpacing", v) }
+                }
+
+                StageSliderRow {
+                    label: "左下角图标大小"
+                    unit: " px"
+                    minV: 16
+                    maxV: 40
+                    active: true
+                    current: fgSchedPage.stageSnapshot.stripIconSize !== undefined
+                        ? fgSchedPage.stageSnapshot.stripIconSize : 24
+                    onCommit: function(v) { fgSchedPage.stageSet("stripIconSize", v) }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+
+                        Text {
+                            text: "显示卡片名称"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "关 = 沉浸缩略图：整卡只展示窗口内容，不显示顶部名称（关闭按钮悬停仍在）"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageSnapshot.showCardTitle !== false
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageSet("showCardTitle", checked)
+                            checked = fgSchedPage.stageSnapshot.showCardTitle !== false
+                        }
+                    }
+                }
+
+                StageSliderRow {
                     label: "静置倾斜角"
                     unit: "°"
                     minV: 0

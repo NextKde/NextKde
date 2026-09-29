@@ -27,6 +27,11 @@ QtObject {
         // 特效回退矩形，三处联动见各自文件
         "side":         { type: "enum", values: ["left", "right"],
                           def: "left" },
+        // 自由合并卡视觉：扇叠背板间距（px）/ 左下角图标排的图标大小
+        "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
+        "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
+        // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
+        "showCardTitle": { type: "bool", def: true },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
         "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
         "centerCards":  { type: "bool", def: true },
@@ -77,6 +82,9 @@ QtObject {
     // 自适应缩小（全部完整显示，等比缩小到恰好放下）
     property string layoutMode: "scroll"
     property string side: "left"
+    property int fanSpacing: 8
+    property int stripIconSize: 24
+    property bool showCardTitle: true
     property int cardHeight: 148
     property int cardSpacing: 16
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定

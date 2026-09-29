@@ -982,6 +982,19 @@ PanelWindow {
         }
     }
 
+    // 合并动画收尾：动画播完才改模型。槽位中途没了（被关/对账重建）
+    // 就跳过动画直接合并——不能丢用户的合并意图
+    property var _mergeAnimPending: null
+    property Timer _mergeAnimTimer: Timer {
+        interval: 260
+        onTriggered: {
+            const p = root._mergeAnimPending
+            root._mergeAnimPending = null
+            if (p)
+                root.mergeGroups(p.from, p.to)
+        }
+    }
+
     // 无头合并/拆分钩子（按槽位下标；自由组合链路验证用）
     function debugMerge(fromIndex, toIndex): string {
         const a = cardRepeater.itemAt(fromIndex)
@@ -1023,8 +1036,23 @@ PanelWindow {
         root.dragKey = ""
         root.dragFromIndex = -1
         root.dragToIndex = -1
-        // 合并落点：压在别的卡上松手 = 并组（不走换位）
+        // 合并落点：压在别的卡上松手 = 先播合并动画（被吞卡滑向目标 +
+        // 交棒淡出，槽位 Behavior 在 dragKey 清掉后已恢复），到位再真正
+        // 并组——模型瞬变没有过程感（用户："合并水灵灵的动画呢"）
         if (mergeKey !== "" && mergeKey !== key) {
+            let targetSlot = null
+            for (let i = 0; i < cardRepeater.count; i++) {
+                const s2 = cardRepeater.itemAt(i)
+                if (s2 && s2.appKey === mergeKey) { targetSlot = s2; break }
+            }
+            if (targetSlot) {
+                const absorbed = slot
+                absorbed.cardItem.engaging = true   // 180ms 淡出（同点卡交棒）
+                absorbed.y = targetSlot.y           // 240ms 滑向目标槽
+                root._mergeAnimPending = { from: key, to: mergeKey }
+                root._mergeAnimTimer.restart()
+                return
+            }
             root.mergeGroups(key, mergeKey)
             return
         }
