@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import qs.desktop.modules.common
 import qs.desktop.modules.platform
 
 // Publishes the current compositor-global Dock icon rectangles to the private
@@ -128,7 +129,9 @@ QtObject {
             return false
         }
 
-        const entry = application?.entry
+        // The caller passes a descriptor or an identity result, so the entry is
+        // resolved here rather than read off it.
+        const entry = AppPresentationService.entryFor(appId)
         const payload = JSON.stringify({
             target: selectedTarget,
             aliases: [appId,

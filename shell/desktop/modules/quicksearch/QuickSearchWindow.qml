@@ -79,7 +79,7 @@ PanelWindow {
                     title: title,
                     subtitle: presentation.desktopId,
                     icon: presentation.iconSource,
-                    entry: presentation.entry
+                    desktopId: presentation.desktopId
                 });
             }
         }
@@ -375,7 +375,9 @@ PanelWindow {
             // Ctrl+V once that has actually happened.
             root.pasteRequested(result, copyOnly === true);
         } else {
-            AppActionService.launch(result.entry);
+            // App results carry a desktopId only. launch() resolves the live
+            // entry itself, so nothing here holds a DesktopEntry reference.
+            AppActionService.launch(result);
         }
         closeRequested();
     }

@@ -161,8 +161,7 @@ PanelWindow {
                 name: presentation.displayName,
                 icon: presentation.iconSource,
                 defaultName: presentation.defaultName,
-                defaultIcon: presentation.defaultIcon,
-                entry: presentation.entry
+                defaultIcon: presentation.defaultIcon
             });
         }
         applications = apps;

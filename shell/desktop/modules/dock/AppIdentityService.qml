@@ -257,7 +257,6 @@ QtObject {
             iconSource: icon,
             hasIconOverride: !!_iconPath(presentationOverride.icon),
             hasPreferredIcon: hasPreferredIcon,
-            entry: entry,
         };
         if (cacheKey)
             svc._cache[cacheKey] = result;
