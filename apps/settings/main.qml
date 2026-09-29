@@ -82,9 +82,20 @@ ApplicationWindow {
             const value = window.materialPalette[name]
             return value === undefined ? iPadOSValue : value
         }
-        readonly property color background: role("surface", dark ? "#000000" : "#f2f2f7")
-        readonly property color sidebar: role("surface_container_low", dark ? "#1c1c1e" : "#fafbff")
-        readonly property color contentSurface: role("surface", dark ? "#000000" : "#fafbff")
+        // 窗口底色 + 左侧栏 = 同一块平面，右侧内容区是它上面一块圆角面板。
+        // 底色**必须**是 #eff0f1，等于 BreezeLight 的 Window/BackgroundNormal(239,240,241)：
+        // 窗口装饰 kos_decoration 的标题栏取的就是 client->palette().color(QPalette::Window)
+        // （integrations/kwin/kos-decoration/kosdecoration.cpp:157），两边同色标题栏才和
+        // 内容连成一块无缝的面。**永远不要动这个值**（2026-09-28 改过一次，标题栏立刻裂出色差）。
+        //   右侧面板 = #e3e5e7，即 Breeze 同组的 Window/BackgroundAlternate(227,229,231)
+        // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。
+        // （试过 #f2f2f7：ΔRGB 只有 (3,2,6)/1.023:1，肉眼分不出边界。加阴影已被否，
+        //  因为读起来是"浮起"不是"分栏"。）
+        // 深色沿用同一套结构：底色 #000000，右侧面板 #1c1c1e。
+        readonly property color background: role("surface", dark ? "#000000" : "#eff0f1")
+        readonly property color sidebar: role("surface", dark ? "#000000" : "#eff0f1")
+        readonly property color contentSurface: role("surface_container_low", dark
+            ? "#1c1c1e" : "#e3e5e7")
         readonly property color primaryText: role("on_surface", dark ? "#f5f5f7" : "#1c1c1e")
         readonly property color secondaryText: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
         readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
@@ -3804,7 +3815,11 @@ ApplicationWindow {
             id: sidebar
             x: 0
             y: 0
-            width: 302
+            // 302 → 211（缩到 70%，用户要求窄 30%）。条目最长的标签是 4 个汉字
+            // （"接入状态"／"玻璃调试"），13px 字号约 52px；一条 ItemDelegate 占
+            // 10(左内) + 29(图标) + 10(间隔) + 文本 + 10(右内)，再加 ColumnLayout
+            // 两侧各 14 的边距 ⇒ 211 下文本仍有约 124px 可用，不会触发 ElideRight。
+            width: 211
             height: parent.height
             radius: 0
             color: theme.sidebar
@@ -3934,12 +3949,18 @@ ApplicationWindow {
 
         Rectangle {
             id: contentSurface
-            x: sidebar.width
-            y: 0
-            width: parent.width - x
-            height: parent.height
-            radius: 0
-            color: theme.background
+            // 右侧内容面板四周让开 inset（呼吸空间），否则贴边时圆角会被窗口
+            // 边缘切掉，只在左下露出一点圆弧。圆角之外露出的就是 theme.background
+            // （#eff0f1），也就是侧栏那块平面，看上去像分栏而不是割裂。
+            // 10 → 20：用户要求边距大一点、圆角区域小一点。面板自身的内边距
+            // （下面 Flickable 的 30/24）保持不变，所以变大的是面板外的留白。
+            readonly property real inset: 20
+            x: sidebar.width + inset
+            y: inset
+            width: parent.width - x - inset
+            height: parent.height - inset * 2
+            radius: 18
+            color: theme.contentSurface
 
             Flickable {
                 id: pageScroll
