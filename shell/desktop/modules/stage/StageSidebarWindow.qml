@@ -868,19 +868,6 @@ PanelWindow {
             WindowService.closeWindow(ids[i])
     }
 
-    // ── 标题 ──
-    Text {
-        id: header
-        anchors {
-            top: parent.top
-            topMargin: 14
-            horizontalCenter: parent.horizontalCenter
-        }
-        text: "Stage"
-        color: Qt.rgba(1, 1, 1, 0.38)
-        font { pixelSize: 11; weight: Font.DemiBold; letterSpacing: 1.5 }
-    }
-
     // ── 卡片堆叠区 ──
     // 背景完全透明（用户要求）：无背板、无霜层，只留悬浮卡片本身。
     // 左右锚到"内容列"（窗宽减两侧溢出余量 = PANEL_WIDTH）；上下留出
@@ -888,8 +875,10 @@ PanelWindow {
     Item {
         id: cards
         anchors {
-            top: header.bottom
-            topMargin: 18
+            // 原来锚在"Stage"标题下方（标题已删，用户要求）；顶距保留
+            // 标题时代的等效间距（14+字高≈14+18）
+            top: parent.top
+            topMargin: 46
             left: parent.left
             leftMargin: StageGeo.CARD_OVERFLOW_MARGIN
             right: parent.right
