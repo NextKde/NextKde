@@ -741,6 +741,27 @@ QtObject {
                 minimizeWindow(record.windowId, true);
         }
 
+    // 整组原子最小化（直发不过合并槽）：逐窗命令在桥侧 50ms/条排队，
+    // N 窗收编管线会被拖到 N*50ms——比显示桌面开关的防抖还长（打断窗口
+    // 的根源，实测踩过）。多窗批量一律走这里，单窗路径用 minimizeWindow。
+    function minimizeGroup(windowIds, value) {
+        const ids = [];
+        for (let i = 0; i < windowIds.length; i++) {
+            const record = windowById(windowIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                ids.push(record.handleId);
+            } else {
+                try { record.toplevel.minimized = value === undefined ? true : value; } catch (e) {}
+            }
+        }
+        if (ids.length === 0)
+            return;
+        _sendKwinCommand({ action: "minimize-group", ids: ids,
+            value: value === undefined ? true : value });
+    }
+
     // 实时卡片模式的压底标记：静默还原的后台窗压到桌面底层（keepBelow），
     // 不遮正在使用的窗口；整组激活时桥侧自动摘掉
     function keepBelowWindow(windowId, below) {

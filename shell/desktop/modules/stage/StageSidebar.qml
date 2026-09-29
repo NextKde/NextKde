@@ -53,6 +53,8 @@ Scope {
         }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
+        // 显示桌面开关状态机快照（抗打断排障）
+        function deskState(): string { return stageWindow.deskState() }
         // round30 调研探针：对第 index 张卡的窗口发起 zkde_screencast 活体流
         // 请求，journal 里看 stream probe nodeId=（>0 = 授权+协议全通）
         function debugStreamProbe(index: int): string {

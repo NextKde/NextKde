@@ -153,14 +153,16 @@ PanelWindow {
         onTriggered: {
         const t = root._pendingMinimize
         root._pendingMinimize = []
-        for (let i = 0; i < t.length; i++)
-            WindowService.minimizeWindow(t[i], true)
-            // 最小化已派发＝窗口开始飞进卡：此刻放出被扣住的卡（同拍）
-            if (root._deskHoldActive) {
-                root._deskHoldActive = false
-                root._deskHoldReleaseTimer.stop()
-                root.stageActiveId = WindowService.activeWindowId
-            }
+        // 原子整组最小化：N 窗一条命令一个桥轮询拍内落地（逐窗排队会把
+        // 收编管线拖到 N*50ms，比 toggle 防抖还长——快速第二击插进管线
+        // 中途的"卡出现、程序没收回去"即此，实测复现过）
+        WindowService.minimizeGroup(t, true)
+        // 最小化已派发＝窗口开始飞进卡：此刻放出被扣住的卡（同拍）
+        if (root._deskHoldActive) {
+            root._deskHoldActive = false
+            root._deskHoldReleaseTimer.stop()
+            root.stageActiveId = WindowService.activeWindowId
+        }
         }
     }
 
@@ -209,9 +211,27 @@ PanelWindow {
             // 永远不落地（"卡出现了程序没收回去"的根因，实测竞态差
             // ~10ms）。真正的属主取消留给有新活动窗的分支。
             return
-        _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
+        // 显示桌面开关属主判定：活动窗在开关集里＝桌面收编管线正在收
+        // 它（toggle 连活动窗一起收），autoMin 的"保护活动应用"语义会把
+        // 批次打散、留下 armed-but-out 残局（collected 挂着但窗没收，
+        // 实测复现）——让位。
+        if (root.deskCollectedIds.indexOf(activeId) >= 0)
+            return
         const activeRec = WindowService.windowById(activeId)
         const activeGroup = activeRec ? StageGroups.groupKeyOf(activeRec) : ""
+        // 外科手术式作废：只从在途批次剔除"现在成了活动应用"的窗口
+        //（round35 的病＝刚展开的应用被迟到批次收走），其余保留——
+        // 桌面收编/整组退位批次不该被一次无关的激活周期整批清掉。
+        if (root._pendingMinimize.length > 0 && activeGroup !== "") {
+            root._pendingMinimize = root._pendingMinimize.filter(id => {
+                const r = WindowService.windowById(id)
+                return !(r && StageGroups.groupKeyOf(r) === activeGroup)
+            })
+            if (root._pendingMinimize.length === 0) {
+                root._captureThenMinTimer.stop()
+                root._minimizeDispatchTimer.stop()
+            }
+        }
         const currentId = WindowService.currentDesktopId
         const records = WindowService.records || []
         const targets = []
@@ -255,6 +275,20 @@ PanelWindow {
                 root._deskHoldActive = false
                 root._deskHoldReleaseTimer.stop()
                 root.stageActiveId = current
+                // 真实窗口被激活而桌面开关态还挂着（用户直接点了桌面上的
+                // 窗，没走卡片）：交互意图＝退出显示桌面（macOS 同语义），
+                // 否则下次点桌面会"惊喜"整组放出来。开关集内的窗聚焦
+                //（收编中的焦点漂移）不算——它们正是要收的对象。
+                if (root.deskCollectedIds.length > 0
+                        && root.deskCollectedIds.indexOf(current) < 0) {
+                    const cr = WindowService.windowById(current)
+                    if (cr && !cr.toplevel?.minimized) {
+                        root._exitDeskReveal()
+                        root._cancelPendingDemote()
+                        console.info("[StageSidebar] desk reveal: exit on"
+                            + " direct window activation")
+                    }
+                }
             }
             if (root._prevActiveId && root._prevActiveId !== current) {
                 if (root.hasWindowId(root._prevActiveId))
@@ -434,15 +468,58 @@ PanelWindow {
         if (deskCollectedIds.length > 0) {
             const ids = deskCollectedIds
             const focusId = deskCollectedFocusId
+            // 抗打断：第二击先问窗口的真实状态再决定语义——一条都没
+            // 最小化＝收编管线还没落地，这是"撤销"（窗口从未离开桌面，
+            // 反向恢复只会白放一遍再收回去）；有最小化的＝正常恢复。
+            // 撤销取消不掉已入桥队列的原子命令（FIFO），迟到落地由
+            // _deskUndoWatchTimer 兜住。
+            let anyMin = false
+            for (let i = 0; i < ids.length; i++) {
+                const r = WindowService.windowById(ids[i])
+                if (r && r.toplevel?.minimized) { anyMin = true; break }
+            }
             _exitDeskReveal()
             // 杀掉在途最小化批次：迟到的派发会把刚放出来的窗口又收走
             _cancelPendingDemote()
+            if (!anyMin) {
+                root._deskUndoWatch = { ids: ids, focusId: focusId }
+                root._deskUndoWatchTimer.restart()
+                console.info("[StageSidebar] desk reveal: undo"
+                    + " (pipeline in flight, " + ids.length + " window(s))")
+                return
+            }
             WindowService.activateGroup(ids, focusId)
             console.info("[StageSidebar] desk reveal: restore "
                 + ids.length + " window(s)")
             return
         }
         _collectDesktopToStrip(true)
+    }
+
+    // 撤销看门狗：undo 时原子最小化命令可能已在桥队列里（取消不了），
+    // 迟到落地会把窗口收进卡而开关态已清——放回来（恢复原焦点目标）。
+    property var _deskUndoWatch: null
+    property Timer _deskUndoWatchTimer: Timer {
+        interval: 900
+        onTriggered: {
+            const w = root._deskUndoWatch
+            root._deskUndoWatch = null
+            if (!w)
+                return
+            const late = []
+            for (let i = 0; i < w.ids.length; i++) {
+                const r = WindowService.windowById(w.ids[i])
+                if (r && r.toplevel?.minimized)
+                    late.push(w.ids[i])
+            }
+            if (late.length === 0)
+                return
+            const focusId = w.ids.indexOf(w.focusId) >= 0
+                ? w.focusId : late[0]
+            WindowService.activateGroup(w.ids, focusId)
+            console.warn("[StageSidebar] desk undo: late minimize landed ("
+                + late.length + "), restored")
+        }
     }
 
     function _exitDeskReveal() {
@@ -454,6 +531,9 @@ PanelWindow {
         if (!StageModeService.enabled || !open)
             return false
         _cancelPendingDemote() // 作废在途批次（round35 NEW-6：属主归一）
+        // 新收编意图接管：撤销看门狗退役（它恢复的窗即将再次收编）
+        root._deskUndoWatch = null
+        root._deskUndoWatchTimer.stop()
         const currentId = WindowService.currentDesktopId
         const records = WindowService.records || []
         const targets = []
@@ -824,6 +904,9 @@ PanelWindow {
         // 保留为普通卡，下次点桌面不再整组放出来）
         _exitDeskReveal()
         _cancelPendingDemote()
+        // 点卡意图接管：撤销看门狗退役（迟到恢复会跟 engage 抢焦点）
+        root._deskUndoWatch = null
+        root._deskUndoWatchTimer.stop()
         // 只入队；退位判定/快照/预测表全部挪到派发时刻（见队列注释）
         root._engageQueue.push({ appKey: slot.appKey,
             targetId: slot.targetId, idsJson: slot.idsJson })
@@ -1253,6 +1336,36 @@ PanelWindow {
             slots: slots })
     }
 
+    // 显示桌面开关状态机快照（抗打断排障）：集合/在途批次/定时器/焦点
+    // 各维度一眼对齐，"卡住了"时直接对照哪一环悬空
+    function deskState(): string {
+        const minPending = root._pendingMinimize.map(id => {
+            const r = WindowService.windowById(id)
+            return { id: id, min: r ? !!r.toplevel?.minimized : null }
+        })
+        const collected = root.deskCollectedIds.map(id => {
+            const r = WindowService.windowById(id)
+            return { id: id, min: r ? !!r.toplevel?.minimized : null }
+        })
+        return JSON.stringify({
+            collected: collected,
+            focusId: root.deskCollectedFocusId,
+            pendingMinimize: minPending,
+            timers: { capture: root._captureThenMinTimer.running,
+                dispatch: root._minimizeDispatchTimer.running,
+                hold: root._deskHoldReleaseTimer.running,
+                autoMin: root._autoMinTimer.running,
+                deskFocus: root._desktopFocusTimer.running },
+            hold: root._deskHoldActive,
+            undoWatch: root._deskUndoWatch !== null,
+            stageActiveId: root.stageActiveId,
+            activeId: WindowService.activeWindowId,
+            kwinActiveId: WindowService.kwinActiveId,
+            kwinDesktop: WindowService.kwinActiveDesktop,
+            lastToggleAt: Math.round(Date.now() - root._lastDeskToggleAt),
+            engageQ: root._engageQueue.length })
+    }
+
     onHoveredKeyChanged: layoutCards()
 
     // 高度纪元：窗口尺寸变化的那一轮布局禁用 hoverY 锚定——启动时首轮
@@ -1495,6 +1608,72 @@ PanelWindow {
                         || WindowService.kwinActiveDesktop)
                     && StageConfigService.autoMinimize)
                 root._collectDesktopToStrip(true)
+        }
+    }
+
+    // ── 收敛看门狗（抗打断兜底）：焦点在桌面、有桌面窗没收、且没有任何
+    // 管线/定时器在途、也无刚发生的人机交互 → 任何被打断的收编管线最终
+    // 都会落进这个态（取消者清了状态、被取消者半途而废、恢复焦点失败等
+    // 未知交错），统一自动补一次收编拉回"显示桌面"一致态。语义与
+    // _desktopFocusTimer 的桌面聚焦收编一致（同一判定条件），只是带重试。
+    property Timer _deskHealTimer: Timer {
+        interval: 1500
+        repeat: true
+        running: root.open && StageModeService.enabled
+        onTriggered: {
+            if (!StageModeService.enabled || !root.open
+                    || root.shellOverlayActive)
+                return
+            // 残局清理：开关态挂着但集内一条都没最小化、管线也已停摆＝
+            // 被打断的收编只剩个空壳（armed-but-out，实测复现：autoMin
+            // 的激活周期把桌面批次拦在派发前）——清掉让状态与现实一致，
+            // 常规收敛逻辑自然接管。armed 且有最小化的＝正常开关态，不碰。
+            if (root.deskCollectedIds.length > 0) {
+                if (root._pendingMinimize.length > 0
+                        || root._captureThenMinTimer.running
+                        || root._minimizeDispatchTimer.running
+                        || Date.now() - root._lastDeskToggleAt < 1600)
+                    return
+                let anyMin = false
+                for (let i = 0; i < root.deskCollectedIds.length; i++) {
+                    const r = WindowService.windowById(
+                        root.deskCollectedIds[i])
+                    if (r && r.toplevel?.minimized) { anyMin = true; break }
+                }
+                if (!anyMin) {
+                    console.warn("[StageSidebar] desk heal: stale armed"
+                        + " set cleared (nothing minimized)")
+                    root._exitDeskReveal()
+                }
+                return
+            }
+            // 有属主在管状态（管线在途/开关态挂着/交互进行中）＝不是孤儿态
+            if (root.deskCollectedIds.length > 0
+                    || root._pendingMinimize.length > 0
+                    || root._deskUndoWatch !== null
+                    || root.dragKey !== ""
+                    || root._engageQueue.length > 0)
+                return
+            if (root._captureThenMinTimer.running
+                    || root._minimizeDispatchTimer.running
+                    || root._deskHoldReleaseTimer.running
+                    || root._desktopFocusTimer.running
+                    || root._autoMinTimer.running)
+                return
+            // 刚 toggle 过（含撤销/恢复）让路：正常管线最长 ~600ms + 动画
+            if (Date.now() - root._lastDeskToggleAt < 1600)
+                return
+            if (!StageConfigService.autoMinimize)
+                return
+            const activeId = WindowService.activeWindowId
+            if (activeId !== "")
+                return
+            if (!(WindowService.kwinActiveId === ""
+                    || WindowService.kwinActiveDesktop))
+                return
+            if (root._collectDesktopToStrip(true))
+                console.warn("[StageSidebar] desk heal: re-collected"
+                    + " (interrupted pipeline residue)")
         }
     }
 
