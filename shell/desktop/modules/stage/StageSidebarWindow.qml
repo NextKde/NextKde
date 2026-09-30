@@ -1560,7 +1560,10 @@ PanelWindow {
                 scale: Math.round(s.slotScale * 100) / 100, z: s.z,
                 x: Math.round(s.x) })
         }
-        return JSON.stringify({ winH: Math.round(root.height),
+        return JSON.stringify({ open: root.open, visible: root.visible,
+            launcherOpen: AppLauncherService.open,
+            winW: Math.round(root.width),
+            winH: Math.round(root.height),
             cardsH: Math.round(cards.height), hovered: root.hoveredKey,
             scroll: Math.round(root.scrollOffset),
             maxScroll: Math.round(root._maxScroll),

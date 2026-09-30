@@ -1,5 +1,4 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import Quickshell.Widgets
 import org.kde.pipewire
 import org.kde.taskmanager
@@ -141,7 +140,8 @@ Item {
     readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
     property real tiltCur: scrollMode
         ? ((isHovered && !engaging) ? 0 : StageConfigService.deckRestTilt)
-        : ((isHovered || engaging) ? StageConfigService.tiltAngle : 0)
+        : ((engaging || (isHovered && !buttonAim))
+            ? StageConfigService.tiltAngle : 0)
     Behavior on tiltCur {
         NumberAnimation {
             duration: card.engaging ? 180 : StageConfigService.tiltAnimDuration
@@ -149,27 +149,41 @@ Item {
         }
     }
 
-    // 悬停 = 整卡或关闭钮任一命中（合成）：关闭钮的 MouseArea 在最上层，
+    // 悬停 = 整卡或任一按钮热区命中（合成）：按钮类 MouseArea 在最上层，
     // 指针移上去会让整卡 MouseArea 失去悬停——若只看后者，卡片会缩回
     // 1.0 → 按钮随 5% 缩放位移 → 指针脱出 → 再放大 = 抽搐循环（实测），
-    // 且点击永远落空。合成后指针在卡内任何位置（含关闭钮）卡片姿态稳定。
+    // 且点击永远落空。⚠️ splitHit 必须在列（2026-09-30 抽搐定案）：漏列
+    // 时指针移上拆分钮 = isHovered 翻 false → hovered(false) → 窗口侧
+    // 清 hoveredKey 整列回基础槽位 = 卡在静止指针底下移位 → 悬停失而
+    // 复得 → 布局弹回 = 抖动 + tilt/scale 来回翻转（"拆分钮点不到"）。
+    // 瞄准态：指针进入按钮角区（自适应模式的悬停倾斜会把视觉钮转离
+    // 固定热区——点击落空）。进入角区即摆平卡片（tilt→0），视觉钮回到
+    // 未倾斜位＝与热区重合，点击必中。合成进 isHovered：瞄准时卡不缩回。
+    readonly property bool buttonAim: buttonAimHover.containsMouse
+        || closeHit.containsMouse || splitHit.containsMouse
     readonly property bool isHovered: cardMouse.containsMouse
         || closeHit.containsMouse
+        || splitHit.containsMouse
         || iconRowHover.containsMouse
+        || buttonAimHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
     // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
     readonly property bool glowOn: card.isHovered || card.engaging
 
     // ── 卡面内容层（离屏）：背板/辉光/头部/缩略图全部渲染进 plane 的层
-    // 纹理，再由 stage_tilt 着色器按共享透视重投影。plane 比卡面大一圈
-    //（辉光外扩 ~14px 必须装进纹理，层纹理只渲染 item 尺寸内的内容）。
+    // 纹理，再由 stage_tilt 着色器按共享透视重投影。plane 比卡面大一圈：
+    // 辉光外扩 ~14px + 扇叠偏移（2 张 × 间距 × 悬停 1.4，fanPad 随
+    // fanSpacing 缩放——层纹理只渲染 item 自身尺寸内的内容，扇叠超界会
+    // 被切断成直角，实测"堆叠卡被裁剪"即此）。
+    // ⚠️ 着色器以 plane 中心对称采样：扩容必须对称（plate 保持居中）。
+    readonly property real fanPad: 2.8 * StageConfigService.fanSpacing
     Item {
         id: plane
         visible: false
-        x: -16
-        y: -22
-        width: parent.width + 32
-        height: parent.height + 44
+        x: -(16 + card.fanPad)
+        y: -(22 + card.fanPad)
+        width: parent.width + 32 + card.fanPad * 2
+        height: parent.height + 44 + card.fanPad * 2
         layer.enabled: true
         layer.smooth: true
 
@@ -185,7 +199,8 @@ Item {
                 readonly property real off: (index + 1)
                     * StageConfigService.fanSpacing
                     * ((card.isHovered || card.dropHovered) ? 1.4 : 1)
-                x: card.rightSide ? plate.x - off : plate.x + off
+                // 方向（用户定稿）：左上角探出；条在右时镜像到右上
+                x: card.rightSide ? plate.x + off : plate.x - off
                 y: plate.y - off
                 width: plate.width
                 height: plate.height
@@ -205,10 +220,10 @@ Item {
         // 背板（原根 Rectangle 的颜色/描边/圆角，随卡面一起被透视投影）
         Rectangle {
             id: plate
-            x: 16
-            y: 22
-            width: parent.width - 32
-            height: parent.height - 44
+            x: 16 + card.fanPad
+            y: 22 + card.fanPad
+            width: parent.width - 32 - card.fanPad * 2
+            height: parent.height - 44 - card.fanPad * 2
             radius: StageConfigService.cardRadius
             // 背板浓度：静置 cardTint，悬停自动 ×1.3 提亮（上限 0.95）
             color: (card.isHovered || card.dropHovered)
@@ -366,20 +381,18 @@ Item {
 
         // 缩略图视口：填满整卡（沉浸式——整卡就是窗口内容，无内框）。
         // ⚠️ Rectangle.clip 是矩形裁切：满卡后直角缩略图会盖住卡背的
-        // 圆角（"卡片变矩形"实测）——层 + OpacityMask 按卡圆角抠 alpha
-        //（遮罩源是旁边的隐形圆角矩形，sibling 锚定到同区域）
-        Rectangle {
-            id: thumbMask
-            anchors.fill: plate
-            radius: plate.radius
-            visible: false
-        }
+        // 圆角（"卡片变矩形"实测）。圆角 = 下面的 thumbRound 着色器对
+        // thumbCard 的层纹理做 SDF 抠 alpha——结构与 plane → stage_tilt
+        // 完全同款（visible:false + 裸 layer 出纹理 + 自写着色器采样）。
+        // ⚠️ 勿改回 Qt5Compat OpacityMask（layer.effect 形态）：带特效的
+        // 嵌套层在 plane 离屏层内于本机 freedreno 栈上静默失效（实测直角
+        // 照旧，且疑似连带杀掉整卡渲染——2026-09-30 排障定案）。
         Item {
             id: thumbCard
             anchors.fill: plate
+            visible: false
             layer.enabled: true
             layer.smooth: true
-            layer.effect: OpacityMask { maskSource: thumbMask }
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)
 
@@ -495,6 +508,17 @@ Item {
             }
         }
 
+        // 圆角化的缩略图本体：采样 thumbCard 层纹理，圆角矩形 SDF 抠
+        // alpha——圆角外透出下方背板（背板自带 radius，视觉浑然一体）。
+        // 半径/尺寸绑定 plate，与背板圆角严格同源（含设置页实时调整）。
+        ShaderEffect {
+            anchors.fill: plate
+            property variant source: thumbCard
+            property real crad: plate.radius
+            property size isz: Qt.size(width, height)
+            fragmentShader: Qt.resolvedUrl("../../shaders/stage_round.frag.qsb")
+        }
+
         // 深度渐变：远侧压暗盖在内容之上，增强"退到侧边"的纵深（悬停/点击时淡出）。
         // 压暗侧 = 屏缘侧（左条压左、右条压右），条在右时整个翻转
         Rectangle {
@@ -522,11 +546,13 @@ Item {
     // ── 真透视倾斜：把 plane 纹理按共享相机针孔模型重投影（逆映射逐像素
     // 采样）。相机 = 所有卡片共享：竖轴取本项中心（卡在内容列里居中），
     // 地平线 = 视口中心（camRel.y 由 perspectiveYOff 换算）——整列灭点唯一。
-    // 尺寸余量：高度 ×1.3（远离地平线的卡随 k 偏移 ±3%）、宽度 ×1.1。
+    // 覆盖整个 plane 再加边距：① 扇叠背板探出卡面外，必须整面入窗；② 近缘
+    // 随 k 放大 ±3%，外扩余量防投影边缘被 item 边界裁掉。中心对称 = 采样
+    // 映射不变（camRel 取项中心，尺寸只定义可见窗口）。
     ShaderEffect {
         anchors.centerIn: parent
-        width: parent.width * 1.1
-        height: parent.height * 1.3
+        width: plane.width + 64
+        height: plane.height + 64
         // uniform 显式声明（ShaderEffect 不自动创建属性；source 约定名，
         // plane 的 layer 纹理由此进 sampler）
         property variant source: plane
@@ -611,6 +637,26 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: card.closeAllRequested()
+    }
+
+    // 按钮角区热区：覆盖两个按钮的更大区域（NoButton 不截点击；声明在
+    // cardMouse 之后=角区内它是 hover 顶层，压住 cardMouse；closeHit/
+    // splitHit z:1 在按钮上仍是最顶层——三态合成见 buttonAim）。
+    // ⚠️ 固定锚右上：视觉钮（cardClose/cardSplit）在头部永远位于卡面
+    // 右上（头部横贯 plate、关闭钮锚右），不随 side 镜像——镜像到左上
+    // 会瞄准错侧（2026-09-30 修正）。
+    MouseArea {
+        id: buttonAimHover
+        width: 104
+        height: 48
+        anchors {
+            top: parent.top
+            right: parent.right
+            rightMargin: 2
+        }
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        cursorShape: Qt.PointingHandCursor
     }
 
     // 拆分热区：与 closeHit 同款根层原理（plane 层内不收输入）。位置与

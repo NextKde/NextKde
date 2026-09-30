@@ -53,4 +53,9 @@ echo "Compiling stage tilt shader..."
 # ../../modules/stage/stage-geometry.mjs 的 tiltProject/tiltUnproject。
 qsb --qt6 -o stage_tilt.frag.qsb stage_tilt.frag
 
-echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb"
+echo "Compiling stage round shader..."
+# 沉浸缩略图的圆角遮罩（圆角矩形 SDF；取代 Qt5Compat OpacityMask——
+# layer.effect 形态的嵌套层在本机 freedreno 栈上于 plane 离屏层内失效）。
+qsb --qt6 -o stage_round.frag.qsb stage_round.frag
+
+echo "Done: icon_effect.frag.qsb + squircle.frag.qsb + card_shadow.vert.qsb + card_shadow.frag.qsb + depth_parallax.frag.qsb + layered_wallpaper.frag.qsb + spatial_foreground.frag.qsb + stage_tilt.frag.qsb + stage_round.frag.qsb" (fix(stage): 拆分钮抽搐三连修 + 圆角改自写 SDF 着色器 + 扇叠裁剪重放)
