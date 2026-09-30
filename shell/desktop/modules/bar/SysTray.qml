@@ -43,6 +43,9 @@ Item {
             const item = trayRepeater.itemAt(i)
             if (!item || !item.isValid || !item.trayKey)
                 continue
+            // duplicateOrdinal already makes every live delegate's key unique;
+            // this stays only so a stray collision can never push itemCount
+            // past the number of slots the delegates actually occupy.
             if (keys.indexOf(item.trayKey) < 0)
                 keys.push(item.trayKey)
         }
@@ -164,7 +167,7 @@ Item {
                 required property int index
 
                 readonly property bool isValid: Boolean(modelData && (modelData.icon || modelData.id || modelData.title))
-                readonly property string trayKey: {
+                readonly property string baseTrayKey: {
                     if (!isValid) return ""
                     if (modelData.id && modelData.id.length > 0) {
                         if (modelData.id.indexOf("chrome_status_icon") === 0 && (modelData.tooltipTitle || modelData.title)) {
@@ -177,6 +180,32 @@ Item {
                         return "tray:" + modelData.title
                     return "tray:#" + index
                 }
+                // Chromium numbers tray icons per process, so two Electron apps
+                // that set neither Title nor ToolTip (QQ and 飞连 both do) each
+                // register the id "chrome_status_icon_1". A delegate's slot is
+                // addressed purely by where its key sits in allKeys, so an
+                // unqualified duplicate drew both icons into one slot: the lower
+                // one hidden and unclickable, and the row one cell too narrow.
+                // Qualify each repeat by how many earlier delegates already hold
+                // the same base key. Only the siblings' baseTrayKey is read
+                // here, never their trayKey, so this cannot close a binding loop.
+                readonly property int duplicateOrdinal: {
+                    const _rev = root.trayRevision
+                    const liveCount = trayRepeater.count
+                    if (!isValid)
+                        return 0
+                    let seen = 0
+                    for (let i = 0; i < index && i < liveCount; i++) {
+                        const other = trayRepeater.itemAt(i)
+                        if (other && other.isValid && other.baseTrayKey === baseTrayKey)
+                            seen++
+                    }
+                    return seen
+                }
+                readonly property string trayKey: !isValid ? ""
+                    : duplicateOrdinal > 0
+                        ? baseTrayKey + "#" + (duplicateOrdinal + 1)
+                        : baseTrayKey
                 readonly property int naturalIndex: isValid ? root.allKeys.indexOf(trayKey) : -1
                 readonly property int targetIndex: isValid ? root.targetIndexFor(trayKey) : -1
                 readonly property bool isDraggedItem: root.draggedKey !== ""
