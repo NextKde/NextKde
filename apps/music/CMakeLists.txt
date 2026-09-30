@@ -34,12 +34,13 @@ set(KOS_MUSIC_CORE_SOURCES
     src/Transcoder.h
 )
 
-# KOS_MUSIC_TESTS_ONLY is set by the root project when it descends here only to
-# build the test targets below. kos-music is a full QML application that links
-# Kos::Ui, which is itself gated behind the app flags, so building it from a
-# test-only descent would fail. Skipping it keeps the tests independent of the
-# application's own dependencies.
-if(NOT KOS_MUSIC_TESTS_ONLY)
+# The lx source host is a plain Qt Core/Network/Qml executable with none of the
+# application's dependencies -- it is the JS host the music sources run inside.
+# It is therefore built even when the root project descends into this directory
+# for its tests only: kos-music.mpris, kos-music.source-host and
+# kos-music.source-service all drive real sources through this binary, and with
+# it missing none of them can do anything but fail. Only its install rules stay
+# with the application below.
 qt_add_executable(kos-music-lx-source-host
     src/LxSourceHostMain.cpp
 )
@@ -49,6 +50,13 @@ target_link_libraries(kos-music-lx-source-host PRIVATE
     Qt6::Network
     Qt6::Qml
 )
+
+# KOS_MUSIC_TESTS_ONLY is set by the root project when it descends here only to
+# build the test targets below. kos-music is a full QML application that links
+# Kos::Ui, which is itself gated behind the app flags, so building it from a
+# test-only descent would fail. Skipping it keeps the tests independent of the
+# application's own dependencies.
+if(NOT KOS_MUSIC_TESTS_ONLY)
 install(TARGETS kos-music-lx-source-host
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
