@@ -573,20 +573,21 @@ ApplicationWindow {
 
         readonly property var stagePresets: [
             { id: "lite", name: "轻盈", detail: "小巧卡片 · 轻微倾斜 · 利落动效",
-              values: { cardHeight: 132, cardSpacing: 12, tiltAngle: 14,
-                        deckRestTilt: 6, hoverScale: 1.03,
-                        cardEnterDuration: 180, tiltAnimDuration: 200,
-                        animDuration: 340, cardGlow: 0.08, cardDepth: 0.30 } },
-            { id: "standard", name: "标准", detail: "均衡默认 · 观感自然（推荐）",
-              values: { cardHeight: 148, cardSpacing: 16, tiltAngle: 22,
-                        deckRestTilt: 10, hoverScale: 1.05,
-                        cardEnterDuration: 240, tiltAnimDuration: 250,
-                        animDuration: 420, cardGlow: 0.13, cardDepth: 0.38 } },
-            { id: "vivid", name: "立体", detail: "更大卡片 · 明显倾斜 · 从容动效",
-              values: { cardHeight: 168, cardSpacing: 22, tiltAngle: 30,
-                        deckRestTilt: 14, hoverScale: 1.08,
-                        cardEnterDuration: 300, tiltAnimDuration: 320,
-                        animDuration: 520, cardGlow: 0.20, cardDepth: 0.50 } },
+              values: { cardHeight: 145, cardSpacing: 14, tiltAngle: 16,
+                        deckRestTilt: 10, hoverScale: 1.0,
+                        cardEnterDuration: 190, tiltAnimDuration: 220,
+                        animDuration: 340, cardGlow: 0.08, cardDepth: 0.28 } },
+            { id: "standard", name: "标准", detail: "中等卡片 · 适度倾斜 · 平衡动效",
+              values: { cardHeight: 170, cardSpacing: 20, tiltAngle: 28,
+                        deckRestTilt: 22, hoverScale: 1.0,
+                        cardEnterDuration: 240, tiltAnimDuration: 280,
+                        animDuration: 400, cardGlow: 0.14, cardDepth: 0.40 } },
+            // 「立体」= 用户 2026-09-30 定稿手感（204/28/40×2，悬停放大关）
+            { id: "vivid", name: "立体", detail: "大卡片 · 强倾斜 · 从容动效",
+              values: { cardHeight: 204, cardSpacing: 28, tiltAngle: 40,
+                        deckRestTilt: 40, hoverScale: 1.0,
+                        cardEnterDuration: 280, tiltAnimDuration: 340,
+                        animDuration: 430, cardGlow: 0.20, cardDepth: 0.50 } },
         ]
 
         // 预设命中 = 全部键与当前快照一致（拖过主参数/高级项即脱离高亮）
