@@ -1661,7 +1661,11 @@ PanelWindow {
             top: parent.top
             topMargin: 46
             bottom: parent.bottom
-            bottomMargin: 18
+            // 给底部 dock 让位：末卡（含辉光/悬停放大/扇叠外扩，布局内的
+            // GLOW_PAD 已计辉光）不得压进 dock 屏幕区挡住图标。dock 厚度取
+            // dock 模块 ConfigService.baseHeight（qmldir 注册名单例，用户
+            // 可调 40–100，随 dock 设置实时跟随）
+            bottomMargin: ConfigService.baseHeight + 14
         }
         width: StageGeo.PANEL_WIDTH
 
