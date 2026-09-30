@@ -26,6 +26,8 @@ export const DRAG_PICK_THRESHOLD = 12   // 按下位移超过此值才算拖拽�
 export const DRAG_SCALE = 1.06          // 被拖卡微放大（与悬停 HOVER_SCALE 同量级）
 export const DRAG_Z = 999               // 被拖卡置顶 z（盖过全部槽位 z = n-i）
 export const DRAG_EDGE_RATIO = 0.5      // 拖拽 y 的上下钳位（半个卡高出界余量）
+export const DRAG_MERGE_DWELL_MS = 320  // 合并驻留门：中心压在别的卡上停稳此时长才武装并组
+export const DRAG_MERGE_EXIT_RATIO = 0.2 // 合并武装解除的滞回边距（×卡高，防卡缘抖动翻状态）
 // 辉光裁剪放宽：滚动视口只裁上下（滚动方向），左右各放宽这么多——
 // 悬停辉光外扩 13px×放大 1.05 + 倾斜投影后 ≈19px 超出卡面 inset，
 // 整条 clip 会把辉光侧边切掉（要与 CARD_OVERFLOW_MARGIN 同步核算）

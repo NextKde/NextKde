@@ -62,6 +62,12 @@ Scope {
         function debugSplit(index: int): string {
             return stageWindow.debugSplit(index)
         }
+        // 无头合并手势模拟（驻留门控链路）：
+        //   debugMergeGesture <from> <to> merge|moveaway
+        function debugMergeGesture(fromIndex: int, toIndex: int,
+                mode: string): string {
+            return stageWindow.debugMergeGesture(fromIndex, toIndex, mode)
+        }
         // round30 调研探针：对第 index 张卡的窗口发起 zkde_screencast 活体流
         // 请求，journal 里看 stream probe nodeId=（>0 = 授权+协议全通）
         function debugStreamProbe(index: int): string {

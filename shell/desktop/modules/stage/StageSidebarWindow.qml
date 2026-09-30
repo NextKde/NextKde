@@ -940,6 +940,41 @@ PanelWindow {
     property real dragY: 0           // 被拖卡视觉 y（列坐标）
     property real dragGrabOffset: 0  // 抓取偏移（指针列坐标 − 卡 y）
 
+    // ── 合并手势的驻留门控（拖拽 vs 并组"打架"的修法）──
+    // 换位拖拽必然连续掠过别的卡（卡列里被拖卡中心几乎总落在某张卡的
+    // 卡面内），即时判合并会和换位让位互相翻转布局：中心进卡→合并冻结
+    // 让位→卡回到指针下→又出卡→又让位 = 无限抖动；且密列里松手十有
+    // 八九压在卡上 = 误并组。规则改为：候选翻转只重启计时器、**不动
+    // 布局**；中心在同一张卡上停稳 DRAG_MERGE_DWELL_MS 才"武装"
+    // （高亮 + 冻结让位 + 松手即并组），武装后中心离开卡面+滞回边距
+    // 才解除（恢复换位预览）。快拖永远只是换位，并组=明确停顿。
+    property string _mergeCandidate: ""
+    property Timer _mergeDwellTimer: Timer {
+        interval: StageGeo.DRAG_MERGE_DWELL_MS
+        onTriggered: root._mergeDwellFire()
+    }
+
+    // 驻留到点：此刻中心仍压在候选卡面上才武装（中途划走=作废）。
+    // 独立成函数 = 无头钩子（debugMergeGesture）可直接触发，不走真实时钟
+    function _mergeDwellFire() {
+        if (root.dragKey === "" || root._mergeCandidate === ""
+                || root._mergeCandidate === root.dragKey)
+            return
+        const ch = StageConfigService.cardHeight
+        const centerY = root.dragY + ch * 0.5
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const s = cardRepeater.itemAt(i)
+            if (s && s.appKey === root._mergeCandidate) {
+                if (centerY >= s.y && centerY <= s.y + ch) {
+                    root._dropMergeKey = root._mergeCandidate
+                    root._mergeCandidate = ""
+                    layoutCards()   // 冻结让位 + 目标高亮
+                }
+                return
+            }
+        }
+    }
+
     function _beginCardDrag(slot, index, sceneY) {
         if (root.dragKey !== "" || slot.cardItem.engaging)
             return
@@ -949,6 +984,8 @@ PanelWindow {
         root._hoverDwellTimer.stop()
         root.hoveredKey = ""
         root._dropMergeKey = ""
+        root._mergeCandidate = ""
+        root._mergeDwellTimer.stop()
         root.dragKey = slot.appKey
         root.dragFromIndex = index
         root.dragToIndex = index
@@ -971,29 +1008,52 @@ PanelWindow {
         // 布局会拖累跟手帧率
         slot.y = root.dragY
         // 合并候选检测：被拖卡中心压在另一张卡的卡面上 = 自由组合手势
-        //（拖到卡上=并组，拖到间隙=换位，两种落点视觉可分）
+        //（停在卡上=并组，拖到间隙=换位）。⚠️ 驻留门控（见 _mergeDwellTimer
+        // 头注释）：候选翻转只重启计时器、不动布局——即时生效曾与换位
+        // 让位互相翻转布局 = 打架抖动。武装只经 dwell 到点产生（单次
+        // layoutCards），解除走滞回边距。
         const n = cardModel.count
-        const centerY = root.dragY + StageConfigService.cardHeight * 0.5
-        let mergeKey = ""
-        for (let i = 0; i < n; i++) {
-            if (i === root.dragFromIndex)
-                continue
-            const s = cardRepeater.itemAt(i)
-            if (!s)
-                continue
-            if (centerY >= s.y
-                    && centerY <= s.y + StageConfigService.cardHeight) {
-                mergeKey = s.appKey
-                break
+        const ch = StageConfigService.cardHeight
+        const centerY = root.dragY + ch * 0.5
+        if (root._dropMergeKey !== "") {
+            // 武装态滞回：中心在目标卡面 ± DRAG_MERGE_EXIT_RATIO×卡高
+            // 之外才解除（卡缘抖动不翻状态）；解除即恢复换位预览
+            let armed = false
+            for (let i = 0; i < n; i++) {
+                const s = cardRepeater.itemAt(i)
+                if (s && s.appKey === root._dropMergeKey) {
+                    const m = ch * StageGeo.DRAG_MERGE_EXIT_RATIO
+                    armed = centerY >= s.y - m && centerY <= s.y + ch + m
+                    break
+                }
+            }
+            if (armed)
+                return   // 武装中：不更新换位目标（松手即合并）
+            root._dropMergeKey = ""
+            root._mergeCandidate = ""
+            root._mergeDwellTimer.stop()
+            layoutCards()   // 恢复换位让位预览
+        } else {
+            let mergeKey = ""
+            for (let i = 0; i < n; i++) {
+                if (i === root.dragFromIndex)
+                    continue
+                const s = cardRepeater.itemAt(i)
+                if (!s)
+                    continue
+                if (centerY >= s.y && centerY <= s.y + ch) {
+                    mergeKey = s.appKey
+                    break
+                }
+            }
+            if (mergeKey !== root._mergeCandidate) {
+                root._mergeCandidate = mergeKey
+                if (mergeKey === "")
+                    root._mergeDwellTimer.stop()
+                else
+                    root._mergeDwellTimer.restart()
             }
         }
-        if (mergeKey !== root._dropMergeKey) {
-            root._dropMergeKey = mergeKey
-            layoutCards()   // 高亮目标卡 / 其余卡停止让位预览
-            return
-        }
-        if (root._dropMergeKey !== "")
-            return   // 合并悬停中：不更新换位目标（松手即合并）
         // 目标槽 = 基础槽位里离被拖卡最近的（与视图同款布局：adaptive
         // 的槽位按缩放间距排，拿 scrollLayout 算会整体错位）
         const lay = StageConfigService.layoutMode === "scroll"
@@ -1046,6 +1106,39 @@ PanelWindow {
         return JSON.stringify({ order: root._groupOrder })
     }
 
+    // 无头合并手势模拟（驻留门控链路验证，不走真实时钟）：
+    //   begin → 中心压到目标卡 →（cand 应入表、armed 应空）→ 驻留到点
+    //   （直接调 _mergeDwellFire）→ armed 应=目标 →
+    //   mode="merge"  : 松手 = 应并组（动画 260ms 后 order 少一键）
+    //   mode="moveaway": 再拖离目标（超滞回边距）→ armed 应清空 → 松手 =
+    //                    只换位不并组（order 键数不变）
+    function debugMergeGesture(fromIndex, toIndex, mode): string {
+        const slot = cardRepeater.itemAt(fromIndex)
+        const target = cardRepeater.itemAt(toIndex)
+        if (!slot || !target || fromIndex === toIndex)
+            return JSON.stringify({ error: "no slot" })
+        const log = []
+        const originY = cards.mapToItem(null, 0, 0).y
+        _beginCardDrag(slot, fromIndex,
+            originY + slot.y + root.dragGrabOffset)
+        // 指针使被拖卡中心压到目标卡中心
+        _updateCardDrag(slot, fromIndex,
+            originY + target.y + root.dragGrabOffset)
+        log.push({ step: "over", cand: root._mergeCandidate,
+            armed: root._dropMergeKey })
+        _mergeDwellFire()
+        log.push({ step: "dwell", armed: root._dropMergeKey })
+        if (mode === "moveaway") {
+            // 拖回列顶：中心远离目标卡面 ≥ 滞回边距 → 应解除武装
+            _updateCardDrag(slot, fromIndex, originY + root.dragGrabOffset)
+            log.push({ step: "moveaway", armed: root._dropMergeKey,
+                cand: root._mergeCandidate })
+        }
+        _endCardDrag(slot)
+        log.push({ step: "end", pending: root._mergeAnimPending !== null })
+        return JSON.stringify(log)
+    }
+
     // 无头拖拽模拟：跳过阈值/跟手（纯视觉），走完 begin→目标槽→end 的
     // 提交链路（顺序表转正 + syncCards + 矩形重发布）
     function debugDrag(fromIndex, toIndex) {
@@ -1064,8 +1157,13 @@ PanelWindow {
         if (root.dragKey !== slot.appKey)
             return
         const key = root.dragKey
-        const mergeKey = root._dropMergeKey
-        root._dropMergeKey = ""
+        const mergeKey = root._dropMergeKey   // 仅武装态非空：驻留未到点
+        const to = root.dragToIndex           // ⚠️ 先取再清态：清了再读=恒
+        // -1，换位提交链路整个变死代码（拖拽松手弹回、只剩误并组——
+        // "拖拽和合并打架"的另一半根源，合并动画重构时引入的回归）
+        root._dropMergeKey = ""               // 松手 = 只是换位（意图明确）
+        root._mergeCandidate = ""
+        root._mergeDwellTimer.stop()
         root.dragKey = ""
         root.dragFromIndex = -1
         root.dragToIndex = -1
@@ -1089,7 +1187,6 @@ PanelWindow {
             root.mergeGroups(key, mergeKey)
             return
         }
-        const to = root.dragToIndex
         if (to >= 0) {
             const next = StageGroups.moveOrderKey(root._groupOrder, key, to)
             if (next !== root._groupOrder) {
