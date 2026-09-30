@@ -949,8 +949,10 @@ PanelWindow {
     // （高亮 + 冻结让位 + 松手即并组），武装后中心离开卡面+滞回边距
     // 才解除（恢复换位预览）。快拖永远只是换位，并组=明确停顿。
     property string _mergeCandidate: ""
-    // 驻留时长/滞回边距（合并手势专属，只在 QML 侧用；值改这里）
-    readonly property int _mergeDwellMs: 320
+    // 驻留时长/滞回边距（合并手势专属，只在 QML 侧用；值改这里）。
+    // 驻留时长走手感：320ms 用户实测"移动卡片不顺畅"（路过卡面稍慢就
+    // 亮），加长到 550ms——拖动从容、合并仍一息可达
+    readonly property int _mergeDwellMs: 550
     readonly property real _mergeExitRatio: 0.2
     property Timer _mergeDwellTimer: Timer {
         interval: root._mergeDwellMs
