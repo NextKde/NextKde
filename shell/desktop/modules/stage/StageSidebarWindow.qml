@@ -987,6 +987,8 @@ PanelWindow {
     property real dragGrabOffsetX: 0 // 抓取偏移 x（指针列坐标 − 卡 x）
     property real dragPointerX: 0    // 指针列坐标 x（合并候选/中心区判定源）
     property real dragPointerY: 0    // 指针列坐标 y（同上——跟指针不跟卡心）
+    property real _dragTraceLast: 0
+    property real _dragTraceT: 0
 
     // ── 中心合并区（拖卡向屏幕中心 = 与前台程序并组）──
     // 判定源 = 指针越过卡片列 + 缓冲；目标是当前活动窗口的有效组键
@@ -1110,6 +1112,16 @@ PanelWindow {
         slot.slotX = Math.max(8 - cards.x,
             Math.min(root.width - slot.width - 8 - cards.x,
                 p.x - root.dragGrabOffsetX))
+        // TEMP-TRACE 跟手排障（真手拖动无头复现不了：事件层/掩码层只有
+        // 真指针能测）：~80ms 一条，读 px（指针列坐标）vs sx（实际 slotX）
+        root._dragTraceT = Date.now()
+        if (root._dragTraceT - root._dragTraceLast > 80) {
+            root._dragTraceLast = root._dragTraceT
+            console.info("[DragTrace] px=" + Math.round(p.x) + " py="
+                + Math.round(p.y) + " sx=" + Math.round(slot.x)
+                + " sy=" + Math.round(slot.y) + " raw="
+                + Math.round(p.x - root.dragGrabOffsetX))
+        }
         const n = cardModel.count
         const ch = StageConfigService.cardHeight
         const lay = _dragBaseLayout(n)
@@ -1283,7 +1295,8 @@ PanelWindow {
             _updateCardDrag(slot, fromIndex, centerX,
                 o.y + slot.y + ch / 2)
             log.push({ step: "center", armed: root._centerMergeArmed,
-                target: root._centerMergeTarget })
+                target: root._centerMergeTarget,
+                slotX: Math.round(slot.x), slotY: Math.round(slot.y) })
             _endCardDrag(slot)
             log.push({ step: "end", pending: root._mergeAnimPending !== null })
             return JSON.stringify(log)
@@ -2445,21 +2458,27 @@ PanelWindow {
         height: 0
         visible: false
     }
-    // 拖拽期全窗输入区：mask 只罩卡条是给点击穿透用的；拖拽中指针必须
-    // 能拖出卡条（中心合并手势）——指针离开 mask = 事件不再送达本窗 =
-    // 拖拽就地冻结 + release 丢失 + dragKey 卡死（"拉到中间没反应/不
-    // 合并"的根源，也是此前"莫名拖不动"的嫌疑）。松手即回落条形 mask。
-    Rectangle {
-        id: dragInputMask
-        visible: false
-        anchors.fill: parent
-    }
+    // mask 只罩卡条是给点击穿透用的；拖拽中几何扩成全窗（见
+    // _updateHitRegionExtent 头注释——指针离开输入区 = 事件停止送达 =
+    // 拖拽冻结在卡条内，"拖出没反应"的根源）
     mask: Region {
-        Region { item: root.dragKey !== "" ? dragInputMask
-            : stripHitRegion }
+        Region { item: stripHitRegion }
     }
 
     function _updateHitRegionExtent() {
+        // 拖拽中 = 全窗输入区：指针必须能拖出卡条（中心手势）。⚠️ 走
+        // **同一 item 的几何扩展**而不是切换 Region.item——Region 对
+        // item 引用翻转是否触发输入区更新未证实（真机拖出卡条后事件
+        // 停止送达的实测嫌疑），几何变化是每天都在生效的已验证通道。
+        // 拖拽结束（dragKey 清掉后的首轮 layoutCards/syncCards）自动
+        // 落回条形范围。
+        if (root.dragKey !== "") {
+            stripHitRegion.x = 0
+            stripHitRegion.y = 0
+            stripHitRegion.width = root.width
+            stripHitRegion.height = root.height
+            return
+        }
         let top = Infinity, bottom = -Infinity
         for (let i = 0; i < cardRepeater.count; i++) {
             const s = cardRepeater.itemAt(i)
