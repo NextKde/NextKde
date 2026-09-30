@@ -2494,8 +2494,12 @@ PanelWindow {
         if (top === Infinity) {
             stripHitRegion.y = 0
             stripHitRegion.height = 0
+            stripHitRegion.width = StageGeo.PANEL_WIDTH
             return
         }
+        // ⚠️ width 必须显式复位：拖拽分支把它扩成全窗宽，漏复位 = 卡片
+        // 纵向范围内整行屏幕的点击永远被吞（"点桌面收不起来"的根源）
+        stripHitRegion.width = StageGeo.PANEL_WIDTH
         stripHitRegion.x = cards.x
         stripHitRegion.y = Math.max(0, Math.floor(top) - StageGeo.GLOW_PAD)
         stripHitRegion.height = Math.ceil(bottom - stripHitRegion.y)
