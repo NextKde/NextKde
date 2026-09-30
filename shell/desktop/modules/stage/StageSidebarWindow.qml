@@ -2391,8 +2391,18 @@ PanelWindow {
         height: 0
         visible: false
     }
+    // 拖拽期全窗输入区：mask 只罩卡条是给点击穿透用的；拖拽中指针必须
+    // 能拖出卡条（中心合并手势）——指针离开 mask = 事件不再送达本窗 =
+    // 拖拽就地冻结 + release 丢失 + dragKey 卡死（"拉到中间没反应/不
+    // 合并"的根源，也是此前"莫名拖不动"的嫌疑）。松手即回落条形 mask。
+    Rectangle {
+        id: dragInputMask
+        visible: false
+        anchors.fill: parent
+    }
     mask: Region {
-        Region { item: stripHitRegion }
+        Region { item: root.dragKey !== "" ? dragInputMask
+            : stripHitRegion }
     }
 
     function _updateHitRegionExtent() {
