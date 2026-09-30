@@ -848,6 +848,25 @@ PanelWindow {
             { targets: targets, suppress: [] }))
     }
 
+    // 把一组窗口的动画起点矩形改写为指定屏幕矩形（中心合并：被拖卡
+    // 停在哪，窗口就从哪"长大"）。写进 _lastCardRects 再落盘——后续
+    // 常规发布会经 prevRects 兜底把这些键保留住（活动组缺席时 hold）
+    function _publishOverrideRects(windowIds, x, y, w, h) {
+        let n = 0
+        for (let i = 0; i < windowIds.length; i++) {
+            const hid = WindowService.handleIdOf(windowIds[i])
+            if (hid === "")
+                continue
+            root._lastCardRects[hid] = { id: hid,
+                x: Math.round(x), y: Math.round(y),
+                width: Math.round(w), height: Math.round(h) }
+            n++
+        }
+        if (n > 0)
+            root._writeTargetsFile()
+        return n
+    }
+
     // ── engage 派发队列（round35 NEW-1）：点击只入队 + 卡片淡出交棒，
     // engageDelay 到点由窗口级单 Timer 逐个派发，**派发时刻**才重算退位
     // 组/预测顺序表（动画全部在派发后才起跑，预测挪晚无损，反而消灭
@@ -1324,18 +1343,30 @@ PanelWindow {
         root.dragKey = ""
         root.dragFromIndex = -1
         root.dragToIndex = -1
-        // 中心合并落点：拖到屏幕中心松手 = 并入正在运行的程序。目标组
-        // 是活动组（没有卡），被拖卡在原地淡出（已跟手到指针旁，读作
-        // "溶进前台"），260ms 后落模型——与列内合并共用动画收尾
+        // 中心合并落点（用户定稿语义）：拖到屏幕中心的卡 = **在原地放
+        // 大成应用置顶桌面**，并与之前的前台程序（"下面的"那个）结成
+        // 卡组。顺序 = 先并组后激活：同卡豁免（_effKey）让退位/收编管
+        // 线不碰刚让位的前台窗——两个应用一起留在桌面，切走时一起收
+        // 进一张卡。被拖卡的最后屏幕矩形发布为动画起点（stageanim 读
+        // targets），窗口从卡片位置"长大"。
         if (centerKey !== "" && centerKey !== key) {
-            slot.cardItem.engaging = true
-            if (root._mergeAnimPending)
-                root.mergeGroups(root._mergeAnimPending.from,
-                    root._mergeAnimPending.to)
-            root._mergeAnimPending = { from: key, to: centerKey }
-            root._mergeAnimTimer.restart()
-            console.info("[StageSidebar] center merge " + key
-                + " -> active " + centerKey)
+            let ids = []
+            try {
+                ids = JSON.parse(slot.idsJson || "[]")
+            } catch (e) {
+                ids = []
+            }
+            const focusId = ids.indexOf(slot.targetId) >= 0
+                ? slot.targetId
+                : (ids.length > 0 ? ids[0] : slot.targetId)
+            const vis = slot.mapToItem(null, 0, 0)
+            const rw = slot.width * StageGeo.DRAG_SCALE
+            const rh = slot.height * StageGeo.DRAG_SCALE
+            root.mergeGroups(key, centerKey)   // 直接落模型（卡片行即消失）
+            root._publishOverrideRects(ids, vis.x, vis.y, rw, rh)
+            WindowService.activateGroup(ids, focusId)
+            console.info("[StageSidebar] center engage+merge " + key
+                + " -> " + centerKey)
             return
         }
         // 合并落点：压在别的卡上松手 = 先播合并动画（被吞卡滑向目标 +
