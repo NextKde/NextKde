@@ -1300,10 +1300,12 @@ PopupWindow {
         id: stageModeCard
         coordinator: coordinator
         visible: cardShown && coordinator.cardAnchor !== null
-        // 历史卡显示时排在其下（206/533），历史为空隐藏时顶到其位（20/347）
+        // 顶栏布局恒在滑杆正下方（347）——原先藏在通知历史之下（533），
+        // 用户实际找不到开关；通知历史让位其下（403）。dock 布局不变
+        //（历史在上 20，本卡随后 206，主控区 238 起）。
         offsetTop: panel.notificationFirst
             ? (ControlCenterService.historyGroups.length > 0 ? 206 : 20)
-            : (ControlCenterService.historyGroups.length > 0 ? 533 : 347)
+            : 347
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
@@ -1377,11 +1379,11 @@ PopupWindow {
         // is open) is factored in here because this card overrides `visible`.
         visible: cardShown && coordinator.cardAnchor !== null
             && ControlCenterService.historyGroups.length > 0
-        offsetTop: panel.notificationFirst ? 20 : 347
+        offsetTop: panel.notificationFirst ? 20 : 403
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
-        // 230 → 178：给常驻的"前台调度"行卡（下方 44px）让位，两者共存
+        // 178：顶栏布局下排在恒驻的"前台调度"行卡（上方 347，44px）之下
         cardHeight: 178
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur

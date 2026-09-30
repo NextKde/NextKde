@@ -568,6 +568,41 @@ ApplicationWindow {
                 bridge.stageConfigSet(key, String(value))
         }
 
+        // ── 台前侧栏简单面：3 预设 + 3 主参数；全量参数收进「高级自定义」──
+        property bool stageAdvanced: false
+
+        readonly property var stagePresets: [
+            { id: "lite", name: "轻盈", detail: "小巧卡片 · 轻微倾斜 · 利落动效",
+              values: { cardHeight: 132, cardSpacing: 12, tiltAngle: 14,
+                        deckRestTilt: 6, hoverScale: 1.03,
+                        cardEnterDuration: 180, tiltAnimDuration: 200,
+                        animDuration: 340, cardGlow: 0.08, cardDepth: 0.30 } },
+            { id: "standard", name: "标准", detail: "均衡默认 · 观感自然（推荐）",
+              values: { cardHeight: 148, cardSpacing: 16, tiltAngle: 22,
+                        deckRestTilt: 10, hoverScale: 1.05,
+                        cardEnterDuration: 240, tiltAnimDuration: 250,
+                        animDuration: 420, cardGlow: 0.13, cardDepth: 0.38 } },
+            { id: "vivid", name: "立体", detail: "更大卡片 · 明显倾斜 · 从容动效",
+              values: { cardHeight: 168, cardSpacing: 22, tiltAngle: 30,
+                        deckRestTilt: 14, hoverScale: 1.08,
+                        cardEnterDuration: 300, tiltAnimDuration: 320,
+                        animDuration: 520, cardGlow: 0.20, cardDepth: 0.50 } },
+        ]
+
+        // 预设命中 = 全部键与当前快照一致（拖过主参数/高级项即脱离高亮）
+        function stagePresetActive(p): bool {
+            const s = stageSnapshot
+            for (const k in p.values)
+                if (s[k] !== p.values[k])
+                    return false
+            return true
+        }
+
+        function stageApplyPreset(p) {
+            for (const k in p.values)
+                stageSet(k, p.values[k])
+        }
+
         function refresh() {
             if (!bridge)
                 return
@@ -698,10 +733,162 @@ ApplicationWindow {
                     }
                 }
 
-                // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）；
-                // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），schema 同步
+                // ── 风格预设：一键套用整组观感（三张等宽卡） ──
+                Text {
+                    text: "风格预设"
+                    color: theme.primaryText
+                    font { pixelSize: 13; weight: Font.Medium }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Repeater {
+                        model: fgSchedPage.stagePresets
+
+                        delegate: Rectangle {
+                            id: presetCard
+                            required property var modelData
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            implicitHeight: presetColumn.implicitHeight + 20
+                            radius: 12
+                            property bool isActive:
+                                fgSchedPage.stagePresetActive(modelData)
+                            color: isActive
+                                ? theme.selectedContainer
+                                : (presetMouse.containsMouse
+                                    ? theme.searchField : theme.sidebar)
+                            border.width: isActive ? 2 : 0
+                            border.color: theme.accent
+
+                            ColumnLayout {
+                                id: presetColumn
+                                anchors {
+                                    left: parent.left
+                                    right: parent.right
+                                    top: parent.top
+                                }
+                                anchors.margins: 10
+                                spacing: 2
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: presetCard.modelData.name
+                                    color: presetCard.isActive
+                                        ? theme.selectedForeground
+                                        : theme.primaryText
+                                    font { pixelSize: 13; weight: Font.Medium }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: presetCard.modelData.detail
+                                    color: theme.secondaryText
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+
+                            MouseArea {
+                                id: presetMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: fgSchedPage.stageApplyPreset(
+                                    presetCard.modelData)
+                            }
+                        }
+                    }
+                }
+
+                // ── 快速调节：三个主参数（其余全在高级自定义） ──
                 StageSliderRow {
-                    label: "卡片倾斜角度"
+                    label: "卡片大小"
+                    unit: " px"
+                    minV: 100
+                    maxV: 220
+                    current: fgSchedPage.stageSnapshot.cardHeight !== undefined
+                        ? fgSchedPage.stageSnapshot.cardHeight : 148
+                    onCommit: function(v) { fgSchedPage.stageSet("cardHeight", v) }
+                }
+
+                StageSliderRow {
+                    label: "倾斜强度"
+                    unit: "°"
+                    minV: 0
+                    maxV: 40
+                    decimals: 1
+                    // 主参数写两键：静置倾角按 0.45 比例联动（预设则各自精写）
+                    current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
+                        ? fgSchedPage.stageSnapshot.tiltAngle : 22
+                    onCommit: function(v) {
+                        fgSchedPage.stageSet("tiltAngle", v)
+                        fgSchedPage.stageSet("deckRestTilt",
+                            Math.round(v * 45) / 100)
+                    }
+                }
+
+                StageSliderRow {
+                    label: "动效速度"
+                    unit: "×"
+                    minV: 0.5
+                    maxV: 1.6
+                    decimals: 2
+                    // 主参数写三键：入场/倾斜/窗口动画按基准时长同比缩放
+                    current: (fgSchedPage.stageSnapshot.cardEnterDuration !== undefined
+                        ? fgSchedPage.stageSnapshot.cardEnterDuration : 240) / 240
+                    onCommit: function(v) {
+                        fgSchedPage.stageSet("cardEnterDuration", Math.round(240 * v))
+                        fgSchedPage.stageSet("tiltAnimDuration", Math.round(250 * v))
+                        fgSchedPage.stageSet("animDuration", Math.round(420 * v))
+                    }
+                }
+
+                // ── 高级自定义：现有全量参数的入口 ──
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 12
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        Text {
+                            text: "高级自定义"
+                            color: theme.primaryText
+                            font { pixelSize: 13; weight: Font.Medium }
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "展开全部参数：布局与位置、手势与动效细节、玻璃质感、"
+                                  + "收编节拍、窗口切换动画。"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+
+                    LiquidControls.LiquidGlassSwitch {
+                        checked: fgSchedPage.stageAdvanced
+                        accentColor: theme.accent
+                        trackColor: theme.divider
+                        onToggled: function(checked) {
+                            fgSchedPage.stageAdvanced = checked
+                        }
+                    }
+                }
+
+                // ── 全量参数（默认折叠；上面的预设/主参数即本组的高层快捷方式） ──
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: fgSchedPage.stageAdvanced
+                    spacing: 10
+
+                    // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）；
+                    // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），schema 同步
+                    StageSliderRow {
+                        label: "卡片倾斜角度"
                     unit: "°"
                     minV: 0
                     maxV: 40
@@ -1153,13 +1340,16 @@ ApplicationWindow {
                     current: fgSchedPage.stageSnapshot.streamCycleOffMs !== undefined
                         ? fgSchedPage.stageSnapshot.streamCycleOffMs : 750
                     onCommit: function(v) { fgSchedPage.stageSet("streamCycleOffMs", v) }
+                    }
                 }
             }
         }
 
-        // ── 玻璃质感（卡面：圆角/背板/受光/描边/辉光/纵深/缩略图清晰度） ──
+        // ── 玻璃质感（卡面：圆角/背板/受光/描边/辉光/纵深/缩略图清晰度；
+        //     高级自定义的一部分，默认折叠） ──
         Rectangle {
             Layout.fillWidth: true
+            visible: fgSchedPage.stageAdvanced
             radius: 14
             color: theme.card
             implicitHeight: glassColumn.implicitHeight + 32
@@ -1253,9 +1443,11 @@ ApplicationWindow {
             }
         }
 
-        // ── 收编与刷新节拍（收编两拍延迟 / 桌面去抖 / 实时刷新间隔） ──
+        // ── 收编与刷新节拍（收编两拍延迟 / 桌面去抖 / 实时刷新间隔；
+        //     高级自定义的一部分，默认折叠） ──
         Rectangle {
             Layout.fillWidth: true
+            visible: fgSchedPage.stageAdvanced
             radius: 14
             color: theme.card
             implicitHeight: demoteColumn.implicitHeight + 32
@@ -1313,9 +1505,11 @@ ApplicationWindow {
             }
         }
 
-        // ── 窗口切换动画（时长 + 缓动曲线，reconfigure 即时生效） ──
+        // ── 窗口切换动画（时长 + 缓动曲线，reconfigure 即时生效；
+        //     高级自定义的一部分，默认折叠） ──
         Rectangle {
             Layout.fillWidth: true
+            visible: fgSchedPage.stageAdvanced
             radius: 14
             color: theme.card
             implicitHeight: animColumn.implicitHeight + 32
