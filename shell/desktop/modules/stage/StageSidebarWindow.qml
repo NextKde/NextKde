@@ -952,7 +952,16 @@ PanelWindow {
             const aRec = WindowService.windowById(entry.targetId)
             const entryIds = root._idsOf(entry.idsJson)
             const sameGroup = entryIds.indexOf(demotedId) >= 0
-            if (!dRec?.toplevel?.minimized && !sameGroup
+            // ⚠️ 不查 dRec.toplevel.minimized：demotedId 就是 activeWindowId，
+            // KWin 里活动窗不可能已最小化——快连点时记录快照滞后（上一手
+            // engage 刚把它还原、50ms 轮询没追上），旧守卫把正在前台的前任
+            // 误判成"已收起"→跳过退位→前任滞留桌面、被兜底扫收整批收进
+            //（连点后收错槽/落位错拍的根源，2026-09-30 遥测实锤三连
+            // demote=none）。桌面收编属主改用 deskCollectedIds 判定——只有
+            // 那条管线会合法地收走活动窗。
+            const deskOwned =
+                root.deskCollectedIds.indexOf(demotedId) >= 0
+            if (!deskOwned && !sameGroup
                     && !StageGroups.isSameApp(dRec, aRec,
                         _appOf(demotedId), _appOf(entry.targetId))) {
                 skipDemote = false
@@ -972,9 +981,23 @@ PanelWindow {
         // 落在这个窗口）会按"被点组已走"重排旧记录：邻卡先顶进被点槽位
         // （N−1 布局）、真快照到达再弹回 = 换位抽动。转正由 syncCards 的
         // 提交门在退位组真正进场的那一次对账里完成（与模型变更同拍）。
-        const predictedOrder = StageGroups.applySwapOrder(root._groupOrder,
-            entry.appKey, skipDemote ? "" : demotedKey)
-        if (!skipDemote && demotedKey) {
+        // 预测顺序 = 当前顺序表 + 在途未提交 swap 逐条叠加，再套本次换位。
+        // 快连点时 _groupOrder 还压着几手未提交的 swap（提交门等记录确认），
+        // 不叠加的话发布槽位与最终提交后的视图差一档（窗口飞 d2 发布的槽、
+        // 卡落在双换后的槽 = "收进下面那张"的实测根源）。
+        let baseOrder = root._groupOrder
+        for (let s = 0; s < root._pendingSwaps.length; s++)
+            baseOrder = StageGroups.applySwapOrder(baseOrder,
+                root._pendingSwaps[s].clicked,
+                root._pendingSwaps[s].demoted)
+        // 同一 demoted 不得重复入队：激活滞后时下一手 dispatch 仍看到旧前台
+        //（它的最小化已在途），再排一条 swap 会在提交门双落、把同一组挪两档
+        const dupDemote = !skipDemote && demotedKey !== ""
+            && root._pendingSwaps.some(s => s.demoted === demotedKey)
+        const predictedOrder = StageGroups.applySwapOrder(baseOrder,
+            entry.appKey,
+            (!skipDemote && !dupDemote) ? demotedKey : "")
+        if (!skipDemote && !dupDemote && demotedKey) {
             const swaps = root._pendingSwaps.slice()
             swaps.push({ clicked: entry.appKey, demoted: demotedKey,
                 at: Date.now() })
