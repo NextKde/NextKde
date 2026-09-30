@@ -574,12 +574,12 @@ ApplicationWindow {
         readonly property var stagePresets: [
             { id: "lite", name: "轻盈", detail: "小巧卡片 · 轻微倾斜 · 利落动效",
               values: { cardHeight: 145, cardSpacing: 14, tiltAngle: 16,
-                        deckRestTilt: 10, hoverScale: 1.0,
+                        deckRestTilt: 16, hoverScale: 1.0,
                         cardEnterDuration: 190, tiltAnimDuration: 220,
                         animDuration: 340, cardGlow: 0.08, cardDepth: 0.28 } },
             { id: "standard", name: "标准", detail: "中等卡片 · 适度倾斜 · 平衡动效",
               values: { cardHeight: 170, cardSpacing: 20, tiltAngle: 28,
-                        deckRestTilt: 22, hoverScale: 1.0,
+                        deckRestTilt: 28, hoverScale: 1.0,
                         cardEnterDuration: 240, tiltAnimDuration: 280,
                         animDuration: 400, cardGlow: 0.14, cardDepth: 0.40 } },
             // 「立体」= 用户 2026-09-30 定稿手感（204/28/40×2，悬停放大关）
@@ -820,13 +820,17 @@ ApplicationWindow {
                     minV: 0
                     maxV: 40
                     decimals: 1
-                    // 主参数写两键：静置倾角按 0.45 比例联动（预设则各自精写）
-                    current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
-                        ? fgSchedPage.stageSnapshot.tiltAngle : 22
+                    // 读当前模式的"活键"：scroll 的可见倾角是静置倾斜角，
+                    // adaptive 才是悬停倾角——读另一个会"拖了没反应/反应
+                    // 减半"。写两键同值（用户手感即两键同档，不分静置/悬停）
+                    current: fgSchedPage.stageSnapshot.layoutMode === "adaptive"
+                        ? (fgSchedPage.stageSnapshot.tiltAngle !== undefined
+                            ? fgSchedPage.stageSnapshot.tiltAngle : 22)
+                        : (fgSchedPage.stageSnapshot.deckRestTilt !== undefined
+                            ? fgSchedPage.stageSnapshot.deckRestTilt : 10)
                     onCommit: function(v) {
                         fgSchedPage.stageSet("tiltAngle", v)
-                        fgSchedPage.stageSet("deckRestTilt",
-                            Math.round(v * 45) / 100)
+                        fgSchedPage.stageSet("deckRestTilt", v)
                     }
                 }
 
@@ -836,13 +840,26 @@ ApplicationWindow {
                     minV: 0.5
                     maxV: 1.6
                     decimals: 2
-                    // 主参数写三键：入场/倾斜/窗口动画按基准时长同比缩放
+                    // 倍率对**当前值**等比缩放（factor = 新倍率/当前倍率）：
+                    // 保留用户调过的三个时长配比；锚点 240 只是显示基准。
+                    // 三个目标值先从同一份快照取齐再写，防逐键回读互相污染
                     current: (fgSchedPage.stageSnapshot.cardEnterDuration !== undefined
                         ? fgSchedPage.stageSnapshot.cardEnterDuration : 240) / 240
                     onCommit: function(v) {
-                        fgSchedPage.stageSet("cardEnterDuration", Math.round(240 * v))
-                        fgSchedPage.stageSet("tiltAnimDuration", Math.round(250 * v))
-                        fgSchedPage.stageSet("animDuration", Math.round(420 * v))
+                        const s = fgSchedPage.stageSnapshot
+                        const enter = s.cardEnterDuration !== undefined
+                            ? s.cardEnterDuration : 240
+                        const tilt = s.tiltAnimDuration !== undefined
+                            ? s.tiltAnimDuration : 250
+                        const win = s.animDuration !== undefined
+                            ? s.animDuration : 420
+                        const f = enter > 0 ? v / (enter / 240) : 1
+                        fgSchedPage.stageSet("cardEnterDuration",
+                            Math.round(enter * f))
+                        fgSchedPage.stageSet("tiltAnimDuration",
+                            Math.round(tilt * f))
+                        fgSchedPage.stageSet("animDuration",
+                            Math.round(win * f))
                     }
                 }
 
