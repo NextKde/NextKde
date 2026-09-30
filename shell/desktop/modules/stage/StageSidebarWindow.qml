@@ -370,6 +370,14 @@ PanelWindow {
                 root._deskHoldActive = false
                 root._deskHoldReleaseTimer.stop()
                 root.stageActiveId = current
+                // 组焦点记忆：此刻的有效组键 → 该窗（收回时最后活动的
+                // 窗 = 展开时的顶层）
+                const mRec = WindowService.windowById(current)
+                if (mRec) {
+                    const mk = root._effKey(mRec)
+                    if (mk !== "")
+                        root._groupFocusMemory[mk] = current
+                }
                 // 真实窗口被激活而桌面开关态还挂着（用户直接点了桌面上的
                 // 窗，没走卡片）：交互意图＝退出显示桌面（macOS 同语义），
                 // 否则下次点桌面会"惊喜"整组放出来。开关集内的窗聚焦
@@ -850,14 +858,15 @@ PanelWindow {
 
     // 把一组窗口的动画起点矩形改写为指定屏幕矩形（中心合并：被拖卡
     // 停在哪，窗口就从哪"长大"）。写进 _lastCardRects 再落盘——后续
-    // 常规发布会经 prevRects 兜底把这些键保留住（活动组缺席时 hold）
+    // 常规发布会经 prevRects 兜底把这些键保留住（活动组缺席时 hold）。
+    // flat=1：卡片是拖拽中摆平的正视卡，窗口直长不旋转（stageanim 读）
     function _publishOverrideRects(windowIds, x, y, w, h) {
         let n = 0
         for (let i = 0; i < windowIds.length; i++) {
             const hid = WindowService.handleIdOf(windowIds[i])
             if (hid === "")
                 continue
-            root._lastCardRects[hid] = { id: hid,
+            root._lastCardRects[hid] = { id: hid, flat: 1,
                 x: Math.round(x), y: Math.round(y),
                 width: Math.round(w), height: Math.round(h) }
             n++
@@ -1407,8 +1416,21 @@ PanelWindow {
         // 错一个槽；哨兵键只属于桌面收编路径，那里全员即将最小化）
     }
 
+    // 组焦点记忆：组内最后活动的窗口（= 收回时在最上的那个）。展开
+    // 合并卡时焦点优先给它——代表窗（pickRepresentative 取首个）可能
+    // 是当初垫底的那个，展开后层序读作"没有复原收起时的排列"
+    property var _groupFocusMemory: ({})
+
     function engageCard(slot) {
-        engageCardWindow(slot, slot.targetId)
+        let ids = []
+        try {
+            ids = JSON.parse(slot.idsJson || "[]")
+        } catch (e) {
+            ids = []
+        }
+        const mem = root._groupFocusMemory[slot.appKey]
+        const focusId = mem && ids.indexOf(mem) >= 0 ? mem : slot.targetId
+        engageCardWindow(slot, focusId)
     }
 
     // 点卡 / 点左下角窗口图标共用的入列口：iconWindowId 传图标命中的那扇
@@ -1654,6 +1676,7 @@ PanelWindow {
                         && root._mergeCandidate === slot.appKey
                     selfMergeHint: root._centerMergeArmed
                         && slot.appKey === root.dragKey
+                    dragging: root.dragKey === slot.appKey
                     perspectiveYOff: slot.planeYOff
                     // 活体流判定源：窗口侧聚焦键（与布局同源，无头调试可触达）
                     focusKey: root.hoveredKey

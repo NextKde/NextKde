@@ -53,6 +53,10 @@ Item {
     // 共享透视：卡中心相对滚动视口中心（= 共享地平线）的 y 偏移，slot 下传
     property real perspectiveYOff: 0
 
+    // 拖拽中（窗口侧 dragKey 绑定）：被抓起的卡强制摆平——倾斜姿态在
+    // 拖拽里只会碍事（对位/读位都难，实测"卡片是斜着的"）；松手回姿态
+    property bool dragging: false
+
     // 窗口侧聚焦键（hoveredKey 下传）：活体流判定与布局同源
     property string focusKey: ""
 
@@ -152,10 +156,11 @@ Item {
     // ⚠️ schema 键 deckRestTilt/deckSidePeek 是牌堆时代遗名（持久化配置
     // 不能改名），现役语义都属 scroll 模式。
     readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
-    property real tiltCur: scrollMode
-        ? ((isHovered && !engaging) ? 0 : StageConfigService.deckRestTilt)
-        : ((engaging || (isHovered && !buttonAim))
-            ? StageConfigService.tiltAngle : 0)
+    property real tiltCur: dragging ? 0
+        : (scrollMode
+            ? ((isHovered && !engaging) ? 0 : StageConfigService.deckRestTilt)
+            : ((engaging || (isHovered && !buttonAim))
+                ? StageConfigService.tiltAngle : 0))
     Behavior on tiltCur {
         NumberAnimation {
             duration: card.engaging ? 180 : StageConfigService.tiltAnimDuration
