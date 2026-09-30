@@ -57,12 +57,15 @@ QtObject {
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY " + StageGeo.PANEL_ORIGIN_Y
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + StageGeo.PANEL_WIDTH
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight " + (_screenH - StageGeo.PANEL_ORIGIN_Y)
+        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetMirror "
+        + (StageConfigService.side === "right" ? "true" : "false")
 
     readonly property string clearTargetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX --delete"
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY --delete"
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth --delete"
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight --delete"
+        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetMirror --delete"
 
     // 最小化动画特效二选一（避免两个特效抢动画）：
     //   开 = effectId（目标=卡片矩形）独占，KOS dock 精灵卸载

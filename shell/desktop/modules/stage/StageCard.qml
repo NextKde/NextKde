@@ -591,7 +591,10 @@ Item {
         // uniform 显式声明（ShaderEffect 不自动创建属性；source 约定名，
         // plane 的 layer 纹理由此进 sampler）
         property variant source: plane
-        property real angleRad: card.tiltCur * Math.PI / 180
+        // 右侧常驻镜像：正角 = 左缘近大（左条卡片朝屏幕中心），右条应
+        // 右缘近大——倾斜角取反（深度渐变/扇叠/图标排的镜像在各自处）
+        property real angleRad: (card.rightSide ? -card.tiltCur : card.tiltCur)
+            * Math.PI / 180
         property real focal: StageGeo.TILT_FOCAL
         property size cardSize: Qt.size(plane.width, plane.height)
         property size camRel: Qt.size(width / 2,
