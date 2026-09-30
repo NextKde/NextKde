@@ -949,17 +949,24 @@ PanelWindow {
     // （高亮 + 冻结让位 + 松手即并组），武装后中心离开卡面+滞回边距
     // 才解除（恢复换位预览）。快拖永远只是换位，并组=明确停顿。
     property string _mergeCandidate: ""
+    // 驻留时长/滞回边距（合并手势专属，只在 QML 侧用；值改这里）
+    readonly property int _mergeDwellMs: 320
+    readonly property real _mergeExitRatio: 0.2
     property Timer _mergeDwellTimer: Timer {
-        interval: StageGeo.DRAG_MERGE_DWELL_MS
+        interval: root._mergeDwellMs
         onTriggered: root._mergeDwellFire()
     }
 
     // 驻留到点：此刻中心仍压在候选卡面上才武装（中途划走=作废）。
     // 独立成函数 = 无头钩子（debugMergeGesture）可直接触发，不走真实时钟
     function _mergeDwellFire() {
+        // 三分支全打点（低频高值诊断：本轮靠它实锤"预览挤走候选卡"真因）
         if (root.dragKey === "" || root._mergeCandidate === ""
-                || root._mergeCandidate === root.dragKey)
+                || root._mergeCandidate === root.dragKey) {
+            console.info("[StageSidebar] dwell fired-guard drag="
+                + root.dragKey + " cand=" + root._mergeCandidate)
             return
+        }
         const ch = StageConfigService.cardHeight
         const centerY = root.dragY + ch * 0.5
         for (let i = 0; i < cardRepeater.count; i++) {
@@ -968,11 +975,19 @@ PanelWindow {
                 if (centerY >= s.y && centerY <= s.y + ch) {
                     root._dropMergeKey = root._mergeCandidate
                     root._mergeCandidate = ""
+                    console.info("[StageSidebar] merge armed on "
+                        + root._dropMergeKey)
                     layoutCards()   // 冻结让位 + 目标高亮
+                } else {
+                    console.info("[StageSidebar] dwell fired-offcard cY="
+                        + Math.round(centerY) + " rect=" + Math.round(s.y)
+                        + ".." + Math.round(s.y + ch))
                 }
                 return
             }
         }
+        console.info("[StageSidebar] dwell fired-noslot cand="
+            + root._mergeCandidate)
     }
 
     function _beginCardDrag(slot, index, sceneY) {
@@ -1022,7 +1037,7 @@ PanelWindow {
             for (let i = 0; i < n; i++) {
                 const s = cardRepeater.itemAt(i)
                 if (s && s.appKey === root._dropMergeKey) {
-                    const m = ch * StageGeo.DRAG_MERGE_EXIT_RATIO
+                    const m = ch * root._mergeExitRatio
                     armed = centerY >= s.y - m && centerY <= s.y + ch + m
                     break
                 }
@@ -1032,6 +1047,7 @@ PanelWindow {
             root._dropMergeKey = ""
             root._mergeCandidate = ""
             root._mergeDwellTimer.stop()
+            console.info("[StageSidebar] merge disarmed (left target)")
             layoutCards()   // 恢复换位让位预览
         } else {
             let mergeKey = ""
@@ -1052,6 +1068,18 @@ PanelWindow {
                     root._mergeDwellTimer.stop()
                 else
                     root._mergeDwellTimer.restart()
+            }
+            if (root._mergeCandidate !== "") {
+                // 压在卡面上 = 合并语境：换位预览必须让位——把被拖卡插进
+                // 候选槽位的预览会把候选卡从指针下挤走（从下往上拖必然
+                // 发生），驻留到点复核"中心不在候选卡面"= 永不武装（真实
+                // 计时器实测实锤）。预览回同序（布局静止、候选钉在指针下），
+                // 换位让位只在间隙语境出现——两种落点语义从此不打架
+                if (root.dragToIndex !== root.dragFromIndex) {
+                    root.dragToIndex = root.dragFromIndex
+                    layoutCards()
+                }
+                return
             }
         }
         // 目标槽 = 基础槽位里离被拖卡最近的（与视图同款布局：adaptive
@@ -1126,6 +1154,13 @@ PanelWindow {
             originY + target.y + root.dragGrabOffset)
         log.push({ step: "over", cand: root._mergeCandidate,
             armed: root._dropMergeKey })
+        if (mode === "timer") {
+            // 真实时钟验证：拖拽保持打开直接返回（dwell 定时器自然在跑），
+            // sleep 后查 journal 的 "merge armed" 行，再用 debugDrag <from>
+            // 收尾松手（begin 因 dragKey 已设而跳过，直接走 _endCardDrag）
+            log.push({ step: "open", note: "drag left open, timer live" })
+            return JSON.stringify(log)
+        }
         _mergeDwellFire()
         log.push({ step: "dwell", armed: root._dropMergeKey })
         if (mode === "moveaway") {
