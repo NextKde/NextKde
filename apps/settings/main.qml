@@ -972,7 +972,7 @@ ApplicationWindow {
                     maxV: 1200
                     active: true
                     current: fgSchedPage.stageSnapshot.mergeDwellMs !== undefined
-                        ? fgSchedPage.stageSnapshot.mergeDwellMs : 550
+                        ? fgSchedPage.stageSnapshot.mergeDwellMs : 450
                     onCommit: function(v) { fgSchedPage.stageSet("mergeDwellMs", v) }
                 }
 

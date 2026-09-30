@@ -1072,10 +1072,16 @@ PanelWindow {
         const edge = StageConfigService.cardHeight * StageGeo.DRAG_EDGE_RATIO
         root.dragY = Math.max(-edge,
             Math.min(cards.height - edge, want))
-        // 逐帧跟手：被拖卡的 y 直接赋值（其 Behavior 已在拖拽中禁用）。
+        // 逐帧跟手：被拖卡的 y/x 直接赋值（其 Behavior 已在拖拽中禁用；
+        // x 跟指针走 = 中心合并手势的实体感，且**必须**在此直接赋值——
+        // layoutCards 只在目标槽变化时跑，横移不触发，靠它更新 x = 卡
+        // 不跟手 + 偶发布局才跳一下 = "没反馈 + 掉帧"的实测根源）。
         // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
         // 布局会拖累跟手帧率
         slot.y = root.dragY
+        slot.slotX = Math.max(8 - cards.x,
+            Math.min(root.width - slot.width - 8 - cards.x,
+                p.x - root.dragGrabOffsetX))
         const n = cardModel.count
         const ch = StageConfigService.cardHeight
         const lay = _dragBaseLayout(n)
@@ -1517,13 +1523,15 @@ PanelWindow {
         // 辉光外扩 ~14px 超出卡面 inset，整条 clip 会把辉光侧边切掉
         //（窗口的 CARD_OVERFLOW_MARGIN 余量就是给辉光留的，别在内层先切）。
         // slot 坐标系 = 视口（slotX 已含 GLOW_PAD 补偿，视觉位置不变）。
+        // ⚠️ 拖拽中解裁：被拖卡要跟指针拖出卡列（中心合并手势），clip
+        // 会在视口缘把它硬切（实测"拖过某处就被截断"）
         Item {
             id: cardsViewport
             x: -StageGeo.GLOW_PAD
             y: 0
             width: cards.width + StageGeo.GLOW_PAD * 2
             height: cards.height
-            clip: true
+            clip: root.dragKey === ""
 
             Repeater {
                 id: cardRepeater

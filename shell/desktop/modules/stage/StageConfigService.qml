@@ -34,7 +34,7 @@ QtObject {
         "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
         //（用户实测调过 320→550，入 schema 供设置页可调）
-        "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 550 },
+        "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
         "showCardTitle": { type: "bool", def: true },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },

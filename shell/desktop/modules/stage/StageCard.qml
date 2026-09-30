@@ -239,18 +239,20 @@ Item {
             width: parent.width - 32 - card.fanPad * 2
             height: parent.height - 44 - card.fanPad * 2
             radius: StageConfigService.cardRadius
-            // 背板浓度：静置 cardTint，悬停自动 ×1.3 提亮（上限 0.95）
-            color: (card.isHovered || card.dropHovered)
+            // 背板浓度：静置 cardTint，悬停/驻留预示自动 ×1.3 提亮（上限 0.95）
+            color: (card.isHovered || card.dropHovered || card.dwellHint)
                 ? Qt.rgba(0.10, 0.13, 0.20,
                     Math.min(0.95, StageConfigService.cardTint * 1.3))
                 : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
-            border.width: (card.dropHovered || card.selfMergeHint) ? 2 : 1
+            border.width: (card.dropHovered || card.selfMergeHint
+                || card.dwellHint) ? 2 : 1
             // dropHovered/selfMergeHint = 武装级高亮（亮蓝）；
-            // dwellHint = 驻留预示（半亮蓝，"停住别动"的即时反馈）
+            // dwellHint = 驻留预示（强蓝，"停住别动"的即时反馈——首版
+            // 1px@45% 实测几乎不可见 = "反馈太差"，加粗提亮）
             border.color: (card.dropHovered || card.selfMergeHint)
                 ? Qt.rgba(0.45, 0.85, 1.0, 0.95)
                 : card.dwellHint
-                    ? Qt.rgba(0.45, 0.85, 1.0, 0.45)
+                    ? Qt.rgba(0.45, 0.85, 1.0, 0.78)
                     : card.glowOn
                         ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
                         : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
