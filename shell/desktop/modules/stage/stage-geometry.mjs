@@ -20,15 +20,19 @@ export const PANEL_ORIGIN_Y = 35        // 仅剩 StageModeService 的 kwinrc �
 // 回退矩形在用（"顶栏之下的条"粗略语义）。⚠️ 全屏浮层化（d5d8630）后
 // 面板窗原点已是 (0,0)，computeTargetRects 的屏幕 y 不再加它——加了
 // 就是全列 +35px 系统偏移（2026-09-30 审计实锤）
-export const HOVER_SCALE = 1.05
-export const PERSPECTIVE_FOCAL = 900    // ⚠️ 特效 stageanim 同名常量必须同步
+export const PERSPECTIVE_FOCAL = 900    // 文档锚：本导出无代码消费，值须与
+                                        // 特效 stageanim.cpp kPerspectiveFocal 同步
 
 export const SCROLL_RETREAT = 20        // 聚焦退避：其余卡从原位向两侧平移的像素
 // ── 拖拽排序（StageCard 与 StageSidebarWindow 共用；阈值/视觉同源）──
 export const DRAG_PICK_THRESHOLD = 12   // 按下位移超过此值才算拖拽（否则是点击）
-export const DRAG_SCALE = 1.06          // 被拖卡微放大（与悬停 HOVER_SCALE 同量级）
+export const DRAG_SCALE = 1.06          // 被拖卡微放大（悬停放大走 config.hoverScale）
 export const DRAG_Z = 999               // 被拖卡置顶 z（盖过全部槽位 z = n-i）
 export const DRAG_EDGE_RATIO = 0.5      // 拖拽 y 的上下钳位（半个卡高出界余量）
+export const DRAG_SCREEN_MARGIN = 8     // 拖拽 x 的左右屏缘余量（_dragClampX）
+export const DRAG_CENTER_BUFFER = 48    // 中心合并区：指针越过卡列再留的缓冲
+export const ENGAGE_FADE_MS = 180       // 点卡交棒/被吞卡淡出（_mergeAnimTimer
+                                        // 收尾时长的下限基准，StageCard 同源）
 // 合并驻留时长/滞回边距：值在 StageConfigService.mergeDwellMs 与
 // StageSidebarWindow 的 _mergeExitRatio（手势时序类参数，不进几何库）
 // 辉光裁剪放宽：滚动视口只裁上下（滚动方向），左右各放宽这么多——
@@ -208,9 +212,10 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
         const wins = groups[g].wins
         for (let wI = 0; wI < wins.length; wI++) {
             const r = wins[wI]
+            //（pid 字段已删：stageanim 只读 id/x/y/width/height/flat，
+            // 写了没人消费 = 死负载）
             merged[r.handleId || r.windowId] = {
                 id: r.handleId || r.windowId,
-                pid: r.pid,
                 x: x,
                 y: y,
                 width: w,

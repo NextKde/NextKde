@@ -705,7 +705,8 @@ ApplicationWindow {
                     unit: "°"
                     minV: 0
                     maxV: 40
-                    active: fgSchedPage.stageSnapshot.layoutMode !== "adaptive" ? false : true
+                    decimals: 1
+                    active: fgSchedPage.stageSnapshot.layoutMode === "adaptive"
                     current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
                         ? fgSchedPage.stageSnapshot.tiltAngle : 22
                     onCommit: function(v) { fgSchedPage.stageSet("tiltAngle", v) }
@@ -1013,7 +1014,7 @@ ApplicationWindow {
                     minV: 0
                     maxV: 40
                     decimals: 1
-                    active: fgSchedPage.stageSnapshot.layoutMode !== "scroll" ? false : true
+                    active: fgSchedPage.stageSnapshot.layoutMode === "scroll"
                     current: fgSchedPage.stageSnapshot.deckRestTilt !== undefined
                         ? fgSchedPage.stageSnapshot.deckRestTilt : 10
                     onCommit: function(v) { fgSchedPage.stageSet("deckRestTilt", v) }
@@ -1024,7 +1025,7 @@ ApplicationWindow {
                     unit: " px"
                     minV: 4
                     maxV: 60
-                    active: fgSchedPage.stageSnapshot.layoutMode !== "scroll" ? false : true
+                    active: fgSchedPage.stageSnapshot.layoutMode === "scroll"
                     current: fgSchedPage.stageSnapshot.deckSidePeek !== undefined
                         ? fgSchedPage.stageSnapshot.deckSidePeek : 20
                     onCommit: function(v) { fgSchedPage.stageSet("deckSidePeek", v) }

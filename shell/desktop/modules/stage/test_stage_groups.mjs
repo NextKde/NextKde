@@ -49,6 +49,9 @@ check("desktop: no desktopIds array", isOnDesktop(rec({ desktopIds: undefined })
 check("process: same pid", isSameProcess(rec({ pid: 7 }), rec({ pid: 7 })), true);
 check("process: pid 0 never matches", isSameProcess(rec({ pid: 0 }), rec({ pid: 0 })), false);
 check("process: null record", isSameProcess(rec({ pid: 7 }), null), false);
+// a 位可能传已移除窗口的 undefined（_dispatchNextEngage 实路径）——
+// 不得抛 TypeError 打断派发循环（2026-09-30 审计）
+check("process: undefined a-record", isSameProcess(undefined, rec({ pid: 7 })), false);
 check("app: same desktopId", isSameApp(rec({ pid: 1 }), rec({ pid: 2 }), "chrome", "chrome"), true);
 check("app: empty appIds not equal", isSameApp(rec({ pid: 1 }), rec({ pid: 2 }), "", ""), false);
 check("app: different appIds", isSameApp(rec({ pid: 1 }), rec({ pid: 2 }), "a", "b"), false);
@@ -297,6 +300,14 @@ check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
     // 合并动画 no-op 分支的承重契约（2026-09-30 审计补）
     assert.equal(applyMerge(ov, [], "ghost", "b"), ov, "no-record no-op ref");
     cases.push("merge no-record is no-op (ref)");
+    // 空句柄（foreign provider 记录）不得写 overrides[""] 毒键——那会让
+    // 全部同类记录塌进一张卡且 prune 永久保留（2026-09-30 审计）
+    const frecs = [
+        rec({ windowId: "fw1", handleId: "fh1", identity: { desktopId: "a" } }),
+        rec({ windowId: "fw2", handleId: "", identity: { desktopId: "a" } }),
+    ];
+    const fov = applyMerge({}, frecs, "a", "b");
+    check("merge skips empty handleId", fov, { fh1: "b" });
 
     // 分组：合成一张 merged 卡，每窗图标齐全
     const groups = groupRecords(recs, { overrides: ov });

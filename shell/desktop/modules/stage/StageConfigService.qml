@@ -19,7 +19,8 @@ QtObject {
     // ── schema：唯一事实来源（新增参数 = 加一行 schema + 一个属性）──
     // 分组：布局 / 玻璃质感 / 动效节拍 / 实时预览 / 窗口动画特效投影
     readonly property var _schema: ({
-        // 布局（scroll = 完整滚动：卡片完整显示不重叠，固定可见数 + 滚轮翻页）
+        // 布局（scroll = 完整滚动：卡片完整显示不重叠，固定间距自然排列、
+        // 放不下滚轮滚动；adaptive = 等比缩小全显）
         "layoutMode":   { type: "enum", values: ["scroll", "adaptive"],
                           def: "scroll" },
         // 常驻侧：left = 屏幕左缘（默认）；right = 屏幕右缘（macOS
@@ -33,7 +34,7 @@ QtObject {
         "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
         "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
-        //（用户实测调过 320→550，入 schema 供设置页可调）
+        //（用户实测调过 320→550→450，入 schema 供设置页可调）
         "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 450 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
         "showCardTitle": { type: "bool", def: true },
@@ -82,18 +83,24 @@ QtObject {
             values: ["OutCubic", "InOutCubic", "OutBack", "OutQuad",
                      "InOutQuad", "Linear"],
             def: "OutCubic" },
+        // 诊断遥测开关（[DragTrace] 拖拽跟手日志）：默认关；排障时
+        // `stage-config set debugTrace true` 打开。设置页不暴露（非用户参数）
+        "debugTrace":   { type: "bool", def: false },
     })
 
     // 运行时属性（_load 用持久值覆盖默认；分组与 schema 一一对应）
-    // 卡片布局：scroll = 完整滚动（卡片完整显示永不重叠，固定可见卡数
-    // 等分视口，超出滚轮翻页无滚动条，底部位置点+窗数提示）；adaptive =
-    // 自适应缩小（全部完整显示，等比缩小到恰好放下）
+    // 卡片布局：scroll = 完整滚动（卡片完整显示永不重叠，固定间距自然
+    // 排列，超出滚轮滚动，底部位置点+窗数提示）；adaptive = 自适应缩小
+    //（全部完整显示，等比缩小到恰好放下）
     property string layoutMode: "scroll"
     property string side: "left"
     property int fanSpacing: 8
     property int stripIconSize: 24
     property int maxIconSlots: 5
-    property int mergeDwellMs: 550
+    // ⚠️ 属性默认值 = 无 config.json 时的真实默认（_load 不回填 schema def，
+    // 两处默认必须同步改——2026-09-30 审计抓过 550/450 漂移）
+    property int mergeDwellMs: 450
+    property bool debugTrace: false   // 诊断遥测（[DragTrace]），见 schema 注释
     property bool showCardTitle: true
     property int cardHeight: 148
     property int cardSpacing: 16
@@ -161,11 +168,13 @@ QtObject {
     //（bool 也一样：只有真/假布尔字面量合法）
     function _coerce(s, value) {
         if (s.type === "int" || s.type === "real") {
-            // 前置拒收布尔/空串/null：Number("")===0、Number(true)===1、
-            // Number(null)===0 都会静默钳到 min 且 set 报 ok（IPC 手误
+            // 前置拒收布尔/空串/空白串/数组/null：Number("")===0、
+            // Number(" ")===0、Number(true)===1、Number(null)===0、
+            // Number([5])===5 都会静默钳到 min 且 set 报 ok（IPC 手误
             // 不报错——与 bool 路径的"非法报错"契约对称，2026-09-30 审计）
             if (typeof value === "boolean" || value === null
-                    || value === undefined || value === "")
+                    || value === undefined || Array.isArray(value)
+                    || String(value).trim() === "")
                 return null
             let v = Number(value)
             if (isNaN(v))

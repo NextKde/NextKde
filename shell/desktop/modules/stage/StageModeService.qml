@@ -39,12 +39,14 @@ QtObject {
     // 侧栏条矩形（屏幕逻辑坐标：顶栏之下、常驻条；几何常量同源
     // stage-geometry.mjs。X = 面板窗原点 + 溢出余量：左侧=余量本身；
     // 右侧=屏宽−窗宽+余量（面板窗锚右缘，窗宽 = 常驻条 + 两侧余量）。
-    // TargetHeight 1059 是历史全局回退矩形的实测值，仅作特效第三级
-    // 回落，不随面板几何变化）
+    // 高度从屏幕高推导（顶栏之下到屏底）；screens[0] 是多屏下的已知近似
+    // ——此矩形仅作特效第三级回落，不随面板几何变化）
     readonly property int _screenW: Quickshell.screens.length > 0
         ? Quickshell.screens[0].width : 1920
+    readonly property int _screenH: Quickshell.screens.length > 0
+        ? Quickshell.screens[0].height : 1094
     // kwinrc 三级回退矩形：targets 文件未命中时的粗略"顶栏之下的条带"
-    // 近似（35/1059 非卡位精度——精确矩形走 stage-targets.json 每窗发布，
+    // 近似（非卡位精度——精确矩形走 stage-targets.json 每窗发布，
     // 那条链路已按全屏浮层原点 (0,0) 修正，勿按卡位精度校准这里）
     readonly property string targetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX "
@@ -54,7 +56,7 @@ QtObject {
             : String(StageGeo.CARD_OVERFLOW_MARGIN))
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY " + StageGeo.PANEL_ORIGIN_Y
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + StageGeo.PANEL_WIDTH
-        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight 1059"
+        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight " + (_screenH - StageGeo.PANEL_ORIGIN_Y)
 
     readonly property string clearTargetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX --delete"

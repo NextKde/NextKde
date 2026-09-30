@@ -43,8 +43,8 @@ Item {
     // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
     property bool dropHovered: false
     // 驻留预示（窗口侧按 _mergeCandidate 绑定）：指针压在候选卡上、
-    // 驻留计时中——淡蓝描边 = "keep holding"（武装前的可见反馈，550ms
-    // 盲等是"合并十分困难"体感的一半）
+    // 驻留计时中——淡蓝描边 = "keep holding"（武装前的可见反馈；纯等待
+    // 无提示是"合并十分困难"体感的另一半，时长走 mergeDwellMs）
     property bool dwellHint: false
     // 中心合并预示（被拖卡自身）：拖进屏幕中心区且前台程序可并组 =
     // 松手即与正在运行的程序合组
@@ -134,7 +134,7 @@ Item {
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
-    Behavior on opacity { NumberAnimation { duration: engaging ? 180 : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
+    Behavior on opacity { NumberAnimation { duration: engaging ? StageGeo.ENGAGE_FADE_MS : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // 缩放带过冲（OutBack）：悬停放大/入场有弹性回弹；位置类刻意保持
     // OutCubic——x/y 过冲会越过槽位触发悬停丢失（kill 循环前科）
     Behavior on scale {
@@ -607,11 +607,14 @@ Item {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
+        property real pressSceneX: 0
         property real pressSceneY: 0
         property bool dragArmed: false
         property bool wasDrag: false
         onPressed: function(mouse) {
-            pressSceneY = mapToItem(null, mouse.x, mouse.y).y
+            const press = mapToItem(null, mouse.x, mouse.y)
+            pressSceneX = press.x
+            pressSceneY = press.y
             dragArmed = false
             // 每次按压重置：界外松手（拖拽中指针移出卡面）只发 released
             // 不发 clicked，wasDrag 若留到下一次按压会吞掉那次正常点击
@@ -622,7 +625,9 @@ Item {
                 return
             const p = mapToItem(null, mouse.x, mouse.y)
             if (!dragArmed) {
-                if (Math.abs(p.y - pressSceneY)
+                // 双轴位移模长起拖：中心合并手势是纯横向位移，y-only 判定
+                // 会把手压得稳的横拖整个饿死（永远进不了拖拽态）
+                if (Math.hypot(p.x - pressSceneX, p.y - pressSceneY)
                         > StageGeo.DRAG_PICK_THRESHOLD) {
                     dragArmed = true
                     card.dragStarted(p.x, p.y)
@@ -789,7 +794,7 @@ Item {
 
         // 更多窗口收进 "+N"
         Text {
-            visible: card.windowIds.length > card.maxIconSlots
+            visible: card.windowIds.length > iconRow.visibleCount
             anchors {
                 verticalCenter: parent.verticalCenter
                 left: card.rightSide ? undefined : parent.right
@@ -797,7 +802,7 @@ Item {
                 right: card.rightSide ? parent.left : undefined
                 rightMargin: 5
             }
-            text: "+" + (card.windowIds.length - card.maxIconSlots)
+            text: "+" + (card.windowIds.length - iconRow.visibleCount)
             color: Qt.rgba(1, 1, 1, 0.65)
             font { pixelSize: 10; weight: Font.DemiBold }
         }

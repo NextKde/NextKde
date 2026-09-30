@@ -32,7 +32,8 @@ export function isOnDesktop(r, desktopId) {
 // 同进程（pid 相同）。XWayland 弹窗的身份解析常与主窗对不上，pid 是
 // "同应用豁免"的第二重保险（第一重是 desktopId）。
 export function isSameProcess(a, b) {
-    return a.pid > 0 && a.pid === (b?.pid || 0)
+    // a 侧同样可选链：_dispatchNextEngage 会把可能已移除的记录放在 a 位
+    return a?.pid > 0 && a?.pid === (b?.pid || 0);
 }
 
 // 同应用豁免双保险：同进程，或 desktopId 相同（空串不算相同——两个身份
@@ -323,6 +324,8 @@ export function applyMerge(overrides, records, fromKey, toKey) {
     for (let i = 0; i < records.length; i++) {
         const r = records[i]
         if (groupKeyOf(r, overrides) === fromKey) {
+            if (!r.handleId)
+                continue   // foreign 记录无 KWin 句柄：写 "" 键会毒化全部同类记录
             out[r.handleId] = toKey
             changed = true
         }

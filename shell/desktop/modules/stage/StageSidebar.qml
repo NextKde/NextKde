@@ -5,8 +5,8 @@ import qs.desktop.modules.dock
 
 // Stage Sidebar controller — macOS Stage Manager 式常驻窗口卡片侧栏。
 // 消费 WindowService（KWin 桥：窗口列表/实时缩略图/激活），卡片区排除
-// 当前活动窗口（它就是"主窗"），其余窗口全部以缩略卡片常驻左侧，
-// 点击卡片激活置顶。
+// 当前活动窗口（它就是"主窗"），其余窗口全部以缩略卡片常驻侧栏
+//（side 可配左/右），点击卡片激活置顶。
 // 显隐由 StageModeService.enabled 驱动（前台调度总开关，控制中心/Meta+Y 可切）。
 Scope {
     id: root
@@ -63,7 +63,7 @@ Scope {
             return stageWindow.debugSplit(index)
         }
         // 无头合并手势模拟（驻留门控链路）：
-        //   debugMergeGesture <from> <to> merge|moveaway
+        //   debugMergeGesture <from> <to> center|pass|timer|merge|moveaway
         function debugMergeGesture(fromIndex: int, toIndex: int,
                 mode: string): string {
             return stageWindow.debugMergeGesture(fromIndex, toIndex, mode)
