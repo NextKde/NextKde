@@ -741,14 +741,11 @@ Item {
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
         height: iconSize
-        anchors {
-            bottom: parent.bottom
-            bottomMargin: -5
-            left: card.rightSide ? undefined : parent.left
-            leftMargin: card.rightSide ? 0 : -5
-            right: card.rightSide ? parent.right : undefined
-            rightMargin: card.rightSide ? -5 : 0
-        }
+        // ⚠️ 水平定位用 x 而非 left/right 锚点切换（同 cards 列的坑）：
+        // 锚点对在 side 翻转瞬间同时定义会拆掉 width 绑定
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: -5
+        x: card.rightSide ? parent.width - width - 5 : -5
         width: rowWidth
 
         // 悬停垫片（不截点击）：指针在排内任意位置 = 卡片保持悬停姿态
@@ -795,16 +792,11 @@ Item {
             }
         }
 
-        // 更多窗口收进 "+N"
+        // 更多窗口收进 "+N"（x 定位同上——不碰水平锚点）
         Text {
             visible: card.windowIds.length > iconRow.visibleCount
-            anchors {
-                verticalCenter: parent.verticalCenter
-                left: card.rightSide ? undefined : parent.right
-                leftMargin: 5
-                right: card.rightSide ? parent.left : undefined
-                rightMargin: 5
-            }
+            anchors.verticalCenter: parent.verticalCenter
+            x: card.rightSide ? -width - 5 : parent.width + 5
             text: "+" + (card.windowIds.length - iconRow.visibleCount)
             color: Qt.rgba(1, 1, 1, 0.65)
             font { pixelSize: 10; weight: Font.DemiBold }

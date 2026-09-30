@@ -1610,19 +1610,24 @@ PanelWindow {
 
     // ── 卡片堆叠区 ──
     // 背景完全透明（用户要求）：无背板、无霜层，只留悬浮卡片本身。
-    // 左右锚到"内容列"（窗宽减两侧溢出余量 = PANEL_WIDTH）；上下留出
+    // 左右贴"内容列"（窗宽减两侧溢出余量 = PANEL_WIDTH）；上下留出
     // 辉光余量（首/末卡的辉光外扩 ~19px 不出窗缘）。
     Item {
         id: cards
         // 卡片列：固定条宽、贴常驻侧（全屏浮层下 cards.x 即屏幕绝对 x，
-        // 特效矩形/hit 区域都从它推）
+        // 特效矩形/hit 区域都从它推）。⚠️ 水平定位必须用 x 而不是
+        // left/right 锚点切换——两条锚点绑定在 side 翻转瞬间先后求值，
+        // 会出现"左右锚点同时定义"的一拍，QML 随即让锚点接管宽度并
+        // **拆除 width 绑定（不再恢复）**：列宽被撑成 parent.width−两侧
+        // margin（1656），卡片拉成 1632 宽，倾斜透视在大宽度上产生极端
+        // 剪切（"切右侧时卡片被拉长"的真因，2026-09-30 实锤）
+        x: root.rightSide
+            ? parent.width - StageGeo.PANEL_WIDTH
+                - StageGeo.CARD_OVERFLOW_MARGIN
+            : StageGeo.CARD_OVERFLOW_MARGIN
         anchors {
             top: parent.top
             topMargin: 46
-            left: root.rightSide ? undefined : parent.left
-            leftMargin: root.rightSide ? 0 : StageGeo.CARD_OVERFLOW_MARGIN
-            right: root.rightSide ? parent.right : undefined
-            rightMargin: root.rightSide ? StageGeo.CARD_OVERFLOW_MARGIN : 0
             bottom: parent.bottom
             bottomMargin: 18
         }
