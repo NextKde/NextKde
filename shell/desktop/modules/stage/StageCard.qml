@@ -1,6 +1,8 @@
 import QtQuick
 import Quickshell.Widgets
 import org.kde.pipewire
+// ⚠️ ScreencastingRequest 在本模块（勿按直觉挪去 pipewire——删过一次
+// 就 crash-loop："is not a type"）
 import org.kde.taskmanager
 import qs.desktop.modules.dock
 import "stage-geometry.mjs" as StageGeo
@@ -69,7 +71,8 @@ Item {
     // 组内窗口 id 与逐窗图标（合并组内各应用图标不同，逐窗取）
     readonly property var windowIds: {
         try {
-            return JSON.parse(idsJson || "[]")
+            const arr = JSON.parse(idsJson || "[]")
+            return Array.isArray(arr) ? arr : []
         } catch (e) {
             return []
         }
@@ -82,8 +85,9 @@ Item {
             return []
         }
     }
-    // 图标排最多并列数，更多收进 "+N"（排满会把卡面顶穿）
-    readonly property int maxIconSlots: 5
+    // 图标排并列上限（stage-config maxIconSlots，设置页可调）；实际
+    // 可见数还按卡宽动态封顶（见 iconRow.visibleCount），超出进 "+N"
+    readonly property int maxIconSlots: StageConfigService.maxIconSlots
 
     // 右侧常驻（stage-config side）：内容整体镜像——入场方向/扇叠方向/
     // 图标排/深度渐变都翻到对侧
@@ -278,7 +282,6 @@ Item {
                 GradientStop { position: 0.35; color: Qt.rgba(1, 1, 1, 0.02) }
                 GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.10) }
             }
-            Behavior on opacity { NumberAnimation { duration: 150 } }
         }
 
         // 头部：名称（多窗带数量）+ 关闭。不放应用图标——卡面保持纯缩略图
@@ -299,7 +302,10 @@ Item {
             Text {
                 anchors {
                     left: parent.left
-                    right: cardClose.left
+                    // 合并卡让位给拆分芯片（悬停时芯片亮起会盖住标题
+                    // 尾部 ~18px，elide 又按全宽算——读作"标题被啃"）
+                    right: card.merged && cardSplit.visible
+                        ? cardSplit.left : cardClose.left
                     rightMargin: 6
                     verticalCenter: parent.verticalCenter
                 }
@@ -411,8 +417,25 @@ Item {
             // 单流全速，GPUTotalUsed（/proc/meminfo）可实测对账。
             readonly property bool liveWanted:
                 card.focusKey === card.appKey || card.engaging
+            // 合成启停门：liveWanted 与 thumbLiveStream 任一翻转都要重算
+            //（原先只监听 liveWanted——悬停中途在设置页打开"活体流"开关
+            // 不会启动消费，直到悬停离开再进）
+            readonly property bool streamArmed:
+                thumbCard.liveWanted && StageConfigService.thumbLiveStream
             property bool streamOn: false     // 占空比相位：true=连接消费
             property string liveGrabUrl: ""   // 断开前定格的最后一帧
+
+            function _syncStream() {
+                liveGrabUrl = ""
+                if (streamArmed) {
+                    streamOn = true   // 首相位即连接（别先空等 off 周期）
+                    streamCycle.restart()
+                } else {
+                    streamOn = false
+                    streamCycle.stop()
+                }
+            }
+            onStreamArmedChanged: _syncStream()
 
             ScreencastingRequest {
                 id: streamRequest
@@ -452,16 +475,7 @@ Item {
                 }
             }
 
-            onLiveWantedChanged: {
-                liveGrabUrl = ""
-                if (liveWanted && StageConfigService.thumbLiveStream) {
-                    streamOn = true   // 首相位即连接（别先空等 off 周期）
-                    streamCycle.restart()
-                } else {
-                    streamOn = false
-                    streamCycle.stop()
-                }
-            }
+            onLiveWantedChanged: _syncStream()
 
             PipeWireSourceItem {
                 id: liveStream
@@ -660,7 +674,8 @@ Item {
     }
 
     // 拆分热区：与 closeHit 同款根层原理（plane 层内不收输入）。位置与
-    // 头部拆分钮对齐（closeHit 右缘 6 + 钮 20 + 间隙 4 = rightMargin 30）
+    // 头部拆分钮对齐：closeHit 右缘 6 + 钮 20 + 间隙 4 = 30，热区 22px
+    // 居中于 20px 视觉钮再 +1 → rightMargin 31
     MouseArea {
         id: splitHit
         z: 1
@@ -688,8 +703,12 @@ Item {
         z: 2
         readonly property int iconSize: StageConfigService.stripIconSize
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
-        readonly property int visibleCount:
-            Math.min(card.windowIds.length, card.maxIconSlots)
+        // 卡宽钳制：图标排不裁切（Item 默认不 clip），maxIconSlots×最大
+        // 图标 40px 时 rowWidth 232 > 卡宽 216 会画出卡缘——按"排满卡宽
+        // 能塞几枚"动态封顶（40px 图标 × 卡宽 216 → 4 枚），多的进 "+N"
+        readonly property int visibleCount: Math.min(card.windowIds.length,
+            card.maxIconSlots,
+            Math.floor((card.width + iconGap) / (iconSize + iconGap)))
         readonly property real rowWidth:
             visibleCount * iconSize + Math.max(0, visibleCount - 1) * iconGap
         height: iconSize

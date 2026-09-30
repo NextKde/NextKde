@@ -6,7 +6,7 @@ import {
     PANEL_WIDTH, CARD_WIDTH_INSET, CARD_HEIGHT, CARD_X_INSET, PANEL_ORIGIN_Y,
     SCROLL_RETREAT as RETREAT_DEFAULT, TILT_FOCAL,
     tiltProject, tiltUnproject,
-    adaptiveLayout, scrollLayout, computeTargetRects, tiltHeadroom,
+    adaptiveLayout, scrollLayout, computeTargetRects,
 } from "./stage-geometry.mjs";
 
 const cases = [];
@@ -111,6 +111,12 @@ check("scroll focus: focus clamped up to base scale",
 check("scroll focus: invalid index falls back to base",
     scrollLayout(1000, 3, { hoveredIndex: 9 }).dims,
     [false, false, false]);
+// NaN 全防线：Number.isFinite 挡住 NaN/undefined（?? 挡不住 NaN，会让
+// 整列布局毒成 NaN——2026-09-30 审计补齐后锁住）
+check("scroll: NaN opts fall back to defaults",
+    scrollLayout(1000, 2,
+        { cardHeight: NaN, spacing: NaN, focusScale: NaN,
+            retreat: NaN }).pitch, 148 + 12);
 
 // computeTargetRects：每组独立缩放（牌堆），x 居中宽随缩放
 const scaled = computeTargetRects(
@@ -139,9 +145,10 @@ const dims = { columnY: 41, columnWidth: 240 };
 const rects = computeTargetRects(groups, rectLay, dims,
     [groups[0].wins[0], groups[0].wins[1], groups[1].wins[0]], {});
 
-// 面板原点 35 + 列 y 41 + 槽位 y；组内每窗的 handleId 都映射到同一张组卡
-check("targets: y = origin + column + slot", rects.h1.y, 35 + 41 + 0);
-check("targets: second slot", rects.h3.y, 35 + 41 + 160);
+// 全屏浮层原点 (0,0)：屏幕 y = 列 y 41 + 槽位 y（不再加 PANEL_ORIGIN_Y，
+// 旧窗原点常量只剩 kwinrc 回退矩形在用——加了就是全列 +35px 偏移）
+check("targets: y = column + slot", rects.h1.y, 41 + 0);
+check("targets: second slot", rects.h3.y, 41 + 160);
 check("targets: group windows share card rect",
     [rects.h1.y, rects.h2.y, rects.h2.id], [rects.h1.y, rects.h1.y, "h2"]);
 check("targets: x/width from column", [rects.h1.x, rects.h1.width], [12, 216]);
@@ -174,12 +181,7 @@ const noHandle = computeTargetRects(
     [win("wN", "", 7)], {});
 check("targets: windowId fallback", noHandle.wN.id, "wN");
 
-// ── tiltHeadroom：余量随倾斜角单调（特效倾斜展开的裁剪契约参考）──
-check("headroom 0°", tiltHeadroom(0, 240), 6);
-check("headroom 24°", tiltHeadroom(24, 240), 10);
-check("headroom 42°", tiltHeadroom(42, 240), 13);
-check("headroom 60° (上限)", tiltHeadroom(60, 240), 15);
-check("headroom monotonic", tiltHeadroom(30, 240) <= tiltHeadroom(45, 240), true);
+// （tiltHeadroom 已随实现删除：无生产调用方 + 公式焦距与现役不符）
 
 // ── tiltProject/tiltUnproject：真透视孪生（与 shaders/stage_tilt.frag 同式）──
 // 角度 0 = 恒等

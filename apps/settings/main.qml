@@ -691,18 +691,20 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.bridge.stageSidebarSet(checked)
-                            // 开关自持状态；回读 IPC 确认值（同 dock 页惯例）
-                            checked = fgSchedPage.snapshot.stageEnabled !== false
+                            // 开关自持；快照回读经完好绑定回写（原"回读
+                            // 确认"行是参数遮蔽 no-op，已删——勿改写成对
+                            // checked 属性赋值，会砸掉绑定）
                         }
                     }
                 }
 
-                // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）
+                // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）；
+                // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），schema 同步
                 StageSliderRow {
                     label: "卡片倾斜角度"
                     unit: "°"
                     minV: 0
-                    maxV: 60
+                    maxV: 40
                     active: fgSchedPage.stageSnapshot.layoutMode !== "adaptive" ? false : true
                     current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
                         ? fgSchedPage.stageSnapshot.tiltAngle : 22
@@ -809,7 +811,6 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.stageSet("autoMinimize", checked)
-                            checked = fgSchedPage.stageSnapshot.autoMinimize !== false
                         }
                     }
                 }
@@ -825,39 +826,8 @@ ApplicationWindow {
                     onCommit: function(v) { fgSchedPage.stageSet("autoMinDelay", v) }
                 }
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-
-                    ColumnLayout {
-                        spacing: 2
-                        Layout.fillWidth: true
-
-                        Text {
-                            text: "保留侧栏条"
-                            color: theme.primaryText
-                            font.pixelSize: 13
-                        }
-
-                        Text {
-                            text: "关闭后卡片纯悬浮：窗口可铺满全宽、滑到卡片"
-                                  + "下方（卡片浮在窗上，点击只挡卡面）。"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-
-                    LiquidControls.LiquidGlassSwitch {
-                        checked: fgSchedPage.stageSnapshot.reserveStrip !== false
-                        accentColor: theme.accent
-                        trackColor: theme.divider
-                        onToggled: function(checked) {
-                            fgSchedPage.stageSet("reserveStrip", checked)
-                            checked = fgSchedPage.stageSnapshot.reserveStrip !== false
-                        }
-                    }
-                }
+                // （「保留侧栏条」开关已删：全屏浮层化后卡片恒为纯悬浮，
+                // 该键零消费点，翻动只改 config 死值——schema 键保留兼容）
 
                 Text {
                     text: "卡片布局"
@@ -984,6 +954,28 @@ ApplicationWindow {
                     onCommit: function(v) { fgSchedPage.stageSet("stripIconSize", v) }
                 }
 
+                StageSliderRow {
+                    label: "图标排并列上限"
+                    unit: " 枚"
+                    minV: 3
+                    maxV: 8
+                    active: true
+                    current: fgSchedPage.stageSnapshot.maxIconSlots !== undefined
+                        ? fgSchedPage.stageSnapshot.maxIconSlots : 5
+                    onCommit: function(v) { fgSchedPage.stageSet("maxIconSlots", v) }
+                }
+
+                StageSliderRow {
+                    label: "合并驻留时长"
+                    unit: " ms"
+                    minV: 200
+                    maxV: 1200
+                    active: true
+                    current: fgSchedPage.stageSnapshot.mergeDwellMs !== undefined
+                        ? fgSchedPage.stageSnapshot.mergeDwellMs : 550
+                    onCommit: function(v) { fgSchedPage.stageSet("mergeDwellMs", v) }
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
 
@@ -1011,7 +1003,6 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.stageSet("showCardTitle", checked)
-                            checked = fgSchedPage.stageSnapshot.showCardTitle !== false
                         }
                     }
                 }
@@ -1020,7 +1011,7 @@ ApplicationWindow {
                     label: "静置倾斜角"
                     unit: "°"
                     minV: 0
-                    maxV: 45
+                    maxV: 40
                     decimals: 1
                     active: fgSchedPage.stageSnapshot.layoutMode !== "scroll" ? false : true
                     current: fgSchedPage.stageSnapshot.deckRestTilt !== undefined
@@ -1067,7 +1058,6 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.stageSet("focusDim", checked)
-                            checked = fgSchedPage.stageSnapshot.focusDim === true
                         }
                     }
                 }
@@ -1103,7 +1093,6 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.stageSet("centerCards", checked)
-                            checked = fgSchedPage.stageSnapshot.centerCards !== false
                         }
                     }
                 }
@@ -1139,7 +1128,6 @@ ApplicationWindow {
                         trackColor: theme.divider
                         onToggled: function(checked) {
                             fgSchedPage.stageSet("thumbLiveStream", checked)
-                            checked = fgSchedPage.stageSnapshot.thumbLiveStream === true
                         }
                     }
                 }

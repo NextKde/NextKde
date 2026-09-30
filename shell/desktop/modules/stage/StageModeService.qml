@@ -43,6 +43,9 @@ QtObject {
     // 回落，不随面板几何变化）
     readonly property int _screenW: Quickshell.screens.length > 0
         ? Quickshell.screens[0].width : 1920
+    // kwinrc 三级回退矩形：targets 文件未命中时的粗略"顶栏之下的条带"
+    // 近似（35/1059 非卡位精度——精确矩形走 stage-targets.json 每窗发布，
+    // 那条链路已按全屏浮层原点 (0,0) 修正，勿按卡位精度校准这里）
     readonly property string targetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX "
         + (StageConfigService.side === "right"

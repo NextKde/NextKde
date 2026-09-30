@@ -27,9 +27,14 @@ QtObject {
         // 特效回退矩形，三处联动见各自文件
         "side":         { type: "enum", values: ["left", "right"],
                           def: "left" },
-        // 自由合并卡视觉：扇叠背板间距（px）/ 左下角图标排的图标大小
+        // 自由合并卡视觉：扇叠背板间距（px）/ 左下角图标排的图标大小 /
+        // 图标排并列上限（实际还按卡宽动态封顶，超出进 "+N"）
         "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
         "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
+        "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
+        // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
+        //（用户实测调过 320→550，入 schema 供设置页可调）
+        "mergeDwellMs": { type: "int", min: 200, max: 1200, def: 550 },
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
         "showCardTitle": { type: "bool", def: true },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
@@ -37,8 +42,11 @@ QtObject {
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
         "focusDim":     { type: "bool", def: false },
-        "deckRestTilt": { type: "real", min: 0, max: 45, def: 10 },
-        "tiltAngle":    { type: "real", min: 0, max: 60, def: 22 },
+        // ⚠️ 倾角上限 40 = 特效 stageanim 的 std::clamp 钳位（>40° 时
+        // depth>focal 顶点镜像炸裂）——schema 越过它就是"设置页可选但
+        // 静默被砍"，两处必须同步
+        "deckRestTilt": { type: "real", min: 0, max: 40, def: 10 },
+        "tiltAngle":    { type: "real", min: 0, max: 40, def: 22 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
         "cardRadius":   { type: "int", min: 0, max: 24, def: 14 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
@@ -84,6 +92,8 @@ QtObject {
     property string side: "left"
     property int fanSpacing: 8
     property int stripIconSize: 24
+    property int maxIconSlots: 5
+    property int mergeDwellMs: 550
     property bool showCardTitle: true
     property int cardHeight: 148
     property int cardSpacing: 16
@@ -151,6 +161,12 @@ QtObject {
     //（bool 也一样：只有真/假布尔字面量合法）
     function _coerce(s, value) {
         if (s.type === "int" || s.type === "real") {
+            // 前置拒收布尔/空串/null：Number("")===0、Number(true)===1、
+            // Number(null)===0 都会静默钳到 min 且 set 报 ok（IPC 手误
+            // 不报错——与 bool 路径的"非法报错"契约对称，2026-09-30 审计）
+            if (typeof value === "boolean" || value === null
+                    || value === undefined || value === "")
+                return null
             let v = Number(value)
             if (isNaN(v))
                 return null

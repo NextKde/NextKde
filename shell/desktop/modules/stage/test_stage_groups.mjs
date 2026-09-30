@@ -286,10 +286,17 @@ check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
     check("override key wins", groupKeyOf(recs[0], { h1: "b" }), "b");
     check("override miss falls back", groupKeyOf(recs[1], { h1: "b" }), "b");
 
-    // 合并：fromKey 组全部并进 toKey；from===to 无变化返回原引用
+    // 合并：fromKey 组全部并进 toKey；无变化返回**原引用**（消费端
+    // `next === root._mergeOverrides` 据此跳过保存/syncCards——引用回归
+    // 改成返回副本会让 no-op 检测全部失效，锁引用而非值相等）
     let ov = applyMerge({}, recs, "a", "b");
     check("merge writes both windows", ov, { h1: "b", h3: "b" });
-    check("merge self is no-op", applyMerge(ov, recs, "b", "b"), ov);
+    assert.equal(applyMerge(ov, recs, "b", "b"), ov, "merge self no-op ref");
+    cases.push("merge self is no-op (ref)");
+    // fromKey 已无任何 record（260ms 动画窗口内窗口消失）同样原引用——
+    // 合并动画 no-op 分支的承重契约（2026-09-30 审计补）
+    assert.equal(applyMerge(ov, [], "ghost", "b"), ov, "no-record no-op ref");
+    cases.push("merge no-record is no-op (ref)");
 
     // 分组：合成一张 merged 卡，每窗图标齐全
     const groups = groupRecords(recs, { overrides: ov });
@@ -306,12 +313,13 @@ check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
     const regrouped = groupRecords(recs, { overrides: ov });
     check("split restores natural groups", regrouped.length, 2);
 
-    // 剪枝：死窗口的覆盖项清掉
+    // 剪枝：死窗口的覆盖项清掉；全活 = 原引用（同上锁引用：返回入参本身）
     check("prune drops dead handles",
         pruneOverrides({ h1: "b", h9: "x" }, { h1: 1 }), { h1: "b" });
-    check("prune all-live is no-op ref",
-        pruneOverrides({ h1: "b" }, { h1: 1 }),
-        { h1: "b" });
+    const allLive = { h1: "b" };
+    assert.equal(pruneOverrides(allLive, { h1: 1 }), allLive,
+        "prune all-live no-op ref");
+    cases.push("prune all-live is no-op (ref)");
 }
 
 console.log(`stage-groups: ${cases.length} checks passed`);
