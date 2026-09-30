@@ -79,5 +79,11 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
     kbuildsycoca6 --noincremental >/dev/null
 fi
 
+# 设置页 QML 与主程序分开部署（进程独立、按安装目录解析相对导入）：
+# 此前只有完整 `kosctl install` 的 deploy_artifacts 拷它——`install apps`
+# 改了 apps/settings/main.qml 不生效的"部署黑洞"即此（2026-09-30 体检实锤）
+install -m 0644 "$project_dir/apps/settings/main.qml" \
+    "$prefix/share/kos/settings/main.qml"
+
 "$script_dir/verify-apps-install.sh" "$prefix"
 echo "KOS applications are installed for this user and ready from the launcher."

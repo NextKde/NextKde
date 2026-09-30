@@ -930,6 +930,9 @@ PanelWindow {
     property var _engageQueue: []
     // 最近派发的被点组键（NEW-2 回执失败复位 engaging 用）
     property string _lastDispatchedKey: ""
+    // 派发时刻（还原在途判定用：demoted 记录滞后的最小化旗标时，只有
+    // "我们刚 engage 过的组"才可信它其实在前台——600ms 内还原必落地）
+    property real _lastDispatchedAt: 0
 
     property Timer _engageDispatchTimer: Timer {
         interval: StageConfigService.engageDelay
@@ -941,6 +944,7 @@ PanelWindow {
         if (!entry)
             return
         root._lastDispatchedKey = entry.appKey
+        root._lastDispatchedAt = Date.now()
         // 退位判定在派发时刻做（点击到派发之间没有任何激活派发，活动窗
         // 未变；豁免规则与旧点击时刻版一致：同组/同应用/已最小化豁免）
         const demotedId = WindowService.activeWindowId
@@ -952,20 +956,25 @@ PanelWindow {
             const aRec = WindowService.windowById(entry.targetId)
             const entryIds = root._idsOf(entry.idsJson)
             const sameGroup = entryIds.indexOf(demotedId) >= 0
-            // ⚠️ 不查 dRec.toplevel.minimized：demotedId 就是 activeWindowId，
-            // KWin 里活动窗不可能已最小化——快连点时记录快照滞后（上一手
-            // engage 刚把它还原、50ms 轮询没追上），旧守卫把正在前台的前任
-            // 误判成"已收起"→跳过退位→前任滞留桌面、被兜底扫收整批收进
-            //（连点后收错槽/落位错拍的根源，2026-09-30 遥测实锤三连
-            // demote=none）。桌面收编属主改用 deskCollectedIds 判定——只有
-            // 那条管线会合法地收走活动窗。
+            // 记录说"已最小化"时照旧跳过（标题栏手收/桌面收编后的活动窗
+            // 残影——KWin 马上会把激活让给别人），**唯一例外：我们上一手
+            // engage 刚还原它**——还原命令在途、50ms 轮询快照滞后，它其实
+            // 正站在前台。旧守卫无差别信旗标，快连点时把前任误判"已收起"
+            // →跳过退位→滞留桌面被兜底扫收整批收进（连点后收错槽的根源，
+            // 2026-09-30 遥测实锤三连 demote=none）。600ms 窗口还原必落地。
+            const dKey = dRec ? root._effKey(dRec) : ""
+            const restoredInFlight = dKey !== ""
+                && dKey === root._lastDispatchedKey
+                && Date.now() - root._lastDispatchedAt < 600
             const deskOwned =
                 root.deskCollectedIds.indexOf(demotedId) >= 0
             if (!deskOwned && !sameGroup
+                    && (!(dRec?.toplevel?.minimized === true)
+                        || restoredInFlight)
                     && !StageGroups.isSameApp(dRec, aRec,
                         _appOf(demotedId), _appOf(entry.targetId))) {
                 skipDemote = false
-                demotedKey = dRec ? root._effKey(dRec) : ""
+                demotedKey = dKey
             }
         }
         if (!skipDemote) {
