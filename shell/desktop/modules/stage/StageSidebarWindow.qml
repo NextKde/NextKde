@@ -986,10 +986,14 @@ PanelWindow {
         }
         const ch = StageConfigService.cardHeight
         const centerY = root.dragY + ch * 0.5
+        // 复核用基础槽位（与候选检测同一坐标系——实时 y 随预览让位而动，
+        // 会构成"检测-布局"反馈回路）
+        const lay = root._dragBaseLayout(cardRepeater.count)
         for (let i = 0; i < cardRepeater.count; i++) {
             const s = cardRepeater.itemAt(i)
             if (s && s.appKey === root._mergeCandidate) {
-                if (centerY >= s.y && centerY <= s.y + ch) {
+                const top = lay.positions[i] ?? 0
+                if (centerY >= top && centerY <= top + ch) {
                     root._dropMergeKey = root._mergeCandidate
                     root._mergeCandidate = ""
                     console.info("[StageSidebar] merge armed on "
@@ -997,8 +1001,8 @@ PanelWindow {
                     layoutCards()   // 冻结让位 + 目标高亮
                 } else {
                     console.info("[StageSidebar] dwell fired-offcard cY="
-                        + Math.round(centerY) + " rect=" + Math.round(s.y)
-                        + ".." + Math.round(s.y + ch))
+                        + Math.round(centerY) + " rect=" + Math.round(top)
+                        + ".." + Math.round(top + ch))
                 }
                 return
             }
@@ -1027,6 +1031,21 @@ PanelWindow {
         layoutCards()
     }
 
+    // 拖拽期间的基础槽位布局（无悬停/无拖拽的自然排列）——候选检测、
+    // 驻留复核、插入目标都用**基础槽位**而不是实时 y：实时位置随预览
+    // 让位而动，拿它做检测会构成反馈回路（中心进卡→预览把卡挤走→检测
+    // 翻空→预览又回来 = 抽搐循环的根源）。基础槽位恒定，检测确定性。
+    function _dragBaseLayout(n) {
+        return StageConfigService.layoutMode === "scroll"
+            ? StageGeo.scrollLayout(cards.height, n, {
+                cardHeight: StageConfigService.cardHeight,
+                spacing: StageConfigService.cardSpacing,
+                scroll: root.scrollOffset,
+                hoveredIndex: -1,
+            })
+            : _layout(n)
+    }
+
     function _updateCardDrag(slot, index, sceneY) {
         if (root.dragKey !== slot.appKey)
             return
@@ -1039,42 +1058,56 @@ PanelWindow {
         // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
         // 布局会拖累跟手帧率
         slot.y = root.dragY
-        // 合并候选检测：被拖卡中心压在另一张卡的卡面上 = 自由组合手势
-        //（停在卡上=并组，拖到间隙=换位）。⚠️ 驻留门控（见 _mergeDwellTimer
-        // 头注释）：候选翻转只重启计时器、不动布局——即时生效曾与换位
-        // 让位互相翻转布局 = 打架抖动。武装只经 dwell 到点产生（单次
-        // layoutCards），解除走滞回边距。
+        // ── 统一预览（2026-09-30 三轮手感回归后的终版）──
+        // 插入目标 = 基础槽位里离被拖卡最近的——**始终如此**，无语境
+        // 分叉：压在卡面上松手（未武装）= 插到那张卡的槽位，拖到缝隙
+        // = 插进缝里，落点语义直觉且"插缝难"不复存在。合并候选卡在
+        // layoutCards 里被**钉在基础槽位**（不被插入预览挤走）——驻留
+        // 复核"中心压在候选卡面"因此恒成立（用的是同一份基础槽位）。
+        // 旧版"压卡面=预览归位"会在经过每张卡时让整列在让位/归位间
+        // 来回翻转（实测抽搐+掉帧），已废。
         const n = cardModel.count
         const ch = StageConfigService.cardHeight
         const centerY = root.dragY + ch * 0.5
+        const lay = _dragBaseLayout(n)
         if (root._dropMergeKey !== "") {
-            // 武装态滞回：中心在目标卡面 ± DRAG_MERGE_EXIT_RATIO×卡高
-            // 之外才解除（卡缘抖动不翻状态）；解除即恢复换位预览
+            // 武装态滞回：中心离开目标基础槽位 ± DRAG_MERGE_EXIT_RATIO×
+            // 卡高才解除；解除即恢复统一插入预览
             let armed = false
             for (let i = 0; i < n; i++) {
                 const s = cardRepeater.itemAt(i)
                 if (s && s.appKey === root._dropMergeKey) {
+                    const top = lay.positions[i] ?? 0
                     const m = ch * root._mergeExitRatio
-                    armed = centerY >= s.y - m && centerY <= s.y + ch + m
+                    armed = centerY >= top - m && centerY <= top + ch + m
                     break
                 }
             }
             if (armed)
-                return   // 武装中：不更新换位目标（松手即合并）
+                return   // 武装中：不更新插入目标（松手即合并）
             root._dropMergeKey = ""
             root._mergeCandidate = ""
             root._mergeDwellTimer.stop()
             console.info("[StageSidebar] merge disarmed (left target)")
-            layoutCards()   // 恢复换位让位预览
+            layoutCards()   // 恢复插入预览
         } else {
+            // 候选检测（基础槽位 + 边界滞回：进卡面收紧 6px、出卡面放宽
+            // 6px——防卡缘抖动翻候选导致钉位/让位来回切）
             let mergeKey = ""
+            const hm = 6
             for (let i = 0; i < n; i++) {
                 if (i === root.dragFromIndex)
                     continue
                 const s = cardRepeater.itemAt(i)
                 if (!s)
                     continue
-                if (centerY >= s.y && centerY <= s.y + ch) {
+                const top = lay.positions[i] ?? 0
+                if (s.appKey === root._mergeCandidate) {
+                    if (centerY >= top - hm && centerY <= top + ch + hm) {
+                        mergeKey = s.appKey
+                        break
+                    }
+                } else if (centerY >= top + hm && centerY <= top + ch - hm) {
                     mergeKey = s.appKey
                     break
                 }
@@ -1086,29 +1119,9 @@ PanelWindow {
                 else
                     root._mergeDwellTimer.restart()
             }
-            if (root._mergeCandidate !== "") {
-                // 压在卡面上 = 合并语境：换位预览必须让位——把被拖卡插进
-                // 候选槽位的预览会把候选卡从指针下挤走（从下往上拖必然
-                // 发生），驻留到点复核"中心不在候选卡面"= 永不武装（真实
-                // 计时器实测实锤）。预览回同序（布局静止、候选钉在指针下），
-                // 换位让位只在间隙语境出现——两种落点语义从此不打架
-                if (root.dragToIndex !== root.dragFromIndex) {
-                    root.dragToIndex = root.dragFromIndex
-                    layoutCards()
-                }
-                return
-            }
         }
-        // 目标槽 = 基础槽位里离被拖卡最近的（与视图同款布局：adaptive
-        // 的槽位按缩放间距排，拿 scrollLayout 算会整体错位）
-        const lay = StageConfigService.layoutMode === "scroll"
-            ? StageGeo.scrollLayout(cards.height, n, {
-                cardHeight: StageConfigService.cardHeight,
-                spacing: StageConfigService.cardSpacing,
-                scroll: root.scrollOffset,
-                hoveredIndex: -1,
-            })
-            : _layout(n)
+        // 插入目标 = 最近基础槽位（候选在时即候选自己的槽位——被拖卡
+        // 视觉上悬停在它上方，读作"叠上去"，与合并语义同构）
         let best = index, bestDist = Infinity
         for (let i = 0; i < n; i++) {
             const d = Math.abs((lay.positions[i] ?? 0) - root.dragY)
@@ -1180,6 +1193,13 @@ PanelWindow {
             originY + target.y + root.dragGrabOffset)
         log.push({ step: "over", cand: root._mergeCandidate,
             armed: root._dropMergeKey })
+        if (mode === "pass") {
+            // 压在卡面上直接松手（未驻留）：应换位到目标槽位而非弹回
+            _endCardDrag(slot)
+            log.push({ step: "end", pending: root._mergeAnimPending !== null,
+                to: "slot of target" })
+            return JSON.stringify(log)
+        }
         if (mode === "timer") {
             // 真实时钟验证：拖拽保持打开直接返回（dwell 定时器自然在跑），
             // sleep 后查 journal 的 "merge armed" 行，再用 debugDrag <from>
@@ -1853,6 +1873,21 @@ PanelWindow {
                         slot.dimmed = false
                         continue
                     }
+                    // 合并候选钉位：候选卡不被插入预览挤走（钉在自己的
+                    // 基础槽位，被拖卡悬停在它上方 = "叠上去"的合并隐喻）；
+                    // 其余卡照常让位——预览全程单状态，无"过卡归位/过缝
+                    // 让位"的来回翻转（实测抽搐+掉帧的根源）
+                    if (root._mergeCandidate !== ""
+                            && slot.appKey === root._mergeCandidate) {
+                        slot.y = lay.positions[i] ?? 0
+                        slot.slotScale = lay.scales[i] ?? 1
+                        slot.slotX = (cards.width
+                            - slot.width * slot.slotScale) / 2
+                            + StageGeo.GLOW_PAD
+                        slot.z = n - i
+                        slot.dimmed = false
+                        continue
+                    }
                     let pi = i < root.dragFromIndex ? i : i - 1
                     if (pi >= root.dragToIndex)
                         pi += 1
@@ -1915,6 +1950,18 @@ PanelWindow {
                     slot.y = lay.positions[i] ?? 0
                     slot.slotScale = lay.scale
                     slot.slotX = (cards.width - slot.width * lay.scale) / 2
+                        + StageGeo.GLOW_PAD
+                    slot.z = n - i
+                    slot.dimmed = false
+                    continue
+                }
+                // 合并候选钉位（scroll 分支同款，见该处注释）
+                if (root._mergeCandidate !== ""
+                        && slot.appKey === root._mergeCandidate) {
+                    slot.y = lay.positions[i] ?? 0
+                    slot.slotScale = lay.scales?.[i] ?? lay.scale ?? 1
+                    slot.slotX = (cards.width
+                        - slot.width * slot.slotScale) / 2
                         + StageGeo.GLOW_PAD
                     slot.z = n - i
                     slot.dimmed = false
