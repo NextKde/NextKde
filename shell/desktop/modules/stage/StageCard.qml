@@ -42,6 +42,13 @@ Item {
     required property bool merged // 自由合并卡（右键拆分）
     // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
     property bool dropHovered: false
+    // 驻留预示（窗口侧按 _mergeCandidate 绑定）：指针压在候选卡上、
+    // 驻留计时中——淡蓝描边 = "keep holding"（武装前的可见反馈，550ms
+    // 盲等是"合并十分困难"体感的一半）
+    property bool dwellHint: false
+    // 中心合并预示（被拖卡自身）：拖进屏幕中心区且前台程序可并组 =
+    // 松手即与正在运行的程序合组
+    property bool selfMergeHint: false
 
     // 共享透视：卡中心相对滚动视口中心（= 共享地平线）的 y 偏移，slot 下传
     property real perspectiveYOff: 0
@@ -55,8 +62,11 @@ Item {
     // 按压不再触发 engageClicked（点击/拖拽二选一）。传**场景坐标**——
     // 卡内坐标会随卡片移动而漂移（指针没动、卡动了，卡内 y 就变了），
     // 用它算位移会互相抵消＝"拖过一张卡就拖不动"（实测踩过）。
-    signal dragStarted(real sceneY)
-    signal dragMoved(real sceneY)
+    // x 也要传：合并候选检测跟**指针**走（用户瞄的是指针，不是被拖卡
+    // 中心——抓卡偏一点中心就落在别的卡上，驻留等错目标），"拖向屏幕
+    // 中心与前台程序合并"也靠它判定离区。
+    signal dragStarted(real sceneX, real sceneY)
+    signal dragMoved(real sceneX, real sceneY)
     signal dragReleased()
     // 悬停进出（窗口侧据此聚焦布局：悬停卡原位放大置顶、其余原位退避）
     signal hovered(bool over)
@@ -234,12 +244,16 @@ Item {
                 ? Qt.rgba(0.10, 0.13, 0.20,
                     Math.min(0.95, StageConfigService.cardTint * 1.3))
                 : Qt.rgba(0.05, 0.07, 0.12, StageConfigService.cardTint)
-            border.width: card.dropHovered ? 2 : 1
-            border.color: card.dropHovered
+            border.width: (card.dropHovered || card.selfMergeHint) ? 2 : 1
+            // dropHovered/selfMergeHint = 武装级高亮（亮蓝）；
+            // dwellHint = 驻留预示（半亮蓝，"停住别动"的即时反馈）
+            border.color: (card.dropHovered || card.selfMergeHint)
                 ? Qt.rgba(0.45, 0.85, 1.0, 0.95)
-                : card.glowOn
-                    ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
-                    : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
+                : card.dwellHint
+                    ? Qt.rgba(0.45, 0.85, 1.0, 0.45)
+                    : card.glowOn
+                        ? Qt.rgba(0.62, 0.80, 1.0, 0.85)
+                        : Qt.rgba(255, 255, 255, StageConfigService.cardBorder)
             Behavior on color { ColorAnimation { duration: 130 } }
         }
 
@@ -599,16 +613,16 @@ Item {
         onPositionChanged: function(mouse) {
             if (!(mouse.buttons & Qt.LeftButton))
                 return
-            const sceneY = mapToItem(null, mouse.x, mouse.y).y
+            const p = mapToItem(null, mouse.x, mouse.y)
             if (!dragArmed) {
-                if (Math.abs(sceneY - pressSceneY)
+                if (Math.abs(p.y - pressSceneY)
                         > StageGeo.DRAG_PICK_THRESHOLD) {
                     dragArmed = true
-                    card.dragStarted(sceneY)
+                    card.dragStarted(p.x, p.y)
                 }
                 return
             }
-            card.dragMoved(sceneY)
+            card.dragMoved(p.x, p.y)
         }
         onReleased: {
             if (dragArmed) {
