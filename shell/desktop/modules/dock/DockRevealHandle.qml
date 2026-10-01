@@ -29,6 +29,8 @@ Item {
     // When false the whole handle is inert (zero-size hit target); used by the
     // "always" mode which must never swallow clicks near the edge.
     property bool active: true
+    // Hiding the hint must not disable edge hover/click input.
+    property bool showIndicator: true
     // Glass tint + outline matching the dock's own backdrop, so the hidden bar
     // reads as the same adaptive material. The owning window supplies the
     // theme colours; the backdrop blur (also owned by the window) adapts to
@@ -63,7 +65,7 @@ Item {
     // The handle is a second liquid surface. Its panel owns the matching
     // rounded blur mask and SurfaceShape; DockWindow only combines it with the
     // main Dock surface when it publishes BackgroundEffect.blurRegion.
-    readonly property alias blurRegion: pill.blurRegion
+    readonly property var blurRegion: bar.visible ? pill.blurRegion : null
 
     readonly property bool vertical: handle.position !== "bottom"
     readonly property real visualThickness: 6
@@ -137,7 +139,7 @@ Item {
         // thickness in both cases).
         width: handle.vertical ? handle.visualThickness : handle.barLength
         height: handle.vertical ? handle.barLength : handle.visualThickness
-        visible: handle.active && handle.visualThickness > 0
+        visible: handle.active && handle.showIndicator && handle.visualThickness > 0
         opacity: handle.fadeOpacity
 
         scale: targetHover.hovered ? 1.08 : 1.0

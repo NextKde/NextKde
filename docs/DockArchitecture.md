@@ -287,11 +287,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 9):
+Core user configuration fields (schema version 10):
 
 ```json
 {
-  "version": 9,
+  "version": 10,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -309,7 +309,8 @@ Core user configuration fields (schema version 9):
   "visibilityMode": "always",
   "windowGrouping": "grouped",
   "showLauncher": true,
-  "showTrash": true
+  "showTrash": true,
+  "showRevealIndicator": true
 }
 ```
 
@@ -321,6 +322,14 @@ new presentation code reads `dockItems` and the shell-wide
 `IconAppearanceService`. Legacy `smartHideEnabled: true` migrates to `"smart"`,
 legacy `autoHide: true` to `"persistent"`, with `"smart"` winning if both were
 set.
+
+Schema 10 adds `showRevealIndicator`, defaulting to `true` unless the stored
+value is the boolean `false`. Settings updates it through
+`dock-settings.updateRevealIndicatorVisibility(visible)`. Disabling it removes
+only the reveal pill and its compositor blur region, for all three Dock edges;
+the edge hit target, hover/click reveal, and visibility mode remain unchanged.
+The Settings switch follows the confirmed snapshot and handles its own pending
+request, so unrelated snapshots cannot prematurely re-enable it.
 
 Schema 9 adds `showLauncher` and `showTrash`. Both default to `true` for old
 configurations; only an explicit boolean `false` hides an icon. Settings uses

@@ -114,6 +114,13 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.dock-builtins PROPERTIES
                 LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.dock-reveal-indicator
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal-indicator/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
+                LABELS ui TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/static-work/run.mjs

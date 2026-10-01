@@ -667,6 +667,8 @@ ApplicationWindow {
         readonly property var windowGroupings: ["grouped", "separate"]
         property bool showLauncher: true
         property bool showTrash: true
+        property bool showRevealIndicator: true
+        property bool revealIndicatorUpdatePending: false
         property bool stateReady: false
         property bool builtinUpdatePending: false
         property string errorText: ""
@@ -708,6 +710,7 @@ ApplicationWindow {
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
             showTrash = state.showTrash !== false
+            showRevealIndicator = state.showRevealIndicator !== false
             stateReady = true
             layoutDirty = false
             errorText = ""
@@ -748,6 +751,13 @@ ApplicationWindow {
             bridge.updateDockWindowGrouping(mode)
         }
 
+        function saveRevealIndicatorVisibility(visible) {
+            if (!bridge || !stateReady || revealIndicatorUpdatePending)
+                return
+            revealIndicatorUpdatePending = true
+            bridge.updateDockRevealIndicatorVisibility(visible)
+        }
+
         function saveBuiltinVisibility(id, visible) {
             if (!bridge || !stateReady || builtinUpdatePending)
                 return
@@ -786,6 +796,12 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
+                dockPage.applyState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
+            function onDockRevealIndicatorVisibilityChanged(state) {
+                dockPage.revealIndicatorUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = dockPage.bridge.lastError
@@ -1160,6 +1176,41 @@ ApplicationWindow {
                             currentIndex: dockPage.visibilityModeIndex
                             onSelectionChanged: function(index) {
                                 dockPage.saveVisibilityMode(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 64
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "━"; tint: "#8e8e93" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "显示隐藏提示条"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: "关闭后仍可移到屏幕边缘唤出 Dock"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            objectName: "dock-reveal-indicator-switch"
+                            checked: dockPage.showRevealIndicator
+                            enabled: dockPage.stateReady && !dockPage.revealIndicatorUpdatePending
+                            accentColor: theme.role("primary", "#0a84ff")
+                            trackColor: theme.divider
+                            Accessible.name: "显示隐藏提示条"
+                            onToggled: function(checked) {
+                                dockPage.saveRevealIndicatorVisibility(checked)
                             }
                         }
                     }

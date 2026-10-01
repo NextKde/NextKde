@@ -140,9 +140,12 @@ PanelWindow {
         // combines the two independently shaped surfaces into one region.
         // Transparent style removes only the Dock's shared capsule; the
         // reveal handle and component-owned card surfaces stay intact.
-        regions: ConfigService.dockStyle === "transparent"
-            ? [revealHandle.blurRegion]
-            : [pill.blurRegion, revealHandle.blurRegion]
+        regions: {
+            const regions = ConfigService.dockStyle === "transparent" ? [] : [pill.blurRegion]
+            if (revealHandle.blurRegion)
+                regions.push(revealHandle.blurRegion)
+            return regions
+        }
     }
 
     // A taskbar spans the edge. A floating Dock remains centred along its
@@ -289,6 +292,7 @@ PanelWindow {
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         active: hide.handleActive
+        showIndicator: ConfigService.showRevealIndicator
         onEntered: hide.handleEntered()
         onExited: hide.handleExited()
         onClicked: hide.handleClicked()
