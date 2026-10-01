@@ -7,9 +7,10 @@ import "./DockRevealGeometry.mjs" as DockRevealGeometry
 // DockRevealHandle — pure visual + pointer-input Home Indicator.
 //
 // Renders an iOS-style white pill on the screen edge and exposes an invisible
-// hit target at the Dock's projection onto the screen edge. It never reads any
-// service/configuration; the owning DockWindow supplies the stable Dock layout
-// and reveal state. See docs/DockArchitecture.md, "Visibility modes and auto-hide".
+// hit target along the screen edge, optionally limited to the Dock's own span.
+// It never reads services/configuration; the owning DockWindow supplies the
+// layout, trigger mode and reveal state. See docs/DockArchitecture.md,
+// "Visibility modes and auto-hide".
 // ────────────────────────────────────────────────────────────────
 
 Item {
@@ -17,6 +18,7 @@ Item {
 
     // ── Inputs ──
     property string position: "bottom"   // bottom | left | right
+    property string triggerMode: "fullEdge" // fullEdge | dockSpan
     property real windowWidth: 0         // owning surface size (logical px)
     property real windowHeight: 0
     // Stable full-reveal position in surface coordinates, not the animated
@@ -28,8 +30,8 @@ Item {
     // always stay proportional; the pill is a fixed fraction shorter.
     property real dockWidth: 0
     property real dockHeight: 0
-    // Only widen across the floating gap after reveal has started. Hidden and
-    // reveal-pending docks must still require contact with the screen edge.
+    // In dockSpan mode, only widen across the floating gap after reveal starts.
+    // Hidden and reveal-pending docks still require screen-edge contact.
     property bool expanded: false
     // Cross-fade opacity driven by the controller's reveal progress.
     property real fadeOpacity: 0.0       // 0..1
@@ -84,9 +86,9 @@ Item {
     readonly property real barInsetRatio: 0.20   // pill is 20% shorter than the dock
 
     // ── Hit target geometry (in window/parent coordinates) ──
-    // Always match the Dock's long axis. The same target and input-mask region
-    // grow from a 2px edge strip into a hold corridor after reveal begins, so
-    // crossing the floating gap does not drop hover or restart the delay.
+    // fullEdge retains the existing 14px strip. In dockSpan mode the same target
+    // and input-mask region grow from a 2px projected edge strip into a hold
+    // corridor after reveal begins, so crossing the gap does not drop hover.
     readonly property var hitRect: DockRevealGeometry.revealHitRect({
         position: handle.position,
         windowWidth: handle.windowWidth,
@@ -96,7 +98,8 @@ Item {
         dockWidth: handle.dockWidth,
         dockHeight: handle.dockHeight,
         active: handle.active,
-        expanded: handle.expanded
+        expanded: handle.expanded,
+        triggerMode: handle.triggerMode
     })
     readonly property real hitX: handle.hitRect.x
     readonly property real hitY: handle.hitRect.y
@@ -104,13 +107,17 @@ Item {
     readonly property real hitH: handle.hitRect.height
 
     // ── Visual bar geometry ──
-    // Centre the hint on the same stable Dock rectangle as the hit target;
-    // side docks can be shifted away from screen centre by the top bar.
+    // Preserve the screen-centred hint in fullEdge mode. For dockSpan, centre
+    // it on the same stable rectangle as the target (including top-bar offset).
     readonly property real barX: vertical
         ? (handle.position === "right" ? handle.windowWidth - handle.edgeInset - handle.visualThickness : handle.edgeInset)
-        : (handle.dockX + (handle.dockWidth - handle.barLength) / 2)
+        : (handle.triggerMode === "dockSpan"
+            ? handle.dockX + (handle.dockWidth - handle.barLength) / 2
+            : (handle.windowWidth - handle.barLength) / 2)
     readonly property real barY: vertical
-        ? (handle.dockY + (handle.dockHeight - handle.barLength) / 2)
+        ? (handle.triggerMode === "dockSpan"
+            ? handle.dockY + (handle.dockHeight - handle.barLength) / 2
+            : (handle.windowHeight - handle.barLength) / 2)
         : (handle.windowHeight - handle.edgeInset - handle.visualThickness)
 
     // Transparent hit target. opacity:0 items still hit-test, so HoverHandler

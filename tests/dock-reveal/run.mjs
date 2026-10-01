@@ -46,7 +46,7 @@ singleton AppearanceTokens 1.0 AppearanceTokens.qml
     assert.equal(result.status, 0, output);
     assert.doesNotMatch(output, /FAIL |ReferenceError|TypeError|Binding loop|is not a type|is not a function|Cannot assign|Unable to assign/, output);
     assert.match(output, /DOCK_REVEAL_RUNTIME_PASS/, output);
-    console.log('Dock reveal: real HoverHandler input, delayed/cancelled entry, slow gap hand-off, hide reset, dynamic span and disabled mode passed offscreen');
+    console.log('Dock reveal: real HoverHandler input, delayed/cancelled entry, slow gap hand-off, hide reset, dynamic span, legacy default, mode switching and disabled mode passed offscreen');
 } finally {
     rmSync(directory, { recursive: true, force: true });
 }

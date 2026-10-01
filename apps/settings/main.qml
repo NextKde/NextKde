@@ -663,6 +663,8 @@ ApplicationWindow {
         readonly property var dockStyles: ["floating", "taskbar", "transparent"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
+        property int revealTriggerModeIndex: 0
+        readonly property var revealTriggerModes: ["fullEdge", "dockSpan"]
         property int windowGroupingIndex: 0
         readonly property var windowGroupings: ["grouped", "separate"]
         property bool showLauncher: true
@@ -692,6 +694,11 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
+        function revealTriggerModeIndexFromString(mode) {
+            const idx = revealTriggerModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
         function windowGroupingIndexFromString(mode) {
             const idx = windowGroupings.indexOf(mode)
             return idx >= 0 ? idx : 0
@@ -705,6 +712,7 @@ ApplicationWindow {
             dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
+            revealTriggerModeIndex = revealTriggerModeIndexFromString(state.revealTriggerMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
             showTrash = state.showTrash !== false
@@ -739,6 +747,13 @@ ApplicationWindow {
                 return
             const mode = visibilityModes[index]
             bridge.updateDockVisibilityMode(mode)
+        }
+
+        function saveRevealTriggerMode(index) {
+            if (!bridge || !stateReady || visibilityModeIndex === 0
+                    || index < 0 || index >= revealTriggerModes.length)
+                return
+            bridge.updateDockRevealTriggerMode(revealTriggerModes[index])
         }
 
         function saveWindowGrouping(index) {
@@ -1160,6 +1175,45 @@ ApplicationWindow {
                             currentIndex: dockPage.visibilityModeIndex
                             onSelectionChanged: function(index) {
                                 dockPage.saveVisibilityMode(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↥"; tint: "#0a84ff" }
+                        Text {
+                            text: "隐藏时呼出范围"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            objectName: "dock-reveal-trigger-picker"
+                            model: [
+                                { id: "fullEdge", label: "整个屏幕边缘" },
+                                { id: "dockSpan", label: "Dock 对应边缘" }
+                            ]
+                            itemWidthOverride: 112
+                            currentIndex: dockPage.revealTriggerModeIndex
+                            disabled: !dockPage.stateReady || dockPage.visibilityModeIndex === 0
+                            onSelectionChanged: function(index) {
+                                // Restore the confirmed-state binding after
+                                // LiquidNavBar.select assigns currentIndex.
+                                currentIndex = Qt.binding(function() {
+                                    return dockPage.revealTriggerModeIndex
+                                })
+                                dockPage.saveRevealTriggerMode(index)
                             }
                         }
                     }

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { revealHitRect } from '../../shell/desktop/modules/dock/DockRevealGeometry.mjs';
 
 const bottom = {
-    position: 'bottom', windowWidth: 1000, windowHeight: 800,
+    triggerMode: 'dockSpan', position: 'bottom', windowWidth: 1000, windowHeight: 800,
     dockX: 300, dockY: 720, dockWidth: 400, dockHeight: 60,
     active: true, expanded: false,
 };
@@ -119,4 +119,43 @@ test('fully off-surface Docks and unsupported positions are inert', () => {
         assert.deepEqual(revealHitRect({ ...bottom, ...change }), empty);
         assert.deepEqual(revealHitRect({ ...bottom, ...change, expanded: true }), empty);
     }
+});
+
+
+for (const [name, input] of positions) {
+    test(`${name}: missing or invalid mode preserves the legacy 14px full edge`, () => {
+        const expected = name === 'bottom'
+            ? { x: 0, y: 786, width: 1000, height: 14 }
+            : { x: name === 'left' ? 0 : 986, y: 0, width: 14, height: 800 };
+        for (const triggerMode of [undefined, 'fullEdge', '', 'invalid', null]) {
+            assert.deepEqual(revealHitRect({ ...input, triggerMode }), expected);
+            assert.deepEqual(revealHitRect({ ...input, triggerMode, expanded: true }), expected);
+        }
+    });
+    test(`${name}: legacy full edge does not depend on Dock layout readiness`, () => {
+        const expected = revealHitRect({ ...input, triggerMode: 'fullEdge' });
+        for (const layout of [{ dockWidth: 0, dockHeight: 0 },
+            { dockX: NaN, dockY: undefined, dockWidth: 0, dockHeight: 0 },
+            { dockX: -5000, dockY: -5000 }])
+            assert.deepEqual(revealHitRect({ ...input, ...layout, triggerMode: 'fullEdge' }), expected);
+        assert.deepEqual(revealHitRect({ ...input, triggerMode: 'fullEdge', active: false }), empty);
+    });
+}
+
+test('switching modes replaces the span and does not retain expanded geometry', () => {
+    assert.deepEqual(revealHitRect({ ...bottom, expanded: true }),
+        { x: 300, y: 778, width: 400, height: 22 });
+    assert.deepEqual(revealHitRect({ ...bottom, expanded: true, triggerMode: 'fullEdge' }),
+        { x: 0, y: 786, width: 1000, height: 14 });
+    assert.deepEqual(revealHitRect(bottom), { x: 300, y: 798, width: 400, height: 2 });
+});
+
+test('legacy full edge safely clips small surfaces and rejects invalid surfaces', () => {
+    assert.deepEqual(revealHitRect({ ...bottom, triggerMode: 'fullEdge', windowHeight: 4 }),
+        { x: 0, y: 0, width: 1000, height: 4 });
+    assert.deepEqual(revealHitRect({ ...positions[1][1], triggerMode: 'fullEdge', windowWidth: 3 }),
+        { x: 0, y: 0, width: 3, height: 800 });
+    for (const change of [{ windowWidth: 0 }, { windowHeight: -1 },
+        { windowWidth: NaN }, { windowHeight: Infinity }, { position: 'top' }])
+        assert.deepEqual(revealHitRect({ ...bottom, ...change, triggerMode: 'fullEdge' }), empty);
 });

@@ -92,6 +92,9 @@ QtObject {
     // Dock show mode. Single mutually-exclusive enum: "always" | "smart" |
     // "persistent". Never store two booleans — that allows impossible states.
     property string visibilityMode: "always"
+    // Hidden-Dock pointer target. Preserve the full-edge default for existing
+    // configurations; dockSpan opts into only the Dock's projected edge span.
+    property string revealTriggerMode: "fullEdge"
     // Window grouping mode: "grouped" (macOS style - 1 icon per app) | "separate" (classic taskbar)
     property string windowGrouping: "grouped"
     // Shell controls stay separate from the persisted application pin order.
@@ -386,6 +389,19 @@ QtObject {
         return true
     }
 
+    function isValidRevealTriggerMode(value) {
+        return value === "fullEdge" || value === "dockSpan"
+    }
+
+    function updateRevealTriggerMode(rawMode) {
+        const nextMode = String(rawMode)
+        if (!isValidRevealTriggerMode(nextMode) || revealTriggerMode === nextMode)
+            return false
+        revealTriggerMode = nextMode
+        scheduleSave()
+        return true
+    }
+
     function updateWindowGrouping(rawMode) {
         const nextMode = String(rawMode)
         if (!isValidWindowGrouping(nextMode) || windowGrouping === nextMode)
@@ -540,6 +556,7 @@ QtObject {
             iconTintColor:    svc.iconTintColor,
             // Show mode (v3)
             visibilityMode: svc.visibilityMode,
+            revealTriggerMode: svc.revealTriggerMode,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
@@ -582,6 +599,15 @@ QtObject {
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
+        if (isValidRevealTriggerMode(obj.revealTriggerMode)) {
+            svc.revealTriggerMode = obj.revealTriggerMode
+        } else {
+            svc.revealTriggerMode = "fullEdge"
+            if (obj.revealTriggerMode !== undefined) {
+                console.warn("[DockConfig] invalid revealTriggerMode ignored -> fullEdge")
+                scheduleSave()
+            }
+        }
         if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {
