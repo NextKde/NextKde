@@ -472,6 +472,14 @@ if(BUILD_TESTING)
     # so an earlier set_tests_properties would name a test that does not exist
     # yet. Without this line the test carries no label and no layer runs it.
     set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
+    if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-lockscreen.wake-authentication
+            COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/headless/tst_wake.qml)
+        set_tests_properties(kos-lockscreen.wake-authentication PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
+            LABELS ui TIMEOUT 30)
+    endif()
 endif()
 
 if(KOS_BUILD_CALENDAR)

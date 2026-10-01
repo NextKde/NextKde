@@ -56,6 +56,11 @@ kwriteconfig6 --file plasmashellrc --group Shell --key ShellPackage org.kos.desk
 未完成的密文；「显示密码」切换明文；大写锁定开着时会有提示（复用
 `org.kde.plasma.private.keyboardindicator`，与上游默认主题同源）。
 
+如果初次认证请求被暂缓，或非交互认证通道已经超时，键盘、鼠标交互会重新发起认证。
+重试失败通道时保留密码会话和已输入的文字，遵守 PAM 的失败等待时间；只有用户交互
+才会请求重试，不在后台循环开启摄像头。离屏测试覆盖实际按键与点击、密码保留、
+通道超时、失败等待以及解锁成功后停止重试。
+
 ## 背景壁纸：为什么要自己再画一遍
 
 greeter 交过来的 `wallpaper` 是壁纸包的根 item。`org.kde.image` 内部用 C++ 的

@@ -133,9 +133,16 @@ Item {
         }
     }
 
+    WakeAuthentication {
+        id: wakeAuthentication
+        backend: authenticator
+        blocked: graceLockTimer.running
+    }
+
     function wake() {
         idleTimer.restart()
         inputField.forceActiveFocus()
+        wakeAuthentication.request()
     }
 
     function submit() {
@@ -646,6 +653,7 @@ Item {
 
         TextField {
             id: inputField
+            objectName: "passwordField"
 
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
@@ -860,7 +868,16 @@ Item {
                 }
             }
 
-            onTextEdited: idleTimer.restart()
+            Keys.onPressed: event => {
+                if (event.key !== Qt.Key_Escape && !event.isAutoRepeat)
+                    root.wake()
+                event.accepted = false
+            }
+            TapHandler {
+                onPressedChanged: if (pressed) wakeAuthentication.request()
+            }
+            // Includes input methods and paste, which need not emit key events.
+            onTextEdited: root.wake()
             onAccepted: root.submit()
         }
 

@@ -16,8 +16,9 @@
 import QtQml
 
 QtObject {
-    signal failed(int kind)
+    signal failed(int kind, var channel)
     signal succeeded()
+    signal loginFailedDelayStarted(int kind, var channel, int usecDelay)
 
     property string infoMessage: ""
     property string errorMessage: ""
@@ -44,7 +45,10 @@ QtObject {
     // A conversation ends with the attempt that ran it, and the real object
     // returns to Idle there -- that is what lets the *next* start request be
     // answered instead of being refused by the state check above.
-    onFailed: state = idle
+    onFailed: (kind, channel) => {
+        if (kind === 0)
+            state = idle
+    }
 
     function startAuthenticating() {
         if (state === authenticating || graceLocked) {

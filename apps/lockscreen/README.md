@@ -62,6 +62,13 @@ field and asks the greeter to forget the pending secret, "显示密码" toggles
 cleartext, and a caps-lock hint appears while caps lock is on (via
 `org.kde.plasma.private.keyboardindicator`, the same module upstream uses).
 
+Keyboard and pointer activity also restart authentication if the initial request
+was refused or a noninteractive channel timed out. Failed channels are retried
+without cancelling the password conversation or clearing typed text. Retries
+respect PAM's failure delay and require user activity; they do not run a camera
+in a background retry loop. The headless suite covers real key/click delivery,
+password preservation, channel timeout, failure delay, and successful unlock.
+
 ## The wallpaper, and why the theme draws it again
 
 The `wallpaper` the greeter hands over is the root item of a wallpaper package.
