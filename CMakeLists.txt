@@ -100,8 +100,18 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs
         )
         set_tests_properties(kos-shell.process-identity PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.dock-reveal-geometry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/test_geometry.mjs)
+        set_tests_properties(kos-shell.dock-reveal-geometry PROPERTIES LABELS logic TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-shell.dock-reveal-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-reveal-runtime PROPERTIES LABELS ui TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-deskcenter.density-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/run.mjs
