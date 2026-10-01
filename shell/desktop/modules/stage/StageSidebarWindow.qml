@@ -1658,8 +1658,10 @@ PanelWindow {
                 - StageGeo.CARD_OVERFLOW_MARGIN
             : StageGeo.CARD_OVERFLOW_MARGIN
         anchors {
+            // 顶距跟随顶栏厚度（barHeight 默认 35 + 11 视觉间隙 = 46，删
+            // 除"Stage"标题时代的等效值）；别的机器调高顶栏时卡片跟着让位
             top: parent.top
-            topMargin: 46
+            topMargin: ConfigService.barHeight + 11
             bottom: parent.bottom
             // 给底部 dock 让位：末卡（含辉光/悬停放大/扇叠外扩，布局内的
             // GLOW_PAD 已计辉光）不得压进 dock 屏幕区挡住图标。dock 厚度取

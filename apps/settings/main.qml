@@ -1708,7 +1708,7 @@ ApplicationWindow {
                             { id: "aggressive", label: "激进压缩",
                               detail: "进入后台持续压缩（每 5 分钟重压），内存占用降到最低" },
                             { id: "kill", label: "极限",
-                              detail: "先持续压缩，后台 10 分钟后直接结束应用——内存归零。未保存工作会丢失（浏览器可恢复会话）；konsole/ZCode 默认豁免" }
+                              detail: "先持续压缩，后台 10 分钟后直接结束应用——内存归零。未保存工作会丢失（浏览器可恢复会话）；把不想被结束的应用加进下方名单即可豁免" }
                         ]
 
                         delegate: Rectangle {
