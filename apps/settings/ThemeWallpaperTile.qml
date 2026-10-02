@@ -24,16 +24,7 @@ Rectangle {
         x: 5; y: 5
         width: parent.width - 10; height: parent.height - 62
         themeId: root.themeId
-    }
-    // Keep nested background layers active while hiding the uncropped scene.
-    ShaderEffectSource {
-        id: previewTexture
-        width: previewScene.width
-        height: previewScene.height
-        sourceItem: previewScene
-        hideSource: true
-        live: true
-        smooth: true
+        // The PNG supplies its texture directly to the rounded mask below.
         visible: false
     }
     Rectangle {
@@ -43,7 +34,7 @@ Rectangle {
     }
     MultiEffect {
         x: 5; y: 5; width: root.width-10; height: root.height-62
-        source: previewTexture
+        source: previewScene
         maskEnabled: true
         maskSource: previewMask
     }

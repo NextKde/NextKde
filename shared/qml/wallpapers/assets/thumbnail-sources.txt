@@ -1,0 +1,4 @@
+Static grid artwork adapted from the former QML fallback in ThemeWallpaperThumbnail.qml.
+Authoring sources: starfield-thumbnail.svg, weather-thumbnail.svg.
+PNG generation: rsvg-convert --width 640 --height 384 --output NAME.png NAME.svg
+Settings and preview grids load the PNG files; SVG files are offline authoring sources.
