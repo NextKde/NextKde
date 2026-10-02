@@ -37,9 +37,9 @@ PanelWindow {
     // handle tucks 6px inside the true edge, so the Home Indicator can sit
     // right at the physical edge while the glass keeps breathing room (§9.2).
     //
-    // A bottom dock spans the full screen width; a side dock now spans the full
-    // screen height (anchored top+bottom) so it can host the full-height reveal
-    // handle, with the glass column vertically centred inside.
+    // A bottom surface spans the full screen width; a side surface spans the
+    // full screen height (anchored top+bottom). In dockSpan trigger mode, the
+    // input mask limits the reveal target to the glass's projection onto it.
     //
     // position is a per-edge literal baked into the matching Component in
     // Dock.qml; switching edges recreates this window instead of patching a
@@ -282,11 +282,17 @@ PanelWindow {
     DockRevealHandle {
         id: revealHandle
         position: root.position
+        triggerMode: ConfigService.revealTriggerMode
         windowWidth: root.width
         windowHeight: root.height
         fadeOpacity: hide.handleOpacity
+        dockX: root.restX
+        dockY: root.restY
         dockWidth: dockContainer.width
         dockHeight: dockContainer.height
+        // dockSpan keeps the edge-to-glass gap interactive while showing/shown/
+        // hiding, but not while waiting for the initial reveal delay.
+        expanded: hide.revealProgress > 0 || hide.phase === "Showing"
         // Wallpaper ambient, same liquid material as the dock's popups.
         ambientPrimary: WallpaperColorSource.primary
         ambientSecondary: WallpaperColorSource.secondary

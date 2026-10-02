@@ -152,6 +152,8 @@ Item {
                 ? ConfigService.iconMode : "color"
             const visibilityMode = ConfigService.isValidVisibilityMode(ConfigService.visibilityMode)
                 ? ConfigService.visibilityMode : "always"
+            const revealTriggerMode = ConfigService.isValidRevealTriggerMode(ConfigService.revealTriggerMode)
+                ? ConfigService.revealTriggerMode : "fullEdge"
             const windowGrouping = ConfigService.isValidWindowGrouping(ConfigService.windowGrouping)
                 ? ConfigService.windowGrouping : "grouped"
             const dockStyle = ConfigService.isValidDockStyle(ConfigService.dockStyle)
@@ -173,6 +175,7 @@ Item {
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
                 visibilityMode,
+                revealTriggerMode,
                 windowGrouping,
                 showLauncher: ConfigService.showLauncher,
                 showTrash: ConfigService.showTrash,
@@ -251,6 +254,11 @@ Item {
 
         function updateVisibilityMode(mode: string): string {
             ConfigService.updateVisibilityMode(mode)
+            return snapshot()
+        }
+
+        function updateRevealTriggerMode(mode: string): string {
+            ConfigService.updateRevealTriggerMode(mode)
             return snapshot()
         }
 

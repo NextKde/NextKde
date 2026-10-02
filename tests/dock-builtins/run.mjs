@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Run the real configuration service and JSON transport twice. Only the
+// Run the real configuration service and JSON transport across three starts. Only the
 // platform's state storage is replaced, so this never writes user settings.
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 const directory = mkdtempSync(join(tmpdir(), "kos-dock-builtins-"));
@@ -41,7 +41,8 @@ async function run(reload) {
             XDG_STATE_HOME: join(directory, "state"),
             KOS_PLATFORM_SOCKET: socket,
             KOS_DATA_SOCKET: join(directory, "absent-data.sock"),
-            KOS_TEST_RELOAD: reload ? "1" : "0",
+            KOS_TEST_RELOAD: String(reload),
+            WAYLAND_DISPLAY: "", DISPLAY: "",
         },
     });
     let output = "";
@@ -55,7 +56,8 @@ async function run(reload) {
         });
         assert.equal(status, 0, output);
         assert.doesNotMatch(output, /FAIL |ReferenceError|TypeError|Binding loop/);
-        assert.ok(output.includes(reload ? "DOCK_BUILTINS_RELOAD_PASS"
+        assert.ok(output.includes(reload === 2 ? "DOCK_BUILTINS_DEFAULT_RELOAD_PASS"
+            : reload === 1 ? "DOCK_BUILTINS_RELOAD_PASS"
             : "DOCK_BUILTINS_SAVE_PASS"), output);
     } finally {
         clearTimeout(timeout);
@@ -69,13 +71,20 @@ try {
     symlinkSync(join(repository, "shell/Kos"), join(directory, "Kos"), "dir");
     mkdirSync(join(directory, "config"));
     await new Promise((resolve) => server.listen(socket, resolve));
-    await run(false);
+    await run(0);
     assert.ok([...saved.values()].some((data) => {
         const value = JSON.parse(data);
-        return value.showLauncher === false && value.showTrash === false;
-    }), "both visibility preferences must be serialized as booleans");
-    await run(true);
-    console.log("Dock built-ins: defaults, independent toggles, persistence and restart passed");
+        return value.showLauncher === false && value.showTrash === false
+            && value.revealTriggerMode === "dockSpan";
+    }), "visibility booleans and the selected trigger mode must be serialized");
+    await run(1);
+    assert.ok([...saved.values()].some((data) => {
+        const value = JSON.parse(data);
+        return value.showLauncher === true && value.showTrash === true
+            && value.revealTriggerMode === "fullEdge";
+    }), "restoring defaults must also persist");
+    await run(2);
+    console.log("Dock built-ins and reveal trigger: defaults, validation, independent toggles, persistence and restart passed");
 } finally {
     server.close();
     rmSync(directory, { recursive: true, force: true });

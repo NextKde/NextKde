@@ -401,6 +401,14 @@ watched QML source tree.
 `persistent` (stay hidden regardless of windows). Never persist separate
 booleans for these; that only produces illegal combinations.
 
+`DockConfigService.revealTriggerMode` is independent of visibility mode:
+`fullEdge` (the default) preserves the existing whole-edge trigger, while
+`dockSpan` opts into revealing only along the Dock's footprint. Missing or
+invalid saved values load as `fullEdge`; changing this choice must not require
+restarting the shell or changing the visibility policy. Settings use
+`updateRevealTriggerMode`, and the saved configuration and settings snapshot
+carry the same `revealTriggerMode` field.
+
 Components:
 
 - `DockAutoHideController.qml` — a plain per-surface component, **not** a
@@ -409,8 +417,10 @@ Components:
   It drives one `revealProgress` value; every visual offset, opacity and scale
   derives from it. It never persists configuration or creates windows.
 - `DockRevealHandle.qml` — the iOS-style white home indicator shown while
-  hidden. Pure visual + pointer input; separates the visual pill from a larger
-  invisible hit target and reads no services.
+  hidden. Pure visual + pointer input; separates the visual pill from the
+  invisible edge target and reads no services. `DockRevealGeometry.mjs` owns
+  the target geometry; the window supplies its static full-reveal Dock
+  rectangle in surface-local logical coordinates.
 - `DockAutoHideMath.mjs` + `test_autohide.mjs` — pure, unit-tested geometry
   and policy functions (`visibleDockRect`, eligibility filtering, conflict
   hysteresis). Geometry and policy must not be scattered into QML bindings.
@@ -438,6 +448,24 @@ Non-negotiable invariants:
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
    through. In `always` mode the handle hit target is zero-sized.
+   In the default `fullEdge` mode the existing **14 logical-pixel strip along
+   the whole screen edge** and screen-centred hint are preserved, independent
+   of Dock layout readiness or reveal progress.
+   In opt-in `dockSpan` mode a hidden Dock only responds in a **2 logical-pixel
+   strip at the screen edge, along the Dock's actual span**. The rest of that
+   edge, and the Dock's future footprint above it, remain pass-through. The span follows layout
+   changes and side-Dock top-bar reservations; it is not screen-centred by
+   assumption and does not follow animated transforms.
+   The strip stays narrow during `RevealPending`. Once showing starts, and
+   while reveal progress is nonzero, it extends across the floating gap and
+   2 logical pixels into the static Dock rectangle. This allows slow pointer
+   travel from the edge into the Dock without losing the hover hold. Once
+   fully hidden, it contracts to the edge strip again. Invalid or empty Dock
+   geometry produces an empty target in `dockSpan` mode. Disabling or shrinking
+   a hovered target, including by changing trigger modes, must release its
+   controller hold if the pointer is no longer inside. In `dockSpan` mode the
+   decorative pill follows the Dock's centre; it does not define the input
+   region in either mode.
 4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
    That mode also gives newly opened windows the same `workspaceGap` as the
    Dock's screen-edge float, preserving visible breathing room. Smart and

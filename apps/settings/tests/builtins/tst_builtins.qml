@@ -12,17 +12,103 @@ Item {
         property var calls: []
         property var groupingCalls: []
         property var indicatorCalls: []
+        property var revealCalls: []
+        property bool deferSnapshot: false
         signal dockSnapshotChanged(var state)
         signal dockBuiltinVisibilityChanged(var state)
         signal dockRevealIndicatorVisibilityChanged(var state)
-        function dockSnapshot() { dockSnapshotChanged(snapshot) }
+        function dockSnapshot() { if (!deferSnapshot) dockSnapshotChanged(snapshot) }
         function updateDockBuiltinVisibility(id, visible) { calls = calls.concat([{id, visible}]) }
         function updateDockRevealIndicatorVisibility(visible) { indicatorCalls = indicatorCalls.concat([visible]) }
         function updateDockWindowGrouping(mode) { groupingCalls = groupingCalls.concat([mode]) }
+        function updateDockRevealTriggerMode(mode) { revealCalls = revealCalls.concat([mode]) }
     }
     TestCase {
         name: "SettingsBuiltins"
         when: windowShown
+        function init() {
+            bridge.snapshot = {baseHeight:60, position:"bottom", contentStyle:"compact",
+                dockStyle:"floating", visibilityMode:"smart", windowGrouping:"grouped",
+                showLauncher:true, showTrash:true}
+            bridge.calls = []
+            bridge.groupingCalls = []
+            bridge.revealCalls = []
+            bridge.deferSnapshot = false
+            bridge.lastError = ""
+        }
+
+        function test_reveal_choice_roundtrip() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage:3})
+            verify(app !== null)
+            try {
+                const picker = findChild(app.contentItem, "dock-reveal-trigger-picker")
+                verify(picker !== null)
+                const scroll = findChild(app.contentItem, "settings-page-scroll")
+                verify(waitForRendering(picker))
+                scroll.contentY = picker.mapToItem(scroll.contentItem, 0, 0).y - 80
+                verify(waitForRendering(picker))
+                compare(picker.currentIndex, 0, "old snapshots retain whole-edge triggering")
+                verify(!picker.disabled)
+                mouseClick(picker, picker.width * 0.75, picker.height / 2)
+                compare(bridge.revealCalls.length, 1)
+                compare(bridge.revealCalls[0], "dockSpan")
+                compare(picker.currentIndex, 0, "request does not replace confirmed state")
+                bridge.lastError = "save failed"
+                bridge.dockSnapshotChanged({})
+                compare(picker.currentIndex, 0, "failed update preserves the last confirmed state")
+                bridge.lastError = ""
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {revealTriggerMode:"dockSpan"})
+                bridge.dockSnapshot()
+                compare(picker.currentIndex, 1, "snapshot acknowledgement updates the picker")
+                mouseClick(picker, picker.width * 0.25, picker.height / 2)
+                compare(bridge.revealCalls.length, 2)
+                compare(bridge.revealCalls[1], "fullEdge")
+                compare(picker.currentIndex, 1)
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {revealTriggerMode:"fullEdge"})
+                bridge.dockSnapshot()
+                compare(picker.currentIndex, 0)
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {revealTriggerMode:"dockSpan", visibilityMode:"always"})
+                bridge.dockSnapshot()
+                compare(picker.currentIndex, 1, "always-visible mode preserves the saved choice")
+                verify(picker.disabled)
+                mouseClick(picker, picker.width * 0.25, picker.height / 2)
+                compare(bridge.revealCalls.length, 2, "disabled and snapshot updates cannot write")
+            } finally {
+                app.destroy()
+            }
+        }
+
+        function test_reveal_loading_guard() {
+            bridge.deferSnapshot = true
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage:3})
+            verify(app !== null)
+            try {
+                const picker = findChild(app.contentItem, "dock-reveal-trigger-picker")
+                verify(picker !== null)
+                const scroll = findChild(app.contentItem, "settings-page-scroll")
+                verify(waitForRendering(picker))
+                scroll.contentY = picker.mapToItem(scroll.contentItem, 0, 0).y - 80
+                verify(waitForRendering(picker))
+                verify(picker.disabled, "unknown configuration cannot be edited")
+                mouseClick(picker, picker.width * 0.75, picker.height / 2)
+                compare(bridge.revealCalls.length, 0)
+                bridge.dockSnapshotChanged({})
+                verify(picker.disabled, "failed initial load must stay disabled")
+                bridge.deferSnapshot = false
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {revealTriggerMode:"dockSpan"})
+                bridge.dockSnapshot()
+                verify(!picker.disabled)
+                compare(picker.currentIndex, 1)
+                compare(bridge.revealCalls.length, 0, "loading the value does not write it back")
+            } finally {
+                app.destroy()
+            }
+        }
+
         function test_grouping_binding() {
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
