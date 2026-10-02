@@ -97,6 +97,8 @@ QtObject {
     // Shell controls stay separate from the persisted application pin order.
     property bool showLauncher: true
     property bool showTrash: true
+    // Visual hint only; the edge hit target remains active when disabled.
+    property bool showRevealIndicator: true
     // Becomes true once config load finishes (success, missing file, or parse
     // error). The auto-hide controller waits on this before its first reveal
     // decision so a saved smart/persistent dock never flashes fully shown.
@@ -215,6 +217,14 @@ QtObject {
         if (contentStyle === nextStyle)
             return false
         contentStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function updateRevealIndicatorVisibility(visible) {
+        if (typeof visible !== "boolean" || svc.showRevealIndicator === visible)
+            return false
+        svc.showRevealIndicator = visible
         scheduleSave()
         return true
     }
@@ -521,7 +531,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 9,
+            version: 10,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -544,6 +554,7 @@ QtObject {
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
             showTrash: svc.showTrash,
+            showRevealIndicator: svc.showRevealIndicator,
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
@@ -582,6 +593,7 @@ QtObject {
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
+        svc.showRevealIndicator = obj.showRevealIndicator !== false
         if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {

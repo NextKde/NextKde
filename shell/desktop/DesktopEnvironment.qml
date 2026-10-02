@@ -176,11 +176,17 @@ Item {
                 windowGrouping,
                 showLauncher: ConfigService.showLauncher,
                 showTrash: ConfigService.showTrash,
+                showRevealIndicator: ConfigService.showRevealIndicator,
             })
         }
 
         function updateLayout(height: real): string {
             ConfigService.updateLayout(height)
+            return snapshot()
+        }
+
+        function updateRevealIndicatorVisibility(visible: bool): string {
+            ConfigService.updateRevealIndicatorVisibility(visible)
             return snapshot()
         }
 
