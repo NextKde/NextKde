@@ -18,9 +18,9 @@ import "../../../Kos/Ui"
 PanelWindow {
     id: root
 
-    // Distinguish this surface from other quickshell panels so the glass
-    // plugin can give it its own highlight direction.
-    WlrLayershell.namespace: "quickshell-dock"
+    // KWin maps this namespace to the Dock window type. An unrecognised name
+    // makes the transparent surface a normal window in Window View.
+    WlrLayershell.namespace: "dock"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
     // The Dock lives on Top, but the fullscreen launcher (a Top surface

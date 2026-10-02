@@ -23,6 +23,9 @@ import "../../../Kos/Ui"
 PanelWindow {
     id: root
 
+    // The transparent notification surface is not an application window.
+    WlrLayershell.namespace: "notification"
+
     required property var groupService
     property int exitDuration: 200
 
