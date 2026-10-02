@@ -13,7 +13,8 @@ PanelWindow {
 
     property bool barEnabled: true
 
-    WlrLayershell.namespace: "quickshell-bar"
+    // Exclude the panel surface from KWin's application-window effects.
+    WlrLayershell.namespace: "dock"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
     // The Bar lives on Top, but the fullscreen launcher (a Top surface
