@@ -36,12 +36,15 @@ jobs:
 
       # node and python drive the platform layer without a display. Building
       # the platform also builds its AI worker, which requires OpenCV and the
-      # CPU ONNX Runtime headers/library.
+      # CPU ONNX Runtime headers/library. Kos.SurfaceShape is also built with
+      # KOS_BUILD_PLATFORM=ON, even when KWin plugins are disabled; it needs
+      # ECM, the Wayland scanner/client library, and Qt WaylandClient.
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative \
+            qt6-base qt6-declarative qt6-wayland \
+            extra-cmake-modules wayland \
             kwindowsystem kiconthemes kglobalaccel kio \
             go dbus nodejs python opencv onnxruntime-cpu
 
@@ -97,14 +100,15 @@ jobs:
       # pull their own dependencies on top of the core set: `KWin` and
       # `KDecoration3` come from the `kwin` and `kdecoration` packages, and the
       # plugins additionally want Qt6 Widgets/OpenGL and gettext for the i18n
-      # catalogs. This list is `arch_kwin_build_packages` in tools/kosctl:35.
+      # catalogs. Kos.SurfaceShape needs the core Qt Wayland and Wayland
+      # protocol-generation dependencies from tools/kosctl as well.
       - name: Install plugin build dependencies
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative \
+            qt6-base qt6-declarative qt6-wayland \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
-            kcoreaddons kdecoration gettext libxcb vulkan-headers
+            kcoreaddons kdecoration gettext libxcb vulkan-headers wayland
 
       # Compiling is all this job proves, and that is deliberate. Whether the
       # plugin then loads, and whether the install path relabels correctly, is
