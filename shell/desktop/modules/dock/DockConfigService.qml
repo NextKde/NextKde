@@ -92,11 +92,16 @@ QtObject {
     // Dock show mode. Single mutually-exclusive enum: "always" | "smart" |
     // "persistent". Never store two booleans — that allows impossible states.
     property string visibilityMode: "always"
+    // Hidden-Dock pointer target. Preserve the full-edge default for existing
+    // configurations; dockSpan opts into only the Dock's projected edge span.
+    property string revealTriggerMode: "fullEdge"
     // Window grouping mode: "grouped" (macOS style - 1 icon per app) | "separate" (classic taskbar)
     property string windowGrouping: "grouped"
     // Shell controls stay separate from the persisted application pin order.
     property bool showLauncher: true
     property bool showTrash: true
+    // Visual hint only; the edge hit target remains active when disabled.
+    property bool showRevealIndicator: true
     // Becomes true once config load finishes (success, missing file, or parse
     // error). The auto-hide controller waits on this before its first reveal
     // decision so a saved smart/persistent dock never flashes fully shown.
@@ -215,6 +220,14 @@ QtObject {
         if (contentStyle === nextStyle)
             return false
         contentStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function updateRevealIndicatorVisibility(visible) {
+        if (typeof visible !== "boolean" || svc.showRevealIndicator === visible)
+            return false
+        svc.showRevealIndicator = visible
         scheduleSave()
         return true
     }
@@ -386,6 +399,19 @@ QtObject {
         return true
     }
 
+    function isValidRevealTriggerMode(value) {
+        return value === "fullEdge" || value === "dockSpan"
+    }
+
+    function updateRevealTriggerMode(rawMode) {
+        const nextMode = String(rawMode)
+        if (!isValidRevealTriggerMode(nextMode) || revealTriggerMode === nextMode)
+            return false
+        revealTriggerMode = nextMode
+        scheduleSave()
+        return true
+    }
+
     function updateWindowGrouping(rawMode) {
         const nextMode = String(rawMode)
         if (!isValidWindowGrouping(nextMode) || windowGrouping === nextMode)
@@ -521,7 +547,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 9,
+            version: 10,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -540,10 +566,12 @@ QtObject {
             iconTintColor:    svc.iconTintColor,
             // Show mode (v3)
             visibilityMode: svc.visibilityMode,
+            revealTriggerMode: svc.revealTriggerMode,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
             showTrash: svc.showTrash,
+            showRevealIndicator: svc.showRevealIndicator,
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
@@ -582,6 +610,16 @@ QtObject {
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
+        svc.showRevealIndicator = obj.showRevealIndicator !== false
+        if (isValidRevealTriggerMode(obj.revealTriggerMode)) {
+            svc.revealTriggerMode = obj.revealTriggerMode
+        } else {
+            svc.revealTriggerMode = "fullEdge"
+            if (obj.revealTriggerMode !== undefined) {
+                console.warn("[DockConfig] invalid revealTriggerMode ignored -> fullEdge")
+                scheduleSave()
+            }
+        }
         if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {

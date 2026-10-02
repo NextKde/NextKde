@@ -135,8 +135,18 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs
         )
         set_tests_properties(kos-shell.process-identity PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.dock-reveal-geometry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/test_geometry.mjs)
+        set_tests_properties(kos-shell.dock-reveal-geometry PROPERTIES LABELS logic TIMEOUT 10)
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-shell.dock-reveal-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-reveal-runtime PROPERTIES LABELS ui TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-deskcenter.density-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/run.mjs
@@ -158,6 +168,18 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.app-launch-resolution PROPERTIES
                 LABELS ui TIMEOUT 45
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.dock-startup
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-startup/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-startup PROPERTIES LABELS ui TIMEOUT 60)
+            add_test(NAME kos-shell.dock-reveal-indicator
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal-indicator/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
+                LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
@@ -517,6 +539,14 @@ if(BUILD_TESTING)
     # so an earlier set_tests_properties would name a test that does not exist
     # yet. Without this line the test carries no label and no layer runs it.
     set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
+    if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-lockscreen.wake-authentication
+            COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/headless/tst_wake.qml)
+        set_tests_properties(kos-lockscreen.wake-authentication PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
+            LABELS ui TIMEOUT 30)
+    endif()
 endif()
 
 if(KOS_BUILD_CALENDAR)

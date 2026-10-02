@@ -225,7 +225,7 @@ Item {
 
                 // A rejected attempt clears the field and surfaces the message.
                 lock.entry = "wrong"
-                wrapper.authenticator.failed(0)
+                wrapper.authenticator.failed(0, null)
                 wrapper.check(lock.entry === "", 109)
                 wrapper.check(lock.notification.length > 0, 108)
 

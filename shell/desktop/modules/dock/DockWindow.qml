@@ -19,9 +19,9 @@ import "../../../Kos/Ui"
 PanelWindow {
     id: root
 
-    // Distinguish this surface from other quickshell panels so the glass
-    // plugin can give it its own highlight direction.
-    WlrLayershell.namespace: "quickshell-dock"
+    // KWin maps this namespace to the Dock window type. An unrecognised name
+    // makes the transparent surface a normal window in Window View.
+    WlrLayershell.namespace: "dock"
     color: "transparent"
     exclusionMode: ExclusionMode.Normal
     // The Dock lives on Top, but the fullscreen launcher (a Top surface
@@ -38,9 +38,9 @@ PanelWindow {
     // handle tucks 6px inside the true edge, so the Home Indicator can sit
     // right at the physical edge while the glass keeps breathing room (§9.2).
     //
-    // A bottom dock spans the full screen width; a side dock now spans the full
-    // screen height (anchored top+bottom) so it can host the full-height reveal
-    // handle, with the glass column vertically centred inside.
+    // A bottom surface spans the full screen width; a side surface spans the
+    // full screen height (anchored top+bottom). In dockSpan trigger mode, the
+    // input mask limits the reveal target to the glass's projection onto it.
     //
     // position is a per-edge literal baked into the matching Component in
     // Dock.qml; switching edges recreates this window instead of patching a
@@ -141,9 +141,12 @@ PanelWindow {
         // combines the two independently shaped surfaces into one region.
         // Transparent style removes only the Dock's shared capsule; the
         // reveal handle and component-owned card surfaces stay intact.
-        regions: ConfigService.dockStyle === "transparent"
-            ? [revealHandle.blurRegion]
-            : [pill.blurRegion, revealHandle.blurRegion]
+        regions: {
+            const regions = ConfigService.dockStyle === "transparent" ? [] : [pill.blurRegion]
+            if (revealHandle.blurRegion)
+                regions.push(revealHandle.blurRegion)
+            return regions
+        }
     }
 
     // A taskbar spans the edge. A floating Dock remains centred along its
@@ -294,16 +297,23 @@ PanelWindow {
     DockRevealHandle {
         id: revealHandle
         position: root.position
+        triggerMode: ConfigService.revealTriggerMode
         windowWidth: root.width
         windowHeight: root.height
         fadeOpacity: hide.handleOpacity
+        dockX: root.restX
+        dockY: root.restY
         dockWidth: dockContainer.width
         dockHeight: dockContainer.height
+        // dockSpan keeps the edge-to-glass gap interactive while showing/shown/
+        // hiding, but not while waiting for the initial reveal delay.
+        expanded: hide.revealProgress > 0 || hide.phase === "Showing"
         // Wallpaper ambient, same liquid material as the dock's popups.
         ambientPrimary: WallpaperColorSource.primary
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         active: hide.handleActive
+        showIndicator: ConfigService.showRevealIndicator
         onEntered: hide.handleEntered()
         onExited: hide.handleExited()
         onClicked: hide.handleClicked()

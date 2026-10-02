@@ -36,3 +36,14 @@ for scale in 2 1; do
 done
 test -f lock.png
 echo "ok: all assertions passed, lock.png rendered"
+
+qmltest=$(command -v qmltestrunner6 || command -v qmltestrunner || true)
+if [ -z "$qmltest" ] && [ -x /usr/lib/qt6/bin/qmltestrunner ]; then
+    qmltest=/usr/lib/qt6/bin/qmltestrunner
+fi
+if [ -z "$qmltest" ]; then
+    echo "qmltestrunner (Qt 6) is required for lock-screen input tests" >&2
+    exit 93
+fi
+dbus-run-session -- env QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software \
+    QML_DISABLE_DISK_CACHE=1 timeout 30 "$qmltest" -input tst_wake.qml

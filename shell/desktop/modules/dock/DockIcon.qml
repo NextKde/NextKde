@@ -921,10 +921,10 @@ Item {
                 } else {
                     menu.addItem("folder-open", "打开", "open")
                     menu.addItem("window-new", "新建窗口", "new_window")
-                    if (icon.isRunning)
-                        menu.addItem("window-close", "关闭所有窗口", "close_all")
                     menu.addItem(pinned ? "unpin" : "pin",
                         pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
+                    if (icon.isRunning)
+                        menu.addItem("window-close", "关闭所有窗口", "close_all")
                 }
                 DockModelService.activeContextMenu = menu
                 DockModelService.openDockPopup(menu)

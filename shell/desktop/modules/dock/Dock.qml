@@ -13,6 +13,11 @@ Scope {
     property bool clockInInfoCarousel: false
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
+    // Never map a surface with the provisional "always" mode: KWin may keep
+    // its initial exclusive zone after the saved smart mode arrives, keeping
+    // maximized windows outside the Dock's collision area until mode toggles.
+    readonly property bool surfaceReady: ConfigService.ready
+        && ScreenLifecycle.outputAvailable && root.targetScreen !== null
 
     // Keep position-specific components so each newly selected edge commits
     // its final layer-shell anchors on the window's first frame. The Loader
@@ -23,8 +28,7 @@ Scope {
         DockWindow {
             position: "bottom"
             screen: root.targetScreen
-            visible: ScreenLifecycle.outputAvailable
-                && root.targetScreen !== null
+            visible: root.surfaceReady
             leadingAccessory: root.leadingAccessory
             trailingAccessory: root.trailingAccessory
             clockInInfoCarousel: root.clockInInfoCarousel
@@ -36,8 +40,7 @@ Scope {
         DockWindow {
             position: "left"
             screen: root.targetScreen
-            visible: ScreenLifecycle.outputAvailable
-                && root.targetScreen !== null
+            visible: root.surfaceReady
             leadingAccessory: root.leadingAccessory
             trailingAccessory: root.trailingAccessory
             clockInInfoCarousel: root.clockInInfoCarousel
@@ -49,8 +52,7 @@ Scope {
         DockWindow {
             position: "right"
             screen: root.targetScreen
-            visible: ScreenLifecycle.outputAvailable
-                && root.targetScreen !== null
+            visible: root.surfaceReady
             leadingAccessory: root.leadingAccessory
             trailingAccessory: root.trailingAccessory
             clockInInfoCarousel: root.clockInInfoCarousel

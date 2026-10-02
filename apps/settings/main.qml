@@ -697,10 +697,14 @@ ApplicationWindow {
         readonly property var dockStyles: ["floating", "taskbar", "transparent"]
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
+        property int revealTriggerModeIndex: 0
+        readonly property var revealTriggerModes: ["fullEdge", "dockSpan"]
         property int windowGroupingIndex: 0
         readonly property var windowGroupings: ["grouped", "separate"]
         property bool showLauncher: true
         property bool showTrash: true
+        property bool showRevealIndicator: true
+        property bool revealIndicatorUpdatePending: false
         property bool stateReady: false
         property bool builtinUpdatePending: false
         property string errorText: ""
@@ -726,6 +730,11 @@ ApplicationWindow {
             return idx >= 0 ? idx : 0
         }
 
+        function revealTriggerModeIndexFromString(mode) {
+            const idx = revealTriggerModes.indexOf(mode)
+            return idx >= 0 ? idx : 0
+        }
+
         function windowGroupingIndexFromString(mode) {
             const idx = windowGroupings.indexOf(mode)
             return idx >= 0 ? idx : 0
@@ -739,9 +748,11 @@ ApplicationWindow {
             dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
+            revealTriggerModeIndex = revealTriggerModeIndexFromString(state.revealTriggerMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
             showTrash = state.showTrash !== false
+            showRevealIndicator = state.showRevealIndicator !== false
             stateReady = true
             layoutDirty = false
             errorText = ""
@@ -775,11 +786,25 @@ ApplicationWindow {
             bridge.updateDockVisibilityMode(mode)
         }
 
+        function saveRevealTriggerMode(index) {
+            if (!bridge || !stateReady || visibilityModeIndex === 0
+                    || index < 0 || index >= revealTriggerModes.length)
+                return
+            bridge.updateDockRevealTriggerMode(revealTriggerModes[index])
+        }
+
         function saveWindowGrouping(index) {
             if (!bridge)
                 return
             const mode = windowGroupings[index]
             bridge.updateDockWindowGrouping(mode)
+        }
+
+        function saveRevealIndicatorVisibility(visible) {
+            if (!bridge || !stateReady || revealIndicatorUpdatePending)
+                return
+            revealIndicatorUpdatePending = true
+            bridge.updateDockRevealIndicatorVisibility(visible)
         }
 
         function saveBuiltinVisibility(id, visible) {
@@ -820,6 +845,12 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
+                dockPage.applyState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
+            function onDockRevealIndicatorVisibilityChanged(state) {
+                dockPage.revealIndicatorUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = dockPage.bridge.lastError
@@ -1194,6 +1225,79 @@ ApplicationWindow {
                             currentIndex: dockPage.visibilityModeIndex
                             onSelectionChanged: function(index) {
                                 dockPage.saveVisibilityMode(index)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 64
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "━"; tint: "#8e8e93" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "显示隐藏提示条"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: "关闭后仍可移到屏幕边缘唤出 Dock"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            objectName: "dock-reveal-indicator-switch"
+                            checked: dockPage.showRevealIndicator
+                            enabled: dockPage.stateReady && !dockPage.revealIndicatorUpdatePending
+                            accentColor: theme.role("primary", "#0a84ff")
+                            trackColor: theme.divider
+                            Accessible.name: "显示隐藏提示条"
+                            onToggled: function(checked) {
+                                dockPage.saveRevealIndicatorVisibility(checked)
+                            }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 54
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↥"; tint: "#0a84ff" }
+                        Text {
+                            text: "隐藏时呼出范围"
+                            color: theme.primaryText
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            objectName: "dock-reveal-trigger-picker"
+                            model: [
+                                { id: "fullEdge", label: "整个屏幕边缘" },
+                                { id: "dockSpan", label: "Dock 对应边缘" }
+                            ]
+                            itemWidthOverride: 112
+                            currentIndex: dockPage.revealTriggerModeIndex
+                            disabled: !dockPage.stateReady || dockPage.visibilityModeIndex === 0
+                            onSelectionChanged: function(index) {
+                                // Restore the confirmed-state binding after
+                                // LiquidNavBar.select assigns currentIndex.
+                                currentIndex = Qt.binding(function() {
+                                    return dockPage.revealTriggerModeIndex
+                                })
+                                dockPage.saveRevealTriggerMode(index)
                             }
                         }
                     }
