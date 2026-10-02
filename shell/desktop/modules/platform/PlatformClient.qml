@@ -59,6 +59,7 @@ JsonlClient {
         "display.outputs.get": true,
         "file.open-with": true,
         "file.trash-state": true,
+        "input.clipboard-anchor": true,
         "network.details": true,
         "network.refresh": true,
         "network.scan": true,

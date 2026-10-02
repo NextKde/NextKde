@@ -21,6 +21,10 @@ option(KOS_BUILD_MUSIC "Build the Music application" OFF)
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
     if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-shell.clipboard-placement
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/test_geometry.mjs)
+        set_tests_properties(kos-shell.clipboard-placement PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-deskcenter.density-metrics
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/test_metrics.mjs)
@@ -301,6 +305,13 @@ if(BUILD_TESTING)
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
     find_program(KOS_INTERACTION_QUICKSHELL NAMES quickshell)
+    find_program(KOS_TEST_KWIN NAMES kwin_wayland)
+    find_program(KOS_TEST_DBUS_RUN NAMES dbus-run-session)
+    if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL AND KOS_TEST_KWIN AND KOS_TEST_DBUS_RUN)
+        add_test(NAME kos-ui.clipboard-placement
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/run.py)
+        set_tests_properties(kos-ui.clipboard-placement PROPERTIES LABELS ui TIMEOUT 40)
+    endif()
     if(KOS_INTERACTION_QMLTEST)
         add_test(NAME kos-ui.interaction-controls
             COMMAND ${KOS_INTERACTION_QMLTEST}

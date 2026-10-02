@@ -3992,6 +3992,30 @@ bool PlatformServer::handleAppMenu(QLocalSocket *socket, const QJsonObject &requ
 
 bool PlatformServer::handleInput(QLocalSocket *socket, const QJsonObject &request)
 {
+    if (operation(request) == QStringLiteral("input.clipboard-anchor")) {
+        // No synchronous introspection or cache: each opening needs a fresh
+        // compositor snapshot, and an unavailable effect must not stall the daemon.
+        QDBusMessage message = QDBusMessage::createMethodCall(
+            QStringLiteral("org.kde.KWin"), QStringLiteral("/KOSContextMenuInput"),
+            QStringLiteral("org.kos.KWin.ContextMenuInput"), QStringLiteral("clipboardAnchor"));
+        message.setArguments({request.value(QStringLiteral("payload")).toObject()
+            .value(QStringLiteral("expectedWindowId")).toString()});
+        auto *watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(message, 150), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, guardedSocket = QPointer<QLocalSocket>(socket), request, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+                respond(guardedSocket.data(), request, true,
+                        QJsonObject{{QStringLiteral("available"), false}});
+                return;
+            }
+            respond(guardedSocket.data(), request, true,
+                    QJsonObject::fromVariantMap(variantMapFromDbusValue(reply.arguments().first())));
+        });
+        return true;
+    }
     if (operation(request) != QStringLiteral("input.paste"))
         return false;
 
@@ -5200,6 +5224,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         respond(socket, request, true, QJsonObject{
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
+                QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),

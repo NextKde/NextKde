@@ -101,12 +101,23 @@ def main():
             fail("platform.ping did not report ready: " + buf.decode().strip(),
                  output)
         capabilities = reply.get("result", {}).get("capabilities", [])
-        for capability in ("wallpaper.preview.desktop",
+        for capability in ("input.clipboard-anchor", "wallpaper.preview.desktop",
                            "wallpaper.plasma.proxy",
                            "wallpaper.plasma.restore"):
             if capability not in capabilities:
                 fail("platform.ping missing capability " + capability + ": "
                      + buf.decode().strip(), output)
+
+        # An absent positioning bridge is a supported, bounded fallback.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as anchor_client:
+            anchor_client.settimeout(2)
+            anchor_client.connect(sock_path)
+            anchor_client.sendall((json.dumps({"version": 1, "requestId": "anchor",
+                "operation": "input.clipboard-anchor", "payload": {}}) + "\n").encode())
+            with anchor_client.makefile("rb") as stream:
+                response = json.loads(stream.readline())
+            if not response.get("ok") or response.get("result", {}).get("available") is not False:
+                fail("missing anchor bridge did not fall back: " + str(response), output)
 
         # A missing target must fail before contacting KWin; a valid target on
         # this private bus must also fail safely (there is no injection effect).

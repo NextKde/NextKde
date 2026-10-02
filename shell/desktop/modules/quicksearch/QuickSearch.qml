@@ -4,9 +4,10 @@ import Quickshell.Io
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import "ClipboardPlacement.mjs" as ClipboardPlacement
 
-// Global controller for the Spotlight-like window switcher. Its window stays
-// bound to ScreenLifecycle's last real output across suspend/resume churn.
+// Global controller for search and clipboard history. Clipboard placement uses
+// a pre-focus snapshot on its containing output; other modes use the main one.
 //
 // It also owns the clipboard "click to paste" lifecycle. Ctrl+V is delivered by
 // the compositor to whichever window holds keyboard focus, and that focus only
@@ -20,7 +21,13 @@ Scope {
     property bool open: false
     property string mode: "window"
     property string viewMode: "list"
-    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    property var clipboardAnchor: null
+    property bool _opening: false
+    property bool _anchorResolved: false
+    property int _openSerial: 0
+    readonly property var targetScreen: mode === "clipboard"
+        ? ClipboardPlacement.screenForAnchor(ScreenLifecycle.usableScreens, clipboardAnchor,
+            ScreenLifecycle.activeScreen) : ScreenLifecycle.activeScreen
 
     // Window that was active before the panel took keyboard focus. Empty means
     // there was nothing to paste into (for example the desktop itself).
@@ -40,44 +47,88 @@ Scope {
     // already empty.
     function prepareOpen() {
         cancelPaste()
+        clipboardAnchor = null
+        _anchorResolved = false
         _focusReturnId = WindowService.activeWindowId
     }
 
     function show(modeName) {
-        prepareOpen()
-        mode = normalizeMode(modeName)
-        if (mode === "clipboard")
-            ClipboardService.refresh()
-        open = true
-    }
-    function hide() { open = false }
-    function toggle(modeName) {
-        const nextMode = normalizeMode(modeName)
-        if (!open) {
+        if (!open && !_opening)
             prepareOpen()
-            mode = nextMode
-            if (mode === "clipboard")
-                ClipboardService.refresh()
-            open = true
-        } else if (mode === nextMode) {
-            open = false
+        mode = normalizeMode(modeName)
+        if (mode === "clipboard") {
+            ClipboardService.refresh()
+            locateClipboard()
         } else {
-            mode = nextMode
-            if (mode === "clipboard")
-                ClipboardService.refresh()
+            cancelOpen()
+            open = true
         }
     }
+    function cancelOpen() {
+        _openSerial++
+        _opening = false
+        anchorTimeout.stop()
+    }
+    function hide() {
+        cancelOpen()
+        open = false
+    }
+    function locateClipboard() {
+        // Repeated show() while already open must not replace the captured
+        // caret with the panel's own field or follow subsequent mouse motion.
+        if (open && _anchorResolved)
+            return
+        cancelOpen()
+        clipboardAnchor = null
+        _opening = true
+        const serial = _openSerial
+        const target = WindowService.windowById(_focusReturnId)
+        anchorTimeout.restart()
+        PlatformClient.request("input.clipboard-anchor",
+            { expectedWindowId: target?.handleId || "", serial: serial }, function(response) {
+                if (!root._opening || serial !== root._openSerial || root.mode !== "clipboard")
+                    return
+                anchorTimeout.stop()
+                root.clipboardAnchor = response?.ok && ClipboardPlacement.validAnchor(response.result)
+                    ? response.result : null
+                root._opening = false
+                root._anchorResolved = true
+                root.open = true
+            })
+    }
+    function toggle(modeName) {
+        const nextMode = normalizeMode(modeName)
+        if ((open || _opening) && mode === nextMode)
+            hide()
+        else
+            show(nextMode)
+    }
     function cycleMode() {
-        if (!open)
-            prepareOpen()
         const modes = ["window", "app", "clipboard"]
-        mode = modes[(modes.indexOf(mode) + 1) % modes.length]
-        if (mode === "clipboard")
-            ClipboardService.refresh()
-        open = true
+        show(modes[(modes.indexOf(mode) + 1) % modes.length])
     }
     function toggleViewMode() {
         viewMode = viewMode === "list" ? "grid" : "list"
+    }
+
+    // A missing/older bridge keeps the old centered placement. Never let a
+    // stalled request block the shortcut or a late reply reopen a closed panel.
+    Timer {
+        id: anchorTimeout
+        interval: 180
+        onTriggered: {
+            root.cancelOpen()
+            root._anchorResolved = true
+            root.open = true
+        }
+    }
+
+    Connections {
+        target: ScreenLifecycle
+        function onOutputAvailableChanged() {
+            if (!ScreenLifecycle.outputAvailable)
+                root.hide()
+        }
     }
 
     function cancelPaste() {
@@ -168,6 +219,7 @@ Scope {
             && root.targetScreen !== null
         mode: root.mode
         viewMode: root.viewMode
+        clipboardAnchor: root.clipboardAnchor
         onCloseRequested: root.hide()
         onModeCycleRequested: root.cycleMode()
         onViewModeToggleRequested: root.toggleViewMode()
