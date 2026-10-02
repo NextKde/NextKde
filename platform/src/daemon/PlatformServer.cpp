@@ -265,8 +265,21 @@ QString cleanCreatePath(const QString &path)
         cursor = parent;
     }
     const QFileInfo base(cursor);
-    if (!base.isDir() || base.isSymLink())
+    if (base.isSymLink())
         return {};
+    if (!base.isDir()) {
+        // The deepest existing component is a regular file rather than a
+        // directory. That is a legitimate *destination*: file.copy and
+        // clipboard.save-image both replace their target on purpose, and the
+        // copy itself goes through QSaveFile (tmp + rename) with file.copy's
+        // own same-file guard covering the one case where replacing would
+        // destroy the source. Only the final component may be that file: an
+        // existing file higher up is not a directory, so a missing component
+        // underneath it can never be created.
+        if (!suffix.isEmpty() || !base.isFile())
+            return {};
+        return base.canonicalFilePath();
+    }
     QString result = base.canonicalFilePath();
     if (result.isEmpty())
         return {};
