@@ -5,8 +5,9 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "ClipboardPlacement.mjs" as ClipboardPlacement
 
-// Focusable full-screen layer with a compact, centered window switcher.
+// Focusable full-screen layer containing search or anchored clipboard history.
 PanelWindow {
     id: root
 
@@ -18,6 +19,13 @@ PanelWindow {
     property bool open: false
     property string mode: "window"
     property string viewMode: "list"
+    property var clipboardAnchor: null
+    readonly property var placementScreen: ({ x: screen?.x || 0, y: screen?.y || 0,
+        width: width, height: height })
+    readonly property var placementBounds: ClipboardPlacement.bounds(placementScreen,
+        mode === "clipboard" ? clipboardAnchor : null)
+    readonly property var clipboardPosition: ClipboardPlacement.place(placementScreen,
+        clipboardAnchor, dialog.width, dialog.height)
     property string query: ""
     property int selectedIndex: 0
     // Keep this deliberately minimal: QuickSearch is a high-frequency
@@ -150,6 +158,10 @@ PanelWindow {
 
     visible: popupMotion.mapped
     color: "transparent"
+    // Anchor coordinates are relative to the whole output. If layer-shell
+    // also offsets this surface around panels, their reservation is applied
+    // twice. The card itself is clamped to KWin's placement area instead.
+    exclusionMode: mode === "clipboard" ? ExclusionMode.Ignore : ExclusionMode.Auto
     focusable: open
     WlrLayershell.keyboardFocus: open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     contentItem.enabled: open
@@ -435,7 +447,8 @@ PanelWindow {
 
     Rectangle {
         id: dialog
-        width: 580
+        objectName: "quicksearch-dialog"
+        width: root.mode === "clipboard" ? Math.min(580, Math.max(1, root.placementBounds.width - 24)) : 580
         height: root.resultCount > 0
             ? (searchHeader.height + 6 + 6 + (root.viewMode === "grid" ? gridView.height : resultView.height) + 10)
             : (searchHeader.height + 6 + 50)
@@ -445,11 +458,8 @@ PanelWindow {
         readonly property color textOutlineColor: ThemeService.isDark
             ? Qt.rgba(0.05, 0.08, 0.12, 0.38)
             : Qt.rgba(1, 1, 1, 0.50)
-        anchors {
-            horizontalCenter: parent.horizontalCenter
-            top: parent.top
-            topMargin: Math.round(parent.height * 0.16)
-        }
+        x: root.mode === "clipboard" ? root.clipboardPosition.x : (parent.width - width) / 2
+        y: root.mode === "clipboard" ? root.clipboardPosition.y : Math.round(parent.height * 0.16)
         radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28)
         color: "transparent"
         opacity: root.revealProgress
@@ -459,9 +469,8 @@ PanelWindow {
             anchors.fill: parent
             radius: dialog.radius
             cornerExponent: AppearanceTokens.shape.cornerExponent
-            // The dialog is centred under the search header, so the panel's own
-            // x/y read 0; anchor the region to the dialog, which carries that
-            // offset in the full-output surface.
+            // The card carries the offset within the full-output surface;
+            // its blur must follow both centered and caret-based placement.
             blurAnchor: dialog
             baseColor: ThemeService.isDark
                 ? Qt.rgba(0.08, 0.09, 0.12, 0.35)
@@ -1031,7 +1040,9 @@ PanelWindow {
                 leftMargin: 8
                 rightMargin: 8
             }
-            height: root.visibleResultCount * 52
+            height: root.mode === "clipboard"
+                ? Math.min(root.visibleResultCount * 52, Math.max(0, root.placementBounds.height - 90))
+                : root.visibleResultCount * 52
             clip: true
             model: root.results
             currentIndex: root.selectedIndex
@@ -1287,7 +1298,9 @@ PanelWindow {
                 leftMargin: 8
                 rightMargin: 8
             }
-            height: root.visibleGridRowCount * 94
+            height: root.mode === "clipboard"
+                ? Math.min(root.visibleGridRowCount * 94, Math.max(0, root.placementBounds.height - 90))
+                : root.visibleGridRowCount * 94
             cellWidth: width / root.gridColumnCount
             cellHeight: 94
             clip: true

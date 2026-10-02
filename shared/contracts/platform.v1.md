@@ -28,6 +28,15 @@ Current operation groups are:
   `clipboard.history.watch-images`,
   `clipboard.history.list`, `clipboard.history.copy`,
   `clipboard.history.delete`, `clipboard.history.clear`
+- `input.clipboard-anchor` (`expectedWindowId`: original KWin window UUID;
+  read once before mapping the clipboard panel). Returns `available`, `source`
+  (`caret` or `pointer`), `x/y/width/height`, and
+  `areaX/areaY/areaWidth/areaHeight` in global logical pixels. The effect uses
+  enabled text-input-v3/v2 geometry only while the requested window owns both
+  keyboard and text-input focus; otherwise it samples the current pointer.
+  No surrounding text is accessed. The area excludes reserved panels on the
+  selected output. Missing/older effects return `available: false`, preserving
+  centered placement. Queries are asynchronous, uncached, and bounded to 150 ms.
 - `input.paste` (`expectedWindowId`: KWin window UUID, required; the effect
   injects Ctrl+V only if that window still owns keyboard focus. Missing targets,
   changed focus and an older effect without the guarded method fail without
