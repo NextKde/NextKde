@@ -362,9 +362,18 @@ PanelWindow {
             if (current === "" && root._desktopFocused()) {
                 // 桌面聚焦：保持活动组排除（卡不先冒出来），等收编派发
                 // 最小化的同一拍再放出卡（动画和谐：窗口起飞=卡出现）；
-                // 若最终没有收编走（自动收编关/无目标），短延迟后照常放出
-                root._deskHoldActive = true
-                root._deskHoldReleaseTimer.restart()
+                // 若最终没有收编走（自动收编关/无目标），短延迟后照常放出。
+                // ⚠️ 桌面已无可收窗口（dock 点掉最后一个应用——最小化由
+                // KWin 即时完成、没有待派发的收编批次）时不扣：扣了 = 卡
+                // 白等 600ms 释放计时器才现身（"卡片迟一步"的加时来源）
+                if (_desktopWindowIds(false).length > 0) {
+                    root._deskHoldActive = true
+                    root._deskHoldReleaseTimer.restart()
+                } else {
+                    root._deskHoldActive = false
+                    root._deskHoldReleaseTimer.stop()
+                    root.stageActiveId = current
+                }
             } else {
                 root._deskHoldActive = false
                 root._deskHoldReleaseTimer.stop()
@@ -1063,6 +1072,9 @@ PanelWindow {
     // 在区内；被拖卡自身高亮（selfMergeHint）示意"松手即并入前台"。
     property bool _centerMergeArmed: false
     property string _centerMergeTarget: ""
+    // 指针松手时是否仍在中心区（无前台可并组的空桌面下，中心松手 =
+    // 纯展开：卡原地放大成应用置顶，不并组）
+    property bool _centerZoneActive: false
 
     // ── 合并手势的驻留门控（拖拽 vs 并组"打架"的修法）──
     // 换位拖拽必然连续掠过别的卡（卡列里被拖卡中心几乎总落在某张卡的
@@ -1196,6 +1208,7 @@ PanelWindow {
         root._mergeDwellTimer.stop()
         root._centerMergeArmed = false
         root._centerMergeTarget = ""
+        root._centerZoneActive = false
     }
 
     // 被吞卡姿态复位：mergeGroups 返回 false（from 组已无 record）时，
@@ -1249,6 +1262,7 @@ PanelWindow {
             ? p.x < -StageGeo.DRAG_CENTER_BUFFER
             : p.x > cards.width + StageGeo.DRAG_CENTER_BUFFER
         if (inCenterZone) {
+            root._centerZoneActive = true
             if (root._dropMergeKey !== "") {
                 root._dropMergeKey = ""
                 layoutCards()
@@ -1268,8 +1282,9 @@ PanelWindow {
                 root._centerMergeArmed = newArmed
                 root._centerMergeTarget = newTarget
             }
-            return   // 区内不更新插入目标（松手=并入前台或弹回）
+            return   // 区内不更新插入目标（松手=并入前台/无前台纯展开）
         }
+        root._centerZoneActive = false
         if (root._centerMergeArmed || root._centerMergeTarget !== "") {
             root._centerMergeArmed = false
             root._centerMergeTarget = ""
@@ -1472,6 +1487,7 @@ PanelWindow {
         const mergeKey = root._dropMergeKey   // 仅武装态非空：驻留未到点
         const centerKey = root._centerMergeArmed
             ? root._centerMergeTarget : ""    // 中心区松手 = 并入前台程序
+        const centerZone = root._centerZoneActive   // 无前台时的纯展开落点
         const to = root.dragToIndex           // ⚠️ 先取再清态：清了再读=恒
         // -1，换位提交链路整个变死代码（拖拽松手弹回、只剩误并组——
         // "拖拽和合并打架"的另一半根源，合并动画重构时引入的回归）
@@ -1479,13 +1495,13 @@ PanelWindow {
         root.dragKey = ""
         root.dragFromIndex = -1
         root.dragToIndex = -1
-        // 中心合并落点（用户定稿语义）：拖到屏幕中心的卡 = **在原地放
-        // 大成应用置顶桌面**，并与之前的前台程序（"下面的"那个）结成
-        // 卡组。顺序 = 先并组后激活：同卡豁免（_effKey）让退位/收编管
-        // 线不碰刚让位的前台窗——两个应用一起留在桌面，切走时一起收
-        // 进一张卡。被拖卡的最后屏幕矩形发布为动画起点（stageanim 读
-        // targets），窗口从卡片位置"长大"。
-        if (centerKey !== "" && centerKey !== key) {
+        // 中心拖放落点（用户定稿语义）：拖到屏幕中心的卡 = **在原地放
+        // 大成应用置顶桌面**；有前台程序（"下面的"那个）则与之结成卡组
+        // ——顺序 = 先并组后激活：同卡豁免（_effKey）让退位/收编管线不碰
+        // 刚让位的前台窗——两个应用一起留在桌面，切走时一起收进一张卡。
+        // 空桌面（无前台可并）= 纯展开，同样从松手点"长大"。
+        // 被拖卡的最后屏幕矩形发布为动画起点（stageanim 读 targets）。
+        if ((centerKey !== "" && centerKey !== key) || centerZone) {
             const ids = root._idsOf(slot.idsJson)
             const focusId = ids.indexOf(slot.targetId) >= 0
                 ? slot.targetId
@@ -1493,11 +1509,15 @@ PanelWindow {
             const vis = slot.mapToItem(null, 0, 0)
             const rw = slot.width * StageGeo.DRAG_SCALE
             const rh = slot.height * StageGeo.DRAG_SCALE
-            root.mergeGroups(key, centerKey)   // 直接落模型（卡片行即消失）
+            if (centerKey !== "" && centerKey !== key) {
+                root.mergeGroups(key, centerKey)   // 直接落模型（卡片行即消失）
+                console.info("[StageSidebar] center engage+merge " + key
+                    + " -> " + centerKey)
+            } else {
+                console.info("[StageSidebar] center engage " + key)
+            }
             root._publishOverrideRects(ids, vis.x, vis.y, rw, rh)
             WindowService.activateGroup(ids, focusId)
-            console.info("[StageSidebar] center engage+merge " + key
-                + " -> " + centerKey)
             return
         }
         // 合并落点：压在别的卡上松手 = 先播合并动画（被吞卡滑向目标 +
@@ -1733,6 +1753,7 @@ PanelWindow {
                 required property string idsJson
                 required property string iconsJson
                 required property bool merged
+                required property bool enterInstant
 
                 // 统一等比缩放：设计宽 = 列宽 − inset，slotX 按缩放居中
                 //（聚焦/退位与 adaptive 缩小共用本机制）
@@ -1796,6 +1817,7 @@ PanelWindow {
                     idsJson: slot.idsJson
                     iconsJson: slot.iconsJson
                     merged: slot.merged
+                    enterInstant: slot.enterInstant
                     dropHovered: root._dropMergeKey === slot.appKey
                     // 驻留预示 = 指针在候选上计时中；中心合并预示 =
                     // 被拖卡自身进了屏幕中心区且前台可并组
@@ -2493,8 +2515,14 @@ PanelWindow {
             for (const field in upd.fields)
                 cardModel.setProperty(upd.row, field, upd.fields[field])
         }
-        for (let a = 0; a < plan.appends.length; a++)
+        for (let a = 0; a < plan.appends.length; a++) {
+            // 收集落卡即时现身：追加行直接落位（免入场滑入/淡入）——行
+            // 的窗口此刻多在收编飞行中（dock 点收回/标题栏收起后 ~50ms
+            // 快照落行），再叠 280ms 入场动画 = "卡片迟一步出现"
+            //（2026-10-01 用户实测；instant 使卡与飞行同拍起跑）
+            plan.appends[a].enterInstant = true
             cardModel.append(plan.appends[a])
+        }
         for (let m = 0; m < plan.moves.length; m++)
             cardModel.move(plan.moves[m].from, plan.moves[m].to, 1)
         _queueAllThumbnails()

@@ -112,7 +112,10 @@ Item {
     height: StageConfigService.cardHeight
 
     // ── 动效状态机：点击=原地淡出并保持倾斜（窗口从倾斜姿态旋转展开接管）──
-    property bool shown: false
+    // enterInstant = 行以"收集落卡"追加（窗口正在飞进）：出生即落位可见，
+    // 不播入场滑入/淡入——卡与收编飞行同拍（窗口侧 syncCards 追加时置真）
+    property bool enterInstant: false
+    property bool shown: enterInstant
     property bool engaging: false
     // 同组换代表（点同应用的另一扇窗）时模型行不销毁，engaging 不会随
     // delegate 重建归零——必须在此显式交还卡片姿态，否则卡片永远停在
@@ -130,7 +133,7 @@ Item {
     // 右/下生长——绕中心缩放会让四边同缩，压在边条上的指针被"缩出去"→
     // 悬停丢失（kill 循环的一环）。外扩区域内的指针不可能被挤出。
     transformOrigin: Item.TopLeft
-    Component.onCompleted: shown = true
+    Component.onCompleted: if (!shown) shown = true
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
