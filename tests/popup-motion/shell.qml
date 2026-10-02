@@ -125,10 +125,13 @@ ShellRoot {
             check(center.BackgroundEffect.blurRegion !== null,
                 "a page transition never clears the window blur region")
             for (const card of cards) {
-                check(card.opacity === 1 && card.scale === 1,
-                    "page animation must not fade or shrink the native glass")
-                check(card.contentOpacity === center.pageProgress,
-                    "only the card content fades during navigation")
+                // Crossfade: the outgoing page's glass and content fade
+                // together while the incoming page fades in -- a card never
+                // leaves a bare glass shell hanging over the next page.
+                check(Math.abs(card.opacity - card.contentOpacity) < 0.001,
+                    "glass and content fade together during navigation")
+                check(card.opacity >= 0 && card.opacity <= 1,
+                    "a transitioning card stays inside the fade range")
             }
             stableGlassChecks++
         } catch (error) {
@@ -267,16 +270,18 @@ ShellRoot {
                     check(center.revealProgress === 1 && popup.revealProgress === 1,
                         "old exit callbacks cannot close reopened surfaces")
                     center.openSubmenu("wifi")
-                    check(center.activeSubmenu === "wifi" && center.displayedSubmenu === "",
-                        "requested and displayed pages are separate")
+                    check(center.activeSubmenu === "wifi" && center.displayedSubmenu === "wifi",
+                        "crossfade commits the incoming page on the first frame")
                     center.closeSubmenu()
                     check(center.activeSubmenu === "", "back clears logical state synchronously")
                     center.openSubmenu("wifi")
                     interval = 60
                     break
                 case 3:
-                    check(center.displayedSubmenu === "" && center.pageProgress < 1,
-                        "outgoing main controls remain rendered during page exit")
+                    check(center.displayedSubmenu === "wifi" && center.pageProgress < 1,
+                        "the Wi-Fi page fades in while the main controls fade out")
+                    check(center.outgoingPage === "",
+                        "the primary page is the fading side of the crossfade")
                     savedProgress = center.pageProgress
                     center.close()
                     center.toggle(anchorItem)
@@ -292,7 +297,8 @@ ShellRoot {
                     check(center.displayedSubmenu === "wifi" && center.pageProgress === 1,
                         "Wi-Fi page settles")
                     center.closeSubmenu()
-                    check(center.activeSubmenu === "" && center.displayedSubmenu === "wifi",
+                    check(center.activeSubmenu === "" && center.displayedSubmenu === ""
+                        && center.outgoingPage === "wifi",
                         "back keeps outgoing Wi-Fi content alive")
                     interval = 60
                     break
