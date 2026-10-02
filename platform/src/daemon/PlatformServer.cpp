@@ -5190,8 +5190,48 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),
+                QStringLiteral("spatial.resources"),
+                QStringLiteral("session.visibility"),
             }},
         });
+        return;
+    }
+    if (op == "session.visibility") {
+        const auto call = QDBusMessage::createMethodCall("org.freedesktop.ScreenSaver",
+            "/ScreenSaver", "org.freedesktop.ScreenSaver", "GetActive");
+        auto *watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(call, 2000), this);
+        const QPointer<QLocalSocket> guarded(socket);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, guarded, request](QDBusPendingCallWatcher *completed) {
+                const QDBusMessage reply = completed->reply();
+                const bool valid = reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty();
+                respond(guarded.data(), request, valid,
+                    {{"locked", valid && reply.arguments().first().toBool()}},
+                    valid ? QString() : QStringLiteral("session-state-unavailable"),
+                    valid ? QString() : QStringLiteral("锁屏状态暂不可用"), false);
+                completed->deleteLater();
+            });
+        return;
+    }
+    if (op == "spatial.status") {
+        respond(socket, request, true, m_aiWorker.status());
+        return;
+    }
+    if (op == "spatial.cancel") {
+        m_aiWorker.cancel();
+        respond(socket, request, true, {});
+        return;
+    }
+    if (op == "spatial.initialize" || op == "spatial.inspect" || op == "spatial.clear") {
+        if (op == "spatial.clear") m_aiWorker.cancel();
+        const QPointer<QLocalSocket> guarded(socket);
+        m_aiWorker.resourceOperation(op, request.value("payload").toObject().value("kind").toString(),
+            [this, guarded, request, op](bool ok, const QJsonObject &result,
+                                       const QString &code, const QString &message, bool retryable) {
+                respond(guarded.data(), request, ok, result, code, message, retryable);
+                if (op == "spatial.clear") m_aiWorker.cancel();
+            });
         return;
     }
     if (op == QStringLiteral("depth.generate")) {

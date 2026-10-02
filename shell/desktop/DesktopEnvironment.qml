@@ -25,20 +25,53 @@ Item {
         function snapshot(): string {
             return JSON.stringify({
                 image: WallpaperService.wallpaperUrl.toString(),
+                wallpaperMode: WallpaperService.mode,
+                themeId: WallpaperService.themeId,
+                themeEconomical: WallpaperService.themeEconomical,
+                themeAnimated: WallpaperService.themeAnimated,
+                themeSpeed: WallpaperService.themeSpeed,
+                themeParticleCount: WallpaperService.themeParticleCount,
+                themeMotion: {
+                    running: ThemeWallpaperService.running,
+                    waiting: ThemeWallpaperService.idleDelay.running,
+                    hasVisibleWindows: ThemeWallpaperService.hasVisibleWindows,
+                    phase: ThemeWallpaperService.phase,
+                    preview: ThemeWallpaperService.preview
+                },
                 previewActive: WallpaperPreviewService.active,
+                previewImage: WallpaperPreviewService.image,
+                previewMode: WallpaperPreviewService.mode,
+                previewSelection: JSON.stringify(WallpaperPreviewService.selectedImages),
+                previewCatalog: JSON.stringify(WallpaperPreviewService.imageCatalog),
+                previewColors: JSON.stringify(WallpaperPreviewService.colorCatalog),
+                previewInterval: WallpaperPreviewService.intervalMinutes,
                 previewPending: WallpaperPreviewService.pending,
                 previewError: WallpaperPreviewService.errorMessage,
                 previewAvailable: WallpaperPreviewService.available,
                 fitMode: WallpaperService.fitMode,
                 transition: WallpaperService.transition,
-                recentImages: JSON.stringify(WallpaperService.recentImages),
+                transitionOptions: JSON.stringify(WallpaperService.transitionOptions),
+                slideshowImages: JSON.stringify(WallpaperService.slideshowImages),
+                library: JSON.stringify(WallpaperService.library),
                 slideshowEnabled: WallpaperService.slideshowEnabled,
                 slideshowIntervalMinutes: WallpaperService.slideshowIntervalMinutes,
-                slideshowImages: JSON.stringify(WallpaperService.slideshowImages),
+                slideshowFolder: WallpaperService.slideshowFolder,
                 takeoverEnabled: WallpaperService.takeoverEnabled,
                 takeoverPending: WallpaperService.takeoverPending,
                 takeoverError: WallpaperService.errorMessage,
                 takeoverAvailable: WallpaperService.takeoverAvailable,
+                spatialResources: {
+                    available: SpatialResourceService.available,
+                    enabled: SpatialResourceService.enabled,
+                    ready: SpatialResourceService.modelsReady,
+                    busy: SpatialResourceService.busy,
+                    checking: SpatialResourceService.checking,
+                    stage: SpatialResourceService.stage,
+                    progress: SpatialResourceService.progress,
+                    error: SpatialResourceService.errorMessage,
+                    modelBytes: SpatialResourceService.modelBytes,
+                    generatedBytes: SpatialResourceService.generatedBytes
+                },
                 spatialEnabled: AppearanceConfigService.spatialWallpaperEnabled,
                 spatialReady: SpatialWallpaperService.ready,
                 spatialPrepared: SpatialWallpaperService.prepared,
@@ -49,16 +82,55 @@ Item {
         }
 
         function previewImage(path: string, images: string): string {
+            WindowService.minimizeAllWindows()
             WallpaperPreviewService.begin(path, images)
             return snapshot()
         }
 
+        function previewSession(path: string, session: string): string {
+            if (WallpaperPreviewService.beginSession(path, session))
+                WindowService.minimizeAllWindows()
+            return snapshot()
+        }
+
+        function setPreviewThumbnails(thumbnails: string): string {
+            if (WallpaperPreviewService.active)
+                WallpaperPreviewService.setThumbnails(thumbnails)
+            return snapshot()
+        }
+
+        function setTransitionOptions(options: string): string {
+            WallpaperService.setTransitionOptions(options)
+            return snapshot()
+        }
+
+        function chooseTheme(id: string): string {
+            WallpaperService.chooseTheme(id)
+            return snapshot()
+        }
+        function setThemeEconomical(enabled: bool): string {
+            WallpaperService.setThemeEconomical(enabled)
+            return snapshot()
+        }
+
+        function setThemeMotion(animated: bool, speed: real, count: int): string {
+            WallpaperService.setThemeMotion(animated, speed, count)
+            return snapshot()
+        }
+
         function chooseImage(path: string): string {
+            if (path.indexOf("/wallpaper-colors/") >= 0)
+                AppearanceConfigService.updateSpatialWallpaperEnabled(false)
             WallpaperService.chooseImage(path, true)
             return snapshot()
         }
 
+        // 图集增删已迁移到 settings 本地托管目录(GNOME 模式),shell 只剩
+        // 应用/预览/轮播等展示职责;library 字段保留在快照里供旧数据一次性
+        // 迁移读取。
+
         function chooseColor(path: string): string {
+            if (WallpaperPreviewService.chooseColor(path)) return snapshot()
             AppearanceConfigService.updateSpatialWallpaperEnabled(false)
             WallpaperService.chooseImage(path, true)
             return snapshot()
@@ -81,20 +153,43 @@ Item {
             return snapshot()
         }
 
-        function setSlideshow(enabled: bool, minutes: int, images: string): string {
-            if (WallpaperService.setSlideshow(enabled, minutes, images) && enabled)
+        function setSlideshow(enabled: bool, minutes: int, images: string,
+                              folder: string): string {
+            if (WallpaperService.setSlideshow(enabled, minutes, images, folder)
+                    && enabled)
                 AppearanceConfigService.updateSpatialWallpaperEnabled(false)
             return snapshot()
         }
 
         function setSpatialEnabled(enabled: bool): string {
-            if (enabled && !SpatialWallpaperService.prepared)
-                return snapshot()
             if (enabled) {
-                WallpaperService.setSlideshow(false, WallpaperService.slideshowIntervalMinutes, "[]")
-                WallpaperService.setTakeoverEnabled(true)
+                SpatialWallpaperService.prepareForEnable()
+                return snapshot()
             }
+            SpatialWallpaperService.cancelPreparation()
             AppearanceConfigService.updateSpatialWallpaperEnabled(enabled)
+            return snapshot()
+        }
+
+        function initializeSpatialService(): string {
+            SpatialResourceService.initialize()
+            return snapshot()
+        }
+        function disableSpatialService(): string {
+            SpatialResourceService.disable()
+            return snapshot()
+        }
+        function cancelSpatial(): string {
+            SpatialWallpaperService.cancelActivation()
+            SpatialResourceService.cancel()
+            return snapshot()
+        }
+        function inspectSpatialService(): string {
+            SpatialResourceService.inspect()
+            return snapshot()
+        }
+        function clearSpatialCache(kind: string): string {
+            SpatialResourceService.clear(kind)
             return snapshot()
         }
 

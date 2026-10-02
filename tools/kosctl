@@ -58,11 +58,12 @@ is_nixos() {
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
 arch_core_build_packages=(
-    quickshell cmake ninja gcc qt6-base qt6-declarative go curl
+    quickshell cmake ninja gcc qt6-base qt6-declarative qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
+    extra-cmake-modules wayland
     kwindowsystem kiconthemes kglobalaccel kio opencv patchelf
 )
 arch_kwin_build_packages=(
-    extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils
+    kwin kconfig ki18n kguiaddons kcmutils
     kcoreaddons kdecoration gettext libxcb vulkan-headers
 )
 arch_optional_runtime_packages=(
@@ -257,10 +258,10 @@ configure_if_needed() {
 }
 
 configure_build() {
-    local build_type=${KOS_BUILD_TYPE:-Debug}
+    local build_type=${KOS_BUILD_TYPE:-Release}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
     local ort_root
-    ort_root=$(ensure_onnxruntime_sdk)
+    ort_root=$(ensure_onnxruntime_sdk) || return 1
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
     # bare `cmake --build` then compiles every registered test before deploying
@@ -304,11 +305,17 @@ ensure_onnxruntime_sdk() {
             printf 'curl is required to fetch the pinned ONNX Runtime SDK.\n' >&2
             return 1
         }
-        curl -fL --retry 3 -o "$archive" \
-            https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz
+        if ! curl -fL --retry 3 --connect-timeout 30 --speed-limit 1024 --speed-time 60 \
+                -o "$archive.part" \
+                https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz; then
+            rm -f -- "$archive.part"
+            return 1
+        fi
+        mv -f "$archive.part" "$archive"
     fi
     printf '%s  %s\n' "$sha" "$archive" | sha256sum --check --status || {
-        printf 'Pinned ONNX Runtime SDK archive SHA256 mismatch.\n' >&2
+        rm -f -- "$archive"
+        printf 'Pinned ONNX Runtime SDK archive SHA256 mismatch; retry install to download again.\n' >&2
         return 1
     }
     tar -xzf "$archive" -C "$build_dir/deps"
@@ -403,7 +410,7 @@ filter_vendored_warnings() {
 }
 
 build_kwin_glass() {
-    local build_type=${KOS_BUILD_TYPE:-Debug}
+    local build_type=${KOS_BUILD_TYPE:-Release}
     prepare_cmake_build_dir "$glass_build_dir" \
         "$project_dir/vendor/kwin-effects-glass"
     configure_if_needed "$project_dir/vendor/kwin-effects-glass" \
@@ -469,7 +476,7 @@ materialize_kos_ui() {
         return 1
     fi
     local dir
-    for dir in colorize foundation controls; do
+    for dir in colorize foundation controls wallpapers; do
         if [[ ! -d "$qml_root/$dir" ]]; then
             printf 'Kos.Ui source dir not found: %s\n' "$qml_root/$dir" >&2
             return 1
@@ -477,9 +484,9 @@ materialize_kos_ui() {
     done
     rm -rf "$shell_config/Kos/Ui"
     mkdir -p "$shell_config/Kos/Ui"
-    cp "$qmldir_src" "$shell_config/Kos/Ui/qmldir"
-    for dir in colorize foundation controls; do
-        cp -a "$qml_root/$dir" "$shell_config/Kos/Ui/"
+    install -m 0644 "$qmldir_src" "$shell_config/Kos/Ui/qmldir"
+    for dir in colorize foundation controls wallpapers; do
+        cp -rL --no-preserve=mode "$qml_root/$dir" "$shell_config/Kos/Ui/"
     done
 }
 
@@ -520,6 +527,22 @@ deploy_artifacts() {
         return 1
     fi
 
+    local nix_artifact=false
+    [[ -d "$artifact_root/share/kos/settings" ]] && nix_artifact=true
+    local required
+    local -a required_files
+    if [[ "$nix_artifact" == true ]]; then
+        required_files=(libexec/kos-platform libexec/kos-ai-worker libexec/kos-data-service bin/kos-settings)
+    else
+        required_files=(platform/kos-platform platform/kos-ai-worker bin/kos-data-service apps/settings/kos-settings)
+    fi
+    for required in "${required_files[@]}"; do
+        [[ -x "$artifact_root/$required" ]] || {
+            printf 'Missing build artifact: %s/%s\n' "$artifact_root" "$required" >&2
+            return 1
+        }
+    done
+
     mkdir -p "$prefix/libexec" "$prefix/bin" "$prefix/lib" \
         "$prefix/share/kos/platform/kwin" "$prefix/share/kos/settings" \
         "$prefix/share/shared/qml" "$prefix/share/applications"
@@ -527,7 +550,7 @@ deploy_artifacts() {
     # --- Binaries ---
     rm -f "$prefix/libexec/kos-platform" "$prefix/libexec/kos-ai-worker" \
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
-    if is_nixos; then
+    if [[ "$nix_artifact" == true ]]; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
         ln -s "$artifact_root/libexec/kos-ai-worker" "$prefix/libexec/kos-ai-worker"
         ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
@@ -555,7 +578,7 @@ deploy_artifacts() {
     fi
 
     # --- KWin bridge script ---
-    if is_nixos; then
+    if [[ "$nix_artifact" == true ]]; then
         ln -sf "$artifact_root/share/kos/platform/kwin/window-bridge.js" \
             "$prefix/share/kos/platform/kwin/window-bridge.js"
     else
@@ -564,16 +587,23 @@ deploy_artifacts() {
     fi
 
     # --- Settings QML & shared controls ---
-    if is_nixos; then
-        cp "$artifact_root/share/kos/settings/main.qml" \
+    if [[ "$nix_artifact" == true ]]; then
+        install -m 0644 "$artifact_root/share/kos/settings/main.qml" \
             "$prefix/share/kos/settings/main.qml"
-        cp "$artifact_root"/share/kos/settings/Wallpaper*.qml \
+        install -m 0644 "$artifact_root"/share/kos/settings/Wallpaper*.qml \
+            "$artifact_root/share/kos/settings/ThemeWallpaperTile.qml" \
+            "$artifact_root/share/kos/settings/ServicesSettingsPage.qml" \
             "$prefix/share/kos/settings/"
+        cp -rL --no-preserve=mode "$artifact_root/share/kos/settings/icons" "$prefix/share/kos/settings/"
     else
         install -m 0644 "$project_dir/apps/settings/main.qml" \
             "$prefix/share/kos/settings/main.qml"
         install -m 0644 "$project_dir"/apps/settings/Wallpaper*.qml \
             "$prefix/share/kos/settings/"
+        install -m 0644 "$project_dir/apps/settings/ThemeWallpaperTile.qml" \
+            "$project_dir/apps/settings/ServicesSettingsPage.qml" \
+            "$prefix/share/kos/settings/"
+        cp -rL --no-preserve=mode "$project_dir/apps/settings/icons" "$prefix/share/kos/settings/"
     fi
     # The Settings window is a *separate process*, and it resolves its relative
     # imports against its own installed directory, $prefix/share/kos/settings.
@@ -585,12 +615,15 @@ deploy_artifacts() {
     # clicking Settings simply did nothing. Copy the whole tree so a new
     # subdirectory never needs another edit here.
     local shared_qml_src="$project_dir/shared/qml"
-    if is_nixos && [[ -d "$artifact_root/share/shared/qml" ]]; then
+    if [[ "$nix_artifact" == true ]] && [[ -d "$artifact_root/share/shared/qml" ]]; then
         shared_qml_src="$artifact_root/share/shared/qml"
+    fi
+    if [[ -d "$prefix/share/shared/qml" ]]; then
+        find "$prefix/share/shared/qml" -type d -exec chmod u+w {} +
     fi
     rm -rf "$prefix/share/shared/qml"
     mkdir -p "$prefix/share/shared/qml"
-    cp -a "$shared_qml_src/." "$prefix/share/shared/qml/"
+    cp -rL --no-preserve=mode "$shared_qml_src/." "$prefix/share/shared/qml/"
     # The checkout tree carries build/test files next to the runtime QML;
     # the Nix installPhase filters the same two patterns, and the CMake
     # install rule that used to run this copy carried the same EXCLUDEs.
@@ -601,6 +634,8 @@ deploy_artifacts() {
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
     mkdir -p "$shell_config"
+    find "$shell_config" -type d -exec chmod u+w {} +
+    find "$shell_config" -type f -exec chmod u+w {} +
     # These source entries are symlinks in the checkout, but older releases
     # installed them as directories. Remove only those known legacy targets
     # before copying the shell tree; otherwise cp refuses to replace a
@@ -608,26 +643,26 @@ deploy_artifacts() {
     # Kos.Ui below.
     rm -rf "$shell_config/Kos/Ui/colorize" \
            "$shell_config/Kos/Ui/foundation" \
-           "$shell_config/Kos/Ui/controls"
+           "$shell_config/Kos/Ui/controls" \
+           "$shell_config/Kos/Ui/wallpapers"
     rm -rf "$shell_config/shared/qml/controls"
-    if is_nixos; then
-        cp -a "$artifact_root/share/kos-desktop/." "$shell_config/"
+    if [[ "$nix_artifact" == true ]]; then
+        cp -rL --no-preserve=mode "$artifact_root/share/kos-desktop/shell/." "$shell_config/"
     else
-        cp -a "$project_dir/shell/." "$shell_config/"
+        cp -rL --no-preserve=mode "$project_dir/shell/." "$shell_config/"
     fi
     mkdir -p "$shell_config/shared/qml"
     rm -rf "$shell_config/shared/qml/controls"
-    if is_nixos; then
-        cp -a "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
+    if [[ "$nix_artifact" == true ]]; then
+        cp -rL --no-preserve=mode "$artifact_root/share/shared/qml/controls" "$shell_config/shared/qml/"
     else
-        cp -a "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
+        cp -rL --no-preserve=mode "$project_dir/shared/qml/controls" "$shell_config/shared/qml/"
     fi
     # Kos.Ui alias: replace the checkout's symlinks with real files (see
     # materialize_kos_ui above for why the symlinks cannot survive the copy).
-    # layout only exists when deploying from a built Nix derivation;
-    # `kosctl install` on NixOS deploys from the CMake build dir, which has no
-    # share/kos-desktop, so fall back to the checkout in that case.
-    if is_nixos && [[ -f "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" ]]; then
+    # Nix sources live alongside the packaged shell; CMake deployments use
+    # the checkout. In both cases the installed aliases contain real files.
+    if [[ "$nix_artifact" == true ]] && [[ -f "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" ]]; then
         materialize_kos_ui "$shell_config" \
             "$artifact_root/share/kos-desktop/shell/Kos/Ui/qmldir" \
             "$artifact_root/share/kos-desktop/shared/qml"
@@ -640,20 +675,20 @@ deploy_artifacts() {
     # so Quickshell finds `import Kos.SurfaceShape 1.0` without requiring root install to /usr
     if [[ -d "$artifact_root/qml/Kos/SurfaceShape" ]]; then
         rm -rf "$shell_config/Kos/SurfaceShape"
-        cp -a "$artifact_root/qml/Kos/SurfaceShape" "$shell_config/Kos/"
+        cp -rL --no-preserve=mode "$artifact_root/qml/Kos/SurfaceShape" "$shell_config/Kos/"
     fi
     # Optional Qt Quick 3D mesh geometry used by the spatial wallpaper layer.
     if [[ -d "$artifact_root/qml/Kos/Spatial3D" ]]; then
         rm -rf "$shell_config/Kos/Spatial3D"
-        cp -a "$artifact_root/qml/Kos/Spatial3D" "$shell_config/Kos/"
+        cp -rL --no-preserve=mode "$artifact_root/qml/Kos/Spatial3D" "$shell_config/Kos/"
     fi
 
     # --- Systemd user services ---
     mkdir -p "$runtime_unit_dir"
-    if is_nixos; then
-        cp "$artifact_root/lib/systemd/user/kos-platform.service" "$runtime_unit_dir/"
-        cp "$artifact_root/lib/systemd/user/kos-data.service"     "$runtime_unit_dir/"
-        cp "$artifact_root/lib/systemd/user/kos-shell.service"    "$runtime_unit_dir/"
+    if [[ "$nix_artifact" == true ]]; then
+        install -m 0644 "$artifact_root/lib/systemd/user/kos-platform.service" "$runtime_unit_dir/"
+        install -m 0644 "$artifact_root/lib/systemd/user/kos-data.service"     "$runtime_unit_dir/"
+        install -m 0644 "$artifact_root/lib/systemd/user/kos-shell.service"    "$runtime_unit_dir/"
     else
         sed "s|%h/.local|$prefix|g" \
             "$project_dir/packaging/systemd/kos-platform.service" \
@@ -676,9 +711,9 @@ deploy_artifacts() {
         "$runtime_unit_dir/kos-shell.service"
 
     # --- Desktop entries ---
-    if is_nixos; then
-        cp "$artifact_root/share/applications/kos-settings.desktop"   "$prefix/share/applications/"
-        cp "$artifact_root/share/applications/org.kos.Platform.desktop" "$prefix/share/applications/"
+    if [[ "$nix_artifact" == true ]]; then
+        install -m 0644 "$artifact_root/share/applications/kos-settings.desktop"   "$prefix/share/applications/"
+        install -m 0644 "$artifact_root/share/applications/org.kos.Platform.desktop" "$prefix/share/applications/"
     else
         sed "s|^Exec=.*|Exec=$prefix/bin/kos-settings|" \
             "$project_dir/packaging/desktop/kos-settings.desktop.in" \
@@ -843,6 +878,14 @@ start_all() {
     if [[ -n "$qs_bin" ]]; then
         "$qs_bin" -c kos kill >/dev/null 2>&1 || true
     fi
+    local proxy_name
+    local -a proxy_names=()
+    for proxy_name in http_proxy https_proxy all_proxy no_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY; do
+        [[ -z "${!proxy_name:-}" ]] || proxy_names+=("$proxy_name")
+    done
+    if (( ${#proxy_names[@]} )); then
+        systemctl --user import-environment "${proxy_names[@]}"
+    fi
     systemctl --user daemon-reload
     systemctl --user enable --now "${kos_units[@]}"
     systemctl --user restart "${kos_units[@]}"
@@ -859,7 +902,21 @@ start_all() {
 # dev — run the source Shell against the normal systemd platform and data
 # services. It deliberately does not build, install, stop, or replace them;
 # all clients use the single standard runtime socket pair.
+# A per-machine graphics workaround, leaving other machines on Qt's default.
+# Respect an explicitly selected backend and never source arbitrary config code.
+configure_render_backend() {
+    local backend=""
+    if [[ -z "${QSG_RHI_BACKEND:-}" && -r "$config_dir/kos/render-backend" ]]; then
+        IFS= read -r backend < "$config_dir/kos/render-backend" || true
+        case "$backend" in
+            vulkan|opengl) export QSG_RHI_BACKEND="$backend" ;;
+            *) printf 'Ignoring unsupported KOS render backend: %s\n' "$backend" >&2 ;;
+        esac
+    fi
+}
+
 dev_all() {
+    configure_render_backend
     if [[ -z "$qs_bin" ]]; then
         echo "Quickshell (qs) is required for dev mode" >&2
         return 1
@@ -875,6 +932,7 @@ dev_all() {
     fi
     "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     printf 'Starting source Shell with system platform and data services\n'
+    QSG_RENDER_LOOP=threaded \
     QML2_IMPORT_PATH="$build_dir/qml${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
         exec "$qs_bin" -p "$project_dir/shell"
 }
@@ -1197,10 +1255,10 @@ write_shell_package_key() {  # $1: value, or --delete
     if command -v kwriteconfig6 >/dev/null 2>&1; then
         if [[ "$1" == "--delete" ]]; then
             kwriteconfig6 --file plasmashellrc --group Shell \
-                --key ShellPackage --delete
+                --key ShellPackage --delete || return 1
         else
             kwriteconfig6 --file plasmashellrc --group Shell \
-                --key ShellPackage "$1"
+                --key ShellPackage "$1" || return 1
         fi
         return 0
     fi
@@ -1319,6 +1377,14 @@ restore_plasma_shell() {
         write_shell_package_key --delete || return 1
         printf 'plasmashellrc ShellPackage key removed.\n'
     fi
+    local restored_shell
+    restored_shell=$(previous_plasma_shell)
+    [[ "$restored_shell" != "$kos_shell_id" ]] || return 1
+    if [[ -n "$qdbus_bin" ]]; then
+        "$qdbus_bin" org.kde.plasmashell /PlasmaShell \
+            org.kde.PlasmaShell.changeShell "${restored_shell:-org.kde.plasma.desktop}" \
+            >/dev/null 2>&1 || true
+    fi
     rm -f "$plasma_shell_state"
 }
 
@@ -1391,14 +1457,8 @@ install_apps() {
 
 install_all() {
     if is_nixos; then
-        printf '\n'
-        printf '  NixOS detected. Use the flake-based install for best results:\n'
-        printf '    ./tools/kosctl nix build   # Build the Nix package\n'
-        printf '    ./tools/kosctl nix install # Deploy user-space components\n'
-        printf '\n'
-        printf '  Proceeding with manual install to %s...\n' "$prefix"
-        printf '  Note: KWin plugins will NOT be installed (use NixOS module).\n'
-        printf '\n'
+        nix_install install
+        return
     fi
     ensure_build_dependencies
     build
@@ -1412,14 +1472,18 @@ install_all() {
 }
 
 run_shell() {
+    configure_render_backend
     if [[ -z "$qs_bin" ]]; then
         echo "Quickshell (qs) is not installed" >&2
         return 1
     fi
+    local installed_imports="$config_dir/quickshell/kos:$prefix/lib/qt6/qml"
     if [[ "${1:-}" == "installed" ]]; then
-        exec "$qs_bin" -c kos
+        QML2_IMPORT_PATH="$installed_imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
+            QSG_RENDER_LOOP=threaded exec "$qs_bin" -c kos
     fi
-    exec "$qs_bin" -p "$project_dir/shell"
+    QML2_IMPORT_PATH="$build_dir/qml:$project_dir/shell:$installed_imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
+        QSG_RENDER_LOOP=threaded exec "$qs_bin" -p "$project_dir/shell"
 }
 
 open_glass_settings() {
@@ -1466,7 +1530,7 @@ uninstall_kwin_plugins() {
                     org.kde.kwin.Effects.unloadEffect "$effect" >/dev/null 2>&1 || true
             fi
             kwriteconfig6 --file kwinrc --group Plugins \
-                --key "${effect}Enabled" --delete --notify || true
+                --key "${effect}Enabled" false --type bool --notify || true
         done
         restore_blur_state
     fi
@@ -1490,6 +1554,14 @@ uninstall_kwin_plugins() {
             sudo rm -f -- "${system_files[@]}"
         fi
     fi
+    # Clear disable overrides only after plugin files were actually removed.
+    # A rejected sudo leaves installed effects disabled for the next login.
+    if command -v kwriteconfig6 >/dev/null 2>&1; then
+        for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
+            kwriteconfig6 --file kwinrc --group Plugins \
+                --key "${effect}Enabled" --delete --notify || true
+        done
+    fi
     rm -f "$kwin_manifest" "$kwin_effect_state"
     # Last, and about the plugin file just removed rather than about anything
     # this script wrote: it never wrote the decoration selection.
@@ -1501,9 +1573,9 @@ uninstall() {
         systemctl --user disable --now kos-shell.service \
             kos-platform.service kos-data.service 2>/dev/null || true
     fi
-    if ! is_nixos; then
-        uninstall_kwin_plugins
-    fi
+    # Restore desktop input and panels before any sudo/plugin failure can stop
+    # uninstall halfway through. Also handles an already missing shell package.
+    restore_plasma_shell || return 1
     # The optional surfaces are removed by what exists, not by what was asked
     # for: an uninstall must clean up a component that was installed earlier
     # even when no flag or argument names it now. The shells/ root exists
@@ -1521,8 +1593,11 @@ uninstall() {
                 "$kos_shell_id"
         else
             rm -rf "$shells_dir" "$laf_dir"
-            printf 'Plasma shell reverted; plasmashell reloads its previous shell at the next login.\n'
+            printf 'Plasma shell reverted to its previous shell.\n'
         fi
+    fi
+    if ! is_nixos; then
+        uninstall_kwin_plugins
     fi
     # An SDDM theme installed from this checkout by an earlier kosctl is left
     # alone -- removing it needs root -- so report it instead of silently
@@ -1547,7 +1622,7 @@ uninstall() {
         "$prefix/share/applications/kos-settings.desktop" \
         "$prefix/share/applications/org.kos.Platform.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
-    rm -rf "$prefix/share/shared/qml"
+    rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
     if is_nixos; then
@@ -1597,11 +1672,9 @@ nix_install() {
             printf 'Build output: %s/result\n' "$project_dir"
             ;;
         install)
-            if [[ ! -L "$project_dir/result" ]]; then
-                printf '==> Building KOS via flake.nix...\n'
-                nix build --impure "$project_dir#packages.x86_64-linux.kos-desktop" \
-                    --out-link "$project_dir/result"
-            fi
+            printf '==> Building KOS via flake.nix...\n'
+            nix build --impure "$project_dir#packages.x86_64-linux.kos-desktop" \
+                --out-link "$project_dir/result"
             printf '==> Deploying KOS user-space components from Nix store...\n'
             nix_deploy_artifacts
             printf '\n'

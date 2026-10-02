@@ -35,6 +35,50 @@ PanelWindow {
     implicitWidth: screen?.width ?? 1920
     implicitHeight: screen?.height ?? 1080
 
+    // Coordinates shared with the separate Top-layer foreground surface.
+    Item {
+        id: desktopCoordinates
+        anchors.fill: parent
+    }
+
+    // Passive pointer handlers observe the whole desktop, including cards,
+    // while existing controls retain their clicks and drags.
+    HoverHandler {
+        id: wallpaperHover
+        enabled: ThemeWallpaperService.active
+        onPointChanged: ThemeWallpaperService.pointerMoved(root.screen?.name,
+            point.position.x, point.position.y, hovered)
+        onHoveredChanged: ThemeWallpaperService.pointerMoved(root.screen?.name,
+            point.position.x, point.position.y, hovered)
+    }
+    TapHandler {
+        enabled: ThemeWallpaperService.active
+        acceptedButtons: Qt.LeftButton
+        gesturePolicy: TapHandler.DragThreshold
+        onPressedChanged: if (pressed) ThemeWallpaperService.pointerPressed(root.screen?.name,
+            point.position.x, point.position.y)
+    }
+
+    // Publish current visual positions, including drag transforms. Both
+    // wallpaper surfaces use these coordinates for a visible crossing orbit.
+    Timer {
+        interval: 250
+        repeat: true
+        running: ThemeWallpaperService.active && root.visible
+        triggeredOnStart: true
+        onTriggered: {
+            const rectangles = []
+            for (let i = 0; i < widgetRepeater.count; ++i) {
+                const card = widgetRepeater.itemAt(i)
+                if (!card || !card.visible) continue
+                const point = card.mapToItem(desktopCoordinates, 0, 0)
+                rectangles.push({x: Math.round(point.x), y: Math.round(point.y),
+                    width: Math.round(card.width * card.scale), height: Math.round(card.height * card.scale)})
+            }
+            ThemeWallpaperService.setWidgetRects(root.screen?.name, rectangles)
+        }
+    }
+
     // Ten square units are derived exclusively from screen width. Every
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
@@ -110,6 +154,19 @@ PanelWindow {
     property real depthPointerX: 0
     property real depthPointerY: 0
     property bool spatialWallpaperActive: false
+    HoverHandler {
+        enabled: root.spatialWallpaperActive && !WallpaperPreviewService.active
+        onPointChanged: {
+            root.depthPointerX = Math.max(-1, Math.min(1,
+                (point.position.x / Math.max(1, root.width) - 0.5) * 2))
+            root.depthPointerY = Math.max(-1, Math.min(1,
+                (point.position.y / Math.max(1, root.height) - 0.5) * 2))
+        }
+        onHoveredChanged: if (!hovered) {
+            root.depthPointerX = 0
+            root.depthPointerY = 0
+        }
+    }
 
     function formattedTimer() {
         const hours = Math.floor(timerSeconds / 3600)
@@ -304,18 +361,6 @@ PanelWindow {
         anchors.fill: parent
         z: 0
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        hoverEnabled: root.spatialWallpaperActive
-
-        onPositionChanged: function(mouse) {
-            root.depthPointerX = Math.max(-1, Math.min(1,
-                (mouse.x / Math.max(1, width) - 0.5) * 2))
-            root.depthPointerY = Math.max(-1, Math.min(1,
-                (mouse.y / Math.max(1, height) - 0.5) * 2))
-        }
-        onExited: {
-            root.depthPointerX = 0
-            root.depthPointerY = 0
-        }
 
         onPressed: function(mouse) {
             if (mouse.button === Qt.RightButton) {

@@ -629,6 +629,15 @@ QtObject {
         try { record.toplevel.minimized = value === undefined ? true : value; } catch (e) {}
     }
 
+    function minimizeAllWindows() {
+        const current = svc.records || [];
+        for (let i = 0; i < current.length; i++) {
+            const record = current[i];
+            if (!record.toplevel?.minimized)
+                minimizeWindow(record.windowId, true);
+        }
+    }
+
     function closeWindow(windowId) {
         const record = windowById(windowId);
         if (!record)

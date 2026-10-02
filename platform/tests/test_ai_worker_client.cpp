@@ -31,7 +31,26 @@ int main(int argc, char **argv)
                         || secondResult.value(QStringLiteral("depthPath")).toString()
                                != QStringLiteral("/test/depth.png");
                     ++completed;
-                    app.quit();
+                    if (failed) { app.quit(); return; }
+                    client.generateDepth("slow", [&](bool ok, const QJsonObject &,
+                                                      const QString &code, const QString &, bool retryable) {
+                        failed = ok || code != "spatial-canceled" || retryable;
+                        ++completed;
+                    });
+                    QTimer::singleShot(150, &app, [&] {
+                        const auto status = client.status();
+                        failed = failed || !status.value("busy").toBool()
+                            || status.value("received").toInt() != 50;
+                        client.cancel();
+                        failed = failed || client.status().value("busy").toBool();
+                        // A canceled worker must restart immediately, without crash cooldown.
+                        client.resourceOperation("spatial.initialize", "", [&](bool ok, const QJsonObject &result,
+                            const QString &, const QString &, bool) {
+                            failed = failed || !ok || result.value("depthPath").toString() != "/test/depth.png";
+                            ++completed;
+                            app.quit();
+                        });
+                    });
                 });
             });
         }
@@ -43,5 +62,5 @@ int main(int argc, char **argv)
     });
     client.generateDepth(QStringLiteral("first"), finish);
     app.exec();
-    return failed || completed != 2 ? 1 : 0;
+    return failed || completed != 4 ? 1 : 0;
 }

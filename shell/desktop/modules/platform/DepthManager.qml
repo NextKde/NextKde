@@ -7,6 +7,8 @@ QtObject {
     id: root
 
     property int pendingCount: 0
+    property int epoch: 0
+    function invalidate() { epoch++ }
     readonly property bool busy: pendingCount > 0
 
     signal finished(string imagePath, string depthPath, int width, int height,
@@ -22,12 +24,14 @@ QtObject {
             return
         }
 
+        const task = epoch
         pendingCount++
         PlatformClient.request("depth.generate", {
             imagePath: path,
             prepareSpatial: true
         }, response => {
             pendingCount = Math.max(0, pendingCount - 1)
+            if (task !== epoch) return
             if (!response || !response.ok) {
                 const error = response && response.error ? response.error : ({})
                 failed(path, String(error.code || "depth-generation-failed"),

@@ -18,7 +18,8 @@ Item {
     signal commitRequested(real value)
 
     readonly property real clampedValue: Math.max(0, Math.min(1, value))
-    readonly property real thumbDiameter: 18
+    property real thumbDiameter: 18
+    property real trackHeight: 8
     readonly property real trackInset: thumbDiameter / 2
     readonly property real travel: Math.max(1, width - trackInset * 2)
     readonly property real thumbCenterX: trackInset + clampedValue * travel
@@ -39,7 +40,7 @@ Item {
         anchors.leftMargin: root.trackInset
         anchors.rightMargin: root.trackInset
         anchors.verticalCenter: parent.verticalCenter
-        height: 8
+        height: root.trackHeight
         radius: height / 2
         border.width: 1
         border.color: Qt.rgba(0, 0, 0, 0.16)

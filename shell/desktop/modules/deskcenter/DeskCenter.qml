@@ -24,9 +24,11 @@ Scope {
                     id: wallpaperWindow
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
-                        && (WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
-                    pointerX: widgetWindow.depthPointerX
-                    pointerY: widgetWindow.depthPointerY
+                        && (WallpaperPreviewService.active || WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
+                    pointerX: WallpaperPreviewService.active
+                        ? previewWindow.depthPointerX : widgetWindow.depthPointerX
+                    pointerY: WallpaperPreviewService.active
+                        ? previewWindow.depthPointerY : widgetWindow.depthPointerY
                 }
 
                 DeskCenterWindow {
@@ -36,9 +38,21 @@ Scope {
                     spatialWallpaperActive: wallpaperWindow.active
                 }
 
+                ThemeForegroundWindow {
+                    screen: outputScope.modelData
+                }
+
                 // Map after the ordinary desktop surfaces so the transient
                 // scene covers every QML surface on this output.
+                SpatialPreparationWindow {
+                    screen: outputScope.modelData
+                    visible: ScreenLifecycle.outputAvailable && !WallpaperPreviewService.active
+                        && outputScope.modelData === ScreenLifecycle.activeScreen
+                        && (SpatialWallpaperService.preparationRequested || SpatialWallpaperService.errorMessage.length > 0)
+                }
+
                 WallpaperPreviewBar {
+                    id: previewWindow
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable && WallpaperPreviewService.active
                 }

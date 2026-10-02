@@ -1,0 +1,15 @@
+{
+  "inverse_radius.dat": "7fa22a9270e61f2842c97fb1a9398bcb13e1a965ad39b0f73169354a0d608b04",
+  "deflection.dat": "1080f45a12fba81321771c2071f4a31795444b110833f61384a9bdf7d057c19d",
+  "noise_texture.png": "7ba6d84ad14496b6299b57dbbc75b400fad4e9ab022dcacfc7f3fa3751009ed9",
+  "shader_manager.js": "69c275db8e5a49e26a0dd866be70cb37794d4af4fa1d7acd1fc0bb7ee977f56a",
+  "doppler.dat": "5174fff7559f82771977f7aadf00bbc071a010fc2913fe9a26d9ecd0f04afe50",
+  "inverse_radius-float.png": "78e487a7a5baf2993c45599ef91d750f028d6bae097047518b28c50fa878e8d0",
+  "black_body.dat": "aac8ed78dde66d9b44da8b65142429470c89b5edeb74a8fde8dfc000777a2d97",
+  "functions.glsl": "ee254594ca8461d0360bc1741c14d93d0fc80103b3f50670e677f0fd8e26df45",
+  "black_body-float.png": "bb0df789dd36b23a644505cc83028278a489980933816f85e749a02cf8b39bd3",
+  "model.glsl": "34f8de3599578e8573cf88582ebb9da0372f83f307da08e26a9c7c21a5a666a8",
+  "deflection-float.png": "15b725437ccbbec4c20a05bd45c3365dca1578f2451e49914aa0811bbe297101",
+  "definitions.glsl": "24e8f8eaf08fd7320a9d4b3b03aea581400374acf643b387c887794ed9e82af2",
+  "doppler-float.png": "d4d9f00b9c52cf63337ef1cc7067d6b4c0cd111a1e3c3e94a84db24b53ef6d55"
+}

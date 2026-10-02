@@ -65,9 +65,16 @@ QtObject {
     readonly property int _pollSkip: 4
     // Keep a QML-owned reference while resolving a wallpaper package.
     property var _resolveProcess: null
-    readonly property color primary: palette.primary
-    readonly property color secondary: palette.secondary
-    readonly property bool ready: palette.ready
+    property string proceduralPrimary: ""
+    readonly property color primary: proceduralPrimary || palette.primary
+    readonly property color secondary: proceduralPrimary || palette.secondary
+    readonly property bool ready: proceduralPrimary.length > 0 || palette.ready
+    onProceduralPrimaryChanged: {
+        if (ready) {
+            ColorScheme.setSeed(primary)
+            paletteChanged(primary, secondary)
+        }
+    }
 
     // Injected by the shell adapter: which scheme branch the wallpaper-derived
     // colours should be generated for. Defaults to the system palette so the
@@ -407,8 +414,8 @@ QtObject {
                     + " secondary=" + palette.secondary)
                 // The sampled primary is the seed for the Material scheme. It is
                 // computed in-process, so no external tool has to re-read the image.
-                ColorScheme.setSeed(palette.primary)
-                svc.paletteChanged(palette.primary, palette.secondary)
+                ColorScheme.setSeed(svc.primary)
+                svc.paletteChanged(svc.primary, svc.secondary)
             }
         }
     }

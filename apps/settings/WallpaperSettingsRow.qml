@@ -11,17 +11,10 @@ Item {
     signal activated()
     implicitHeight: 54
     height: implicitHeight
-    Rectangle {
-        anchors.fill: parent
-        color: row.colors.primaryText
-        opacity: hit.containsMouse ? 0.035 : 0
-        radius: 18
-    }
     MouseArea {
         id: hit
         anchors.fill: parent
         enabled: row.actionable
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: row.activated()
     }

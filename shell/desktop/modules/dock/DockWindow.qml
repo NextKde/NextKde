@@ -4,6 +4,7 @@ import QtQuick
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
+import qs.desktop.modules.deskcenter
 import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 
@@ -202,6 +203,20 @@ PanelWindow {
         target: dockContainer
         function onWidthChanged() { layoutPublishTimer.restart() }
         function onHeightChanged() { layoutPublishTimer.restart() }
+    }
+
+    Timer {
+        interval: 67
+        repeat: true
+        triggeredOnStart: true
+        running: ThemeWallpaperService.active && root.visible
+        onTriggered: {
+            const p=dockWrapper.mapToItem(root.contentItem,0,0)
+            ThemeWallpaperService.setDockRect(root.screen?.name,
+                dockWrapper.opacity>0.05 ? {x:root.surfaceGlobalX+p.x-(root.screen?.x ?? 0),
+                    y:root.surfaceGlobalY+p.y-(root.screen?.y ?? 0),
+                    width:dockWrapper.width*dockWrapper.scale,height:dockWrapper.height*dockWrapper.scale} : null)
+        }
     }
 
     Component.onCompleted: layoutPublishTimer.restart()

@@ -105,11 +105,31 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_slideshow.mjs
         )
         set_tests_properties(kos-shell.wallpaper-slideshow PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-handoff
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_handoff.mjs)
+        set_tests_properties(kos-shell.wallpaper-handoff PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-transitions
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_transitions.mjs)
+        set_tests_properties(kos-shell.wallpaper-transitions PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-preview
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_preview.mjs
         )
         set_tests_properties(kos-shell.wallpaper-preview PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.theme-wallpaper-policy
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_theme_wallpaper_policy.mjs)
+        set_tests_properties(kos-shell.theme-wallpaper-policy PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.theme-wallpaper-physics
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/wallpapers/test_particle_physics.mjs)
+        set_tests_properties(kos-shell.theme-wallpaper-physics PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.theme-wallpaper-state
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_theme_wallpaper_state.mjs)
+        set_tests_properties(kos-shell.theme-wallpaper-state PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.process-identity
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs
@@ -512,8 +532,12 @@ if(KOS_BUILD_MUSIC)
     add_subdirectory(apps/music)
 endif()
 
-if(KOS_BUILD_KWIN_PLUGINS)
+# The shell imports this QML module even without compositor effects.
+if(KOS_BUILD_PLATFORM OR KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/quickshell/surface-shape)
+endif()
+
+if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/dock-window-animation)
     add_subdirectory(integrations/kwin/context-menu-input)
     add_subdirectory(integrations/kwin/kos-bridge)

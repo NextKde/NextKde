@@ -46,6 +46,7 @@ JsonlClient {
     daemonName: "platform daemon"
     timeoutName: "platform"
     readOperations: ({
+        "session.visibility": true,
         "appmenu.active": true,
         "appmenu.layout": true,
         "audio.applications": true,
@@ -88,6 +89,9 @@ JsonlClient {
         "network.connect-enterprise": 90000,
         "screenshot.capture": 0,
         "depth.generate": 300000,
+        "spatial.initialize": 1260000,
+        "spatial.inspect": 300000,
+        "spatial.clear": 300000,
         "wallpaper.preview.desktop": 6000
     })
 }

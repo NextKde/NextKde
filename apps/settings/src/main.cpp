@@ -1,3 +1,5 @@
+#include "CacheMaintenance.h"
+
 #include <LiquidAI/ModelManager.h>
 
 #include <QGuiApplication>
@@ -8,18 +10,30 @@
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
 #include <QDBusReply>
+#include <QDBusArgument>
+#include <QDBusPendingCallWatcher>
 #include <QDebug>
+#include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QImage>
+#include <QImageWriter>
+#include <QPainter>
+#include <QPainterPath>
+#include <QLinearGradient>
+#include <cmath>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
 #include <QProcess>
+#include <QImageReader>
+#include <QMutex>
+#include <QSet>
+#include <QThreadPool>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QQmlApplicationEngine>
@@ -31,6 +45,7 @@
 #include <QTimer>
 #include <QVariantMap>
 #include <QUrl>
+#include <algorithm>
 
 namespace {
 
@@ -108,6 +123,24 @@ bool isReadOnlyDebugKey(const QString &key)
 
 } // namespace
 
+// 托管图集目录(GNOME 模式:导入=复制进来,图集=枚举本目录,移除=进回收站)。
+// shell 侧 WallpaperService.migrateLibraryOnce 迁移旧图集时复制到同一路径,
+// 两处路径必须同步修改。
+static QString galleryDirPath() {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/kos/gallery");
+}
+
+// 壁纸缩略图缓存目录,确保存在。生成(wallpaperThumbnail)与启动清理
+// (CacheMaintenance::schedule)共用;以后新增缓存目录照此模式各起一个助手。
+static QString wallpaperThumbCacheDir() {
+    const QString dir = QStandardPaths::writableLocation(
+        QStandardPaths::GenericCacheLocation) + QStringLiteral("/kos/wallpaper-thumbs/");
+    if (!QDir(dir).exists())
+        QDir().mkpath(dir);
+    return dir;
+}
+
 class SettingsBridge final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
@@ -127,6 +160,14 @@ public:
         const QString configured = qEnvironmentVariable("KOS_SHELL_DIR");
         if (!configured.isEmpty())
             m_sessionShellDir = configured;
+        // 缩略图生成专用池:并发 2。全局池按核数开满,几十张 4K 壁纸同时
+        // 解码能把内存顶到几百 MB(每张全尺寸 RGBA ~33MB)。
+        m_thumbnailPool.setMaxThreadCount(2);
+    }
+
+    ~SettingsBridge() override {
+        m_thumbnailPool.clear();
+        m_thumbnailPool.waitForDone();
     }
 
     QString lastError() const { return m_lastError; }
@@ -242,26 +283,271 @@ public:
         return catalog;
     }
 
-    Q_INVOKABLE QStringList wallpaperImagesInFolder(const QString &urlOrPath) const {
+    // 磁盘缩略图缓存:键 = 源路径+mtime+目标尺寸+圆角的 SHA1,落盘 WebP q72
+    // (带 alpha;无 webp 编码器的机器退回 PNG)。圆角直接烘进图里(角外透明),
+    // 瓦片端不需要 MultiEffect 蒙版图层——那是展开全部时每瓦片一层的 FBO
+    // 内存大头。命中→立即返回;未命中→返回空串让瓦片先用原图,同时线程池
+    // 后台生成,完成发 wallpaperThumbnailChanged。
+    Q_INVOKABLE QString wallpaperThumbnail(const QString &urlOrPath,
+                                           int width, int height, int radius, bool generate = true) {
         const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
-        const QDir folder(path);
-        if (!folder.exists())
+        const QFileInfo info(path);
+        if (path.isEmpty() || !info.isFile() || !info.isReadable()
+                || width < 1 || height < 1 || width > 2048 || height > 2048)
             return {};
-        const QStringList formats{QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"),
-                                  QStringLiteral("*.png"), QStringLiteral("*.webp"),
-                                  QStringLiteral("*.avif"), QStringLiteral("*.bmp")};
-        QStringList images;
-        for (const QFileInfo &entry : folder.entryInfoList(
-                 formats, QDir::Files | QDir::Readable,
-                 QDir::Name | QDir::IgnoreCase)) {
-            images.append(entry.absoluteFilePath());
+        const QString key = QString::fromLatin1(
+            QCryptographicHash::hash(
+                QStringLiteral("thumb-v2|%1|%2|%3x%4r%5").arg(path,
+                    QString::number(info.lastModified().toMSecsSinceEpoch()),
+                    QString::number(width), QString::number(height),
+                    QString::number(radius)).toUtf8(),
+                QCryptographicHash::Sha1).toHex());
+        // WebP 带 alpha 且几十 KB;无 webp 编码器的机器退回 PNG(大些但可用)。
+        static const bool webpWritable =
+            QImageWriter::supportedImageFormats().contains("webp");
+        const QString thumbFile = wallpaperThumbCacheDir() + key
+            + (webpWritable ? QStringLiteral(".webp") : QStringLiteral(".png"));
+        if (QFileInfo(thumbFile).size() > 0)
+            return QUrl::fromLocalFile(thumbFile).toString();
+        if (!generate) return {};
+        const QString source = info.absoluteFilePath();
+        {
+            QMutexLocker locker(&m_thumbnailMutex);
+            if (m_thumbnailFailed.contains(key) || m_thumbnailInFlight.size() >= 64
+                || m_thumbnailInFlight.contains(key))
+                return {};
+            m_thumbnailInFlight.insert(key);
         }
+        const QString keyCopy = key;
+        // QPointer 守护:窗口退出后对象销毁,后台任务收尾时不再 emit。
+        QPointer<SettingsBridge> self(this);
+        m_thumbnailPool.start([self, source, thumbFile, keyCopy, width, height,
+                               radius]() {
+            // 按目标尺寸降采样解码(QImageReader):4K 原图全尺寸解码要
+            // ~33MB/张,降采样后中间产物 <1MB,内存和速度都差一个量级。
+            QImageReader reader(source);
+            reader.setAutoTransform(true);
+            const QSize originalSize = reader.size();
+            if (originalSize.width() > 0 && originalSize.height() > 0) {
+                // Bound the intermediate canvas even for panoramas. Crop
+                // before the final resize instead of expanding a thin image
+                // to an arbitrarily long buffer.
+                reader.setScaledSize(originalSize.scaled(
+                    QSize(width * 2, height * 2), Qt::KeepAspectRatio));
+            }
+            bool written = false;
+            QImage image = reader.read();
+            if (!image.isNull()) {
+                QSize crop = image.size();
+                const double targetAspect = double(width) / height;
+                if (double(image.width()) / image.height() > targetAspect)
+                    crop.setWidth(qMax(1, qRound(image.height() * targetAspect)));
+                else
+                    crop.setHeight(qMax(1, qRound(image.width() / targetAspect)));
+                QImage thumb = image.copy((image.width() - crop.width()) / 2,
+                    (image.height() - crop.height()) / 2, crop.width(), crop.height())
+                    .scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                if (radius > 0 && radius * 2 <= width && radius * 2 <= height) {
+                    // 圆角烘进图里(角外清成透明),需要 alpha 通道。
+                    thumb = thumb.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+                    QPainter p(&thumb);
+                    p.setRenderHint(QPainter::Antialiasing);
+                    QPainterPath rounded;
+                    rounded.addRoundedRect(0, 0, width, height, radius, radius);
+                    QPainterPath outside;
+                    outside.addRect(QRectF(0, 0, width, height));
+                    outside = outside.subtracted(rounded);
+                    p.setCompositionMode(QPainter::CompositionMode_Clear);
+                    p.fillPath(outside, Qt::black);
+                    p.end();
+                }
+                // WebP q72 带 alpha 仍几十 KB;PNG 退路大些但完整可用。
+                QSaveFile output(thumbFile);
+                if (output.open(QIODevice::WriteOnly)
+                    && thumb.save(&output, webpWritable ? "WEBP" : "PNG", 72))
+                    written = output.commit();
+                else
+                    output.cancelWriting();
+            }
+            if (self) {
+                QMutexLocker locker(&self->m_thumbnailMutex);
+                self->m_thumbnailInFlight.remove(keyCopy);
+                if (!written) {
+                    if (self->m_thumbnailFailed.size() >= 512)
+                        self->m_thumbnailFailed.clear();
+                    self->m_thumbnailFailed.insert(keyCopy);
+                }
+            }
+            if (self)
+                emit self->wallpaperThumbnailChanged();
+        });
+        return {};
+    }
+
+    // ===== 托管图集(GNOME 模式):导入=复制进 galleryDir,图集=枚举该目录,
+    // 移除=移入回收站。全部本地操作,不经 shell IPC、无快照回填。
+
+    static bool isGalleryImage(const QFileInfo &info) {
+        static const QStringList formats{
+            QStringLiteral("jpg"), QStringLiteral("jpeg"), QStringLiteral("png"),
+            QStringLiteral("webp"), QStringLiteral("avif"), QStringLiteral("bmp")};
+        return formats.contains(info.suffix().toLower());
+    }
+
+    // 内容指纹缓存:键=路径,附 (大小, mtime) 校验——文件没变就直接复用,
+    // 不重复读盘。仅 UI 线程访问(导入是同步 Q_INVOKABLE),无需加锁。
+    struct GalleryFingerprint {
+        qint64 size = 0;
+        qint64 mtime = 0;
+        QByteArray md5;
+    };
+    QHash<QString, GalleryFingerprint> m_galleryFingerprints;
+
+    QByteArray galleryFileMd5(const QString &path) {
+        const QFileInfo info(path);
+        const qint64 size = info.size();
+        const qint64 mtime = info.lastModified().toMSecsSinceEpoch();
+        const auto it = m_galleryFingerprints.constFind(path);
+        if (it != m_galleryFingerprints.constEnd()
+                && it->size == size && it->mtime == mtime)
+            return it->md5;
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return {};
+        QCryptographicHash hash(QCryptographicHash::Md5);
+        char buffer[1 << 16];
+        while (!file.atEnd()) {
+            const qint64 read = file.read(buffer, sizeof(buffer));
+            if (read <= 0)
+                return {};
+            hash.addData(QByteArrayView(buffer, qsizetype(read)));
+        }
+        const QByteArray md5 = hash.result();
+        if (m_galleryFingerprints.size() >= 4096)
+            m_galleryFingerprints.clear();
+        m_galleryFingerprints.insert(path, {size, mtime, md5});
+        return md5;
+    }
+
+    // 枚举托管图集,按 mtime 降序 = 新导入置顶。同步但目录只有自己的副本,
+    // 单次几百 stat 以内,代价可控。
+    Q_INVOKABLE QStringList galleryImages() const {
+        const QDir dir(galleryDirPath());
+        QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Readable);
+        entries.erase(std::remove_if(entries.begin(), entries.end(),
+                          [](const QFileInfo &info) { return !isGalleryImage(info); }),
+            entries.end());
+        std::sort(entries.begin(), entries.end(),
+            [](const QFileInfo &a, const QFileInfo &b) {
+                return a.lastModified() > b.lastModified();
+            });
+        QStringList images;
+        images.reserve(entries.size());
+        for (const QFileInfo &entry : entries)
+            images.append(entry.absoluteFilePath());
         return images;
     }
 
-    Q_INVOKABLE void chooseWallpaperImage(const QString &urlOrPath) {
+    // 复制单张图片进托管图集;重名自动加 " (n)"。返回目标路径,失败返回空串。
+    Q_INVOKABLE QString importGalleryImage(const QString &urlOrPath) {
         const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QFileInfo info(path);
+        if (path.isEmpty() || !info.isFile() || !info.isReadable()
+                || !isGalleryImage(info) || !QImageReader(info.absoluteFilePath()).canRead()) {
+            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            return {};
+        }
+        QDir dir(galleryDirPath());
+        if (!dir.exists())
+            QDir().mkpath(dir.absolutePath());
+        // 内容去重(两级):同内容必同大小,所以先按文件大小筛出候选(通常
+        // 0~1 个),只对候选算 MD5 比对——不必全目录扫哈希。命中即视为同一
+        // 张,跳过复制直接返回已有路径,重复导入幂等。
+        const QByteArray sourceMd5 = galleryFileMd5(info.absoluteFilePath());
+        if (sourceMd5.isEmpty()) {
+            setLastError(QStringLiteral("无法读取图片内容"));
+            return {};
+        }
+        for (const QFileInfo &entry : dir.entryInfoList(QDir::Files)) {
+            if (entry.size() != info.size())
+                continue;
+            if (galleryFileMd5(entry.absoluteFilePath()) == sourceMd5)
+                return entry.absoluteFilePath();
+        }
+        const QString base = info.completeBaseName();
+        const QString suffix = info.suffix();
+        QString target = dir.filePath(info.fileName());
+        for (int n = 1; QFileInfo::exists(target); ++n)
+            target = dir.filePath(QStringLiteral("%1 (%2).%3")
+                                      .arg(base, QString::number(n), suffix));
+        if (!QFile::copy(info.absoluteFilePath(), target)) {
+            setLastError(QStringLiteral("复制图片失败:%1").arg(info.fileName()));
+            return {};
+        }
+        return target;
+    }
+
+    // 复制文件夹内全部图片进托管图集(一次性快照,之后文件夹新增不会自动
+    // 出现),返回成功张数,上限 200。
+    Q_INVOKABLE int importGalleryFolder(const QString &urlOrPath) {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QDir folder(path);
+        if (path.isEmpty() || !folder.exists()) {
+            setLastError(QStringLiteral("文件夹不存在或不可读取"));
+            return -1;
+        }
+        constexpr int kMaxFolderImages = 200;
+        int imported = 0;
+        const QFileInfoList entries = folder.entryInfoList(
+            QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase);
+        for (const QFileInfo &entry : entries) {
+            if (imported >= kMaxFolderImages)
+                break;
+            if (!isGalleryImage(entry))
+                continue;
+            if (!importGalleryImage(entry.absoluteFilePath()).isEmpty())
+                ++imported;
+        }
+        return imported;
+    }
+
+    // 移入回收站，只允许操作托管目录内的图片。
+    Q_INVOKABLE bool deleteGalleryImage(const QString &urlOrPath) {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        const QString managed = QFileInfo(galleryDirPath()).canonicalFilePath();
+        if (canonical.isEmpty() || managed.isEmpty()
+                || !canonical.startsWith(managed + QLatin1Char('/'))) {
+            setLastError(QStringLiteral("只能移除图集内的图片"));
+            return false;
+        }
+        if (!QFile::moveToTrash(canonical)) {
+            setLastError(QStringLiteral("移入回收站失败:%1")
+                             .arg(QFileInfo(canonical).fileName()));
+            return false;
+        }
+        return true;
+    }
+
+    // 打开图片所在文件夹是设置程序自己的本地动作,不经 shell、无快照回填。
+    Q_INVOKABLE void revealWallpaperImage(const QString &urlOrPath) {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QFileInfo info(path);
+        if (!info.exists()) {
+            setLastError(QStringLiteral("文件不存在,无法打开所在文件夹"));
+            emit wallpaperSnapshotChanged({});
+            return;
+        }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(info.isDir()
+            ? info.absoluteFilePath() : info.absolutePath()));
+    }
+
+    Q_INVOKABLE void chooseWallpaperImage(const QString &urlOrPath) {        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
         const QFileInfo image(path);
         if (!image.isFile() || !image.isReadable()) {
@@ -282,42 +568,111 @@ public:
             return;
         }
         QJsonArray paths;
-        for (const QString &image : images.mid(0, 120)) paths.append(image);
+        for (const QString &image : images.mid(0, 2000)) paths.append(image);
         const QString listJson = QString::fromUtf8(
             QJsonDocument(paths).toJson(QJsonDocument::Compact));
         callWallpaper({QStringLiteral("previewImage"), QFileInfo(path).absoluteFilePath(),
             ipcStringArgument(listJson)});
     }
 
-    Q_INVOKABLE void chooseWallpaperColor(const QString &hex) {
+    // Generated colors are internal cache entries, never added to the user's library.
+    Q_INVOKABLE QString wallpaperColorImage(const QString &start, const QString &end,
+                                             int angle) {
         const QRegularExpression format(QStringLiteral("^#[0-9a-fA-F]{6}$"));
-        if (!format.match(hex).hasMatch()) {
-            setLastError(QStringLiteral("壁纸颜色无效"));
-            emit wallpaperSnapshotChanged({});
-            return;
+        if (!format.match(start).hasMatch() || !format.match(end).hasMatch()) {
+            setLastError(QStringLiteral("请输入有效的六位十六进制颜色，例如 #A8C8F0"));
+            return {};
         }
+        angle = ((angle % 360) + 360) % 360;
         const QString folder = QStandardPaths::writableLocation(
-            QStandardPaths::GenericCacheLocation)
-            + QStringLiteral("/kos/wallpaper-colors");
+            QStandardPaths::GenericCacheLocation) + QStringLiteral("/kos/wallpaper-colors");
+        const QString key = start == end ? start.mid(1).toLower()
+            : QStringLiteral("gradient-%1-%2-%3").arg(start.mid(1).toLower(),
+                end.mid(1).toLower(), QString::number(angle));
+        const QString path = folder + QLatin1Char('/') + key + QStringLiteral(".png");
+        if (QFileInfo::exists(path)) return path;
         if (!QDir().mkpath(folder)) {
             setLastError(QStringLiteral("无法创建颜色壁纸缓存"));
-            emit wallpaperSnapshotChanged({});
-            return;
+            return {};
         }
-        const QString path = folder + QLatin1Char('/')
-            + hex.mid(1).toLower() + QStringLiteral(".png");
-        if (!QFileInfo::exists(path)) {
-            QImage pixel(16, 16, QImage::Format_RGB32);
-            pixel.fill(QColor(hex));
-            QSaveFile file(path);
-            if (!file.open(QIODevice::WriteOnly) || !pixel.save(&file, "PNG")
-                    || !file.commit()) {
-                setLastError(QStringLiteral("无法保存颜色壁纸"));
-                emit wallpaperSnapshotChanged({});
+        QImage image(start == end ? QSize(16, 16) : QSize(1920, 1080), QImage::Format_RGB32);
+        if (start == end) image.fill(QColor(start));
+        else {
+            const double radians = angle * 3.14159265358979323846 / 180.0;
+            const QPointF direction(std::cos(radians), std::sin(radians));
+            const QPointF center(image.width() / 2.0, image.height() / 2.0);
+            const double extent = std::abs(direction.x()) * image.width() / 2.0
+                + std::abs(direction.y()) * image.height() / 2.0;
+            QLinearGradient gradient(center - direction * extent, center + direction * extent);
+            gradient.setColorAt(0, QColor(start));
+            gradient.setColorAt(1, QColor(end));
+            QPainter painter(&image);
+            painter.fillRect(image.rect(), gradient);
+        }
+        QSaveFile file(path);
+        if (!file.open(QIODevice::WriteOnly) || !image.save(&file, "PNG") || !file.commit()) {
+            setLastError(QStringLiteral("无法生成颜色壁纸"));
+            return {};
+        }
+        setLastError({});
+        return path;
+    }
+
+    Q_INVOKABLE void chooseWallpaperColor(const QString &hex) {
+        chooseWallpaperGradient(hex, hex, 0);
+    }
+
+    Q_INVOKABLE void chooseWallpaperGradient(const QString &start, const QString &end, int angle) {
+        const QString path = wallpaperColorImage(start, end, angle);
+        if (path.isEmpty()) { emit wallpaperSnapshotChanged({}); return; }
+        callWallpaper({QStringLiteral("chooseColor"), path});
+    }
+
+    Q_INVOKABLE QString wallpaperCustomColors() {
+        QSettings settings;
+        return settings.value(QStringLiteral("wallpaper/customColors"), QStringLiteral("[]")).toString();
+    }
+    Q_INVOKABLE void saveWallpaperCustomColors(const QString &json) {
+        const QJsonDocument document = QJsonDocument::fromJson(json.toUtf8());
+        if (!document.isArray()) return;
+        QSettings settings;
+        settings.setValue(QStringLiteral("wallpaper/customColors"), json);
+    }
+
+    Q_INVOKABLE void pickWallpaperColor() {
+        QDBusInterface picker(QStringLiteral("org.kde.KWin"), QStringLiteral("/ColorPicker"),
+                              QStringLiteral("org.kde.kwin.ColorPicker"), QDBusConnection::sessionBus());
+        auto *watcher = new QDBusPendingCallWatcher(picker.asyncCall(QStringLiteral("pick")), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
+            const QDBusMessage reply = watcher->reply();
+            watcher->deleteLater();
+            if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+                emit wallpaperColorPickFailed(QStringLiteral("取色已取消或当前桌面不支持屏幕取色"));
                 return;
             }
-        }
-        previewWallpaperImage(path, {path});
+            const QDBusArgument value = reply.arguments().first().value<QDBusArgument>();
+            quint32 rgba = 0;
+            value.beginStructure(); value >> rgba; value.endStructure();
+            emit wallpaperColorPicked(QColor::fromRgba(rgba).name(QColor::HexRgb));
+        });
+    }
+
+    Q_INVOKABLE void previewWallpaperSession(const QString &path, const QVariantMap &session) {
+        const QString json = QString::fromUtf8(QJsonDocument(
+            QJsonObject::fromVariantMap(session)).toJson(QJsonDocument::Compact));
+        callWallpaper({QStringLiteral("previewSession"), path, ipcStringArgument(json)});
+    }
+
+    Q_INVOKABLE void updateWallpaperPreviewThumbnails(const QVariantMap &thumbnails) {
+        const QString json = QString::fromUtf8(QJsonDocument(
+            QJsonObject::fromVariantMap(thumbnails)).toJson(QJsonDocument::Compact));
+        callWallpaper({QStringLiteral("setPreviewThumbnails"), ipcStringArgument(json)});
+    }
+
+    Q_INVOKABLE void updateWallpaperTransitionOptions(const QVariantMap &options) {
+        const QString json = QString::fromUtf8(QJsonDocument(
+            QJsonObject::fromVariantMap(options)).toJson(QJsonDocument::Compact));
+        callWallpaper({QStringLiteral("setTransitionOptions"), ipcStringArgument(json)});
     }
 
     Q_INVOKABLE void updateWallpaperFitMode(const QString &mode) {
@@ -334,16 +689,18 @@ public:
     }
 
     Q_INVOKABLE void updateWallpaperSlideshow(bool enabled, int minutes,
-                                              const QStringList &images) {
+                                              const QStringList &images,
+                                              const QString &folder) {
         QJsonArray paths;
-        for (const QString &path : images.mid(0, 120))
+        for (const QString &path : images.mid(0, 2000))
             paths.append(path);
         const QString listJson = QString::fromUtf8(
             QJsonDocument(paths).toJson(QJsonDocument::Compact));
         callWallpaper({QStringLiteral("setSlideshow"),
                        enabled ? QStringLiteral("true") : QStringLiteral("false"),
                        QString::number(minutes),
-                       ipcStringArgument(listJson)});
+                       ipcStringArgument(listJson),
+                       folder});
     }
 
     Q_INVOKABLE void updateWallpaperSpatialEnabled(bool enabled) {
@@ -351,8 +708,31 @@ public:
                        enabled ? QStringLiteral("true") : QStringLiteral("false")});
     }
 
+    Q_INVOKABLE void chooseWallpaperTheme(const QString &id) {
+        if (id != "starfield" && id != "blackhole" && id != "weather"
+            && id != "underwater" && id != "forest") return;
+        callWallpaper({QStringLiteral("chooseTheme"), id});
+    }
+    Q_INVOKABLE void updateWallpaperThemeEconomical(bool enabled) {
+        callWallpaper({QStringLiteral("setThemeEconomical"), enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateWallpaperThemeMotion(bool animated, double speed, int count) {
+        callWallpaper({QStringLiteral("setThemeMotion"), animated ? QStringLiteral("true") : QStringLiteral("false"),
+                       QString::number(qBound(0.1, speed, 1.5)), QString::number(qBound(24, count, 160))});
+    }
+
     Q_INVOKABLE void prepareWallpaperSpatial() {
         callWallpaper({QStringLiteral("prepareSpatial")});
+    }
+
+    Q_INVOKABLE void initializeSpatialService() { callWallpaper({QStringLiteral("initializeSpatialService")}); }
+    Q_INVOKABLE void disableSpatialService() { callWallpaper({QStringLiteral("disableSpatialService")}); }
+    Q_INVOKABLE void cancelWallpaperSpatial() { callWallpaper({QStringLiteral("cancelSpatial")}); }
+    Q_INVOKABLE void inspectSpatialService() { callWallpaper({QStringLiteral("inspectSpatialService")}); }
+    Q_INVOKABLE void clearSpatialCache(const QString &kind) {
+        if (kind != "generated" && kind != "models" && kind != "all") return;
+        callWallpaper({QStringLiteral("clearSpatialCache"), kind});
     }
 
     Q_INVOKABLE void inspectWallpaperModels() {
@@ -659,6 +1039,8 @@ public:
     }
 
 signals:
+    void wallpaperColorPicked(const QString &color);
+    void wallpaperColorPickFailed(const QString &message);
     void lastErrorChanged();
     void sessionChanged();
     void entryChanged();
@@ -674,6 +1056,8 @@ signals:
                                    const QString &presetStyle);
     void integrationSnapshotChanged(const QVariantMap &snapshot);
     void systemAppearanceApplied(bool accepted);
+    // 后台缩略图生成完毕;页面收到后重新求值瓦片缩略图绑定,下次直接命中缓存。
+    void wallpaperThumbnailChanged();
 
 private:
     // What the requesting page wants back once the IPC reply lands: every
@@ -761,21 +1145,36 @@ private:
         }
         setLastError({});
         return {
+            {QStringLiteral("previewImage"), object.value(QStringLiteral("previewImage")).toString()},
+            {QStringLiteral("previewMode"), object.value(QStringLiteral("previewMode")).toString()},
+            {QStringLiteral("previewSelection"), object.value(QStringLiteral("previewSelection")).toString()},
+            {QStringLiteral("previewCatalog"), object.value(QStringLiteral("previewCatalog")).toString()},
+            {QStringLiteral("previewColors"), object.value(QStringLiteral("previewColors")).toString()},
+            {QStringLiteral("transitionOptions"), object.value(QStringLiteral("transitionOptions")).toString()},
+            {QStringLiteral("slideshowImages"), object.value(QStringLiteral("slideshowImages")).toString()},
+            {QStringLiteral("previewInterval"), object.value(QStringLiteral("previewInterval")).toInt()},
             {QStringLiteral("previewActive"), object.value(QStringLiteral("previewActive")).toBool()},
             {QStringLiteral("previewPending"), object.value(QStringLiteral("previewPending")).toBool()},
             {QStringLiteral("previewError"), object.value(QStringLiteral("previewError")).toString()},
             {QStringLiteral("previewAvailable"), object.value(QStringLiteral("previewAvailable")).toBool()},
             {QStringLiteral("image"), object.value(QStringLiteral("image")).toString()},
+            {QStringLiteral("wallpaperMode"), object.value(QStringLiteral("wallpaperMode")).toString()},
+            {QStringLiteral("themeId"), object.value(QStringLiteral("themeId")).toString()},
+            {QStringLiteral("themeEconomical"), object.value(QStringLiteral("themeEconomical")).toBool()},
+            {QStringLiteral("themeAnimated"), object.value(QStringLiteral("themeAnimated")).toBool()},
+            {QStringLiteral("themeSpeed"), object.value(QStringLiteral("themeSpeed")).toDouble(0.5)},
+            {QStringLiteral("themeParticleCount"), object.value(QStringLiteral("themeParticleCount")).toInt(80)},
             {QStringLiteral("fitMode"), object.value(QStringLiteral("fitMode")).toString()},
             {QStringLiteral("transition"), object.value(QStringLiteral("transition")).toString()},
-            {QStringLiteral("recentImages"), object.value(QStringLiteral("recentImages")).toString()},
+            {QStringLiteral("library"), object.value(QStringLiteral("library")).toString()},
             {QStringLiteral("slideshowEnabled"), object.value(QStringLiteral("slideshowEnabled")).toBool()},
             {QStringLiteral("slideshowIntervalMinutes"), object.value(QStringLiteral("slideshowIntervalMinutes")).toInt()},
-            {QStringLiteral("slideshowImages"), object.value(QStringLiteral("slideshowImages")).toString()},
+            {QStringLiteral("slideshowFolder"), object.value(QStringLiteral("slideshowFolder")).toString()},
             {QStringLiteral("takeoverEnabled"), object.value(QStringLiteral("takeoverEnabled")).toBool()},
             {QStringLiteral("takeoverPending"), object.value(QStringLiteral("takeoverPending")).toBool()},
             {QStringLiteral("takeoverError"), object.value(QStringLiteral("takeoverError")).toString()},
             {QStringLiteral("takeoverAvailable"), object.value(QStringLiteral("takeoverAvailable")).toBool()},
+            {QStringLiteral("spatialResources"), object.value(QStringLiteral("spatialResources")).toObject().toVariantMap()},
             {QStringLiteral("spatialEnabled"), object.value(QStringLiteral("spatialEnabled")).toBool()},
             {QStringLiteral("spatialReady"), object.value(QStringLiteral("spatialReady")).toBool()},
             {QStringLiteral("spatialPrepared"), object.value(QStringLiteral("spatialPrepared")).toBool()},
@@ -1131,7 +1530,21 @@ private:
     }
 
     void callWallpaper(const QStringList &arguments) {
-        callShell(QStringLiteral("wallpaper-settings"), arguments,
+        // Serialize mutations so rapid multi-selection cannot apply out of order.
+        if (arguments.value(0) == QStringLiteral("snapshot") && m_wallpaperBusy)
+            return;
+        if (!m_wallpaperQueue.isEmpty() && arguments.value(0) == QStringLiteral("setSlideshow")
+                && m_wallpaperQueue.last().value(0) == QStringLiteral("setSlideshow"))
+            m_wallpaperQueue.last() = arguments;
+        else
+            m_wallpaperQueue.append(arguments);
+        pumpWallpaperRequests();
+    }
+
+    void pumpWallpaperRequests() {
+        if (m_wallpaperBusy || m_wallpaperQueue.isEmpty()) return;
+        m_wallpaperBusy = true;
+        callShell(QStringLiteral("wallpaper-settings"), m_wallpaperQueue.takeFirst(),
                   QStringLiteral("壁纸设置请求失败"), RequestKind::Wallpaper);
     }
 
@@ -1341,6 +1754,62 @@ private:
     }
 
     // Dispatch the reply to the signal the requesting page listens to.
+    // 旧 libraryJson 引用的一次性迁移:首次拿到带 library 字段的快照时,把
+    // 引用的单图/文件夹内容复制进托管图集(GNOME 模式的起点)。按进程一次;
+    // 按内容去重，同名但内容不同的文件也保留。持久化迁移标记，防止下一次
+    // 打开设置时把已移除的图片重新从旧引用导入。
+    void migrateGalleryFromLibrary(const QString &libraryJson) {
+        if (m_galleryMigrated)
+            return;
+        QSettings migration;
+        if (migration.value(QStringLiteral("wallpaper/galleryMigrationVersion"), 0).toInt() >= 1) {
+            m_galleryMigrated = true;
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(libraryJson.toUtf8());
+        if (!doc.isArray())
+            return;
+        m_galleryMigrated = true;
+        const QVariantList entries = doc.array().toVariantList();
+        constexpr int kMaxMigratedImages = 200;
+        int copied = 0;
+        for (const QVariant &entryVar : entries) {
+            if (copied >= kMaxMigratedImages)
+                break;
+            const QVariantMap entry = entryVar.toMap();
+            const QString type = entry.value(QStringLiteral("type")).toString();
+            QString path = entry.value(QStringLiteral("path")).toString();
+            if (path.startsWith(QStringLiteral("file:")))
+                path = QUrl(path).toLocalFile();
+            if (type != QLatin1String("image") && type != QLatin1String("folder"))
+                continue;
+            QStringList sources{path};
+            if (type == QLatin1String("folder")) {
+                sources.clear();
+                const QDir folder(path);
+                if (!folder.exists())
+                    continue;
+                for (const QFileInfo &file : folder.entryInfoList(
+                         QDir::Files | QDir::Readable, QDir::Name | QDir::IgnoreCase)) {
+                    if (copied >= kMaxMigratedImages)
+                        break;
+                    if (isGalleryImage(file))
+                        sources.append(file.absoluteFilePath());
+                }
+            }
+            for (const QString &source : sources) {
+                if (copied >= kMaxMigratedImages)
+                    break;
+                if (!importGalleryImage(source).isEmpty())
+                    ++copied;
+            }
+        }
+        migration.setValue(QStringLiteral("wallpaper/galleryMigrationVersion"), 1);
+        migration.sync();
+        if (copied > 0)
+            qDebug() << "gallery migration accepted" << copied << "images";
+    }
+
     void handleReply(RequestKind kind, const QString &payload) {
         switch (kind) {
         case RequestKind::Dock:
@@ -1349,9 +1818,16 @@ private:
         case RequestKind::DockBuiltinVisibility:
             emit dockBuiltinVisibilityChanged(snapshotFromReply(payload));
             break;
-        case RequestKind::Wallpaper:
-            emit wallpaperSnapshotChanged(wallpaperSnapshotFromReply(payload));
+        case RequestKind::Wallpaper: {
+            const QVariantMap state = wallpaperSnapshotFromReply(payload);
+            m_wallpaperBusy = false;
+            migrateGalleryFromLibrary(
+                state.value(QStringLiteral("library")).toString());
+            // Intermediate replies must not overwrite a newer selection in the UI.
+            if (m_wallpaperQueue.isEmpty()) emit wallpaperSnapshotChanged(state);
+            pumpWallpaperRequests();
             break;
+        }
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
             break;
@@ -1395,7 +1871,9 @@ private:
             emit dockBuiltinVisibilityChanged({});
             break;
         case RequestKind::Wallpaper:
+            m_wallpaperBusy = false;
             emit wallpaperSnapshotChanged({});
+            pumpWallpaperRequests();
             break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged({});
@@ -1425,11 +1903,21 @@ private:
         emit lastErrorChanged();
     }
 
+    bool m_wallpaperBusy = false;
+    QList<QStringList> m_wallpaperQueue;
     QString m_lastError;
     // The Shell directory this window is talking to: seeded from KOS_SHELL_DIR,
     // replaced by whichever candidate answers. Empty until one of the two has
     // happened, which is also the state that reads as "not a development
     // session" rather than guessing.
+    // 缩略图后台生成的去重:同一 key 只允许一个在途任务,防止首开 200 张
+    // 瓦片的解码风暴重复排队。
+    QMutex m_thumbnailMutex;
+    QSet<QString> m_thumbnailInFlight;
+    QSet<QString> m_thumbnailFailed;
+    QThreadPool m_thumbnailPool;
+    // 旧图集引用 → 托管目录的一次性迁移,每进程只跑一次。
+    bool m_galleryMigrated = false;
     QString m_sessionShellDir;
     // Set once, from the entry point main() chose, before the engine loads it.
     bool m_sourceTreeEntry = false;
@@ -1674,6 +2162,12 @@ int main(int argc, char *argv[]) {
     // there is something to watch.
     SettingsQmlReloader reloader(&engine, entrypoint, entry.checkoutRoot);
     reloader.start();
+
+    // 缓存维护:启动时调度一次(线程池内执行,阈值内零开销)。以后新增缓存
+    // 目录都从这里追加 schedule 调用。
+    CacheMaintenance::schedule(wallpaperThumbCacheDir(),
+                               64 * 1024 * 1024, 500);
+
     // --smoke-test is the build-side check that the settings window loads:
     // run one event loop turn (as ApplicationRunner does for the apps) and
     // exit, so CI can prove main.qml instantiates without a display.

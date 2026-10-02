@@ -1,0 +1,7 @@
+Generated with built-in image_gen on 2026-10-02.
+
+underwater:
+Use case: photorealistic-natural. Generate a premium cinematic desktop wallpaper, wide 16:9 landscape. View underwater in a clear deep turquoise lake, looking toward the rippling sunlit surface above, beautiful volumetric shafts of sunlight, realistic fine suspended particles, detailed submerged rock formations and aquatic plants framing the bottom and sides, deep layered blue distance, natural caustic light on stones. Rich photographic detail and believable natural materials, restrained luminous atmosphere, calm open central space for desktop widgets. No divers, fish, text, logos, UI or cartoon shapes. Deliver a PNG image.
+
+forest:
+Use case: photorealistic-natural. Generate a premium cinematic desktop wallpaper, wide 16:9 landscape. Immersive ancient forest at blue hour, richly detailed mossy tree trunks and ferns, soft mist between many receding trees, moonlight gently filtering through canopy, a small number of warm golden fireflies floating naturally near the forest floor, dark teal and deep forest green tones with subtle amber light. Photographic natural textures and sophisticated film lighting, believable layered depth, calm central clearing for desktop widgets. No people, buildings, text, logos, UI or cartoon shapes. Deliver a PNG image.

@@ -1,8 +1,8 @@
+import "../../shared/qml/controls" as SharedControls
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 
-// Compact value in a settings row. The choices live in a small glass sheet
+// Compact value in a settings row. The choices live in a small rounded sheet
 // instead of a platform-styled ComboBox, keeping every settings page aligned.
 Item {
     id: control
@@ -12,7 +12,6 @@ Item {
     property int currentIndex: 0
     property bool openingUp: false
     property string placeholder: ""
-    property Item backdropSource: null
     signal activated(int index)
     implicitWidth: 150
     implicitHeight: 40
@@ -35,16 +34,6 @@ Item {
         menu.open()
     }
 
-    Rectangle {
-        anchors.fill: parent
-        radius: 12
-        color: pointer.containsMouse
-            ? (control.colors.dark ? "#22ffffff" : "#14000000")
-            : "transparent"
-        border.color: pointer.containsMouse
-            ? (control.colors.dark ? "#48ffffff" : "#23000000") : "transparent"
-        Behavior on color { ColorAnimation { duration: 150 } }
-    }
     Row {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
@@ -56,10 +45,10 @@ Item {
             font.pixelSize: 13
             font.weight: Font.Medium
         }
-        Text {
-            text: "⌄"
+        SharedControls.VectorIcon {
+            name: "chevron"
             color: control.colors.secondaryText
-            font.pixelSize: 17
+            size: 17
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: -2
         }
@@ -67,7 +56,6 @@ Item {
     MouseArea {
         id: pointer
         anchors.fill: parent
-        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: control.openMenu()
     }
@@ -75,15 +63,8 @@ Item {
     Popup {
         id: menu
         width: Math.max(188, control.width + 34)
-        implicitHeight: choices.implicitHeight + 12
+        implicitHeight: Math.min(360, choices.implicitHeight + 12)
         padding: 6
-        onOpened: {
-            if (control.backdropSource && GraphicsInfo.api !== GraphicsInfo.Software) {
-                const origin = menu.background.mapToItem(control.backdropSource, 0, 0)
-                capturedBackground.sourceRect = Qt.rect(origin.x, origin.y, menu.width, menu.height)
-                capturedBackground.scheduleUpdate()
-            }
-        }
         modal: false
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -98,37 +79,39 @@ Item {
         }
         background: Rectangle {
             radius: 19
-            color: "transparent"
-            border.color: control.colors.dark ? "#70ffffff" : "#baffffff"
+            // 不透明底。之前是"模糊捕获 backdrop + 半透明着色"两层玻璃,底下
+            // 透什么全看运气;现在底色定死,玻璃感全部交给描边。
+            color: control.colors.dark ? "#262b31" : "#f6f8fb"
             border.width: 1
-            ShaderEffectSource {
-                id: capturedBackground
-                visible: false
-                sourceItem: control.backdropSource
-                textureSize: Qt.size(menu.width, menu.height)
-                live: false
-                recursive: false
-            }
-            MultiEffect {
-                anchors.fill: parent
-                source: capturedBackground
-                blurEnabled: true
-                blur: 0.75
-                blurMax: 20
-                maskEnabled: true
-                maskSource: Rectangle {
-                    width: menu.width
-                    height: menu.height
-                    radius: 19
-                    color: "white"
-                    visible: false
-                }
-                visible: control.backdropSource && GraphicsInfo.api !== GraphicsInfo.Software
-            }
+            // Edge glow - soft rim light(LiquidNavBar 的边光做法)
+            border.color: Qt.rgba(1, 1, 1, control.colors.dark ? 0.30 : 0.72)
+            // Inner rim light:再往里 1px 一道更细的亮线(LiquidGlassButton 层1)
             Rectangle {
                 anchors.fill: parent
+                anchors.margins: 1
+                radius: 18
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, control.colors.dark ? 0.16 : 0.45)
+            }
+            // Chromatic aberration:红/青描边各偏 0.5px(LiquidGlassButton 层2)
+            Rectangle {
+                width: parent.width
+                height: parent.height
+                x: -0.5
                 radius: 19
-                color: control.colors.dark ? "#b9272b32" : "#dcf6f8fb"
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(1, 0.25, 0.25, control.colors.dark ? 0.14 : 0.20)
+            }
+            Rectangle {
+                width: parent.width
+                height: parent.height
+                x: 0.5
+                radius: 19
+                color: "transparent"
+                border.width: 1
+                border.color: Qt.rgba(0.25, 0.85, 1, control.colors.dark ? 0.14 : 0.20)
             }
             Rectangle {
                 anchors.fill: parent
@@ -140,17 +123,13 @@ Item {
                     GradientStop { position: 1; color: control.colors.dark ? "#10000000" : "#08000000" }
                 }
             }
-            Rectangle {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: 10
-                height: 1
-                color: "#65ffffff"
-                opacity: 0.65
-            }
         }
-        contentItem: Column {
+        contentItem: Flickable {
+            clip: true
+            contentHeight: choices.implicitHeight
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            Column {
             id: choices
             Repeater {
                 model: control.model
@@ -165,9 +144,7 @@ Item {
                         color: parent.index === control.currentIndex
                             ? Qt.rgba(control.colors.accent.r, control.colors.accent.g,
                                       control.colors.accent.b, control.colors.dark ? 0.22 : 0.13)
-                            : hit.containsMouse
-                                ? (control.colors.dark ? "#25ffffff" : "#16000000")
-                                : "transparent"
+                            : "transparent"
                         Behavior on color { ColorAnimation { duration: 120 } }
                     }
                     Text {
@@ -179,19 +156,18 @@ Item {
                             ? control.colors.accent : control.colors.primaryText
                         font.pixelSize: 13
                     }
-                    Text {
+                    SharedControls.VectorIcon {
                         anchors.right: parent.right
                         anchors.rightMargin: 13
                         anchors.verticalCenter: parent.verticalCenter
                         visible: parent.index === control.currentIndex
-                        text: "✓"
+                        name: "check"
                         color: control.colors.accent
-                        font.pixelSize: 13
+                        size: 13
                     }
                     MouseArea {
                         id: hit
                         anchors.fill: parent
-                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             control.activated(parent.index)
@@ -199,6 +175,7 @@ Item {
                         }
                     }
                 }
+            }
             }
         }
     }

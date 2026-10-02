@@ -35,3 +35,7 @@ singleton AppearanceTokens 1.0 AppearanceTokens.qml
 singleton ScreenLifecycle 1.0 ScreenLifecycle.qml
 
 MediaControlButton 1.0 MediaControlButton.qml
+
+ActionFeedbackToast 1.0 ActionFeedbackToast.qml
+
+DesktopConfirmDialog 1.0 DesktopConfirmDialog.qml

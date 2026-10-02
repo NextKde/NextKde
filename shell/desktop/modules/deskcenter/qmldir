@@ -20,4 +20,12 @@ singleton PimWidgetService 1.0 PimWidgetService.qml
 singleton WallpaperPreviewService 1.0 WallpaperPreviewService.qml
 WallpaperPreviewBar 1.0 WallpaperPreviewBar.qml
 
-WallpaperPreviewAction 1.0 WallpaperPreviewAction.qml
+singleton SpatialResourceService 1.0 SpatialResourceService.qml
+
+SpatialPreparationOverlay 1.0 SpatialPreparationOverlay.qml
+
+SpatialPreparationWindow 1.0 SpatialPreparationWindow.qml
+
+singleton ThemeWallpaperService 1.0 ThemeWallpaperService.qml
+ThemeWallpaperLayer 1.0 ThemeWallpaperLayer.qml
+ThemeForegroundWindow 1.0 ThemeForegroundWindow.qml

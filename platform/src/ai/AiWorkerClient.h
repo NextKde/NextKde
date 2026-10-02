@@ -22,12 +22,19 @@ public:
     void generateDepth(const QString &imagePath, Completion completion,
                        bool prepareSpatial = false);
 
+    void resourceOperation(const QString &operation, const QString &kind, Completion completion);
+    void cancel();
+    QJsonObject status() const { return m_status; }
+
 private:
+    QJsonObject m_status;
+    bool m_canceling = false;
     struct Request {
         QString id;
         QString imagePath;
         bool prepareSpatial = false;
         Completion completion;
+        QString operation = QStringLiteral("depth.generate");
     };
 
     void ensureWorker();
@@ -43,6 +50,7 @@ private:
     QByteArray m_outputBuffer;
     bool m_active = false;
     bool m_starting = false;
+    bool m_stopping = false;
     qint64 m_retryAfterMs = 0;
     int m_failureCount = 0;
 };

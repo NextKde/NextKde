@@ -17,7 +17,8 @@ Arch 常用基础包：
 
 ```sh
 sudo pacman -S --needed \
-  git quickshell cmake ninja gcc go qt6-base qt6-declarative \
+  git quickshell cmake ninja gcc go curl patchelf qt6-base qt6-declarative \
+  qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland opencv kio \
   kwindowsystem kiconthemes kglobalaccel \
   extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
   kcoreaddons kdecoration gettext libxcb vulkan-headers
@@ -61,7 +62,11 @@ sudo apt install quickshell
 ```sh
 sudo apt install \
   git cmake ninja-build g++ golang-go \
-  qt6-base-dev qt6-declarative-dev \
+  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-wayland-dev libqt6svg6 \
+  qt6-wayland qt6-image-formats-plugins qml6-module-qt5compat-graphicaleffects \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
+  qml6-module-qtqml-models qml6-module-qtqml-workerscript libopencv-dev curl patchelf \
   libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
   extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
   libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \
@@ -191,6 +196,27 @@ sudo systemctl restart sddm
 ```
 
 彻底移除主题本体：`sudo rm -rf /usr/share/sddm/themes/kos`。
+
+### 从干净状态重新安装
+
+彻底清理使用 `./tools/purge-kos.sh`，它会先列出删除清单并等待确认。
+只查看清单可用 `./tools/purge-kos.sh --dry-run`。
+
+此操作停止 KOS 服务与相关进程、恢复 Plasma shell，移除核心与可选应用、KWin/QML
+插件、AI worker、ONNX 运行库、下载的模型、图片及空间素材缓存、配置与构建目录。
+**托管图库的副本和 KOS 应用数据（包括日历/待办）也会删除**；源码和外部原图保留。
+遵循 `KOS_PREFIX`、`KOS_INSTALL_PREFIX` 和 XDG 路径；使用过自定义安装路径时，
+清理时传入相同设置。系统文件通过 sudo 删除，共用的 Qt/OpenCV 等系统软件包保留。
+NixOS 声明式服务需先在配置中关闭 `services.kos.enable` 并重新构建系统。
+
+清理完成后重新登录或重启，再执行：
+
+```sh
+./tools/kosctl install
+./tools/kosctl start
+```
+
+空间壁纸服务再次开启时会重新下载并校验模型。
 
 ### 4. 首次设置
 
@@ -415,3 +441,16 @@ CI 容器里跑不了，所以它们只在本地生效。
 
 本项目采用其仓库声明的许可证。第三方 Glass 特效的许可证见
 [vendor/kwin-effects-glass/LICENSE](vendor/kwin-effects-glass/LICENSE)。
+
+### 空间壁纸资源
+
+核心安装默认使用 Release 构建，并安装空间壁纸所需的 Qt Quick 3D、SVG 和玻璃控件依赖。
+`./tools/kosctl run` 会自动设置本地 QML 插件搜索路径；无需手动设置 `QML2_IMPORT_PATH`。
+NixOS 上的 `./tools/kosctl install` 使用 flake 构建和部署用户组件；KWin 插件由 NixOS 模块管理。
+
+在「服务和组件」开启空间壁纸时，程序自动下载并校验两个固定版本的 ONNX 模型，
+无需账号或手动放置模型文件。模型使用官方 Release 地址；首次开启需要联网，已校验的
+模型后续可以离线复用。每个下载允许最长 10 分钟，并在连接持续无数据时结束请求，
+失败后可以再次开启重试。生成缓存限制为 2 GiB，自动删除最旧缓存；关闭服务保留模型。
+配置了终端代理环境变量时，`./tools/kosctl start` 会把这些变量传给用户服务，AI worker
+也会读取系统代理配置。

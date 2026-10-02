@@ -1,4 +1,5 @@
 import QtQuick
+import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
@@ -60,11 +61,9 @@ Dialog {
                     colors: dialog.colors
                     label: "填充方式"
                     separator: true
-                    WallpaperValueMenu {
-                        width: 142
+                    LiquidControls.LiquidSelect {
                         objectName: "wallpaperFitMenu"
-                        colors: dialog.colors
-                        backdropSource: dialog.contentItem
+                        accentColor: dialog.colors.accent
                         model: ["填满屏幕", "完整显示", "拉伸", "居中"]
                         currentIndex: Math.max(0, ["crop", "fit", "stretch", "center"].indexOf(dialog.fitMode))
                         onActivated: function(index) {
@@ -77,15 +76,14 @@ Dialog {
                     colors: dialog.colors
                     label: "切换效果"
                     separator: true
-                    WallpaperValueMenu {
-                        width: 142
+                    LiquidControls.LiquidSelect {
                         objectName: "wallpaperTransitionMenu"
-                        colors: dialog.colors
-                        backdropSource: dialog.contentItem
-                        model: ["柔和揭幕", "淡入淡出", "关闭"]
-                        currentIndex: Math.max(0, ["cinematic", "fade", "none"].indexOf(dialog.transition))
+                        accentColor: dialog.colors.accent
+                        model: WallpaperCatalog.transitions
+                        textRole: "label"
+                        currentIndex: Math.max(0, WallpaperCatalog.transitions.map(item => item.id).indexOf(dialog.transition))
                         onActivated: function(index) {
-                            dialog.transitionChosen(["cinematic", "fade", "none"][index])
+                            dialog.transitionChosen(WallpaperCatalog.transitions[index].id)
                         }
                     }
                 }

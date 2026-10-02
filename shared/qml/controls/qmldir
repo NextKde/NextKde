@@ -3,7 +3,10 @@ ColorRampSlider 1.0 ColorRampSlider.qml
 LiquidGlassButton 1.0 LiquidGlassButton.qml
 LiquidGlassSwitch 1.0 LiquidGlassSwitch.qml
 LiquidNavBar 1.0 LiquidNavBar.qml
+LiquidSelect 1.0 LiquidSelect.qml
 LiquidSegmentedControl 1.0 LiquidSegmentedControl.qml
 LiquidSlider 1.0 LiquidSlider.qml
 LiquidTextField 1.0 LiquidTextField.qml
 singleton ControlForm 1.0 ControlForm.qml
+
+VectorIcon 1.0 VectorIcon.qml

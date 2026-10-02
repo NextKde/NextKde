@@ -10,7 +10,9 @@ ApplicationWindow {
 
     width: 1100
     height: 720
-    minimumWidth: 840
+    // 最小宽 = 侧栏 230 + 面板 inset 20×2 + 滚动区边距 30×2 + 内容列 700:
+    // 内容列已锁死 700 固定宽,窗口再窄只会截切,这里保证永远放得下。
+    minimumWidth: 1030
     minimumHeight: 560
     visible: true
     title: "kos设置界面"
@@ -91,11 +93,13 @@ ApplicationWindow {
         // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。
         // （试过 #f2f2f7：ΔRGB 只有 (3,2,6)/1.023:1，肉眼分不出边界。加阴影已被否，
         //  因为读起来是"浮起"不是"分栏"。）
-        // 深色沿用同一套结构：底色 #000000，右侧面板 #1c1c1e。
-        readonly property color background: role("surface", dark ? "#000000" : "#eff0f1")
-        readonly property color sidebar: role("surface", dark ? "#000000" : "#eff0f1")
+        // 深色沿用同一套结构：底色 #202326，右侧面板 #2a2d31（比底色浅一档，
+        // 圆角才看得见），分组卡片 #1c1c1e 沉在面板里（面板 < 卡片的亮度，
+        // 卡片才是"深黑"的那一层）。
+        readonly property color background: role("surface", dark ? "#202326" : "#eff0f1")
+        readonly property color sidebar: role("surface", dark ? "#202326" : "#eff0f1")
         readonly property color contentSurface: role("surface_container_low", dark
-            ? "#1c1c1e" : "#e3e5e7")
+            ? "#2a2d31" : "#e3e5e7")
         readonly property color primaryText: role("on_surface", dark ? "#f5f5f7" : "#1c1c1e")
         readonly property color secondaryText: role("on_surface_variant", dark ? "#98989d" : "#6d6d72")
         readonly property color tertiaryText: role("outline", dark ? "#8e8e93" : "#8e8e93")
@@ -218,6 +222,10 @@ ApplicationWindow {
         {
             subtitle: "壁纸",
             groups: []
+        },
+        {
+            subtitle: "服务和组件",
+            groups: []
         }
     ]
 
@@ -320,20 +328,28 @@ ApplicationWindow {
         required property string symbol
         required property color tint
         property bool highlighted: false
+        // Content-page icons keep the designed 29px; the sidebar hands in 18 so
+        // the chip matches the 13px label's line height instead of towering
+        // over it. Radius and glyph scale off the size so both stay proportioned.
+        property int size: 29
         readonly property bool flat: window.materialForm
-        width: 29
-        height: 29
-        radius: flat ? 0 : 10
+        width: size
+        height: size
+        radius: flat ? 0 : size * 0.345
         color: flat ? "transparent" : tint
-        Text {
+        LiquidControls.VectorIcon {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: -0.5
-            text: symbol
+            size: Math.round(parent.size * 0.58)
+            name: ({"◈":"theme", "◇":"theme", "▧":"wallpaper", "⎍":"panel",
+                "▰":"dock", "▭":"dock", "▣":"panel", "▦":"grid", "❖":"grid",
+                "⌘":"keyboard", "✓":"check", "⚙":"settings", "♲":"trash",
+                "↔":"arrows", "◉":"circle", "◌":"circle", "●":"circle",
+                "◐":"contrast", "◔":"contrast", "◒":"contrast", "≈":"waves",
+                "≋":"waves", "⧉":"copy", "⌂":"home", "⌕":"search",
+                "⇲":"resize", "↺":"undo", "B":"bold"})[parent.symbol] || "settings"
             color: parent.flat
                 ? (parent.highlighted ? theme.selectedForeground : theme.iconMuted)
                 : theme.iconForeground
-            font.pixelSize: 14
-            font.weight: parent.flat ? Font.Medium : Font.DemiBold
         }
     }
 
@@ -343,7 +359,9 @@ ApplicationWindow {
         required property string navSymbol
         required property color navTint
         width: parent ? parent.width : 0
-        height: 40
+        // Compact rows: 28 (user-picked) pulls the titles tight; the icon (18)
+        // sits level with the 14px label.
+        height: 28
         leftPadding: 10
         rightPadding: 10
         highlighted: window.currentPage === pageIndex
@@ -353,17 +371,18 @@ ApplicationWindow {
             // M3's drawer items are full-round pills that carry selection in
             // secondaryContainer; the iPadOS form keeps its squircle of tinted
             // wash.
-            radius: window.materialForm ? height / 2 : 18
+            radius: height / 2
             color: parent.highlighted
                 ? (window.materialForm ? theme.selectedContainer : theme.selected)
                 : (parent.hovered ? theme.sidebarHover : "transparent")
         }
         contentItem: Item {
-            implicitHeight: 40
+            implicitHeight: 28
             SettingIcon {
                 id: sidebarIcon
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
+                size: 18
                 symbol: navSymbol
                 tint: navTint
                 highlighted: window.currentPage === pageIndex
@@ -376,10 +395,10 @@ ApplicationWindow {
                 text: label
                 color: window.currentPage === pageIndex
                     && window.materialForm ? theme.selectedForeground : theme.primaryText
-                font.pixelSize: 13
+                font.pixelSize: 14
                 font.weight: window.materialForm
-                    ? (window.currentPage === pageIndex ? Font.Medium : Font.Normal)
-                    : (window.currentPage === pageIndex ? Font.DemiBold : Font.Normal)
+                    ? (window.currentPage === pageIndex ? Font.DemiBold : Font.Medium)
+                    : (window.currentPage === pageIndex ? Font.Bold : Font.Medium)
                 elide: Text.ElideRight
             }
         }
@@ -3815,19 +3834,23 @@ ApplicationWindow {
             id: sidebar
             x: 0
             y: 0
-            // 302 → 211（缩到 70%，用户要求窄 30%）。条目最长的标签是 4 个汉字
-            // （"接入状态"／"玻璃调试"），13px 字号约 52px；一条 ItemDelegate 占
-            // 10(左内) + 29(图标) + 10(间隔) + 文本 + 10(右内)，再加 ColumnLayout
-            // 两侧各 14 的边距 ⇒ 211 下文本仍有约 124px 可用，不会触发 ElideRight。
-            width: 211
+            // 302 → 211（缩到 70%，用户要求窄 30%）→ 230（用户要求加宽一点点）。
+            // 条目最长的标签是 4 个汉字（"接入状态"／"玻璃调试"），14px 字号约
+            // 56px；一条 ItemDelegate 占 10(左内) + 18(图标) + 10(间隔) + 文本 +
+            // 10(右内)，再加 ColumnLayout 两侧各 14 的边距 ⇒ 230 下文本仍有约
+            // 150px 可用，不会触发 ElideRight。
+            width: 230
             height: parent.height
             radius: 0
             color: theme.sidebar
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 14
-                anchors.rightMargin: 14
+                // 左 24 / 右 4 是有意不对称的：右侧要再叠加内容面板的 inset(20)，
+                // 4+20=24 才和左侧的 24 相等，session 卡片于是落在「窗口左缘 ↔
+                // 内容面板」这段视觉空间的正中；标题和搜索框跟卡片同列对齐。
+                anchors.leftMargin: 24
+                anchors.rightMargin: 4
                 anchors.topMargin: 22
                 anchors.bottomMargin: 16
                 spacing: 0
@@ -3869,76 +3892,112 @@ ApplicationWindow {
                     }
                 }
 
-                SidebarEntry {
+                // 侧栏条目也按 session 分组卡片呈现：背景和圆角对齐右侧内容区
+                // 的卡片（theme.card / radius 18），组间 15px。搜索过滤掉条目时
+                // ColumnLayout 只按可见项撑高，卡片会跟着收缩。
+                Rectangle {
                     Layout.fillWidth: true
-                    pageIndex: 1
-                    label: "主题"
-                    navSymbol: "◈"
-                    navTint: "#af52de"
+                    Layout.bottomMargin: 15
+                    color: theme.card
+                    radius: 18
+                    implicitHeight: navGroup1.implicitHeight + 8
+
+                    ColumnLayout {
+                        id: navGroup1
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 4
+                        spacing: 0
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 1
+                            label: "主题"
+                            navSymbol: "◈"
+                            navTint: "#af52de"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 8
+                            label: "壁纸"
+                            navSymbol: "▧"
+                            navTint: "#64d2ff"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 2
+                            label: "顶栏"
+                            navSymbol: "⎍"
+                            navTint: "#5ac8fa"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 3
+                            label: "Dock"
+                            navSymbol: "▰"
+                            navTint: "#0a84ff"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 4
+                            label: "启动台"
+                            navSymbol: "❖"
+                            navTint: "#ff9500"
+                        }
+                    }
                 }
 
-                SidebarEntry {
+                Rectangle {
                     Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    visible: false
-                    pageIndex: 8
-                    label: "壁纸"
-                    navSymbol: "▧"
-                    navTint: "#64d2ff"
-                }
+                    color: theme.card
+                    radius: 18
+                    implicitHeight: navGroup2.implicitHeight + 8
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 2
-                    label: "顶栏"
-                    navSymbol: "⎍"
-                    navTint: "#5ac8fa"
-                }
+                    ColumnLayout {
+                        id: navGroup2
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 4
+                        spacing: 0
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 3
-                    label: "Dock"
-                    navSymbol: "▰"
-                    navTint: "#0a84ff"
-                }
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 5
+                            label: "快捷键"
+                            navSymbol: "⌘"
+                            navTint: "#5856d6"
+                        }
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 4
-                    label: "启动台"
-                    navSymbol: "❖"
-                    navTint: "#ff9500"
-                }
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 6
+                            label: "接入状态"
+                            navSymbol: "✓"
+                            navTint: "#30d158"
+                        }
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 5
-                    label: "快捷键"
-                    navSymbol: "⌘"
-                    navTint: "#5856d6"
-                }
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 9
+                            label: "服务和组件"
+                            navSymbol: "◇"
+                            navTint: "#5ac8fa"
+                        }
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 6
-                    label: "接入状态"
-                    navSymbol: "✓"
-                    navTint: "#30d158"
-                }
-
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 7
-                    label: "玻璃调试"
-                    navSymbol: "⚙"
-                    navTint: "#64d2ff"
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 7
+                            label: "玻璃调试"
+                            navSymbol: "⚙"
+                            navTint: "#64d2ff"
+                        }
+                    }
                 }
 
                 Item {
@@ -3980,8 +4039,10 @@ ApplicationWindow {
 
                 ColumnLayout {
                     id: pageContent
-                    readonly property real maximumWidth: 700
-                    width: Math.max(0, Math.min(pageScroll.width, maximumWidth))
+                    // 固定宽度:窗口缩放只改变两侧留白,内容列(含图片网格)
+                    // 尺寸恒定,不触发网格重排/缩略图重生成。窗口窄于 700 时
+                    // 由外层 Flickable 的横向滚动兜底(contentWidth 已取 max)。
+                    width: 700
                     x: Math.max(0, Math.round((pageScroll.width - width) / 2))
                     spacing: 0
 
@@ -4000,7 +4061,7 @@ ApplicationWindow {
                         Layout.bottomMargin: 18
                     }
                     Repeater {
-                        model: (window.displayedPage >= 0 && window.displayedPage <= 8)
+                        model: (window.displayedPage >= 0 && window.displayedPage <= 9)
                             ? [] : window.contentByPage[window.displayedPage].groups
                         delegate: ColumnLayout {
                             required property var modelData
@@ -4075,9 +4136,20 @@ ApplicationWindow {
 
                     Loader {
                         Layout.fillWidth: true
+                        active: window.displayedPage === 9
+                        visible: active
+                        sourceComponent: ServicesSettingsPage {
+                            bridge: (typeof settingsBridge !== "undefined") ? settingsBridge : null
+                            colors: theme
+                        }
+                    }
+
+                    Loader {
+                        Layout.fillWidth: true
                         active: window.displayedPage === 8
                         visible: active
                         sourceComponent: WallpaperSettingsPage {
+                            scrollViewport: pageScroll
                             bridge: (typeof settingsBridge !== "undefined")
                                 ? settingsBridge : null
                             colors: theme

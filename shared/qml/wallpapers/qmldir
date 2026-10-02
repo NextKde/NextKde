@@ -1,0 +1,16 @@
+ThemeWallpaperScene 1.0 ThemeWallpaperScene.qml
+
+PhysicalParticleField 1.0 PhysicalParticleField.qml
+WidgetTransitField 1.0 WidgetTransitField.qml
+
+FlowParticleField 1.0 FlowParticleField.qml
+
+FloatingPointTable 1.0 FloatingPointTable.qml
+ForegroundEffects 1.0 ForegroundEffects.qml
+CinematicBlackHole 1.0 CinematicBlackHole.qml
+
+NatureWallpaper 1.0 NatureWallpaper.qml
+
+ForestFireflies 1.0 ForestFireflies.qml
+
+ThemeWallpaperThumbnail 1.0 ThemeWallpaperThumbnail.qml

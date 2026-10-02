@@ -161,6 +161,7 @@ QtObject {
     // model and performs a local CPU inference. The renderer remains idle while
     // this is false.
     property bool spatialWallpaperEnabled: false
+    property bool spatialServiceEnabled: false
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
@@ -509,6 +510,14 @@ QtObject {
         return true
     }
 
+    function updateSpatialServiceEnabled(rawValue) {
+        const value = _toBool(rawValue)
+        if (spatialServiceEnabled === value) return false
+        spatialServiceEnabled = value
+        saveTimer.restart()
+        return true
+    }
+
     function updateSpatialWallpaperEnabled(rawValue) {
         const value = _toBool(rawValue)
         if (spatialWallpaperEnabled === value)
@@ -645,6 +654,7 @@ QtObject {
             materialColorScheme: service.materialColorScheme,
             glassFollowsAppearanceMode: service.glassFollowsAppearanceMode,
             spatialWallpaperEnabled: service.spatialWallpaperEnabled,
+            spatialServiceEnabled: service.spatialServiceEnabled,
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
@@ -736,6 +746,7 @@ QtObject {
                     const glassStyle = String(object.glassStyle ?? "liquid")
                     const followsAppearance = object.glassFollowsAppearanceMode
                     const followsAppearanceLegacy = object.glassFollowsColorMode
+                    service.spatialServiceEnabled = object.spatialServiceEnabled === true
                     const hasSpatialWallpaper =
                         typeof object.spatialWallpaperEnabled === "boolean"
                     const hasGlassFollows = typeof followsAppearance === "boolean"
