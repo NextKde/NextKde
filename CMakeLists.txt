@@ -12,7 +12,7 @@ include(CTest)
 include(GNUInstallDirs)
 
 option(KOS_BUILD_PLATFORM "Build the KOS platform daemon and settings app" ON)
-option(KOS_BUILD_KWIN_PLUGINS "Build the two KWin effect plugins" ON)
+option(KOS_BUILD_KWIN_PLUGINS "Build the KWin plugins and the window decoration" ON)
 option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
@@ -90,11 +90,26 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_record_index.mjs
         )
         set_tests_properties(kos-shell.window-record-index PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.window-transport-fallback
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_transport_fallback.mjs
+        )
+        set_tests_properties(kos-shell.window-transport-fallback PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-color-source
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_color_source.mjs
         )
         set_tests_properties(kos-shell.wallpaper-color-source PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-slideshow
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_slideshow.mjs
+        )
+        set_tests_properties(kos-shell.wallpaper-slideshow PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.wallpaper-preview
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_preview.mjs
+        )
+        set_tests_properties(kos-shell.wallpaper-preview PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.process-identity
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs
@@ -113,6 +128,16 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-builtins PROPERTIES
                 LABELS ui TIMEOUT 25
+                ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            # A live DesktopEntry stored in a descriptor or an identity result
+            # crashed the shell on every catalogue rescan. Nothing may carry one
+            # now, and every launch resolves the entry from its desktop id.
+            add_test(NAME kos-shell.app-launch-resolution
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-launch-resolution/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.app-launch-resolution PROPERTIES
+                LABELS ui TIMEOUT 45
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
@@ -491,7 +516,21 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/quickshell/surface-shape)
     add_subdirectory(integrations/kwin/dock-window-animation)
     add_subdirectory(integrations/kwin/context-menu-input)
-    add_subdirectory(integrations/kwin/decoration-liquid-glass)
+    add_subdirectory(integrations/kwin/kos-bridge)
+    add_subdirectory(integrations/kwin/kos-decoration)
+endif()
+
+# The spatial wallpaper mesh is an optional QML extension. Keep Qt Quick 3D
+# outside the shell's mandatory dependencies so systems without it retain the
+# existing shader renderer.
+if(KOS_BUILD_PLATFORM)
+    find_package(Qt6 QUIET COMPONENTS Quick3D)
+    find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+    if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5 AND OpenCV_FOUND)
+        add_subdirectory(integrations/quickshell/spatial3d)
+    else()
+        message(STATUS "Qt Quick 3D or OpenCV not found; spatial mesh renderer disabled")
+    endif()
 endif()
 
 # No install() rules for the shell and shared QML trees, on purpose: user-side

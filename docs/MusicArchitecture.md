@@ -63,7 +63,11 @@ compatibility facade while provider/search/source behavior lives in dedicated
 services. Album identity combines
 album title and album artist so two unrelated albums with the same title do
 not merge. Artist browsing uses track artist, falling back to album artist only
-when the track artist is absent.
+when the track artist is absent. The controller is created in `src/main.cpp`
+and handed to QML as an initial property instead of being instantiated by the
+QML tree, so a development hot reload (`--watch-qml`) rebuilds the window
+without stopping playback or dropping the queue, the database connection, and
+the MPRIS registration.
 
 ### MetadataScanner
 

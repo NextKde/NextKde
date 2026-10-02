@@ -5,6 +5,10 @@ import Quickshell
 // Shared application-presentation contract. It deliberately has no Dock or
 // Launcher import, so every shell surface can use the same descriptor:
 // descriptor(entry, rawId) -> desktopId, displayName, iconSource, defaults.
+// Descriptors and identity results carry strings only. Anything that must
+// execute an entry calls entryFor(id) to resolve a live DesktopEntry at the
+// point of use, because DesktopEntries destroys and replaces entries on every
+// catalogue rescan.
 QtObject {
     id: service
 
@@ -52,11 +56,62 @@ QtObject {
         // Never leak an unresolved icon name into Image.source: Qt treats a
         // bare name as a relative qrc URL and emits a Cannot open warning.
         const defaultIcon = iconSource(entry?.icon ?? "") || genericIconSource()
-        return { desktopId: desktopId, rawAppId: raw, entry: entry,
+        return { desktopId: desktopId, rawAppId: raw,
             defaultName: defaultName, defaultIcon: defaultIcon,
             displayName: override.name || defaultName,
             iconSource: iconSource(override.icon || defaultIcon) || defaultIcon,
             override: override }
+    }
+
+    // A live DesktopEntry, resolved by id at the moment of use.
+    //
+    // Never store an entry in a descriptor, an identity result or a model item.
+    // DesktopEntries replaces and destroys entries on every catalogue rescan,
+    // and QML's lifecycle tracking does not follow a QObject* that is wrapped
+    // inside a QVariantMap, so a stored entry silently becomes a dangling
+    // pointer that crashes incubation or teardown.
+    //
+    // Window app ids are not always desktop ids, so the same three tiers the
+    // identity resolver uses are applied: exact ids, then Quickshell's
+    // heuristic lookup preferring an entry that carries an icon (otherwise a
+    // handler .desktop such as cc-switch-handler.desktop shadows the real
+    // application entry), then a normalized full-catalogue comparison.
+    function entryFor(idOrRaw) {
+        const raw = String(idOrRaw ?? "").trim()
+        if (!raw)
+            return null
+        const candidates = [raw, raw.replace(/\.desktop$/i, ""),
+                            /\.desktop$/i.test(raw) ? raw : raw + ".desktop"]
+        for (let i = 0; i < candidates.length; i++) {
+            try {
+                const entry = DesktopEntries.byId(candidates[i])
+                if (entry)
+                    return entry
+            } catch (e) {}
+        }
+        let withoutIcon = null
+        for (let i = 0; i < candidates.length; i++) {
+            try {
+                const entry = DesktopEntries.heuristicLookup(candidates[i])
+                if (entry) {
+                    if (iconSource(entry.icon ?? ""))
+                        return entry
+                    if (!withoutIcon)
+                        withoutIcon = entry
+                }
+            } catch (e) {}
+        }
+        const wanted = normalize(raw)
+        const entries = DesktopEntries.applications?.values ?? []
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i]
+            if (!entry)
+                continue
+            if (normalize(entry.id) === wanted
+                    || normalize(entry.startupClass) === wanted)
+                return entry
+        }
+        return withoutIcon
     }
 
     // The single installed-app catalogue used by launcher/search surfaces.

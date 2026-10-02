@@ -54,36 +54,53 @@ QtObject {
         }
     }
 
+    // Launch by desktop id. Callers may pass a DesktopEntry itself, or any
+    // object that carries an id (presentation descriptor, identity result,
+    // catalogue item). The entry is resolved here, at call time: it must never
+    // be stored on the caller's side, because DesktopEntries destroys and
+    // replaces entries on every catalogue rescan.
     function launch(application) {
-        const entry = application?.entry ?? application
-        const appId = String(entry?.id ?? application?.id ?? "")
-        if (!entry?.execute) {
-            console.warn("[AppAction] cannot launch without DesktopEntry app=" + appId)
+        const provided = application && typeof application.execute === "function"
+            ? application : null
+        const appId = String(provided?.id ?? application?.desktopId
+            ?? application?.id ?? application?.rawAppId ?? "")
+        if (!appId) {
+            console.warn("[AppAction] cannot launch without an app id")
             return false
         }
+        const entry = provided ?? AppPresentationService.entryFor(appId)
+
         // Terminal entries (Terminal=true, e.g. nvim/htop) must NOT go through
         // DesktopEntry.execute(): Quickshell spawns the bare command with no
         // TTY and terminal apps die immediately. Route them through the
         // platform daemon here; KIO::ApplicationLauncherJob wraps them in the
         // user's configured terminal.
         if (!PlatformClient.connected) {
-            if (entry.runInTerminal) {
-                console.warn("[AppAction] terminal app needs the daemon, "
+            if (!entry || entry.runInTerminal) {
+                console.warn("[AppAction] launch needs the platform daemon, "
                              + "no TTY fallback exists app=" + appId)
                 return false
             }
             return _executeDirect(entry, appId, "platform-unavailable")
         }
+        return _requestDaemonLaunch(appId, entry)
+    }
+
+    // The daemon op accepts only {desktopId, urls}, so it still works when the
+    // entry could not be resolved -- for example it was uninstalled between the
+    // catalogue snapshot and the click. Only the direct argv fallback needs a
+    // live entry.
+    function _requestDaemonLaunch(appId, entry) {
         PlatformClient.request("application.launch", {
             desktopId: appId,
             urls: []
         }, function(response) {
             if (!response.ok) {
-                if (entry.runInTerminal) {
+                if (!entry || entry.runInTerminal) {
                     // Spawning a terminal app without a TTY always dies; a
                     // silent dead process is worse than a logged refusal.
-                    console.warn("[AppAction] terminal app launch failed, "
-                                 + "no TTY fallback app=" + appId)
+                    console.warn("[AppAction] launch failed, no direct fallback "
+                                 + "exists app=" + appId)
                     return
                 }
                 service._executeDirect(entry, appId, "platform-launch")
@@ -93,25 +110,11 @@ QtObject {
         return true
     }
 
-    function entryForId(desktopId) {
-        const raw = String(desktopId ?? "")
-        const candidates = [raw, raw.replace(/\.desktop$/i, ""),
-                            raw.endsWith(".desktop") ? raw : raw + ".desktop"]
-        for (let index = 0; index < candidates.length; index++) {
-            try {
-                const entry = DesktopEntries.byId(candidates[index])
-                if (entry)
-                    return entry
-            } catch (_) {}
-        }
-        return null
-    }
-
     // Widgets use the desktop entry as the executable authority, then append
     // app-owned deep-link arguments. With no arguments the regular launcher
     // path remains in use, including all DesktopEntry environment handling.
     function launchById(desktopId, launchArguments) {
-        const entry = entryForId(desktopId)
+        const entry = AppPresentationService.entryFor(desktopId)
         if (!entry) {
             console.warn("[AppAction] desktop entry is not installed: " + desktopId)
             return false

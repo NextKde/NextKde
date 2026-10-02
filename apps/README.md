@@ -23,6 +23,31 @@ small application runtime rather than a feature layer; applications do not
 import one another. The Weather preset additionally builds and installs its Go
 data service, which the application starts on demand.
 
+## Development: QML hot reload
+
+Every application can load its QML from a source tree and hot reload it, so QML
+edits need neither a rebuild nor a restart:
+
+```bash
+.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+# or skip the argument via the environment
+KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
+```
+
+The path names the directory holding `Main.qml` (or the entry file itself).
+`*.qml`/`*.mjs` files in the tree are watched and the window is rebuilt after a
+300 ms debounce; the new code is fully compiled on a throwaway engine first
+(including referenced siblings), and text that does not compile reports its
+errors and keeps the current window. Controllers created in C++ and injected
+into QML through initial properties (such as music's `music`) survive a reload:
+playback, the queue, the database connection, and the MPRIS registration keep
+running. QML-owned state (the current page, open dialogs) resets.
+`shared/qml` (Kos.Ui) is compiled into the binary and still needs a rebuild.
+
+A watch run is an isolated development instance: it never displaces the
+single-instance activation of the running application. C++ edits still need a
+rebuild; only QML/JS edits go through hot reload.
+
 For a persistent per-user installation on Plasma, run:
 
 ```sh

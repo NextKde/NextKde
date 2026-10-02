@@ -5,9 +5,9 @@
 # Workflow:
 #   1. Print the full deletion list (core + leftovers) and wait for confirm.
 #   2. Call `./tools/kosctl uninstall` for the KWin/plugin/service layer --
-#      it runs unloadEffect + blur/decoration restore BEFORE deleting the
-#      /usr .so files, using the state it saved at install time. This step
-#      will ask for sudo to remove /usr/lib/qt6/plugins/...
+#      it runs unloadEffect + blur restore BEFORE deleting the /usr .so files,
+#      using the state it saved at install time. This step will ask for sudo to
+#      remove /usr/lib/qt6/plugins/...
 #   3. Sweep leftovers uninstall leaves behind: empty share dirs, apps-era
 #      files (install-apps.sh产物, not owned by kosctl), stray systemd wants
 #      links, the optional lockscreen/app surfaces, and any kwinrc keys that
@@ -41,14 +41,15 @@ core_targets=(
     "$prefix/share/shared/qml"
     "$config_dir/quickshell/kos"
     /usr/lib/qt6/plugins/kwin/effects/plugins/glass.so
+    /usr/lib/qt6/plugins/kwin/effects/plugins/kos_bridge.so
     /usr/lib/qt6/plugins/kwin/effects/plugins/kos_context_menu_input.so
     /usr/lib/qt6/plugins/kwin/effects/plugins/kos_dock_window_animation.so
     /usr/lib/qt6/plugins/kwin/effects/plugins/quickshell_context_menu_input.so
     /usr/lib/qt6/plugins/kwin/effects/configs/kwin_glass_config.so
+    /usr/lib/qt6/plugins/org.kde.kdecoration3/kos_decoration.so
     /usr/lib/qt6/qml/Kos/SurfaceShape/libkos_surface_shape.so
     "$prefix/share/kos/kwin-system-files.manifest"
     "$prefix/share/kos/kwin-effect-state"
-    "$prefix/share/kos/kwin-decoration-state"
 )
 
 # --- leftovers that uninstall does NOT cover (sweep these) ---
@@ -73,11 +74,16 @@ leftover_targets=(
     # appletsrc seeded by the desktop takeover; the previous shell's own
     # appletsrc was never modified, so deleting this loses nothing
     "$config_dir/plasma-org.kos.desktop-appletsrc"
+    # a copy of the bridge effect that once landed in kwin/effects/ instead of
+    # kwin/effects/plugins/. KWin never loads it from there and no install
+    # writes it, so nothing else will ever remove it.
+    /usr/lib/qt6/plugins/kwin/effects/kos_bridge.so
     # runtime caches/state (regenerated on next start)
 )
 
 kwinrc_keys=(
     glassEnabled
+    kos_bridgeEnabled
     kos_context_menu_inputEnabled
     kos_dock_window_animationEnabled
     quickshell_context_menu_inputEnabled

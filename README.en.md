@@ -127,14 +127,15 @@ cd NextKde
 Arch, `install` offers to install missing required build packages before it
 builds KOS; the
 first KWin-plugin installation may ask for your sudo password. `start` applies
-the new version immediately and briefly refreshes the desktop UI. By default,
-only KWin effects are installed; the Liquid Glass window decoration is neither
-installed nor selected, and a previously opt-in-installed decoration is left
-unchanged. Install or update it explicitly with
-`KOS_INSTALL_KWIN_DECORATION=1 ./tools/kosctl install`. `start` does not change
-the current window decoration.
-For the NixOS module, set `services.kos.decoration.enable = true;`; this only
-installs the plugin, and you still select it in KDE settings.
+the new version immediately and briefly refreshes the desktop UI. `install`
+ships the KOS window decoration together with the KWin plugins but never
+selects it: it installs the files and enables the effects, and the decoration
+stays your choice in System Settings ▸ Window Decorations. The three window
+buttons belong to that decoration — select it and they appear, choose another
+one and every window gets its own controls back, client-side decorated windows
+included. `start` does not change the decoration selection.
+The NixOS module installs the decoration with the rest of the plugins (there is
+no separate switch); selecting it stays in KDE settings.
 
 KOS starts automatically after later logins.
 

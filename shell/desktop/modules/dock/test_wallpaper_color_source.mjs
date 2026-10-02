@@ -14,7 +14,8 @@ const parser = wallpaper.slice(wallpaper.indexOf("    function _parseWallpaperCo
 const resolved = [];
 const cleared = [];
 const context = vm.createContext({
-    preferredScreen: 1, configuredWallpaperUrl: "", wallpaperUrl: "",
+    preferredScreen: 1, preferredWallpaperUrl: "",
+    configuredWallpaperUrl: "", wallpaperUrl: "",
     _resolveWallpaperUrl: url => resolved.push(url),
     paletteCleared: () => cleared.push(true),
     console: { warn() {} },
@@ -27,6 +28,11 @@ const config = "[Containments][1]\nlastScreen=0\n"
 context._readWallpaperText(config);
 context._readWallpaperText(config);
 assert.deepEqual(resolved, ["file:///second.png"]);
+context.preferredWallpaperUrl = "file:///quickshell-owned.png";
+context._readWallpaperText(config.replace("second.png", "plasma-backdrop.png"));
+assert.deepEqual(resolved, ["file:///second.png"],
+    "the Plasma backdrop must not replace Quickshell's original image");
+context.preferredWallpaperUrl = "";
 context._readWallpaperText(config.replace("second.png", "replacement.png"));
 assert.equal(resolved.at(-1), "file:///replacement.png");
 context.preferredScreen = 9;

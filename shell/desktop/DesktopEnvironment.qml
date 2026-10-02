@@ -17,6 +17,93 @@ import qs.desktop.modules.weather
 Item {
     id: shell
 
+    // Settings edits the Quickshell-owned image and presentation preferences
+    // through a narrow endpoint. Plasma remains a first-run source only.
+    IpcHandler {
+        target: "wallpaper-settings"
+
+        function snapshot(): string {
+            return JSON.stringify({
+                image: WallpaperService.wallpaperUrl.toString(),
+                previewActive: WallpaperPreviewService.active,
+                previewPending: WallpaperPreviewService.pending,
+                previewError: WallpaperPreviewService.errorMessage,
+                previewAvailable: WallpaperPreviewService.available,
+                fitMode: WallpaperService.fitMode,
+                transition: WallpaperService.transition,
+                recentImages: JSON.stringify(WallpaperService.recentImages),
+                slideshowEnabled: WallpaperService.slideshowEnabled,
+                slideshowIntervalMinutes: WallpaperService.slideshowIntervalMinutes,
+                slideshowImages: JSON.stringify(WallpaperService.slideshowImages),
+                takeoverEnabled: WallpaperService.takeoverEnabled,
+                takeoverPending: WallpaperService.takeoverPending,
+                takeoverError: WallpaperService.errorMessage,
+                takeoverAvailable: WallpaperService.takeoverAvailable,
+                spatialEnabled: AppearanceConfigService.spatialWallpaperEnabled,
+                spatialReady: SpatialWallpaperService.ready,
+                spatialPrepared: SpatialWallpaperService.prepared,
+                spatialBusy: SpatialWallpaperService.requestInFlight,
+                spatialPreparing: SpatialWallpaperService.preparationRequested,
+                spatialError: SpatialWallpaperService.errorMessage,
+            })
+        }
+
+        function previewImage(path: string, images: string): string {
+            WallpaperPreviewService.begin(path, images)
+            return snapshot()
+        }
+
+        function chooseImage(path: string): string {
+            WallpaperService.chooseImage(path, true)
+            return snapshot()
+        }
+
+        function chooseColor(path: string): string {
+            AppearanceConfigService.updateSpatialWallpaperEnabled(false)
+            WallpaperService.chooseImage(path, true)
+            return snapshot()
+        }
+
+        function setTakeoverEnabled(enabled: bool): string {
+            if (!enabled && AppearanceConfigService.spatialWallpaperEnabled)
+                AppearanceConfigService.updateSpatialWallpaperEnabled(false)
+            WallpaperService.setTakeoverEnabled(enabled)
+            return snapshot()
+        }
+
+        function setFitMode(mode: string): string {
+            WallpaperService.setFitMode(mode)
+            return snapshot()
+        }
+
+        function setTransition(style: string): string {
+            WallpaperService.setTransition(style)
+            return snapshot()
+        }
+
+        function setSlideshow(enabled: bool, minutes: int, images: string): string {
+            if (WallpaperService.setSlideshow(enabled, minutes, images) && enabled)
+                AppearanceConfigService.updateSpatialWallpaperEnabled(false)
+            return snapshot()
+        }
+
+        function setSpatialEnabled(enabled: bool): string {
+            if (enabled && !SpatialWallpaperService.prepared)
+                return snapshot()
+            if (enabled) {
+                WallpaperService.setSlideshow(false, WallpaperService.slideshowIntervalMinutes, "[]")
+                WallpaperService.setTakeoverEnabled(true)
+            }
+            AppearanceConfigService.updateSpatialWallpaperEnabled(enabled)
+            return snapshot()
+        }
+
+        function prepareSpatial(): string {
+            SpatialWallpaperService.prepareForEnable()
+            return snapshot()
+        }
+    }
+
     readonly property bool barIntegratedWithDock:
         AppearanceConfigService.barIntegratedWithDock
 
@@ -219,6 +306,8 @@ Item {
                     JSON.stringify(AppearanceTokens.colorSchemeSwatches),
                 glassFollowsAppearanceMode:
                     AppearanceConfigService.glassFollowsAppearanceMode,
+                spatialWallpaperEnabled:
+                    AppearanceConfigService.spatialWallpaperEnabled,
                 barIntegratedWithDock:
                     AppearanceConfigService.barIntegratedWithDock,
                 barVisibilityMode: AppearanceConfigService.barVisibilityMode,
@@ -316,6 +405,11 @@ Item {
 
         function updateGlassFollowsAppearanceMode(enabled: bool): string {
             AppearanceConfigService.updateGlassFollowsAppearanceMode(enabled)
+            return snapshot()
+        }
+
+        function updateSpatialWallpaperEnabled(enabled: bool): string {
+            AppearanceConfigService.updateSpatialWallpaperEnabled(enabled)
             return snapshot()
         }
 

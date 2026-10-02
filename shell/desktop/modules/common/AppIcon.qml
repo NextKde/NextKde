@@ -32,32 +32,62 @@ Item {
     readonly property bool needsEffect: saturation !== 1.0
         || tintEnabled !== 0.0 || opacityMultiplier !== 1.0
 
-    IconImage {
-        id: iconImage
+    // The artwork is two components rather than one tree with a binding on
+    // `layer.enabled`, and that is load-bearing. Enabling a layer on an item
+    // that has already painted never renders that layer: the icon stays blank
+    // until something else rebuilds it, which is why the Dock only brought an
+    // icon back after it was clicked, while icons created while the mode was
+    // already on were fine. Swapping the Loader destroys the old tree and
+    // builds the new one in the same frame, so entering or leaving the effect
+    // path always yields artwork that was born in the state it is shown in.
+    Loader {
         anchors.fill: parent
-        source: root.source
-        smooth: root.smooth
-        asynchronous: root.asynchronous
-        // Direct rendering can safely reuse Qt Quick's decoded pixmap. Keep
-        // the effect path uncached because it owns a live layer texture.
-        backer.cache: !root.needsEffect
-            && IconThemeReloadService.pixmapCacheAllowed
-        visible: !root.needsEffect
-        // Provide a live texture directly to ShaderEffect. A separate
-        // ShaderEffectSource keeps an extra QQuickItem alive across a
-        // LayerShell window hide/show and can crash Qt Quick during cleanup.
-        layer.enabled: root.needsEffect
-        layer.smooth: root.smooth
+        sourceComponent: root.needsEffect ? effectIcon : directIcon
     }
 
-    ShaderEffect {
-        anchors.fill: iconImage
-        visible: root.needsEffect
-        property variant source: iconImage
-        property real opacityMult: root.opacityMultiplier
-        property real sat: root.saturation
-        property real iconTintEnabled: root.tintEnabled
-        property color iconTintColor: root.tintColor
-        fragmentShader: Qt.resolvedUrl("../../shaders/icon_effect.frag.qsb")
+    Component {
+        id: directIcon
+
+        IconImage {
+            source: root.source
+            smooth: root.smooth
+            asynchronous: root.asynchronous
+            // Direct rendering can safely reuse Qt Quick's decoded pixmap.
+            backer.cache: IconThemeReloadService.pixmapCacheAllowed
+        }
+    }
+
+    Component {
+        id: effectIcon
+
+        Item {
+            IconImage {
+                id: effectImage
+                anchors.fill: parent
+                source: root.source
+                smooth: root.smooth
+                asynchronous: root.asynchronous
+                // The effect path owns a live layer texture and cannot share
+                // Qt Quick's decoded pixmap with anyone.
+                backer.cache: false
+                visible: false
+                // Provide a live texture directly to ShaderEffect. A separate
+                // ShaderEffectSource keeps an extra QQuickItem alive across a
+                // LayerShell window hide/show and can crash Qt Quick during
+                // cleanup.
+                layer.enabled: true
+                layer.smooth: root.smooth
+            }
+
+            ShaderEffect {
+                anchors.fill: parent
+                property variant source: effectImage
+                property real opacityMult: root.opacityMultiplier
+                property real sat: root.saturation
+                property real iconTintEnabled: root.tintEnabled
+                property color iconTintColor: root.tintColor
+                fragmentShader: Qt.resolvedUrl("../../shaders/icon_effect.frag.qsb")
+            }
+        }
     }
 }

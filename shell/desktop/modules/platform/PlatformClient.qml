@@ -8,6 +8,36 @@ import Quickshell
 // — is JsonlClient; only the socket path, the read/write split and the
 // per-operation timeouts below are specific to this daemon.
 JsonlClient {
+    property var capabilities: []
+    property bool capabilityProbeComplete: false
+
+    function supports(operation) {
+        return capabilities.indexOf(String(operation)) >= 0
+    }
+
+    function probeCapabilities() {
+        capabilityProbeComplete = false
+        capabilities = []
+        request("platform.ping", {}, function(response) {
+            if (!response?.ok)
+                return
+            const advertised = response.result?.capabilities
+            capabilities = Array.isArray(advertised) ? advertised : []
+            capabilityProbeComplete = true
+        })
+    }
+
+    onTransportChanged: function(isConnected) {
+        if (isConnected)
+            probeCapabilities()
+        else {
+            capabilityProbeComplete = false
+            capabilities = []
+        }
+    }
+
+    Component.onCompleted: if (connected) probeCapabilities()
+
     // KOS_PLATFORM_SOCKET redirects the shell to a development daemon (kosctl
     // dev); unset in the installed layout.
     socketPath: Quickshell.env("KOS_PLATFORM_SOCKET")
@@ -45,7 +75,8 @@ JsonlClient {
     // runs file.copy/file.transfer/file.empty-trash itself with no watchdog
     // and gives screenshot.capture's interactive tool a 0 watchdog, so a
     // daemon kill never races this client), while Wi-Fi and Bluetooth
-    // association can legitimately approach a minute.
+    // association can legitimately approach a minute. Depth generation may
+    // spend several minutes downloading the pinned model or running CPU inference.
     // 0 disables expiry entirely.
     requestTimeoutOverrides: ({
         "bluetooth.connect": 90000,
@@ -55,6 +86,8 @@ JsonlClient {
         "file.transfer": 0,
         "network.connect": 90000,
         "network.connect-enterprise": 90000,
-        "screenshot.capture": 0
+        "screenshot.capture": 0,
+        "depth.generate": 300000,
+        "wallpaper.preview.desktop": 6000
     })
 }

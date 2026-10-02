@@ -14,11 +14,34 @@ Scope {
         model: ScreenLifecycle.usableScreens
 
         delegate: Component {
-            DeskCenterWindow {
+            Scope {
+                id: outputScope
                 required property var modelData
 
-                screen: modelData
-                visible: ScreenLifecycle.outputAvailable
+                // Keep this surface mapped before the widget surface. Both use
+                // the Bottom layer so Plasma cannot cover the wallpaper.
+                SpatialWallpaperWindow {
+                    id: wallpaperWindow
+                    screen: outputScope.modelData
+                    visible: ScreenLifecycle.outputAvailable
+                        && (WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
+                    pointerX: widgetWindow.depthPointerX
+                    pointerY: widgetWindow.depthPointerY
+                }
+
+                DeskCenterWindow {
+                    id: widgetWindow
+                    screen: outputScope.modelData
+                    visible: ScreenLifecycle.outputAvailable
+                    spatialWallpaperActive: wallpaperWindow.active
+                }
+
+                // Map after the ordinary desktop surfaces so the transient
+                // scene covers every QML surface on this output.
+                WallpaperPreviewBar {
+                    screen: outputScope.modelData
+                    visible: ScreenLifecycle.outputAvailable && WallpaperPreviewService.active
+                }
             }
         }
     }

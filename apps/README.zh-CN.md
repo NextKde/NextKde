@@ -20,6 +20,27 @@
 不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
 应用会在需要时自动启动它。
 
+## 开发调试：QML 热重载
+
+每个应用都支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
+
+```bash
+.build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
+# 或者用环境变量省去参数
+KOS_APP_QML_DIR=apps/music/qml .build/music-dev/apps/music/kos-music
+```
+
+参数指向存放 `Main.qml` 的目录（或入口文件本身）。监视树内的
+`*.qml`/`*.mjs`，保存后 300ms 防抖重建窗口；新代码会先在一次性引擎上
+完整编译校验（含被引用的兄弟组件），编译不过就报错并保留当前窗口。
+由 C++ 创建、经 initial properties 注入 QML 的控制器（如 music 的
+`music`）跨重载存活，播放、队列、数据库连接与 MPRIS 注册不会中断；
+QML 自己拥有的状态（当前页面、打开的对话框）会重置。`shared/qml`
+（Kos.Ui）编译在二进制里，改动它仍需重编。
+
+watch 运行是独立的开发实例：不与已运行的正式实例争单例激活。
+各应用的 C++ 改动仍需重编；只有 QML/JS 改动走热重载。
+
 要在 Plasma 开发机上注册为持久的用户级系统应用，请运行：
 
 ```sh

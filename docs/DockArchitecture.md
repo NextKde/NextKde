@@ -38,15 +38,23 @@ the same custom name/icon override, so UI surfaces must not walk
 `DesktopEntries` or resolve theme icons themselves. Keep folder layout,
 sorting and hidden-app state in AppLauncher-only configuration.
 
+Descriptors carry strings only. A `DesktopEntry` must never be stored in a
+descriptor, an identity result or a model item: `DesktopEntries` destroys and
+replaces entries on every catalogue rescan, and QML's lifecycle tracking does
+not follow a `QObject*` wrapped inside a `QVariantMap`, so a stored entry
+becomes a dangling pointer that crashes delegation incubation or teardown.
+Anything that has to execute an entry calls `entryFor(id)` at the point of use.
+
 Public functions:
 
 ```js
 catalog() -> [descriptor] // visible installed apps, sorted by displayName
 descriptor(entry, rawId) -> {
-    desktopId, rawAppId, entry,
+    desktopId, rawAppId,
     defaultName, defaultIcon,
     displayName, iconSource, override
 }
+entryFor(idOrRaw) -> DesktopEntry | null // live entry, resolved at use
 iconSource(candidate) -> QML image source
 overrideFor(desktopId, rawId) -> override
 setOverrides(overrides)
@@ -68,17 +76,26 @@ Use this service for every cross-surface application action:
 
 ```js
 launch(applicationOrDesktopEntry)
+launchById(desktopId, launchArguments)
 pin(appId)
 unpin(appId)
 hide(appId)
 edit(application)
 ```
 
-`launch()` executes the DesktopEntry once in the common layer. Persistence
-actions emit requests: Dock handles pin/unpin, AppLauncher handles hide/edit.
-This is intentional dependency inversion; common code must not import either
-UI module. New surfaces call the service and never duplicate launch commands
-or configuration mutations.
+`launch()` accepts a `DesktopEntry` or any object carrying an id (`desktopId`,
+`id` or `rawAppId`) and resolves the live entry itself through
+`AppPresentationService.entryFor()`. Persistence actions emit requests: Dock
+handles pin/unpin, AppLauncher handles hide/edit. This is intentional
+dependency inversion; common code must not import either UI module. New
+surfaces call the service and never duplicate launch commands or configuration
+mutations.
+
+`kos-shell.app-launch-resolution` runs the real presentation, identity and
+action services against a stub platform socket. It asserts that descriptors and
+identity results carry no `entry`, that `entryFor()` resolves a live entry from
+an id with or without the `.desktop` suffix, and that a launch -- including the
+Dock's new-window action -- reaches the daemon with the canonical desktop id.
 
 
 ### AppIdentityService
@@ -98,7 +115,8 @@ resolve(rawAppId) -> {
     rawAppId,
     name,
     iconSource,
-    entry
+    hasIconOverride,
+    hasPreferredIcon
 }
 
 canonicalId(rawAppId) -> "org.kde.kate.desktop"

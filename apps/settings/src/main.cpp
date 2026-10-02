@@ -1,4 +1,8 @@
+#include <LiquidAI/ModelManager.h>
+
 #include <QGuiApplication>
+#include <QCryptographicHash>
+#include <QColor>
 #include <QDateTime>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -10,11 +14,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -23,8 +30,34 @@
 #include <QThread>
 #include <QTimer>
 #include <QVariantMap>
+#include <QUrl>
 
 namespace {
+
+// Quickshell IPC parses each CLI argument as JSON. An array literal is
+// expanded into multiple function arguments, so a JSON list destined for a
+// QML string parameter must itself be passed as a JSON string literal.
+QString ipcStringArgument(const QString &value)
+{
+    const QByteArray wrapped = QJsonDocument(QJsonArray{value}).toJson(
+        QJsonDocument::Compact);
+    return QString::fromUtf8(wrapped.mid(1, wrapped.size() - 2));
+}
+
+bool cachedModelVerified(const QString &path, const char *expectedSha256)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return false;
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    while (!file.atEnd()) {
+        const QByteArray chunk = file.read(1024 * 1024);
+        if (chunk.isEmpty() && file.error() != QFileDevice::NoError)
+            return false;
+        hash.addData(chunk);
+    }
+    return hash.result().toHex() == QByteArray(expectedSha256);
+}
 
 // The 材质 group of the debug page is the editor for the shell's glass presets,
 // not for raw kwinrc values. The shell re-writes every one of those keys from
@@ -150,6 +183,204 @@ public:
     // instantiated pages froze startup entirely while the shell was down.
     Q_INVOKABLE void dockSnapshot() {
         callDock({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE void wallpaperSnapshot() {
+        callWallpaper({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE QStringList wallpaperCatalog() const {
+        QStringList catalog;
+        const QStringList formats{QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"),
+                                  QStringLiteral("*.png"), QStringLiteral("*.webp"),
+                                  QStringLiteral("*.avif"), QStringLiteral("*.bmp")};
+        for (const QString &location : QStandardPaths::standardLocations(
+                 QStandardPaths::GenericDataLocation)) {
+            const QDir wallpapers(location + QStringLiteral("/wallpapers"));
+            if (!wallpapers.exists())
+                continue;
+            const QFileInfoList entries = wallpapers.entryInfoList(
+                QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot,
+                QDir::Name | QDir::IgnoreCase);
+            for (const QFileInfo &entry : entries) {
+                // These tiny solid images exist only as Plasma placeholders
+                // while KOS owns the actual wallpaper. They are not user
+                // wallpapers and make the gallery look like broken tiles.
+                if (entry.fileName().startsWith(QStringLiteral("KOS-Backdrop-")))
+                    continue;
+                if (entry.isFile()) {
+                    if (formats.contains(QStringLiteral("*.") + entry.suffix().toLower()))
+                        catalog.append(entry.absoluteFilePath());
+                    continue;
+                }
+                const QDir images(entry.absoluteFilePath()
+                                  + QStringLiteral("/contents/images"));
+                if (!images.exists())
+                    continue;
+                const QFileInfoList candidates = images.entryInfoList(
+                    formats, QDir::Files, QDir::Name | QDir::IgnoreCase);
+                if (candidates.isEmpty())
+                    continue;
+                QFileInfo chosen = candidates.first();
+                double bestScore = -1e9;
+                for (const QFileInfo &candidate : candidates) {
+                    const QStringList size = candidate.completeBaseName().split('x');
+                    const double width = size.value(0).toDouble();
+                    const double height = size.value(1).toDouble();
+                    if (width < 1 || height < 1)
+                        continue;
+                    const double score = -qAbs(width / height - 16.0 / 9.0) * 10000
+                        - qAbs(width - 3840) / 100.0;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        chosen = candidate;
+                    }
+                }
+                catalog.append(chosen.absoluteFilePath());
+            }
+        }
+        return catalog;
+    }
+
+    Q_INVOKABLE QStringList wallpaperImagesInFolder(const QString &urlOrPath) const {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QDir folder(path);
+        if (!folder.exists())
+            return {};
+        const QStringList formats{QStringLiteral("*.jpg"), QStringLiteral("*.jpeg"),
+                                  QStringLiteral("*.png"), QStringLiteral("*.webp"),
+                                  QStringLiteral("*.avif"), QStringLiteral("*.bmp")};
+        QStringList images;
+        for (const QFileInfo &entry : folder.entryInfoList(
+                 formats, QDir::Files | QDir::Readable,
+                 QDir::Name | QDir::IgnoreCase)) {
+            images.append(entry.absoluteFilePath());
+        }
+        return images;
+    }
+
+    Q_INVOKABLE void chooseWallpaperImage(const QString &urlOrPath) {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        const QFileInfo image(path);
+        if (!image.isFile() || !image.isReadable()) {
+            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            emit wallpaperSnapshotChanged({});
+            return;
+        }
+        callWallpaper({QStringLiteral("chooseImage"), image.absoluteFilePath()});
+    }
+
+    Q_INVOKABLE void previewWallpaperImage(const QString &urlOrPath,
+                                            const QStringList &images) {
+        const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
+            ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
+        if (!QFileInfo(path).isFile() || !QFileInfo(path).isReadable()) {
+            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            emit wallpaperSnapshotChanged({});
+            return;
+        }
+        QJsonArray paths;
+        for (const QString &image : images.mid(0, 120)) paths.append(image);
+        const QString listJson = QString::fromUtf8(
+            QJsonDocument(paths).toJson(QJsonDocument::Compact));
+        callWallpaper({QStringLiteral("previewImage"), QFileInfo(path).absoluteFilePath(),
+            ipcStringArgument(listJson)});
+    }
+
+    Q_INVOKABLE void chooseWallpaperColor(const QString &hex) {
+        const QRegularExpression format(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+        if (!format.match(hex).hasMatch()) {
+            setLastError(QStringLiteral("壁纸颜色无效"));
+            emit wallpaperSnapshotChanged({});
+            return;
+        }
+        const QString folder = QStandardPaths::writableLocation(
+            QStandardPaths::GenericCacheLocation)
+            + QStringLiteral("/kos/wallpaper-colors");
+        if (!QDir().mkpath(folder)) {
+            setLastError(QStringLiteral("无法创建颜色壁纸缓存"));
+            emit wallpaperSnapshotChanged({});
+            return;
+        }
+        const QString path = folder + QLatin1Char('/')
+            + hex.mid(1).toLower() + QStringLiteral(".png");
+        if (!QFileInfo::exists(path)) {
+            QImage pixel(16, 16, QImage::Format_RGB32);
+            pixel.fill(QColor(hex));
+            QSaveFile file(path);
+            if (!file.open(QIODevice::WriteOnly) || !pixel.save(&file, "PNG")
+                    || !file.commit()) {
+                setLastError(QStringLiteral("无法保存颜色壁纸"));
+                emit wallpaperSnapshotChanged({});
+                return;
+            }
+        }
+        previewWallpaperImage(path, {path});
+    }
+
+    Q_INVOKABLE void updateWallpaperFitMode(const QString &mode) {
+        callWallpaper({QStringLiteral("setFitMode"), mode});
+    }
+
+    Q_INVOKABLE void updateWallpaperTakeoverEnabled(bool enabled) {
+        callWallpaper({QStringLiteral("setTakeoverEnabled"),
+                       enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateWallpaperTransition(const QString &style) {
+        callWallpaper({QStringLiteral("setTransition"), style});
+    }
+
+    Q_INVOKABLE void updateWallpaperSlideshow(bool enabled, int minutes,
+                                              const QStringList &images) {
+        QJsonArray paths;
+        for (const QString &path : images.mid(0, 120))
+            paths.append(path);
+        const QString listJson = QString::fromUtf8(
+            QJsonDocument(paths).toJson(QJsonDocument::Compact));
+        callWallpaper({QStringLiteral("setSlideshow"),
+                       enabled ? QStringLiteral("true") : QStringLiteral("false"),
+                       QString::number(minutes),
+                       ipcStringArgument(listJson)});
+    }
+
+    Q_INVOKABLE void updateWallpaperSpatialEnabled(bool enabled) {
+        callWallpaper({QStringLiteral("setSpatialEnabled"),
+                       enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void prepareWallpaperSpatial() {
+        callWallpaper({QStringLiteral("prepareSpatial")});
+    }
+
+    Q_INVOKABLE void inspectWallpaperModels() {
+        if (m_modelInspectionPending)
+            return;
+        m_modelInspectionPending = true;
+        const QString directory = QStandardPaths::writableLocation(
+            QStandardPaths::GenericCacheLocation)
+            + QStringLiteral("/liquid-shell/models/");
+        const QPointer<SettingsBridge> guard(this);
+        auto *thread = QThread::create([guard, directory] {
+            const bool depth = cachedModelVerified(
+                directory + QStringLiteral("depth-anything-v2-small-vits.onnx"),
+                LiquidAI::ModelManager::modelSha256);
+            const bool foreground = cachedModelVerified(
+                directory + QStringLiteral("isnet-general-use.onnx"),
+                LiquidAI::ModelManager::foregroundModelSha256);
+            if (guard) {
+                QMetaObject::invokeMethod(guard.data(), [guard, depth, foreground] {
+                    if (!guard)
+                        return;
+                    guard->m_modelInspectionPending = false;
+                    emit guard->wallpaperModelsChecked(depth, foreground);
+                }, Qt::QueuedConnection);
+            }
+        });
+        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        thread->start();
     }
 
     Q_INVOKABLE void updateDockLayout(double height) {
@@ -345,6 +576,12 @@ public:
             enabled ? QStringLiteral("true") : QStringLiteral("false")});
     }
 
+    Q_INVOKABLE void updateSpatialWallpaperEnabled(bool enabled) {
+        callAppearance({
+            QStringLiteral("updateSpatialWallpaperEnabled"),
+            enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
     Q_INVOKABLE void updateBarVisibilityMode(const QString &mode) {
         callAppearance({QStringLiteral("updateBarVisibilityMode"), mode});
     }
@@ -428,6 +665,8 @@ signals:
     void bannerDismissedChanged();
     void dockSnapshotChanged(const QVariantMap &snapshot);
     void dockBuiltinVisibilityChanged(const QVariantMap &snapshot);
+    void wallpaperSnapshotChanged(const QVariantMap &snapshot);
+    void wallpaperModelsChecked(bool depthReady, bool foregroundReady);
     void appearanceSnapshotChanged(const QVariantMap &snapshot);
     void launcherSnapshotChanged(const QVariantMap &snapshot);
     void shortcutsSnapshotChanged(const QVariantMap &snapshot);
@@ -442,6 +681,7 @@ private:
     enum class RequestKind {
         Dock,
         DockBuiltinVisibility,
+        Wallpaper,
         Appearance,
         Launcher,
         Shortcuts,
@@ -484,6 +724,64 @@ private:
             {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
             {QStringLiteral("showLauncher"), object.value(QStringLiteral("showLauncher")).toBool(true)},
             {QStringLiteral("showTrash"), object.value(QStringLiteral("showTrash")).toBool(true)},
+        };
+    }
+
+    QVariantMap wallpaperSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+        QJsonParseError parseError;
+        QByteArray json = payload.toUtf8();
+        QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            // Some Quickshell builds may write an informational line before
+            // the IPC return value. Recover the JSON object instead of
+            // rejecting an otherwise valid wallpaper snapshot.
+            const qsizetype firstBrace = json.indexOf('{');
+            const qsizetype lastBrace = json.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                json = json.mid(firstBrace, lastBrace - firstBrace + 1);
+                document = QJsonDocument::fromJson(json, &parseError);
+            }
+        }
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            QString detail = payload.simplified();
+            if (detail.size() > 140)
+                detail = detail.left(137) + QStringLiteral("...");
+            setLastError(QStringLiteral("壁纸 IPC 返回内容无法解析（%1）：%2")
+                .arg(parseError.errorString(), detail.isEmpty()
+                    ? QStringLiteral("空响应") : detail));
+            return {};
+        }
+        const QJsonObject object = document.object();
+        if (!object.contains(QStringLiteral("fitMode"))
+                || !object.contains(QStringLiteral("transition"))) {
+            setLastError(QStringLiteral("桌面环境返回的壁纸配置不完整"));
+            return {};
+        }
+        setLastError({});
+        return {
+            {QStringLiteral("previewActive"), object.value(QStringLiteral("previewActive")).toBool()},
+            {QStringLiteral("previewPending"), object.value(QStringLiteral("previewPending")).toBool()},
+            {QStringLiteral("previewError"), object.value(QStringLiteral("previewError")).toString()},
+            {QStringLiteral("previewAvailable"), object.value(QStringLiteral("previewAvailable")).toBool()},
+            {QStringLiteral("image"), object.value(QStringLiteral("image")).toString()},
+            {QStringLiteral("fitMode"), object.value(QStringLiteral("fitMode")).toString()},
+            {QStringLiteral("transition"), object.value(QStringLiteral("transition")).toString()},
+            {QStringLiteral("recentImages"), object.value(QStringLiteral("recentImages")).toString()},
+            {QStringLiteral("slideshowEnabled"), object.value(QStringLiteral("slideshowEnabled")).toBool()},
+            {QStringLiteral("slideshowIntervalMinutes"), object.value(QStringLiteral("slideshowIntervalMinutes")).toInt()},
+            {QStringLiteral("slideshowImages"), object.value(QStringLiteral("slideshowImages")).toString()},
+            {QStringLiteral("takeoverEnabled"), object.value(QStringLiteral("takeoverEnabled")).toBool()},
+            {QStringLiteral("takeoverPending"), object.value(QStringLiteral("takeoverPending")).toBool()},
+            {QStringLiteral("takeoverError"), object.value(QStringLiteral("takeoverError")).toString()},
+            {QStringLiteral("takeoverAvailable"), object.value(QStringLiteral("takeoverAvailable")).toBool()},
+            {QStringLiteral("spatialEnabled"), object.value(QStringLiteral("spatialEnabled")).toBool()},
+            {QStringLiteral("spatialReady"), object.value(QStringLiteral("spatialReady")).toBool()},
+            {QStringLiteral("spatialPrepared"), object.value(QStringLiteral("spatialPrepared")).toBool()},
+            {QStringLiteral("spatialBusy"), object.value(QStringLiteral("spatialBusy")).toBool()},
+            {QStringLiteral("spatialPreparing"), object.value(QStringLiteral("spatialPreparing")).toBool()},
+            {QStringLiteral("spatialError"), object.value(QStringLiteral("spatialError")).toString()},
         };
     }
 
@@ -567,6 +865,8 @@ private:
                 object.value(QStringLiteral("barIntegratedWithDock")).toBool()},
             {QStringLiteral("glassFollowsAppearanceMode"),
                 object.value(QStringLiteral("glassFollowsAppearanceMode")).toBool(true)},
+            {QStringLiteral("spatialWallpaperEnabled"),
+                object.value(QStringLiteral("spatialWallpaperEnabled")).toBool(false)},
             {QStringLiteral("barVisibilityMode"),
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),
@@ -830,6 +1130,11 @@ private:
                   QStringLiteral("Dock 设置请求失败"), RequestKind::Dock);
     }
 
+    void callWallpaper(const QStringList &arguments) {
+        callShell(QStringLiteral("wallpaper-settings"), arguments,
+                  QStringLiteral("壁纸设置请求失败"), RequestKind::Wallpaper);
+    }
+
     void callAppearance(const QStringList &arguments) {
         callShell(QStringLiteral("appearance-settings"), arguments,
                   QStringLiteral("外观设置请求失败"), RequestKind::Appearance);
@@ -1044,6 +1349,9 @@ private:
         case RequestKind::DockBuiltinVisibility:
             emit dockBuiltinVisibilityChanged(snapshotFromReply(payload));
             break;
+        case RequestKind::Wallpaper:
+            emit wallpaperSnapshotChanged(wallpaperSnapshotFromReply(payload));
+            break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
             break;
@@ -1085,6 +1393,9 @@ private:
             break;
         case RequestKind::DockBuiltinVisibility:
             emit dockBuiltinVisibilityChanged({});
+            break;
+        case RequestKind::Wallpaper:
+            emit wallpaperSnapshotChanged({});
             break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged({});
@@ -1132,6 +1443,7 @@ private:
     // The integration probe is a worker thread: while one is running the 5s
     // page poll must not pile up another.
     bool m_integrationPending = false;
+    bool m_modelInspectionPending = false;
 };
 
 namespace {

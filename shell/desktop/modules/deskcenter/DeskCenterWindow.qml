@@ -107,6 +107,9 @@ PanelWindow {
     // lays it out as a right-aligned desktop grid.
     readonly property var desktopFiles: DesktopFilesService
     readonly property string desktopOutput: screen?.name ?? ""
+    property real depthPointerX: 0
+    property real depthPointerY: 0
+    property bool spatialWallpaperActive: false
 
     function formattedTimer() {
         const hours = Math.floor(timerSeconds / 3600)
@@ -301,6 +304,18 @@ PanelWindow {
         anchors.fill: parent
         z: 0
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        hoverEnabled: root.spatialWallpaperActive
+
+        onPositionChanged: function(mouse) {
+            root.depthPointerX = Math.max(-1, Math.min(1,
+                (mouse.x / Math.max(1, width) - 0.5) * 2))
+            root.depthPointerY = Math.max(-1, Math.min(1,
+                (mouse.y / Math.max(1, height) - 0.5) * 2))
+        }
+        onExited: {
+            root.depthPointerX = 0
+            root.depthPointerY = 0
+        }
 
         onPressed: function(mouse) {
             if (mouse.button === Qt.RightButton) {
