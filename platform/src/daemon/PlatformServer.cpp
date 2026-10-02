@@ -5234,7 +5234,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         });
         return;
     }
-    if (op == "session.visibility") {
+    if (op == QStringLiteral("session.visibility")) {
         const auto call = QDBusMessage::createMethodCall("org.freedesktop.ScreenSaver",
             "/ScreenSaver", "org.freedesktop.ScreenSaver", "GetActive");
         auto *watcher = new QDBusPendingCallWatcher(
@@ -5252,23 +5252,24 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             });
         return;
     }
-    if (op == "spatial.status") {
+    if (op == QStringLiteral("spatial.status")) {
         respond(socket, request, true, m_aiWorker.status());
         return;
     }
-    if (op == "spatial.cancel") {
+    if (op == QStringLiteral("spatial.cancel")) {
         m_aiWorker.cancel();
         respond(socket, request, true, {});
         return;
     }
-    if (op == "spatial.initialize" || op == "spatial.inspect" || op == "spatial.clear") {
-        if (op == "spatial.clear") m_aiWorker.cancel();
+    if (op == QStringLiteral("spatial.initialize") || op == QStringLiteral("spatial.inspect")
+        || op == QStringLiteral("spatial.clear")) {
+        if (op == QStringLiteral("spatial.clear")) m_aiWorker.cancel();
         const QPointer<QLocalSocket> guarded(socket);
         m_aiWorker.resourceOperation(op, request.value("payload").toObject().value("kind").toString(),
             [this, guarded, request, op](bool ok, const QJsonObject &result,
                                        const QString &code, const QString &message, bool retryable) {
                 respond(guarded.data(), request, ok, result, code, message, retryable);
-                if (op == "spatial.clear") m_aiWorker.cancel();
+                if (op == QStringLiteral("spatial.clear")) m_aiWorker.cancel();
             });
         return;
     }
