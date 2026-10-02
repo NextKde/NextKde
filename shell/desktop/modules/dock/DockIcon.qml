@@ -735,6 +735,7 @@ Item {
 
     Rectangle {
         id: attentionBadge
+        objectName: "dock-notification-badge"
         readonly property bool hasCount: icon.notificationCount > 0
         readonly property real badgeHeight: hasCount
             ? Math.max(16, Math.round(icon.iconSize * 0.36))
@@ -752,7 +753,8 @@ Item {
         transformOrigin: Item.Center
         color: "#ff3b30"
         border.width: 0
-        opacity: (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
+        opacity: ConfigService.showNotificationBadges
+            && (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
         scale: opacity > 0 ? 1 : 0
         visible: opacity > 0.01
         z: 3

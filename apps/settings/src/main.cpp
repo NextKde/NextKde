@@ -400,6 +400,14 @@ public:
                   RequestKind::DockBuiltinVisibility);
     }
 
+    Q_INVOKABLE void updateDockNotificationBadgeVisibility(bool visible) {
+        callShell(QStringLiteral("dock-settings"),
+                  {QStringLiteral("updateNotificationBadgeVisibility"),
+                   visible ? QStringLiteral("true") : QStringLiteral("false")},
+                  QStringLiteral("Dock 通知角标设置请求失败"),
+                  RequestKind::DockNotificationBadgeVisibility);
+    }
+
     Q_INVOKABLE void updateDockRevealIndicatorVisibility(bool visible) {
         callShell(QStringLiteral("dock-settings"),
                   {QStringLiteral("updateRevealIndicatorVisibility"),
@@ -679,6 +687,7 @@ signals:
     void dockBuiltinVisibilityChanged(const QVariantMap &snapshot);
     void wallpaperSnapshotChanged(const QVariantMap &snapshot);
     void wallpaperModelsChecked(bool depthReady, bool foregroundReady);
+    void dockNotificationBadgeVisibilityChanged(const QVariantMap &snapshot);
     void dockRevealIndicatorVisibilityChanged(const QVariantMap &snapshot);
     void appearanceSnapshotChanged(const QVariantMap &snapshot);
     void launcherSnapshotChanged(const QVariantMap &snapshot);
@@ -695,6 +704,7 @@ private:
         Dock,
         DockBuiltinVisibility,
         Wallpaper,
+        DockNotificationBadgeVisibility,
         DockRevealIndicatorVisibility,
         Appearance,
         Launcher,
@@ -739,6 +749,7 @@ private:
             {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
             {QStringLiteral("showLauncher"), object.value(QStringLiteral("showLauncher")).toBool(true)},
             {QStringLiteral("showTrash"), object.value(QStringLiteral("showTrash")).toBool(true)},
+            {QStringLiteral("showNotificationBadges"), object.value(QStringLiteral("showNotificationBadges")).toBool(true)},
             {QStringLiteral("showRevealIndicator"), object.value(QStringLiteral("showRevealIndicator")).toBool(true)},
         };
     }
@@ -1368,6 +1379,9 @@ private:
         case RequestKind::Wallpaper:
             emit wallpaperSnapshotChanged(wallpaperSnapshotFromReply(payload));
             break;
+        case RequestKind::DockNotificationBadgeVisibility:
+            emit dockNotificationBadgeVisibilityChanged(snapshotFromReply(payload));
+            break;
         case RequestKind::DockRevealIndicatorVisibility:
             emit dockRevealIndicatorVisibilityChanged(snapshotFromReply(payload));
             break;
@@ -1415,6 +1429,9 @@ private:
             break;
         case RequestKind::Wallpaper:
             emit wallpaperSnapshotChanged({});
+            break;
+        case RequestKind::DockNotificationBadgeVisibility:
+            emit dockNotificationBadgeVisibilityChanged({});
             break;
         case RequestKind::DockRevealIndicatorVisibility:
             emit dockRevealIndicatorVisibilityChanged({});

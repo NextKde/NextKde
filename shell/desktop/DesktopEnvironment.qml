@@ -179,12 +179,18 @@ Item {
                 windowGrouping,
                 showLauncher: ConfigService.showLauncher,
                 showTrash: ConfigService.showTrash,
+                showNotificationBadges: ConfigService.showNotificationBadges,
                 showRevealIndicator: ConfigService.showRevealIndicator,
             })
         }
 
         function updateLayout(height: real): string {
             ConfigService.updateLayout(height)
+            return snapshot()
+        }
+
+        function updateNotificationBadgeVisibility(visible: bool): string {
+            ConfigService.updateNotificationBadgeVisibility(visible)
             return snapshot()
         }
 

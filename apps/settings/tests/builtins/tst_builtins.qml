@@ -11,14 +11,17 @@ Item {
         property var snapshot: ({baseHeight:60, position:"bottom", contentStyle:"compact", dockStyle:"floating", visibilityMode:"smart", windowGrouping:"grouped", showLauncher:true, showTrash:true})
         property var calls: []
         property var groupingCalls: []
+        property var badgeCalls: []
         property var indicatorCalls: []
         property var revealCalls: []
         property bool deferSnapshot: false
         signal dockSnapshotChanged(var state)
         signal dockBuiltinVisibilityChanged(var state)
+        signal dockNotificationBadgeVisibilityChanged(var state)
         signal dockRevealIndicatorVisibilityChanged(var state)
         function dockSnapshot() { if (!deferSnapshot) dockSnapshotChanged(snapshot) }
         function updateDockBuiltinVisibility(id, visible) { calls = calls.concat([{id, visible}]) }
+        function updateDockNotificationBadgeVisibility(visible) { badgeCalls = badgeCalls.concat([visible]) }
         function updateDockRevealIndicatorVisibility(visible) { indicatorCalls = indicatorCalls.concat([visible]) }
         function updateDockWindowGrouping(mode) { groupingCalls = groupingCalls.concat([mode]) }
         function updateDockRevealTriggerMode(mode) { revealCalls = revealCalls.concat([mode]) }
@@ -31,6 +34,7 @@ Item {
                 dockStyle:"floating", visibilityMode:"smart", windowGrouping:"grouped",
                 showLauncher:true, showTrash:true}
             bridge.calls = []
+            bridge.badgeCalls = []
             bridge.groupingCalls = []
             bridge.revealCalls = []
             bridge.deferSnapshot = false
@@ -129,6 +133,41 @@ Item {
             bridge.snapshot = Object.assign({}, bridge.snapshot, {windowGrouping:"grouped"})
             bridge.dockSnapshot()
             verify(control.checked, "external changes keep the binding")
+            app.destroy()
+        }
+        function test_notification_badge_binding() {
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage:3})
+            verify(app !== null)
+            const control = findChild(app.contentItem, "dock-notification-badges-switch")
+            verify(control !== null)
+            verify(control.checked, "older snapshots keep notification badges enabled")
+            const scroll = findChild(app.contentItem, "settings-page-scroll")
+            verify(waitForRendering(app.contentItem))
+            scroll.contentY = Math.max(0, Math.min(scroll.contentHeight - scroll.height,
+                control.mapToItem(scroll.contentItem, 0, 0).y - 100))
+            verify(waitForRendering(control))
+            mouseClick(control)
+            compare(bridge.badgeCalls.length, 1)
+            compare(bridge.badgeCalls[0], false)
+            verify(control.checked && !control.enabled, "wait for the confirmed snapshot")
+            bridge.dockSnapshot()
+            verify(!control.enabled, "an unrelated snapshot cannot acknowledge the request")
+            bridge.snapshot = Object.assign({}, bridge.snapshot, {showNotificationBadges:false})
+            bridge.dockNotificationBadgeVisibilityChanged(bridge.snapshot)
+            verify(!control.checked && control.enabled)
+            mouseClick(control)
+            compare(bridge.badgeCalls.length, 2)
+            compare(bridge.badgeCalls[1], true)
+            bridge.lastError = "save failed"
+            bridge.dockNotificationBadgeVisibilityChanged({})
+            verify(!control.checked && control.enabled, "a failed update keeps the confirmed value")
+            bridge.lastError = ""
+            bridge.snapshot = Object.assign({}, bridge.snapshot, {showNotificationBadges:true})
+            bridge.dockSnapshot()
+            verify(control.checked, "external snapshots keep the switch binding")
+            compare(bridge.badgeCalls.length, 2, "snapshot updates must not write back")
             app.destroy()
         }
         function test_reveal_indicator_binding() {
