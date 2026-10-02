@@ -407,6 +407,13 @@ Components:
   hysteresis). Geometry and policy must not be scattered into QML bindings.
 - All show-mode timing/easing constants live in `DockAnimation.qml`.
 
+Startup mapping is gated separately in `Dock.qml`: the saved configuration must
+finish loading and a real output must be available before any Dock surface
+becomes visible. Otherwise the provisional `always` mode can reserve workspace
+before a saved `smart` or `persistent` mode arrives. The controller's boot timeout
+does not bypass this gate. Output loss still hides and restores the existing
+window; ordinary auto-hide and runtime mode changes keep it mapped.
+
 Non-negotiable invariants:
 
 1. Collision judgement always uses the **static rectangle the Dock would
