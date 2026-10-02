@@ -70,9 +70,9 @@ assert.match(panel, /crossfade:\s*true/,
     "page navigation is a single continuous crossfade, not exit-then-enter")
 assert.doesNotMatch(panel, /popupMotion\.progress > 0 && pageMotion\.progress > 0/,
     "navigation never drops the compositor blur region")
-assert.match(card, /scrimOpacity:\\s*root\\.glassOpacity/,
-    \"the KWin scrim fades with the card's page factor, not just its content\")
-assert.match(placement, /c\\.glassOpacity = Qt\\.binding\\(function\\(\\)\\s*\\{\\s*return panel\\.pageFactor\\(c\\.pageTag\\)\\s*\\}/,
-    \"a card's compositor glass fades with its page so no blurred ghost is left\")
+assert.match(card, /scrimOpacity:\s*root\.glassOpacity/,
+    "the KWin scrim fades with the card's page factor, not just its content")
+assert.match(placement, /c\.glassOpacity = Qt\.binding\(function\(\)\s*\{\s*return panel\.pageFactor\(c\.pageTag\)\s*\}/,
+    "a card's compositor glass fades with its page so no blurred ghost is left")
 
 console.log("control-center submenu state contract: ok")
