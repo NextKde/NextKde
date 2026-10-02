@@ -29,8 +29,18 @@ QtObject {
     // Where kscreenloader looks: the generic data location is what
     // `plasma-lookup` and the greeter both resolve for look-and-feel and shell
     // packages, and it is user-writable by construction.
+    //
+    // StandardPaths.writableLocation() is a QUrl in QML, not a path: read as a
+    // string it is "file:///home/...". FileView loads that form happily, which
+    // is why the probe below never complained, but the daemon resolves
+    // file.copy against a local path -- QFileInfo does not treat "file://..."
+    // as absolute -- and refused every publish with "invalid-path", so the
+    // lock screen kept the weather its package was installed with. This is the
+    // same file URL conversion AppLauncherConfigService.importCustomIcon does.
     readonly property string packageDir:
-        StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
+        decodeURIComponent(String(
+            StandardPaths.writableLocation(StandardPaths.GenericDataLocation)
+        ).replace(/^file:\/\//, ""))
         + "/plasma/shells/org.kos.desktop/contents/lockscreen"
 
     // state.write cannot reach the package directory (it is confined to the

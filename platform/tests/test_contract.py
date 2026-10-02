@@ -190,6 +190,28 @@ def test_brightness_targets_one_kde_display() -> None:
     assert "setKdeDisplayBrightness(displayId, value)" in handler
 
 
+def test_lockscreen_feed_hands_the_daemon_a_local_path() -> None:
+    """StandardPaths.writableLocation() is a QUrl in QML, not a path.
+
+    Concatenated straight into the publish destination it read as
+    "file:///home/.../LockFeed.qml". FileView loads that happily, so the probe
+    gating the publish never noticed, but QFileInfo does not treat it as
+    absolute and the daemon answered every file.copy with "invalid-path": the
+    lock screen silently kept the weather its package was installed with. The
+    QUrl therefore has to go through the file URL conversion.
+    """
+    source = (ROOT
+              / "shell/desktop/modules/weather/LockScreenFeedService.qml"
+              ).read_text()
+    assert "StandardPaths.writableLocation" in source
+    assert "decodeURIComponent" in source, (
+        "the QUrl from StandardPaths must be converted to a local path"
+    )
+    assert 'replace(/^file:\\/\\//, "")' in source, (
+        "the file URL scheme must be stripped before the value is used as a path"
+    )
+
+
 if __name__ == "__main__":
     test_shortcuts_service_defaults()
     test_platform_contract_mentions_socket_and_errors()
@@ -202,4 +224,5 @@ if __name__ == "__main__":
     test_thumbnail_capture_closes_every_descriptor_it_opens()
     test_thumbnail_memory_is_bounded_and_recent_frames_are_reused()
     test_brightness_targets_one_kde_display()
+    test_lockscreen_feed_hands_the_daemon_a_local_path()
     print("platform contracts: ok")
