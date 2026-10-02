@@ -34,15 +34,16 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      # node and python are what the platform layer runs on; neither needs a
-      # display, so both layers in this job work in a container.
+      # node and python drive the platform layer without a display. Building
+      # the platform also builds its AI worker, which requires OpenCV and the
+      # CPU ONNX Runtime headers/library.
       - name: Install build dependencies
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
             qt6-base qt6-declarative \
             kwindowsystem kiconthemes kglobalaccel kio \
-            go dbus nodejs python
+            go dbus nodejs python opencv onnxruntime-cpu
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
       # whole standard library on a cold cache (>50 s locally, ~1 s warm),
