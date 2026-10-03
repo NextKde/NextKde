@@ -205,12 +205,6 @@ Item {
         onTriggered: card.mergeGlow = false
     }
     onMergedChanged: {
-        // ⚠️ 命令式写、不走绑定：plane（visible:false 离屏层）子项的
-        // visible 绑定在依赖变化时**不会重新求值**（原地合并路径实测：
-        // merged 翻真后芯片仍隐身，切走重建才出现——出生求值一次定终
-        // 身）。普通属性（opacity/isHovered 链）不受此影响。出生赋值同
-        // 样触发本 handler，两条路径都覆盖
-        cardSplit.visible = merged
         if (merged) {
             mergeGlow = true
             _mergeGlowTimer.restart()
@@ -353,12 +347,12 @@ Item {
             Text {
                 anchors {
                     left: parent.left
-                    // 合并卡让位给拆分芯片（悬停时芯片亮起会盖住标题
-                    // 尾部 ~18px，elide 又按全宽算——读作"标题被啃"）。
-                    // ⚠️ 只看 card.merged——cardSplit.visible 在 plane
-                    //（visible:false）下读的是恒 false 的有效可见性
-                    right: card.merged ? cardSplit.left : cardClose.left
-                    rightMargin: 6
+                    // 合并卡让位给拆分芯片（芯片亮起盖住标题尾部 ~18px，
+                    // elide 又按全宽算——读作"标题被啃"）。芯片已搬根层，
+                    // 锚点坐标不再同系，改固定让位量：merged 时让出 ✕(20)
+                    // + 间隙(4) + 芯片(20) + 余量(6)
+                    right: parent.right
+                    rightMargin: card.merged ? 50 : 26
                     verticalCenter: parent.verticalCenter
                 }
                 // 名称可关（stage-config showCardTitle）：关=纯窗口内容。
@@ -374,43 +368,11 @@ Item {
                 elide: Text.ElideRight
             }
 
-            // 拆分钮（合并卡才有）：右键的可见等价物。芯片里画两张错位
-            // 小卡表达"拆开"；热区在根层（splitHit），本层只画
-            Rectangle {
-                id: cardSplit
-                anchors {
-                    right: cardClose.left
-                    rightMargin: 4
-                    verticalCenter: parent.verticalCenter
-                }
-                width: 20
-                height: 20
-                radius: 10
-                visible: card.merged
-                color: splitHit.containsMouse ? "#f59e0b" : "transparent"
-                opacity: (card.isHovered || card.mergeGlow) ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
-
-                // 两张错位小卡（纯 Rectangle，不依赖字体字形）
-                Rectangle {
-                    width: 9; height: 9; radius: 2
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: -1.5
-                    anchors.verticalCenterOffset: -1.5
-                    color: "transparent"
-                    border.width: 1.4
-                    border.color: "white"
-                }
-                Rectangle {
-                    width: 9; height: 9; radius: 2
-                    anchors.centerIn: parent
-                    anchors.horizontalCenterOffset: 1.5
-                    anchors.verticalCenterOffset: 1.5
-                    color: splitHit.containsMouse ? "#ffffff" : "transparent"
-                    border.width: 1.4
-                    border.color: "white"
-                }
-            }
+            // 拆分钮视觉在根层 splitHit 内（见下）——原画在 plane 头部，
+            // 但不可见子树（plane visible:false）里的 visible 改动被吞
+            //（绑定不重求值 + 命令式写也不重渲染，2026-10-03 原地合并
+            // 三轮实测），原地合并后芯片永远隐身。根层直渲染 + opacity
+            // 门控彻底绕开；悬停时卡片压平，直渲染芯片与卡面对齐
 
             Rectangle {
                 id: cardClose
@@ -751,6 +713,39 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: card.ungroupRequested()
+
+        // 拆分钮视觉（根层直渲染，绕开 plane 不可见子树吞改动的坑）：
+        // 芯片画两张错位小卡表达"拆开"；opacity 门控（悬停或合并提示），
+        // 热区门控由外层 splitHit.visible 承担（根层绑定正常工作）
+        Rectangle {
+            id: cardSplit
+            anchors.centerIn: parent
+            width: 20
+            height: 20
+            radius: 10
+            color: splitHit.containsMouse ? "#f59e0b" : "transparent"
+            opacity: (card.isHovered || card.mergeGlow) ? 1.0 : 0.0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+
+            Rectangle {
+                width: 9; height: 9; radius: 2
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: -1.5
+                anchors.verticalCenterOffset: -1.5
+                color: "transparent"
+                border.width: 1.4
+                border.color: "white"
+            }
+            Rectangle {
+                width: 9; height: 9; radius: 2
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: 1.5
+                anchors.verticalCenterOffset: 1.5
+                color: splitHit.containsMouse ? "#ffffff" : "transparent"
+                border.width: 1.4
+                border.color: "white"
+            }
+        }
     }
 
     // ── 左下角窗口图标排（macOS Stage Manager 同款）：一窗一图标并列。
