@@ -2,9 +2,6 @@ module qs.desktop.modules.deskcenter
 
 DeskCenter 1.0 DeskCenter.qml
 DeskCenterWindow 1.0 DeskCenterWindow.qml
-SpatialWallpaperWindow 1.0 SpatialWallpaperWindow.qml
-WallpaperImageLayer 1.0 WallpaperImageLayer.qml
-DepthWallpaperLayer 1.0 DepthWallpaperLayer.qml
 DeskWidgetCard 1.0 DeskWidgetCard.qml
 DeskMediaButton 1.0 DeskMediaButton.qml
 OfficialDragReorderDemo 1.0 OfficialDragReorderDemo.qml
@@ -13,19 +10,4 @@ FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
 singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml
 singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
-singleton SpatialWallpaperService 1.0 SpatialWallpaperService.qml
-singleton WallpaperService 1.0 WallpaperService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml
-
-singleton WallpaperPreviewService 1.0 WallpaperPreviewService.qml
-WallpaperPreviewBar 1.0 WallpaperPreviewBar.qml
-
-singleton SpatialResourceService 1.0 SpatialResourceService.qml
-
-SpatialPreparationOverlay 1.0 SpatialPreparationOverlay.qml
-
-SpatialPreparationWindow 1.0 SpatialPreparationWindow.qml
-
-singleton ThemeWallpaperService 1.0 ThemeWallpaperService.qml
-ThemeWallpaperLayer 1.0 ThemeWallpaperLayer.qml
-ThemeForegroundWindow 1.0 ThemeForegroundWindow.qml

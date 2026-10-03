@@ -708,9 +708,61 @@ public:
                        enabled ? QStringLiteral("true") : QStringLiteral("false")});
     }
 
+    // 主题包(marketplace)清单扫描:~/.local/share/kos/wallpaper-themes/<id>/
+    // manifest.json,字段与兜底规则和壳侧 ThemePackService 一致(缺 id 用目录
+    // 名,缺 name 用 id,entry/preview 拒绝路径分隔符)。同步但只在打开壁纸
+    // 页时调用,目录规模是个位数,代价可控。
+    Q_INVOKABLE QVariantList themePackCatalog() const {
+        QVariantList packs;
+        const QString override = qEnvironmentVariable("KOS_WALLPAPER_PACKS");
+        const QString root = override.trimmed().isEmpty()
+            ? qEnvironmentVariable("HOME") + QStringLiteral("/.local/share/kos/wallpaper-themes")
+            : override.trimmed();
+        const QFileInfoList entries = QDir(root).entryInfoList(
+            QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot, QDir::Name | QDir::IgnoreCase);
+        static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9_-]+$"));
+        for (const QFileInfo &entry : entries) {
+            QFile manifest(entry.absoluteFilePath() + QStringLiteral("/manifest.json"));
+            if (!manifest.open(QIODevice::ReadOnly))
+                continue;
+            const QJsonDocument document = QJsonDocument::fromJson(manifest.readAll());
+            if (!document.isObject())
+                continue;
+            const QJsonObject object = document.object();
+            const QString rawId = object.value(QStringLiteral("id")).toString().trimmed();
+            const QString id = rawId.isEmpty() ? entry.fileName() : rawId;
+            if (!validId.match(id).hasMatch())
+                continue;
+            const QString entryName = object.value(QStringLiteral("entry")).toString(QStringLiteral("main.qml"));
+            QString preview = object.value(QStringLiteral("preview")).toString();
+            if (entryName.isEmpty() || entryName.contains(QLatin1Char('/')) || entryName.contains(QStringLiteral("..")))
+                continue;
+            if (preview.contains(QLatin1Char('/')) || preview.contains(QStringLiteral("..")))
+                preview.clear();
+            QVariantMap pack;
+            pack.insert(QStringLiteral("id"), id);
+            pack.insert(QStringLiteral("dir"), entry.absoluteFilePath());
+            pack.insert(QStringLiteral("name"), object.value(QStringLiteral("name")).toString(id));
+            pack.insert(QStringLiteral("detail"), object.value(QStringLiteral("detail")).toString());
+            pack.insert(QStringLiteral("accent"), object.value(QStringLiteral("accent")).toString());
+            pack.insert(QStringLiteral("version"), object.value(QStringLiteral("version")).toInt(1));
+            pack.insert(QStringLiteral("entryPath"), entry.absoluteFilePath() + QLatin1Char('/') + entryName);
+            pack.insert(QStringLiteral("previewPath"),
+                        preview.isEmpty() ? QString()
+                                          : entry.absoluteFilePath() + QLatin1Char('/') + preview);
+            packs.append(pack);
+        }
+        return packs;
+    }
+
     Q_INVOKABLE void chooseWallpaperTheme(const QString &id) {
         if (id != "starfield" && id != "blackhole" && id != "weather"
-            && id != "underwater" && id != "forest") return;
+            && id != "underwater" && id != "forest") {
+            // 包主题(marketplace)不在内置名单里:只做格式守卫,存在性由壳侧
+            // ThemePackService / WallpaperService.chooseTheme 校验。
+            static const QRegularExpression validId(QStringLiteral("^[A-Za-z0-9_-]+$"));
+            if (!validId.match(id).hasMatch()) return;
+        }
         callWallpaper({QStringLiteral("chooseTheme"), id});
     }
     Q_INVOKABLE void updateWallpaperThemeEconomical(bool enabled) {

@@ -18,6 +18,8 @@ ColumnLayout {
     property string themeId: "starfield"
     readonly property bool currentIsTheme: previewActive ? previewMode === "theme" : wallpaperMode === "theme"
     readonly property string displayedThemeId: currentIsTheme && previewActive ? previewImage.slice(6) : themeId
+    // 当前主题若是主题包,取包内 preview.png 作为当前卡片缩略图。
+    readonly property string displayedPackPreviewPath: currentIsTheme ? page.packPreviewPath(displayedThemeId) : ""
     readonly property bool themeBridgeCompatible: bridgeCompatible && typeof bridge.chooseWallpaperTheme === "function"
 
     property string fitMode: "crop"
@@ -113,8 +115,28 @@ ColumnLayout {
     readonly property var imageItems: buildImageItems()
     // 图像 = 我的图片(托管目录,mtime 降序=新导入置顶)在前、系统壁纸垫底;
     // 按路径去重,同路径算托管条目(可移除进回收站)。
-    readonly property var galleryItems: galleryCategory === "themes" ? WallpaperCatalog.themes
+    readonly property var galleryItems: galleryCategory === "themes" ? WallpaperCatalog.themes.concat(packItems)
         : galleryCategory === "colors" ? colorItems : imageItems
+    // 已安装主题包(marketplace):bridge 本地扫描,内置在前、包在后;
+    // 与内置同 id 的包不展示(内置优先)。
+    readonly property var packItems: {
+        if (!bridgeCompatible) return []
+        const raw = typeof bridge.themePackCatalog === "function" ? bridge.themePackCatalog() : []
+        // 过桥的列表可能不是真 JS 数组(历史坑),先 slice。
+        const packs = Array.prototype.slice.call(raw)
+        const builtin = {}
+        for (const theme of WallpaperCatalog.themes)
+            builtin[theme.id] = true
+        return packs.filter(pack => pack && pack.id && !builtin[pack.id])
+            .map(pack => ({
+                id: pack.id, label: pack.name || pack.id,
+                detail: pack.detail || "", previewPath: pack.previewPath || ""
+            }))
+    }
+    function packPreviewPath(id) {
+        const hit = packItems.find(item => item.id === id)
+        return hit ? hit.previewPath : ""
+    }
     function buildImageItems() {
         // 过桥的 QStringList（catalogImages/galleryImages）不是真 JS 数组（历史
         // 坑：嵌套列表过界后 Array.isArray 为假），不能直接 concat；先 slice。
@@ -144,7 +166,7 @@ ColumnLayout {
         if (galleryCategory === "themes" || String(path).startsWith("theme:")) {
             if (!themeBridgeCompatible) { errorText = "请更新设置程序以使用主题壁纸"; return }
             const id = String(path).startsWith("theme:") ? String(path).slice(6) : themeId
-            if (!WallpaperCatalog.theme(id)) return
+            if (!WallpaperCatalog.theme(id) && packItems.every(item => item.id !== id)) return
             bridge.previewWallpaperSession("theme:" + id, {
                 images: imageItems.map(item => item.path), colors: colorItems.map(item => item.path),
                 mode: "theme", selectedImages: selectedSlideshowImages, intervalMinutes: slideshowIntervalMinutes
@@ -560,7 +582,21 @@ ColumnLayout {
                 Loader {
                     anchors.fill: parent
                     active: page.currentIsTheme
-                    sourceComponent: ThemeVisuals.ThemeWallpaperThumbnail { themeId: page.displayedThemeId }
+                    // 包主题用包内 preview.png;内置主题用共享静态图。
+                    sourceComponent: page.displayedPackPreviewPath ? packThumb : builtinThumb
+                }
+                Component {
+                    id: packThumb
+                    Image {
+                        source: page.displayedPackPreviewPath
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        smooth: true
+                    }
+                }
+                Component {
+                    id: builtinThumb
+                    ThemeVisuals.ThemeWallpaperThumbnail { themeId: page.displayedThemeId }
                 }
             }
             ColumnLayout {
@@ -568,7 +604,11 @@ ColumnLayout {
                 spacing: 5
                 Text {
                     Layout.fillWidth: true
-                    text: page.currentIsTheme ? (WallpaperCatalog.theme(page.displayedThemeId)?.label || "主题壁纸") : page.displayName(page.image)
+                    text: page.currentIsTheme
+                        ? (WallpaperCatalog.theme(page.displayedThemeId)?.label
+                            || page.packItems.find(item => item.id === page.displayedThemeId)?.label
+                            || "主题壁纸")
+                        : page.displayName(page.image)
                     color: page.colors.primaryText
                     font.pixelSize: 14
                     elide: Text.ElideRight
@@ -861,6 +901,7 @@ ColumnLayout {
                         id: themeDelegate
                         ThemeWallpaperTile {
                             themeId: modelData.id
+                            previewPath: modelData.previewPath || ""
                             title: modelData.label
                             detail: modelData.detail
                             accent: page.colors.accent

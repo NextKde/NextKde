@@ -6,6 +6,7 @@ import qs.desktop.modules.dock
 import qs.desktop.modules.common
 import qs.desktop.modules.deskcenter
 import qs.desktop.modules.platform
+import qs.desktop.modules.wallpaper
 import "../../../Kos/Ui"
 
 // One concrete output-bound Dock layer surface.

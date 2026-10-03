@@ -6,6 +6,8 @@ import "../../shared/qml/wallpapers" as ThemeVisuals
 Rectangle {
     id: root
     property string themeId: "starfield"
+    // 主题包自带 preview.png;为空时回退内置主题的静态图。
+    property string previewPath: ""
     property string title: ""
     property string detail: ""
     property color accent: "#70b4ff"
@@ -19,13 +21,28 @@ Rectangle {
     color: surroundingColor
     border.width: selected ? 2 : 1
     border.color: selected ? accent : "#40808080"
-    ThemeVisuals.ThemeWallpaperThumbnail {
+    Loader {
         id: previewScene
         x: 5; y: 5
         width: parent.width - 10; height: parent.height - 62
-        themeId: root.themeId
+        sourceComponent: root.previewPath ? packPreview : builtinPreview
         // The PNG supplies its texture directly to the rounded mask below.
         visible: false
+    }
+    Component {
+        id: packPreview
+        Image {
+            source: root.previewPath
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            smooth: true
+        }
+    }
+    Component {
+        id: builtinPreview
+        ThemeVisuals.ThemeWallpaperThumbnail {
+            themeId: root.themeId
+        }
     }
     Rectangle {
         id: previewMask

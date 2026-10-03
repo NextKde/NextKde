@@ -1,0 +1,18 @@
+module qs.desktop.modules.wallpaper
+
+singleton WallpaperService 1.0 WallpaperService.qml
+singleton ThemeWallpaperService 1.0 ThemeWallpaperService.qml
+singleton ThemePackService 1.0 ThemePackService.qml
+singleton WallpaperPreviewService 1.0 WallpaperPreviewService.qml
+singleton SpatialWallpaperService 1.0 SpatialWallpaperService.qml
+singleton SpatialResourceService 1.0 SpatialResourceService.qml
+
+WallpaperImageLayer 1.0 WallpaperImageLayer.qml
+DepthWallpaperLayer 1.0 DepthWallpaperLayer.qml
+SpatialWallpaperWindow 1.0 SpatialWallpaperWindow.qml
+SpatialPreparationOverlay 1.0 SpatialPreparationOverlay.qml
+SpatialPreparationWindow 1.0 SpatialPreparationWindow.qml
+
+ThemeWallpaperLayer 1.0 ThemeWallpaperLayer.qml
+ThemeForegroundWindow 1.0 ThemeForegroundWindow.qml
+WallpaperPreviewBar 1.0 WallpaperPreviewBar.qml

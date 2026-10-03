@@ -1,6 +1,7 @@
 import Quickshell
 import QtQuick
 import qs.desktop.modules.common
+import qs.desktop.modules.wallpaper
 
 // A desktop surface is intentionally independent from application windows.
 // ScreenLifecycle temporarily hides it while KWin has no real output.

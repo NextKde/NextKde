@@ -10,6 +10,7 @@ import Qt5Compat.GraphicalEffects
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
+import qs.desktop.modules.wallpaper
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 import qs.desktop.modules.weather

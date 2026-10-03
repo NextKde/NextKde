@@ -1,0 +1,4 @@
+User-provided visual reference, copied without modification on 2026-10-02.
+Original attachment: codex-clipboard-8abcf7d0-0a0d-4416-a04f-82f447efe499.png
+Used as an image material by CinematicBlackHole.qml; not part of the BSD-licensed black-hole simulation or MIT Flow code.
+Original artwork attribution was not supplied.

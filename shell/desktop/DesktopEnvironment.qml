@@ -8,6 +8,7 @@ import qs.desktop.modules.quicksearch
 import qs.desktop.modules.notifications
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.deskcenter
+import qs.desktop.modules.wallpaper
 import qs.desktop.modules.overview
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
@@ -220,6 +221,10 @@ Item {
     Component.onCompleted: {
         IconThemeReloadService.initialize()
         ShortcutsService.applyToPlatform()
+        // Warm the theme pack scan at startup: a persisted pack themeId is
+        // validated against installed packs on every shell start, and the
+        // scan should not wait for the wallpaper settings to be opened.
+        ThemePackService.rescan()
         // Touch the lock screen feed so it exists on every shell start, not
         // only when a widget happens to reference WeatherService: the lock
         // screen cannot read anything the shell does not write out for it.
