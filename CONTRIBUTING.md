@@ -118,6 +118,10 @@ python3 tools/check-docs.py
 `tmp/` 是本地工作台（由 `.gitignore` 里的 `/tmp/` 忽略），**不随仓库走**；
 它的用途与约定见 `tmp/README.md`。别把只此一份的重要信息放进去。
 
+**`.gitignore` 只收「工具或构建固定生成、名字稳定、永远不会入库」的路径**（构建输出、日志、
+编辑器与 agent 的配置目录）。**某次会话临时造出来的东西一律不进 `.gitignore`** —— 那是把症状盖住：
+下次换个名字再来一遍，你还是要再补一行。临时物的正解是放进 `tmp/`。
+
 **English**
 
 | Content | Where it goes |
@@ -129,6 +133,12 @@ python3 tools/check-docs.py
 `tmp/` is a local workbench (ignored via `/tmp/` in `.gitignore`) and **does not travel with the
 repository**; its purpose and conventions are documented in `tmp/README.md`. Never put the only copy
 of important information there.
+
+**`.gitignore` takes only paths that a tool or the build produces deterministically, under a stable
+name, and that must never be committed** (build output, logs, editor and assistant config
+directories). **Something one session happened to create never goes into `.gitignore`** — that hides
+the symptom: the next one arrives under a different name and you add another line. Scratch material
+belongs in `tmp/`.
 
 ---
 
@@ -144,6 +154,7 @@ of important information there.
 | 长期有效的项目约定 | `PROJECT_CONTEXT.md` |
 | 面向用户的使用 / 排查指南 | `README.md`、`docs/nix-*.md` |
 | **一次会话的过程记录** | `tmp/`（不提交） |
+| **临时夹具、一次性脚本、探针、抓到的日志** | `tmp/`（不提交）；值得长期保留的测试进 `tests/` |
 
 判断依据一句话：**读它的人是要了解"现在是什么样"→ 进仓库；是要复盘"某次是怎么做的"→ 进 `tmp/`。**
 
@@ -157,6 +168,7 @@ of important information there.
 | Long-lived project conventions | `PROJECT_CONTEXT.md` |
 | User-facing usage / troubleshooting guides | `README.md`, `docs/nix-*.md` |
 | **Process record of a single session** | `tmp/` (not committed) |
+| **Scratch fixtures, one-off scripts, probes, captured logs** | `tmp/` (not committed); a test worth keeping belongs in `tests/` |
 
 One-line test: if the reader wants to know **what it looks like now** → it belongs in the repository;
 if they want to replay **how it was done once** → it belongs in `tmp/`.
