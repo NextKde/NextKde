@@ -21,7 +21,7 @@
         inherit kos-desktop;
         inherit (kos-desktop.passthru)
           shell-data-service kos-settings kos-platform kosctl
-          kwin-dock-window-animation kwin-context-menu-input kwin-effects-glass
+          kwin-dock-window-animation kwin-stage-animation kwin-context-menu-input kwin-effects-glass
           kwin-kos-bridge kwin-kos-decoration;
         default = kos-desktop;
       };
@@ -58,6 +58,7 @@
             kos.passthru.kosctl
             kos-ctl
             kos.passthru.kwin-dock-window-animation
+            kos.passthru.kwin-stage-animation
             kos.passthru.kwin-context-menu-input
             kos.passthru.kwin-effects-glass
             kos.passthru.kwin-kos-bridge

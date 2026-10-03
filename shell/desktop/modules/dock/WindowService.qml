@@ -25,11 +25,31 @@ QtObject {
     // Pure geometry updates retain the presentation array and its objects.
     property int placementRevision: 0
     property string activeWindowId: ""
+    // KWin's real active window (unfiltered scan in the bridge snapshot):
+    // non-empty while ANY window holds focus, including transient dialogs
+    // that never enter `records`. Empty = genuinely nothing active (desktop).
+    property string kwinActiveId: ""
+    // KWin 活动窗是自己的全屏桌面表面（挂件层/壁纸）＝"焦点在桌面上"
+    // 而不是"未跟踪 transient"——桌面聚焦语义的判据（见 window-bridge.js）
+    property bool kwinActiveDesktop: false
 
     // Forwarded by the KWin input effect through this service's existing local
     // bridge. Consumers use the global logical coordinates for outside-click
     // dismissal; the event itself is never consumed by KWin.
     signal globalPointerPressed(real x, real y, int button, real timestamp)
+
+    // Activation requested by this process (dock icon/preview/menu click):
+    // emitted the instant the click happens, before the bridge command is
+    // queued. Stage's sidebar uses it to run the simultaneous swap without
+    // waiting for the change to round-trip through the 120ms-debounced
+    // snapshot path.
+    signal activationRequested(string windowId)
+    // Bridge command receipt (round35 NEW-2): fired for every action echo
+    // from the KWin script. found=false means the command could not be
+    // applied (window gone / bridge not ready); consumers that gate UI state
+    // on command success (stage engage) reset on this instead of staying
+    // stuck when the command was lost.
+    signal commandFinished(string action, string ticket, bool found)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -77,8 +97,13 @@ QtObject {
     property Connections _platformEvents: Connections {
         target: PlatformClient
         function onEventReceived(eventName, payload) {
+            // window.action = 命令回执（publishAction）：engage-swap 派发
+            // 失败自愈（stage 侧 engaging 卡复位）依赖它——漏掉这个过滤
+            // 项会让整条回执链变成死代码（桥一路发到 shell 门口被丢弃）
             if (eventName === "window.snapshot" || eventName === "desktops"
-                    || eventName === "thumbnail" || eventName === "global-pointer-press")
+                    || eventName === "thumbnail"
+                    || eventName === "global-pointer-press"
+                    || eventName === "window.action")
                 svc._consumeKwinEvent(payload)
         }
     }
@@ -579,6 +604,14 @@ QtObject {
             ? (_thumbnailUrlsByHandle[record.handleId] ?? "") : "";
     }
 
+    // KWin 的稳定窗口 UUID（PlasmaWindow uuid / internalId 去花括号）——
+    // zkde_screencast 单窗口流的 uuid 口径（ScreencastingRequest 同源）。
+    // shell 句柄（window-N）不是 KWin id，直传会静默开不出流。
+    function handleIdOf(windowId) {
+        const record = windowById(windowId);
+        return record?.provider === "kwin" ? (record.handleId ?? "") : "";
+    }
+
     function requestThumbnail(windowId) {
         const record = windowById(windowId);
         if (!record) {
@@ -607,11 +640,82 @@ QtObject {
             console.warn("[WindowService] activate missing windowId=" + windowId);
             return;
         }
+        activationRequested(windowId);
         if (record.provider === "kwin") {
             _enqueueKwinCommand({ action: "activate", id: record.handleId });
             return;
         }
         try { record.toplevel.activate(); } catch (e) {}
+    }
+
+    // 整组一起展开（macOS 语义）：同应用全部窗口还原抬升、focusId 最后激活
+    // 拿焦点。必须走单个 activate-group 原子命令——连续的 activate 会被
+    // _kwinActivationTimer 的单槽合并吞掉兄弟窗的还原（dock/侧栏两条入口
+    // 都踩过）。activationRequested 只对 focus 窗发一次（stage 退位交换）。
+    function activateGroup(windowIds, focusId) {
+        const ids = [];
+        for (let i = 0; i < windowIds.length; i++) {
+            const record = windowById(windowIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                ids.push(record.handleId);
+            } else {
+                try { record.toplevel.activate(); } catch (e) {}
+            }
+        }
+        if (ids.length === 0)
+            return;
+        const focusRecord = windowById(focusId);
+        const focusHandle = focusRecord?.provider === "kwin"
+            ? focusRecord.handleId : ids[ids.length - 1];
+        activationRequested(focusId);
+        _sendKwinCommand({ action: "activate-group", ids: ids,
+            focusId: focusHandle });
+    }
+
+    // 同拍交换（点击卡片）：激活目标组 + 收编退位组走**一条原子命令**——
+    // 分开发会按桥的 50ms 命令轮询一拍一条，收编比激活晚一拍起跑（实测
+    // 50ms，实时模式肉眼可见的"慢半拍"）。activationRequested 只对焦点窗
+    // 发一次（stage 退位交换 / dock 路径都依赖它）。
+    function engageSwap(activateIds, focusId, minimizeIds, ticket) {
+        const actHandles = [];
+        for (let i = 0; i < activateIds.length; i++) {
+            const record = windowById(activateIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                actHandles.push(record.handleId);
+            } else {
+                try { record.toplevel.activate(); } catch (e) {}
+            }
+        }
+        if (actHandles.length === 0)
+            return;
+        const minHandles = [];
+        for (let m = 0; m < minimizeIds.length; m++) {
+            const record = windowById(minimizeIds[m]);
+            if (record?.provider === "kwin")
+                minHandles.push(record.handleId);
+        }
+        const focusRecord = windowById(focusId);
+        const focusHandle = focusRecord?.provider === "kwin"
+            ? focusRecord.handleId : actHandles[actHandles.length - 1];
+        activationRequested(focusId);
+        _sendKwinCommand({ action: "engage-swap", ids: actHandles,
+            focusId: focusHandle, minimizeIds: minHandles,
+            ticket: ticket || undefined });
+    }
+
+    // 实时卡片停泊：收编窗静默还原后移到屏幕外（保持渲染=缩略图实时，
+    // 桌面不摊满应用）；几何复位在桥的激活路径（activate/activate-group/
+    // engage-swap）自动完成
+    function parkWindow(windowId, value) {
+        const record = windowById(windowId);
+        if (!record || record.provider !== "kwin")
+            return;
+        _sendKwinCommand({ action: "park", id: record.handleId,
+            value: value !== false });
     }
 
     function minimizeWindow(windowId, value) {
@@ -636,6 +740,41 @@ QtObject {
             if (!record.toplevel?.minimized)
                 minimizeWindow(record.windowId, true);
         }
+    }
+
+    // 整组原子最小化：逐窗命令在桥侧 50ms/条排队（shell 侧的合并槽只
+    // 作用于 activate，minimize 本就直发——真正的串行化瓶颈在桥），
+    // N 窗收编管线会被拖到 N*50ms——比显示桌面开关的防抖还长（打断窗口
+    // 的根源，实测踩过）。多窗批量一律走这里，单窗路径用 minimizeWindow。
+    function minimizeGroup(windowIds, value) {
+        const ids = [];
+        for (let i = 0; i < windowIds.length; i++) {
+            const record = windowById(windowIds[i]);
+            if (!record)
+                continue;
+            if (record.provider === "kwin") {
+                ids.push(record.handleId);
+            } else {
+                try { record.toplevel.minimized = value === undefined ? true : value; } catch (e) {}
+            }
+        }
+        if (ids.length === 0)
+            return;
+        _sendKwinCommand({ action: "minimize-group", ids: ids,
+            value: value === undefined ? true : value });
+    }
+
+    // 实时卡片模式的压底标记：静默还原的后台窗压到桌面底层（keepBelow），
+    // 不遮正在使用的窗口；整组激活时桥侧自动摘掉
+    function keepBelowWindow(windowId, below) {
+        const record = windowById(windowId);
+        if (!record || record.provider !== "kwin")
+            return;
+        _enqueueKwinCommand({
+            action: "keep-below",
+            id: record.handleId,
+            value: below === undefined ? true : below
+        });
     }
 
     function closeWindow(windowId) {
@@ -692,18 +831,36 @@ QtObject {
                 if (event.type !== "snapshot")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));
+                // Command receipts (round35 NEW-2): the bridge echoes every
+                // command's outcome (action + optional shell ticket). Only
+                // consumers that need confirmation subscribe; snapshot state
+                // self-corrects everything else.
+                if (event.type === "action") {
+                    svc.commandFinished(String(event.action ?? ""),
+                        String(event.ticket ?? ""), !!event.found);
+                    return;
+                }
                 if (event.type === "snapshot" && Array.isArray(event.windows)) {
                         // Coalesce redundant snapshots. The KWin script already
                         // publishes only on change, but a second filter here
                         // keeps the model rebuild rate bounded even if a future
-                        // provider stops deduplicating.
-                        const snapshotJson = JSON.stringify(event.windows);
+                        // provider stops deduplicating. activeId joins the key:
+                        // focus moving onto an untracked dialog changes nothing
+                        // in `windows` but must still reach consumers.
+                        // activeDesktop 同理：桌面表面（quickshell）不在
+                        // windows 里，它拿走/交还焦点时 windows 与 activeId
+                        // 都不变——漏键会把桌面聚焦状态冻结在旧值。
+                        const snapshotJson = JSON.stringify(event.windows)
+                            + "#" + (event.activeId ?? "")
+                            + "#" + (event.activeDesktop ? 1 : 0);
                         if (snapshotJson === svc._lastSnapshotJson)
                             return;
                         svc._lastSnapshotJson = snapshotJson;
                         // Keep activation direct. Virtual-desktop transient
                         // filtering is handled separately; delaying this
                         // authoritative list also delayed focus changes.
+                        svc.kwinActiveId = String(event.activeId ?? "");
+                        svc.kwinActiveDesktop = !!event.activeDesktop;
                         svc._kwinWindows = event.windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;
@@ -792,8 +949,15 @@ QtObject {
             if (!response?.ok)
                 console.warn("[WindowService] KWin subscription failed: "
                     + (response?.error?.message || "platform unavailable"))
-            else
+            else {
                 svc._sendKwinCommand({ action: "desktops" })
+                // The replayed cache can predate the current focus (a
+                // no-focus instant leaves every window activated=false and
+                // no later windowActivated event corrects it) — ask the
+                // bridge for a fresh authoritative snapshot. Seeds
+                // activeWindowId after shell restarts.
+                svc._sendKwinCommand({ action: "refresh-snapshot" })
+            }
         })
     }
 

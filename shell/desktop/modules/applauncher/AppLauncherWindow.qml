@@ -321,7 +321,10 @@ PanelWindow {
         // Treat spaces and common desktop-entry separators as word breaks.
         // This lets e.g. "code" find "Visual Studio Code" before a loose
         // substring while still behaving sensibly for non-Latin app names.
-        const words = name.split(/[\\s._-]+/);
+        // ⚠️ 字符类必须单反斜杠：`[\\s]` 在 JS 正则里是"字面反斜杠+
+        // 字母 s"——空格不分割、每个小写 s 反而当分隔符（"Visual Studio
+        // Code" 被切成 Vi/ual…，词首匹配从未生效，实测踩过）
+        const words = name.split(/[\s._-]+/);
         for (let i = 0; i < words.length; i++) {
             if (words[i].startsWith(needle))
                 return 2;

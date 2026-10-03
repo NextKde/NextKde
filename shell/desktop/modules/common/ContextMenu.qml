@@ -280,6 +280,7 @@ PopupWindow {
                 id: menuRepeater
                 model: root.displayedPage.items
                 delegate: MenuItemRow {
+                    required property int index
                     required property var modelData
                     // Items may carry a live QsMenuEntry (DBusMenu tray
                     // menus). Binding through it keeps label/icon/check

@@ -9,6 +9,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
 import qs.desktop.modules.platform
+import qs.desktop.modules.stage
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
@@ -279,6 +280,10 @@ PopupWindow {
             slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
             slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
             slotCard8.visible ? slotCard8.blurRegion : emptyRegion,
+            // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
+            // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
+            // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
+            stageModeCard.visible ? stageModeCard.blurRegion : emptyRegion,
             sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
             submenuCard.visible ? submenuCard.blurRegion : emptyRegion
         ]
@@ -1286,6 +1291,80 @@ PopupWindow {
         }
     }
 
+    // ── Card 9a: Stage mode toggle（前台调度总开关，常驻）─────────────
+    // 常驻行卡：notificationFirst 布局下位于历史卡下方（历史卡压矮到 178，
+    // 本行 206..250，主控制区 258 起，互不重叠；非 notificationFirst 同理
+    // 落在 533..577）。开=窗口收进/呼出自左侧 Stage 侧栏；关=经典
+    // magiclamp dock 动画。切换逻辑在 StageModeService。
+    ControlCenterCard {
+        id: stageModeCard
+        coordinator: coordinator
+        visible: cardShown && coordinator.cardAnchor !== null
+        // 顶栏布局恒在滑杆正下方（347）——原先藏在通知历史之下（533），
+        // 用户实际找不到开关；通知历史让位其下（403）。dock 布局不变
+        //（历史在上 20，本卡随后 206，主控区 238 起）。
+        offsetTop: panel.notificationFirst
+            ? (ControlCenterService.historyGroups.length > 0 ? 206 : 20)
+            : 347
+        offsetRight: 20
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
+        cardWidth: 296
+        cardHeight: 44
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
+
+        Rectangle {
+            id: stageDisc
+            width: 34; height: 34; radius: 17
+            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveFill
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: stagePointer.containsMouse && !stagePointer.pressed ? 1.0 : 0.92
+            Behavior on color { ColorAnimation { duration: 140 } }
+
+            Image {
+                anchors.centerIn: parent
+                width: 18; height: 18
+                source: BundledIcons.source("window")
+                sourceSize.width: 36; sourceSize.height: 36
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    colorization: 1.0
+                    colorizationColor: StageModeService.enabled
+                        ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
+                }
+            }
+        }
+
+        GlassText {
+            anchors { left: stageDisc.right; leftMargin: 10; verticalCenter: parent.verticalCenter }
+            text: "前台调度"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        }
+
+        GlassText {
+            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
+            text: StageModeService.enabled ? "已开启" : "已关闭"
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
+            opacity: StageModeService.enabled ? 0.9 : 0.5
+            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        }
+
+        MouseArea {
+            id: stagePointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: StageModeService.toggle()
+        }
+    }
+
     // ── Card 9: Notification history ─────────────────────────────────
     // Session history grouped by app: dismissed/expired banners and DND
     // notifications (which are never shown) land here. Each group header
@@ -1300,11 +1379,12 @@ PopupWindow {
         // is open) is factored in here because this card overrides `visible`.
         visible: cardShown && coordinator.cardAnchor !== null
             && ControlCenterService.historyGroups.length > 0
-        offsetTop: panel.notificationFirst ? 20 : 347
+        offsetTop: panel.notificationFirst ? 20 : 403
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
-        cardHeight: 230
+        // 178：顶栏布局下排在恒驻的"前台调度"行卡（上方 347，44px）之下
+        cardHeight: 178
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1356,6 +1436,7 @@ PopupWindow {
                 // One group per app: a compact header + its notification rows.
                 delegate: Column {
                     required property var modelData
+                    required property int index
                     width: historyList.width
 
                     Row {
@@ -1384,6 +1465,7 @@ PopupWindow {
                             model: modelData.items
                             delegate: Item {
                                 required property var modelData
+                                required property int index
                                 width: historyList.width
                                 height: rowSummary.implicitHeight + (rowBody.visible ? rowBody.implicitHeight + 1 : 0)
 
@@ -1615,6 +1697,7 @@ PopupWindow {
 
                     delegate: Item {
                         required property var modelData
+                        required property int index
                         width: actionsList.width
                         height: 44
                         scale: sessionRow.pressed ? 0.98 : 1
@@ -2105,6 +2188,7 @@ PopupWindow {
 
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
                         width: submenuWifiList.width
                         height: 42
                         radius: 10
@@ -2371,6 +2455,7 @@ PopupWindow {
 
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
                         width: submenuBtList.width
                         height: 42
                         radius: 10
@@ -2545,6 +2630,7 @@ PopupWindow {
                 delegate: Item {
                         id: displayBrightnessRow
                         required property var modelData
+                        required property int index
                         width: brightnessDisplayList.width
                         height: 82
                         property real preview: Number(modelData.percent || 0)
@@ -2882,6 +2968,7 @@ PopupWindow {
                         delegate: Item {
                             id: appVolumeRow
                             required property var modelData
+                            required property int index
                             width: parent.width
                             height: 58
                             property int volumePreview: Number(modelData.percent || 0)

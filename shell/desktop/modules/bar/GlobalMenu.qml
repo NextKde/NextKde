@@ -168,6 +168,7 @@ Item {
             model: root.shownItems
             delegate: Item {
                 id: menuItem
+                required property int index
                 required property var modelData
                 width: root.itemWidth(modelData)
                 height: 28

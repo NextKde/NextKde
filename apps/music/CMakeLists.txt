@@ -45,10 +45,9 @@ qt_add_executable(kos-music-lx-source-host
     src/LxSourceHostMain.cpp
 )
 configure_file(src/LxSourceHost.js kos-music-lx-source-host.js COPYONLY)
+# 纯启动器（exec node），Network/Qml 依赖随死代码删除一并摘除
 target_link_libraries(kos-music-lx-source-host PRIVATE
     Qt6::Core
-    Qt6::Network
-    Qt6::Qml
 )
 
 # KOS_MUSIC_TESTS_ONLY is set by the root project when it descends here only to

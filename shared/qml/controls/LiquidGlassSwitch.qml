@@ -104,9 +104,11 @@ Item {
         wobbleAnim.restart()
     }
 
-    // Track background
+    // Track background（Material 形态隐藏：玻璃件"hidden rather than
+    // blended"，见头注释——漏门控会让玻璃拇指从 Material 轨道下透出来）
     Rectangle {
         id: track
+        visible: !root.materialForm
         anchors.fill: parent
         radius: height / 2
         color: root.currentTrackColor
@@ -151,7 +153,9 @@ Item {
         radius: width / 2
         color: Qt.rgba(0, 0, 0, 0.25)
         opacity: (1 - root._expansion) * 0.5
-        visible: opacity > 0.01
+        // 合并 Material 门控与原有淡出判定（同对象两条 visible = 解析错
+        // crash-loop，桌面起不来——实测踩过）
+        visible: !root.materialForm && opacity > 0.01
         Behavior on opacity { NumberAnimation { duration: 200 } }
     }
 
@@ -159,6 +163,7 @@ Item {
     Item {
         id: glassThumb
         objectName: "switch-glass-thumb"
+        visible: !root.materialForm
         // 展开时保持中心点不变，而不是左上角
         x: 3 + root._thumbX - (width - root.thumbWidth) / 2
         anchors.verticalCenter: parent.verticalCenter
@@ -367,12 +372,16 @@ Item {
 
         onPressed: {
             root._pressed = true
-            root._expansion = 1.0
+            // Material 形态不驱动玻璃展开（FBO+OpacityMask 纯属浪费，
+            // 玻璃件已隐藏）
+            if (!root.materialForm)
+                root._expansion = 1.0
         }
 
         onReleased: {
             root._pressed = false
-            root._expansion = 0.0
+            if (!root.materialForm)
+                root._expansion = 0.0
         }
 
         onClicked: root.toggle()

@@ -188,7 +188,7 @@ Item {
 
                         Image {
                             anchors.fill: parent
-                            source: root.userFace(userModel.get(index))
+                            source: root.userFace(root.userRecord(index))
                             fillMode: Image.PreserveAspectCrop
                             visible: source != ""
                         }
@@ -196,7 +196,7 @@ Item {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: root.displayName(userModel.get(index))
+                        text: root.displayName(root.userRecord(index))
                         color: Qt.rgba(1, 1, 1, 0.85)
                         font.pixelSize: 13
                     }

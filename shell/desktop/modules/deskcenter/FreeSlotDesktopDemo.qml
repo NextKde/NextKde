@@ -98,6 +98,10 @@ Item {
     signal moveIntoFolderRequested(var sourceEntries, var targetFolder)
     signal contextMenuRequested(var entry, point pos)
     signal backgroundPressAndHold()
+    // 空白桌面的普通单击（无拖选框/无修饰键/非长按）——宿主用它接
+    // "显示桌面"开关（台前侧栏收编/放出）。这个 MouseArea 覆盖了大部
+    // 分桌面，不经过它的话点击只能落在网格外的零星边角。
+    signal backgroundPlainClicked()
     signal openRequested(var entry)
     signal activityRequested()
     signal externalUrlsDropped(var urls, int action)
@@ -779,6 +783,14 @@ Item {
                 root.updateBoxSelection()
             }
             root.selectionBoxActive = false
+        }
+        onClicked: function(mouse) {
+            // 普通左键单击（没拖出选框、无修饰键、不是长按拖拽）＝空桌
+            // 面单击；右键是上下文菜单，Ctrl 是多选，都不算
+            if (mouse.button === Qt.LeftButton && !held
+                    && !root.selectionBoxActive
+                    && mouse.modifiers === Qt.NoModifier)
+                root.backgroundPlainClicked()
         }
         onCanceled: root.selectionBoxActive = false
     }

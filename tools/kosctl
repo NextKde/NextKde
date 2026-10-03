@@ -303,19 +303,16 @@ configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
     local spatial=${KOS_BUILD_SPATIAL:-AUTO}
+    local ort_include="" ort_library=""
     local -a spatial_flags=()
-    # The pinned SDK is a build-time download, not a system package. Fetch it
-    # when the depth engine is required, and in AUTO only when OpenCV is already
-    # there -- a machine that will skip the engine must not pay for either.
-    local ort_root=""
     if spatial_forced; then
-        ort_root=$(ensure_onnxruntime_sdk) || return 1
+        ensure_onnxruntime_paths || return 1
     elif spatial_requested && opencv_available; then
-        ort_root=$(ensure_onnxruntime_sdk) || ort_root=""
+        ensure_onnxruntime_paths || { ort_include=""; ort_library=""; }
     fi
-    if [[ -n "$ort_root" ]]; then
-        spatial_flags=(-DONNXRUNTIME_INCLUDE_DIR="$ort_root/include"
-            -DONNXRUNTIME_LIBRARY="$ort_root/lib/libonnxruntime.so")
+    if [[ -n "$ort_include" && -n "$ort_library" ]]; then
+        spatial_flags=(-DONNXRUNTIME_INCLUDE_DIR="$ort_include"
+            -DONNXRUNTIME_LIBRARY="$ort_library")
     fi
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
@@ -342,9 +339,45 @@ configure_build() {
         -DBUILD_TESTING=OFF
 }
 
+find_path_onnxruntime_header() {
+    for d in /usr/include/onnxruntime /usr/local/include/onnxruntime; do
+        [[ -f "$d/onnxruntime_cxx_api.h" ]] && { printf '%s' "$d"; return 0; }
+    done
+    return 1
+}
+
+find_lib_onnxruntime() {
+    local lib
+    lib=$(ls /usr/lib/*/libonnxruntime.so 2>/dev/null | head -n 1)
+    [[ -n "$lib" ]] && { printf '%s' "$lib"; return 0; }
+    return 1
+}
+
 # Keep the CPU runtime deterministic across machines. The SDK is a build
 # dependency only; the model remains a separately downloaded, hash-pinned user
 # cache asset. A Nix build gets onnxruntime from its declared package instead.
+# Resolves ort_include/ort_library. x86_64 keeps the pinned SDK for a
+# deterministic CPU runtime across machines; other architectures fall back to
+# the distro's onnxruntime development package, which the liquid-ai API
+# surface (basic Ort API) builds against just as well.
+ensure_onnxruntime_paths() {
+    if [[ "$(uname -m)" != "x86_64" ]]; then
+        ort_include=$(find_path_onnxruntime_header) || {
+            printf 'kosctl: no non-x86_64 onnxruntime headers; install libonnxruntime-dev\n' >&2
+            return 1
+        }
+        ort_library=$(find_lib_onnxruntime) || {
+            printf 'kosctl: no non-x86_64 onnxruntime library; install libonnxruntime-dev\n' >&2
+            return 1
+        }
+        return 0
+    fi
+    local root
+    root=$(ensure_onnxruntime_sdk) || return 1
+    ort_include="$root/include"
+    ort_library="$root/lib/libonnxruntime.so"
+}
+
 ensure_onnxruntime_sdk() {
     local root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
     local archive="$build_dir/deps/onnxruntime-linux-x64-1.30.0.tgz"
@@ -774,7 +807,16 @@ deploy_artifacts() {
         sed "s|@CMAKE_INSTALL_FULL_LIBEXECDIR@|$prefix/libexec|g" \
             "$project_dir/services/data-service/systemd/kos-data.service.in" \
             > "$runtime_unit_dir/kos-data.service"
-        sed "s|@QS_EXEC@|$qs_bin|g" \
+        # 惰性重解析：脚本顶部的 qs_bin 在 ensure_build_dependencies 装
+        # quickshell 之前求值过（全新机器首装=空），写出的 unit 是
+        # ExecStart= --no-duplicate … 的坏 unit，下次登录桌面静默起不来
+        local qs_bin_now
+        qs_bin_now=$(command -v qs || command -v quickshell || true)
+        if [[ -z "$qs_bin_now" ]]; then
+            printf 'kosctl: quickshell not found -- install it (kosctl doctor) and re-run install\n' >&2
+            exit 1
+        fi
+        sed "s|@QS_EXEC@|$qs_bin_now|g" \
             "$project_dir/packaging/systemd/kos-shell.service.in" \
             > "$runtime_unit_dir/kos-shell.service"
     fi
@@ -1186,6 +1228,10 @@ install_kwin_plugins() {
     local manifest_entry
     local -a system_entries=()
     local -a stale_entries=()
+    # rm-then-cp must only rm what this staged tree reinstalls. Entries carried
+    # forward into the manifest from an opt-in component (the decoration) are
+    # not staged here, so sourcing the list from the manifest itself would rm
+    # the installed binary and never copy it back.
     while IFS= read -r manifest_entry; do
         [[ -z "$manifest_entry" ]] && continue
         case "$manifest_entry" in
@@ -1195,7 +1241,7 @@ install_kwin_plugins() {
                 return 1
                 ;;
         esac
-    done < "$kwin_manifest"
+    done < <(find "$stage_dir" \( -type f -o -type l \) -printf '/%P\n' | sort -u)
     # Entries the previous install shipped and this one does not.
     while IFS= read -r manifest_entry; do
         [[ -z "$manifest_entry" ]] && continue

@@ -419,6 +419,7 @@ AnimatedPopupWindow {
             spacing: 2
             model: NetworkService.wifiEnabled ? NetworkService.nearbyWifi : []
             delegate: Rectangle {
+                required property int index
                 required property var modelData
                 width: wifiList.width
                 height: 46
@@ -674,6 +675,7 @@ AnimatedPopupWindow {
                             { id: "ttls", label: "TTLS" }
                         ]
                         delegate: Rectangle {
+                            required property int index
                             required property var modelData
                             width: 55
                             height: 24
