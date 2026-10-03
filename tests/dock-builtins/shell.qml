@@ -25,11 +25,14 @@ Item {
                         "restoring full-edge mode must survive another restart")
                     check(ConfigService.showLauncher && ConfigService.showTrash,
                         "restored built-ins must survive another restart")
+                    check(ConfigService.showNotificationBadges, "restored badges survive another restart")
                     console.log("DOCK_BUILTINS_DEFAULT_RELOAD_PASS")
                     Qt.quit()
                     return
                 }
                 if (Quickshell.env("KOS_TEST_RELOAD") === "1") {
+                    check(!ConfigService.showNotificationBadges, "hidden badges survive restart")
+                    check(ConfigService.updateNotificationBadgeVisibility(true), "badges can be restored")
                     check(ConfigService.revealTriggerMode === "dockSpan",
                         "opt-in Dock span must survive a shell restart")
                     check(!ConfigService.showLauncher && !ConfigService.showTrash,
@@ -85,6 +88,18 @@ Item {
                 ConfigService._apply({})
                 check(ConfigService.showLauncher && ConfigService.showTrash,
                     "legacy configuration must preserve visible defaults")
+                check(ConfigService.showNotificationBadges, "legacy config defaults badges to visible")
+                for (const invalid of ["false", null, 0]) {
+                    check(!ConfigService.updateNotificationBadgeVisibility(invalid), "reject invalid badge writes")
+                    ConfigService._apply({showNotificationBadges: invalid})
+                    check(ConfigService.showNotificationBadges, "invalid stored badge value defaults visible")
+                }
+                ConfigService._apply({showNotificationBadges: false})
+                check(!ConfigService.showNotificationBadges, "explicit false must load")
+                ConfigService._apply({})
+                check(ConfigService.showNotificationBadges, "missing badge preference remains visible")
+                check(!ConfigService.updateNotificationBadgeVisibility(true), "unchanged badge setting is ignored")
+                check(ConfigService.updateNotificationBadgeVisibility(false), "badges can be hidden")
                 ConfigService.updateBuiltinVisibility("trash", false)
                 check(ConfigService.showLauncher, "hiding trash changed launcher")
                 ConfigService.updateBuiltinVisibility("launcher", false)

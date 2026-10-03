@@ -100,6 +100,8 @@ QtObject {
     // Shell controls stay separate from the persisted application pin order.
     property bool showLauncher: true
     property bool showTrash: true
+    // Visual only: notification collection and urgency keep their own state.
+    property bool showNotificationBadges: true
     // Visual hint only; the edge hit target remains active when disabled.
     property bool showRevealIndicator: true
     // Becomes true once config load finishes (success, missing file, or parse
@@ -220,6 +222,14 @@ QtObject {
         if (contentStyle === nextStyle)
             return false
         contentStyle = nextStyle
+        scheduleSave()
+        return true
+    }
+
+    function updateNotificationBadgeVisibility(visible) {
+        if (typeof visible !== "boolean" || svc.showNotificationBadges === visible)
+            return false
+        svc.showNotificationBadges = visible
         scheduleSave()
         return true
     }
@@ -571,6 +581,7 @@ QtObject {
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
             showTrash: svc.showTrash,
+            showNotificationBadges: svc.showNotificationBadges,
             showRevealIndicator: svc.showRevealIndicator,
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
@@ -610,6 +621,7 @@ QtObject {
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
+        svc.showNotificationBadges = obj.showNotificationBadges !== false
         svc.showRevealIndicator = obj.showRevealIndicator !== false
         if (isValidRevealTriggerMode(obj.revealTriggerMode)) {
             svc.revealTriggerMode = obj.revealTriggerMode

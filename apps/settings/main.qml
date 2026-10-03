@@ -703,6 +703,8 @@ ApplicationWindow {
         readonly property var windowGroupings: ["grouped", "separate"]
         property bool showLauncher: true
         property bool showTrash: true
+        property bool showNotificationBadges: true
+        property bool notificationBadgeUpdatePending: false
         property bool showRevealIndicator: true
         property bool revealIndicatorUpdatePending: false
         property bool stateReady: false
@@ -752,6 +754,7 @@ ApplicationWindow {
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
             showTrash = state.showTrash !== false
+            showNotificationBadges = state.showNotificationBadges !== false
             showRevealIndicator = state.showRevealIndicator !== false
             stateReady = true
             layoutDirty = false
@@ -800,6 +803,13 @@ ApplicationWindow {
             bridge.updateDockWindowGrouping(mode)
         }
 
+        function saveNotificationBadgeVisibility(visible) {
+            if (!bridge || !stateReady || notificationBadgeUpdatePending)
+                return
+            notificationBadgeUpdatePending = true
+            bridge.updateDockNotificationBadgeVisibility(visible)
+        }
+
         function saveRevealIndicatorVisibility(visible) {
             if (!bridge || !stateReady || revealIndicatorUpdatePending)
                 return
@@ -845,6 +855,12 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
+                dockPage.applyState(state)
+                if (dockPage.bridge.lastError)
+                    dockPage.errorText = dockPage.bridge.lastError
+            }
+            function onDockNotificationBadgeVisibilityChanged(state) {
+                dockPage.notificationBadgeUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = dockPage.bridge.lastError
@@ -1230,6 +1246,40 @@ ApplicationWindow {
                     }
                 }
 
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 64
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "●"; tint: "#ff3b30" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "显示通知角标"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: "在应用图标上显示通知数字和提醒红点"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            objectName: "dock-notification-badges-switch"
+                            checked: dockPage.showNotificationBadges
+                            enabled: dockPage.stateReady && !dockPage.notificationBadgeUpdatePending
+                            accentColor: theme.role("primary", "#0a84ff")
+                            trackColor: theme.divider
+                            Accessible.name: "显示通知角标"
+                            onToggled: function(checked) {
+                                dockPage.saveNotificationBadgeVisibility(checked)
+                            }
+                        }
+                    }
+                }
                 Rectangle { width: parent.width; height: 1; color: theme.separator }
 
                 Item {
