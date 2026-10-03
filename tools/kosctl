@@ -60,7 +60,12 @@ is_nixos() {
 arch_core_build_packages=(
     quickshell cmake ninja gcc qt6-base qt6-declarative qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland go curl
     extra-cmake-modules wayland
-    kwindowsystem kiconthemes kglobalaccel kio opencv patchelf
+    kwindowsystem kiconthemes kglobalaccel kio patchelf
+)
+# Only the depth engine and the 3D wallpaper plugin need these, and both follow
+# KOS_BUILD_SPATIAL. The default build installs neither.
+arch_spatial_build_packages=(
+    opencv
 )
 arch_kwin_build_packages=(
     kwin kconfig ki18n kguiaddons kcmutils
@@ -75,6 +80,40 @@ kwin_plugins_enabled() {
         0|OFF|off|FALSE|false|NO|no) return 1 ;;
         *) return 0 ;;
     esac
+}
+
+# The depth engine is optional: a default build leaves the ONNX Runtime and
+# OpenCV out entirely, and the Shell's spatial wallpaper UI stays hidden behind
+# the capability probe. Turn it on with KOS_BUILD_SPATIAL=ON.
+# The depth engine is optional. AUTO, the default, builds it when OpenCV and the
+# ONNX Runtime are already installed and quietly leaves it out otherwise; ON
+# requires them; OFF never looks for them. Turning it off is what a machine that
+# does not want the spatial wallpaper uses to skip OpenCV entirely.
+spatial_requested() {
+    case "${KOS_BUILD_SPATIAL:-AUTO}" in
+        OFF|off|0|FALSE|false|NO|no) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+spatial_forced() {
+    case "${KOS_BUILD_SPATIAL:-AUTO}" in
+        1|ON|on|TRUE|true|YES|yes) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# AUTO resolves inside CMake, which records the answer in the build tree. Read
+# that instead of the option or a leftover binary: a worker built by an earlier
+# configuration stays on disk after the option is turned off.
+spatial_built() {
+    [[ -r "$build_dir/kos-spatial-enabled" ]] \
+        && [[ "$(<"$build_dir/kos-spatial-enabled")" == ON ]] \
+        && [[ -x "$build_dir/platform/kos-ai-worker" ]]
+}
+
+opencv_available() {
+    command -v pkg-config >/dev/null 2>&1 && pkg-config --exists opencv4
 }
 
 # KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
@@ -124,7 +163,7 @@ Plain `install` / `uninstall` cover the core desktop only -- no apps, no lock
 screen. The SDDM sign-in theme (apps/sddm) is not installed by kosctl while its
 greeter integration is being reworked; see the README for the status.
 
-Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, GOPROXY
+Environment overrides: KOS_BUILD_DIR, KOS_PREFIX, KOS_BUILD_TYPE, KOS_BUILD_KWIN_PLUGINS, KOS_BUILD_SPATIAL, GOPROXY
 
 The KOS window decoration is installed with the KWin plugins but is not
 selected by anything here. Choose it in System Settings > Window Decorations;
@@ -191,6 +230,9 @@ doctor() {
         local -a required_packages=("${arch_core_build_packages[@]}")
         if kwin_plugins_enabled; then
             required_packages+=("${arch_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${arch_spatial_build_packages[@]}")
         fi
         for package in "${required_packages[@]}"; do
             if pacman -Q "$package" >/dev/null 2>&1; then
@@ -260,8 +302,21 @@ configure_if_needed() {
 configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
-    local ort_root
-    ort_root=$(ensure_onnxruntime_sdk) || return 1
+    local spatial=${KOS_BUILD_SPATIAL:-AUTO}
+    local -a spatial_flags=()
+    # The pinned SDK is a build-time download, not a system package. Fetch it
+    # when the depth engine is required, and in AUTO only when OpenCV is already
+    # there -- a machine that will skip the engine must not pay for either.
+    local ort_root=""
+    if spatial_forced; then
+        ort_root=$(ensure_onnxruntime_sdk) || return 1
+    elif spatial_requested && opencv_available; then
+        ort_root=$(ensure_onnxruntime_sdk) || ort_root=""
+    fi
+    if [[ -n "$ort_root" ]]; then
+        spatial_flags=(-DONNXRUNTIME_INCLUDE_DIR="$ort_root/include"
+            -DONNXRUNTIME_LIBRARY="$ort_root/lib/libonnxruntime.so")
+    fi
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
     # bare `cmake --build` then compiles every registered test before deploying
@@ -281,9 +336,9 @@ configure_build() {
     configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
-        -DONNXRUNTIME_INCLUDE_DIR="$ort_root/include" \
-        -DONNXRUNTIME_LIBRARY="$ort_root/lib/libonnxruntime.so" \
+        "${spatial_flags[@]}" \
         -DKOS_BUILD_KWIN_PLUGINS="$plugins" \
+        -DKOS_BUILD_SPATIAL="$spatial" \
         -DBUILD_TESTING=OFF
 }
 
@@ -380,6 +435,9 @@ ensure_build_dependencies() {
         local -a required_packages=("${arch_core_build_packages[@]}")
         if kwin_plugins_enabled; then
             required_packages+=("${arch_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${arch_spatial_build_packages[@]}")
         fi
         for package in "${required_packages[@]}"; do
             if ! pacman -Q "$package" >/dev/null 2>&1; then
@@ -532,9 +590,11 @@ deploy_artifacts() {
     local required
     local -a required_files
     if [[ "$nix_artifact" == true ]]; then
-        required_files=(libexec/kos-platform libexec/kos-ai-worker libexec/kos-data-service bin/kos-settings)
+        required_files=(libexec/kos-platform libexec/kos-data-service bin/kos-settings)
+        spatial_requested && required_files+=(libexec/kos-ai-worker)
     else
-        required_files=(platform/kos-platform platform/kos-ai-worker bin/kos-data-service apps/settings/kos-settings)
+        required_files=(platform/kos-platform bin/kos-data-service apps/settings/kos-settings)
+        spatial_built && required_files+=(platform/kos-ai-worker)
     fi
     for required in "${required_files[@]}"; do
         [[ -x "$artifact_root/$required" ]] || {
@@ -552,28 +612,40 @@ deploy_artifacts() {
         "$prefix/libexec/kos-data-service" "$prefix/bin/kos-settings"
     if [[ "$nix_artifact" == true ]]; then
         ln -s "$artifact_root/libexec/kos-platform"    "$prefix/libexec/kos-platform"
-        ln -s "$artifact_root/libexec/kos-ai-worker" "$prefix/libexec/kos-ai-worker"
+        spatial_requested && ln -s "$artifact_root/libexec/kos-ai-worker" \
+            "$prefix/libexec/kos-ai-worker"
         ln -s "$artifact_root/libexec/kos-data-service" "$prefix/libexec/kos-data-service"
         ln -s "$artifact_root/bin/kos-settings"          "$prefix/bin/kos-settings"
     else
         install -m 0755 "$artifact_root/platform/kos-platform"    "$prefix/libexec/kos-platform"
-        install -m 0755 "$artifact_root/platform/kos-ai-worker" "$prefix/libexec/kos-ai-worker"
-        local ort_root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
-        if [[ -f "$ort_root/lib/libonnxruntime.so.1.30.0" ]]; then
-            install -m 0755 "$ort_root/lib/libonnxruntime.so.1.30.0" \
-                "$prefix/lib/libonnxruntime.so.1.30.0"
-            ln -sfn libonnxruntime.so.1.30.0 "$prefix/lib/libonnxruntime.so.1"
-            ln -sfn libonnxruntime.so.1 "$prefix/lib/libonnxruntime.so"
-            if [[ -f "$ort_root/lib/libonnxruntime_providers_shared.so" ]]; then
-                install -m 0755 "$ort_root/lib/libonnxruntime_providers_shared.so" \
-                    "$prefix/lib/libonnxruntime_providers_shared.so"
+        if spatial_built; then
+            install -m 0755 "$artifact_root/platform/kos-ai-worker" \
+                "$prefix/libexec/kos-ai-worker"
+            local ort_root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
+            if [[ -f "$ort_root/lib/libonnxruntime.so.1.30.0" ]]; then
+                install -m 0755 "$ort_root/lib/libonnxruntime.so.1.30.0" \
+                    "$prefix/lib/libonnxruntime.so.1.30.0"
+                ln -sfn libonnxruntime.so.1.30.0 "$prefix/lib/libonnxruntime.so.1"
+                ln -sfn libonnxruntime.so.1 "$prefix/lib/libonnxruntime.so"
+                if [[ -f "$ort_root/lib/libonnxruntime_providers_shared.so" ]]; then
+                    install -m 0755 "$ort_root/lib/libonnxruntime_providers_shared.so" \
+                        "$prefix/lib/libonnxruntime_providers_shared.so"
+                fi
             fi
+        else
+            # The binaries above were just removed: a build without the depth
+            # engine must not leave its runtime library behind either.
+            rm -f "$prefix/lib/libonnxruntime.so" "$prefix/lib/libonnxruntime.so.1" \
+                "$prefix/lib/libonnxruntime.so.1.30.0" \
+                "$prefix/lib/libonnxruntime_providers_shared.so"
         fi
         install -m 0755 "$artifact_root/bin/kos-data-service"     "$prefix/libexec/kos-data-service"
         install -m 0755 "$artifact_root/apps/settings/kos-settings" "$prefix/bin/kos-settings"
         if command -v patchelf >/dev/null 2>&1; then
             patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-platform"
-            patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-ai-worker"
+            if spatial_built; then
+                patchelf --set-rpath '$ORIGIN/../lib' "$prefix/libexec/kos-ai-worker"
+            fi
         fi
     fi
 
@@ -843,6 +915,12 @@ print_install_summary() {
     printf '  ⚠️  注意：KWin 特效与桌面接管（plasmashell 换 shell）要到下次登录才生效\n'
     printf '     Note: KWin effects and the desktop takeover apply at your next login.\n'
     printf '\n'
+    if spatial_requested && ! spatial_built; then
+        printf '  ℹ️  景深/空间壁纸未构建（缺少 OpenCV 或 ONNX Runtime）\n'
+        printf '     Depth engine not built (OpenCV or ONNX Runtime missing).\n'
+        printf '     需要时安装依赖并用 KOS_BUILD_SPATIAL=ON 重新执行 install。\n'
+        printf '\n'
+    fi
     printf '  📦 安装位置：%s\n' "$prefix"
     printf '     (shell 配置：%s)\n' "$shell_config"
     printf '\n'

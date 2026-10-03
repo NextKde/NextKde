@@ -194,9 +194,10 @@ QtObject {
             applyPlasmaBackdropIfReady()
             return true
         }
-        const imagePath = localPath(config.image)
-        if (!imagePath)
-            return false
+        // A wallpaper the Shell draws itself (a theme) has no image path to
+        // fall back to, but the takeover still has to be reversible: the
+        // platform service holds the Plasma wallpaper it saved when the
+        // takeover started, and restores that per screen.
         takeoverPending = true
         restoreRequested = true
         if (!proxyPending)

@@ -36,7 +36,11 @@ ColumnLayout {
                     Layout.fillWidth: true
                     Text {text:"空间壁纸";color:page.colors.primaryText;font.pixelSize:15;font.weight:Font.DemiBold}
                     Text {
-                        text: page.resources.busy
+                        // A build made without KOS_BUILD_SPATIAL has no worker
+                        // and therefore no spatial.resources capability; say so
+                        // instead of offering a switch that cannot do anything.
+                        text: page.resources.available === false ? "此版本未构建空间壁纸组件"
+                            : page.resources.busy
                             ? (page.resources.stage || "正在准备…")
                                 + (Number(page.resources.progress) >= 0
                                     ? " · " + Math.round(Number(page.resources.progress) * 100) + "%" : "")
@@ -46,8 +50,11 @@ ColumnLayout {
                     }
                 }
                 LiquidControls.LiquidGlassSwitch {
+                    id: spatialServiceSwitch
+                    objectName: "spatialServiceSwitch"
                     checked: !!page.resources.enabled
-                    enabled: page.compatible && !page.resources.busy && !page.resources.checking
+                    enabled: page.compatible && page.resources.available !== false
+                        && !page.resources.busy && !page.resources.checking
                     accentColor: page.colors.accent
                     trackColor: page.colors.divider
                     onToggled: function(checked) {
