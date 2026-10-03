@@ -666,7 +666,9 @@ ApplicationWindow {
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: "前台应用获得高 CPU 优先级与防杀保护；切到后台 10 秒后"
+                    text: !fgSchedPage.snapshot.resourceSchedulingAvailable
+                        ? "台前侧栏可独立使用。资源调度需要另外安装并运行 fg-schedd；当前未检测到该组件。"
+                        : "外部资源调度守护运行时，前台应用获得高 CPU 优先级与防杀保护；切到后台 10 秒后"
                           + "自动降低资源优先级（nice "
                           + (fgSchedPage.snapshot.bgNice !== undefined ? "+" + fgSchedPage.snapshot.bgNice : "+5")
                           + "、磁盘 IO 降为低优先"
@@ -722,7 +724,7 @@ ApplicationWindow {
                     }
 
                     LiquidControls.LiquidGlassSwitch {
-                        checked: fgSchedPage.snapshot.stageEnabled !== false
+                        checked: fgSchedPage.snapshot.stageEnabled === true
                         accentColor: theme.accent
                         trackColor: theme.divider
                         onToggled: function(checked) {
@@ -1634,6 +1636,7 @@ ApplicationWindow {
 
         // ── 冻结开关 ──
         Rectangle {
+            visible: fgSchedPage.snapshot.resourceSchedulingAvailable === true
             Layout.fillWidth: true
             radius: 14
             color: theme.card
@@ -1677,6 +1680,7 @@ ApplicationWindow {
 
         // ── 后台内存节省 ──
         Rectangle {
+            visible: fgSchedPage.snapshot.resourceSchedulingAvailable === true
             Layout.fillWidth: true
             radius: 14
             color: theme.card
@@ -1762,6 +1766,7 @@ ApplicationWindow {
 
         // ── 内存状态 ──
         Rectangle {
+            visible: fgSchedPage.snapshot.resourceSchedulingAvailable === true
             Layout.fillWidth: true
             radius: 14
             color: theme.card
@@ -1844,6 +1849,7 @@ ApplicationWindow {
 
         // ── 后台全资源运行名单 ──
         Rectangle {
+            visible: fgSchedPage.snapshot.resourceSchedulingAvailable === true
             Layout.fillWidth: true
             radius: 14
             color: theme.card

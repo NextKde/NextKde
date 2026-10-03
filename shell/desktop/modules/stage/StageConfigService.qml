@@ -232,21 +232,25 @@ QtObject {
     // 键（审计 P1：启动对齐窗口期 Target*/特效参数互相丢失即此）。
     property var _writerQueue: []
 
-    function _enqueueWriter(argv) {
-        _writerQueue.push(argv)
-        if (!_writer.running)
+    property var _writerDone: null
+
+    function _enqueueWriter(argv, done) {
+        _writerQueue.push({ argv: argv, done: done })
+        if (_writer && !_writer.running)
             _startNextWriter()
     }
 
     // 跨服务入口：StageModeService 的特效装卸/对齐链经此串行化
-    function enqueueBashChain(argv) {
-        _enqueueWriter(argv)
+    function enqueueBashChain(argv, done) {
+        _enqueueWriter(argv, done)
     }
 
     function _startNextWriter() {
-        if (_writerQueue.length === 0)
+        if (!_writer || _writer.running || _writerQueue.length === 0)
             return
-        _writer.command = _writerQueue.shift()
+        const job = _writerQueue.shift()
+        _writerDone = job.done
+        _writer.command = job.argv
         _writer.running = true
     }
 
@@ -330,6 +334,10 @@ QtObject {
                 else if (err !== "")
                     console.warn("[StageConfig] kwinrc writer warning: "
                         + err)
+                const done = svc._writerDone
+                svc._writerDone = null
+                if (typeof done === "function")
+                    done(exitCode === 0)
                 svc._startNextWriter()
             }
         }
@@ -340,5 +348,6 @@ QtObject {
     Component.onCompleted: {
         _writer = _procFactory.createObject(svc)
         _load()
+        _startNextWriter()
     }
 }

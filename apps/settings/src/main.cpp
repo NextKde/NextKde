@@ -942,10 +942,12 @@ public:
     // 轮询自动应用（≤5s），无需任何信号/特权通道。knownApps 来自守护维护的
     // known-apps.json（出现过的 resourceClass）。
     static QString fgSchedConfigPath() {
-        return QDir::homePath() + QStringLiteral("/.config/fg-sched/config.json");
+        return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+            + QStringLiteral("/fg-sched/config.json");
     }
     static QString fgSchedKnownAppsPath() {
-        return QDir::homePath() + QStringLiteral("/.config/fg-sched/known-apps.json");
+        return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+            + QStringLiteral("/fg-sched/known-apps.json");
     }
 
     static bool writeFgSchedConfig(
@@ -957,6 +959,8 @@ public:
                 obj = QJsonDocument::fromJson(in.readAll()).object();
         }
         mutate(obj);
+        if (!QDir().mkpath(QFileInfo(fgSchedConfigPath()).absolutePath()))
+            return false;
         QSaveFile out(fgSchedConfigPath());
         if (!out.open(QIODevice::WriteOnly))
             return false;
@@ -971,7 +975,12 @@ public:
                   QStringLiteral("运行应用清单请求失败"), RequestKind::FgSchedApps);
     }
 
-    Q_INVOKABLE void fgSchedSnapshot() {        QVariantMap out;
+    Q_INVOKABLE void fgSchedSnapshot() {
+        QVariantMap out;
+        out.insert(QStringLiteral("resourceSchedulingAvailable"),
+                   !QStandardPaths::findExecutable(QStringLiteral("fg-schedd")).isEmpty()
+                   || QFileInfo(QStringLiteral("/usr/local/sbin/fg-schedd")).isExecutable()
+                   || QFileInfo(QStringLiteral("/usr/sbin/fg-schedd")).isExecutable());
         QJsonObject obj;
         {
             QFile in(fgSchedConfigPath());
@@ -1014,15 +1023,15 @@ public:
         }
         out.insert(QStringLiteral("knownApps"), known);
         // 台前侧栏总开关的落盘态（StageModeService 的 stage-mode flag）
-        QFile stageFlag(QDir::homePath()
-                        + QStringLiteral("/.config/fg-sched/stage-mode"));
+        QFile stageFlag(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+                        + QStringLiteral("/fg-sched/stage-mode"));
         if (stageFlag.open(QIODevice::ReadOnly | QIODevice::Text)) {
             const QString flagValue = QString::fromUtf8(stageFlag.readAll())
                                           .trimmed();
             out.insert(QStringLiteral("stageEnabled"),
-                       flagValue != QStringLiteral("0"));
+                       flagValue == QStringLiteral("1"));
         } else {
-            out.insert(QStringLiteral("stageEnabled"), true);
+            out.insert(QStringLiteral("stageEnabled"), false);
         }
         emit fgSchedSnapshotChanged(out);
     }

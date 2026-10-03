@@ -197,6 +197,11 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_groups.mjs
         )
         set_tests_properties(kos-shell.stage-groups PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.stage-effects
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_effects.mjs)
+        set_tests_properties(kos-shell.stage-effects PROPERTIES TIMEOUT 10)
+
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-reveal-runtime
@@ -450,7 +455,7 @@ if(BUILD_TESTING)
             kos-shell.window-placement-updates
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.process-identity
-            kos-shell.stage-geometry kos-shell.stage-groups
+            kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects
             kos-shell.appearance-config kos-shell.dock-adaptive
             kos-shell.dock-autohide kos-deskcenter.desktop-outputs
             kos-shell.screen-selection
@@ -638,6 +643,7 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/context-menu-input)
     add_subdirectory(integrations/kwin/kos-bridge)
     add_subdirectory(integrations/kwin/kos-decoration)
+    add_subdirectory(vendor/kwin-effects-stageanim)
 endif()
 
 # The spatial wallpaper mesh is an optional QML extension, built only when the
