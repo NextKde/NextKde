@@ -302,8 +302,18 @@ configure_if_needed() {
 configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
-    local ort_include ort_library
-    ensure_onnxruntime_paths || return 1
+    local spatial=${KOS_BUILD_SPATIAL:-AUTO}
+    local ort_include="" ort_library=""
+    local -a spatial_flags=()
+    if spatial_forced; then
+        ensure_onnxruntime_paths || return 1
+    elif spatial_requested && opencv_available; then
+        ensure_onnxruntime_paths || { ort_include=""; ort_library=""; }
+    fi
+    if [[ -n "$ort_include" && -n "$ort_library" ]]; then
+        spatial_flags=(-DONNXRUNTIME_INCLUDE_DIR="$ort_include"
+            -DONNXRUNTIME_LIBRARY="$ort_library")
+    fi
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
     # bare `cmake --build` then compiles every registered test before deploying
@@ -323,12 +333,7 @@ configure_build() {
     configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
-<<<<<<< HEAD
         "${spatial_flags[@]}" \
-=======
-        -DONNXRUNTIME_INCLUDE_DIR="$ort_include" \
-        -DONNXRUNTIME_LIBRARY="$ort_library" \
->>>>>>> 420cace (fix: 上游同步合并（773 提交）落内构建修 + 设置页前台调度页码修正)
         -DKOS_BUILD_KWIN_PLUGINS="$plugins" \
         -DKOS_BUILD_SPATIAL="$spatial" \
         -DBUILD_TESTING=OFF
