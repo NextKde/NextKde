@@ -302,21 +302,8 @@ configure_if_needed() {
 configure_build() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     local plugins=${KOS_BUILD_KWIN_PLUGINS:-ON}
-    local spatial=${KOS_BUILD_SPATIAL:-AUTO}
-    local -a spatial_flags=()
-    # The pinned SDK is a build-time download, not a system package. Fetch it
-    # when the depth engine is required, and in AUTO only when OpenCV is already
-    # there -- a machine that will skip the engine must not pay for either.
-    local ort_root=""
-    if spatial_forced; then
-        ort_root=$(ensure_onnxruntime_sdk) || return 1
-    elif spatial_requested && opencv_available; then
-        ort_root=$(ensure_onnxruntime_sdk) || ort_root=""
-    fi
-    if [[ -n "$ort_root" ]]; then
-        spatial_flags=(-DONNXRUNTIME_INCLUDE_DIR="$ort_root/include"
-            -DONNXRUNTIME_LIBRARY="$ort_root/lib/libonnxruntime.so")
-    fi
+    local ort_include ort_library
+    ensure_onnxruntime_paths || return 1
     prepare_cmake_build_dir "$build_dir" "$project_dir"
     # include(CTest) turns BUILD_TESTING on unless it is told otherwise, and a
     # bare `cmake --build` then compiles every registered test before deploying
@@ -336,15 +323,56 @@ configure_build() {
     configure_if_needed "$project_dir" "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \
+<<<<<<< HEAD
         "${spatial_flags[@]}" \
+=======
+        -DONNXRUNTIME_INCLUDE_DIR="$ort_include" \
+        -DONNXRUNTIME_LIBRARY="$ort_library" \
+>>>>>>> 420cace (fix: 上游同步合并（773 提交）落内构建修 + 设置页前台调度页码修正)
         -DKOS_BUILD_KWIN_PLUGINS="$plugins" \
         -DKOS_BUILD_SPATIAL="$spatial" \
         -DBUILD_TESTING=OFF
 }
 
+find_path_onnxruntime_header() {
+    for d in /usr/include/onnxruntime /usr/local/include/onnxruntime; do
+        [[ -f "$d/onnxruntime_cxx_api.h" ]] && { printf '%s' "$d"; return 0; }
+    done
+    return 1
+}
+
+find_lib_onnxruntime() {
+    local lib
+    lib=$(ls /usr/lib/*/libonnxruntime.so 2>/dev/null | head -n 1)
+    [[ -n "$lib" ]] && { printf '%s' "$lib"; return 0; }
+    return 1
+}
+
 # Keep the CPU runtime deterministic across machines. The SDK is a build
 # dependency only; the model remains a separately downloaded, hash-pinned user
 # cache asset. A Nix build gets onnxruntime from its declared package instead.
+# Resolves ort_include/ort_library. x86_64 keeps the pinned SDK for a
+# deterministic CPU runtime across machines; other architectures fall back to
+# the distro's onnxruntime development package, which the liquid-ai API
+# surface (basic Ort API) builds against just as well.
+ensure_onnxruntime_paths() {
+    if [[ "$(uname -m)" != "x86_64" ]]; then
+        ort_include=$(find_path_onnxruntime_header) || {
+            printf 'kosctl: no non-x86_64 onnxruntime headers; install libonnxruntime-dev\n' >&2
+            return 1
+        }
+        ort_library=$(find_lib_onnxruntime) || {
+            printf 'kosctl: no non-x86_64 onnxruntime library; install libonnxruntime-dev\n' >&2
+            return 1
+        }
+        return 0
+    fi
+    local root
+    root=$(ensure_onnxruntime_sdk) || return 1
+    ort_include="$root/include"
+    ort_library="$root/lib/libonnxruntime.so"
+}
+
 ensure_onnxruntime_sdk() {
     local root="$build_dir/deps/onnxruntime-linux-x64-1.30.0"
     local archive="$build_dir/deps/onnxruntime-linux-x64-1.30.0.tgz"

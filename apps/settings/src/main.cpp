@@ -153,16 +153,6 @@ class SettingsBridge final : public QObject {
 
 public:
 
-    ~SettingsBridge() {
-        // 析构等在飞的探测线程落地：worker 读 QPointer guard 与 UI 线程
-        // 析构是数据竞争（QPointer 非线程安全，注释原以为"只捕获指针"
-        // 就绕开了，读它本身就在竞争）；QThread 无父对象不等则退出时
-        // "Destroyed while thread is still running"。finished→removeAll
-        // 经 queued 也在 UI 线程跑，列表自身无竞争。
-        const QList<QThread *> threads = m_probeThreads;
-        for (QThread *thread : threads)
-            thread->wait();
-    }
     explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
         // The Shell's own Settings entry goes through the platform daemon, which
         // exports KOS_SHELL_DIR for the session it belongs to. That is the one
@@ -178,6 +168,14 @@ public:
     }
 
     ~SettingsBridge() override {
+        // 析构等在飞的探测线程落地：worker 读 QPointer guard 与 UI 线程
+        // 析构是数据竞争（QPointer 非线程安全，注释原以为"只捕获指针"
+        // 就绕开了，读它本身就在竞争）；QThread 无父对象不等则退出时
+        // "Destroyed while thread is still running"。finished→removeAll
+        // 经 queued 也在 UI 线程跑，列表自身无竞争。
+        const QList<QThread *> threads = m_probeThreads;
+        for (QThread *thread : threads)
+            thread->wait();
         m_thumbnailPool.clear();
         m_thumbnailPool.waitForDone();
     }

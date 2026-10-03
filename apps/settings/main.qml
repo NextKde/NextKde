@@ -5684,7 +5684,7 @@ ApplicationWindow {
                 SidebarEntry {
                     Layout.fillWidth: true
                     Layout.topMargin: 1
-                    pageIndex: 8
+                    pageIndex: 10
                     label: "前台调度"
                     navSymbol: "⏵"
                     navTint: "#ff9f0a"
