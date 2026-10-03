@@ -194,6 +194,20 @@ Item {
         || iconRowHover.containsMouse
         || buttonAimHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
+
+    // 合并完成的可拆分提示：merged 原地翻真（首次拖卡合并就是这条路径）
+    // 时拆分钮自动亮一小会儿——拆分钮平时只在悬停时显现，合并完指针不在
+    // 卡上，用户看到的是"没有任何拆分入口"，实测被读作"按钮丢了"
+    //（2026-10-03；切换走再切回的重建路径因自然带 hover 而"就有了"）
+    property bool mergeGlow: false
+    property Timer _mergeGlowTimer: Timer {
+        interval: 1800
+        onTriggered: card.mergeGlow = false
+    }
+    onMergedChanged: if (merged) {
+        mergeGlow = true
+        _mergeGlowTimer.restart()
+    }
     // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
     readonly property bool glowOn: card.isHovered || card.engaging
 
@@ -365,7 +379,7 @@ Item {
                 radius: 10
                 visible: card.merged
                 color: splitHit.containsMouse ? "#f59e0b" : "transparent"
-                opacity: card.isHovered ? 1.0 : 0.0
+                opacity: (card.isHovered || card.mergeGlow) ? 1.0 : 0.0
                 Behavior on opacity { NumberAnimation { duration: 120 } }
 
                 // 两张错位小卡（纯 Rectangle，不依赖字体字形）
