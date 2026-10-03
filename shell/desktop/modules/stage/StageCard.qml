@@ -204,9 +204,17 @@ Item {
         interval: 1800
         onTriggered: card.mergeGlow = false
     }
-    onMergedChanged: if (merged) {
-        mergeGlow = true
-        _mergeGlowTimer.restart()
+    onMergedChanged: {
+        // ⚠️ 命令式写、不走绑定：plane（visible:false 离屏层）子项的
+        // visible 绑定在依赖变化时**不会重新求值**（原地合并路径实测：
+        // merged 翻真后芯片仍隐身，切走重建才出现——出生求值一次定终
+        // 身）。普通属性（opacity/isHovered 链）不受此影响。出生赋值同
+        // 样触发本 handler，两条路径都覆盖
+        cardSplit.visible = merged
+        if (merged) {
+            mergeGlow = true
+            _mergeGlowTimer.restart()
+        }
     }
     // 聚焦辉光：悬停/交棒时点亮（与聚焦放大同步）
     readonly property bool glowOn: card.isHovered || card.engaging
@@ -346,9 +354,10 @@ Item {
                 anchors {
                     left: parent.left
                     // 合并卡让位给拆分芯片（悬停时芯片亮起会盖住标题
-                    // 尾部 ~18px，elide 又按全宽算——读作"标题被啃"）
-                    right: card.merged && cardSplit.visible
-                        ? cardSplit.left : cardClose.left
+                    // 尾部 ~18px，elide 又按全宽算——读作"标题被啃"）。
+                    // ⚠️ 只看 card.merged——cardSplit.visible 在 plane
+                    //（visible:false）下读的是恒 false 的有效可见性
+                    right: card.merged ? cardSplit.left : cardClose.left
                     rightMargin: 6
                     verticalCenter: parent.verticalCenter
                 }
