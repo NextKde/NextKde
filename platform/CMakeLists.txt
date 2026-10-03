@@ -11,13 +11,17 @@ find_package(KF6CoreAddons REQUIRED)
 find_package(KF6IconThemes REQUIRED)
 find_package(KF6GlobalAccel REQUIRED)
 find_package(KF6KIO REQUIRED)
-add_subdirectory(${CMAKE_SOURCE_DIR}/liquid-ai ${CMAKE_BINARY_DIR}/liquid-ai)
+# The depth engine is the only part of the platform that needs OpenCV and the
+# ONNX Runtime, so it follows KOS_SPATIAL_ENABLED (resolved from
+# KOS_BUILD_SPATIAL in the top-level file) instead of being unconditional. The
+# model a build like this would use is still a user-cache download.
+if(KOS_SPATIAL_ENABLED)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/liquid-ai ${CMAKE_BINARY_DIR}/liquid-ai)
+endif()
 
 qt_standard_project_setup()
 
-qt_add_executable(kos-platform
-    src/ai/AiWorkerClient.cpp
-    src/ai/AiWorkerClient.h
+set(kos_platform_sources
     src/daemon/main.cpp
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformServer.h
@@ -28,8 +32,21 @@ qt_add_executable(kos-platform
     src/wallpaper/PlasmaWallpaperAdapter.cpp
     src/wallpaper/PlasmaWallpaperAdapter.h
 )
+if(KOS_SPATIAL_ENABLED)
+    list(APPEND kos_platform_sources
+        src/ai/AiWorkerClient.cpp
+        src/ai/AiWorkerClient.h)
+endif()
+
+qt_add_executable(kos-platform ${kos_platform_sources})
 set_target_properties(kos-platform PROPERTIES
     INSTALL_RPATH "$ORIGIN/../lib")
+
+# The daemon drops the spatial operations, and the capability that gates the
+# Shell's spatial UI, when there is no worker to talk to.
+if(KOS_SPATIAL_ENABLED)
+    target_compile_definitions(kos-platform PRIVATE KOS_SPATIAL_ENABLED)
+endif()
 
 target_link_libraries(kos-platform PRIVATE
     Qt6::Core
@@ -43,16 +60,22 @@ target_link_libraries(kos-platform PRIVATE
     KF6::KIOGui
 )
 
-qt_add_executable(kos-ai-worker
-    ${CMAKE_SOURCE_DIR}/liquid-ai/worker/main.cpp
-)
-target_link_libraries(kos-ai-worker PRIVATE liquid-ai Qt6::Core)
-set_target_properties(kos-ai-worker PROPERTIES
-    INSTALL_RPATH "$ORIGIN/../lib")
+if(KOS_SPATIAL_ENABLED)
+    qt_add_executable(kos-ai-worker
+        ${CMAKE_SOURCE_DIR}/liquid-ai/worker/main.cpp
+    )
+    target_link_libraries(kos-ai-worker PRIVATE liquid-ai Qt6::Core)
+    set_target_properties(kos-ai-worker PROPERTIES
+        INSTALL_RPATH "$ORIGIN/../lib")
 
-install(TARGETS kos-platform kos-ai-worker
-    RUNTIME DESTINATION libexec
-)
+    install(TARGETS kos-platform kos-ai-worker
+        RUNTIME DESTINATION libexec
+    )
+else()
+    install(TARGETS kos-platform
+        RUNTIME DESTINATION libexec
+    )
+endif()
 
 install(FILES kwin/window-bridge.js
     DESTINATION share/kos/platform/kwin
@@ -62,7 +85,7 @@ install(FILES kwin/window-bridge.js
 # private session bus, wait for its READY line, answer-check platform.ping
 # and confirm SIGTERM stops it cleanly. It needs an interpreter and
 # dbus-run-session, so it registers only when both exist.
-if(BUILD_TESTING)
+if(BUILD_TESTING AND KOS_SPATIAL_ENABLED)
     qt_add_executable(kos-ai-worker-fake tests/fake_ai_worker.cpp)
     target_link_libraries(kos-ai-worker-fake PRIVATE Qt6::Core)
     set_target_properties(kos-ai-worker-fake PROPERTIES
@@ -82,7 +105,9 @@ if(BUILD_TESTING)
     set_tests_properties(kos-platform.ai-worker-client PROPERTIES
         LABELS platform
         TIMEOUT 10)
+endif()
 
+if(BUILD_TESTING)
     if(NOT KOS_PYTHON_EXECUTABLE)
         find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
     endif()

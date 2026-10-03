@@ -33,7 +33,7 @@ TestCase {
         const toggle = findChild(page, "spatialServiceSwitch")
         verify(toggle)
         compare(toggle.checked, false)
-        toggle.clicked()
+        toggle.toggled(true)
         compare(bridge.starts, 1)
         compare(toggle.checked, false)
         bridge.wallpaperSnapshotChanged({spatialResources: {available: true, enabled: false, busy: true, progress: 0.5}})
@@ -41,7 +41,7 @@ TestCase {
         compare(toggle.checked, false)
         bridge.wallpaperSnapshotChanged({spatialResources: {available: true, enabled: true, ready: true}})
         compare(toggle.checked, true)
-        toggle.clicked()
+        toggle.toggled(false)
         compare(bridge.stops, 1)
     }
 }

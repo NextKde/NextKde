@@ -67,7 +67,13 @@ jobs:
       # The single entry point shared with local development: it configures with
       # -DBUILD_TESTING=ON -DKOS_BUILD_KWIN_PLUGINS=OFF, keeps TMPDIR and
       # GOTMPDIR inside the build tree, and runs `ctest -L data|platform`.
+      #
+      # KOS_BUILD_SPATIAL=ON (not the AUTO default) so a container that failed
+      # to install OpenCV or the ONNX Runtime fails here instead of quietly
+      # dropping the depth engine from the coverage.
       - name: Run the data and platform layers
+        env:
+          KOS_BUILD_SPATIAL: ON
         run: ./tools/run-tests.sh --layer data --layer platform
 
       - name: Summarise which layers ran

@@ -1,6 +1,8 @@
 #pragma once
 
+#ifdef KOS_SPATIAL_ENABLED
 #include "../ai/AiWorkerClient.h"
+#endif
 
 #include <QObject>
 #include <QDBusObjectPath>
@@ -78,7 +80,9 @@ private:
                            const NmConnectRequest &connect);
     void runBluetoothList(QLocalSocket *socket, const QJsonObject &request);
     void runTrayIdentify(QLocalSocket *socket, const QJsonObject &request);
+#ifdef KOS_SPATIAL_ENABLED
     void runDepthGenerate(QLocalSocket *socket, const QJsonObject &request);
+#endif
     void sendEvent(QLocalSocket *socket, const QJsonObject &event);
     QString requestId(const QJsonObject &request) const;
     QString operation(const QJsonObject &request) const;
@@ -193,10 +197,12 @@ private:
     // here off the socket event loop. Declared last so ~QThreadPool waits for
     // in-flight workers (bounded calls) before members go away.
     QThreadPool m_dbusPool;
+#ifdef KOS_SPATIAL_ENABLED
     // Starts the optional AI worker only for AI requests. Kept last so its
     // child process is stopped before the platform server's other state is
     // destroyed. An ONNX failure cannot take down core desktop operations.
     AiWorkerClient m_aiWorker;
+#endif
 };
 
 } // namespace KosPlatform

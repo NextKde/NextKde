@@ -73,7 +73,11 @@ Current operation groups are:
   SHA256, and keeps the ONNX session warm for up to one idle minute. Inference
   runs asynchronously and may take up to five minutes on the first request;
   worker failures are request-local and do not affect unrelated platform
-  operations. Images remain local.)
+  operations. Images remain local. This operation, the `spatial.*` group and
+  the `spatial.resources` capability exist only when `KOS_BUILD_SPATIAL` resolved
+  to a build: the worker is the one part of the daemon that links OpenCV and the
+  ONNX Runtime, and a build without it reports `platform.ping` without that
+  capability, which is what keeps the Shell's spatial wallpaper switched off.)
 - `settings.open` (allow-listed KDE System Settings modules) and
   `settings.launch` (launch the `kos-settings` app with a fixed argv; the
   only accepted payload field is `shellDir`, an optional absolute path that

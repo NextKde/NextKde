@@ -18,7 +18,7 @@ Arch 常用基础包：
 ```sh
 sudo pacman -S --needed \
   git quickshell cmake ninja gcc go curl patchelf qt6-base qt6-declarative \
-  qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland opencv kio \
+  qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland kio \
   kwindowsystem kiconthemes kglobalaccel \
   extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
   kcoreaddons kdecoration gettext libxcb vulkan-headers
@@ -36,6 +36,27 @@ sudo pacman -S --needed \
 亮度、剪贴板历史、回收站/文件操作和截图支持。如只构建平台服务和设置应用、
 禁用 KWin 插件，可设置 `KOS_BUILD_KWIN_PLUGINS=OFF`，此时不需要 KWin 插件
 开发依赖。
+
+景深/空间壁纸（depth 引擎、`kos-ai-worker`、`Kos.Spatial3D`）需要 OpenCV 与
+ONNX Runtime，是否构建由 `KOS_BUILD_SPATIAL` 决定：
+
+| 取值 | 行为 |
+|---|---|
+| `AUTO`（默认） | 本机已装好这两个依赖就构建，缺了就跳过并打印一行提示；**不会**自动安装或下载 |
+| `ON` | 强制构建，缺依赖时 configure 直接失败（打包与 CI 用这个） |
+| `OFF` | 完全不查找、不构建 |
+
+所以不需要景深壁纸的机器不必安装 OpenCV：
+
+```sh
+KOS_BUILD_SPATIAL=OFF ./tools/kosctl install
+```
+
+想长期固定这个选择，把它写进 shell 配置（例如 `export KOS_BUILD_SPATIAL=OFF`），
+或者在 `AUTO` 下干脆不安装 OpenCV —— 两种情况都不会再要求那套依赖。
+
+深度模型本身不随仓库或安装包分发：第一次在「服务与组件」里开启空间壁纸时才下载到
+用户缓存，`kosctl install` 只负责编译引擎本身。
 
 其中 `extra-cmake-modules` 是 KWin 插件 CMake 配置的直接依赖；`vulkan-headers`
 是 KWin 导出的 `Vulkan::Vulkan` 编译接口所需依赖。Arch 的 `kwin` 包不会自动安装

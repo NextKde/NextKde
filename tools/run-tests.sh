@@ -59,6 +59,9 @@ Environment:
   KOS_TEST_BUILD_DIR   build directory (default .build/tests)
   KOS_TEST_TMPDIR      scratch directory for compilers and Go
   KOS_BUILD_TYPE       Debug (default) or Release
+  KOS_BUILD_SPATIAL    AUTO (default), ON or OFF for the depth engine and the
+                       3D wallpaper plugin; ON makes missing OpenCV or ONNX
+                       Runtime a hard failure
 EOF
             exit 0
             ;;
@@ -82,6 +85,7 @@ cmake -S "$project_dir" -B "$build_dir" -G Ninja \
     -DCMAKE_BUILD_TYPE="${KOS_BUILD_TYPE:-Debug}" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKOS_BUILD_KWIN_PLUGINS=OFF \
+    -DKOS_BUILD_SPATIAL="${KOS_BUILD_SPATIAL:-AUTO}" \
     -DBUILD_TESTING=ON >/dev/null
 
 printf '==> building (--parallel %s)\n' "$build_jobs"

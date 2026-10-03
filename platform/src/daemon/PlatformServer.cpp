@@ -5179,6 +5179,7 @@ bool PlatformServer::handleTrayOperation(QLocalSocket *socket, const QJsonObject
     return false;
 }
 
+#ifdef KOS_SPATIAL_ENABLED
 void PlatformServer::runDepthGenerate(QLocalSocket *socket, const QJsonObject &request)
 {
     const QString requestedPath = request.value(QStringLiteral("payload")).toObject()
@@ -5206,6 +5207,7 @@ void PlatformServer::runDepthGenerate(QLocalSocket *socket, const QJsonObject &r
         respond(guardedSocket.data(), request, true, result);
     }, prepareSpatial);
 }
+#endif
 
 void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &request)
 {
@@ -5228,7 +5230,9 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("wallpaper.plasma.proxy"),
                 QStringLiteral("wallpaper.plasma.restore"),
                 QStringLiteral("wallpaper.preview.desktop"),
+#ifdef KOS_SPATIAL_ENABLED
                 QStringLiteral("spatial.resources"),
+#endif
                 QStringLiteral("session.visibility"),
             }},
         });
@@ -5252,6 +5256,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             });
         return;
     }
+#ifdef KOS_SPATIAL_ENABLED
     if (op == QStringLiteral("spatial.status")) {
         respond(socket, request, true, m_aiWorker.status());
         return;
@@ -5277,6 +5282,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         runDepthGenerate(socket, request);
         return;
     }
+#endif
     if (handleClipboard(socket, request) || handleApplication(socket, request)
         || handleFileOperation(socket, request)
         || handleKWin(socket, request) || handleAppMenu(socket, request)

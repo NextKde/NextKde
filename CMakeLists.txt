@@ -17,6 +17,50 @@ option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
 option(KOS_BUILD_MUSIC "Build the Music application" OFF)
+# The depth engine (liquid-ai) needs OpenCV and the ONNX Runtime, and the 3D
+# wallpaper plugin needs Qt Quick 3D. KOS_BUILD_SPATIAL decides whether they are
+# built; the resolution below turns it into KOS_SPATIAL_ENABLED, which both this
+# file and platform/CMakeLists.txt read:
+#
+#   AUTO (default)  build them when the dependencies are already installed
+#   ON              require them; configure fails when they are missing
+#   OFF             never build them, never look for them
+if(NOT DEFINED KOS_BUILD_SPATIAL)
+    set(KOS_BUILD_SPATIAL "AUTO" CACHE STRING
+        "Build the ONNX/OpenCV depth engine and 3D wallpaper plugin: AUTO, ON or OFF")
+endif()
+set_property(CACHE KOS_BUILD_SPATIAL PROPERTY STRINGS AUTO ON OFF)
+
+set(KOS_SPATIAL_ENABLED FALSE)
+if(KOS_BUILD_SPATIAL STREQUAL "ON")
+    # The REQUIRED find_package calls in liquid-ai/CMakeLists.txt are the loud
+    # failure for this mode; nothing is probed here.
+    set(KOS_SPATIAL_ENABLED TRUE)
+elseif(KOS_BUILD_SPATIAL STREQUAL "AUTO" OR KOS_BUILD_SPATIAL STREQUAL "TRUE"
+        OR KOS_BUILD_SPATIAL STREQUAL "1")
+    find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+    find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+        PATH_SUFFIXES onnxruntime onnxruntime/core/session)
+    find_library(ONNXRUNTIME_LIBRARY NAMES onnxruntime)
+    if(OpenCV_FOUND AND ONNXRUNTIME_INCLUDE_DIR AND ONNXRUNTIME_LIBRARY)
+        set(KOS_SPATIAL_ENABLED TRUE)
+    else()
+        message(STATUS
+            "Depth engine skipped: OpenCV or the ONNX Runtime is not installed. "
+            "Install both and configure with -DKOS_BUILD_SPATIAL=ON to build it.")
+    endif()
+elseif(NOT KOS_BUILD_SPATIAL STREQUAL "OFF")
+    message(FATAL_ERROR "KOS_BUILD_SPATIAL must be AUTO, ON or OFF")
+endif()
+
+# tools/kosctl reads this to decide whether to deploy (or clean up) the worker:
+# AUTO resolves here rather than in the script, and a build tree can still hold
+# a worker binary from an earlier configuration.
+if(KOS_SPATIAL_ENABLED)
+    file(WRITE "${CMAKE_BINARY_DIR}/kos-spatial-enabled" "ON\n")
+else()
+    file(WRITE "${CMAKE_BINARY_DIR}/kos-spatial-enabled" "OFF\n")
+endif()
 
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
@@ -585,16 +629,15 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/kos-decoration)
 endif()
 
-# The spatial wallpaper mesh is an optional QML extension. Keep Qt Quick 3D
-# outside the shell's mandatory dependencies so systems without it retain the
-# existing shader renderer.
-if(KOS_BUILD_PLATFORM)
+# The spatial wallpaper mesh is an optional QML extension, built only when the
+# depth engine is. Keep Qt Quick 3D and OpenCV outside the shell's mandatory
+# dependencies so systems without them retain the existing shader renderer.
+if(KOS_BUILD_PLATFORM AND KOS_SPATIAL_ENABLED)
     find_package(Qt6 QUIET COMPONENTS Quick3D)
-    find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
-    if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5 AND OpenCV_FOUND)
+    if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
         add_subdirectory(integrations/quickshell/spatial3d)
     else()
-        message(STATUS "Qt Quick 3D or OpenCV not found; spatial mesh renderer disabled")
+        message(STATUS "Qt Quick 3D not found; spatial mesh renderer disabled")
     endif()
 endif()
 
