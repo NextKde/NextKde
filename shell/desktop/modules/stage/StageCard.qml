@@ -112,32 +112,37 @@ Item {
     height: StageConfigService.cardHeight
 
     // ── 动效状态机：点击=原地淡出并保持倾斜（窗口从倾斜姿态旋转展开接管）──
-    // enterInstant = 行以"收集落卡"追加（窗口正在飞进）：出生即落位可见，
-    // 不播入场滑入/淡入——卡与收编飞行同拍（窗口侧 syncCards 追加时置真）
+    // enterInstant = 行以"收集落卡"追加（窗口正飞进该卡位）：几何出生即
+    // 终值（无侧滑/无缩放入场），只做**原地淡入**且时长对齐收编飞行
+    //（animDuration）——卡与窗同拍开始、同拍落成。旧版 280ms 侧滑因快照
+    // 延迟"迟一步"被砍成即时蹦出，又压着飞行中段突兀（2026-10-03 两轮
+    // 回归后的折中：淡入时长=飞行时长，窗口飞到时卡片恰好凝实）
     property bool enterInstant: false
-    property bool shown: enterInstant
+    property bool shown: false
     property bool engaging: false
     // 同组换代表（点同应用的另一扇窗）时模型行不销毁，engaging 不会随
     // delegate 重建归零——必须在此显式交还卡片姿态，否则卡片永远停在
     // 透明态，看起来就是"卡片消失了"
     onTargetIdChanged: engaging = false
     // x 入列方向镜像：左侧从右滑入（+70），右侧从左滑入（−70）——都从
-    // 桌面一侧进条
+    // 桌面一侧进条；收集落卡（enterInstant）几何即终值，不走侧滑
     x: rightSide
         ? (parent ? parent.width - width - StageGeo.CARD_X_INSET : 0)
-            - (shown ? 0 : 70)
-        : StageGeo.CARD_X_INSET + (shown ? 0 : 70)
+            - ((shown || enterInstant) ? 0 : 70)
+        : StageGeo.CARD_X_INSET + ((shown || enterInstant) ? 0 : 70)
     opacity: engaging ? 0.0 : (shown ? 1.0 : 0.0)
-    scale: shown ? (isHovered ? StageConfigService.hoverScale : 1.0) : 0.86
+    scale: (shown || enterInstant)
+        ? (isHovered ? StageConfigService.hoverScale : 1.0) : 0.86
     // 悬停放大从左上角外扩（与 slot 的 TopLeft 缩放同向）：上边钉死、只向
     // 右/下生长——绕中心缩放会让四边同缩，压在边条上的指针被"缩出去"→
     // 悬停丢失（kill 循环的一环）。外扩区域内的指针不可能被挤出。
     transformOrigin: Item.TopLeft
-    Component.onCompleted: if (!shown) shown = true
+    Component.onCompleted: shown = true
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
-    Behavior on opacity { NumberAnimation { duration: engaging ? StageGeo.ENGAGE_FADE_MS : StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
+    // 收集落卡的淡入时长 = animDuration（收编飞行时长）：卡与窗同拍
+    Behavior on opacity { NumberAnimation { duration: engaging ? StageGeo.ENGAGE_FADE_MS : (enterInstant ? StageConfigService.animDuration : StageConfigService.cardEnterDuration); easing.type: Easing.OutCubic } }
     // 缩放带过冲（OutBack）：悬停放大/入场有弹性回弹；位置类刻意保持
     // OutCubic——x/y 过冲会越过槽位触发悬停丢失（kill 循环前科）
     Behavior on scale {
