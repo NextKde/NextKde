@@ -219,7 +219,7 @@ Item {
         property vector2d paintScale: Qt.vector2d(root.width / Math.max(1, root.effectImage?.paintedWidth || root.width),
             root.height / Math.max(1, root.effectImage?.paintedHeight || root.height))
         property real zoom: 1
-        fragmentShader: Qt.resolvedUrl("../../shaders/wallpaper_reveal.frag.qsb")
+        fragmentShader: Qt.resolvedUrl("shaders/wallpaper_reveal.frag.qsb")
     }
 
     // Only uniform writers here: they update values on the render thread

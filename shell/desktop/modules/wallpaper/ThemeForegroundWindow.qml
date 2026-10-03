@@ -88,7 +88,7 @@ PanelWindow {
             property vector4d block13: blocked(13)
             property vector4d block14: blocked(14)
             property vector4d block15: blocked(15)
-            fragmentShader: "../../../Kos/Ui/wallpapers/shaders/foreground_clip.frag.qsb"
+            fragmentShader: "shaders/foreground_clip.frag.qsb"
         }
     }
     IpcHandler {

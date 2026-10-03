@@ -8,8 +8,8 @@ Build from the repository root:
   mkdir -p .build/theme-thumbnail-export
   g++ -std=c++17 -fPIC tools/export-theme-thumbnails.cpp -o .build/theme-thumbnail-export/export $(pkg-config --cflags --libs Qt6Quick Qt6Qml Qt6Gui)
 Run in an existing graphical session, one theme per process (shows a brief window):
-  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" starfield "$PWD/shared/qml/wallpapers/assets/starfield-thumbnail.png"
-  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" weather "$PWD/shared/qml/wallpapers/assets/weather-thumbnail.png"
+  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" starfield "$PWD/shared/qml/wallpapers/themes/starfield/assets/starfield-thumbnail.png"
+  QSG_RHI_BACKEND=opengl .build/theme-thumbnail-export/export "$PWD/shared/qml/wallpapers/ThemeWallpaperScene.qml" weather "$PWD/shared/qml/wallpapers/themes/weather/assets/weather-thumbnail.png"
 
 Settings and preview grids load these PNG files only. The exporter and desktop
 renderer are never instantiated by a thumbnail delegate.

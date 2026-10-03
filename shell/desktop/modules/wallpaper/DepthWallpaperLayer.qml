@@ -175,7 +175,7 @@ Item {
         property vector2d pointer: Qt.vector2d(root.renderedPointerX,
             root.renderedPointerY)
         property vector2d cropScale: root.cropScale
-        fragmentShader: Qt.resolvedUrl("../../shaders/depth_parallax.frag.qsb")
+        fragmentShader: Qt.resolvedUrl("shaders/depth_parallax.frag.qsb")
     }
 
     ShaderEffect {
@@ -190,7 +190,7 @@ Item {
         property vector2d pointer: Qt.vector2d(root.renderedPointerX,
             root.renderedPointerY)
         property vector2d cropScale: root.cropScale
-        fragmentShader: Qt.resolvedUrl("../../shaders/layered_wallpaper.frag.qsb")
+        fragmentShader: Qt.resolvedUrl("shaders/layered_wallpaper.frag.qsb")
     }
 
     onRenderedPointerXChanged: syncMeshRenderer()
