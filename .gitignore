@@ -1,9 +1,10 @@
-# Runtime/user-specific dock state
-config/dock/config.json
-
 # Local editor/assistant settings
-.claude/settings.local.json
+# (AI 工具的规则/skill 目录：从提交移出，但留在本机供 agent 读取)
+.claude/
+.agents/
+CLAUDE.md
 .zcode/
+.idea/
 
 # Quickshell runtime logs and generated crash data
 *.log
@@ -12,6 +13,12 @@ config/dock/config.json
 
 # Local build outputs
 .build/
+
+# Local workbench: session reports and open-issue notes that must not be
+# committed, but should stay readable and traceable on this machine.
+# See tmp/README.md for what belongs here.
+/tmp/
+
 # Anchored on purpose: running kos-bridge's documented preview command from the
 # repo root (cmake -S integrations/kwin/kos-bridge -B build) lands its tree here
 # instead of the ignored per-project path. Nothing else uses a root build/.
