@@ -44,6 +44,17 @@ QtObject {
     // daemon reports wifiDeviceName.
     property bool _scanPendingDevice: false
 
+    // Live transfer-rate snapshot of the active device, sampled once a second
+    // while a device is connected. The tray readout and the Wi-Fi tooltip both
+    // consume this; nothing here performs network-management actions.
+    property real downloadBytesPerSecond: 0
+    property real uploadBytesPerSecond: 0
+    property string _trafficDevice: ""
+    property real _previousRx: -1
+    property real _previousTx: -1
+    property double _previousTimestamp: 0
+    property bool _trafficSamplePending: false
+
     function _applySnapshot(result) {
         available = !!result.available
         networkingEnabled = result.networkingEnabled !== false
@@ -76,6 +87,7 @@ QtObject {
         } else {
             ipv4 = ""
             signalStrength = -1
+            resetTraffic("")
         }
         // A scan requested before the first refresh knew the wifi ifname
         // drains here once the snapshot supplies it.
@@ -99,6 +111,59 @@ QtObject {
                 ssid = String(result.ssid)
             if (connectionType === "wifi" && result.signalStrength !== undefined)
                 signalStrength = Number(result.signalStrength)
+        })
+    }
+
+    function formatRate(bytesPerSecond) {
+        const value = Math.max(0, Number(bytesPerSecond) || 0)
+        if (value < 1024)
+            return value.toFixed(2) + " B/s"
+        if (value < 1024 * 1024)
+            return (value / 1024).toFixed(2) + " KB/s"
+        if (value < 1024 * 1024 * 1024)
+            return (value / (1024 * 1024)).toFixed(2) + " MB/s"
+        return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB/s"
+    }
+
+    function resetTraffic(device) {
+        _trafficDevice = device || ""
+        _previousRx = -1
+        _previousTx = -1
+        _previousTimestamp = 0
+        downloadBytesPerSecond = 0
+        uploadBytesPerSecond = 0
+        _trafficSamplePending = false
+    }
+
+    function sampleTraffic() {
+        const device = deviceName
+        if (deviceState !== "connected" || !device) {
+            resetTraffic("")
+            return
+        }
+        if (_trafficDevice !== device)
+            resetTraffic(device)
+        if (_trafficSamplePending)
+            return
+        _trafficSamplePending = true
+        PlatformClient.request("network.traffic", { device: device }, function(response) {
+            if (_trafficDevice !== device)
+                return
+            _trafficSamplePending = false
+            const result = response?.ok ? response.result || ({}) : ({})
+            const rx = Number(result.rxBytes)
+            const tx = Number(result.txBytes)
+            const now = Date.now()
+            if (response?.ok && Number.isFinite(rx) && Number.isFinite(tx)) {
+                if (_previousTimestamp > 0 && rx >= _previousRx && tx >= _previousTx) {
+                    const seconds = Math.max(0.25, (now - _previousTimestamp) / 1000)
+                    downloadBytesPerSecond = (rx - _previousRx) / seconds
+                    uploadBytesPerSecond = (tx - _previousTx) / seconds
+                }
+                _previousRx = rx
+                _previousTx = tx
+                _previousTimestamp = now
+            }
         })
     }
 
@@ -264,6 +329,14 @@ QtObject {
         running: PlatformClient.socket.connected
         onTriggered: service.refresh()
     }
+    property Timer trafficTimer: Timer {
+        interval: 1000
+        repeat: true
+        running: service.available && service.deviceState === "connected"
+            && PlatformClient.socket.connected
+        triggeredOnStart: true
+        onTriggered: service.sampleTraffic()
+    }
     property Timer wifiEnableScanTimer: Timer {
         interval: 900
         repeat: false
@@ -288,6 +361,7 @@ QtObject {
                 wifiDisconnectInProgress = false
                 wifiForgetInProgress = false
                 wifiToggleInProgress = false
+                _trafficSamplePending = false
             }
         }
     }

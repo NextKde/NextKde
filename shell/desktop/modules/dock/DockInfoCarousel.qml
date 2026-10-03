@@ -261,6 +261,14 @@ Item {
                 infoPopup.requestClose()
             return
         }
+        // The temperature page hosts the same sensor popups as the Bar
+        // (TemperatureSensorPopups), so the generic info popup must not
+        // compete with it for the hover.
+        if (pointerPage === carousel.temperaturePage) {
+            if (infoPopup.visible)
+                infoPopup.requestClose()
+            return
+        }
         carousel.hoveredPage = pointerPage
         if (infoPopup.requestedOpen)
             infoPopupOpenDelay.stop()
@@ -287,7 +295,8 @@ Item {
         repeat: false
         onTriggered: {
             if (infoHover.hovered && carousel.pointerPage >= 0
-                    && carousel.pointerPage !== carousel.musicPage)
+                    && carousel.pointerPage !== carousel.musicPage
+                    && carousel.pointerPage !== carousel.temperaturePage)
                 DockModelService.openDockPopup(infoPopup)
         }
     }

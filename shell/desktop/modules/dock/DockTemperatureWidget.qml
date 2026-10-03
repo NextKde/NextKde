@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import qs.desktop.modules.bar
 import qs.desktop.modules.common
 
 // Permanent thermal page for DockInfoCarousel. It is deliberately a pure
@@ -269,5 +270,13 @@ Item {
                 weight: Font.Medium
             }
         }
+    }
+
+    // Same hover tooltip and click-open sensor dashboard as the Bar's thermal
+    // summary. The carousel's generic DockInfoPopup skips this page (see
+    // DockInfoCarousel), so this is the page's only hover surface.
+    TemperatureSensorPopups {
+        anchors.fill: parent
+        dockHosted: true
     }
 }

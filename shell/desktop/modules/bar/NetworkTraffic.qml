@@ -2,99 +2,27 @@ import QtQuick
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
-import qs.desktop.modules.platform
 
-// Live transfer-rate companion for NetworkStatus. NetworkService decides
-// which interface is active; this component only samples that interface's
-// kernel byte counters and never performs network-management actions.
+// Presentational transfer-rate readout for the network tray cell. Sampling
+// lives in NetworkService (1 Hz while a device is connected) so the Wi-Fi
+// tooltip can show the same rates; this component only formats the shared
+// snapshot and never performs network-management actions.
 Item {
     id: root
 
-    // The readouts below already take the glass tint through ThemeService; the
+    signal panelToggleRequested()
+
+    // The readouts already take the glass tint through ThemeService; the
     // arrow glyph has to move with them or the two halves of one indicator
     // disagree. The ink follows the glass, so while 液态玻璃跟随外观模式 is off
     // the arrow still strokes exactly the white it stroked before.
     readonly property color glyphInk: AppearanceTokens.content.glassInk()
-
-    // BarWindow routes this request to the shared NetworkPanel. Keeping the
-    // event at component level lets the same traffic readout be reused in a
-    // future control centre without owning any popup or anchor geometry.
-    signal panelToggleRequested()
-
-    property bool _samplePending: false
-    property int _sampleGeneration: 0
-    property string sampledDevice: ""
-    property real _previousRx: -1
-    property real _previousTx: -1
-    property double _previousTimestamp: 0
-    property real downloadBytesPerSecond: 0
-    property real uploadBytesPerSecond: 0
 
     implicitWidth: trafficContent.implicitWidth
     implicitHeight: 22
     width: implicitWidth
     height: implicitHeight
     visible: NetworkService.available && NetworkService.deviceState === "connected"
-
-    function formatRate(bytesPerSecond) {
-        const value = Math.max(0, Number(bytesPerSecond) || 0)
-        if (value < 1024)
-            return value.toFixed(2) + " B/s"
-        if (value < 1024 * 1024)
-            return (value / 1024).toFixed(2) + " KB/s"
-        if (value < 1024 * 1024 * 1024)
-            return (value / (1024 * 1024)).toFixed(2) + " MB/s"
-        return (value / (1024 * 1024 * 1024)).toFixed(2) + " GB/s"
-    }
-
-    function reset(device) {
-        sampledDevice = device || ""
-        _previousRx = -1
-        _previousTx = -1
-        _previousTimestamp = 0
-        downloadBytesPerSecond = 0
-        uploadBytesPerSecond = 0
-        _samplePending = false
-        _sampleGeneration++
-    }
-
-    function sample() {
-        const device = NetworkService.deviceName
-        if (!visible || !device) {
-            reset("")
-            return
-        }
-        if (sampledDevice !== device)
-            reset(device)
-        if (_samplePending)
-            return
-        _samplePending = true
-        const generation = _sampleGeneration
-        PlatformClient.request("network.traffic", { device: device }, function(response) {
-            if (generation !== root._sampleGeneration
-                    || root.sampledDevice !== device) {
-                return
-            }
-            root._samplePending = false
-            const result = response?.ok ? response.result || ({}) : ({})
-            const rx = Number(result.rxBytes)
-            const tx = Number(result.txBytes)
-            const now = Date.now()
-            if (response?.ok
-                    && Number.isFinite(rx) && Number.isFinite(tx)) {
-                if (root._previousTimestamp > 0 && rx >= root._previousRx
-                        && tx >= root._previousTx) {
-                    const seconds = Math.max(0.25,
-                        (now - root._previousTimestamp) / 1000)
-                    root.downloadBytesPerSecond = (rx - root._previousRx) / seconds
-                    root.uploadBytesPerSecond = (tx - root._previousTx) / seconds
-                }
-                root._previousRx = rx
-                root._previousTx = tx
-                root._previousTimestamp = now
-            }
-        })
-    }
 
     Row {
         id: trafficContent
@@ -107,7 +35,12 @@ Item {
             id: directionGlyph
             width: 13
             height: 18
-            onGlyphInkChanged: requestPaint()
+            // glyphInk lives on the root item, so the change signal is
+            // reconnected here instead of as a Canvas-scoped handler.
+            Connections {
+                target: root
+                function onGlyphInkChanged() { directionGlyph.requestPaint() }
+            }
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.reset()
@@ -131,14 +64,14 @@ Item {
         Column {
             spacing: -1
             Text {
-                text: "下行 " + root.formatRate(root.downloadBytesPerSecond)
+                text: "下行 " + NetworkService.formatRate(NetworkService.downloadBytesPerSecond)
                 color: ThemeService.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
                 font { family: "SF Pro Display"; pixelSize: 9; weight: Font.DemiBold }
             }
             Text {
-                text: "上行 " + root.formatRate(root.uploadBytesPerSecond)
+                text: "上行 " + NetworkService.formatRate(NetworkService.uploadBytesPerSecond)
                 color: ThemeService.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
@@ -152,32 +85,5 @@ Item {
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.PointingHandCursor
         onClicked: root.panelToggleRequested()
-    }
-
-    Connections {
-        target: NetworkService
-        function onDeviceNameChanged() { root.reset(NetworkService.deviceName) }
-        function onDeviceStateChanged() {
-            if (NetworkService.deviceState !== "connected")
-                root.reset("")
-        }
-    }
-
-    Connections {
-        target: PlatformClient
-        function onTransportChanged(connected) {
-            // A dropped transport fails the outstanding sample's callback,
-            // but clear the guard as well so sampling always resumes.
-            if (!connected)
-                root._samplePending = false
-        }
-    }
-
-    Timer {
-        interval: 1000
-        repeat: true
-        running: root.visible
-        triggeredOnStart: true
-        onTriggered: root.sample()
     }
 }

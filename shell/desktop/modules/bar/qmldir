@@ -10,6 +10,7 @@ BarStatusArea 1.0 BarStatusArea.qml
 StatusAreaEditor 1.0 StatusAreaEditor.qml
 Battery 1.0 Battery.qml
 CpuTemperature 1.0 CpuTemperature.qml
+TemperatureSensorPopups 1.0 TemperatureSensorPopups.qml
 NetworkStatus 1.0 NetworkStatus.qml
 WifiSignalIcon 1.0 WifiSignalIcon.qml
 NetworkTraffic 1.0 NetworkTraffic.qml

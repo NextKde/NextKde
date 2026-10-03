@@ -111,8 +111,14 @@ Item {
         secondaryText: !root.connected ? "" : (root.hasIssue
             ? (NetworkService.connectivity === "portal"
                 ? "需要网页登录认证" : "网络受限，无法访问互联网")
-            : (NetworkService.ipv4.length > 0
-                ? "已连接 · " + NetworkService.ipv4 : "已连接互联网"))
+            : ((NetworkService.ipv4.length > 0
+                ? "已连接 · " + NetworkService.ipv4 : "已连接互联网")
+                // The rate snapshot comes from NetworkService's own sampling,
+                // so this stays live in both the top Bar and the Dock host.
+                + (NetworkService.deviceName
+                    ? " · ↓" + NetworkService.formatRate(NetworkService.downloadBytesPerSecond)
+                    + " ↑" + NetworkService.formatRate(NetworkService.uploadBytesPerSecond)
+                    : "")))
     }
 
 }

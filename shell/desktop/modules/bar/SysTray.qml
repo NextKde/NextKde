@@ -31,6 +31,21 @@ Item {
     property real availableHeight: 24
     readonly property int itemSize: iconSize + 8
 
+    // Width of one grid slot. Shell cells whose loaded root declares a
+    // `cellExtraWidth` property overflow their square by that amount; native
+    // tray items are always plain itemSize squares. Extra width only applies
+    // in single-row layouts: the dock's two-row fold never hosts the wide
+    // readout, so its uniform grid math stays intact.
+    function slotWidth(key) {
+        if (root.rowCount > 1)
+            return root.itemSize
+        const index = root.trailingCellKeys.indexOf(key)
+        if (index < 0)
+            return root.itemSize
+        const extra = root.trailingItem(index)?.cellExtraWidth ?? 0
+        return root.itemSize + Math.max(0, extra)
+    }
+
     property int trayRevision: 0
     function notifyTrayChanged() { trayRevision++ }
 
@@ -60,8 +75,14 @@ Item {
     readonly property bool twoRows: dockHosted && itemCount > 1
         && availableHeight >= twoRowThreshold
     readonly property int rowCount: twoRows ? 2 : 1
-    readonly property real singleRowImplicitWidth: itemCount > 0
-        ? itemCount * itemSize + (itemCount - 1) * iconSpacing : 0
+    readonly property real singleRowImplicitWidth: {
+        if (root.itemCount <= 0)
+            return 0
+        let width = 0
+        for (let i = 0; i < root.allKeys.length; i++)
+            width += root.slotWidth(root.allKeys[i])
+        return width + (root.itemCount - 1) * root.iconSpacing
+    }
 
     // Let the order service see every key as it appears, so an icon that
     // shows up later is recognisably new and lands at the head of the row
@@ -95,22 +116,38 @@ Item {
     property real dragTranslationX: 0
     property real dragTranslationY: 0
 
-    function slotOrigin(flowIndex) {
+    function slotOriginIn(keys, flowIndex) {
         if (flowIndex < 0)
             return Qt.point(0, 0)
         const rows = Math.max(1, root.rowCount)
-        const column = Math.floor(flowIndex / rows)
         const row = flowIndex % rows
+        if (rows === 1) {
+            // Variable cell widths: a shell cell may request overflow beyond
+            // its itemSize square (the network cell hosts the traffic
+            // readout), so positions accumulate real slot widths instead of
+            // assuming a uniform grid.
+            let x = 0
+            for (let i = 0; i < flowIndex && i < keys.length; i++)
+                x += root.slotWidth(keys[i]) + root.iconSpacing
+            return Qt.point(x, 0)
+        }
+        const column = Math.floor(flowIndex / rows)
         return Qt.point(column * (root.itemSize + root.iconSpacing), row * root.itemSize)
     }
+
+    function slotOrigin(flowIndex) {
+        return root.slotOriginIn(root.arrangedKeys, flowIndex)
+    }
+
     function slotCenter(flowIndex) {
         const origin = root.slotOrigin(flowIndex)
-        return Qt.point(origin.x + root.itemSize / 2, origin.y + root.itemSize / 2)
+        const key = root.arrangedKeys[flowIndex] ?? ""
+        return Qt.point(origin.x + root.slotWidth(key) / 2, origin.y + root.itemSize / 2)
     }
     // The visual (Translate) delta from a delegate's fixed declaration slot
     // to wherever it should currently appear.
     function reorderOffsetFor(naturalIndex, displayIndex) {
-        const from = root.slotOrigin(naturalIndex)
+        const from = root.slotOriginIn(root.allKeys, naturalIndex)
         const to = root.slotOrigin(displayIndex)
         return Qt.point(to.x - from.x, to.y - from.y)
     }
@@ -144,8 +181,10 @@ Item {
 
     readonly property int columnCount: itemCount > 0
         ? Math.ceil(itemCount / Math.max(1, rowCount)) : 0
-    implicitWidth: itemCount > 0
-        ? columnCount * itemSize + (columnCount - 1) * iconSpacing : 0
+    implicitWidth: rowCount === 1
+        ? singleRowImplicitWidth
+        : (itemCount > 0
+            ? columnCount * itemSize + (columnCount - 1) * iconSpacing : 0)
     implicitHeight: itemCount > 0 ? rowCount * itemSize : 0
     width: implicitWidth
     height: implicitHeight
@@ -269,8 +308,8 @@ Item {
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
                 visible: isValid
-                x: root.slotOrigin(naturalIndex).x
-                y: root.slotOrigin(naturalIndex).y
+                x: root.slotOriginIn(root.allKeys, naturalIndex).x
+                y: root.slotOriginIn(root.allKeys, naturalIndex).y
                 width: isValid ? root.itemSize : 0
                 height: isValid ? root.itemSize : 0
                 readonly property string tooltip: modelData ? SysTrayIdentityService.friendlyName(modelData) : ""
@@ -459,9 +498,9 @@ Item {
                 scale: isDraggedItem ? 1.08 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-                x: root.slotOrigin(naturalIndex).x
-                y: root.slotOrigin(naturalIndex).y
-                width: root.itemSize
+                x: root.slotOriginIn(root.allKeys, naturalIndex).x
+                y: root.slotOriginIn(root.allKeys, naturalIndex).y
+                width: root.slotWidth(trayKey)
                 height: root.itemSize
 
                 Loader {

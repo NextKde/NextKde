@@ -94,24 +94,43 @@ Item {
         id: networkQuickControl
         Item {
             readonly property alias control: networkStatus
-            NetworkStatus {
-                id: networkStatus
+            // The transfer-rate readout lives inside the network cell, left of
+            // the Wi-Fi glyph, so native tray icons never come between them.
+            // Exposing the overflow lets the grid widen this one cell (single
+            // row only); the integrated Dock keeps its cell uniform because
+            // the readout hides there per the cpuSlot visibility rule.
+            readonly property real cellExtraWidth: networkTraffic.visible
+                ? networkTraffic.implicitWidth + networkCell.spacing : 0
+            Row {
+                id: networkCell
                 anchors.centerIn: parent
-                // The Wi-Fi glyph is a thin arc fan and the battery glyph is
-                // a flat capsule; both read visually smaller than the filled
-                // control-center mark at the same nominal box size, so they
-                // get a bit more room within the shared tray slot.
-                iconSize: systemTray.iconSize + 3
-                dockHosted: root.dockHosted
-                dockEdge: root.dockEdge
-                verticalDock: root.verticalDock
-                sharedPanelOpen: networkPanel.requestedOpen
-                    || bluetoothPanel.requestedOpen || root.controlCenterOpen
-                onPanelToggleRequested: {
-                    bluetoothPanel.close()
-                    if (!networkPanel.requestedOpen)
-                        root.closeControlCenter()
-                    networkPanel.toggle(networkStatus)
+                spacing: 6
+                NetworkStatus {
+                    id: networkStatus
+                    anchors.verticalCenter: parent.verticalCenter
+                    // The Wi-Fi glyph is a thin arc fan and the battery glyph is
+                    // a flat capsule; both read visually smaller than the filled
+                    // control-center mark at the same nominal box size, so they
+                    // get a bit more room within the shared tray slot.
+                    iconSize: systemTray.iconSize + 3
+                    dockHosted: root.dockHosted
+                    dockEdge: root.dockEdge
+                    verticalDock: root.verticalDock
+                    sharedPanelOpen: networkPanel.requestedOpen
+                        || bluetoothPanel.requestedOpen || root.controlCenterOpen
+                    onPanelToggleRequested: {
+                        bluetoothPanel.close()
+                        if (!networkPanel.requestedOpen)
+                            root.closeControlCenter()
+                        networkPanel.toggle(networkStatus)
+                    }
+                }
+                NetworkTraffic {
+                    id: networkTraffic
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !root.dockHosted && NetworkService.available
+                        && NetworkService.deviceState === "connected"
+                    onPanelToggleRequested: networkStatus.panelToggleRequested()
                 }
             }
         }
