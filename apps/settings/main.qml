@@ -5678,16 +5678,15 @@ ApplicationWindow {
                             navSymbol: "⚙"
                             navTint: "#64d2ff"
                         }
-                    }
-                }
 
-                SidebarEntry {
-                    Layout.fillWidth: true
-                    Layout.topMargin: 1
-                    pageIndex: 10
-                    label: "前台调度"
-                    navSymbol: "⏵"
-                    navTint: "#ff9f0a"
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: 10
+                            label: "前台调度"
+                            navSymbol: "⏵"
+                            navTint: "#ff9f0a"
+                        }
+                    }
                 }
 
                 Item {
