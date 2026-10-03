@@ -52,6 +52,17 @@ Current operation groups are:
   `file.open-kde`
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
+- `wallpaper.plasma.proxy` (replace every screen's Plasma wallpaper with a KOS
+  backdrop package whose metadata carries the accent sampled from the Shell's
+  wallpaper, so Plasma keeps painting a matching colour behind it; each
+  screen's pre-takeover plugin and configuration are saved once, when the first
+  takeover records them) and `wallpaper.plasma.restore` (put those wallpapers
+  back per screen; `imagePath` is the fallback for screens the saved set does
+  not cover). Non-image Plasma wallpapers -- Picture of the Day, slideshow,
+  solid colour -- are stored as their plugin plus configuration, not as an
+  image path.
+- `wallpaper.preview.desktop` (KWin show-desktop; payload `{showing}`, result
+  `{previous}`)
 - `depth.generate` (CPU depth inference for an absolute local `imagePath`;
   set `prepareSpatial: true` to request optional scene assets;
   returns `{depthPath,width,height,cached,model,contract}` and, when scene

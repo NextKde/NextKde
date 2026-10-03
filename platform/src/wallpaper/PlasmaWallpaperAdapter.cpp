@@ -1,5 +1,7 @@
 #include "PlasmaWallpaperAdapter.h"
 
+#include <cstddef>
+
 #include <QCryptographicHash>
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -40,61 +42,148 @@ QString backupPath()
         + QStringLiteral("/kos/plasma-wallpaper-backup.json");
 }
 
-QStringList savedImages()
+// One screen's pre-takeover Plasma wallpaper. The takeover replaces every
+// screen with the KOS backdrop, so what has to be put back is whatever plugin
+// the desktop was running -- not only the image plugin. A Picture of the Day,
+// slideshow or solid-colour screen carries no `Image` path at all, and
+// rejecting those screens made the takeover impossible on a desktop that is
+// otherwise perfectly valid.
+struct SavedWallpaper {
+    QString plugin;
+    QVariantMap config;
+};
+
+// Plasma wraps some values in a variant inside the variant the map is made of
+// (its `*Default` keys, for instance), so unwrap until the value is plain.
+// QtDBus aborts the whole process on a value it cannot marshal, and a
+// wallpaper configuration that travelled through a JSON backup can carry one:
+// a null in the file turns into std::nullptr_t. Such keys are dropped rather
+// than allowed to take the daemon down.
+bool isMarshallable(const QVariant &value)
 {
+    if (!value.isValid() || value.isNull())
+        return false;
+    const int id = value.metaType().id();
+    return id != QMetaType::UnknownType
+        && id != QMetaType::fromType<std::nullptr_t>().id();
+}
+
+QVariant unwrapDBusValue(const QVariant &value)
+{
+    QVariant current = value;
+    for (int depth = 0; depth < 4
+            && current.metaType() == QMetaType::fromType<QDBusVariant>(); depth++)
+        current = qvariant_cast<QDBusVariant>(current).variant();
+    return current;
+}
+
+QList<SavedWallpaper> savedWallpapers()
+{
+    QList<SavedWallpaper> saved;
     QFile file(backupPath());
     if (!file.open(QIODevice::ReadOnly))
-        return {};
+        return saved;
     const QJsonDocument document = QJsonDocument::fromJson(file.readAll());
-    QStringList images;
+
+    const QJsonArray screens = document.object()
+        .value(QStringLiteral("screens")).toArray();
+    if (!screens.isEmpty()) {
+        for (const QJsonValue &value : screens) {
+            const QJsonObject entry = value.toObject();
+            QVariantMap config = entry.value(QStringLiteral("config"))
+                .toObject().toVariantMap();
+            for (auto key = config.begin(); key != config.end();) {
+                if (isMarshallable(*key))
+                    ++key;
+                else
+                    key = config.erase(key);
+            }
+            saved.append(SavedWallpaper{
+                entry.value(QStringLiteral("plugin")).toString(), config});
+        }
+        return saved;
+    }
+
+    // Backup files written before the plugin was recorded hold image paths
+    // only, one per screen.
     for (const QJsonValue &value : document.object()
              .value(QStringLiteral("images")).toArray()) {
         const QString image = value.toString();
         if (image.isEmpty())
-            return {};
-        images.append(image);
+            continue;
+        saved.append(SavedWallpaper{QStringLiteral("org.kde.image"),
+            QVariantMap{{QStringLiteral("Image"), image}}});
     }
-    return images;
+    return saved;
 }
 
-bool saveCurrentImages(int screenCount, QString *error)
+bool writeBackup(const QList<SavedWallpaper> &saved, QString *error)
 {
-    if (savedImages().size() >= screenCount)
-        return true;
-    QDBusInterface plasma(QStringLiteral("org.kde.plasmashell"),
-                          QStringLiteral("/PlasmaShell"),
-                          QStringLiteral("org.kde.PlasmaShell"));
-    if (!plasma.isValid()) {
-        *error = QStringLiteral("Plasma 壁纸服务不可用");
-        return false;
-    }
-    QJsonArray images;
-    for (int screen = 0; screen < screenCount; ++screen) {
-        const QDBusReply<QVariantMap> reply = plasma.call(
-            QStringLiteral("wallpaper"), static_cast<quint32>(screen));
-        if (!reply.isValid()) {
-            *error = QStringLiteral("无法读取第 %1 块屏幕的原壁纸").arg(screen);
-            return false;
+    QJsonArray screens;
+    for (const SavedWallpaper &wallpaper : saved) {
+        QJsonObject config;
+        for (auto entry = wallpaper.config.begin();
+                entry != wallpaper.config.end(); ++entry) {
+            // A few Plasma values (the wallpaper colour, for one) arrive as a
+            // QDBusArgument, whose D-Bus struct has no Qt metatype and cannot
+            // survive a JSON round trip. Storing the null that conversion
+            // produces would only abort the daemon when the file is read back,
+            // so those keys are dropped instead.
+            const QJsonValue value = QJsonValue::fromVariant(entry.value());
+            if (!value.isNull() && !value.isUndefined())
+                config.insert(entry.key(), value);
         }
-        QVariant image = reply.value().value(QStringLiteral("Image"));
-        if (image.metaType() == QMetaType::fromType<QDBusVariant>())
-            image = qvariant_cast<QDBusVariant>(image).variant();
-        const QString path = image.toString();
-        if (path.isEmpty()) {
-            *error = QStringLiteral("第 %1 块屏幕没有可恢复的图片壁纸").arg(screen);
-            return false;
-        }
-        images.append(path);
+        screens.append(QJsonObject{
+            {QStringLiteral("plugin"), wallpaper.plugin},
+            {QStringLiteral("config"), config},
+        });
     }
     if (!QDir().mkpath(QFileInfo(backupPath()).absolutePath())) {
         *error = QStringLiteral("无法保存 Plasma 原壁纸");
         return false;
     }
     return writeFile(backupPath(), QJsonDocument(QJsonObject{
-        {QStringLiteral("images"), images}}).toJson(), error);
+        {QStringLiteral("screens"), screens}}).toJson(), error);
 }
 
-bool setPlasmaWallpaper(const QString &image, int screenCount, QString *error)
+bool saveCurrentWallpapers(int screenCount, QString *error)
+{
+    QList<SavedWallpaper> saved = savedWallpapers();
+    if (saved.size() >= screenCount)
+        return true;
+
+    QDBusInterface plasma(QStringLiteral("org.kde.plasmashell"),
+                          QStringLiteral("/PlasmaShell"),
+                          QStringLiteral("org.kde.PlasmaShell"));
+    if (!plasma.isValid()) {
+        *error = QStringLiteral("Plasma 壁纸服务不可用");
+        return false;
+    }
+    // Only the screens the backup does not cover yet are read back: re-entering
+    // the takeover after a screen was added must not record the KOS backdrop
+    // that is on screen at that moment as the wallpaper to restore.
+    for (int screen = saved.size(); screen < screenCount; ++screen) {
+        const QDBusReply<QVariantMap> reply = plasma.call(
+            QStringLiteral("wallpaper"), static_cast<quint32>(screen));
+        if (!reply.isValid()) {
+            *error = QStringLiteral("无法读取第 %1 块屏幕的原壁纸").arg(screen);
+            return false;
+        }
+        // The reply is the plugin's live configuration plus the defaults its
+        // editor knows. Replaying all of it restores the same wallpaper
+        // without guessing which keys a plugin needs.
+        QVariantMap config = reply.value();
+        const QString plugin = unwrapDBusValue(
+            config.take(QStringLiteral("wallpaperPlugin"))).toString();
+        for (auto entry = config.begin(); entry != config.end(); ++entry)
+            *entry = unwrapDBusValue(*entry);
+        saved.append(SavedWallpaper{plugin, config});
+    }
+    return writeBackup(saved, error);
+}
+
+bool setPlasmaWallpaper(const QString &plugin, const QVariantMap &parameters,
+                        int screenCount, QString *error)
 {
     QDBusInterface plasma(QStringLiteral("org.kde.plasmashell"),
                           QStringLiteral("/PlasmaShell"),
@@ -103,11 +192,10 @@ bool setPlasmaWallpaper(const QString &image, int screenCount, QString *error)
         *error = QStringLiteral("Plasma 壁纸服务不可用");
         return false;
     }
-    const QVariantMap options{{QStringLiteral("Image"), image}};
     for (int screen = 0; screen < screenCount; ++screen) {
         const QDBusReply<void> reply = plasma.call(
-            QStringLiteral("setWallpaper"), QStringLiteral("org.kde.image"),
-            options, static_cast<quint32>(screen));
+            QStringLiteral("setWallpaper"), plugin, parameters,
+            static_cast<quint32>(screen));
         if (!reply.isValid()) {
             *error = QStringLiteral("Plasma 未接受第 %1 块屏幕的壁纸：%2")
                 .arg(screen).arg(reply.error().message());
@@ -162,9 +250,10 @@ bool PlasmaWallpaperAdapter::applyProxy(const QString &accent, bool dark,
     if (!writeFile(path + QStringLiteral("/metadata.json"),
                    QJsonDocument(metadata).toJson(), error))
         return false;
-    if (!saveCurrentImages(screenCount, error))
+    if (!saveCurrentWallpapers(screenCount, error))
         return false;
-    if (setPlasmaWallpaper(path, screenCount, error))
+    if (setPlasmaWallpaper(QStringLiteral("org.kde.image"),
+            QVariantMap{{QStringLiteral("Image"), path}}, screenCount, error))
         return true;
     const QString applyError = *error;
     QString restoreError;
@@ -181,32 +270,45 @@ bool PlasmaWallpaperAdapter::restoreImage(const QString &imagePath,
         *error = QStringLiteral("原壁纸不可用");
         return false;
     }
-    const QStringList images = savedImages();
-    if (images.size() < screenCount) {
-        if (!QFileInfo::exists(imagePath)) {
-            *error = QStringLiteral("原壁纸不可用");
+    const QList<SavedWallpaper> saved = savedWallpapers();
+    const bool haveFallback = QFileInfo::exists(imagePath);
+    if (saved.isEmpty() && !haveFallback) {
+        *error = QStringLiteral("原壁纸不可用");
+        return false;
+    }
+    QDBusInterface plasma(QStringLiteral("org.kde.plasmashell"),
+                          QStringLiteral("/PlasmaShell"),
+                          QStringLiteral("org.kde.PlasmaShell"));
+    if (!plasma.isValid()) {
+        *error = QStringLiteral("Plasma 壁纸服务不可用");
+        return false;
+    }
+    // Screens the backup covers get their own plugin and configuration back;
+    // anything past it falls back to the image the Shell is displaying.
+    for (int screen = 0; screen < screenCount; ++screen) {
+        QString plugin;
+        QVariantMap parameters;
+        if (screen < saved.size()
+                && (!saved.at(screen).plugin.isEmpty()
+                    || !saved.at(screen).config.isEmpty())) {
+            plugin = saved.at(screen).plugin;
+            parameters = saved.at(screen).config;
+            if (plugin.isEmpty())
+                plugin = QStringLiteral("org.kde.image");
+        } else if (haveFallback) {
+            plugin = QStringLiteral("org.kde.image");
+            parameters = QVariantMap{{QStringLiteral("Image"), imagePath}};
+        } else {
+            *error = QStringLiteral("第 %1 块屏幕的原壁纸不可用").arg(screen);
             return false;
         }
-        if (!setPlasmaWallpaper(imagePath, screenCount, error))
+        const QDBusReply<void> reply = plasma.call(
+            QStringLiteral("setWallpaper"), plugin, parameters,
+            static_cast<quint32>(screen));
+        if (!reply.isValid()) {
+            *error = QStringLiteral("恢复第 %1 块屏幕失败：%2")
+                .arg(screen).arg(reply.error().message());
             return false;
-    } else {
-        QDBusInterface plasma(QStringLiteral("org.kde.plasmashell"),
-                              QStringLiteral("/PlasmaShell"),
-                              QStringLiteral("org.kde.PlasmaShell"));
-        if (!plasma.isValid()) {
-            *error = QStringLiteral("Plasma 壁纸服务不可用");
-            return false;
-        }
-        for (int screen = 0; screen < screenCount; ++screen) {
-            const QVariantMap options{{QStringLiteral("Image"), images.at(screen)}};
-            const QDBusReply<void> reply = plasma.call(
-                QStringLiteral("setWallpaper"), QStringLiteral("org.kde.image"),
-                options, static_cast<quint32>(screen));
-            if (!reply.isValid()) {
-                *error = QStringLiteral("恢复第 %1 块屏幕失败：%2")
-                    .arg(screen).arg(reply.error().message());
-                return false;
-            }
         }
     }
     QFile::remove(backupPath());
