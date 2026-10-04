@@ -360,7 +360,7 @@ assert.match(activation, /XDG_ACTIVATION_TOKEN[\s\S]*setCurrentXdgActivationToke
 assert.match(activation, /AcquireResult::Error/,
     "a failed single-instance hand-off is not reported as a successful launch");
 
-const glassEffect = read("../../vendor/kwin-effects-glass/src/blur.cpp");
+const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
 assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
     "explicit application and decoration blur bypass force-blur filtering");
 assert.match(glassEffect,

@@ -8,7 +8,7 @@
 // operation that has crashed KWin before, which is why kosctl's
 // reload_kwin_effects() is deliberately called by no command.
 //
-//   cmake -S integrations/kwin/kos-bridge -B build -DKOS_BRIDGE_BUILD_PREVIEW=ON
+//   cmake -S kwin/kos-bridge -B build -DKOS_BRIDGE_BUILD_PREVIEW=ON
 //   cmake --build build --target glyph_preview
 //   QT_QPA_PLATFORM=offscreen build/glyph_preview panel.png
 //

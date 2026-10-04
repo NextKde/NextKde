@@ -87,7 +87,7 @@ ApplicationWindow {
         // 窗口底色 + 左侧栏 = 同一块平面，右侧内容区是它上面一块圆角面板。
         // 底色**必须**是 #eff0f1，等于 BreezeLight 的 Window/BackgroundNormal(239,240,241)：
         // 窗口装饰 kos_decoration 的标题栏取的就是 client->palette().color(QPalette::Window)
-        // （integrations/kwin/kos-decoration/kosdecoration.cpp:157），两边同色标题栏才和
+        // （kwin/kos-decoration/kosdecoration.cpp:157），两边同色标题栏才和
         // 内容连成一块无缝的面。**永远不要动这个值**（2026-09-28 改过一次，标题栏立刻裂出色差）。
         //   右侧面板 = #e3e5e7，即 Breeze 同组的 Window/BackgroundAlternate(227,229,231)
         // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。

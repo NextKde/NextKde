@@ -1201,7 +1201,7 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
     // cannot follow the deformation; the animation therefore fades the glass
     // material out and back in through a data role instead of leaving a frozen
     // blurred strip behind (or switching the blur back on in one step).
-    // The role is written by integrations/kwin/dock-window-animation.
+    // The role is written by kwin/dock-window-animation.
 
     if (w->isDesktop()) {
         return false;
@@ -1934,7 +1934,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     // KOS: fade the whole glass material for a window that the Dock animation
     // is driving. Unset means a fully opaque material, so nothing changes for
     // every other window. The value is written by
-    // integrations/kwin/dock-window-animation; both sides must keep the role
+    // kwin/dock-window-animation; both sides must keep the role
     // value in sync.
     static constexpr int KosDockAnimationGlassFadeRole = 0x4b4f5342; // "KOSB"
     const QVariant glassFade = w->data(KosDockAnimationGlassFadeRole);

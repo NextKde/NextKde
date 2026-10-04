@@ -403,7 +403,7 @@ the panel is.
 
 - Windows KWin decorates itself are handled too — the panel is the same panel,
   drawn by this effect in both cases, and the decoration
-  (`integrations/kwin/kos-decoration/`) draws a frame and no buttons. There is
+  (`kwin/kos-decoration/`) draws a frame and no buttons. There is
   no way around the decoration for the task switcher, the resize grips and the
   shadow to come from KWin; the effect is what draws the controls over it.
 - Only the macOS traffic-light look is implemented.

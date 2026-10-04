@@ -30,7 +30,7 @@ namespace
 constexpr auto dbusPath = "/KOSDockWindowAnimation";
 
 // Fades the glass material of a window this effect is animating. The vendored
-// glass effect (see vendor/kwin-effects-glass/src/blur.cpp) blurs the backdrop
+// glass effect (see kwin/glass-effect/src/blur.cpp) blurs the backdrop
 // where the window's frame is, and that region cannot follow the deformation
 // this effect applies. Fading the material out while the window is clearly
 // moving and back in while it is coming home keeps a blurred copy of the title
