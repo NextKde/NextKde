@@ -406,7 +406,7 @@ function bandFromSlope(centreX, centreY, directionX, directionY, halfWidth,
     //     effect is present. The whole point of matching the family is that
     //     both edges describe one outline.
     const compositor = new URL(
-        "../../../../vendor/kwin-effects-glass/src/shaders/onscreen_rounded.glsl",
+        "../../../../kwin/glass-effect/src/shaders/onscreen_rounded.glsl",
         import.meta.url);
     try {
         const compositorSource = readFileSync(compositor, "utf8")

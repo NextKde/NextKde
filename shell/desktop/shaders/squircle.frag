@@ -18,7 +18,7 @@ layout(std140, binding = 0) uniform buf {
 
 // GPU mirror of squircleDistance() / squircleGradient() in
 // ../../modules/common/Squircle.mjs. Keep both in sync: this mask and the
-// compositor's glass mask (vendor/kwin-effects-glass) have to evaluate the same
+// compositor's glass mask (kwin/glass-effect) have to evaluate the same
 // family, otherwise the content edge and the glass edge split around 45
 // degrees -- far more visible than either edge alone.
 //

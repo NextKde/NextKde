@@ -2,7 +2,7 @@ pragma Singleton
 import QtQuick
 
 // QML boundary for local depth and optional spatial assets. Transport, model
-// downloads, hashing and CPU work remain owned by kos-platform / liquid-ai.
+// downloads, hashing and CPU work remain owned by kos-platform / services/ai.
 QtObject {
     id: root
 

@@ -1,0 +1,26 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "KWin development team"
+            },
+            {
+                "Name": "taj_ny"
+            },
+            {
+                "Name": "DaddelZeit"
+            },
+            {
+                "Name": "iGerman00"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Glass effect with refraction, blur and more",
+        "Description[fr]": "Effet de verre avec réfraction, flou et plus",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "Glass",
+        "Name[fr]": "Verre"
+    },
+    "X-KDE-ConfigModule": "kwin_glass_config"
+}

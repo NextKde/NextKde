@@ -12,7 +12,7 @@ qt_add_executable(kos-settings
     src/CacheMaintenance.cpp
 )
 target_include_directories(kos-settings PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../liquid-ai/include)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
 
 target_link_libraries(kos-settings PRIVATE
     Qt6::Core

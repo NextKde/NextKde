@@ -1,0 +1,15 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "fg-sched"
+            }
+        ],
+        "Category": "Window Management",
+        "Description": "Minimize animation toward a configurable target rect (Stage sidebar / dock)",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "stageanim13",
+        "Version": "1.0"
+    }
+}

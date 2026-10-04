@@ -17,7 +17,7 @@ option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
 option(KOS_BUILD_MUSIC "Build the Music application" OFF)
-# The depth engine (liquid-ai) needs OpenCV and the ONNX Runtime, and the 3D
+# The depth engine (kos-ai) needs OpenCV and the ONNX Runtime, and the 3D
 # wallpaper plugin needs Qt Quick 3D. KOS_BUILD_SPATIAL decides whether they are
 # built; the resolution below turns it into KOS_SPATIAL_ENABLED, which both this
 # file and platform/CMakeLists.txt read:
@@ -33,7 +33,7 @@ set_property(CACHE KOS_BUILD_SPATIAL PROPERTY STRINGS AUTO ON OFF)
 
 set(KOS_SPATIAL_ENABLED FALSE)
 if(KOS_BUILD_SPATIAL STREQUAL "ON")
-    # The REQUIRED find_package calls in liquid-ai/CMakeLists.txt are the loud
+    # The REQUIRED find_package calls in services/ai/CMakeLists.txt are the loud
     # failure for this mode; nothing is probed here.
     set(KOS_SPATIAL_ENABLED TRUE)
 elseif(KOS_BUILD_SPATIAL STREQUAL "AUTO" OR KOS_BUILD_SPATIAL STREQUAL "TRUE"
@@ -635,7 +635,7 @@ endif()
 
 # The shell imports this QML module even without compositor effects.
 if(KOS_BUILD_PLATFORM OR KOS_BUILD_KWIN_PLUGINS)
-    add_subdirectory(integrations/quickshell/surface-shape)
+    add_subdirectory(qml-plugins/surface-shape)
 endif()
 
 if(KOS_BUILD_KWIN_PLUGINS)
@@ -643,7 +643,7 @@ if(KOS_BUILD_KWIN_PLUGINS)
     add_subdirectory(integrations/kwin/context-menu-input)
     add_subdirectory(integrations/kwin/kos-bridge)
     add_subdirectory(integrations/kwin/kos-decoration)
-    add_subdirectory(vendor/kwin-effects-stageanim)
+    add_subdirectory(kwin/kwin-effects-stageanim)
 endif()
 
 # The spatial wallpaper mesh is an optional QML extension, built only when the
@@ -652,7 +652,7 @@ endif()
 if(KOS_BUILD_PLATFORM AND KOS_SPATIAL_ENABLED)
     find_package(Qt6 QUIET COMPONENTS Quick3D)
     if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
-        add_subdirectory(integrations/quickshell/spatial3d)
+        add_subdirectory(qml-plugins/spatial3d)
     else()
         message(STATUS "Qt Quick 3D not found; spatial mesh renderer disabled")
     endif()

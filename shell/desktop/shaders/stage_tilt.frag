@@ -8,7 +8,7 @@
 // 享同一台相机**（竖轴 = 内容列中心线，地平线 = 滚动视口垂直中心）——
 // 整列卡片读作一面朝同一方向微转的 3D 墙，灭点唯一。
 //
-// 正交约定与 vendor/kwin-effects-stageanim 一致：depth = −u·sinR（正角
+// 正交约定与 kwin/kwin-effects-stageanim 一致：depth = −u·sinR（正角
 // = 左缘近大，Qt Y 轴朝下）。焦距用 TILT_FOCAL（stage-geometry.mjs，
 // 2200）：比特效的 900 温和——侧栏整列共享透视时，大焦距避免远离地平
 // 线的卡被广角式放大/缩小（45° 倾角下 k 偏差仍 <4%）。

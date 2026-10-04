@@ -358,7 +358,7 @@ find_lib_onnxruntime() {
 # cache asset. A Nix build gets onnxruntime from its declared package instead.
 # Resolves ort_include/ort_library. x86_64 keeps the pinned SDK for a
 # deterministic CPU runtime across machines; other architectures fall back to
-# the distro's onnxruntime development package, which the liquid-ai API
+# the distro's onnxruntime development package, which the kos-ai API
 # surface (basic Ort API) builds against just as well.
 ensure_onnxruntime_paths() {
     if [[ "$(uname -m)" != "x86_64" ]]; then
@@ -503,8 +503,8 @@ filter_vendored_warnings() {
 build_kwin_glass() {
     local build_type=${KOS_BUILD_TYPE:-Release}
     prepare_cmake_build_dir "$glass_build_dir" \
-        "$project_dir/vendor/kwin-effects-glass"
-    configure_if_needed "$project_dir/vendor/kwin-effects-glass" \
+        "$project_dir/kwin/glass-effect"
+    configure_if_needed "$project_dir/kwin/glass-effect" \
         "$glass_build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_INSTALL_PREFIX="$kwin_system_prefix" \

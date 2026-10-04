@@ -1,0 +1,181 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kwin-effects-glass\n"
+"PO-Revision-Date: 2026-07-29 00:00+0800\n"
+"Last-Translator: Quickshell configuration\n"
+"Language-Team: Chinese\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "Glass"
+msgstr "液态玻璃"
+
+msgid "General"
+msgstr "常规"
+
+msgid "Content blur"
+msgstr "内容模糊"
+
+msgid "Blur"
+msgstr "模糊"
+
+msgid "Light"
+msgstr "弱"
+
+msgid "Strong"
+msgstr "强"
+
+msgid "Noise"
+msgstr "噪点"
+
+msgid "Decorations blur"
+msgstr "窗口装饰模糊"
+
+msgid "Docks blur"
+msgstr "Dock 模糊"
+
+msgid "Brightness"
+msgstr "亮度"
+
+msgid "Saturation"
+msgstr "饱和度"
+
+msgid "Contrast"
+msgstr "对比度"
+
+msgid "Tint color"
+msgstr "着色颜色"
+
+msgid "Enter a color in #AARRGGBB format. The A (alpha) channel sets tint strength."
+msgstr "请输入 #AARRGGBB 格式的颜色；A（透明度）决定着色强度。"
+
+msgid "Automatically adjust tint strength"
+msgstr "自动调整着色强度"
+
+msgid "Scales tint strength by comparing the average background color with the text color."
+msgstr "根据背景平均色与文字颜色的差异调整着色强度。"
+
+msgid "Glow color"
+msgstr "边缘光颜色"
+
+msgid "Enter a color in #AARRGGBB format. The A (alpha) channel sets glow strength."
+msgstr "请输入 #AARRGGBB 格式的颜色；A（透明度）决定边缘光强度。"
+
+msgid "Make the window edges brighter"
+msgstr "提亮窗口边缘"
+
+msgid "Don't apply tint to docks"
+msgstr "不对 Dock 着色"
+
+msgid "Don't apply tint to decorations"
+msgstr "不对窗口装饰着色"
+
+msgid "Don't apply tint to tooltips"
+msgstr "不对工具提示着色"
+
+msgid "Don't apply brighter to dock"
+msgstr "不提亮 Dock 边缘"
+
+msgid "Don't apply brighter to tooltip"
+msgstr "不提亮工具提示边缘"
+
+msgid "Force blur"
+msgstr "模糊作用范围"
+
+msgid "Classes of windows to force blur:"
+msgstr "要强制应用模糊的窗口类："
+
+msgid "Blur only matching"
+msgstr "仅模糊匹配项"
+
+msgid "Blur all except matching"
+msgstr "模糊除匹配项外的所有窗口"
+
+msgid "Apply effects to window decorations as well"
+msgstr "也对窗口装饰应用效果"
+
+msgid "Blur menus"
+msgstr "模糊菜单"
+
+msgid "Blur docks"
+msgstr "模糊 Dock"
+
+msgid "Refraction"
+msgstr "折射"
+
+msgid "Refraction does not work when using static blur."
+msgstr "静态模糊模式下折射不会生效。"
+
+msgid "Refraction Strength:"
+msgstr "折射强度："
+
+msgid "Off"
+msgstr "关闭"
+
+msgid "Refraction Edge Size:"
+msgstr "折射边缘宽度："
+
+msgid "Small"
+msgstr "窄"
+
+msgid "Wide"
+msgstr "宽"
+
+msgid "Refraction Falloff:"
+msgstr "折射衰减："
+
+msgid "Linear"
+msgstr "线性"
+
+msgid "Round"
+msgstr "圆润"
+
+msgid "RGB Fringing Strength:"
+msgstr "RGB 色散强度："
+
+msgid "Rounded corners"
+msgstr "圆角"
+
+msgid "The corner radius only applies to the blur region."
+msgstr "圆角半径仅作用于模糊区域。"
+
+msgid "Menu corner radius"
+msgstr "菜单圆角半径"
+
+msgid "Dock corner radius"
+msgstr "Dock 圆角半径"
+
+msgid "Use declared corner radius"
+msgstr "使用客户端声明的圆角"
+
+msgid "Ignore content blur region"
+msgstr "忽略内容模糊区域"
+
+msgid "Dynamic corner radius"
+msgstr "动态圆角"
+
+msgid "Exclude docks"
+msgstr "排除 Dock"
+
+msgid "Exclude tooltips"
+msgstr "排除工具提示"
+
+msgid "Exclude menus"
+msgstr "排除菜单"
+
+msgid "About"
+msgstr "关于"
+
+msgid "Failed to load about.html"
+msgstr "无法加载 about.html"
+
+msgid "Only apply to Quickshell"
+msgstr "仅对 Quickshell 生效"
+
+msgid "Recommended for Quickshell: preserves its own rounded surfaces and prevents Glass from changing other applications."
+msgstr "推荐用于 Quickshell：保留其自身圆角表面，并避免 Glass 修改其它应用。"
+
+msgid "<p>Specify one window class per line.</p><p>Use <code>$blank</code> to match empty window classes.<br/>Use <code>$$</code> for literal dollar sign.</p>"
+msgstr "<p>每行填写一个窗口类。</p><p>使用 <code>$blank</code> 匹配空窗口类；<br/>使用 <code>$$</code> 表示字面量美元符号。</p>"

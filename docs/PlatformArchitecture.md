@@ -71,7 +71,7 @@ for a surface declaring nothing feeds the SDF KWin's own window radius -- the
 same value the ordinary-window path has always used -- so there is one source of
 rounding rather than one source plus an inference.
 
-`integrations/quickshell/surface-shape/kos-surface-shape-v1.xml` is a project-local protocol that carries the
+`qml-plugins/surface-shape/kos-surface-shape-v1.xml` is a project-local protocol that carries the
 missing fields. It is deliberately not a Quickshell fork:
 
 ```text
@@ -99,9 +99,9 @@ case open. Three pieces implement it and all three build from this repository:
 
 | Piece | Path | Role |
 | --- | --- | --- |
-| Protocol | `integrations/quickshell/surface-shape/kos-surface-shape-v1.xml` | Shared wire definition. |
-| Client | `integrations/quickshell/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
-| Server | `vendor/kwin-effects-glass/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
+| Protocol | `qml-plugins/surface-shape/kos-surface-shape-v1.xml` | Shared wire definition. |
+| Client | `qml-plugins/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
+| Server | `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
 
 `LiquidGlassPanel` owns the only declaration today; one is created per panel, so
 each popup's shape objects are independent. Where a surface declares shapes the
