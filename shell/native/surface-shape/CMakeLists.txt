@@ -23,8 +23,17 @@ find_package(WaylandScanner REQUIRED)
 find_package(Wayland REQUIRED COMPONENTS Client)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui GuiPrivate Qml Quick WaylandClient)
 
-set(KOS_SURFACE_PROTOCOL_FILE "${CMAKE_CURRENT_SOURCE_DIR}/kos-surface-shape-v1.xml"
-    CACHE FILEPATH "Surface shape Wayland protocol")
+# Nix and standalone builds may point this at an out-of-tree protocol file.
+# A cache value left by an older source layout can pin a path that no longer
+# exists (the variable is not FORCE-set, so a plain reconfigure keeps it), and
+# ecm_add_wayland_client_protocol would then fail the build with a bare
+# "missing and no known rule" ninja error. Self-heal: when the cached file is
+# gone, drop the entry and fall back to the in-tree copy.
+if(NOT KOS_SURFACE_PROTOCOL_FILE OR NOT EXISTS "${KOS_SURFACE_PROTOCOL_FILE}")
+    unset(KOS_SURFACE_PROTOCOL_FILE CACHE)
+    set(KOS_SURFACE_PROTOCOL_FILE "${CMAKE_CURRENT_SOURCE_DIR}/kos-surface-shape-v1.xml"
+        CACHE FILEPATH "Surface shape Wayland protocol")
+endif()
 set(protocol_sources)
 ecm_add_wayland_client_protocol(protocol_sources
     PROTOCOL "${KOS_SURFACE_PROTOCOL_FILE}"
