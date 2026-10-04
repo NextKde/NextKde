@@ -258,7 +258,12 @@ Item {
         customMarginsTop: 0
         macosPopupMotion: true
         globalDismissGraceMs: 250
-        dismissOnGlobalPointerPress: false
+        // An outside press anywhere on the output closes the app menu, the same
+        // contract as every other ContextMenu. This used to be opted out with
+        // `dismissOnGlobalPointerPress: false`, which meant the menu survived a
+        // click on the desktop or a window. The grace period above covers the
+        // race with the press that opened this menu.
+        dismissOnGlobalPointerPress: true
         onAction: function(cmd, item) {
             console.info("[GlobalMenu] trigger id=" + item.id)
             PlatformClient.request("appmenu.trigger", { service: root.service, path: root.path, id: item.id }, function(response) {
