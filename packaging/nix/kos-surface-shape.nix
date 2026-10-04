@@ -8,7 +8,6 @@ stdenv.mkDerivation {
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_INSTALL_LIBDIR=lib"
-    "-DKOS_SURFACE_PROTOCOL_FILE=${src}/shell/native/surface-shape/kos-surface-shape-v1.xml"
   ];
   dontWrapQtApps = true;
   meta = {

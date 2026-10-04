@@ -23,17 +23,13 @@ find_package(WaylandScanner REQUIRED)
 find_package(Wayland REQUIRED COMPONENTS Client)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui GuiPrivate Qml Quick WaylandClient)
 
-# Nix and standalone builds may point this at an out-of-tree protocol file.
-# A cache value left by an older source layout can pin a path that no longer
-# exists (the variable is not FORCE-set, so a plain reconfigure keeps it), and
-# ecm_add_wayland_client_protocol would then fail the build with a bare
-# "missing and no known rule" ninja error. Self-heal: when the cached file is
-# gone, drop the entry and fall back to the in-tree copy.
-if(NOT KOS_SURFACE_PROTOCOL_FILE OR NOT EXISTS "${KOS_SURFACE_PROTOCOL_FILE}")
-    unset(KOS_SURFACE_PROTOCOL_FILE CACHE)
-    set(KOS_SURFACE_PROTOCOL_FILE "${CMAKE_CURRENT_SOURCE_DIR}/kos-surface-shape-v1.xml"
-        CACHE FILEPATH "Surface shape Wayland protocol")
-endif()
+# Deliberately a plain variable, not CACHE: a cache entry outlives source
+# layout changes (a build tree configured before a move keeps the old absolute
+# path, and a non-FORCE cache set never corrects it, so reconfigure fails with
+# a bare ninja "missing and no known rule" error). Nothing overrides this path
+# -- the nix build used to pass -D with the identical file -- so the override
+# knob was removed rather than guarded.
+set(KOS_SURFACE_PROTOCOL_FILE "${CMAKE_CURRENT_SOURCE_DIR}/kos-surface-shape-v1.xml")
 set(protocol_sources)
 ecm_add_wayland_client_protocol(protocol_sources
     PROTOCOL "${KOS_SURFACE_PROTOCOL_FILE}"
