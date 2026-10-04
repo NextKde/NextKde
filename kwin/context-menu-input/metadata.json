@@ -1,0 +1,9 @@
+{
+    "KPlugin": {
+        "Name": "Quickshell Context Menu Input",
+        "Description": "Compositor-level outside-click dismissal for Quickshell context menus",
+        "Category": "Accessibility",
+        "License": "MIT",
+        "EnabledByDefault": false
+    }
+}

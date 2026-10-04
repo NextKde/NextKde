@@ -17,7 +17,7 @@ NextKde/
 ├── services/data-service/    Go metrics/history/desktop service
 ├── platform/                 kos-platform C++/Qt daemon
 ├── services/ai/              portable C++ local inference library
-├── integrations/kwin/        project-owned KWin plugins
+├── kwin/        project-owned KWin plugins
 ├── kwin/glass-effect/ third-party KWin effect
 ├── packaging/                systemd and desktop files
 ├── tools/kosctl               lifecycle entry point
@@ -191,7 +191,7 @@ about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
 `.build/tests/services/data-service/go-test-cache`, which is the directory the
 ctest entry point actually uses.
 
-The four KWin plugins under `integrations/kwin` and
+The four KWin plugins under `kwin` and
 `qml-plugins/surface-shape` are built by a **separate CI job** that
 only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
 deliberately narrower than "the plugins work": loading them needs a running

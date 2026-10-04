@@ -367,7 +367,7 @@ Quickshell Shell ──► kos-platform ──► KWin / network / audio / Bluet
 - `shell/`: UI code.
 - `platform/`: system adapters for KWin, networking, audio, and brightness.
 - `services/data-service/`: system metrics, history, desktop data, and weather cache.
-- `integrations/kwin/`: KWin plugins; `kwin/glass-effect/`: third-party Glass source.
+- `kwin/`: KWin plugins; `kwin/glass-effect/`: third-party Glass source.
 
 See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
 

@@ -367,7 +367,7 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 - `shell/`：界面代码。
 - `platform/`：KWin、网络、音频、亮度等系统接口。
 - `services/data-service/`：系统指标、历史、桌面数据与共享天气缓存。
-- `integrations/kwin/`：KWin 插件；`kwin/glass-effect/`：第三方 Glass 特效源码。
+- `kwin/`：KWin 插件；`kwin/glass-effect/`：第三方 Glass 特效源码。
 
 更详细的说明见 [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md)。
 

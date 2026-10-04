@@ -17,9 +17,9 @@ kos-platform ── argv ───► nmcli, wpctl, bluetoothctl, loginctl, gio,
 
 The KWin script is installed as data and loaded by the daemon. Its private
 session-D-Bus object is `org.kos.Platform` at `/Platform`; Shell never calls
-that object directly. KWin effects under `integrations/kwin/` remain separate
+that object directly. KWin effects under `kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
-`integrations/kwin/kos-decoration` is a KDecoration3 plugin rather
+`kwin/kos-decoration` is a KDecoration3 plugin rather
 than an effect: it installs to the `org.kde.kdecoration3` plugin directory.
 `kosctl install` installs it with the effects and never writes the selection:
 choosing it is the user's, through `[org.kde.kdecoration2] library` in
@@ -164,7 +164,7 @@ Three properties of this arrangement are load-bearing:
 
 > **Packaging status.** The module is currently built and installed through
 > `KOS_BUILD_KWIN_PLUGINS` / the `kwin_plugins` install component, even though it
-> has no KWin dependency. Consequences today: `nix/package.nix` copies `shell/`
+> has no KWin dependency. Consequences today: `packaging/nix/package.nix` copies `shell/`
 > and `shared/` only, so the NixOS package ships no module at all and
 > `import Kos.SurfaceShape 1.0` fails there; and a user-only install
 > (`KOS_BUILD_KWIN_PLUGINS=OFF`) skips it as well. Both break the whole `common`

@@ -128,7 +128,7 @@ and compositing path.
 
 ## Build runtime
 
-Nix builds use OpenCV and ONNX Runtime from `nix/kos-platform.nix`. On Arch,
+Nix builds use OpenCV and ONNX Runtime from `packaging/nix/kos-platform.nix`. On Arch,
 `kosctl build` installs OpenCV when needed and fetches the official ONNX Runtime
 Linux x64 1.30.0 C++ SDK into the ignored build directory. The SDK archive is
 SHA256-checked and its CPU shared libraries are installed beside

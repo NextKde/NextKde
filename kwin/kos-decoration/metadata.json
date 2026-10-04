@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "dumingqiao@outlook.com",
+                "Name": "KOS"
+            }
+        ],
+        "Description": "Thin KOS window frame: a title bar with a centred caption, invisible resize borders, and natively rounded window corners.",
+        "Description[zh_CN]": "KOS 的薄窗框：带居中标题文字的标题栏、不可见的缩放边框，以及由 KWin 原生裁剪的四角圆角。",
+        "Id": "kos_decoration",
+        "License": "MIT",
+        "Name": "KOS",
+        "Name[zh_CN]": "KOS",
+        "Version": "1.0"
+    },
+    "org.kde.kdecoration3": {
+        "recommendedBorderSize": "None"
+    }
+}

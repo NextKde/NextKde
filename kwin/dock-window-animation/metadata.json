@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Name": "KOS Dock Window Animation",
+        "Description": "Internal iPadOS-style window animation for KOS",
+        "Category": "Window Open/Close Animation",
+        "License": "MIT",
+        "EnabledByDefault": false
+    },
+    "X-KWin-Internal": "true"
+}
