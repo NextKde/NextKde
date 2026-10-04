@@ -74,17 +74,15 @@ try {
     await run(0);
     assert.ok([...saved.values()].some((data) => {
         const value = JSON.parse(data);
-        return value.showLauncher === false && value.showTrash === false
-            && value.revealTriggerMode === "dockSpan";
-    }), "visibility booleans and the selected trigger mode must be serialized");
+        return value.showLauncher === false && value.showTrash === false;
+    }), "visibility booleans must be serialized");
     await run(1);
     assert.ok([...saved.values()].some((data) => {
         const value = JSON.parse(data);
-        return value.showLauncher === true && value.showTrash === true
-            && value.revealTriggerMode === "fullEdge";
+        return value.showLauncher === true && value.showTrash === true;
     }), "restoring defaults must also persist");
     await run(2);
-    console.log("Dock built-ins and reveal trigger: defaults, validation, independent toggles, persistence and restart passed");
+    console.log("Dock built-ins: defaults, validation, independent toggles, persistence and restart passed");
 } finally {
     server.close();
     rmSync(directory, { recursive: true, force: true });

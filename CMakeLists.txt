@@ -204,6 +204,11 @@ if(BUILD_TESTING)
 
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-shell.dock-surface
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-surface/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-surface PROPERTIES LABELS ui TIMEOUT 10)
             add_test(NAME kos-shell.dock-reveal-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/run.mjs

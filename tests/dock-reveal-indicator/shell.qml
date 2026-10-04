@@ -30,6 +30,8 @@ Item {
             const hit = handle.hitTarget
             const geometry = [hit.x, hit.y, hit.width, hit.height].join(":")
             check(handle.visualBar.visible, "indicator defaults visible at " + edge)
+            check(edge === "bottom" ? handle.visualBar.width === 400 : handle.visualBar.height === 300,
+                "indicator length is 50% of the screen edge at " + edge)
             check(hit.enabled && hit.width > 0 && hit.height > 0, "edge target is active")
             ConfigService.updateRevealIndicatorVisibility(false)
             check(!handle.visualBar.visible && !handle.visualPill.visible,

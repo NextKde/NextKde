@@ -57,16 +57,18 @@ PanelWindow {
     property bool clockInInfoCarousel: false
     readonly property bool vertical: root.position === "left"
         || root.position === "right"
+    readonly property real dockThickness: root.vertical
+        ? dockContainer.width : dockContainer.height
     // A floating Dock breathes by a proportion of its own thickness, so a
     // 100pt Dock does not retain the cramped inset intended for a 40pt one.
     // Taskbar presentation is a true edge fill and therefore has no inset.
     readonly property int edgeMargin: ConfigService.dockStyle === "taskbar"
-        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
+        ? 0 : Math.max(4, Math.round(root.dockThickness * 0.12))
     // Keep the opposite edge airy as well: maximised windows stop before the
     // floating glass instead of touching its top/inner edge. This follows the
     // Dock thickness just like edgeMargin, while a taskbar remains flush.
     readonly property int workspaceMargin: ConfigService.dockStyle === "taskbar"
-        ? 0 : Math.max(4, Math.round(dockContainer.height * 0.12))
+        ? 0 : Math.max(4, Math.round(root.dockThickness * 0.12))
     // Wayland does not expose a trustworthy QWindow global position to QML.
     // Derive this layer surface's compositor-global origin from the output it
     // is explicitly bound to and from the anchors declared below.
@@ -143,7 +145,7 @@ PanelWindow {
         // Transparent style removes only the Dock's shared capsule; the
         // reveal handle and component-owned card surfaces stay intact.
         regions: {
-            const regions = ConfigService.dockStyle === "transparent" ? [] : [pill.blurRegion]
+            const regions = pill.visible && pill.blurRegion ? [pill.blurRegion] : []
             if (revealHandle.blurRegion)
                 regions.push(revealHandle.blurRegion)
             return regions
@@ -249,7 +251,10 @@ PanelWindow {
             id: pill
             anchors.fill: parent
             z: -1
-            visible: ConfigService.dockStyle !== "transparent"
+            // Once fully off-screen, retire both the blur mask and exact shape.
+            // Combining that off-screen capsule with the on-screen handle lets
+            // the compositor realign the capsule back into the clipped region.
+            visible: ConfigService.dockStyle !== "transparent" && hide.revealProgress > 0
             radius: root.stretched ? 0 : dockContainer.pillRadius
             // Soften the shell-wide squircle for this low-height capsule while
             // retaining a little continuous-corner character.
@@ -298,7 +303,6 @@ PanelWindow {
     DockRevealHandle {
         id: revealHandle
         position: root.position
-        triggerMode: ConfigService.revealTriggerMode
         windowWidth: root.width
         windowHeight: root.height
         fadeOpacity: hide.handleOpacity

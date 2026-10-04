@@ -21,8 +21,6 @@ Item {
             started = true
             try {
                 if (Quickshell.env("KOS_TEST_RELOAD") === "2") {
-                    check(ConfigService.revealTriggerMode === "fullEdge",
-                        "restoring full-edge mode must survive another restart")
                     check(ConfigService.showLauncher && ConfigService.showTrash,
                         "restored built-ins must survive another restart")
                     check(ConfigService.showNotificationBadges, "restored badges survive another restart")
@@ -33,8 +31,6 @@ Item {
                 if (Quickshell.env("KOS_TEST_RELOAD") === "1") {
                     check(!ConfigService.showNotificationBadges, "hidden badges survive restart")
                     check(ConfigService.updateNotificationBadgeVisibility(true), "badges can be restored")
-                    check(ConfigService.revealTriggerMode === "dockSpan",
-                        "opt-in Dock span must survive a shell restart")
                     check(!ConfigService.showLauncher && !ConfigService.showTrash,
                         "hidden icons must stay hidden across a shell restart")
                     check(ConfigService.updateBuiltinVisibility("launcher", true),
@@ -42,32 +38,9 @@ Item {
                     check(!ConfigService.showTrash, "restoring launcher changed trash")
                     check(ConfigService.updateBuiltinVisibility("trash", true),
                         "a hidden trash icon must be restorable")
-                    check(!ConfigService.updateRevealTriggerMode("invalid")
-                        && ConfigService.revealTriggerMode === "dockSpan",
-                        "invalid updates must not replace a saved choice")
-                    check(ConfigService.updateRevealTriggerMode("fullEdge"),
-                        "full-edge mode must be restorable")
                     savedCheck.start()
                     return
                 }
-                check(ConfigService.revealTriggerMode === "fullEdge",
-                    "legacy and fresh configuration must preserve full-edge behavior")
-                for (const invalid of ["", "unknown", null, 1, false])
-                    check(!ConfigService.updateRevealTriggerMode(invalid),
-                        "invalid reveal trigger updates must be rejected")
-                check(ConfigService.updateRevealTriggerMode("dockSpan"),
-                    "Dock-span trigger must be selectable")
-                check(!ConfigService.updateRevealTriggerMode("dockSpan"),
-                    "unchanged trigger mode must not schedule another write")
-                ConfigService._apply({ revealTriggerMode: "invalid" })
-                check(ConfigService.revealTriggerMode === "fullEdge",
-                    "invalid saved reveal trigger falls back to full-edge behavior")
-                ConfigService._apply({ revealTriggerMode: "dockSpan" })
-                check(ConfigService.revealTriggerMode === "dockSpan",
-                    "valid saved reveal trigger must load")
-                ConfigService._apply({})
-                check(ConfigService.revealTriggerMode === "fullEdge",
-                    "missing reveal trigger preserves legacy full-edge behavior")
                 check(ConfigService.showLauncher && ConfigService.showTrash,
                     "both icons must be visible by default")
                 check(!ConfigService.updateBuiltinVisibility("unknown", false),
@@ -103,7 +76,6 @@ Item {
                 ConfigService.updateBuiltinVisibility("trash", false)
                 check(ConfigService.showLauncher, "hiding trash changed launcher")
                 ConfigService.updateBuiltinVisibility("launcher", false)
-                ConfigService.updateRevealTriggerMode("dockSpan")
                 savedCheck.start()
             } catch (error) {
                 console.log("FAIL " + error)
@@ -121,8 +93,7 @@ Item {
                 return
             const saved = JSON.parse(data)
             const reload = Quickshell.env("KOS_TEST_RELOAD") === "1"
-            if (saved.showLauncher === reload && saved.showTrash === reload
-                    && saved.revealTriggerMode === (reload ? "fullEdge" : "dockSpan")) {
+            if (saved.showLauncher === reload && saved.showTrash === reload) {
                 console.log(reload ? "DOCK_BUILTINS_RELOAD_PASS" : "DOCK_BUILTINS_SAVE_PASS")
                 Qt.quit()
             }

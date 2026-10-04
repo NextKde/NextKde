@@ -1,26 +1,19 @@
-// The default keeps the historical 14px full-edge target. The optional dockSpan
-// mode uses the Dock's full-reveal rectangle in surface coordinates, never its
-// animated position: a hidden Dock claims only its projected 2px edge strip.
-// Once revealing, that target bridges the floating gap with a 2px Dock overlap.
+// The reveal target uses the Dock's full-reveal rectangle in surface
+// coordinates, never its animated position: a hidden Dock claims only its
+// projected 2px edge strip along its own span, so the rest of that screen edge
+// stays pass-through. Once reveal starts, the target bridges the floating gap
+// and overlaps the static Dock by 2px, so slow pointer travel from the edge
+// into the Dock does not drop the hover hold.
 export function revealHitRect({ position, windowWidth, windowHeight,
                                 dockX, dockY, dockWidth, dockHeight,
-                                active, expanded, triggerMode = "fullEdge" }) {
+                                active, expanded }) {
     const empty = { x: 0, y: 0, width: 0, height: 0 }
     if (!active || !["bottom", "left", "right"].includes(position)
             || ![windowWidth, windowHeight].every(Number.isFinite)
             || windowWidth <= 0 || windowHeight <= 0)
         return empty
 
-    // Missing or unrecognised settings preserve the existing behaviour, even
-    // before the Dock's own layout has a usable size.
-    if (triggerMode !== "dockSpan") {
-        const depth = Math.min(14, position === "bottom" ? windowHeight : windowWidth)
-        return position === "bottom"
-            ? { x: 0, y: windowHeight - depth, width: windowWidth, height: depth }
-            : { x: position === "left" ? 0 : windowWidth - depth, y: 0,
-                width: depth, height: windowHeight }
-    }
-
+    // A Dock whose layout has no usable size yet cannot claim edge input.
     if (![dockX, dockY, dockWidth, dockHeight].every(Number.isFinite)
             || dockWidth <= 0 || dockHeight <= 0)
         return empty

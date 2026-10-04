@@ -883,10 +883,6 @@ public:
         callDock({QStringLiteral("updateVisibilityMode"), mode});
     }
 
-    Q_INVOKABLE void updateDockRevealTriggerMode(const QString &mode) {
-        callDock({QStringLiteral("updateRevealTriggerMode"), mode});
-    }
-
     Q_INVOKABLE void updateDockWindowGrouping(const QString &mode) {
         callDock({QStringLiteral("updateWindowGrouping"), mode});
     }
@@ -1440,7 +1436,6 @@ private:
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
             {QStringLiteral("visibilityMode"), object.value(QStringLiteral("visibilityMode")).toString()},
-            {QStringLiteral("revealTriggerMode"), object.value(QStringLiteral("revealTriggerMode")).toString(QStringLiteral("fullEdge"))},
             {QStringLiteral("windowGrouping"), object.value(QStringLiteral("windowGrouping")).toString()},
             {QStringLiteral("showLauncher"), object.value(QStringLiteral("showLauncher")).toBool(true)},
             {QStringLiteral("showTrash"), object.value(QStringLiteral("showTrash")).toBool(true)},
