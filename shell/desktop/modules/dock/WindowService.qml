@@ -582,6 +582,11 @@ QtObject {
         _sendKwinCommand({ action: "switch-desktop", id: id })
     }
 
+    // Toggle Plasma's native KWin Overview effect.
+    function toggleOverview() {
+        _sendKwinCommand({ action: "toggle-overview" })
+    }
+
     function windowById(windowId) {
         return _recordsById[String(windowId)] ?? null;
     }

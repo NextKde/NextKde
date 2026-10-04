@@ -3,6 +3,7 @@
 #include <QDBusConnection>
 #include <QDBusError>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
@@ -115,6 +116,29 @@ public slots:
 
         const QString command = QString::fromUtf8(document.toJson(QJsonDocument::Compact));
         const QString action = document.object().value(QStringLiteral("action")).toString();
+
+        // Direct overview trigger delegates to Plasma's native Overview effect via
+        // KWin's registered global shortcut.
+        if (action == QStringLiteral("toggle-overview")) {
+            QDBusInterface effects(QStringLiteral("org.kde.KWin"),
+                                  QStringLiteral("/Effects"),
+                                  QStringLiteral("org.kde.kwin.Effects"),
+                                  QDBusConnection::sessionBus());
+            if (effects.isValid()) {
+                const QDBusReply<bool> loaded = effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("overview"));
+                if (loaded.isValid() && !loaded.value()) {
+                    effects.call(QStringLiteral("loadEffect"), QStringLiteral("overview"));
+                }
+            }
+            QDBusMessage msg = QDBusMessage::createMethodCall(
+                QStringLiteral("org.kde.kglobalaccel"),
+                QStringLiteral("/component/kwin"),
+                QStringLiteral("org.kde.kglobalaccel.Component"),
+                QStringLiteral("invokeShortcut"));
+            msg << QStringLiteral("Overview");
+            QDBusConnection::sessionBus().send(msg);
+            return;
+        }
 
         // Thumbnail capture uses KWin's restricted ScreenShot2 API directly.
         // The KWin Script has no pixel access, but it already gives us the
@@ -699,6 +723,17 @@ bool startKWinBridge(const KWinEventHandler &handler)
     // D-Bus bridge is usable even when KWin is unavailable; the call simply
     // fails and the rest of the platform adapters keep serving clients.
     QTimer::singleShot(0, [] {
+        QDBusInterface effects(QStringLiteral("org.kde.KWin"),
+                              QStringLiteral("/Effects"),
+                              QStringLiteral("org.kde.kwin.Effects"),
+                              QDBusConnection::sessionBus());
+        if (effects.isValid()) {
+            const QDBusReply<bool> loaded = effects.call(QStringLiteral("isEffectLoaded"), QStringLiteral("overview"));
+            if (loaded.isValid() && !loaded.value()) {
+                effects.call(QStringLiteral("loadEffect"), QStringLiteral("overview"));
+            }
+        }
+
         QDBusInterface scripting(QStringLiteral("org.kde.KWin"),
                                  QStringLiteral("/Scripting"),
                                  QStringLiteral("org.kde.kwin.Scripting"));
