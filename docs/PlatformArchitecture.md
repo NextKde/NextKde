@@ -71,7 +71,7 @@ for a surface declaring nothing feeds the SDF KWin's own window radius -- the
 same value the ordinary-window path has always used -- so there is one source of
 rounding rather than one source plus an inference.
 
-`protocols/kos-surface-shape-v1.xml` is a project-local protocol that carries the
+`integrations/quickshell/surface-shape/kos-surface-shape-v1.xml` is a project-local protocol that carries the
 missing fields. It is deliberately not a Quickshell fork:
 
 ```text
@@ -99,7 +99,7 @@ case open. Three pieces implement it and all three build from this repository:
 
 | Piece | Path | Role |
 | --- | --- | --- |
-| Protocol | `protocols/kos-surface-shape-v1.xml` | Shared wire definition. |
+| Protocol | `integrations/quickshell/surface-shape/kos-surface-shape-v1.xml` | Shared wire definition. |
 | Client | `integrations/quickshell/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
 | Server | `vendor/kwin-effects-glass/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
 

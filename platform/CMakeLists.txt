@@ -77,7 +77,7 @@ else()
     )
 endif()
 
-install(FILES kwin/window-bridge.js
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../integrations/kwin/window-bridge.js
     DESTINATION share/kos/platform/kwin
 )
 
