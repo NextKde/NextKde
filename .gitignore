@@ -14,6 +14,9 @@ CLAUDE.md
 # Local build outputs
 .build/
 
+# Python bytecode from test helpers such as tests/popup-motion/run.py
+__pycache__/
+
 # Local workbench: session reports and open-issue notes that must not be
 # committed, but should stay readable and traceable on this machine.
 # See tmp/README.md for what belongs here.
