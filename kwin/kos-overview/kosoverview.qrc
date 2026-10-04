@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/kos-overview">
+        <file>qml/Main.qml</file>
+        <file>qml/Card.qml</file>
+    </qresource>
+</RCC>

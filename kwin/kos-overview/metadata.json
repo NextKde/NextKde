@@ -1,0 +1,10 @@
+{
+    "KPlugin": {
+        "Name": "KOS Overview",
+        "Description": "Gesture-following workspace overview for KOS (phase 1)",
+        "Category": "Desktop Grid Effect",
+        "License": "MIT",
+        "EnabledByDefault": false
+    },
+    "X-KWin-Internal": "true"
+}
