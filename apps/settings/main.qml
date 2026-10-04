@@ -715,7 +715,7 @@ ApplicationWindow {
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "左侧常驻窗口卡片栏；收进/呼出的切换动画随之切换"
+                            text: "屏幕侧缘常驻的窗口卡片栏（左/右可选）：点卡放大换主，收编的应用缩为玻璃卡"
                                   + "（也可在右上角控制中心开关）。"
                             color: theme.secondaryText
                             font.pixelSize: 12
@@ -814,6 +814,17 @@ ApplicationWindow {
                     current: fgSchedPage.stageSnapshot.cardHeight !== undefined
                         ? fgSchedPage.stageSnapshot.cardHeight : 148
                     onCommit: function(v) { fgSchedPage.stageSet("cardHeight", v) }
+                }
+
+                StageSliderRow {
+                    label: "卡片宽度"
+                    unit: " px"
+                    minV: 120
+                    maxV: 320
+                    active: true
+                    current: fgSchedPage.stageSnapshot.cardWidth !== undefined
+                        ? fgSchedPage.stageSnapshot.cardWidth : 216
+                    onCommit: function(v) { fgSchedPage.stageSet("cardWidth", v) }
                 }
 
                 StageSliderRow {
@@ -1050,7 +1061,7 @@ ApplicationWindow {
                     Repeater {
                         model: [
                             { id: "scroll", label: "完整滚动（默认）",
-                              detail: "卡片完整显示、永不重叠；固定可见数量等分侧栏，滚轮翻页（无滚动条），底部位置点+窗数提示" },
+                              detail: "卡片完整显示、永不重叠；固定间距自然排列，超出侧栏可滚轮连续滚动（底部位置点+窗数提示）" },
                             { id: "adaptive", label: "自适应缩小",
                               detail: "卡片全部完整显示，随窗口数量等比缩小" },
                         ]
@@ -1149,6 +1160,22 @@ ApplicationWindow {
                     current: fgSchedPage.stageSnapshot.fanSpacing !== undefined
                         ? fgSchedPage.stageSnapshot.fanSpacing : 8
                     onCommit: function(v) { fgSchedPage.stageSet("fanSpacing", v) }
+                }
+
+                StageSliderRow {
+                    label: "扇叠悬停扩散"
+                    unit: " ×"
+                    minV: 1.0
+                    maxV: 2.0
+                    decimals: 2
+                    active: true
+                    // 悬停/武装时扇叠间距的扩散系数（1.0=不扩散）；
+                    // 静态快照与实时直绘两模式同源生效
+                    current: fgSchedPage.stageSnapshot.fanHoverSpread !== undefined
+                        ? fgSchedPage.stageSnapshot.fanHoverSpread : 1.4
+                    onCommit: function(v) {
+                        fgSchedPage.stageSet("fanHoverSpread", v)
+                    }
                 }
 
                 StageSliderRow {
@@ -1305,9 +1332,24 @@ ApplicationWindow {
                     }
                 }
 
-                // 活体流（round39 占空比节流）：无头 soak 存活但真实负载
-                //（重绘频繁窗口）下用户实测仍会被宿主杀桌面——本机默认关，
-                // 保留给硬件更强的设备
+                // ── 卡面画面模式（两态）：静态快照（关）/ 实时·合成器
+                //    直绘（开）。遗留 PipeWire 流实验路径已从面板移除
+                //   （本机触发宿主杀桌面；代码保留给强硬件、仅 IPC 可达），
+                //    配置层互斥仍在 ──
+                Text {
+                    Layout.fillWidth: true
+                    text: "卡面画面模式 — 当前："
+                        + (fgSchedPage.stageSnapshot.thumbLiveEffect === true
+                            ? "实时（合成器直绘，窗口内容持续更新）"
+                            : "静态快照（收编时拍照，稳定省电）")
+                    color: theme.accent
+                    font { pixelSize: 12; weight: Font.Medium }
+                    wrapMode: Text.WordWrap
+                }
+
+                // 合成器活体卡（stageanim 直绘）：隐藏窗经 KWin 离屏帧
+                // 回调继续出帧（成本=窗口可见在桌面，无 screencast 管线），
+                // 特效把窗口纹理按卡面透视直接画进卡里——所有卡常开实时
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
@@ -1317,13 +1359,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "活体流（实验性）"
+                            text: "实时卡片（合成器直绘）"
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "悬停的卡片经 PipeWire 直显窗口实时画面（其余显示静态快照）。⚠️ 本机勿开：即使占空比节流（连接抓帧→断开渲染），重绘频繁的窗口仍可能触发宿主杀桌面；仅限硬件更强的设备。"
+                            text: "收进卡片的窗口实时显示画面（视频/终端输出持续更新）。走合成器直绘通道（无 PipeWire），窗口内容更新才会产生开销，与桌面上开着这些应用相当。特效未生效时自动回退静态快照。"
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1331,36 +1373,16 @@ ApplicationWindow {
                     }
 
                     LiquidControls.LiquidGlassSwitch {
-                        checked: fgSchedPage.stageSnapshot.thumbLiveStream === true
+                        checked: fgSchedPage.stageSnapshot.thumbLiveEffect === true
                         accentColor: theme.accent
                         trackColor: theme.divider
                         onToggled: function(checked) {
-                            fgSchedPage.stageSet("thumbLiveStream", checked)
+                            fgSchedPage.stageSet("thumbLiveEffect", checked)
                         }
                     }
                 }
 
-                StageSliderRow {
-                    label: "连接抓帧时长"
-                    unit: " ms"
-                    minV: 80
-                    maxV: 1000
-                    active: fgSchedPage.stageSnapshot.thumbLiveStream === true
-                    current: fgSchedPage.stageSnapshot.streamCycleOnMs !== undefined
-                        ? fgSchedPage.stageSnapshot.streamCycleOnMs : 250
-                    onCommit: function(v) { fgSchedPage.stageSet("streamCycleOnMs", v) }
-                }
 
-                StageSliderRow {
-                    label: "断开休止时长"
-                    unit: " ms"
-                    minV: 200
-                    maxV: 5000
-                    active: fgSchedPage.stageSnapshot.thumbLiveStream === true
-                    current: fgSchedPage.stageSnapshot.streamCycleOffMs !== undefined
-                        ? fgSchedPage.stageSnapshot.streamCycleOffMs : 750
-                    onCommit: function(v) { fgSchedPage.stageSet("streamCycleOffMs", v) }
-                    }
                 }
             }
         }
@@ -1430,7 +1452,10 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "聚焦辉光强度"
+                    // 辉光是静态快照的扇叠背板效果（实时直绘模式无辉光
+                    // pass，v57 撤）——实时模式下隐藏防"拖了没反应"
+                    visible: fgSchedPage.stageSnapshot.thumbLiveEffect !== true
+                    label: "聚焦辉光强度（静态模式）"
                     unit: ""
                     minV: 0
                     maxV: 0.4

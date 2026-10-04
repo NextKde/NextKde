@@ -30,6 +30,9 @@ Item {
     id: card
 
     required property string appKey
+    // 合并动画窗内被吞卡的组键（非动画窗为 ""）：交棒淡出期间 rep 翻转
+    // 不得复位 engaging（打断淡出＝闪回一帧）
+    property string mergeAnimFromKey: ""
     required property string targetId // 代表窗口（缩略图与激活目标）
     required property int pid
     required property string appName
@@ -39,6 +42,7 @@ Item {
     required property string idsJson // 组内全部窗口 id 的 JSON 数组
     // 每窗图标（与 idsJson 平行；自由合并组内各应用图标不同）
     required property string iconsJson
+    required property string iconIdsJson
     required property bool merged // 自由合并卡（右键拆分）
     // 拖拽合并手势的落点高亮（窗口侧按 _dropMergeKey 绑定）
     property bool dropHovered: false
@@ -99,6 +103,27 @@ Item {
             return []
         }
     }
+    // 与 windowIcons 索引对齐的窗口 id（decorateGroups 去重时记的首现窗）
+    readonly property var windowIconIds: {
+        try {
+            const arr = JSON.parse(iconIdsJson || "[]")
+            return Array.isArray(arr) ? arr : []
+        } catch (e) {
+            return []
+        }
+    }
+    // 图标排消费的对（icon, id）：图标按源去重——同应用多窗只留一枚
+    //（点击直达该应用首个窗口），窗口总数由标题 ×N 表达。id 取自与
+    // icons 同源去重的 iconIds——旧实现拿全量 windowIds 按位 zip，重复
+    // 图标排在异图标之前时会错位激活同应用兄弟窗（v87 审查）
+    readonly property var iconPairs: {
+        const icons = windowIcons
+        const ids = windowIconIds
+        const out = []
+        for (let i = 0; i < icons.length && i < ids.length; i++)
+            out.push({ icon: icons[i], id: ids[i] })
+        return out
+    }
     // 图标排并列上限（stage-config maxIconSlots，设置页可调）；实际
     // 可见数还按卡宽动态封顶（见 iconRow.visibleCount），超出进 "+N"
     readonly property int maxIconSlots: StageConfigService.maxIconSlots
@@ -123,7 +148,112 @@ Item {
     // 同组换代表（点同应用的另一扇窗）时模型行不销毁，engaging 不会随
     // delegate 重建归零——必须在此显式交还卡片姿态，否则卡片永远停在
     // 透明态，看起来就是"卡片消失了"
-    onTargetIdChanged: engaging = false
+    // 同组代表窗翻转时交还姿态（防"换代表卡复活"），但**排除合并动画窗**
+    // ——被吞卡的 engaging 是 _endCardDrag 交棒淡出的核心，动画窗内 rep
+    // 翻转（最小化顺序变化换 pickRepresentative）会把淡出中途打断＝卡
+    // 闪回一帧再被模型合并掉
+    onTargetIdChanged: if (mergeAnimFromKey !== appKey)
+        engaging = false
+    // 合成器活体卡让位标记：特效回执（stage-live.json.status）确认正在
+    // 直绘这张卡 → 缩略图 Image 透明让出卡面（opacity 而非 visible——
+    // plane 不可见子树吞 visible 改动，opacity 链实测有效）
+    property bool livePainted: false
+    // 特效接管卡面视觉（方案"卡进特效"）：本卡 QML 视觉（plane 透视层）
+    // 整体让位，只留根层输入热区（MouseArea 仍收点击/拖拽/悬停——特效
+    // 画不出输入）；回执失效自动恢复 QML 自绘（快照时代观感兜底）
+    property bool effectOwnedChrome: false
+    // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
+    readonly property bool closeHot: closeHit.containsMouse
+    // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
+    // 卡面矩形 + 透视参数。**发布动画中的实时值**（card.scale / tiltCur
+    // 都带 Behavior，悬停/入场期间逐帧变化）——旧版发终态值，特效按自己的
+    // 曲线追，而卡面走 OutBack 过冲曲线，两者中途必然脱节（"悬停时内容和
+    // 卡片不协调"）。配合 16ms 发布节拍 + 特效 80ms 短缓动，内容贴着卡面
+    // 动画走（滞后 ≤2 帧）。engaging 卡不发布。
+    signal livePoseDirty()
+    onScaleChanged: livePoseDirty()
+    onTiltCurChanged: livePoseDirty()
+    onXChanged: livePoseDirty()
+    // y 也必须挂：滚动（layoutCards 的 scroll 偏移走 slot.y）只改 y——
+    // 漏挂 = 滚动后卡已滚走、内容还停在旧姿态（"内容不在卡片里"帮凶）
+    onYChanged: livePoseDirty()
+    // 切侧也必须挂：方向符号在下游 angleRad/liveCardPose 里取
+    //（tiltCur 是不带符号的幅值），切侧时 y/x/scale/tiltCur 全不变
+    //= 没有任何信号触发发布，特效按旧角度+旧 rightSide 画到下一次
+    // hover 才纠正（"切侧后倾斜角不对、划一下鼠标就好"的根因）
+    onRightSideChanged: livePoseDirty()
+    // engaging 翻转也必须挂：deskReveal 放出/撤销看门狗/拖拽中心等路径
+    // 只置 slot.cardItem.engaging 就去激活窗口，无姿态变化＝零发布触发
+    //——engaging=true 永远进不了载荷，特效按满 alpha 等 600ms 缺席迟滞
+    //再 150ms 淡出＝放大后旧卡位残影一闪（v80 交棒淡出在这些路径从未
+    // 生效的真因；窗口还原销毁委托比下一次发布更快，标记必须同拍出帧）
+    onEngagingChanged: livePoseDirty()
+    // closeHover/mergeGlow 同族（v87 审查）：scroll 模式下指针从卡面移到
+    // 关闭钮，isHovered 合成值不变、姿态全不动＝零触发，特效红钮要等
+    // 15s 心跳；mergeGlow 1.8s 到期翻转时指针早已离开同理。载荷字段
+    // 的每个输入都必须有发布触发
+    onCloseHotChanged: livePoseDirty()
+    onMergeGlowChanged: livePoseDirty()
+    // v2：发布**静止姿态** + 卡面元数据。悬停放大/压平动画不再由 QML
+    // 驱动（特效 cursorPos 自驱，同管线像素级同步）——这里除放
+    // card.scale（TopLeft 变换原点下原点不动，仅 w/h 回到静止尺寸），
+    // 倾角也发静止值（hoverTilt 单独给终态）。engaging 卡照发（特效淡出）。
+    function liveCardPose(): var {
+        const sc = parent && parent.slotScale !== undefined
+            ? parent.slotScale : 1.0
+        // ⚠️ mapToItem 实测（plate 是 plane 的子项，坐标手工加会偏 (74,115)）
+        const pp = plate.mapToItem(null, 0, 0)
+        const restTilt = scrollMode
+            ? StageConfigService.deckRestTilt : 0
+        const hoverT = scrollMode ? 0
+            : StageConfigService.tiltAngle
+        const title = card.count > 1
+            ? (card.appName || card.title || "应用") + " ×" + card.count
+            : (card.appName || card.title || "应用")
+        return {
+            x: Math.round(pp.x),
+            y: Math.round(pp.y),
+            w: Math.round(sc * plate.width),
+            h: Math.round(sc * plate.height),
+            angle: card.rightSide ? -restTilt : restTilt,
+            yOff: card.perspectiveYOff,
+            focal: StageGeo.TILT_FOCAL,
+            radius: StageConfigService.cardRadius,
+            title: title,
+            count: card.count,
+            z: parent && parent.z !== undefined ? parent.z : 0,
+            hoverScale: StageConfigService.hoverScale,
+            hoverTilt: card.rightSide ? -hoverT : hoverT,
+            // engaging 交棒保持倾角（scroll=deckRestTilt / adaptive=tiltAngle，
+            // 老语义：交棒时卡不压平到 0）
+            engagingTilt: (card.rightSide ? -1 : 1)
+                * (scrollMode ? restTilt : hoverT),
+            hoverMs: StageConfigService.cardEnterDuration + 40,
+            tiltMs: StageConfigService.tiltAnimDuration,
+            enterMs: StageConfigService.cardEnterDuration,
+            animMs: StageConfigService.animDuration,
+            fanSpacing: StageConfigService.fanSpacing,
+            fanHoverSpread: StageConfigService.fanHoverSpread,
+            cardTint: StageConfigService.cardTint,
+            cardBorder: StageConfigService.cardBorder,
+            cardDepth: StageConfigService.cardDepth,
+            cardTopLight: StageConfigService.cardTopLight,
+            rightSide: card.rightSide,
+            merged: card.merged,
+            showCardTitle: StageConfigService.showCardTitle,
+            enterInstant: card.enterInstant,
+            // 拖拽净放大（老语义：1.06 槽位缩放 × 悬停 1.18 叠加）
+            dragScale: card.scale,
+            selfMergeHint: card.selfMergeHint,
+            chipHot: card.isHovered || card.mergeGlow,
+            iconsJson: card.iconsJson,
+            // 图标排消费参数（v88：特效侧原本硬编码 24px+仅宽度封顶＝
+            // stripIconSize/maxIconSlots 两个旋钮在实时模式失灵，且与
+            // 静态模式 40px 视觉不一致）
+            iconSize: StageConfigService.stripIconSize,
+            iconSlots: card.maxIconSlots,
+        }
+    }
     // x 入列方向镜像：左侧从右滑入（+70），右侧从左滑入（−70）——都从
     // 桌面一侧进条；收集落卡（enterInstant）几何即终值，不走侧滑
     x: rightSide
@@ -166,9 +296,11 @@ Item {
     readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
     property real tiltCur: dragging ? 0
         : (scrollMode
-            ? ((isHovered && !engaging) ? 0 : StageConfigService.deckRestTilt)
+            ? ((isHovered && !engaging) ? 0
+                : StageConfigService.deckRestTilt)
             : ((engaging || (isHovered && !buttonAim))
-                ? StageConfigService.tiltAngle : 0))
+                ? StageConfigService.tiltAngle
+                : 0))
     Behavior on tiltCur {
         NumberAnimation {
             duration: card.engaging ? 180 : StageConfigService.tiltAnimDuration
@@ -219,7 +351,11 @@ Item {
     // fanSpacing 缩放——层纹理只渲染 item 自身尺寸内的内容，扇叠超界会
     // 被切断成直角，实测"堆叠卡被裁剪"即此）。
     // ⚠️ 着色器以 plane 中心对称采样：扩容必须对称（plate 保持居中）。
-    readonly property real fanPad: 2.8 * StageConfigService.fanSpacing
+    // 层纹理外扩余量：2 张 × 最大扩散系数 × 间距（默认 2×1.4=2.8 同旧值；
+    // fanHoverSpread 调大时余量同步长——不够＝扇叠被层边界裁成直角）
+    readonly property real fanPad: 2
+        * Math.max(1.4, StageConfigService.fanHoverSpread)
+        * StageConfigService.fanSpacing
     Item {
         id: plane
         visible: false
@@ -236,12 +372,15 @@ Item {
         // 探出。悬停时间距微扩（卡片簇"吸气"的即时反馈）。最多露 2 张，
         // 更多的用左下角图标排表达 ──
         Repeater {
-            model: Math.min(card.count - 1, 2)
+            model: Math.min(card.count - 1, 4)
             Rectangle {
                 required property int index
                 readonly property real off: (index + 1)
                     * StageConfigService.fanSpacing
-                    * ((card.isHovered || card.dropHovered) ? 1.4 : 1)
+                    // 触发集与特效侧 fanBlend 一致（hover/dropHover/dwellHint
+                    // 三态同权）+ 时长 150ms OutCubic——两模式动画手感统一
+                    * ((card.isHovered || card.dropHovered || card.dwellHint)
+                        ? StageConfigService.fanHoverSpread : 1)
                 // 方向（用户定稿）：左上角探出；条在右时镜像到右上
                 x: card.rightSide ? plate.x + off : plate.x - off
                 y: plate.y - off
@@ -249,14 +388,14 @@ Item {
                 height: plate.height
                 radius: plate.radius
                 color: Qt.rgba(0.03, 0.05, 0.09,
-                    StageConfigService.cardTint * (0.85 - index * 0.25))
+                    StageConfigService.cardTint * (0.88 - index * 0.18))
                 border.width: 1
                 border.color: Qt.rgba(255, 255, 255,
-                    StageConfigService.cardBorder * (0.8 - index * 0.25))
+                    StageConfigService.cardBorder * (0.8 - index * 0.18))
                 opacity: card.engaging ? 0.0 : 1.0
                 Behavior on opacity { NumberAnimation { duration: 160 } }
-                Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                Behavior on y { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
             }
         }
 
@@ -269,6 +408,10 @@ Item {
             height: parent.height - 44 - card.fanPad * 2
             radius: StageConfigService.cardRadius
             // 背板浓度：静置 cardTint，悬停/驻留预示自动 ×1.3 提亮（上限 0.95）
+            //（活体内容走 paintScreen 后置通道画在一切之上——背板正常渲染，
+            // 内容盖在其上，视觉与快照时代同层。旧的 livePainted 开洞是
+            // 给"内容画在条带之下"的已废弃架构留的，留着会把玻璃底板抠空
+            // = 卡片分裂成"透明框＋悬浮内容"）
             color: (card.isHovered || card.dropHovered || card.dwellHint)
                 ? Qt.rgba(0.10, 0.13, 0.20,
                     Math.min(0.95, StageConfigService.cardTint * 1.3))
@@ -383,19 +526,21 @@ Item {
                 width: 20
                 height: 20
                 radius: 10
-                // 悬停高亮由根层热区驱动（本视觉树渲染进 visible:false
-                // 的透视层，层内 MouseArea 不收输入）
-                color: closeHit.containsMouse ? "#ef4444" : "transparent"
-                opacity: card.isHovered ? 1.0 : 0.0
-                Behavior on opacity { NumberAnimation { duration: 120 } }
+                // 与特效铭牌同款（v79）：静置=柔和暗底圆 + 白 ×（无圈线，
+                // "圆圈带叉"已否决；暗底保证亮内容上不隐身）、悬停红圆底
+                // + 白 ×；两模式视觉统一
+                color: closeHit.containsMouse
+                    ? "#ef4444" : Qt.rgba(0.04, 0.055, 0.08, 0.45)
 
                 Text {
                     anchors.centerIn: parent
                     text: "✕"
-                    font.pixelSize: 10
-                    color: "white"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: closeHit.containsMouse
+                        ? "white" : Qt.rgba(1, 1, 1, 0.82)
+                    Behavior on color { ColorAnimation { duration: 120 } }
                 }
-
             }
         }
 
@@ -511,6 +656,10 @@ Item {
                 visible: !liveStream.visible
                     && !!(thumbCard.liveGrabUrl !== ""
                         ? thumbCard.liveGrabUrl : parent.thumbUrl)
+                // 合成器活体卡直绘时让出卡面（opacity：plane 内 visible
+                // 改动被吞，opacity 链有效——快照退路在任何让位失败时
+                // 自动恢复，特效不在=livePainted=false=快照照常画）
+                opacity: card.livePainted ? 0.0 : 1.0
                 source: thumbCard.liveGrabUrl !== ""
                     ? thumbCard.liveGrabUrl : parent.thumbUrl
                 // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
@@ -581,6 +730,11 @@ Item {
         anchors.centerIn: parent
         width: plane.width + 64
         height: plane.height + 64
+        // chrome 让位：特效画卡面时 QML 透视层退场。用 visible（根层
+        // 直渲染项，visible 正常生效——被吞的是 plane 不可见子树内部的
+        // 改动）：彻底停掉对 plane 层纹理的采样与重渲染——opacity 0 时
+        // 场景图仍逐帧重渲层（动画期掉帧的大头之一）。
+        visible: !card.effectOwnedChrome
         // uniform 显式声明（ShaderEffect 不自动创建属性；source 约定名，
         // plane 的 layer 纹理由此进 sampler）
         property variant source: plane
@@ -724,7 +878,11 @@ Item {
             height: 20
             radius: 10
             color: splitHit.containsMouse ? "#f59e0b" : "transparent"
-            opacity: (card.isHovered || card.mergeGlow) ? 1.0 : 0.0
+            // 常显暗态：合并卡要让用户知道能拆（与特效芯片同语义）；
+            // 活体模式特效覆盖层画右上同位芯片，QML 视觉隐藏防双绘
+            visible: !card.effectOwnedChrome
+            opacity: (splitHit.containsMouse || card.isHovered || card.mergeGlow)
+                ? 1.0 : 0.35
             Behavior on opacity { NumberAnimation { duration: 120 } }
 
             Rectangle {
@@ -756,12 +914,15 @@ Item {
     Item {
         id: iconRow
         z: 2
+        // chrome 让位：图标排已迁特效正视覆盖层（用户定稿"正视盖住左下
+        // 角"），QML 侧隐藏防双绘
+        visible: !card.effectOwnedChrome
         readonly property int iconSize: StageConfigService.stripIconSize
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
         // 卡宽钳制：图标排不裁切（Item 默认不 clip），maxIconSlots×最大
         // 图标 40px 时 rowWidth 232 > 卡宽 216 会画出卡缘——按"排满卡宽
         // 能塞几枚"动态封顶（40px 图标 × 卡宽 216 → 4 枚），多的进 "+N"
-        readonly property int visibleCount: Math.min(card.windowIds.length,
+        readonly property int visibleCount: Math.min(card.iconPairs.length,
             card.maxIconSlots,
             Math.floor((card.width + iconGap) / (iconSize + iconGap)))
         readonly property real rowWidth:
@@ -795,7 +956,7 @@ Item {
                 height: iconRow.iconSize
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
-                onClicked: card.iconActivated(card.windowIds[index])
+                onClicked: card.iconActivated(card.iconPairs[index].id)
                 Rectangle {
                     anchors.fill: parent
                     radius: width / 3
@@ -811,7 +972,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width * 0.7
                         height: parent.width * 0.7
-                        source: card.windowIcons[index] || card.iconSource || ""
+                        source: card.iconPairs[index]?.icon || card.iconSource || ""
                         asynchronous: false
                     }
                 }
@@ -820,10 +981,10 @@ Item {
 
         // 更多窗口收进 "+N"（x 定位同上——不碰水平锚点）
         Text {
-            visible: card.windowIds.length > iconRow.visibleCount
+            visible: card.iconPairs.length > iconRow.visibleCount
             anchors.verticalCenter: parent.verticalCenter
             x: card.rightSide ? -width - 5 : parent.width + 5
-            text: "+" + (card.windowIds.length - iconRow.visibleCount)
+            text: "+" + (card.iconPairs.length - iconRow.visibleCount)
             color: Qt.rgba(1, 1, 1, 0.65)
             font { pixelSize: 10; weight: Font.DemiBold }
         }

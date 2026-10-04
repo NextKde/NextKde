@@ -53,6 +53,10 @@ Scope {
         }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
+        // 无头验证钩子：强制抽屉检测（"on"/"off"/"auto"=恢复真实判定）
+        function debugFullscreen(mode: string): string {
+            return stageWindow.debugFullscreen(mode)
+        }
         // 显示桌面开关状态机快照（抗打断排障）
         function deskState(): string { return stageWindow.deskState() }
         // 无头合并/拆分（自由组合链路验证）：debugMerge <from> <to> / debugSplit <i>

@@ -2878,4 +2878,37 @@ PanelWindow {
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? launcherSurface.blurRegion
         : null
+
+    // TEMP-DEBUG: 伪影取证（背景偏移）。上游勿合。
+    IpcHandler {
+        target: "applauncher-geo"
+        function dump(): void {
+            const cardInWindow = launcherCard.mapToItem(root.contentItem, 0, 0)
+            const glassInWindow = launcherSurface.parent
+                ? launcherSurface.mapToItem(root.contentItem, 0, 0) : Qt.point(0, 0)
+            console.warn("[LAUNCHER-GEO] open=" + root.open
+                + " mode=" + AppLauncherConfigService.displayMode
+                + " progress=" + root.contentRevealProgress.toFixed(3)
+                + " panelVisible=" + root.panelVisible)
+            console.warn("[LAUNCHER-GEO] window=" + root.width + "x" + root.height
+                + " screen=" + (root.screen ? root.screen.name + " " + root.screen.width
+                    + "x" + root.screen.height : "null"))
+            console.warn("[LAUNCHER-GEO] clip x=" + launcherRevealClip.x
+                + " y=" + launcherRevealClip.y
+                + " " + launcherRevealClip.width + "x" + launcherRevealClip.height)
+            console.warn("[LAUNCHER-GEO] card x=" + launcherCard.x + " y=" + launcherCard.y
+                + " " + launcherCard.width + "x" + launcherCard.height)
+            console.warn("[LAUNCHER-GEO] glassItem x=" + launcherSurface.x + " y=" + launcherSurface.y
+                + " " + launcherSurface.width + "x" + launcherSurface.height
+                + " (absInWindow " + Math.round(glassInWindow.x) + "," + Math.round(glassInWindow.y) + ")"
+                + " cardAbs=" + Math.round(cardInWindow.x) + "," + Math.round(cardInWindow.y))
+        }
+        function heal(): void {
+            // TEMP: 手动触发层重建（自动版在每次关闭后跑）。
+            if (root.open)
+                return
+            root._recreateLayerSurface()
+            console.warn("[LAUNCHER-GEO] heal: manual layer recreate")
+        }
+    }
 }

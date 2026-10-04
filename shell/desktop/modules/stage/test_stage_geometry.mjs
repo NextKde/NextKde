@@ -65,20 +65,41 @@ check("scroll: few cards keep natural spacing",
     Math.round(lay.positions[1] - lay.positions[0]), 164);
 check("scroll: two cards centered as block",
     lay.positions.map(p => Math.round(p)), [344, 508]);
-// ② 溢出：顶锚 + 滚动上限（8 张 content = 7·164+148 = 1296 > 1000）
+// centerCards=false（v88 审计）：放得下时顶锚不居中（旧版死键——
+// 只有 adaptive 尊重此开关）
+lay = scrollLayout(1000, 2, { spacing: 16, centerCards: false });
+check("scroll: centerCards=false top anchors",
+    lay.positions.map(p => Math.round(p)), [0, 164]);
+lay = scrollLayout(1000, 2, { spacing: 16, centerCards: true });
+check("scroll: centerCards=true centers",
+    lay.positions.map(p => Math.round(p)), [344, 508]);
+// ② 溢出：完整卡块居中窗口（用户定稿"时刻居中"）：8 张 avail 1000、
+// pitch 164 → k=6 完整卡（块 968）、top0=(1000−968)/2=16 上下对称净空；
+// 多出的卡藏折叠线下，滚动翻看；尺寸旋钮 1:1 生效（无缩放）
 lay = scrollLayout(1000, 8, { spacing: 16 });
-check("scroll: overflow top anchored", lay.positions[0], 0);
-check("scroll: scrollMax = content + glowPad - avail",
-    lay.scrollMax, 7 * 164 + 148 + 22 - 1000);
+check("scroll: overflow keeps full size", lay.scale, 1);
+// k=6 块 968 净空 16 < MIN_CENTER_PAD(40) → 退 k=5 块 804 净空 98
+check("scroll: block keeps min center pad (top0 = 98)",
+    lay.positions[0], 98);
+check("scroll: centered block is k complete cards",
+    Math.round(lay.positions[4] + 148), 98 + 4 * 164 + 148);
+check("scroll: 6th card hidden below fold",
+    Math.round(lay.positions[5]), 98 + 5 * 164);
+check("scroll: scrollMax centers last window",
+    lay.scrollMax, 98 + 7 * 164 + 148 - 1000 + 22);
 const atMax = scrollLayout(1000, 8,
     { spacing: 16, scroll: lay.scrollMax });
 check("scroll: at max scroll last card bottom = avail - glowPad",
     Math.round(atMax.positions[7] + 148), 1000 - 22);
+// centerCards=false：溢出时退顶锚（开关两分支都活）
+lay = scrollLayout(1000, 8, { spacing: 16, centerCards: false });
+check("scroll: overflow centerCards=false top anchors",
+    lay.positions[0], 0);
 // 滚动偏移：positions 整体 −scroll
 lay = scrollLayout(1000, 8, { spacing: 16, scroll: 300 });
-check("scroll: offset applied", lay.positions[0], -300);
+check("scroll: offset applied", lay.positions[0], 98 - 300);
 check("scroll: offset uniform", Math.round(lay.positions[7]),
-    7 * 164 - 300);
+    98 + 7 * 164 - 300);
 // ③ 聚焦原位退避（avail 1000, n=5, sp 16 → pitch 164，content 804，
 // top0=98，基础 [98,262,426,590,754]，retreat 默认 20）
 lay = scrollLayout(1000, 5, { spacing: 16, hoveredIndex: 2 });
@@ -225,5 +246,15 @@ check("tilt: near/far edges split vertically off-horizon",
     check("originX shifts rect to screen coords", right["h9"].x,
         left["h9"].x + 1920 - 280);
 }
+
+// ── 边界补齐（审查挂账"4 缺"）──
+check("adaptive NaN/0 availH → 钳位不 NaN",
+    Number.isFinite(adaptiveLayout(0, 4).scale), true);
+check("adaptive NaN availH → 钳位不 NaN",
+    Number.isFinite(adaptiveLayout(NaN, 3).scale), true);
+check("scrollLayout count=0 → 空位形不抛",
+    JSON.stringify(scrollLayout(600, 0)), JSON.stringify(scrollLayout(600, 0)));
+check("tiltUnproject denom<1 → null 不抛",
+    tiltUnproject(0, 0, Math.PI / 2, 900, 0), null);
 
 console.log(`stage-geometry: ${cases.length} checks passed`);
