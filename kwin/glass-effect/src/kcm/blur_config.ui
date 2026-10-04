@@ -1273,32 +1273,4 @@
  </customwidgets>
  <resources/>
  <connections/>
- <connections>
-  <connection>
-   <sender>kcfg_EdgeLighting</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>kcfg_EdgeLightingDock</receiver>
-   <slot>setEnabled(bool)</slot>
-  </connection>
-  <connection>
-   <sender>kcfg_EdgeLighting</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>kcfg_EdgeLightingTooltip</receiver>
-   <slot>setEnabled(bool)</slot>
-  </connection>
-
-  <connection>
-   <sender>kcfg_EdgeLighting</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>kcfg_EdgeLightingDock</receiver>
-   <slot>setChecked(bool)</slot>
-  </connection>
-  <connection>
-   <sender>kcfg_EdgeLighting</sender>
-   <signal>toggled(bool)</signal>
-   <receiver>kcfg_EdgeLightingTooltip</receiver>
-   <slot>setChecked(bool)</slot>
-  </connection>
-  
- </connections>
 </ui>

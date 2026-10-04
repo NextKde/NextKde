@@ -17,11 +17,8 @@ Scope {
     default property alias content: cardHost.data
     readonly property alias glass: cardPanel
     property real contentPadding: 20
-    property Item anchorItem: null
     property var targetScreen: ScreenLifecycle.activeScreen
-    property bool centerOnScreen: false
     property bool modal: false
-    property int floatOffset: 12
     // "none" | "dim" | "dimBlur". The underlay shares this panel's single
     // surface, so the card's own blur cannot sample it -- KWin only samples the
     // surfaces below a blur. "dimBlur" therefore widens this surface's blur
@@ -102,15 +99,12 @@ Scope {
         ? popupMotion.requestedOpen : cardWindow.visible
     readonly property alias width: cardWindow.width
     readonly property alias height: cardWindow.height
-    readonly property bool _centered: root.centerOnScreen || root.modal
 
     signal aboutToShow()
     signal aboutToHide()
     signal backdropClicked()
 
     function show() {
-        if (root.anchorItem && !root._centered)
-            root._placeAnchored()
         cardWindow.visible = true
         if (root.animateOnShow)
             popupMotion.open()
@@ -125,15 +119,6 @@ Scope {
     function open() { root.show() }
     function close() { root.hide() }
     function toggle() { root.requestedOpen ? root.hide() : root.show() }
-
-    property real _anchorX: 0
-    property real _anchorY: 0
-    function _placeAnchored() {
-        const g = root.anchorItem.mapToGlobal(0, 0)
-        root._anchorX = Math.round(g.x - (cardWindow.x || 0))
-        root._anchorY = Math.round(g.y - (cardWindow.y || 0)
-                                   - cardPanel.height - root.floatOffset)
-    }
 
     PanelWindow {
         id: cardWindow
@@ -241,10 +226,8 @@ Scope {
 
             width: cardHost.width + root.contentPadding * 2
             height: cardHost.height + root.contentPadding * 2
-            x: root._centered
-                ? Math.round((cardWindow.width - width) / 2) : root._anchorX
-            y: root._centered
-                ? Math.round((cardWindow.height - height) / 2) : root._anchorY
+            x: Math.round((cardWindow.width - width) / 2)
+            y: Math.round((cardWindow.height - height) / 2)
             scale: (root.animateOnShow && popupMotion.progress < 0.999)
                 ? root.startScale + (1 - root.startScale) * popupMotion.progress : 1
             transformOrigin: Item.Top

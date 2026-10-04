@@ -104,7 +104,6 @@ PopupWindow {
         }
         if (!coordinator.open)
             coordinator.openAll()
-        coordinator.modalActive = true
     }
 
     function closeSubmenu() {
@@ -113,7 +112,6 @@ PopupWindow {
         sessionModalVisible = false
         pendingConfirmAction = ""
         activeSubmenu = ""
-        coordinator.modalActive = false
     }
     function openSettingsModule(module) {
         panel.close()
@@ -154,7 +152,6 @@ PopupWindow {
     QtObject {
         id: coordinator
         readonly property bool open: popupMotion.requestedOpen
-        property bool modalActive: false
         property var cardAnchor: panel.anchorItem
         function openAll() {
             if (!popupMotion.mapped)
@@ -402,12 +399,9 @@ PopupWindow {
             // Control Center changes, and the primary cards stay mapped behind it.
             if (!coordinator.open)
                 coordinator.openAll()
-            coordinator.modalActive = true
         }
         if (!panel.sessionModalVisible) {
             panel.pendingConfirmAction = ""
-            if (panel.activeSubmenu === "")
-                coordinator.modalActive = false
         }
     }
 
@@ -451,7 +445,6 @@ PopupWindow {
         sessionModalVisible = false
         submenuOpen = false
         activeSubmenu = ""
-        coordinator.modalActive = false
         pendingConfirmAction = ""
     }
 
@@ -1776,7 +1769,6 @@ PopupWindow {
     // card shadow the other important dialogs already have.
     KosFloatPanel {
         id: sessionConfirm
-        centerOnScreen: true
         modal: true
         backdropMode: "none"
         dismissOnBackdrop: false

@@ -18,7 +18,6 @@ KosFloatPanel {
     signal accepted()
     signal rejected()
     modal: true
-    centerOnScreen: true
     backdropMode: "none"
     dismissOnBackdrop: true
     contentPadding: 0
