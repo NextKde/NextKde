@@ -1825,15 +1825,18 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                     const QSize size = (backgroundRect.size() / (1 << (i + 1))).expandedTo(QSize(1, 1));
                     auto texture = GLTexture::allocate(textureFormat, size);
                     if (!texture) {
+                        // Degrade to a scrim-less frame instead of returning:
+                        // an early return here would skip unbindArrays() below
+                        // and kill the whole frame's blur pass.
                         qCWarning(KWIN_BLUR) << "Failed to allocate a scrim average texture";
-                        return;
+                        break;
                     }
                     texture->setFilter(GL_LINEAR);
                     texture->setWrapMode(GL_CLAMP_TO_EDGE);
                     auto framebuffer = std::make_unique<GLFramebuffer>(texture.get());
                     if (!framebuffer->valid()) {
                         qCWarning(KWIN_BLUR) << "Failed to create a scrim average framebuffer";
-                        return;
+                        break;
                     }
 #ifdef GLASS_X11
                     GLFramebuffer::pushFramebuffer(framebuffer.get());
@@ -1847,30 +1850,37 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                     renderInfo.scrimAvgTextures.push_back(std::move(texture));
                     renderInfo.scrimAvgFramebuffers.push_back(std::move(framebuffer));
                 }
-                renderInfo.scrimAvgSize = backgroundRect.size();
-                renderInfo.scrimAvgLevels = levels;
+                if (renderInfo.scrimAvgFramebuffers.size() == static_cast<size_t>(levels)) {
+                    renderInfo.scrimAvgSize = backgroundRect.size();
+                    renderInfo.scrimAvgLevels = levels;
+                }
             }
 
             // Halve each level with the same box-average pass the blur uses,
             // reaching 1x1 (a single texel = the whole-surface mean colour).
-            ShaderManager::instance()->pushShader(m_downsamplePass.shader.get());
-            QMatrix4x4 projectionMatrix;
-            projectionMatrix.ortho(QRectF(0.0, 0.0, backgroundRect.width(), backgroundRect.height()));
-            m_downsamplePass.shader->setUniform(m_downsamplePass.mvpMatrixLocation, projectionMatrix);
-            m_downsamplePass.shader->setUniform(m_downsamplePass.offsetLocation, 1.0f);
-            GLTexture *read = renderInfo.framebuffers[0]->colorAttachment();
-            for (int i = 0; i < levels && read; ++i) {
-                const QVector2D halfpixel(0.5f / read->width(), 0.5f / read->height());
-                m_downsamplePass.shader->setUniform(m_downsamplePass.halfpixelLocation, halfpixel);
-                glActiveTexture(GL_TEXTURE0);
-                read->bind();
-                EglContext::currentContext()->pushFramebuffer(renderInfo.scrimAvgFramebuffers[i].get());
-                vbo->draw(GL_TRIANGLES, 0, 6);
-                EglContext::currentContext()->popFramebuffer();
-                read = renderInfo.scrimAvgFramebuffers[i]->colorAttachment();
+            // Only on a complete chain: an allocation failure above leaves the
+            // chain partial and scrimAvg null, so this frame keeps its blur
+            // (minus the whole-surface tone) instead of losing it entirely.
+            if (renderInfo.scrimAvgFramebuffers.size() == static_cast<size_t>(levels)) {
+                ShaderManager::instance()->pushShader(m_downsamplePass.shader.get());
+                QMatrix4x4 projectionMatrix;
+                projectionMatrix.ortho(QRectF(0.0, 0.0, backgroundRect.width(), backgroundRect.height()));
+                m_downsamplePass.shader->setUniform(m_downsamplePass.mvpMatrixLocation, projectionMatrix);
+                m_downsamplePass.shader->setUniform(m_downsamplePass.offsetLocation, 1.0f);
+                GLTexture *read = renderInfo.framebuffers[0]->colorAttachment();
+                for (int i = 0; i < levels && read; ++i) {
+                    const QVector2D halfpixel(0.5f / read->width(), 0.5f / read->height());
+                    m_downsamplePass.shader->setUniform(m_downsamplePass.halfpixelLocation, halfpixel);
+                    glActiveTexture(GL_TEXTURE0);
+                    read->bind();
+                    EglContext::currentContext()->pushFramebuffer(renderInfo.scrimAvgFramebuffers[i].get());
+                    vbo->draw(GL_TRIANGLES, 0, 6);
+                    EglContext::currentContext()->popFramebuffer();
+                    read = renderInfo.scrimAvgFramebuffers[i]->colorAttachment();
+                }
+                ShaderManager::instance()->popShader();
+                scrimAvg = read;
             }
-            ShaderManager::instance()->popShader();
-            scrimAvg = read;
         }
     }
 
