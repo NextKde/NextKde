@@ -687,7 +687,7 @@ deploy_artifacts() {
         ln -sf "$artifact_root/share/kos/platform/kwin/window-bridge.js" \
             "$prefix/share/kos/platform/kwin/window-bridge.js"
     else
-        install -m 0644 "$project_dir/platform/kwin/window-bridge.js" \
+        install -m 0644 "$project_dir/kwin/window-bridge.js" \
             "$prefix/share/kos/platform/kwin/window-bridge.js"
     fi
 
