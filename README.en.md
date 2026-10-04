@@ -383,7 +383,7 @@ See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
 Preview the UI without installing it (reuses installed services):
 
 ```sh
-qs -p "$PWD/shell"
+./tools/kosctl run
 ```
 
 To debug source QML, run this in one terminal and leave it running; press

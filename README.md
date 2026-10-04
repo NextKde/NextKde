@@ -387,7 +387,7 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 只想预览界面、不安装到系统（复用已安装的服务）：
 
 ```sh
-qs -p "$PWD/shell"
+./tools/kosctl run
 ```
 
 调试源码 QML（保持运行，`Ctrl+C` 结束）：
