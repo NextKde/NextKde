@@ -19,7 +19,7 @@ ShellRoot {
     BarAutoHideController { id: barBoot; mode: "always"; configReady: false }
     DockAutoHideController { id: dock; mode: "persistent"; configReady: true; windowDataReady: true }
     DockAutoHideController { id: sized; mode: "smart"; configReady: true; windowDataReady: true; targetScreen: screenGeometry; dockWidth: 100; dockHeight: 60 }
-    KosFloatPanel { id: panel; centerOnScreen: true; animateOnShow: true; Item { width: 200; height: 90 } }
+    KosFloatPanel { id: panel; animateOnShow: true; Item { width: 200; height: 90 } }
     OverviewWindow { id: overview }
     QuickSearchWindow { id: search; mode: "clipboard"; TestEvent { id: events } }
     QuickSearch { id: pasteController }

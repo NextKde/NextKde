@@ -394,7 +394,6 @@ assert.doesNotMatch(appActions, /_queueDeepLink|_deepLinkDelay/,
 
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
-const controlCenterCoordinator = read("../../shell/desktop/modules/bar/ControlCenterCoordinator.qml");
 const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
 assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
     "shared popup motion uses Launchpad's 150ms entrance timing");
@@ -402,12 +401,12 @@ assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset
     "shared popup motion uses Launchpad's 0.96 settle scale");
 assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
     "popup open and close use cubic easing without overshoot");
-assert.doesNotMatch(controlCenterCoordinator, /cascade|interval:\s*12/,
-    "control-center cards use one synchronized animation");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
 const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
 const controlCenterPanelSource = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+assert.doesNotMatch(controlCenterPanelSource, /cascade|interval:\s*12/,
+    "control-center cards use one synchronized animation");
 const globalMenuSource = read("../../shell/desktop/modules/bar/GlobalMenu.qml");
 const dockAnimationSource = read("../../shell/desktop/modules/dock/DockAnimation.qml");
 const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
