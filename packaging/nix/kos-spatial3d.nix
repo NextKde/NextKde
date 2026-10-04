@@ -2,7 +2,7 @@
 stdenv.mkDerivation {
   pname = "kos-spatial3d";
   version = "unstable";
-  src = "${src}/qml-plugins/spatial3d";
+  src = "${src}/shell/native/spatial3d";
   nativeBuildInputs = [ cmake ];
   buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative kdePackages.qtquick3d opencv ];
   cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_INSTALL_LIBDIR=lib" ];

@@ -2,13 +2,13 @@
 stdenv.mkDerivation {
   pname = "kos-surface-shape";
   version = "unstable";
-  src = "${src}/qml-plugins/surface-shape";
+  src = "${src}/shell/native/surface-shape";
   nativeBuildInputs = [ cmake pkg-config kdePackages.extra-cmake-modules wayland-scanner ];
   buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative kdePackages.qtwayland wayland ];
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
     "-DCMAKE_INSTALL_LIBDIR=lib"
-    "-DKOS_SURFACE_PROTOCOL_FILE=${src}/qml-plugins/surface-shape/kos-surface-shape-v1.xml"
+    "-DKOS_SURFACE_PROTOCOL_FILE=${src}/shell/native/surface-shape/kos-surface-shape-v1.xml"
   ];
   dontWrapQtApps = true;
   meta = {

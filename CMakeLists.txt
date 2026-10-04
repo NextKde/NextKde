@@ -635,7 +635,7 @@ endif()
 
 # The shell imports this QML module even without compositor effects.
 if(KOS_BUILD_PLATFORM OR KOS_BUILD_KWIN_PLUGINS)
-    add_subdirectory(qml-plugins/surface-shape)
+    add_subdirectory(shell/native/surface-shape)
 endif()
 
 if(KOS_BUILD_KWIN_PLUGINS)
@@ -652,7 +652,7 @@ endif()
 if(KOS_BUILD_PLATFORM AND KOS_SPATIAL_ENABLED)
     find_package(Qt6 QUIET COMPONENTS Quick3D)
     if(TARGET Qt6::Quick3D AND Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
-        add_subdirectory(qml-plugins/spatial3d)
+        add_subdirectory(shell/native/spatial3d)
     else()
         message(STATUS "Qt Quick 3D not found; spatial mesh renderer disabled")
     endif()
