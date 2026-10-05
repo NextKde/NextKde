@@ -32,6 +32,14 @@ Scope {
 
     IpcHandler {
         target: "stage-sidebar"
+        // ⚠️ CLI 陷阱（quickshell 0.3.1 CLI11 subcommand fallthrough）：
+        // ipc 层子命令 {show,call,wait,listen,prop} + 根层 {log,list,kill,
+        // ipc,msg} 会沿祖先链吞掉同名 function——`ipc call <t> show` 永远
+        // 打印列表并以退出码 0"成功"返回，不派发（hide/toggle/enable/
+        // disable/snapshot/set 已核安全）。show/hide 经 CLI 从未可用，
+        // 仅为 API 完整性保留，任何调用方必须用 enable/disable
+        function enable(): void { StageModeService.setEnabled(true) }
+        function disable(): void { StageModeService.setEnabled(false) }
         function show(): void { StageModeService.setEnabled(true) }
         function hide(): void { StageModeService.setEnabled(false) }
         function toggle(): void { StageModeService.toggle() }

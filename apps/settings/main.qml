@@ -636,12 +636,19 @@ ApplicationWindow {
 
         property var memStatus: ({})
 
-        // 内存状态 5s 轮询（页面激活期间）
+        // 内存状态 5s 轮询（页面激活期间）；顺带回读 fg-sched 快照——
+        // stage-mode flag 会被 shell 单独改写（重启对齐/控制中心开关），
+        // 纯事件驱动的快照会陈旧，轻量轮询（本地文件读取，无 IPC）兜底
         Timer {
             interval: 5000
             repeat: true
             running: fgSchedPage.bridge !== null
-            onTriggered: fgSchedPage.bridge !== null && fgSchedPage.bridge.fgSchedMemStatus()
+            onTriggered: {
+                if (fgSchedPage.bridge === null)
+                    return
+                fgSchedPage.bridge.fgSchedMemStatus()
+                fgSchedPage.bridge.fgSchedSnapshot()
+            }
         }
 
         Component.onCompleted: refresh()
