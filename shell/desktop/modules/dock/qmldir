@@ -11,6 +11,7 @@ DockRevealHandle 1.0 DockRevealHandle.qml
 # ── Layout components ──
 DockContainer 1.0 DockContainer.qml
 DockIcon 1.0 DockIcon.qml
+DockIconHighlight 1.0 DockIconHighlight.qml
 DockDivider 1.0 DockDivider.qml
 DockMusicPlayer 1.0 DockMusicPlayer.qml
 DockInfoCarousel 1.0 DockInfoCarousel.qml

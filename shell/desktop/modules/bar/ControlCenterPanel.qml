@@ -525,6 +525,13 @@ PopupWindow {
     // Disc toggles power; tapping the rest of the pill opens the network list.
     ControlCenterCard {
         id: wifiCard
+        ControlCenterSelection {
+            pointer: wifiPagePointer
+            cornerRadius: wifiCard.cardRadius
+            selected: NetworkService.wifiEnabled
+            hovered: wifiPagePointer.containsMouse || wifiTogglePointer.containsMouse
+            pressed: wifiPagePointer.pressed || wifiTogglePointer.pressed
+        }
         coordinator: coordinator
         cardScale: wifiPagePointer.pressed ? 0.97 : wifiPagePointer.containsMouse ? 1.015 : 1
         Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
@@ -659,6 +666,13 @@ PopupWindow {
     // Disc toggles power; tapping the pill opens the device list.
     ControlCenterCard {
         id: bluetoothCard
+        ControlCenterSelection {
+            pointer: bluetoothPagePointer
+            cornerRadius: bluetoothCard.cardRadius
+            selected: ControlCenterService.bluetoothPowered
+            hovered: bluetoothPagePointer.containsMouse || bluetoothTogglePointer.containsMouse
+            pressed: bluetoothPagePointer.pressed || bluetoothTogglePointer.pressed
+        }
         coordinator: coordinator
         cardScale: bluetoothPagePointer.pressed ? 0.97 : bluetoothPagePointer.containsMouse ? 1.015 : 1
         Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
@@ -907,6 +921,10 @@ PopupWindow {
     // ── Card 4: Screenshot ───────────────────────────────────────────
     ControlCenterCard {
         id: slotCard1
+        ControlCenterSelection {
+            pointer: screenshotPointer
+            cornerRadius: slotCard1.cardRadius
+        }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 264
@@ -944,6 +962,11 @@ PopupWindow {
     // ── Card 5: Dark Mode / Theme Toggle ─────────────────────────────
     ControlCenterCard {
         id: slotCard2
+        ControlCenterSelection {
+            pointer: themePointer
+            cornerRadius: slotCard2.cardRadius
+            selected: ThemeService.isDark
+        }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 203
@@ -993,6 +1016,10 @@ PopupWindow {
     // ── Card 6: Power & Session ──────────────────────────────────────
     ControlCenterCard {
         id: slotCard3
+        ControlCenterSelection {
+            pointer: powerPointer
+            cornerRadius: slotCard3.cardRadius
+        }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 142
@@ -1037,6 +1064,11 @@ PopupWindow {
     // ── Card 7: Do Not Disturb ───────────────────────────────────────
     ControlCenterCard {
         id: slotCard4
+        ControlCenterSelection {
+            pointer: dndPointer
+            cornerRadius: slotCard4.cardRadius
+            selected: ControlCenterService.doNotDisturbEnabled
+        }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 81
@@ -1083,6 +1115,11 @@ PopupWindow {
     // ── Card 8: Night Light ──────────────────────────────────────────
     ControlCenterCard {
         id: slotCard5
+        ControlCenterSelection {
+            pointer: nightLightPointer
+            cornerRadius: slotCard5.cardRadius
+            selected: ControlCenterService.nightLightActive
+        }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -1129,6 +1166,12 @@ PopupWindow {
     // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
         id: slotCard6
+        ControlCenterSelection {
+            pointer: brightnessPagePointer
+            cornerRadius: slotCard6.cardRadius
+            hovered: brightnessPagePointer.containsMouse || brightnessSlider._hovered
+            pressed: brightnessPagePointer.pressed || brightnessSlider._pressed
+        }
         coordinator: coordinator
         offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -1162,6 +1205,7 @@ PopupWindow {
             font { pixelSize: 15; weight: Font.Bold }
         }
         MouseArea {
+            id: brightnessPagePointer
             anchors { left: parent.left; right: parent.right; top: parent.top }
             height: 27
             hoverEnabled: true
@@ -1198,6 +1242,12 @@ PopupWindow {
     // ── Card 8: Sound / volume ───────────────────────────────────────
     ControlCenterCard {
         id: slotCard7
+        ControlCenterSelection {
+            pointer: soundPagePointer
+            cornerRadius: slotCard7.cardRadius
+            hovered: soundPagePointer.containsMouse || volumeSlider._hovered
+            pressed: soundPagePointer.pressed || volumeSlider._pressed
+        }
         coordinator: coordinator
         offsetTop: 282 + panel.mainControlsOffsetY
         offsetRight: 20
@@ -1224,6 +1274,7 @@ PopupWindow {
             }
         }
         MouseArea {
+            id: soundPagePointer
             anchors { left: parent.left; top: parent.top; right: parent.right }
             height: 26
             cursorShape: Qt.PointingHandCursor
@@ -1291,6 +1342,11 @@ PopupWindow {
     // magiclamp dock 动画。切换逻辑在 StageModeService。
     ControlCenterCard {
         id: stageModeCard
+        ControlCenterSelection {
+            pointer: stagePointer
+            cornerRadius: stageModeCard.cardRadius
+            selected: StageModeService.enabled
+        }
         coordinator: coordinator
         visible: cardShown && coordinator.cardAnchor !== null
         // 顶栏布局恒在滑杆正下方（347）——原先藏在通知历史之下（533），
@@ -1607,6 +1663,10 @@ PopupWindow {
                         font { pixelSize: 18; weight: Font.Bold }
                     }
 
+                    ControlCenterSelection {
+                        pointer: sessionBackMouse
+                        cornerRadius: 9
+                    }
                     MouseArea {
                         id: sessionBackMouse
                         anchors.fill: parent
@@ -1736,6 +1796,10 @@ PopupWindow {
                             }
                         }
 
+                        ControlCenterSelection {
+                            pointer: sessionRow
+                            cornerRadius: 9
+                        }
                         MouseArea {
                             id: sessionRow
                             anchors.fill: parent
@@ -1880,6 +1944,10 @@ PopupWindow {
                         font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
 
+                    ControlCenterSelection {
+                        pointer: executeConfirmMouse
+                        cornerRadius: 9
+                    }
                     MouseArea {
                         id: executeConfirmMouse
                         anchors.fill: parent
@@ -2005,6 +2073,10 @@ PopupWindow {
                     font { pixelSize: 18; weight: Font.Bold }
                 }
 
+                ControlCenterSelection {
+                    pointer: submenuBackMouse
+                    cornerRadius: 9
+                }
                 MouseArea {
                     id: submenuBackMouse
                     anchors.fill: parent
@@ -2289,6 +2361,11 @@ PopupWindow {
                             }
                         }
 
+                        ControlCenterSelection {
+                            pointer: wifiRowMouse
+                            cornerRadius: 10
+                            selected: !!modelData.active
+                        }
                         MouseArea {
                             id: wifiRowMouse
                             anchors.fill: parent
@@ -2351,6 +2428,10 @@ PopupWindow {
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
+                ControlCenterSelection {
+                    pointer: wifiSettingsMouse
+                    cornerRadius: 8
+                }
                 MouseArea {
                     id: wifiSettingsMouse
                     anchors.fill: parent
@@ -2537,6 +2618,11 @@ PopupWindow {
                             }
                         }
 
+                        ControlCenterSelection {
+                            pointer: btRowMouse
+                            cornerRadius: 10
+                            selected: !!modelData.connected
+                        }
                         MouseArea {
                             id: btRowMouse
                             anchors.fill: parent
@@ -2582,6 +2668,10 @@ PopupWindow {
                     font { pixelSize: 13; weight: Font.Bold }
                 }
 
+                ControlCenterSelection {
+                    pointer: btSettingsMouse
+                    cornerRadius: 8
+                }
                 MouseArea {
                     id: btSettingsMouse
                     anchors.fill: parent
