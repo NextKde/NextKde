@@ -276,6 +276,18 @@ StageAnimEffect::StageAnimEffect()
     setVertexSnappingMode(RenderGeometry::VertexSnappingMode::None);
 }
 
+StageAnimEffect::~StageAnimEffect()
+{
+    m_liveFrameTimer.stop();
+    m_liveStatusTimer.stop();
+    m_liveStaleTimer.stop();
+    effects->makeOpenGLContextCurrent();
+    for (auto it = m_liveCards.begin(); it != m_liveCards.end(); ++it)
+        releaseLiveCard(**it);
+    m_liveCards.clear();
+    writeLiveStatus();
+}
+
 bool StageAnimEffect::supported()
 {
     return OffscreenEffect::supported() && effects->animationsSupported();
@@ -320,7 +332,8 @@ void StageAnimEffect::reconfigure(ReconfigureFlags)
 
     // 活体卡总闸（默认开——shell 侧 thumbLiveEffect 才是用户开关，
     // 这里只是排障时的硬断路器）
-    m_liveEnabled = grp.readEntry<bool>("LiveCards", true);
+    // Without a content renderer, leave the complete card to QML snapshots.
+    m_liveEnabled = STAGE_LIVE_CONTENT_RENDER && grp.readEntry<bool>("LiveCards", true);
     if (!m_liveEnabled && !m_liveCards.isEmpty()) {
         // 硬断路器：必须逐卡撤引用再清表——裸 clear() 会把所有离屏渲染
         // 引用漏在窗口上（隐藏窗永久继续出帧＝排障时"莫名变卡"的陷阱）
@@ -1975,6 +1988,13 @@ void StageAnimEffect::drawLiveCards(const RenderTarget &renderTarget,
     quint32 paintable = 0;
     for (const auto &cp : order)
         drawLiveCardBody(viewport, dpr, *cp, paintable);
+    for (const auto &cp : order) {
+        if (cp->renderCount > 0 && cp->paintCount > 0 && !cp->dying
+            && !m_liveAcknowledged.contains(cp->id)) {
+            writeLiveStatus();
+            break;
+        }
+    }
     // 软件光标补绘（必须在全部卡之后：后置通道本身盖住了场景内光标）
     drawSoftwareCursor(viewport, dpr);
     if (scissorWas)
@@ -2298,12 +2318,20 @@ void StageAnimEffect::writeLiveStatus()
         return;
     QJsonObject obj;
     obj.insert(QStringLiteral("at"), QDateTime::currentMSecsSinceEpoch());
-    obj.insert(QStringLiteral("active"), !m_liveCards.isEmpty());
-    // chrome:true = 卡面视觉已由特效接管（QML 侧隐藏视觉只留输入热区）
-    obj.insert(QStringLiteral("chrome"), !m_liveCards.isEmpty());
     QJsonArray ids;
-    for (auto it = m_liveCards.constBegin(); it != m_liveCards.constEnd(); ++it)
-        ids.append(it.key());
+    m_liveAcknowledged.clear();
+    if (m_liveShader && m_cardShader && m_cursorShader) {
+        for (auto it = m_liveCards.constBegin(); it != m_liveCards.constEnd(); ++it) {
+            const LiveCard &card = **it;
+            if (card.renderCount == 0 || card.paintCount == 0 || card.dying
+                || !liveCardPaintable(card))
+                continue;
+            ids.append(it.key());
+            m_liveAcknowledged.insert(it.key());
+        }
+    }
+    obj.insert(QStringLiteral("active"), !ids.isEmpty());
+    obj.insert(QStringLiteral("chrome"), !ids.isEmpty());
     obj.insert(QStringLiteral("cards"), ids);
     f.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
     f.commit();

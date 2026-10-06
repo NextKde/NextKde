@@ -18,9 +18,8 @@
 
 // 6.6 公开的离屏渲染入口（Compositor::scene()->renderer()）在 6.7+ 被收进
 // KWin 进程内部（kwinApp()->scene() / renderer(RenderDevice*) 均不在公开头
-// 里）。活体内容重渲管线只在 6.6 分支编译；6.7+ 编译为静态玻璃卡降级
-//（发布协议本就支持无内容卡：FBO 空内容 ct.a=0 时着色器退化为纯背板，
-// 与占位形态同一代码路径，无需额外分支）
+// 里）。活体内容重渲管线只在 6.6 分支编译；6.7+ 不接管卡面，
+// 保留 QML 快照与交互，避免用空背板替代窗口内容。
 #ifdef KOS_KWIN_PAINT_TIME_API
 #define STAGE_LIVE_CONTENT_RENDER 1
 #else
@@ -186,6 +185,7 @@ class StageAnimEffect : public OffscreenEffect
 
 public:
     StageAnimEffect();
+    ~StageAnimEffect() override;
 
     void reconfigure(ReconfigureFlags) override;
 #ifdef KOS_KWIN_PAINT_TIME_API
@@ -272,6 +272,7 @@ private:
     QHash<QString, QSharedPointer<LiveCard>> m_liveCards; // 含 dying 退场卡（统一绘制管线）
     QSet<QString> m_liveWanted; // 最近一次发布在册的 id（缺席踢除的对照基准）
     QSet<QString> m_livePending; // 文件里有、窗口还没出现（等 windowAdded）
+    QSet<QString> m_liveAcknowledged; // Only cards with rendered, painted content own QML visuals.
     quint32 m_liveFeedTick = 0;  // 帧投喂分级节拍
     quint32 m_liveFeedCounter = 0; // 相位分配计数
     std::unique_ptr<GLShader> m_liveShader;
