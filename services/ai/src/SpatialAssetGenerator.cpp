@@ -108,7 +108,7 @@ cv::Mat largestComponent(const cv::Mat &binary, double minimumFraction,
     return selected ? labels == selected : cv::Mat{};
 }
 
-void fillEnclosedHoles(cv::Mat &mask)
+void fillEnclosedHoles(cv::Mat &mask, const cv::Mat &depth)
 {
     if (mask.empty())
         return;
@@ -130,8 +130,20 @@ void fillEnclosedHoles(cv::Mat &mask)
         holes, labels, stats, centroids, 8);
     const int maximumHoleArea = static_cast<int>(mask.total() * 0.025);
     for (int index = 1; index < count; ++index) {
-        if (stats.at<int>(index, cv::CC_STAT_AREA) <= maximumHoleArea)
-            mask.setTo(255, labels == index);
+        const int area = stats.at<int>(index, cv::CC_STAT_AREA);
+        if (area > maximumHoleArea) continue;
+        const cv::Mat hole = labels == index;
+        cv::Mat ring;
+        cv::dilate(hole, ring, cv::getStructuringElement(cv::MORPH_ELLIPSE, {7, 7}));
+        cv::bitwise_and(ring, mask, ring);
+        if (!cv::countNonZero(ring)) continue;
+        // Real gaps between arms/fingers see the farther background. Only
+        // restore holes whose depth agrees with the surrounding subject.
+        const double boundaryDepth = cv::mean(depth, ring)[0];
+        cv::Mat supported = depth >= std::max(0.0, boundaryDepth - 0.10 * 65535);
+        cv::bitwise_and(supported, hole, supported);
+        if (cv::countNonZero(supported) >= area * 0.8)
+            mask.setTo(255, hole);
     }
 }
 
@@ -165,7 +177,7 @@ cv::Mat foregroundMask(const cv::Mat &photo, const cv::Mat &depth)
     cv::morphologyEx(binary, binary, cv::MORPH_CLOSE,
                      cv::getStructuringElement(cv::MORPH_ELLIPSE,
                                                cv::Size(3, 3)));
-    fillEnclosedHoles(binary);
+    fillEnclosedHoles(binary, depth);
     return binary;
 }
 
@@ -246,7 +258,7 @@ cv::Mat bottomEdgeForegroundMask(const cv::Mat &photo, const cv::Mat &depth)
     cv::morphologyEx(binary, binary, cv::MORPH_CLOSE,
                      cv::getStructuringElement(cv::MORPH_ELLIPSE,
                                                cv::Size(11, 11)));
-    fillEnclosedHoles(binary);
+    fillEnclosedHoles(binary, depth);
     return binary;
 }
 
@@ -385,6 +397,7 @@ SpatialAssetResult SpatialAssetGenerator::generate(const fs::path &imagePath,
         }
         cv::Mat mask;
         cv::Mat depthSupport;
+        cv::Mat holeSupport;
         bool modelSegmentation = false;
         static ForegroundSegmenter segmenter;
         std::string segmentError;
@@ -423,7 +436,9 @@ SpatialAssetResult SpatialAssetGenerator::generate(const fs::path &imagePath,
                         cv::bitwise_or(mask, support, mask);
                         depthSupport = std::move(support);
                     }
-                    fillEnclosedHoles(mask);
+                    const cv::Mat beforeRepair = mask.clone();
+                    fillEnclosedHoles(mask, depth);
+                    cv::subtract(mask, beforeRepair, holeSupport);
                     modelSegmentation = true;
                 }
             }
@@ -449,6 +464,8 @@ SpatialAssetResult SpatialAssetGenerator::generate(const fs::path &imagePath,
             modelAlpha.copyTo(alpha, allowed);
             if (!depthSupport.empty())
                 alpha.setTo(255, depthSupport);
+            if (!holeSupport.empty())
+                alpha.setTo(255, holeSupport);
             cv::GaussianBlur(alpha, alpha, cv::Size(), 0.7);
         } else {
             cv::Mat matteCore;
