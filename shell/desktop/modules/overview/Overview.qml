@@ -7,8 +7,8 @@ import qs.desktop.modules.dock
 Scope {
     id: root
 
-    function show() { root.toggle() }
-    function hide() { root.toggle() }
+    function show() { WindowService.setOverviewVisible(true) }
+    function hide() { WindowService.setOverviewVisible(false) }
     function toggle() {
         WindowService.toggleOverview()
     }
