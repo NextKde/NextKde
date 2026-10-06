@@ -45,17 +45,16 @@ struct BlurRenderData
     /// contains not blurred background behind the window, it's cached.
     std::vector<std::unique_ptr<GLTexture>> textures;
     std::vector<std::unique_ptr<GLFramebuffer>> framebuffers;
-    // Scratch chain for the whole-surface scrim average: the backdrop is
-    // reduced to 1x1 here so every fragment shares one uniform tone instead of
-    // banding on a variegated backdrop.
-    std::vector<std::unique_ptr<GLTexture>> scrimAvgTextures;
-    std::vector<std::unique_ptr<GLFramebuffer>> scrimAvgFramebuffers;
-    int scrimAvgLevels = 0;
+    // Independent low-pass backdrop for adaptive scrims. Stop at 1/16 scale
+    // to keep local light/dark areas while suppressing wallpaper detail.
+    std::vector<std::unique_ptr<GLTexture>> scrimLumaTextures;
+    std::vector<std::unique_ptr<GLFramebuffer>> scrimLumaFramebuffers;
+    int scrimLumaLevels = 0;
     /// Size the scratch chain was built for. The level count alone does not
     /// change when the capture resizes inside one power-of-two octave, so the
     /// chain has to be keyed on the size as well or its levels no longer match
-    /// the capture they are averaging.
-    QSize scrimAvgSize;
+    /// the capture they are filtering.
+    QSize scrimLumaSize;
     /// One scratch capture per declared blur-override level (protocol v4
     /// set_blur). runBlurPass overwrites the shared mip chain in place, so a
     /// level's result has to be copied out here before the next pass -- or the
