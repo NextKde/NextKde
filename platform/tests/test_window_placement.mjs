@@ -3,7 +3,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
-const bridgePath = fileURLToPath(new URL("../kwin/window-bridge.js", import.meta.url));
+const bridgePath = fileURLToPath(new URL("../../kwin/window-bridge.js", import.meta.url));
 const source = fs.readFileSync(bridgePath, "utf8");
 const helpers = source.slice(0, source.indexOf("// Runtime-dependent bridge helpers"));
 const timers = [];
