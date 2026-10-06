@@ -12,6 +12,10 @@ Item {
     height: implicitHeight
     property bool dockHosted: false
     property string dockEdge: "bottom"
+    // Reveal progress of the auto-hiding Bar this cluster lives in. 1 for a
+    // cluster that is not inside a sliding Bar (the Dock host) and for a Bar
+    // that is permanently visible.
+    property real barRevealProgress: 1
     readonly property bool contextualEditingAvailable: !dockHosted
     readonly property bool verticalDock: dockHosted && dockEdge !== "bottom"
     // DockContainer uses this stable, single-row maximum for its width solver.
@@ -259,6 +263,7 @@ Item {
             ControlCenterPanel {
                 dockHosted: root.dockHosted
                 dockEdge: root.dockEdge
+                barRevealProgress: root.barRevealProgress
                 onWifiNetworkSelected: function(network) {
                     networkPanel.showNetworkDialog(network)
                     controlCenterUnloadTimer.restart()

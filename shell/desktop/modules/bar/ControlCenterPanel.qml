@@ -61,6 +61,22 @@ PopupWindow {
     property real brightnessPreview: ControlCenterService.brightnessPercent
     property bool draggingBrightness: false
     property bool sessionModalVisible: false
+    // Reveal progress of the auto-hiding Bar this panel hangs off (1 when the
+    // Bar is permanently visible or the panel is Dock hosted).
+    property real barRevealProgress: 1
+    // Set while an open request is waiting for the Bar to settle before the
+    // popup window is created. See anchorSettled.
+    property bool pendingOpen: false
+    // A PopupWindow measures its anchor rectangle once, when its window is
+    // created. The Bar translates its whole content while auto-hiding
+    // (barWrapper.y), so creating the window while the Bar is still hidden
+    // anchors the panel to the hidden Bar and leaves it overlapping the Bar
+    // once the Bar slides back in -- which is exactly what the Super+B
+    // shortcut hit, because a shortcut can arrive with the Bar put away.
+    // `requestedOpen` is already true while we wait, so the Bar's own popup
+    // inhibitor slides the Bar out first and the window is only created once
+    // it has stopped moving.
+    readonly property bool anchorSettled: panel.barRevealProgress > 0.999
     property string pendingConfirmAction: ""
     property string confirmActionLabel: ""
     property alias logoutConfirmationVisible: panel.sessionModalVisible
@@ -129,8 +145,10 @@ PopupWindow {
     onNetworkRequested: openSubmenu("wifi")
     onBluetoothRequested: openSubmenu("bluetooth")
 
-    // Bar reads this for sharedPanelOpen / toggle state.
-    readonly property bool isOpen: coordinator.open
+    // Bar reads this for sharedPanelOpen / toggle state. A deferred open
+    // (pendingOpen) already counts as open: it is what keeps the Bar revealed
+    // while the panel waits for the Bar to settle.
+    readonly property bool isOpen: coordinator.open || panel.pendingOpen
 
     // The target screen (the bar's output). Cards live on the same screen.
     readonly property var targetScreen: ScreenLifecycle.activeScreen
@@ -426,7 +444,7 @@ PopupWindow {
     function toggle(item) {
         anchorItem = item
         _triggerTransitionGuard()
-        if (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "") {
+        if (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== "") {
             close()
         } else {
             panel.sessionModalVisible = false
@@ -434,11 +452,41 @@ PopupWindow {
             panel.activeSubmenu = ""
             panel.pendingConfirmAction = ""
             ControlCenterService.refresh()
+            if (panel.anchorSettled)
+                coordinator.openAll()
+            else
+                panel.pendingOpen = true
+        }
+    }
+
+    // The Bar finished sliding; open the deferred panel now that its anchor
+    // will be measured against the Bar's resting position.
+    onAnchorSettledChanged: {
+        if (!panel.anchorSettled || !panel.pendingOpen)
+            return
+        panel.pendingOpen = false
+        coordinator.openAll()
+    }
+
+    // Safety net: a request must never be swallowed if the Bar stops reporting
+    // a settled reveal. Showing the panel slightly high beats not showing it.
+    Timer {
+        id: pendingOpenFallback
+        interval: 700
+        repeat: false
+        running: panel.pendingOpen
+        onTriggered: {
+            if (!panel.pendingOpen)
+                return
+            console.info("[ControlCenter] Bar reveal never settled; opening anyway")
+            panel.pendingOpen = false
             coordinator.openAll()
         }
     }
+
     function close() {
         _triggerTransitionGuard()
+        panel.pendingOpen = false
         const closingSubmenu = submenuOpen || activeSubmenu !== ""
         const closingModal = sessionModalVisible || closingSubmenu
         coordinator.closeAll(closingModal)
@@ -472,8 +520,44 @@ PopupWindow {
         sessionModalVisible = true
     }
 
-    // (Single-block: no extra full-screen dismissal window needed; Escape and
-    // WindowService's active-window change below close the control center.)
+    // ── Outside-press dismissal ──────────────────────────────────────
+    // A PopupWindow anchored to the layer-shell Bar cannot take a Wayland
+    // popup grab here: Qt refuses to create the grabbing popup, so the surface
+    // never maps and the compositor never dismisses the panel on an outside
+    // press. Escape and the WindowService active-window watch below only cover
+    // the keyboard and presses on another *toplevel* -- not presses on the
+    // desktop or on the Bar itself, which is exactly where users click to put
+    // the Control Center away. Catch those with a transparent full-screen
+    // Top-layer surface: a popup attached to a layer surface renders above its
+    // layer, so the panel keeps every press that lands on a card and this
+    // catcher only sees the ones that miss.
+    PanelWindow {
+        id: dismissalCatcher
+        screen: panel.targetScreen
+        visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
+            && (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== "")
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell-controlcenter-backdrop"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.ArrowCursor
+            onPressed: panel.close()
+        }
+    }
+
+    // If the display server ever closes the popup behind our back, fold the
+    // motion state too: otherwise `coordinator.open` keeps reporting true and
+    // the next toggle would "close" a panel that is already gone.
+    onClosed: popupMotion.reset()
 
     Connections {
         target: WindowService
@@ -484,7 +568,7 @@ PopupWindow {
             // make the dialog flash away.
             if (panel.pendingConfirmAction !== "")
                 return
-            if (!panel._internalTransition && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== "")) {
+            if (!panel._internalTransition && (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== "")) {
                 panel.close()
             }
         }
@@ -502,14 +586,14 @@ PopupWindow {
         function onActiveMenuChanged() {
             if (ContextMenuCoordinator.activeMenu
                     && !panel._internalTransition
-                    && (coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== ""))
+                    && (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== ""))
                 panel.close()
         }
     }
 
     Shortcut {
         sequence: "Escape"
-        enabled: coordinator.open || panel.sessionModalVisible || panel.activeSubmenu !== ""
+        enabled: panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== ""
         onActivated: {
             if (panel.pendingConfirmAction !== "") {
                 panel.pendingConfirmAction = ""
