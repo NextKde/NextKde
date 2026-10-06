@@ -1,6 +1,6 @@
 // stage-geometry.mjs — 台前调度侧栏的纯几何计算，QML 与 node 单测共用
 // （pragma library 先例：modules/common/VisibilityPolicy.mjs）。
-// 布局常量集中于此；PERSPECTIVE_FOCAL 与 vendor/kwin-effects-stageanim
+// 布局常量集中于此；PERSPECTIVE_FOCAL 与 kwin/kwin-effects-stageanim
 // 的透视焦距必须保持一致——改一处必须同步另一处。
 
 // 面板窗宽 = 常驻左侧条宽（窗口 implicitWidth / exclusiveZone /

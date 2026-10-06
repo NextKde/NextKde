@@ -1,0 +1,20 @@
+{
+    "default": {
+        "position": "right",
+        "offset": { "x": 10, "y": 6 },
+        "buttonSize": 14,
+        "buttonSpacing": 14,
+        "panelPadding": 4.5,
+        "panelPaddingX": 10,
+        "interceptMargin": 5,
+        "background": "auto"
+    },
+    "apps": {
+        "firefox": {
+            "background": "dark"
+        },
+        "org.gnome.TextEditor": {
+            "showButtons": false
+        }
+    }
+}

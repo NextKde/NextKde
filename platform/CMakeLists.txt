@@ -16,7 +16,7 @@ find_package(KF6KIO REQUIRED)
 # KOS_BUILD_SPATIAL in the top-level file) instead of being unconditional. The
 # model a build like this would use is still a user-cache download.
 if(KOS_SPATIAL_ENABLED)
-    add_subdirectory(${CMAKE_SOURCE_DIR}/liquid-ai ${CMAKE_BINARY_DIR}/liquid-ai)
+    add_subdirectory(${CMAKE_SOURCE_DIR}/services/ai ${CMAKE_BINARY_DIR}/services/ai)
 endif()
 
 qt_standard_project_setup()
@@ -62,9 +62,9 @@ target_link_libraries(kos-platform PRIVATE
 
 if(KOS_SPATIAL_ENABLED)
     qt_add_executable(kos-ai-worker
-        ${CMAKE_SOURCE_DIR}/liquid-ai/worker/main.cpp
+        ${CMAKE_SOURCE_DIR}/services/ai/worker/main.cpp
     )
-    target_link_libraries(kos-ai-worker PRIVATE liquid-ai Qt6::Core)
+    target_link_libraries(kos-ai-worker PRIVATE kos-ai Qt6::Core)
     set_target_properties(kos-ai-worker PROPERTIES
         INSTALL_RPATH "$ORIGIN/../lib")
 
@@ -77,7 +77,7 @@ else()
     )
 endif()
 
-install(FILES kwin/window-bridge.js
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../kwin/window-bridge.js
     DESTINATION share/kos/platform/kwin
 )
 

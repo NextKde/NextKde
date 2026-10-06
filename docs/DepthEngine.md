@@ -1,6 +1,6 @@
 # Local AI depth engine
 
-`liquid-ai/` is a standalone C++ library. It depends on Qt Core/Network,
+`services/ai/` is a standalone C++ library. It depends on Qt Core/Network,
 OpenCV and ONNX Runtime, but has no dependency on Quickshell, Plasma, KDE or
 QML. The optional `kos-ai-worker` process owns `DepthGenerator` and its ONNX
 session. `kos-platform` starts it on the first request, sends bounded JSONL
@@ -128,14 +128,14 @@ and compositing path.
 
 ## Build runtime
 
-Nix builds use OpenCV and ONNX Runtime from `nix/kos-platform.nix`. On Arch,
+Nix builds use OpenCV and ONNX Runtime from `packaging/nix/kos-platform.nix`. On Arch,
 `kosctl build` installs OpenCV when needed and fetches the official ONNX Runtime
 Linux x64 1.30.0 C++ SDK into the ignored build directory. The SDK archive is
 SHA256-checked and its CPU shared libraries are installed beside
 `kos-platform` under `~/.local/lib`. The model itself is downloaded only when a
 non-cached depth request is made.
 
-The ONNX Runtime archive is currently Linux x64. The `liquid-ai` public API is
+The ONNX Runtime archive is currently Linux x64. The `kos-ai` public API is
 standard C++ and the model/runtime design allows platform-specific SDKs, but
 Windows and macOS packaging have not been implemented or validated in this
 project yet.

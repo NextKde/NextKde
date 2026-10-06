@@ -17,9 +17,9 @@ kos-platform ── argv ───► nmcli, wpctl, bluetoothctl, loginctl, gio,
 
 The KWin script is installed as data and loaded by the daemon. Its private
 session-D-Bus object is `org.kos.Platform` at `/Platform`; Shell never calls
-that object directly. KWin effects under `integrations/kwin/` remain separate
+that object directly. KWin effects under `kwin/` remain separate
 `.so` targets because KWin discovers each plugin by ID.
-`integrations/kwin/kos-decoration` is a KDecoration3 plugin rather
+`kwin/kos-decoration` is a KDecoration3 plugin rather
 than an effect: it installs to the `org.kde.kdecoration3` plugin directory.
 `kosctl install` installs it with the effects and never writes the selection:
 choosing it is the user's, through `[org.kde.kdecoration2] library` in
@@ -71,7 +71,7 @@ for a surface declaring nothing feeds the SDF KWin's own window radius -- the
 same value the ordinary-window path has always used -- so there is one source of
 rounding rather than one source plus an inference.
 
-`protocols/kos-surface-shape-v1.xml` is a project-local protocol that carries the
+`shell/native/surface-shape/kos-surface-shape-v1.xml` is a project-local protocol that carries the
 missing fields. It is deliberately not a Quickshell fork:
 
 ```text
@@ -99,9 +99,9 @@ case open. Three pieces implement it and all three build from this repository:
 
 | Piece | Path | Role |
 | --- | --- | --- |
-| Protocol | `protocols/kos-surface-shape-v1.xml` | Shared wire definition. |
-| Client | `integrations/quickshell/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
-| Server | `vendor/kwin-effects-glass/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
+| Protocol | `shell/native/surface-shape/kos-surface-shape-v1.xml` | Shared wire definition. |
+| Client | `shell/native/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
+| Server | `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
 
 `LiquidGlassPanel` owns the only declaration today; one is created per panel, so
 each popup's shape objects are independent. Where a surface declares shapes the
@@ -164,7 +164,7 @@ Three properties of this arrangement are load-bearing:
 
 > **Packaging status.** The module is currently built and installed through
 > `KOS_BUILD_KWIN_PLUGINS` / the `kwin_plugins` install component, even though it
-> has no KWin dependency. Consequences today: `nix/package.nix` copies `shell/`
+> has no KWin dependency. Consequences today: `packaging/nix/package.nix` copies `shell/`
 > and `shared/` only, so the NixOS package ships no module at all and
 > `import Kos.SurfaceShape 1.0` fails there; and a user-only install
 > (`KOS_BUILD_KWIN_PLUGINS=OFF`) skips it as well. Both break the whole `common`

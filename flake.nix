@@ -14,7 +14,7 @@
     in
     {
       packages.${system} = let
-        kos-desktop = pkgs.callPackage ./nix/package.nix {
+        kos-desktop = pkgs.callPackage ./packaging/nix/package.nix {
           src = ./.;
         };
       in {
@@ -34,7 +34,7 @@
         qs_bin = "${pkgs.quickshell}/bin/quickshell";
         
         # NixOS control interface
-        kos-ctl = pkgs.callPackage ./nix/kos-ctl.nix {};
+        kos-ctl = pkgs.callPackage ./packaging/nix/kos-ctl.nix {};
       in {
         options.services.kos = {
           enable = lib.mkEnableOption "KOS Desktop Shell";

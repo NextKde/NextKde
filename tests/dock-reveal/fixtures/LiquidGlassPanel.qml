@@ -16,4 +16,8 @@ Item {
     property string material: "clear"
     property int ambientTransitionDuration: 0
     property bool bottomEdgeVisible: true
+    property bool scrimEnabled: false
+    property string scrimLevel: "transparent"
+    property real scrimCap: 0.5
+    property real scrimDecay: 1.0
 }

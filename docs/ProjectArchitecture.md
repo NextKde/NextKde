@@ -9,18 +9,20 @@ Calendar, Todo, Weather, and Music are optional standalone applications.
 NextKde/
 ├── shell/                    Quickshell configuration root
 │   ├── shell.qml
-│   └── desktop/              UI feature modules
+│   ├── desktop/              UI feature modules
+│   └── native/               shell-owned QML native plugins (SurfaceShape, Spatial3D)
 ├── apps/                     settings plus optional standalone applications
 ├── shared/
 │   ├── qml/                  portable controls
 │   └── contracts/            JSONL and shortcut contracts
-├── services/data-service/    Go metrics/history/desktop service
+├── services/                 long-running process owners
+│   ├── ai/                   portable C++ local inference library (kos-ai)
+│   ├── data-service/         Go metrics/history/desktop service
+│   └── pim-service/          D-Bus activated Calendar/Todo storage
 ├── platform/                 kos-platform C++/Qt daemon
-├── liquid-ai/                portable C++ local inference library
-├── integrations/kwin/        project-owned KWin plugins
-├── vendor/kwin-effects-glass/ third-party KWin effect
-├── packaging/                systemd and desktop files
-├── tools/kosctl               lifecycle entry point
+├── kwin/                     project-owned KWin plugins, bridge script, and glass-effect
+├── packaging/                systemd, desktop files, and the nix packages
+├── tools/kosctl              lifecycle entry point
 └── docs/                     architecture and operational docs
 ```
 
@@ -30,7 +32,7 @@ NextKde/
 apps/settings ── Shell IPC ──► Quickshell
 Quickshell ── JSONL sockets ──► kos-platform / kos-data-service
 kos-platform ── D-Bus/argv ──► KDE, KWin, NetworkManager, PipeWire, BlueZ
-kos-platform ── bounded JSONL ──► kos-ai-worker ──► liquid-ai ──► ONNX Runtime / OpenCV
+kos-platform ── bounded JSONL ──► kos-ai-worker ──► kos-ai ──► ONNX Runtime / OpenCV
 ```
 
 `apps/settings` never imports `shell/desktop`; it uses the narrow
@@ -191,8 +193,8 @@ about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
 `.build/tests/services/data-service/go-test-cache`, which is the directory the
 ctest entry point actually uses.
 
-The four KWin plugins under `integrations/kwin` and
-`integrations/quickshell/surface-shape` are built by a **separate CI job** that
+The four KWin plugins under `kwin` and
+`shell/native/surface-shape` are built by a **separate CI job** that
 only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
 deliberately narrower than "the plugins work": loading them needs a running
 compositor, and installing them needs a SELinux relabel check, and neither

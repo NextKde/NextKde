@@ -9,8 +9,7 @@ import "../../../Kos/Ui"
 // is a LiquidGlassPanel with useKwinEffect:true, publishing its own
 // SurfaceShape. The panel window's single BackgroundEffect region is built as
 // the UNION of every card's blurRegion, so KWin blurs behind the cards but not
-// over the gaps between them -- hollow, frosted, and still one window with no
-// ControlCenterCoordinator.
+// over the gaps between them -- hollow, frosted, and still one window.
 Item {
     id: root
     default property alias content: cardContent.data

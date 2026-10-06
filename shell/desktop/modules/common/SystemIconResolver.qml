@@ -161,10 +161,6 @@ QtObject {
         return name ? (Quickshell.iconPath(name, true) || "") : ""
     }
 
-    function name(role, state) {
-        return nameFromCandidates(candidates(role, state), "image-missing")
-    }
-
     function source(role, state) {
         return sourceFromCandidates(candidates(role, state), "image-missing")
     }

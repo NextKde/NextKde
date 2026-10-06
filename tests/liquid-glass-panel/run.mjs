@@ -33,7 +33,7 @@ const dockWindow = readFileSync(
 const dockPill = dockWindow.match(
     /LiquidGlassPanel \{\n\s*id: pill\n([\s\S]*?)\n {8}\}/);
 assert.ok(dockPill, "the Dock's base pill is a LiquidGlassPanel named pill");
-assert.match(dockPill[1], /\n\s*radius: dockContainer\.pillRadius/,
+assert.match(dockPill[1], /\n\s*radius: root\.stretched \? 0 : dockContainer\.pillRadius/,
     "the Dock pill keeps its own radius");
 assert.match(dockPill[1],
     /\n\s*cornerExponent: 2\.35/,

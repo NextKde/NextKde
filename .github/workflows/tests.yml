@@ -102,7 +102,7 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      # The four plugins under integrations/kwin and integrations/quickshell
+      # The four plugins under kwin/ and shell/native
       # pull their own dependencies on top of the core set: `KWin` and
       # `KDecoration3` come from the `kwin` and `kdecoration` packages, and the
       # plugins additionally want Qt6 Widgets/OpenGL and gettext for the i18n

@@ -479,7 +479,6 @@ Item {
 
     DockTrashConfirmPopup {
         id: trashConfirmPopup
-        anchorItem: trashIcon
     }
 
     // A Dock panel cannot receive pointer events from the rest of the

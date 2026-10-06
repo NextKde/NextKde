@@ -46,7 +46,7 @@ python3 tests/clipboard-placement/run.py
 ```
 
 Build the effect separately with
-`cmake -S integrations/kwin/context-menu-input -B .build/input -G Ninja`
+`cmake -S kwin/context-menu-input -B .build/input -G Ninja`
 and `cmake --build .build/input --parallel 1`. The normal root build supplies
 the platform executable. These tests load the effect only into the private
 compositor; they do not install or reload any plugin in the running desktop.

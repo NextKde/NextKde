@@ -18,8 +18,8 @@ This repository is a KDE Plasma 6 Wayland desktop shell built with Quickshell
 - `kos-calendar`, `kos-todo`, `kos-weather`, and `kos-music`: optional,
   independently built Qt Quick applications. Calendar/Todo share the
   D-Bus-activated PIM service; Weather uses `kos-data-service`.
-- `integrations/kwin/`: the two project-owned KWin plugin libraries.
-- `vendor/kwin-effects-glass/`: third-party glass effect source with its own
+- `kwin/`: the two project-owned KWin plugin libraries.
+- `kwin/glass-effect/`: third-party glass effect source with its own
   license.
 
 ## IPC and state

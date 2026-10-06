@@ -18,16 +18,13 @@ Item {
 
     // ── Inputs ──
     property string position: "bottom"   // bottom | left | right
-    property string triggerMode: "fullEdge" // fullEdge | dockSpan
     property real windowWidth: 0         // owning surface size (logical px)
     property real windowHeight: 0
     // Stable full-reveal position in surface coordinates, not the animated
     // wrapper position. Side docks may be offset by the reserved top bar.
     property real dockX: 0
     property real dockY: 0
-    // The dock glass's layout size. The pill length follows the dock's along
-    // its own long edge (dockWidth on bottom, dockHeight on side) so the two
-    // always stay proportional; the pill is a fixed fraction shorter.
+    // The dock glass's layout size, used for the edge target and hint centre.
     property real dockWidth: 0
     property real dockHeight: 0
     // In dockSpan mode, only widen across the floating gap after reveal starts.
@@ -74,23 +71,21 @@ Item {
     // The handle is a second liquid surface. Its panel owns the matching
     // rounded blur mask and SurfaceShape; DockWindow only combines it with the
     // main Dock surface when it publishes BackgroundEffect.blurRegion.
-    readonly property var blurRegion: bar.visible ? pill.blurRegion : null
+    // A fully faded hint has no native shape. Its blur region must disappear
+    // too, otherwise KWin aligns the Dock against an invisible wider region.
+    readonly property var blurRegion: bar.visible && bar.opacity > 0 ? pill.blurRegion : null
 
     readonly property bool vertical: handle.position !== "bottom"
     readonly property real visualThickness: 6
     readonly property real edgeInset: 6
-    // The visual pill tracks the dock's own long edge (dockWidth on a bottom
-    // dock, dockHeight on a side dock) at a fraction that keeps it always
-    // slightly shorter than the dock, so a small dock shows a small pill and no
-    // wide fixed 50%-of-screen bar leaves big blank edges around it.
-    readonly property real barLength: Math.max(28, Math.round(
-        (handle.vertical ? handle.dockHeight : handle.dockWidth) * (1.0 - handle.barInsetRatio)))
-    readonly property real barInsetRatio: 0.20   // pill is 20% shorter than the dock
+    // DockWindow spans the full screen along its anchored edge. The hint uses
+    // 50% of that screen dimension, independent of the Dock's content length.
+    readonly property real barLength: Math.max(0, Math.round(
+        (handle.vertical ? handle.windowHeight : handle.windowWidth) * 0.5))
 
     // ── Hit target geometry (in window/parent coordinates) ──
-    // fullEdge retains the existing 14px strip. In dockSpan mode the same target
-    // and input-mask region grow from a 2px projected edge strip into a hold
-    // corridor after reveal begins, so crossing the gap does not drop hover.
+    // A 2px strip along the Dock's own edge span grows into a hold corridor
+    // once reveal begins, so crossing the floating gap does not drop hover.
     readonly property var hitRect: DockRevealGeometry.revealHitRect({
         position: handle.position,
         windowWidth: handle.windowWidth,
@@ -100,8 +95,7 @@ Item {
         dockWidth: handle.dockWidth,
         dockHeight: handle.dockHeight,
         active: handle.active,
-        expanded: handle.expanded,
-        triggerMode: handle.triggerMode
+        expanded: handle.expanded
     })
     readonly property real hitX: handle.hitRect.x
     readonly property real hitY: handle.hitRect.y
@@ -109,17 +103,13 @@ Item {
     readonly property real hitH: handle.hitRect.height
 
     // ── Visual bar geometry ──
-    // Preserve the screen-centred hint in fullEdge mode. For dockSpan, centre
-    // it on the same stable rectangle as the target (including top-bar offset).
+    // Centre the hint on the Dock's stable full-reveal rectangle, so it always
+    // tracks the glass (including a side Dock pushed down by the top bar).
     readonly property real barX: vertical
         ? (handle.position === "right" ? handle.windowWidth - handle.edgeInset - handle.visualThickness : handle.edgeInset)
-        : (handle.triggerMode === "dockSpan"
-            ? handle.dockX + (handle.dockWidth - handle.barLength) / 2
-            : (handle.windowWidth - handle.barLength) / 2)
+        : (handle.dockX + (handle.dockWidth - handle.barLength) / 2)
     readonly property real barY: vertical
-        ? (handle.triggerMode === "dockSpan"
-            ? handle.dockY + (handle.dockHeight - handle.barLength) / 2
-            : (handle.windowHeight - handle.barLength) / 2)
+        ? (handle.dockY + (handle.dockHeight - handle.barLength) / 2)
         : (handle.windowHeight - handle.edgeInset - handle.visualThickness)
 
     // Transparent hit target. opacity:0 items still hit-test, so HoverHandler
@@ -188,6 +178,13 @@ Item {
             material: "clear"
             ambientTransitionDuration: 600
             bottomEdgeVisible: true
+            // The handle is a small high-contrast affordance: its readability
+            // must not depend on the wallpaper. A stronger independent scrim
+            // keeps the hint legible while preserving backdrop adaptation.
+            scrimEnabled: true
+            scrimLevel: "custom"
+            scrimCap: 0.90
+            scrimDecay: 1.0
         }
     }
 }

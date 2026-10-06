@@ -1,0 +1,9 @@
+{
+    "KPlugin": {
+        "Name": "KOS Bridge",
+        "Description": "Draw window buttons on top of CSD windows",
+        "Category": "Appearance",
+        "License": "MIT",
+        "EnabledByDefault": true
+    }
+}

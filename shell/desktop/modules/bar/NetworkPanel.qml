@@ -572,7 +572,6 @@ AnimatedPopupWindow {
     KosFloatPanel {
         id: networkDialogOverlay
         modal: true
-        centerOnScreen: true
         backdropMode: "none"
         dismissOnBackdrop: false
         contentPadding: 0

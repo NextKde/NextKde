@@ -21,14 +21,14 @@
 
 ### 1.2 新增打包文件
 
-- `nix/kos-platform.nix` — 构建 C++ 平台守护进程
-- `nix/kwin-effects-glass.nix` — Glass 特效插件
+- `packaging/nix/kos-platform.nix` — 构建 C++ 平台守护进程
+- `packaging/nix/kwin-effects-glass.nix` — Glass 特效插件
 
 ### 1.3 修复现有打包文件
 
-- `nix/package.nix` — 整合所有组件 + systemd 服务 + 快捷方式创建
-- `nix/shell-data-service.nix` — 修复 Go 模块路径、systemd 服务路径
-- KWin 插件路径修正为 `integrations/kwin/...`
+- `packaging/nix/package.nix` — 整合所有组件 + systemd 服务 + 快捷方式创建
+- `packaging/nix/shell-data-service.nix` — 修复 Go 模块路径、systemd 服务路径
+- KWin 插件路径修正为 `kwin/...`
 
 ### 1.4 flake.nix 完善
 
@@ -180,12 +180,12 @@ inputs = {
 |------|----------|
 | `tools/kosctl` | NixOS 支持、nix 子命令、doctor 增强 |
 | `flake.nix` | Gitee 远程、NixOS module、services.kos.enable |
-| `nix/package.nix` | 整合所有组件、systemd 服务、路径 patch |
-| `nix/kos-settings.nix` | QML 安装、自定义 buildPhase |
-| `nix/kos-platform.nix` | 新增、C++ 平台守护进程构建 |
-| `nix/kwin-effects-glass.nix` | 新增、Glass 特效插件构建 |
+| `packaging/nix/package.nix` | 整合所有组件、systemd 服务、路径 patch |
+| `packaging/nix/kos-settings.nix` | QML 安装、自定义 buildPhase |
+| `packaging/nix/kos-platform.nix` | 新增、C++ 平台守护进程构建 |
+| `packaging/nix/kwin-effects-glass.nix` | 新增、Glass 特效插件构建 |
 | `nix/kwin-dock-window-animation.nix` | 修复路径 |
 | `nix/kwin-context-menu-input.nix` | 修复路径 |
-| `nix/shell-data-service.nix` | 修复 Go 模块路径、systemd 服务路径 |
+| `packaging/nix/shell-data-service.nix` | 修复 Go 模块路径、systemd 服务路径 |
 | `nix-configuration-xiaoyintx/flake.nix` | 添加 nextkde input |
 | `nix-configuration-xiaoyintx/hosts/omen-16/config.nix` | 导入 module、启用服务 |

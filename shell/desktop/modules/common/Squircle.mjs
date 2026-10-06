@@ -3,7 +3,7 @@
 // A shell surface's outline is drawn by more than one layer: the QML material
 // mask (SquircleMask.qml), the compositor blur region (RoundedBlurRegion.qml,
 // rectangular primitives only) and, from the KWin side of the work, the glass
-// mask in vendor/kwin-effects-glass. Each is written in a different language,
+// mask in kwin/glass-effect. Each is written in a different language,
 // so the field lives here once and every other copy is a mirror of it:
 //
 //   Squircle.mjs                                 reference -- this file
@@ -129,7 +129,7 @@ export function squircleGradient(x, y, halfWidth, halfHeight, radius, exponent) 
 }
 
 // Coverage of the shape at one pixel centre, using the compositor's own
-// first-order footprint (vendor/kwin-effects-glass:
+// first-order footprint (kwin/glass-effect:
 // src/shaders/onscreen_rounded.glsl -- sum *= 1 - clamp(0.5 + f / fwidth(f))).
 //
 // On the GPU fwidth() comes from screen-space derivatives; for a smooth field

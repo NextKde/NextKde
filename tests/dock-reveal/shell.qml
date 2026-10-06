@@ -10,7 +10,6 @@ ShellRoot {
     property int enteredCount: 0
     property int exitedCount: 0
     property string dockPosition: "bottom"
-    property string revealTriggerMode: "dockSpan"
     property real dockX: 200
     property real dockY: 520
     property real dockWidth: 400
@@ -37,7 +36,6 @@ ShellRoot {
             DockRevealHandle {
                 id: handle
                 position: test.dockPosition
-                triggerMode: test.revealTriggerMode
                 windowWidth: surface.width
                 windowHeight: surface.height
                 dockX: test.dockX; dockY: test.dockY
@@ -86,7 +84,6 @@ ShellRoot {
             try {
                 switch (test.stage++) {
                 case 0:
-                    check(defaultHandle.triggerMode === "fullEdge", "unconfigured handles preserve full-edge mode")
                     check(controller.phase === "Hidden", "persistent mode boots hidden")
                     rect(200, 598, 400, 2)
                     move(100, 599)
@@ -217,50 +214,21 @@ ShellRoot {
                 case 20:
                     check(controller.phase === "Held", "right edge hover reveals")
                     rect(778, 170, 22, 300)
-                    test.revealTriggerMode = "fullEdge"
-                    rect(786, 0, 14, 600)
-                    check(handle.visualBar.y + handle.visualBar.height / 2 === 300,
-                        "full-edge hint keeps its legacy screen-centred position")
-                    move(799, 50)
+                    check(handle.visualBar.y + handle.visualBar.height / 2 === 320,
+                        "hint is centred on the Dock's own rectangle")
+                    test.dockWidth = 0; test.dockHeight = 0
                     interval = 200
                     break
                 case 21:
-                    check(controller._handleHovered && controller.phase === "Held",
-                        "full-edge mode responds outside the Dock span")
-                    test.revealTriggerMode = "dockSpan"
-                    interval = 200
-                    break
-                case 22:
                     check(!controller._handleHovered,
-                        "switching to the smaller span clears a parked outside hover")
-                    controller.resetForScreenChange()
-                    rect(798, 170, 2, 300)
-                    move(799, 50)
-                    interval = 180
-                    break
-                case 23:
-                    check(controller.phase === "Hidden", "dock-span mode keeps the unused edge inert")
-                    test.revealTriggerMode = "fullEdge"
-                    move(799, 51)
-                    interval = 400
-                    break
-                case 24:
-                    check(controller.phase === "Held" && controller._handleHovered,
-                        "switching back restores full-edge entry")
-                    test.dockWidth = 0; test.dockHeight = 0
-                    rect(786, 0, 14, 600)
-                    interval = 200
-                    break
-                case 25:
-                    check(controller._handleHovered,
-                        "legacy full-edge input remains available before Dock layout is ready")
+                        "empty geometry releases its hover hold")
+                    rect(0, 0, 0, 0)
                     controller.mode = "always"
                     interval = 200
                     break
-                case 26:
+                case 22:
                     check(!controller._handleHovered && !handle.hitTarget.enabled,
-                        "always mode clears and disables full-edge hover too")
-                    rect(0, 0, 0, 0)
+                        "always mode clears the hover and disables the edge target")
                     console.log("DOCK_REVEAL_RUNTIME_PASS")
                     Qt.quit()
                     break

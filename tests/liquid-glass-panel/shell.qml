@@ -162,10 +162,18 @@ Item {
             aliasedChild.parent !== null && aliasedChild.parent !== aliased)
 
         // ---- the dock consumer ------------------------------------------
-        // barLength is max(28, round(dockWidth * 0.8)) = 240, so the capsule
+        // barLength is round(windowWidth * 0.5) = 240, so the capsule
         // radius is half the 6px thickness.
         check("dock pill exists", handle.visualPill !== null
             && handle.visualPill !== undefined)
+        check("dock hint length follows the screen", handle.visualBar.width === 240)
+        check("dock hint has its own stronger adaptive scrim",
+            handle.visualPill._effectiveScrimCap === 0.90
+            && handle.visualPill._effectiveScrimDecay === 1.0)
+        handle.fadeOpacity = 0
+        check("faded hint retires its compositor region", handle.blurRegion === null)
+        handle.fadeOpacity = 1
+        check("visible hint restores its compositor region", handle.blurRegion !== null)
         check("dock pill keeps its capsule profile",
             handle.visualPill.cornerExponent === 2.35)
         check("dock pill capsule radius", handle.visualPill.radius === 3)

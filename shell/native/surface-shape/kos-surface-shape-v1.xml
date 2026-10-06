@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="kos_surface_shape_v1">
+  <copyright>
+    SPDX-License-Identifier: MIT
+  </copyright>
+
+  <interface name="kos_surface_shape_manager_v1" version="4">
+    <description summary="surface-local compositor shape metadata">
+      Creates independent shape declarations for regions inside a wl_surface.
+      Coordinates and radius use surface-local logical units.
+    </description>
+    <request name="get_shape">
+      <arg name="id" type="new_id" interface="kos_surface_shape_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+  </interface>
+
+  <!--
+    Version 3 adds set_scrim. The composite must stay binary-compatible with
+    v2 clients: the departing v2 server still has to accept set_role (no-op),
+    and the new request must be appended after destroy so the destructor
+    opcode is unchanged.
+  -->
+  <!--
+    Version 4 adds set_blur. The composite must stay binary-compatible with
+    older clients: the departing server still has to accept every earlier
+    request (set_role is a no-op), and each new request is appended after
+    destroy so the destructor opcode is unchanged.
+  -->
+  <interface name="kos_surface_shape_v1" version="4">
+    <request name="set_geometry">
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
+    </request>
+    <request name="set_corner">
+      <arg name="radius" type="fixed"/>
+      <arg name="exponent" type="fixed"/>
+    </request>
+    <request name="set_enabled">
+      <arg name="enabled" type="uint"/>
+    </request>
+    <!--
+      Kept as a no-op for clients built against protocol version 2. Surface
+      roles were never consumed by the compositor and are no longer published
+      by KOS clients. Removing the request would shift the destructor opcode
+      and make old clients destroy their shape accidentally.
+    -->
+    <request name="set_role">
+      <arg name="role" type="uint"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+    <!--
+      A contrast scrim over this shape, sized to the background it sits on.
+      tint selects black or white. cap is the opacity ceiling for adaptive mode
+      and the exact opacity for fixed mode. decay values 0..1 scale adaptive
+      opacity; values above 1 select fixed mode, and values above 2 select the
+      fixed neutral graphite material; values above 3 select the fixed warm
+      pearl material. This encoding lets an older compositor safely clamp an
+      unknown fixed mode back to adaptive decay 1.
+      Deliberately after the destructor: a v2 client's destroy opcode must not
+      shift, so new versioned state is appended at the end.
+    -->
+    <request name="set_scrim" since="3">
+      <arg name="enabled" type="uint"/>
+      <arg name="tint" type="uint"/>
+      <arg name="cap" type="fixed"/>
+      <arg name="decay" type="fixed"/>
+    </request>
+    <!--
+      A per-shape blur strength override. enabled=0 keeps the shape on the
+      window's default blur pipeline (the historical behaviour). enabled=1
+      selects the compositor's blur level directly, on the same 1..15 scale
+      the global kwinrc BlurStrength uses, so a shape that follows the global
+      setting renders identically whether it is overridden or not. The shell
+      resolves the fixed/atLeast policy before sending; the compositor only
+      ever sees the final level.
+      Deliberately after the destructor: a v3 client's destroy opcode must not
+      shift, so new versioned state is appended at the end.
+    -->
+    <request name="set_blur" since="4">
+      <arg name="enabled" type="uint"/>
+      <arg name="level" type="uint"/>
+    </request>
+  </interface>
+</protocol>

@@ -401,13 +401,12 @@ watched QML source tree.
 `persistent` (stay hidden regardless of windows). Never persist separate
 booleans for these; that only produces illegal combinations.
 
-`DockConfigService.revealTriggerMode` is independent of visibility mode:
-`fullEdge` (the default) preserves the existing whole-edge trigger, while
-`dockSpan` opts into revealing only along the Dock's footprint. Missing or
-invalid saved values load as `fullEdge`; changing this choice must not require
-restarting the shell or changing the visibility policy. Settings use
-`updateRevealTriggerMode`, and the saved configuration and settings snapshot
-carry the same `revealTriggerMode` field.
+The hidden Dock reveals only along its own footprint: a hidden Dock responds in
+a 2 logical-pixel strip at the screen edge, over the Dock's actual span, and the
+rest of that edge stays pass-through. There is no whole-edge trigger and no user
+setting for it -- an earlier `fullEdge`/`dockSpan` choice was removed because the
+whole-edge variant only produced accidental reveals. A `revealTriggerMode` field
+left in an older configuration is ignored on load.
 
 Components:
 
@@ -445,27 +444,27 @@ Non-negotiable invariants:
 2. Hiding never destroys the `PanelWindow`, toggles `visible`, changes
    anchors, or spawns a second layer-shell window for the handle; it only
    translates `dockWrapper` inside the permanently mapped surface.
+   Once fully hidden, the capsule retires its blur region and exact shape;
+   only the visible reveal hint is submitted to the compositor. A fully faded
+   hint likewise submits no blur region.
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
    through. In `always` mode the handle hit target is zero-sized.
-   In the default `fullEdge` mode the existing **14 logical-pixel strip along
-   the whole screen edge** and screen-centred hint are preserved, independent
-   of Dock layout readiness or reveal progress.
-   In opt-in `dockSpan` mode a hidden Dock only responds in a **2 logical-pixel
-   strip at the screen edge, along the Dock's actual span**. The rest of that
-   edge, and the Dock's future footprint above it, remain pass-through. The span follows layout
-   changes and side-Dock top-bar reservations; it is not screen-centred by
-   assumption and does not follow animated transforms.
+   A hidden Dock only responds in a **2 logical-pixel strip at the screen edge,
+   along the Dock's actual span**. The rest of that edge, and the Dock's future
+   footprint above it, remain pass-through. The span follows layout changes and
+   side-Dock top-bar reservations; it is not screen-centred by assumption and
+   does not follow animated transforms. An empty or invalid Dock layout yields an
+   empty target, so no edge input is claimed before the layout is ready.
    The strip stays narrow during `RevealPending`. Once showing starts, and
    while reveal progress is nonzero, it extends across the floating gap and
    2 logical pixels into the static Dock rectangle. This allows slow pointer
    travel from the edge into the Dock without losing the hover hold. Once
    fully hidden, it contracts to the edge strip again. Invalid or empty Dock
-   geometry produces an empty target in `dockSpan` mode. Disabling or shrinking
-   a hovered target, including by changing trigger modes, must release its
-   controller hold if the pointer is no longer inside. In `dockSpan` mode the
-   decorative pill follows the Dock's centre; it does not define the input
-   region in either mode.
+   geometry produces an empty target. Disabling or shrinking a hovered target
+   must release its controller hold if the pointer is no longer inside. The
+   decorative pill is centred on the Dock's rectangle; it never defines the
+   input region.
 4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
    That mode also gives newly opened windows the same `workspaceGap` as the
    Dock's screen-edge float, preserving visible breathing room. Smart and

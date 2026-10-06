@@ -7,7 +7,7 @@
 ## 当前插件结构
 
 ```
-integrations/kwin/
+kwin/
 ├── context-menu-input/        # KWin Effect: 上下文菜单输入
 ├── dock-window-animation/     # KWin Effect: 停靠窗口动画
 ├── kos-bridge/                # KWin Effect: 窗口按钮面板
@@ -17,7 +17,7 @@ integrations/kwin/
 ## 目标插件结构
 
 ```
-integrations/kwin/
+kwin/
 ├── kos-decoration/            # 保持独立（KDecoration3：只画标题栏和标题，按钮由 kos-bridge 画）
 └── kos-bridge/                # 新的统一 Effect 插件
     ├── CMakeLists.txt
@@ -78,7 +78,7 @@ integrations/kwin/
 
 ### 阶段 5: 更新构建配置
 
-1. ✅ 创建 `nix/kwin-kos-bridge.nix`
+1. ✅ 创建 `packaging/nix/kwin-kos-bridge.nix`
 2. 更新 `flake.nix` 添加新的包
 3. 移除旧的 nix 配置（可选）
 
