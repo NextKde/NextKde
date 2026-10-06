@@ -119,8 +119,13 @@ if(BUILD_TESTING)
         )
         set_tests_properties(kos-shell.visibility-policy PROPERTIES TIMEOUT 10)
         find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner
-            HINTS /usr/lib/qt6/bin)
+            HINTS /usr/lib/qt6/bin /usr/lib64/qt6/bin)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
+            add_test(NAME kos-shell.dock-selection-highlight
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-highlight/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE})
+            set_tests_properties(kos-shell.dock-selection-highlight PROPERTIES LABELS ui TIMEOUT 20)
             add_test(NAME kos-shell.date-projection
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/date-projection/run.mjs
@@ -187,6 +192,11 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/test_geometry.mjs)
         set_tests_properties(kos-shell.dock-reveal-geometry PROPERTIES LABELS logic TIMEOUT 10)
+        add_test(NAME kos-shell.dock-magnification-response
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-magnification/test_response.mjs
+        )
+        set_tests_properties(kos-shell.dock-magnification-response PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.stage-geometry
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs
@@ -291,6 +301,22 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.dock-hover-hit PROPERTIES TIMEOUT 20)
+            add_test(NAME kos-shell.dock-magnification-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-magnification/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.dock-magnification-runtime PROPERTIES TIMEOUT 20)
+            if(KOS_QMLTESTRUNNER_EXECUTABLE)
+                add_test(NAME kos-shell.selection-surfaces
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/selection-surfaces/run.mjs
+                        ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                        ${KOS_QUICKSHELL_EXECUTABLE})
+                set_tests_properties(kos-shell.selection-surfaces PROPERTIES
+                    LABELS ui TIMEOUT 20
+                    ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            endif()
             add_test(NAME kos-shell.traditional-color-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/run.mjs
@@ -300,7 +326,7 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
                 kos-shell.glass-ink
-                kos-shell.dock-hover-hit
+                kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         find_program(KOS_WESTON_EXECUTABLE NAMES weston)
@@ -482,7 +508,7 @@ if(BUILD_TESTING)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
             kos-shell.liquid-glass-panel kos-shell.glass-ink
             kos-shell.traditional-color-runtime
-            kos-shell.dock-hover-hit
+            kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
             PROPERTIES LABELS ui)
     endif()
     if(KOS_PYTHON_EXECUTABLE)

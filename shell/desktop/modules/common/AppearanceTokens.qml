@@ -287,6 +287,7 @@ QtObject {
     // paint layer. Material retains its tonal paint layer, and separately
     // opts into a KWin blur region with no refraction.
     readonly property QtObject surface: QtObject {
+        readonly property string selectionHighlightStyle: tokens.isMacos ? "glass" : "flat"
         readonly property string treatment: tokens.isMaterial ? "tonal" : "glass"
         readonly property bool usesBackdrop: treatment !== "tonal"
         readonly property bool usesKwinBlur: usesBackdrop || tokens.isMaterial
@@ -435,6 +436,7 @@ QtObject {
             : tokens.isMaterial ? 0.28 : 0.30
         readonly property string activeBackgroundMode: tokens.isWindows12
             ? "subtle" : tokens.isMaterial ? "tonal" : "glass"
+        readonly property string selectionHighlightStyle: tokens.surface.selectionHighlightStyle
         readonly property bool magnificationEnabled: tokens.isMacos
         readonly property real hoverScale: tokens.isMacos ? 1.20 : 1.0
         readonly property real hoverLiftRatio: tokens.isMacos ? 0.08 : 0.0

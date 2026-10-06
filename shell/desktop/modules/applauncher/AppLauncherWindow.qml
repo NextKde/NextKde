@@ -13,6 +13,8 @@ import "../../../shared/qml/controls" as LiquidControls
 // once it is large enough, but keeps a usable minimum at initial/small sizes.
 PanelWindow {
     id: root
+    readonly property bool glassSelectionEnabled:
+        AppearanceTokens.surface.selectionHighlightStyle === "glass"
 
     // Distinguish this surface from other quickshell panels so the glass
     // plugin can give it its own highlight direction.
@@ -1662,7 +1664,29 @@ PanelWindow {
                                 height: Math.round(root.gridIconSize
                                     + root.configFontSize * 2 + 20)
                                 radius: Math.max(10, Math.round(root.gridIconSize * 0.25))
-                                color: root.folderMergeArmed && root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.30) : (root.folderMergeTargetKey === root._itemKey(modelData) ? Qt.rgba(0.36, 0.68, 1, 0.14) : (root.keyboardSelectionActive && (index + appDelegate.GridView.view.pageBaseIndex) === root.selectedIndex ? Qt.rgba(1, 1, 1, 0.18) : (appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent")))
+                                readonly property bool mergeTarget:
+                                    root.folderMergeTargetKey === root._itemKey(modelData)
+                                readonly property bool keyboardSelected:
+                                    root.keyboardSelectionActive
+                                    && (index + appDelegate.GridView.view.pageBaseIndex) === root.selectedIndex
+                                // Drop/merge feedback keeps its blue semantic state;
+                                // the glass plate replaces only normal hover/selection.
+                                color: mergeTarget
+                                    ? Qt.rgba(0.36, 0.68, 1, root.folderMergeArmed ? 0.30 : 0.14)
+                                    : root.glassSelectionEnabled ? "transparent"
+                                    : keyboardSelected ? Qt.rgba(1, 1, 1, 0.18)
+                                    : appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                SelectionHighlight {
+                                    objectName: "launcher-app-selection-highlight"
+                                    anchors.fill: parent
+                                    cornerRadius: appCard.radius
+                                    enabled: root.glassSelectionEnabled && appMouse.enabled
+                                        && !root.editMode && !appDelegate.manipulating && !appCard.mergeTarget
+                                    hovered: appMouse.containsMouse
+                                    selected: appCard.keyboardSelected
+                                    pressed: appMouse.pressed
+                                    dark: AppearanceTokens.isDarkTheme
+                                }
                                 border.width: root.folderMergeTargetKey === root._itemKey(modelData) ? 1 : 0
                                 border.color: Qt.rgba(0.36, 0.68, 1, root.folderMergeTargetKey === root._itemKey(modelData) ? 0.20 + root.folderMergeProgress * 0.42 : 0)
                                 rotation: 0
@@ -2383,7 +2407,18 @@ PanelWindow {
                                         // consumes its click before the button sees it.
                                         z: 1
                                         radius: Math.max(10, Math.round(root.configIconSize * 0.25))
-                                        color: folderAppMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                        color: !root.glassSelectionEnabled && folderAppMouse.containsMouse
+                                            ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                        SelectionHighlight {
+                                            objectName: "launcher-folder-selection-highlight"
+                                            anchors.fill: parent
+                                            cornerRadius: folderAppCard.radius
+                                            enabled: root.glassSelectionEnabled && folderAppMouse.enabled
+                                                && !root.folderEditMode && !folderAppDelegate.manipulating
+                                            hovered: folderAppMouse.containsMouse
+                                            pressed: folderAppMouse.pressed
+                                            dark: AppearanceTokens.isDarkTheme
+                                        }
                                         rotation: 0
                                         SequentialAnimation {
                                             id: folderWiggleAnimation

@@ -4,12 +4,13 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
+import "DockMagnification.mjs" as Magnification
 
 // ────────────────────────────────────────────────────────────────
 // DockIcon — Single icon in the dock.
 // Used for both pinned launcher icons and open window icons.
 //
-// Hover: gentle NumberAnimation via Behavior.
+// Fisheye: one frame-synchronized influence drives both scale and lift.
 // ────────────────────────────────────────────────────────────────
 
 Item {
@@ -135,6 +136,8 @@ Item {
             return Math.min(0.22, configuredAlpha)
         return configuredAlpha
     }
+    readonly property bool _glassSelectionHighlight:
+        AppearanceTokens.dock.selectionHighlightStyle === "glass"
     readonly property bool showActiveBackground: isRunning && isActivated
     readonly property bool showUrgentBackground: isRunning && isUrgent
         && !showActiveBackground
@@ -240,9 +243,10 @@ Item {
     // ═══════════════════════════════════════════════════════════
     // Distance-based magnification. The Item's width/height remain the fixed
     // layout slot; only its visual transform changes.
+    readonly property bool _usesDistanceMagnification:
+        AppearanceTokens.dock.magnificationEnabled && magnificationRoot !== null
     readonly property bool _distanceMagnificationEnabled:
-        AppearanceTokens.dock.magnificationEnabled
-        && magnificationRoot !== null
+        _usesDistanceMagnification
         && magnificationPointer.x > -9999
         && magnificationPointer.y > -9999
     // Stable slot centre in the magnification root's coordinates, mapped from
@@ -277,24 +281,41 @@ Item {
             1.0 - Math.abs(iconAxis - pointerAxis) / radius))
         return normalized * normalized * (3.0 - 2.0 * normalized)
     }
+    // Animate one normalized value, not the resulting scale and pixel offset
+    // independently. SpringAnimation integrates at 16 ms intervals even on a
+    // faster display, and its default epsilon stops these two units at different
+    // times. FrameAnimation follows the render cadence and sleeps once settled.
+    property real _magnificationProgress: 0
+    readonly property bool _magnificationAnimating:
+        _magnificationProgress !== _magnificationInfluence
+    FrameAnimation {
+        running: icon._magnificationAnimating
+        onTriggered: {
+            icon._magnificationProgress = Magnification.advance(
+                icon._magnificationProgress, icon._magnificationInfluence,
+                frameTime, DockAnimation.magnificationResponseSeconds,
+                DockAnimation.magnificationEpsilon)
+        }
+    }
     readonly property real _magnificationScale:
-        1.0 + _magnificationInfluence
+        1.0 + _magnificationProgress
             * (AppearanceTokens.dock.magnificationMaxScale - 1.0)
     // Continuous (sub-pixel) lift: rounding this to whole pixels would quantise
     // the small magnification lift into a couple of visible steps.
     readonly property real _magnificationLift:
         -(icon.iconSize
             * AppearanceTokens.dock.magnificationLiftRatio
-            * _magnificationInfluence)
+            * _magnificationProgress)
     // The distance curve already includes the hovered icon. Keep the original
     // one-icon fallback for non-macOS shell styles.
-    readonly property real _hoverScale:
-        !_distanceMagnificationEnabled && _hovering
+    property real _hoverScale:
+        !_usesDistanceMagnification && _hovering
             ? AppearanceTokens.dock.hoverScale : 1.0
-    // Lift non-focused tasks to make pointer feedback unmistakable. The active
-    // task keeps its shared background vertically stable, while scale alone
-    // still makes its hover state clear.
-    readonly property real _hoverLift: _hovering && !showActiveBackground
+    // Only isolated/non-fisheye hosts use binary hover feedback. Adding it to
+    // the distance curve introduces a several-pixel jump at every slot edge.
+    // Keep it disabled even during pointer exit, while the fisheye settles.
+    property real _hoverLift: !_usesDistanceMagnification
+        && _hovering && !showActiveBackground
         && AppearanceTokens.dock.hoverLiftRatio > 0
         ? -Math.max(2, Math.round(iconSize
             * AppearanceTokens.dock.hoverLiftRatio)) : 0
@@ -308,13 +329,6 @@ Item {
     // that deliberately extend past the icon edge.
     transform: Translate {
         y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
-        Behavior on y {
-            SpringAnimation {
-                spring: DockAnimation.iconSpring
-                damping: DockAnimation.iconDamping
-                mass: DockAnimation.iconMass
-            }
-        }
     }
 
     function acknowledgeAttention() {
@@ -383,7 +397,17 @@ Item {
     readonly property bool _hasWindows: _appWindows.length > 0
     readonly property string _previewWindowId: _hasWindows ? _appWindows[0].windowId : (icon.windowId || "")
 
-    Behavior on scale {
+    // Keep the legacy single-icon affordance for hosts without a shared
+    // pointer. Do not re-animate composed transforms: fisheye and attention
+    // already have their own animation clocks.
+    Behavior on _hoverScale {
+        SpringAnimation {
+            spring: DockAnimation.iconSpring
+            damping: DockAnimation.iconDamping
+            mass: DockAnimation.iconMass
+        }
+    }
+    Behavior on _hoverLift {
         SpringAnimation {
             spring: DockAnimation.iconSpring
             damping: DockAnimation.iconDamping
@@ -612,12 +636,33 @@ Item {
                     ? Qt.rgba(1, 1, 1, icon.activeBackgroundAlpha)
                     : Qt.rgba(1, 1, 1, icon.activeBackgroundAlpha))
             : Qt.rgba(1.0, 0.30, 0.12, icon.activeBackgroundAlpha)
-        visible: (icon.showActiveBackground && !icon.useSharedActiveBackground)
-            || icon.showUrgentBackground
+        objectName: "dock-legacy-active-background"
+        visible: (icon.showActiveBackground && !icon.useSharedActiveBackground
+                && !icon._glassSelectionHighlight) || icon.showUrgentBackground
         z: -1
         Behavior on color {
             ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
+    }
+
+    DockIconHighlight {
+        objectName: "dock-selection-highlight"
+        width: icon.iconSize + icon.activeBackgroundGap
+        height: width
+        anchors.centerIn: parent
+        cornerRadius: icon.activeBackgroundRadius
+        // Counter-rotate the lighting just like the artwork: "top" stays up
+        // on both side Docks, while the entire plate follows the icon's lift.
+        rotation: icon.vertical ? -90 : 0
+        enabled: icon._glassSelectionHighlight && !icon.showUrgentBackground
+            && !icon.editMode && !icon.isDragging
+        hovered: icon._hovering
+        selected: icon.showActiveBackground && !icon.useSharedActiveBackground
+        pressed: icon.interactive && _mouseArea.pressed
+        dark: AppearanceTokens.isDarkTheme
+        fadeDuration: DockAnimation.iconHighlightDuration
+        pressDuration: DockAnimation.iconPressHighlightDuration
+        z: -1
     }
 
     // External shell actions need feedback that stays visible even when the
@@ -640,6 +685,7 @@ Item {
     // have stronger state backgrounds, so they intentionally do not stack it.
     Rectangle {
         id: hoverHighlight
+        objectName: "dock-legacy-hover-highlight"
         width: icon.iconSize
         height: icon.iconSize
         anchors.centerIn: parent
@@ -647,7 +693,7 @@ Item {
         color: Qt.rgba(1, 1, 1, 0.12)
         opacity: icon._hovering && !icon.showActiveBackground
             && !icon.showUrgentBackground ? 1.0 : 0.0
-        visible: opacity > 0.0
+        visible: !icon._glassSelectionHighlight && opacity > 0.0
         z: -1
 
         Behavior on opacity {
@@ -670,7 +716,7 @@ Item {
         radius: icon.activeBackgroundRadius
         color: Qt.rgba(1, 1, 1, 0.12)
         opacity: 0.0
-        visible: opacity > 0.0
+        visible: !icon._glassSelectionHighlight && opacity > 0.0
         z: -1
     }
     NumberAnimation {

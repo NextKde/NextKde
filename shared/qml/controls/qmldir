@@ -10,3 +10,4 @@ LiquidTextField 1.0 LiquidTextField.qml
 singleton ControlForm 1.0 ControlForm.qml
 
 VectorIcon 1.0 VectorIcon.qml
+SelectionHighlight 1.0 SelectionHighlight.qml

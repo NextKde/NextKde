@@ -31,3 +31,4 @@ singleton SysTrayIdentityService 1.0 SysTrayIdentityService.qml
 ControlCenterCard 1.0 ControlCenterCard.qml
 ControlCenterSlider 1.0 ControlCenterSlider.qml
 StatusTooltip 1.0 StatusTooltip.qml
+ControlCenterSelection 1.0 ControlCenterSelection.qml

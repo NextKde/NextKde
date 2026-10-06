@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // The dual-slider control-centre mark is project-owned artwork (BundledIcons),
 // so it renders identically on every machine regardless of the icon theme.
@@ -20,6 +21,16 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
+    SelectionHighlight {
+        objectName: "control-center-toggle-highlight"
+        anchors.fill: parent
+        cornerRadius: 8
+        enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+        hovered: hoverArea.containsMouse || hoverArea.activeFocus
+        pressed: hoverArea.pressed
+        selected: root.panelOpen
+        dark: AppearanceTokens.isDarkTheme
+    }
     BundledIcon {
         anchors.centerIn: parent
         width: root.iconSize

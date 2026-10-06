@@ -18,6 +18,59 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 6. Hyprland metadata may be added as an adapter, but must not replace the
    provider-neutral `desktopId` contract.
 
+## Pointer magnification
+
+`DockIcon` measures pointer distance from its untransformed layout slot in
+`DockContainer` coordinates, including when the content row is rotated for a
+side Dock. The smoothstep distance curve sets a normalized target; one
+`FrameAnimation` follows it using the elapsed-time response in
+`DockMagnification.mjs`. Scale and lift derive from that same animated value.
+Do not put separate animations on the composed transforms or add a binary
+hover lift to the distance curve: those cause phase mismatch and slot-boundary
+jumps. Attention feedback is composed separately, without a second animation.
+
+The response time and settlement epsilon live in `DockAnimation`. The driver
+stops at the exact target rather than continuing to schedule idle frames.
+Icon slot sizes, hit testing, layout spacing and the existing magnification
+radius/maximum scale remain independent of the visual animation. Hosts without
+a shared magnification root retain single-icon hover feedback.
+
+`tests/dock-magnification/test_response.mjs` checks response equivalence at
+30–240 Hz, reversal and settlement. `tests/dock-magnification/run.mjs` exercises
+the shipping QML on all three edges, alongside the existing `dock-hover-hit`
+regression test. These are offscreen behavior checks, not GPU frame-rate
+benchmarks.
+
+### Selection lighting
+
+For the macOS preset, `DockIconHighlight` replaces the old flat active/hover
+plates with one translucent gradient, a thin rim and a top reflection. Hover,
+active-window selection and press feedback have separate intensities; leaving
+an active task keeps its quieter selected state. The component changes only
+paint and opacity, inherits the icon's existing fisheye transform, and
+counter-rotates on side Docks to keep its light direction upright. It has no
+pointer handlers, blur, offscreen layer or continuously running animation.
+
+Urgent tasks retain their existing colored background; editing/dragging
+suppresses the glass highlight. Material and Windows presets keep the legacy
+selection plates. `tests/dock-highlight/run.mjs` tests state transitions and
+light/dark rendering values; the magnification runtime fixture also verifies
+that the actual DockIcon wires these states without stacking legacy plates.
+
+The paint implementation lives in `shared/qml/controls/SelectionHighlight.qml`;
+`DockIconHighlight` remains a compatibility wrapper. The same component lights
+Control Center controls (without replacing their enabled-state colors) and
+Launcher apps/folders, including explicit keyboard selection. Launcher edit,
+reorder and merge feedback retain their own states. `ControlCenterSelection`
+observes the existing handler instead of adding one, so clicks, slider grabs
+and navigation remain owned by their original controls. `fillStrength` lets
+colored controls use a quieter overlay without muting the reflective rim.
+
+`tests/selection-surfaces/run.mjs` checks click-through and keyboard focus with
+Qt Quick Test, then loads the shipping Launcher and Control Center as unmapped
+Wayland surfaces to verify selection, folder, edit, merge and preset bindings.
+The latter check is explicitly skipped when no Wayland compositor is available.
+
 ## Service layers
 
 ```text
