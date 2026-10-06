@@ -14,7 +14,14 @@ Item {
     property real outputAspect: width > 0 && height > 0 ? width / height : 16 / 9
     readonly property real imageZoom: 1.16
     readonly property real focusZ: -depthGeometry.focusDistance
+    readonly property real foregroundTravel: 0.005
+    readonly property vector2d boundedPointer: Qt.vector2d(
+        Math.max(-1, Math.min(1, root.pointerX)),
+        Math.max(-1, Math.min(1, root.pointerY)))
+    readonly property real focusHalfHeight: depthGeometry.focusDistance
+        * Math.tan(Math.PI * 42 / 360)
     readonly property bool ready: depthGeometry.valid
+        && foregroundGeometry.valid
         && sourceInfo.status === Image.Ready
         && backgroundInfo.status === Image.Ready
         && matteInfo.status === Image.Ready
@@ -113,24 +120,73 @@ Item {
                 }
             }
         }
-    }
 
-    // The foreground outline comes from the cached soft segmentation matte,
-    // rather than from the coarse depth mesh's triangle boundary.
-    ShaderEffect {
-        anchors.fill: parent
-        visible: root.ready
-        property variant source: sourceInfo
-        property variant matte: matteInfo
-        property variant backgroundReference: backgroundInfo
-        property vector2d cropScale: root.cropScale
-        property real imageZoom: root.imageZoom
-        fragmentShader: Qt.resolvedUrl("shaders/spatial_foreground.frag.qsb")
+        // The subject shares the background's camera, with its own depth
+        // relief. Sample the original soft matte at fragment resolution so
+        // fingers and hair are not clipped to a coarse triangle silhouette.
+        Model {
+            // Orbiting around the focus plane leaves the subject almost
+            // stationary. Add a small near-field translation, opposite the
+            // far field, without rebuilding the mesh or separating its matte.
+            position: Qt.vector3d(
+                -root.boundedPointer.x * root.focusHalfHeight * root.outputAspect
+                    * root.foregroundTravel * 2,
+                root.boundedPointer.y * root.focusHalfHeight
+                    * root.foregroundTravel * 2, 0)
+            geometry: DepthMeshGeometry {
+                id: foregroundGeometry
+                foreground: true
+                depthPath: root.depthPath
+                mattePath: root.mattePath
+                imageZoom: root.imageZoom
+                outputAspect: root.outputAspect
+                sourceAspect: root.sourceAspect
+            }
+            materials: CustomMaterial {
+                shadingMode: CustomMaterial.Unshaded
+                cullMode: Material.NoCulling
+                depthDrawMode: Material.NeverDepthDraw
+                sourceBlend: CustomMaterial.One
+                destinationBlend: CustomMaterial.OneMinusSrcAlpha
+                vertexShader: Qt.resolvedUrl("shaders/spatial_subject.vert")
+                fragmentShader: Qt.resolvedUrl("shaders/spatial_subject.frag")
+                property TextureInput sourceTexture: TextureInput {
+                    enabled: true
+                    texture: Texture {
+                        source: root.wallpaperPath
+                        minFilter: Texture.Linear
+                        magFilter: Texture.Linear
+                        tilingModeHorizontal: Texture.ClampToEdge
+                        tilingModeVertical: Texture.ClampToEdge
+                    }
+                }
+                property TextureInput matteTexture: TextureInput {
+                    enabled: true
+                    texture: Texture {
+                        source: root.mattePath
+                        minFilter: Texture.Linear
+                        magFilter: Texture.Linear
+                        tilingModeHorizontal: Texture.ClampToEdge
+                        tilingModeVertical: Texture.ClampToEdge
+                    }
+                }
+                property TextureInput backgroundTexture: TextureInput {
+                    enabled: true
+                    texture: Texture {
+                        source: root.backgroundPath
+                        minFilter: Texture.Linear
+                        magFilter: Texture.Linear
+                        tilingModeHorizontal: Texture.ClampToEdge
+                        tilingModeVertical: Texture.ClampToEdge
+                    }
+                }
+            }
+        }
     }
 
     function updateCamera() {
-        const tiltX = Math.max(-1, Math.min(1, root.pointerX))
-        const tiltY = Math.max(-1, Math.min(1, root.pointerY))
+        const tiltX = root.boundedPointer.x
+        const tiltY = root.boundedPointer.y
         const yaw = tiltX * Math.PI * 4 / 180
         const pitch = -tiltY * Math.PI * 3 / 180
         const radius = depthGeometry.focusDistance
@@ -139,8 +195,7 @@ Item {
             root.focusZ + Math.cos(yaw) * Math.cos(pitch) * radius)
         camera.lookAt(Qt.vector3d(0, 0, root.focusZ))
     }
-    onPointerXChanged: updateCamera()
-    onPointerYChanged: updateCamera()
+    onBoundedPointerChanged: updateCamera()
     onOutputAspectChanged: updateCamera()
     Connections {
         target: depthGeometry

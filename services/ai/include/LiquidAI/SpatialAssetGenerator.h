@@ -19,7 +19,7 @@ struct SpatialAssetResult {
 class SpatialAssetGenerator final {
 public:
     static constexpr const char *contractVersion =
-        "isnet-general-use-softmatte-lowhalo-v14";
+        "isnet-general-use-softmatte-depthholes-v15";
 
     SpatialAssetResult generate(const std::filesystem::path &imagePath,
                                 const std::filesystem::path &depthPath) const;

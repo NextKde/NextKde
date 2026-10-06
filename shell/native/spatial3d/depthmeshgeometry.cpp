@@ -2,6 +2,9 @@
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#if __has_include(<opencv2/geometry/2d.hpp>)
+#include <opencv2/geometry/2d.hpp>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -115,6 +118,14 @@ void DepthMeshGeometry::setValid(bool valid)
     emit validChanged();
 }
 
+void DepthMeshGeometry::setForeground(bool foreground)
+{
+    if (m_foreground == foreground) return;
+    m_foreground = foreground;
+    emit foregroundChanged();
+    rebuild();
+}
+
 void DepthMeshGeometry::rebuild()
 {
     QElapsedTimer buildTimer;
@@ -162,7 +173,28 @@ void DepthMeshGeometry::rebuild()
         cv::getStructuringElement(cv::MORPH_ELLIPSE, {15, 15}));
     cv::GaussianBlur(expandedMatte, expandedMatte, {}, 3.0);
     cv::Mat depth = sourceDepth.clone();
-    for (int y = 0; y < fineRows; ++y) {
+    if (m_foreground) {
+        // Continue subject depth beyond the matte so transparent boundary
+        // triangles cannot bend towards the original far background. The
+        // high-resolution matte, rather than mesh topology, clips the outline.
+        cv::Mat outside = matte <= 16;
+        if (cv::countNonZero(outside) == static_cast<int>(outside.total())) return;
+        cv::Mat distance, labels;
+        cv::distanceTransform(outside, distance, labels, cv::DIST_L2,
+                              5, cv::DIST_LABEL_PIXEL);
+        double maximumLabel = 0;
+        cv::minMaxLoc(labels, nullptr, &maximumLabel);
+        std::vector<std::uint16_t> nearestDepth(static_cast<size_t>(maximumLabel) + 1);
+        for (int y = 0; y < fineRows; ++y) for (int x = 0; x < fineColumns; ++x) {
+            if (!outside.at<std::uint8_t>(y, x))
+                nearestDepth[labels.at<int>(y, x)] = sourceDepth.at<std::uint16_t>(y, x);
+        }
+        for (int y = 0; y < fineRows; ++y) for (int x = 0; x < fineColumns; ++x) {
+            if (outside.at<std::uint8_t>(y, x))
+                depth.at<std::uint16_t>(y, x) = nearestDepth[labels.at<int>(y, x)];
+        }
+        cv::GaussianBlur(depth, depth, {}, 3.0);
+    } else for (int y = 0; y < fineRows; ++y) {
         auto *depthRow = depth.ptr<std::uint16_t>(y);
         const auto *matteRow = expandedMatte.ptr<std::uint8_t>(y);
         for (int x = 0; x < fineColumns; ++x) {
@@ -172,7 +204,9 @@ void DepthMeshGeometry::rebuild()
         }
     }
     const double pivotDistance = farDistance - pivotDepth * depthSpan;
-    const auto distanceAtDepth = [pivotDepth, pivotDistance](double value) {
+    const auto distanceAtDepth = [this, pivotDepth, pivotDistance](double value) {
+        if (m_foreground)
+            return pivotDistance - (value - pivotDepth) * depthSpan * foregroundDepthScale;
         if (value >= pivotDepth)
             return pivotDistance - (value - pivotDepth) * depthSpan * foregroundDepthScale;
         return pivotDistance + (pivotDepth - value) * depthSpan * backgroundDepthScale;
@@ -234,13 +268,17 @@ void DepthMeshGeometry::rebuild()
         const int fineX = x * edgeRefinement;
         const int fineY = y * edgeRefinement;
         double cellMin = 1.0, cellMax = 0.0;
+        int maximumAlpha = 0;
         for (int sy = 0; sy <= edgeRefinement; ++sy) {
             for (int sx = 0; sx <= edgeRefinement; ++sx) {
                 const double value = sampleDepth(fineX + sx, fineY + sy);
                 cellMin = std::min(cellMin, value);
                 cellMax = std::max(cellMax, value);
+                maximumAlpha = std::max(maximumAlpha,
+                    static_cast<int>(matte.at<std::uint8_t>(fineY + sy, fineX + sx)));
             }
         }
+        if (m_foreground && maximumAlpha == 0) continue;
         if (cellMax - cellMin <= refinementThreshold) {
             appendTriangle(vertices[tl], vertices[bl], vertices[tr]);
             appendTriangle(vertices[tr], vertices[bl], vertices[br]);
@@ -280,7 +318,8 @@ void DepthMeshGeometry::rebuild()
     }
     setValid(true);
     update();
-    qInfo().nospace() << "[Spatial3D] mesh ready: " << triangles.size() / 3
+    qInfo().nospace() << "[Spatial3D] " << (m_foreground ? "foreground" : "background")
+        << " mesh ready: " << triangles.size() / 3
         << " triangles, " << refinedCells << " refined cells, "
         << buildTimer.elapsed() << " ms";
 }
