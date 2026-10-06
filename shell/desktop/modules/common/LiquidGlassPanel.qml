@@ -116,23 +116,10 @@ Item {
     //   "readable"    will fill in near-opaque to hold text (notifications),
     //   "custom"      falls back to the explicit scrimCap/scrimDecay below.
     property string scrimLevel: "transparent"
-    // What cap and decay mean at the shader:
-    //
-    //   amount = smoothstep(0.40, 0.85, damage)   // 0..1, from backdrop luminance
-    //   alpha  = clamp(max(amount * decay, 0.06 * cap), 0.0, cap)
-    //
-    // cap is the absolute ceiling on scrim opacity -- how solid the fill is ever
-    // allowed to become at the extreme, regardless of how bright/dark the
-    // backdrop is. decay is a per-surface calm factor that scales the curve down
-    // earlier (below the ceiling); it governs the mid-tone ramp, not the max,
-    // because cap always bites at the extreme. Every preset keeps cap < decay so
-    // cap stays the real maximum and decay only slows the approach to it.
-    // The 0.06*cap floor keeps a scrim from collapsing fully to invisible on a
-    // backdrop that already matches the tint; it scales with cap so see-through
-    // levels stay nearly transparent while readable ones hold a faint presence.
-    // A scrim that reaches this floor on a matching backdrop reverses to a fixed
-    // 10% opposite tint (white -> black, black -> white); it never follows the
-    // curve upward after reversing.
+    // KWin adapts to a softly filtered local backdrop. Rational brightness
+    // compression keeps the response continuous and avoids tonal reversals;
+    // cap bounds the combined opacity and lower decay slows the middle tones.
+    // A broad handoff retains at most 10% opposite tint on matching backdrops.
     property real scrimCap: 0.5
     property real scrimDecay: 1.0
     // The tint is owned by the panel, not passed in by a host. It follows the

@@ -1035,6 +1035,23 @@ configure_render_backend() {
     fi
 }
 
+# Keep the optional native QML modules reachable in every supported launch
+# mode. Qt 6 uses QML_IMPORT_PATH; retain QML2_IMPORT_PATH for older launchers
+# and preserve caller-provided paths after this session's modules.
+configure_shell_imports() {
+    local mode="${1:-source}"
+    local imports="$config_dir/quickshell/kos:$prefix/lib/qt6/qml"
+    if [[ "$mode" == source ]]; then
+        imports="$build_dir/qml:$project_dir/shell:$imports"
+    fi
+    local extra_imports="${QML_IMPORT_PATH:-}"
+    if [[ -n "${QML2_IMPORT_PATH:-}" && "${QML2_IMPORT_PATH:-}" != "$extra_imports" ]]; then
+        extra_imports="${extra_imports:+$extra_imports:}$QML2_IMPORT_PATH"
+    fi
+    export QML_IMPORT_PATH="$imports${extra_imports:+:$extra_imports}"
+    export QML2_IMPORT_PATH="$QML_IMPORT_PATH"
+}
+
 dev_all() {
     configure_render_backend
     if [[ -z "$qs_bin" ]]; then
@@ -1050,11 +1067,11 @@ dev_all() {
         printf 'Start them first: ./tools/kosctl start\n' >&2
         return 1
     fi
+    configure_shell_imports source
     "$qs_bin" -p "$project_dir/shell" kill >/dev/null 2>&1 || true
     printf 'Starting source Shell with system platform and data services\n'
-    QSG_RENDER_LOOP=threaded \
-    QML2_IMPORT_PATH="$build_dir/qml${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
-        exec "$qs_bin" -p "$project_dir/shell"
+    printf '  QML imports: %s\n' "$QML_IMPORT_PATH"
+    QSG_RENDER_LOOP=threaded exec "$qs_bin" -p "$project_dir/shell"
 }
 
 # Runs the just-built Settings binary against this checkout's QML and source
@@ -1080,6 +1097,7 @@ dev_settings() {
     printf '  QML tree:   %s/apps/settings\n' "$project_dir"
     printf '  Shell tree: %s/shell\n' "$project_dir"
     printf '  platform:   %s/kos-platform.sock\n' "$runtime_dir"
+    configure_shell_imports source
     KOS_SHELL_DIR="$project_dir/shell" exec "$executable"
 }
 
@@ -1601,13 +1619,12 @@ run_shell() {
         echo "Quickshell (qs) is not installed" >&2
         return 1
     fi
-    local installed_imports="$config_dir/quickshell/kos:$prefix/lib/qt6/qml"
     if [[ "${1:-}" == "installed" ]]; then
-        QML2_IMPORT_PATH="$installed_imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
-            QSG_RENDER_LOOP=threaded exec "$qs_bin" -c kos
+        configure_shell_imports installed
+        QSG_RENDER_LOOP=threaded exec "$qs_bin" -c kos
     fi
-    QML2_IMPORT_PATH="$build_dir/qml:$project_dir/shell:$installed_imports${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}" \
-        QSG_RENDER_LOOP=threaded exec "$qs_bin" -p "$project_dir/shell"
+    configure_shell_imports source
+    QSG_RENDER_LOOP=threaded exec "$qs_bin" -p "$project_dir/shell"
 }
 
 open_glass_settings() {

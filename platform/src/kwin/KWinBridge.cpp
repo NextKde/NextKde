@@ -82,7 +82,11 @@ public slots:
         });
     }
 
-    void Publish(const QString &payload)
+    // D-Bus 面只暴露 KWin 侧（脚本/特效）真正调用的两个槽（v87 审查：
+    // ExportAllSlots 会让同会话任意进程可调 Enqueue 注入 close/minimize、
+    // TakeCommand 抽干命令队列、Publish 伪造窗口模型——正常客户端走
+    // unix socket，D-Bus 面只服务 KWin）
+    Q_SCRIPTABLE void Publish(const QString &payload)
     {
         QJsonParseError error;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &error);
@@ -102,7 +106,7 @@ public slots:
         publishEvent(event);
     }
 
-    QString TakeCommand()
+    Q_SCRIPTABLE QString TakeCommand()
     {
         return m_commands.isEmpty() ? QString{} : m_commands.dequeue();
     }
@@ -698,7 +702,7 @@ bool startKWinBridge(const KWinEventHandler &handler)
 
     g_bridge = new Bridge(qApp);
     if (!bus.registerObject(QStringLiteral("/Platform"), g_bridge,
-                            QDBusConnection::ExportAllSlots)) {
+                            QDBusConnection::ExportScriptableSlots)) {
         QTextStream(stderr) << "Could not register D-Bus object: "
                             << bus.lastError().message() << Qt::endl;
         delete g_bridge;

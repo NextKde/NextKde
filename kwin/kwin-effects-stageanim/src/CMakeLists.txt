@@ -1,8 +1,11 @@
 add_definitions(-DTRANSLATION_DOMAIN="kwin_effects_stageanim")
 
+set(CMAKE_AUTORCC ON)
+
 set(stageanim_SOURCES
     stageanim.cpp
     main.cpp
+    shaders.qrc
 )
 
 add_library(stageanim13 MODULE ${stageanim_SOURCES})

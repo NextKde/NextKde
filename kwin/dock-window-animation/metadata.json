@@ -5,6 +5,5 @@
         "Category": "Window Open/Close Animation",
         "License": "MIT",
         "EnabledByDefault": false
-    },
-    "X-KWin-Internal": "true"
+    }
 }

@@ -14,6 +14,7 @@ class DepthMeshGeometry : public QQuick3DGeometry
     Q_PROPERTY(float focusDistance READ focusDistance NOTIFY focusDistanceChanged)
     Q_PROPERTY(float backgroundDistance READ backgroundDistance NOTIFY backgroundDistanceChanged)
     Q_PROPERTY(bool valid READ valid NOTIFY validChanged)
+    Q_PROPERTY(bool foreground READ foreground WRITE setForeground NOTIFY foregroundChanged)
 
 public:
     explicit DepthMeshGeometry(QQuick3DObject *parent = nullptr);
@@ -25,11 +26,13 @@ public:
     float focusDistance() const { return m_focusDistance; }
     float backgroundDistance() const { return m_backgroundDistance; }
     bool valid() const { return m_valid; }
+    bool foreground() const { return m_foreground; }
     void setDepthPath(const QUrl &path);
     void setMattePath(const QUrl &path);
     void setImageZoom(float zoom);
     void setOutputAspect(float aspect);
     void setSourceAspect(float aspect);
+    void setForeground(bool foreground);
 
 signals:
     void depthPathChanged();
@@ -40,6 +43,7 @@ signals:
     void focusDistanceChanged();
     void backgroundDistanceChanged();
     void validChanged();
+    void foregroundChanged();
 
 private:
     void rebuild();
@@ -52,4 +56,5 @@ private:
     float m_focusDistance = 2.5f;
     float m_backgroundDistance = 4.0f;
     bool m_valid = false;
+    bool m_foreground = false;
 };

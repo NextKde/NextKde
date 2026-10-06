@@ -113,6 +113,10 @@ function _centerPositions(positions, availH, contentBottom) {
 // 返回 { positions[], scales[], zs[], dims[], scale, pitch, scrollMax }——
 // positions 已含 scroll 偏移；pitch 供滚轮步进、scrollMax 供滚动上限；
 // scale 为基础缩放兜底值。
+// 溢出居中块的两侧最小对称净空：低于此值少显示一张卡——居中必须
+// 肉眼可辨（34px 级净空与顶锚无异，用户实测分不出）
+export const MIN_CENTER_PAD = 40
+
 export function scrollLayout(availH, count, opts = {}) {
     // NaN 全防线：Number.isFinite 只放过有限数（NaN/undefined 走默认），
     // ?? 挡不住 NaN（NaN ?? x 仍是 NaN，Math.max(NaN,1) 会把整列布局
@@ -130,15 +134,39 @@ export function scrollLayout(availH, count, opts = {}) {
         return { positions, scales, zs, dims, scale: 1,
             pitch: ch + spacing, scrollMax: 0 }
     availH = _finiteAvailH(availH, count, ch, spacing)
-    // 基础槽位（未滚动）：固定间距；放得下整块居中，放不下顶锚
+    // 基础槽位（未滚动）：固定间距。**时刻居中**（用户定稿）：
+    // - 放得下 → 整块居中
+    // - 放不下 → 可视窗口内的完整卡块垂直居中（上下对称净空，无半截
+    //   peek 残影、无缩放＝卡高/卡宽旋钮照常 1:1 生效），多出的卡藏在
+    //   折叠线下方滚动翻看；滚到 pitch 整数倍时窗口保持同款居中几何。
+    //   ⚠️ 不做缩放全显（用户实测否决）：整列等比缩小会让尺寸旋钮
+    //   失灵（视觉被 scale 饱和）；"全部完整显示、随数量等比缩小"是
+    //   adaptive 模式的专属语义（设置页"自适应缩小"）
     const pitch = ch + spacing
     const contentH = (count - 1) * pitch + ch
     const fits = contentH <= availH
-    const top0 = fits ? (availH - contentH) / 2 : 0
+    // centerCards（v88 审计）：False＝退顶锚（两分支都尊重）
+    const center = opts.centerCards !== false
+    let top0
+    if (fits) {
+        top0 = center ? (availH - contentH) / 2 : 0
+    } else {
+        // 可视完整卡数 k：块高 k·ch+(k−1)·sp ≤ availH，块居中。
+        // **可感知居中**（用户复诉"还是顶着上面"）：34px 级净空与顶锚
+        // 视觉无法区分——块两侧至少留 MIN_CENTER_PAD 对称净空，不够就
+        // 少显示一张卡（多出的卡本就藏折叠线下滚动翻看）
+        let k = Math.max(1, Math.floor((availH + spacing) / pitch))
+        while (k > 1
+                && (availH - (k * ch + (k - 1) * spacing)) / 2
+                    < MIN_CENTER_PAD)
+            k--
+        const block = k * ch + (k - 1) * spacing
+        top0 = center ? Math.max(0, (availH - block) / 2) : 0
+    }
     const baseY = i => top0 + i * pitch
     // 滚动上限：滚到底末卡完整露出（+GLOW_PAD 辉光余量）
     const scrollMax = fits ? 0
-        : Math.max(0, contentH + GLOW_PAD - availH)
+        : Math.max(0, top0 + contentH - availH + GLOW_PAD)
     if (h < 0 || count === 1) {
         for (let i = 0; i < count; i++) {
             positions.push(baseY(i) - scroll)
@@ -148,11 +176,13 @@ export function scrollLayout(availH, count, opts = {}) {
         }
         return { positions, scales, zs, dims, scale: 1, pitch, scrollMax }
     }
-    // 聚焦缩放 ≥ 基础缩放（基础恒 1，TopLeft 外扩不变量）：聚焦比基础小
-    // 会让悬停卡向内收缩、把指针从卡缘挤出（悬停丢失→回弹→驻留→再聚焦
-    // 的慢振荡）。聚焦只许放大或等大。
+    // 聚焦缩放 ≥ 基础缩放（TopLeft 外扩不变量）：聚焦比基础小会让悬停
+    // 卡向内收缩、把指针从卡缘挤出（悬停丢失→回弹→驻留→再聚焦的慢振
+    // 荡）。**相对基础缩放**（用户实测否决"弹回全尺寸"版：hoverScale
+    // 本就关闭悬停放大的配置下，0.76→1.0 的强弹＝"反转后突然放大"的
+    // 突兀感来源）——默认 1.0×base＝悬停不改尺寸，配置放大也按比例
     const focusScale = Math.max(
-        Number.isFinite(opts.focusScale) ? opts.focusScale : 1.0, 1)
+        (Number.isFinite(opts.focusScale) ? opts.focusScale : 1.0), 1)
     const retreat = Number.isFinite(opts.retreat)
         ? opts.retreat : SCROLL_RETREAT
     // 悬停卡锚定当前视觉位置（hoverY）；缺省回退滚动后的基础槽位
@@ -197,8 +227,12 @@ export function computeTargetRects(groups, lay, dims, records, prevRects) {
     for (let g = 0; g < groups.length; g++) {
         // 每组可有独立缩放（牌堆/聚焦态）；缺省用统一 scale（stack/adaptive）。
         // 缩放卡的 x 居中（与视图 slotX 同式），宽随缩放——矩形=可见卡面
-        const s = (lay.scales && lay.scales[g] !== undefined)
+        let s = (lay.scales && lay.scales[g] !== undefined)
             ? lay.scales[g] : (lay.scale ?? 1)
+        // NaN 防线（scrollLayout 同款）：?? 挡不住 NaN，坏值会让矩形变
+        // null → 特效飞行落点解析回退到兜底（"飞错位"家族）
+        if (!Number.isFinite(s) || s <= 0)
+            s = 1
         // 屏幕坐标 = 全屏浮层原点(0,0) + 列内 y——不加 PANEL_ORIGIN_Y
         //（全屏化前的旧窗原点常量，见其声明处注释）
         const y = Math.round(dims.columnY + (lay.positions[g] ?? 0))

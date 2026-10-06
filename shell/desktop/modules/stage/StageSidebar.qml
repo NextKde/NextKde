@@ -32,6 +32,14 @@ Scope {
 
     IpcHandler {
         target: "stage-sidebar"
+        // ⚠️ CLI 陷阱（quickshell 0.3.1 CLI11 subcommand fallthrough）：
+        // ipc 层子命令 {show,call,wait,listen,prop} + 根层 {log,list,kill,
+        // ipc,msg} 会沿祖先链吞掉同名 function——`ipc call <t> show` 永远
+        // 打印列表并以退出码 0"成功"返回，不派发（hide/toggle/enable/
+        // disable/snapshot/set 已核安全）。show/hide 经 CLI 从未可用，
+        // 仅为 API 完整性保留，任何调用方必须用 enable/disable
+        function enable(): void { StageModeService.setEnabled(true) }
+        function disable(): void { StageModeService.setEnabled(false) }
         function show(): void { StageModeService.setEnabled(true) }
         function hide(): void { StageModeService.setEnabled(false) }
         function toggle(): void { StageModeService.toggle() }
@@ -53,6 +61,10 @@ Scope {
         }
         // 几何快照：窗口/堆叠区高度 + 各卡当前 y/scale/z（排障用）
         function debugGeom(): string { return stageWindow.debugGeom() }
+        // 无头验证钩子：强制抽屉检测（"on"/"off"/"auto"=恢复真实判定）
+        function debugFullscreen(mode: string): string {
+            return stageWindow.debugFullscreen(mode)
+        }
         // 显示桌面开关状态机快照（抗打断排障）
         function deskState(): string { return stageWindow.deskState() }
         // 无头合并/拆分（自由组合链路验证）：debugMerge <from> <to> / debugSplit <i>
