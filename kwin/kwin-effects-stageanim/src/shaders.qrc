@@ -1,0 +1,17 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/stageanim">
+        <file>shaders/stage-live.vert</file>
+        <file>shaders/stage-live.frag</file>
+        <file>shaders/stage-live_core.vert</file>
+        <file>shaders/stage-live_core.frag</file>
+        <file alias="shaders/stage-card.vert">shaders/stage-live.vert</file>
+        <file alias="shaders/stage-card_core.vert">shaders/stage-live_core.vert</file>
+        <file>shaders/stage-card.frag</file>
+        <file>shaders/stage-card_core.frag</file>
+        <file alias="shaders/stage-cursor.vert">shaders/stage-live.vert</file>
+        <file>shaders/stage-cursor.frag</file>
+        <file alias="shaders/stage-cursor_core.vert">shaders/stage-live_core.vert</file>
+        <file>shaders/stage-cursor_core.frag</file>
+    </qresource>
+</RCC>

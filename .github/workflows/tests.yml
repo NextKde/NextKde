@@ -76,6 +76,11 @@ jobs:
           KOS_BUILD_SPATIAL: ON
         run: ./tools/run-tests.sh --layer data --layer platform
 
+      - name: Check Stage logic and publishing protocol
+        run: |
+          ctest --test-dir .build/tests --output-on-failure \
+            -R '^kos-shell\.stage-(geometry|groups|effects|protocol)$'
+
       - name: Summarise which layers ran
         if: always()
         run: |

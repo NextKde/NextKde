@@ -232,6 +232,9 @@ QtObject {
         // Detect false->true urgent transitions since the last rebuild. The
         // first rebuild seeds the baseline so a window that was already urgent
         // before the dock appeared does not cause a spurious reveal.
+        // 基线只在 providerReady 后才定（v87 审查）：首刷常落在 records
+        // 尚空时（初始快照未达），空基线会把"开机前已 urgent"当新出现
+        // 误发一次 reveal——正是注释声称要防的场景
         if (svc._urgentInitDone) {
             const wasUrgent = svc._lastUrgentIds;
             for (let i = 0; i < nowUrgent.length; i++) {
@@ -240,7 +243,8 @@ QtObject {
             }
         }
         svc._lastUrgentIds = nowUrgent;
-        svc._urgentInitDone = true;
+        if (WindowService.providerReady)
+            svc._urgentInitDone = true;
 
         svc._setWindowItems(nextItems);
     }
@@ -354,14 +358,23 @@ QtObject {
 
         if (activeIdx === -1) {
             // App not currently in foreground: activate MRU window
-            console.log("[DockModel] activate app MRU window=" + windows[0].windowId);
-            activateWindow(windows[0].windowId);
+            // （v87 审查：windowsForApp 返回 records 序，旧代码取 [0] 实为
+            // "最早创建的窗"，与 MRU 注释语义不符——按最近激活时间戳取真 MRU）
+            const mru = windows.reduce((a, b) =>
+                WindowService.lastActivatedAtOf(a.windowId)
+                    >= WindowService.lastActivatedAtOf(b.windowId) ? a : b);
+            console.log("[DockModel] activate app MRU window=" + mru.windowId);
+            activateWindow(mru.windowId);
         } else {
-            // App already active: cycle to next window in group
-            const nextIdx = (activeIdx + 1) % windows.length;
+            // App already active: cycle to next window in group (MRU 序)
+            const byMru = windows.slice().sort((a, b) =>
+                WindowService.lastActivatedAtOf(b.windowId)
+                    - WindowService.lastActivatedAtOf(a.windowId));
+            const rank = byMru.indexOf(windows[activeIdx]);
+            const nextIdx = (rank + 1) % byMru.length;
             console.log("[DockModel] cycle app window from=" + windows[activeIdx].windowId
-                        + " to=" + windows[nextIdx].windowId);
-            activateWindow(windows[nextIdx].windowId);
+                        + " to=" + byMru[nextIdx].windowId);
+            activateWindow(byMru[nextIdx].windowId);
         }
     }
 

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Io
 // ⚠️ ScreencastingRequest 是本模块的类型（活体缩略图流开单窗口用）——
 // 曾被"未使用"审计误删导致 shell crash-loop（is not a type），勿再删
 import org.kde.taskmanager
@@ -24,7 +25,13 @@ PanelWindow {
     id: root
 
     WlrLayershell.namespace: "quickshell-stagebar"
-    WlrLayershell.layer: WlrLayer.Top
+    // ⚠️ 必须 Overlay：条带与 DeskCenter 桌面窗同为 layer-shell 窗，同层
+    // （Top）时谁在上=启动映射顺序抽签——桌面窗（0,35 1696x1064）完整覆
+    // 盖卡片区，一旦压在条带上：卡上悬停/点击全被桌面窗吃掉（拆分芯片
+    // 永不亮、关闭钮点不动、空区左键还会触发显示桌面开关＝"合并逻辑很
+    // 奇怪"的来源）。Overlay 恒在全部 Top 层之上，确定性根治（2026-10-04
+    // 叠序实锤：stackingOrder 里 DeskCenter 在 stagebar 之上）。
+    WlrLayershell.layer: WlrLayer.Overlay
     // 全屏透明浮层（2026-09-30 用户定稿"完完全全不用侧边栏，卡片就是
     // 卡片"）：无保留区、无边框——悬停放大/倾斜投影/扇叠背板/拖拽越界
     // 全都不会再被窗缘裁掉（旧 280px 窗实测裁掉扇叠）。输入只挡卡面
@@ -36,8 +43,9 @@ PanelWindow {
     property bool open: false
 
     // 启动台打开时整窗隐藏：全屏浮层若留在原位会盖在启动台内容上
-    //（旧窄条不重叠所以无所谓，全屏必须躲）
-    visible: open && !AppLauncherService.open
+    //（旧窄条不重叠所以无所谓，全屏必须躲）。贴缘拉出（peek）时窗体
+    // 恢复可见——收起的卡列要能接收 hover/点击输入
+    visible: open && (!AppLauncherService.open || root._drawerPeek)
     color: "transparent"
     // 常驻侧（stage-config side）：right 时卡片列锚屏幕右缘（内容层
     // 各自镜像：StageCard/深度渐变/图标排）；窗体本身恒全屏
@@ -144,7 +152,12 @@ PanelWindow {
             const c = s.cardItem
             if (!c)
                 continue
-            c.shown = false   // 压回入场起点（Component.onCompleted 已置 true）
+            // 压回入场起点（Component.onCompleted 已置 true）。⚠️ 必须同
+            // 时清 enterInstant：syncCards 的 appends 无条件置 true 且 update
+            // 路径永不改写（一旦为真终身为真），不清＝(shown||enterInstant)
+            // 恒真，侧滑 ±70 与 0.86→1 长大全部短路，"迸开"只剩淡入
+            c.shown = false
+            c.enterInstant = false
             root._burstQueue.push({ card: c, at: Date.now() + k * 70 })
             k++
         }
@@ -166,6 +179,11 @@ PanelWindow {
                 // 计入 count、发布侧却无矩形无槽位——两侧 count 差 1，
                 // auto 路径布局整体错位
                 requirePid: true,
+                // requireMinimized（v81）：视图与发布同口径只收已最小化
+                // 窗口。旧口径"桌面上除活动组全部成卡"依赖 autoMinimize
+                // 兜底——放出/收集延迟期"可见未聚焦"窗会闪出鬼卡（QML
+                // 画它、发布流排除它），焦点没落回时鬼卡永久驻留
+                requireMinimized: true,
                 skipWindowId: root.stageActiveId,
                 excludeKey: activeRec ? root._effKey(activeRec) : "",
                 excludeKeepMinimized: true,
@@ -246,6 +264,13 @@ PanelWindow {
     property Timer _minimizeDispatchTimer: Timer {
         interval: StageConfigService.demoteDispatchDelay
         onTriggered: {
+        // 模式关闭/面板隐藏后不派发（v87 审查，与 _dispatchNextEngage
+        // 同款守卫）：关闭侧栏的用户不该看到窗口随后被收进一个已经
+        // 不存在的卡列
+        if (!StageModeService.enabled || !root.open) {
+            root._pendingMinimize = []
+            return
+        }
         const t = root._pendingMinimize
         root._pendingMinimize = []
         // 原子整组最小化：N 窗一条命令一个桥轮询拍内落地（逐窗排队会把
@@ -273,7 +298,8 @@ PanelWindow {
         }
     }
     property Timer _captureThenMinTimer: Timer {
-        interval: StageConfigService.demoteCaptureDelay
+        // interval 由 captureAndDemote 每次命令式赋值（可带 captureDelayMs
+        // 覆盖）——声明处不写绑定：绑定首启后被赋值永久切断，纯装饰误导
         onTriggered: {
             root.publishSimulatedLayout(root._pendingPublishExcludeKey)
             root._minimizeDispatchTimer.restart()
@@ -305,6 +331,12 @@ PanelWindow {
             //（focus 路径 150ms 起拍、330ms 才派发），取消它＝最小化
             // 永远不落地（"卡出现了程序没收回去"的根因，实测竞态差
             // ~10ms）。真正的属主取消留给有新活动窗的分支。
+            return
+        // 桌面开关让路（v87 审查）：放出路径先 _exitDeskReveal 清开关集
+        // 再激活，autoMin 的开关集守卫（下方）只护收编方向——激活落地后
+        // 650ms 周期扫到的"异应用可见窗"恰是刚放出的多应用开关集＝整批
+        // 扫回卡。与 _deskCollectYielded 的 toggle 分量同窗
+        if (Date.now() - root._lastDeskToggleAt < _deskFocusYieldMs)
             return
         // 显示桌面开关属主判定：活动窗在开关集里＝桌面收编管线正在收
         // 它（toggle 连活动窗一起收），autoMin 的"保护活动应用"语义会把
@@ -434,8 +466,13 @@ PanelWindow {
         // opacity 0 会永久卡住（"卡片消失"的状态残留同型）。按票根外的
         // 最近派发键复位交棒中的卡，并清退位保护与同键在途队列。
         function onCommandFinished(action, ticket, found) {
-            if (action !== "engage-swap" || found
-                    || root._lastDispatchedKey === "")
+            if (action !== "engage-swap" || found)
+                return
+            // 票根精确匹配：只复位这次失败的派发（无票根的旧回执按最近键兜底）
+            if (root._lastDispatchedTicket !== ""
+                    && ticket !== "" && ticket !== root._lastDispatchedTicket)
+                return
+            if (root._lastDispatchedKey === "")
                 return
             for (let i = 0; i < cardRepeater.count; i++) {
                 const slot = cardRepeater.itemAt(i)
@@ -450,8 +487,16 @@ PanelWindow {
             root._pendingSwaps = root._pendingSwaps.filter(
                 swap => swap.clicked !== root._lastDispatchedKey)
             root._lastDispatchedKey = ""
+            root._lastDispatchedTicket = ""
             console.warn("[StageSidebar] engage-swap failed, card reset ("
                 + "ticket=" + ticket + ")")
+        }
+        // dock 点击的同拍收编（原独立 Connections 块，v87 审查并入——
+        // 同一目标拆两块会让后来者以为有语义差异）：点击瞬间就锁退位窗
+        //（不等 KWin 事件经桥 120ms 防抖绕回来）；卡片点击路径用
+        // _engagingDispatch 防重入，维持自己的 engageDelay 卡片交棒时序
+        function onActivationRequested(windowId) {
+            root.activateWithSwap(windowId)
         }
     }
 
@@ -460,6 +505,18 @@ PanelWindow {
     // 击路径（_dispatchNextEngage 内部激活）用 _engagingDispatch 防重入，
     // 维持自己的 engageDelay 卡片交棒时序。
     property bool _engagingDispatch: false
+    // shell 自发的整组还原（显示桌面放出/撤销看门狗/拖拽中心落点）统一
+    // 走此包装：activateGroup 会同步发 activationRequested → 回灌
+    // activateWithSwap 把刚激活/正要还原的窗又收编一遍（v82 P0——
+    // _engagingDispatch 原本只护 engage 派发路径，这些直调全裸奔）
+    function _activateGroupGuarded(ids, focusId) {
+        _engagingDispatch = true
+        try {
+            WindowService.activateGroup(ids, focusId)
+        } finally {
+            _engagingDispatch = false
+        }
+    }
 
     function activateWithSwap(windowId) {
         if (_engagingDispatch)
@@ -488,13 +545,6 @@ PanelWindow {
             root._effKey(activeRec), false)
     }
 
-    Connections {
-        target: WindowService
-        function onActivationRequested(windowId) {
-            root.activateWithSwap(windowId)
-        }
-    }
-
     // ── 激活切换（Alt-Tab 等 shell 外部路径）的同拍收编兜底 ──
     // 与 engageCard 同构：切换瞬间锁定退位窗、趁可见拍快照、发布预测卡位，
     // 与新活动窗的展开动画同一节拍最小化——而不是等 autoMinTimer。
@@ -521,10 +571,31 @@ PanelWindow {
             return
         if (!StageGroups.isOnDesktop(rec, WindowService.currentDesktopId))
             return
+        // dock 点击双路径让位：activateWithSwap（同拍 captureAndDemote）
+        // 后 ~120ms 桥回激活事件才到这里——退位窗记录未翻转（快照窗内）
+        // 时再跑一遍＝取消在途批次重收编（多 300ms 快照等待+重复拍）。
+        // 与 deskCollectedIds 让位同款语义
+        if (root._pendingMinimize
+                && root._pendingMinimize.indexOf(demotedId) >= 0)
+            return
         // 整组同拍收编（与 activateWithSwap 同规则）
         _cancelPendingDemote()
         captureAndDemote(_demoteGroupIds(demotedId),
             root._effKey(activeRec), false)
+    }
+
+    // 桌面聚焦类收集（desktopFocus / boot 一致性 / heal 孤儿分支）的统一
+    // 让路判定（v82 收敛）：桌面开关 / 换主派发 / shell 覆盖层任一在窗口
+    // 期内＝有属主管状态，收集让路。此前三家守卫强度不一（boot 定时器
+    // 完全裸奔＝换主后误收编的另一扇门、desktopFocus 不看覆盖层）
+    function _deskCollectYielded(): bool {
+        if (root.shellOverlayActive)
+            return true
+        if (Date.now() - root._lastDeskToggleAt < _deskFocusYieldMs)
+            return true
+        if (Date.now() - root._lastEngageDispatchAt < _engageFocusYieldMs)
+            return true
+        return false
     }
 
     // ── 桌面聚焦 / 显示桌面开关（Stage Manager 语义的"收进去/放出来"）──
@@ -534,10 +605,8 @@ PanelWindow {
     property Timer _desktopFocusTimer: Timer {
         interval: StageConfigService.desktopFocusDebounce
         onTriggered: {
-            // 点击自带 toggle 路径（DeskCenter onClicked）——同一次点击的
-            // 焦点变化不该再触发第二次收编（实测：两路互相 cancel 在途
-            // 批次，快速点击时状态翻车）。只兜不经过点击的聚焦转移。
-            if (Date.now() - root._lastDeskToggleAt < _deskFocusYieldMs)
+            // 让路判定统一走 _deskCollectYielded（toggle/换主/覆盖层）
+            if (_deskCollectYielded())
                 return
             if (WindowService.activeWindowId === ""
                     && root._desktopFocused()
@@ -586,23 +655,23 @@ PanelWindow {
     readonly property int _deskUndoWatchMs: 900       // 撤销后迟到落地兜底
     readonly property int _deskFocusYieldMs: 1200      // toggle 后焦点定时器让路
     readonly property int _deskHealSilenceMs: 1600     // toggle 后 heal 静默窗
+    readonly property int _engageFocusYieldMs: 2000    // 换主后聚焦收集让路窗
     readonly property int _deskHoldReleaseMs: 600      // 扣卡兜底释放（< 让路）
 
     // 桌面窗 id 集合（按最小化状态过滤；pid>0 且在当前桌面）——收编目标
-    // 与死态复活共用同一口径。无 pid 的 KWin 内部表面不碰。
+    // 与死态复活共用同一口径。口径单一出处走 groupRecords（v87 审查收敛：
+    // 手写内联过滤与 groupRecords 漂移＝v81 视图/发布口径分裂的同型温床）
     function _desktopWindowIds(wantMinimized) {
-        const currentId = WindowService.currentDesktopId
-        const records = WindowService.records || []
+        const groups = StageGroups.groupRecords(WindowService.records || [], {
+            requirePid: true,
+            requireMinimized: wantMinimized ? true : undefined,
+            requireNotMinimized: wantMinimized ? undefined : true,
+            desktopId: WindowService.currentDesktopId,
+        })
         const out = []
-        for (let i = 0; i < records.length; i++) {
-            const r = records[i]
-            if (!(r.pid > 0))
-                continue
-            if (r.toplevel?.minimized !== !!wantMinimized)
-                continue
-            if (StageGroups.isOnDesktop(r, currentId))
-                out.push(r.windowId)
-        }
+        for (let i = 0; i < groups.length; i++)
+            for (let j = 0; j < groups[i].wins.length; j++)
+                out.push(groups[i].wins[j].windowId)
         return out
     }
 
@@ -622,6 +691,9 @@ PanelWindow {
         const now = Date.now()
         if (now - root._lastDeskToggleAt < _deskToggleDebounceMs)
             return
+        // 本次点击之前的上一击时刻（_lastDeskToggleAt 马上要被覆盖）——
+        // 遗孤复活的"近期开关"判据用
+        const prevToggleAt = root._lastDeskToggleAt
         root._lastDeskToggleAt = now
         if (deskCollectedIds.length > 0) {
             const ids = deskCollectedIds
@@ -642,23 +714,29 @@ PanelWindow {
                     + " (pipeline in flight, " + ids.length + " window(s))")
                 return
             }
-            WindowService.activateGroup(ids, focusId)
+            // 交棒淡出：置 engaging 后窗口飞出与卡淡出同拍（v80 残影修）
+            _markEngagingByIds(ids)
+            root._deskReleaseEngageReset.restart()
+            _activateGroupGuarded(ids, focusId)
             console.info("[StageSidebar] desk reveal: restore "
                 + ids.length + " window(s)")
             return
         }
         if (!_collectDesktopToStrip(true)) {
-            // 死角兜底（审计 🔴）：一条都没得收、开关态也没武装，但桌面
-            // 语义上"已经全在卡里"（undo 看门狗窗口外迟到落地/被击杀后
-            // 的遗孤最小化集）——把这次点击读作 toggle 的另一半"放出
-            // 来"，否则无 targets 的点击永久无效。武装开关集：再点一次
-            // 回到正常开关语义。
-            const revived = _desktopWindowIds(true)
+            // 死角兜底（审计 🔴）：只在**近期发生过桌面开关**（默认 15s
+            // 内有上一击）时才把这次点击读作 toggle 的另一半"放出来"——
+            // 它救的是被打断的收编管线（开关集丢失但窗已收，用户几秒内
+            // 补一击放出）。稳态下桌面本来就没东西（用户关掉了最后一个
+            // 桌面应用）点桌面必须是 no-op：全量翻出所有卡不是这个点击
+            // 的语义（用户定稿"桌面啥也没有点也没啥"）
+            const recentToggle = now - prevToggleAt < 15000
+            const revived = recentToggle ? _desktopWindowIds(true) : []
             if (revived.length > 0) {
                 deskCollectedIds = revived
                 deskCollectedFocusId = root.stageActiveId || revived[0]
-                WindowService.activateGroup(revived,
-                    deskCollectedFocusId)
+                _markEngagingByIds(revived)
+                root._deskReleaseEngageReset.restart()
+                _activateGroupGuarded(revived, deskCollectedFocusId)
                 console.warn("[StageSidebar] desk reveal: revived orphaned"
                     + " minimized set (" + revived.length + " window(s))")
             }
@@ -679,14 +757,20 @@ PanelWindow {
                 return
             const cur = WindowService.activeWindowId
             if (cur !== "" && w.ids.indexOf(cur) < 0) {
-                WindowService.minimizeGroup(w.ids, false)
+                _markEngagingByIds(w.ids)
+                root._deskReleaseEngageReset.restart()
+                _engagingDispatch = true
+                try { WindowService.minimizeGroup(w.ids, false) }
+                finally { _engagingDispatch = false }
                 console.warn("[StageSidebar] desk undo: late minimize"
                     + " landed, restored without focus steal")
                 return
             }
             const focusId = w.ids.indexOf(w.focusId) >= 0
                 ? w.focusId : (cur !== "" ? cur : w.ids[0])
-            WindowService.activateGroup(w.ids, focusId)
+            _markEngagingByIds(w.ids)
+            root._deskReleaseEngageReset.restart()
+            _activateGroupGuarded(w.ids, focusId)
             console.warn("[StageSidebar] desk undo: late minimize landed ("
                 + w.ids.length + "), restored")
         }
@@ -762,12 +846,20 @@ PanelWindow {
                 keepActiveMin = true
             }
         }
+        // 口径与视图一致（v82）：只收已最小化窗 + 在途收编白名单（预测
+        // 槽位需要）。旧口径把"可见未聚焦"窗也计入布局数——视图（卡位）
+        // 与发布（飞行目标）系统性错档（autoMinimize 关/还原未聚焦期）
+        const pendingWhitelist = ({})
+        for (let pi = 0; pi < root._pendingMinimize.length; pi++)
+            pendingWhitelist[root._pendingMinimize[pi]] = true
         const groups = StageGroups.sortByOrder(
             orderOverride || root._groupOrder,
             StageGroups.groupRecords(records,
                 { requirePid: true, overrides: root._mergeOverrides,
                   excludeKey: excludeKey,
-                  excludeKeepMinimized: keepActiveMin }))
+                  excludeKeepMinimized: keepActiveMin,
+                  requireMinimized: true,
+                  minimizedWhitelist: pendingWhitelist }))
         // 基础布局发布，不掺悬停态：聚焦缩放是 TopLeft 原点（y 不动，
         // "从放大位长出"无损），而退避（±deckSidePeek）是鼠标扫过的瞬态
         // ——烤进矩形会让收编窗口落在比卡片落点高/低一个退避量的位置，
@@ -795,7 +887,9 @@ PanelWindow {
         // 视图回流路径），视图布局完全不变。
         if (keepActiveMin) {
             const allGroups = StageGroups.groupRecords(records,
-                { requirePid: true, overrides: root._mergeOverrides })
+                { requirePid: true, overrides: root._mergeOverrides,
+                  requireMinimized: true,
+                  minimizedWhitelist: pendingWhitelist })
             let ghostEntry = null
             for (let g = 0; g < allGroups.length; g++) {
                 if (allGroups[g].key === excludeKey) {
@@ -869,17 +963,265 @@ PanelWindow {
         function onRevisionChanged() {
             root.layoutCards()
             root.publishSimulatedLayout("")
+            root.scheduleLivePublish()
         }
     }
 
+    property string _lastTargetsBody: ""
+    property real _lastTargetsWriteAt: 0
     function _writeTargetsFile() {
         const targets = []
         for (const k in root._lastCardRects)
             targets.push(root._lastCardRects[k])
         // suppress 恒空：伪实时（静默名单）已删除，动画全部照播；
-        // 保留键位仅为 stageanim 的文件格式兼容（无需重建特效）
-        JsonConfigStore.writePath(root._targetsPath, JSON.stringify(
-            { targets: targets, suppress: [] }))
+        // 保留键位仅为 stageanim 的文件格式兼容（无需重建特效）。
+        // 载荷去重 + 10s 保活（与 live 通道同款）：本函数在每次 syncCards
+        // 尾部都会跑，桥事件风暴（41Hz revision）下不去重＝每拍全量写盘
+        const body = JSON.stringify({ targets: targets, suppress: [] })
+        const now = Date.now()
+        if (body !== root._lastTargetsBody
+                || now - root._lastTargetsWriteAt > 10000) {
+            JsonConfigStore.writePath(root._targetsPath, body)
+            root._lastTargetsBody = body
+            root._lastTargetsWriteAt = now
+        }
+    }
+
+    // ── 合成器活体卡（stageanim 直绘）────────────────────────────
+    // 发布 stage-live.json（每卡终态姿态：卡面矩形 + 透视参数，悬停压平
+    // /滚动 yOff 全按发布时刻的终值算，特效侧 220ms 缓动追上）；特效回执
+    // stage-live.json.status 确认直绘中 → 卡片缩略图 opacity 让位。回执
+    // 不新鲜（特效未装/挂死/已关）＝ 快照照常画，任何失败都静默退回静态。
+    readonly property string _livePath: Quickshell.stateDir
+        + "/fg-sched/stage-live.json"
+    // 回执（壳经平台 IPC 读，平台写沙箱在 state 根下）
+    readonly property string _liveStatusPath: Quickshell.stateDir
+        + "/fg-sched/stage-live.json.status"
+    property var _liveActiveIds: ({})   // id → true（回执新鲜期内）
+    // 乐观握手记账（v80）：seeded=本轮已播种待回执确认；rejected=回执
+    // 未确认过（特效没接住）不再播种防 QML 显隐振荡。值=拒收时刻，
+    // 30s 过期（组键含瞬态 pid:N，长会话死键只增不减＝无界增长）
+    property var _liveSeeded: ({})
+    property var _liveSeedRejected: ({})
+    readonly property int _liveSeedRejectTtlMs: 30000
+    property real _liveStatusAt: 0
+    property bool liveChromeOwned: false // 特效已接管卡面视觉（QML 只留输入）
+
+    function scheduleLivePublish() {
+        // ⚠️ 节流不是防抖：restart 式防抖在持续动画（slot Behavior 每帧
+        // 改 y）下被无限重置饿死＝整个动画期间零发布、结束才一帧（"退避
+        // 动画消失"的真凶）。dirty 标记 + repeat 定时器 = 每 16ms 发一帧、
+        // 最后一拍后自然停。
+        _livePublishDirty = true
+        if (!_livePublishTimer.running)
+            _livePublishTimer.start()
+    }
+    property bool _livePublishDirty: false
+    property Timer _livePublishTimer: Timer {
+        interval: 8   // 90Hz 输出：发布流 125Hz 上限 > 帧率，动画满帧
+        repeat: true
+        onTriggered: {
+            root.publishLiveCards()
+            if (!root._livePublishDirty)
+                stop()
+            root._livePublishDirty = false
+        }
+    }
+    // 心跳：开着侧栏时周期重写（特效侧 25s mtime 陈旧判据的另一半）
+    property Timer _liveHeartbeat: Timer {
+        interval: 15000
+        running: root.open
+        repeat: true
+        onTriggered: root.publishLiveCards()
+    }
+    // 条带销毁时立即清空发布（特效 16ms 内撤四边形）——否则 shell 重启/
+    // 关闭的空窗期里，活体内容按最后一帧姿态悬空画在桌面上（"内容悬浮
+    // 不在卡片中"的元凶之一）。开合的清空发布走既有 onOpenChanged（尾部）。
+    Component.onDestruction: root.publishLiveCards()
+
+    property string _lastLiveBody: ""
+    property real _lastLiveWriteAt: 0
+    function publishLiveCards() {
+        const out = []   // 不叫 cards——不遮蔽下方堆叠区 id: cards
+        if (StageConfigService.thumbLiveEffect && StageModeService.enabled
+                && root.open) {
+            for (let i = 0; i < cardRepeater.count; i++) {
+                const slot = cardRepeater.itemAt(i)
+                if (!slot || !slot.cardItem)
+                    continue
+                const engaging = slot.cardItem.engaging
+                // engaging 卡发布供特效淡出（窗口已还原，不受"仅最小
+                // 化"门限制约）；拖拽卡照常发布（矩形逐帧跟手）
+                const rep = WindowService.windowById(slot.targetId)
+                if (!engaging && (!rep || rep.toplevel?.minimized !== true))
+                    continue
+                const hid = WindowService.handleIdOf(slot.targetId)
+                if (hid === "")
+                    continue
+                const p = slot.cardItem.liveCardPose()
+                // id = 组键（稳定身份）：engage/合并引起的 rep 翻转只换
+                // winId 字段，特效原地换窗重接——不再销毁重注册＝消灭
+                // "旧卡淡出+新卡入场"同位双重绘（左侧闪动的根因）
+                out.push({ id: slot.appKey, winId: hid,
+                    x: p.x, y: p.y, w: p.w, h: p.h,
+                    angle: p.angle, yOff: p.yOff, focal: p.focal,
+                    radius: p.radius,
+                    title: p.title, count: p.count, z: p.z,
+                    dragging: root.dragKey === slot.appKey,
+                    selfMergeHint: p.selfMergeHint, rightSide: p.rightSide,
+                    merged: p.merged, showCardTitle: p.showCardTitle,
+                    enterInstant: p.enterInstant, dragScale: p.dragScale,
+                    chipHot: p.chipHot, iconsJson: p.iconsJson,
+                    iconSize: p.iconSize, iconSlots: p.iconSlots,
+                    engagingTilt: p.engagingTilt, tiltMs: p.tiltMs,
+                    enterMs: p.enterMs, animMs: p.animMs,
+                    engaging: engaging,
+                    dropHover: slot.cardItem.dropHovered,
+                    dwellHint: slot.cardItem.dwellHint,
+                    fade: slot.opacity,            // 压暗 × 边缘渐隐（QML 同源）
+                    closeHover: slot.cardItem.closeHot,
+                    hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
+                    hoverMs: p.hoverMs, fanSpacing: p.fanSpacing,
+                    fanHoverSpread: p.fanHoverSpread,
+                    cardTint: p.cardTint, cardBorder: p.cardBorder,
+                    cardDepth: p.cardDepth, cardTopLight: p.cardTopLight })
+            }
+        }
+        // ⚠️ 载荷去重：桥事件风暴（缩略图等高频事件驱动 syncCards→
+        // layoutCards→发布）即使布局不变也会 41Hz 轰炸写通道——载荷相同
+        // 直接跳过；仅 10s 保活重写一次刷 mtime（特效 25s 陈旧判据的
+        // 心跳另一半）。真变化（动画重定向）写平台 IPC（异步，实测扛 60Hz）。
+        // 比较用显式 {cards,hidden} 构造（at 只存在于写入版）——不依赖
+        // "at 是首键/卡字段不叫 at"的隐式正则约定
+        // 启动台打开时照常发布——卡列经 drawerRetracted 滑出屏（260ms
+        // 抽屉动画逐帧发布＝"刷一下收起"，老代码语义回归；此前"保留在
+        // 屏"的定稿已被用户推翻），贴缘 peek 拉出时姿态同样实时
+        const body = { cards: out }
+        const json = JSON.stringify({ at: Date.now(), cards: out })
+        const payloadChanged = JSON.stringify(body) !== root._lastLiveBody
+        const now = Date.now()
+        if (payloadChanged || now - root._lastLiveWriteAt > 10000) {
+            JsonConfigStore.writePath(root._livePath, json)
+            root._lastLiveBody = JSON.stringify(body)
+            root._lastLiveWriteAt = now
+            // hidden 翻转＝可见性变化，特效暂停/恢复绘制需要一次全屏重绘
+            // 信号（addRepaintFull 由特效收到文件变化自行处理，这里无需额外动作）
+        }
+        // 新发布的组键补一次快读回执：新卡注册后特效 ~16ms 内已写回执，
+        // 主动读一次把"特效已画/QML 快照也画"的双绘窗口从 ~1.5s 压到 ~0.2s
+        if (root.liveChromeOwned) {
+            // 乐观握手（v80）：全局回执已确认特效在画（liveChromeOwned）
+            // 时，新发布 id 立即让位 QML 视觉——不等 200ms 快读。特效覆盖
+            // 层随卡倾斜（v78 起）后，双绘窗内两套图标位置错开＝"切换时
+            // 双重图标"显形（老毛病复发）。回执读取仍是权威：未确认的
+            // 播种 id 进 rejected 名单不再播种（防 QML 显隐振荡），特效
+            // 真接住时回执会把它加回 _liveActiveIds。
+            let seeded = false
+            for (let k = 0; k < out.length; k++) {
+                const nid = out[k].id
+                if (!root._liveActiveIds[nid]
+                        && !root._liveSeedRejected[nid]) {
+                    root._liveActiveIds[nid] = true
+                    root._liveSeeded[nid] = true
+                    seeded = true
+                }
+            }
+            if (seeded) {
+                // ⚠️ 必须整对象替换（copy-on-write）：var 属性原地变异不发
+                // 变更通知，delegate 的 effectOwnedChrome 纯绑定只认整体
+                // 赋值/liveChromeOwned 翻转——原地塞键＝QML 视觉没让位，
+                // 双绘窗照旧（v82 修：乐观握手至此才真正闭环）
+                root._liveActiveIds = Object.assign({}, root._liveActiveIds)
+                root._fastStatusOnce.restart()
+            }
+        }
+        // 模型变化后立即对账一次让位标记（不等下一轮回执轮询）
+        _applyLivePainted()
+    }
+
+    // 快读回执（one-shot，去抖 200ms——连续新卡只读一次）
+    property Timer _fastStatusOnce: Timer {
+        interval: 200
+        onTriggered: root._pollLiveStatus()
+    }
+
+    // 回执轮询：特效每 8s 刷 status；这里 1.5s 读一次，<12s 视为新鲜。
+    // 任何失败分支（不存在/空/解析失败）都必须清 liveChromeOwned——
+    // 冻结在 true＝QML 全卡隐形而特效无卡可画
+    function _pollLiveStatus() {
+        JsonConfigStore.readPath(root._liveStatusPath,
+            function(data, exists) {
+                if (!exists || !data) {
+                    root._liveActiveIds = ({})
+                    root._liveSeeded = ({})
+                    root._liveSeedRejected = ({})
+                    root._liveStatusAt = 0
+                    root.liveChromeOwned = false
+                    root._applyLivePainted()
+                    return
+                }
+                try {
+                    const st = JSON.parse(data)
+                    root._liveStatusAt = Number(st.at) || 0
+                    // 判定窗 > 特效回执周期（8s）+余量：6s 时每 8 秒
+                    // 有 2 秒不新鲜 → 快照闪回（"偶尔显示"的元凶）
+                    const fresh = Date.now() - root._liveStatusAt < 12000
+                    // chrome:true = 卡面视觉已由特效接管（QML 隐视觉
+                    // 留输入）——回执失效时自动退回 QML 自绘。
+                    // 防御：开关已关/侧栏已关时特效不会画卡，不让位
+                    root.liveChromeOwned = fresh && st.chrome === true
+                        && StageConfigService.thumbLiveEffect && root.open
+                    // 回执 id 映射与 chrome 让位同门：模式关闭（回执虽
+                    // 仍"新鲜"）时立即清空——否则 livePainted 残留 true
+                    // ＝切回静态模式后缩略图被藏最长 12s（新鲜窗）
+                    const map = ({})
+                    if (root.liveChromeOwned && st.active
+                            && Array.isArray(st.cards))
+                        for (let i = 0; i < st.cards.length; i++)
+                            map[st.cards[i]] = true
+                    // 乐观握手结算：已播种但回执没列＝特效没接住 → 进
+                    // rejected 名单（下次发布不再播种）；回执已列的清掉
+                    // 历史拒绝（再次收编同 id 时播种不受旧账拖累）。
+                    const rejectSettle = Date.now()
+                    for (const sid in root._liveSeeded) {
+                        if (!map[sid])
+                            root._liveSeedRejected[sid] = rejectSettle
+                        else
+                            delete root._liveSeedRejected[sid]
+                    }
+                    for (const rid in root._liveSeedRejected) {
+                        if (rejectSettle - root._liveSeedRejected[rid]
+                                > _liveSeedRejectTtlMs)
+                            delete root._liveSeedRejected[rid]
+                    }
+                    root._liveSeeded = ({})
+                    root._liveActiveIds = map
+                } catch (e) {
+                    root._liveStatusAt = 0
+                    root._liveActiveIds = ({})
+                    root._liveSeeded = ({})
+                    root._liveSeedRejected = ({})
+                    root.liveChromeOwned = false
+                }
+                root._applyLivePainted()
+            })
+    }
+    property Timer _liveStatusPoll: Timer {
+        interval: 1500
+        running: true
+        repeat: true
+        onTriggered: root._pollLiveStatus()
+    }
+
+    function _applyLivePainted() {
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const slot = cardRepeater.itemAt(i)
+            if (!slot || !slot.cardItem)
+                continue
+            // 发布/回执 id 已改用组键（稳定身份，rep 翻转不再换 id）
+            slot.cardItem.livePainted =
+                root._liveActiveIds[slot.appKey] === true
+        }
     }
 
     // 把一组窗口的动画起点矩形改写为指定屏幕矩形（中心合并：被拖卡
@@ -939,9 +1281,17 @@ PanelWindow {
     property var _engageQueue: []
     // 最近派发的被点组键（NEW-2 回执失败复位 engaging 用）
     property string _lastDispatchedKey: ""
+    // 最近一次 engage 派发的票根（失败回执按它精确匹配——极速连点下
+    // #1 的迟到失败回执落在 #2 派发之后，按 _lastDispatchedKey 复位会
+    // 错把 #2 的卡复位/清序）
+    property string _lastDispatchedTicket: ""
     // 派发时刻（还原在途判定用：demoted 记录滞后的最小化旗标时，只有
     // "我们刚 engage 过的组"才可信它其实在前台——600ms 内还原必落地）
     property real _lastDispatchedAt: 0
+    // 换主派发时刻：聚焦收集（desktopFocus/heal）的让路锚——换主后
+    // 焦点交接空窗（active 空+被放窗在桌面）最长 ~2s，当残局收回＝
+    // 刚放大的窗口在原槽位重生卡一闪（v81 放大残影的根源）
+    property real _lastEngageDispatchAt: 0
 
     property Timer _engageDispatchTimer: Timer {
         interval: StageConfigService.engageDelay
@@ -952,8 +1302,23 @@ PanelWindow {
         const entry = root._engageQueue.shift()
         if (!entry)
             return
+        // 🔴 快照上一手派发（restoredInFlight 判定要用"上一个还原是谁"，
+        // 旧版先覆写再判定＝条件恒退化，快连点收错槽回归）
+        const prevDispatchedKey = root._lastDispatchedKey
+        const prevDispatchedAt = root._lastDispatchedAt
         root._lastDispatchedKey = entry.appKey
         root._lastDispatchedAt = Date.now()
+        root._lastEngageDispatchAt = Date.now()
+        // 模式关闭/面板隐藏后不派发（入队与派发之间有 engageDelay 窗口）。
+        // ⚠️ 必须复位队首卡的 engaging：入队时已置 true（opacity 0 隐形），
+        // 清队列不交还＝面板重开后该卡永久隐形且热区还在
+        if (!StageModeService.enabled || !root.open) {
+            root._resetEngaging(entry.appKey)
+            for (let i = 0; i < root._engageQueue.length; i++)
+                root._resetEngaging(root._engageQueue[i].appKey)
+            root._engageQueue = []
+            return
+        }
         // 退位判定在派发时刻做（点击到派发之间没有任何激活派发，活动窗
         // 未变；豁免规则与旧点击时刻版一致：同组/同应用/已最小化豁免）
         const demotedId = WindowService.activeWindowId
@@ -973,8 +1338,8 @@ PanelWindow {
             // 2026-09-30 遥测实锤三连 demote=none）。600ms 窗口还原必落地。
             const dKey = dRec ? root._effKey(dRec) : ""
             const restoredInFlight = dKey !== ""
-                && dKey === root._lastDispatchedKey
-                && Date.now() - root._lastDispatchedAt < 600
+                && dKey === prevDispatchedKey
+                && Date.now() - prevDispatchedAt < 600
             const deskOwned =
                 root.deskCollectedIds.indexOf(demotedId) >= 0
             if (!deskOwned && !sameGroup
@@ -1004,10 +1369,17 @@ PanelWindow {
         // 不叠加的话发布槽位与最终提交后的视图差一档（窗口飞 d2 发布的槽、
         // 卡落在双换后的槽 = "收进下面那张"的实测根源）。
         let baseOrder = root._groupOrder
-        for (let s = 0; s < root._pendingSwaps.length; s++)
+        const foldNow = Date.now()
+        for (let s = 0; s < root._pendingSwaps.length; s++) {
+            // TTL 外的过期 swap 不折（剪除入口只在 syncCards，静默期后无
+            // 对账——死 swap 叠进预测表＝下一次点卡发布错一档槽位）
+            if (foldNow - root._pendingSwaps[s].at
+                    >= StageGroups.SWAP_COMMIT_TTL_MS)
+                continue
             baseOrder = StageGroups.applySwapOrder(baseOrder,
                 root._pendingSwaps[s].clicked,
                 root._pendingSwaps[s].demoted)
+        }
         // 同一 demoted 不得重复入队：激活滞后时下一手 dispatch 仍看到旧前台
         //（它的最小化已在途），再排一条 swap 会在提交门双落、把同一组挪两档
         const dupDemote = !skipDemote && demotedKey !== ""
@@ -1029,10 +1401,17 @@ PanelWindow {
         let ids = root._idsOf(entry.idsJson)
         if (ids.indexOf(entry.targetId) < 0)
             ids.push(entry.targetId)
+        root._lastDispatchedTicket = "eng-" + Date.now()
+        // try/finally（v87 审查，与 _activateGroupGuarded 同款防御）：
+        // 旗标卡 true＝activateWithSwap 从此静默 no-op，dock 点击的同步
+        // 收编整链无日志死亡
         root._engagingDispatch = true
-        WindowService.engageSwap(ids, entry.targetId, minimizeIds,
-            "eng-" + Date.now())
-        root._engagingDispatch = false
+        const ticket = root._lastDispatchedTicket
+        try {
+            WindowService.engageSwap(ids, entry.targetId, minimizeIds, ticket)
+        } finally {
+            root._engagingDispatch = false
+        }
         // kwin 记录已随原子命令收编（NEW-7），仅 foreign 兜底逐条发
         for (let i = 0; i < minimizeIds.length; i++) {
             if (WindowService.windowById(minimizeIds[i])?.provider !== "kwin")
@@ -1143,6 +1522,7 @@ PanelWindow {
         root.hoveredKey = ""
         root._clearMergeGesture()
         root.dragKey = slot.appKey
+        root.publishLiveCards()   // dragging 标志即时发布（矩形逐帧跟手）
         root.dragFromIndex = index
         root.dragToIndex = index
         // 抓取偏移 = 指针列坐标 − 卡当前 x/y（保持指尖抓在按下的位置）
@@ -1185,9 +1565,14 @@ PanelWindow {
 
     // 被拖卡 x 钳位（三处同构的单一出处）：屏幕左右各留 DRAG_SCREEN_MARGIN
     function _dragClampX(slot) {
-        return Math.max(StageGeo.DRAG_SCREEN_MARGIN - cards.x,
+        // clamp 边界按 cards 坐标系（cards.x），但赋值对象 slotX 是
+        // cardsViewport 坐标系（viewport.x = -GLOW_PAD）——不补 GLOW_PAD
+        // ＝最左越界 14px 被裁、最右多留白，两侧不对称
+        return Math.max(StageGeo.DRAG_SCREEN_MARGIN - cards.x
+                + StageGeo.GLOW_PAD,
             Math.min(root.width - slot.width
-                - StageGeo.DRAG_SCREEN_MARGIN - cards.x,
+                - StageGeo.DRAG_SCREEN_MARGIN - cards.x
+                - StageGeo.GLOW_PAD,
                 root.dragPointerX - root.dragGrabOffsetX))
     }
 
@@ -1197,6 +1582,7 @@ PanelWindow {
             cardHeight: StageConfigService.cardHeight,
             spacing: StageConfigService.cardSpacing,
             scroll: root.scrollOffset,
+            centerCards: StageConfigService.centerCards,
         }
         return extra ? Object.assign(o, extra) : o
     }
@@ -1221,11 +1607,68 @@ PanelWindow {
         }
     }
 
+    // 显示桌面整批放出的窗口对应卡置 engaging（与点卡同款交棒淡出）。
+    // 不置位＝发布流最后载荷 alpha 目标仍 1，记录翻转销毁委托后特效按
+    // 满 alpha 滞留 600ms 迟滞再 150ms 淡出＝"放出时旧卡位残影一闪"
+    // （v80）。窗口真还原后委托即销毁，标记随之消失。
+    function _markEngagingByIds(ids) {
+        if (!ids || ids.length === 0)
+            return
+        for (let i = 0; i < cardRepeater.count; i++) {
+            const slot = cardRepeater.itemAt(i)
+            if (!slot || !slot.cardItem)
+                continue
+            const slotIds = root._idsOf(slot.idsJson)
+            for (let j = 0; j < ids.length; j++) {
+                if (slotIds.indexOf(ids[j]) >= 0) {
+                    slot.cardItem.engaging = true
+                    break
+                }
+            }
+        }
+    }
+
+    // 放出交棒安全网：1.5s 后仍最小化＝还原失败，把卡复位回可视
+    // （否则停在 engaging=true 隐形态+热区挡输入，_resetEngaging 注释
+    // 同款病灶）
+    property Timer _deskReleaseEngageReset: Timer {
+        interval: 1500
+        onTriggered: {
+            for (let i = 0; i < cardRepeater.count; i++) {
+                const s = cardRepeater.itemAt(i)
+                if (!s || !s.cardItem || !s.cardItem.engaging)
+                    continue
+                const ids = root._idsOf(s.idsJson)
+                let stillMin = false
+                for (let j = 0; j < ids.length; j++) {
+                    const r = WindowService.windowById(ids[j])
+                    if (r && r.toplevel?.minimized) {
+                        stillMin = true
+                        break
+                    }
+                }
+                if (stillMin)
+                    s.cardItem.engaging = false
+            }
+        }
+    }
+
     function _updateCardDrag(slot, index, sceneX, sceneY) {
         if (root.dragKey !== slot.appKey)
             return
         root.dragFromIndex = index   // 对账就地换主后行号可能变
         const p = cards.mapFromItem(null, sceneX, sceneY)
+        _dragFollowPointer(slot, p)
+        const lay = _dragBaseLayout(cardModel.count)
+        if (_dragUpdateCenterZone(p))
+            return          // 区内不更新插入目标（松手=并入前台/纯展开）
+        if (_dragUpdateMergeTarget(StageConfigService.cardHeight, lay))
+            return          // 武装中：不更新插入目标（松手即合并）
+        _dragUpdateInsertTarget(index, cardModel.count, lay)
+    }
+
+    // 拖拽第 1 段：被拖卡逐帧跟手（y 跟列、x 跟指针钳屏内）＋发布＋遥测
+    function _dragFollowPointer(slot, p) {
         root.dragPointerX = p.x
         root.dragPointerY = p.y
         const want = p.y - root.dragGrabOffset
@@ -1235,11 +1678,13 @@ PanelWindow {
         // 逐帧跟手：被拖卡的 y/x 直接赋值（其 Behavior 已在拖拽中禁用；
         // x 跟指针走 = 中心合并手势的实体感，且**必须**在此直接赋值——
         // layoutCards 只在目标槽变化时跑，横移不触发，靠它更新 x = 卡
-        // 不跟手 + 偶发布局才跳一下 = "没反馈 + 掉帧"的实测根源）。
-        // 只在目标槽变化时才 layoutCards——让其余卡重排，否则每帧全量
-        // 布局会拖累跟手帧率
+        // 不跟手 + 偶发布局才跳一下 = "没反馈 + 掉帧"的实测根源）
         slot.y = root.dragY
         slot.slotX = root._dragClampX(slot)
+        // 拖拽跟手发布（触摸友好）：特效侧拖拽卡画在发布矩形上——
+        // 光标钉位方案对触摸失效（触摸不动鼠标光标，卡会飞到光标
+        // 静止处＝"卡片飞到屏幕中间下方"的真相）。8ms 节流＋去重。
+        root.scheduleLivePublish()
         // 跟手排障遥测（真手拖动无头复现不了：事件层/掩码层只有真指针
         // 能测）：stage-config debugTrace 开启时 ~80ms 一条，读 px（指针
         // 列坐标）vs sx（实际 slotX）
@@ -1252,50 +1697,49 @@ PanelWindow {
                 + " sy=" + Math.round(slot.y) + " raw="
                 + Math.round(p.x - root.dragGrabOffsetX))
         }
-        const n = cardModel.count
-        const ch = StageConfigService.cardHeight
-        const lay = _dragBaseLayout(n)
-        // ── 中心合并区：指针越过卡片列 + 缓冲 = 与前台程序并组手势 ──
-        // 判定跟指针（拖出去的是卡，瞄的是手）；活动窗口 = 正在运行的
-        // 程序（其组此刻没有卡——它在前台）。离开卡列时清掉列内候选。
+    }
+
+    // 拖拽第 2 段：中心合并区（指针越过卡片列 + 缓冲 = 与前台程序并组）。
+    // 判定跟指针（拖出去的是卡，瞄的是手）；活动窗口 = 正在运行的程序
+    //（其组此刻没有卡——它在前台）。离开卡列时清掉列内候选。
+    // 返回 true = 在中心区内（调用方跳过插入目标更新）
+    function _dragUpdateCenterZone(p) {
         const inCenterZone = StageConfigService.side === "right"
             ? p.x < -StageGeo.DRAG_CENTER_BUFFER
             : p.x > cards.width + StageGeo.DRAG_CENTER_BUFFER
-        if (inCenterZone) {
-            root._centerZoneActive = true
-            if (root._dropMergeKey !== "") {
-                root._dropMergeKey = ""
-                layoutCards()
+        if (!inCenterZone) {
+            root._centerZoneActive = false
+            if (root._centerMergeArmed || root._centerMergeTarget !== "") {
+                root._centerMergeArmed = false
+                root._centerMergeTarget = ""
             }
-            if (root._mergeCandidate !== "") {
-                root._mergeCandidate = ""
-                root._mergeDwellTimer.stop()
-            }
-            const activeRec = WindowService.windowById(
-                WindowService.activeWindowId)
-            const target = root._effKey(activeRec)
-            const valid = target !== "" && target !== root.dragKey
-            const newArmed = valid
-            const newTarget = valid ? target : ""
-            if (newArmed !== root._centerMergeArmed
-                    || newTarget !== root._centerMergeTarget) {
-                root._centerMergeArmed = newArmed
-                root._centerMergeTarget = newTarget
-            }
-            return   // 区内不更新插入目标（松手=并入前台/无前台纯展开）
+            return false
         }
-        root._centerZoneActive = false
-        if (root._centerMergeArmed || root._centerMergeTarget !== "") {
-            root._centerMergeArmed = false
-            root._centerMergeTarget = ""
+        root._centerZoneActive = true
+        if (root._dropMergeKey !== "") {
+            root._dropMergeKey = ""
+            layoutCards()
         }
-        // ── 统一插入预览（2026-09-30 三轮手感回归后的终版）──
-        // 插入目标 = 基础槽位里离被拖卡最近的——始终如此：压在卡面上
-        // 松手（未武装）= 插到那张卡的槽位，拖到缝隙 = 插进缝里。合并
-        // 候选卡在 layoutCards 里钉在基础槽位（不被插入预览挤走）。
-        // ⚠️ 候选/驻留/滞回全部跟**指针**（dragPointerY）且用基础槽位：
-        // 用户瞄的是指针——用被拖卡中心会"抓卡偏一点就等错目标"
-        //（"合并十分困难"的根源之一）；用实时 y 则构成检测-布局反馈回路。
+        if (root._mergeCandidate !== "") {
+            root._mergeCandidate = ""
+            root._mergeDwellTimer.stop()
+        }
+        const activeRec = WindowService.windowById(
+            WindowService.activeWindowId)
+        const target = root._effKey(activeRec)
+        const valid = target !== "" && target !== root.dragKey
+        root._centerMergeArmed = valid
+        root._centerMergeTarget = valid ? target : ""
+        return true
+    }
+
+    // 拖拽第 3 段：列内合并候选（驻留武装）＋武装态滞回。
+    // ⚠️ 候选/驻留/滞回全部跟**指针**（dragPointerY）且用基础槽位：
+    // 用户瞄的是指针——用被拖卡中心会"抓卡偏一点就等错目标"
+    //（"合并十分困难"的根源之一）；用实时 y 则构成检测-布局反馈回路。
+    // 返回 true = 武装中（松手即合并，调用方跳过插入目标更新）
+    function _dragUpdateMergeTarget(ch, lay) {
+        const n = cardModel.count
         if (root._dropMergeKey !== "") {
             // 武装态滞回：指针离开目标基础槽位 ± DRAG_MERGE_EXIT_RATIO×
             // 卡高才解除；解除即恢复统一插入预览
@@ -1311,47 +1755,55 @@ PanelWindow {
                 }
             }
             if (armed)
-                return   // 武装中：不更新插入目标（松手即合并）
+                return true
             root._dropMergeKey = ""
             root._mergeCandidate = ""
             root._mergeDwellTimer.stop()
             console.info("[StageSidebar] merge disarmed (left target)")
             layoutCards()   // 恢复插入预览
-        } else {
-            // 候选检测（指针 + 基础槽位 + 边界滞回：进卡面收紧 6px、
-            // 出卡面放宽 0.15×卡高——手在 550ms 驻留里的自然漂移不应
-            // 清候选，否则计时不断归零 = "停了也不亮"）
-            let mergeKey = ""
-            const enter = 6
-            const stay = ch * 0.15
-            for (let i = 0; i < n; i++) {
-                if (i === root.dragFromIndex)
-                    continue
-                const s = cardRepeater.itemAt(i)
-                if (!s)
-                    continue
-                const top = lay.positions[i] ?? 0
-                if (s.appKey === root._mergeCandidate) {
-                    if (root.dragPointerY >= top - stay
-                            && root.dragPointerY <= top + ch + stay) {
-                        mergeKey = s.appKey
-                        break
-                    }
-                } else if (root.dragPointerY >= top + enter
-                            && root.dragPointerY <= top + ch - enter) {
+            return false
+        }
+        // 候选检测（指针 + 基础槽位 + 边界滞回：进卡面收紧 6px、
+        // 出卡面放宽 0.15×卡高——手在 550ms 驻留里的自然漂移不应
+        // 清候选，否则计时不断归零 = "停了也不亮"）
+        let mergeKey = ""
+        const enter = 6
+        const stay = ch * 0.15
+        for (let i = 0; i < n; i++) {
+            if (i === root.dragFromIndex)
+                continue
+            const s = cardRepeater.itemAt(i)
+            if (!s)
+                continue
+            const top = lay.positions[i] ?? 0
+            if (s.appKey === root._mergeCandidate) {
+                if (root.dragPointerY >= top - stay
+                        && root.dragPointerY <= top + ch + stay) {
                     mergeKey = s.appKey
                     break
                 }
-            }
-            if (mergeKey !== root._mergeCandidate) {
-                root._mergeCandidate = mergeKey
-                if (mergeKey === "")
-                    root._mergeDwellTimer.stop()
-                else
-                    root._mergeDwellTimer.restart()
+            } else if (root.dragPointerY >= top + enter
+                        && root.dragPointerY <= top + ch - enter) {
+                mergeKey = s.appKey
+                break
             }
         }
-        // 插入目标 = 最近基础槽位（按被拖卡位置算——卡是插进列的东西）
+        if (mergeKey !== root._mergeCandidate) {
+            root._mergeCandidate = mergeKey
+            if (mergeKey === "")
+                root._mergeDwellTimer.stop()
+            else
+                root._mergeDwellTimer.restart()
+        }
+        return false
+    }
+
+    // 拖拽第 4 段：统一插入预览（2026-09-30 三轮手感回归后的终版）。
+    // 插入目标 = 基础槽位里离被拖卡最近的——压在卡面上松手（未武装）
+    // = 插到那张卡的槽位，拖到缝隙 = 插进缝里。合并候选卡在 layoutCards
+    // 里钉在基础槽位（不被插入预览挤走）。只在目标变化时 layoutCards
+    //（每帧全量布局会拖累跟手帧率）
+    function _dragUpdateInsertTarget(index, n, lay) {
         let best = index, bestDist = Infinity
         for (let i = 0; i < n; i++) {
             const d = Math.abs((lay.positions[i] ?? 0) - root.dragY)
@@ -1510,14 +1962,28 @@ PanelWindow {
             const rw = slot.width * StageGeo.DRAG_SCALE
             const rh = slot.height * StageGeo.DRAG_SCALE
             if (centerKey !== "" && centerKey !== key) {
-                root.mergeGroups(key, centerKey)   // 直接落模型（卡片行即消失）
-                console.info("[StageSidebar] center engage+merge " + key
-                    + " -> " + centerKey)
+                // no-op 合并（from 组已无 record）时不再谎报 merge，退回
+                // 纯展开语义（v82）
+                if (root.mergeGroups(key, centerKey))
+                    console.info("[StageSidebar] center engage+merge " + key
+                        + " -> " + centerKey)
+                else
+                    console.warn("[StageSidebar] center merge no-op, "
+                        + "engage only: " + key)
             } else {
                 console.info("[StageSidebar] center engage " + key)
             }
             root._publishOverrideRects(ids, vis.x, vis.y, rw, rh)
-            WindowService.activateGroup(ids, focusId)
+            // 防重入（同 desk 放出路径）+ 拖拽全窗遮罩立即收缩（分支
+            // 提前 return，等记录落地才收缩＝~200ms 整屏点击死区）
+            _updateHitRegionExtent()
+            // 交棒淡出（v87 审查补齐，与 desk 放出/撤销看门狗同款）：
+            // 缺这对标记＝拖拽中心展开后旧卡位残影一闪（v80 病理的
+            // 拖拽入口版——最后载荷 dragging=true 平摆姿态，记录翻转后
+            // 条目直接消失，特效满 alpha 滞留 600ms 再淡出）
+            _markEngagingByIds(ids)
+            root._deskReleaseEngageReset.restart()
+            _activateGroupGuarded(ids, focusId)
             return
         }
         // 合并落点：压在别的卡上松手 = 先播合并动画（被吞卡滑向目标 +
@@ -1673,23 +2139,32 @@ PanelWindow {
         // **拆除 width 绑定（不再恢复）**：列宽被撑成 parent.width−两侧
         // margin（1656），卡片拉成 1632 宽，倾斜透视在大宽度上产生极端
         // 剪切（"切右侧时卡片被拉长"的真因，2026-09-30 实锤）
-        x: root.rightSide
-            ? parent.width - StageGeo.PANEL_WIDTH
-                - StageGeo.CARD_OVERFLOW_MARGIN
-            : StageGeo.CARD_OVERFLOW_MARGIN
+        x: (root.rightSide
+               ? parent.width - root.panelW - StageGeo.CARD_OVERFLOW_MARGIN
+               : StageGeo.CARD_OVERFLOW_MARGIN)
+            // 抽屉滑移：收起时滑向常驻侧屏缘（左条向左/右条向右），
+            // 发布姿态经 mapToItem 自动跟随
+            + (root.rightSide ? root._retractPx : -root._retractPx)
         anchors {
-            // 顶距跟随顶栏厚度（barHeight 默认 35 + 11 视觉间隙 = 46，删
-            // 除"Stage"标题时代的等效值）；别的机器调高顶栏时卡片跟着让位
+            // 顶距跟随顶栏厚度 + 扇叠/辉光上探余量（顶栏让位修复）：
+            // 多窗卡的扇叠背板向左上探出（静置 ~16px、悬停扩散 ~26-
+            // 40px），叠加辉光外扩 ~14px——旧 +11 会让首卡悬停时装饰层
+            // 压进顶栏底缘；+32 后静置留 ~16px 视觉间隙、悬停扇叠不越
+            // 顶栏底线。别的机器调高顶栏时卡片跟着让位
             top: parent.top
-            topMargin: ConfigService.barHeight + 11
+            topMargin: ConfigService.barHeight + 32
             bottom: parent.bottom
-            // 给底部 dock 让位：末卡（含辉光/悬停放大/扇叠外扩，布局内的
-            // GLOW_PAD 已计辉光）不得压进 dock 屏幕区挡住图标。dock 厚度取
-            // dock 模块 ConfigService.baseHeight（qmldir 注册名单例，用户
-            // 可调 40–100，随 dock 设置实时跟随）
-            bottomMargin: ConfigService.baseHeight + 14
+            // 给底部 dock 让位 + 滚动指示条车道：末卡（含辉光/悬停放大/
+            // 扇叠外扩，布局内的 GLOW_PAD 已计辉光）不得压进 dock 屏幕区
+            // 挡住图标。dock 厚度取 dock 模块 ConfigService.baseHeight
+            //（qmldir 注册名单例，用户可调 40–100，随 dock 设置实时跟随）；
+            // +24 覆盖浮动样式的上下呼吸边距（edgeMargin = max(4, 0.12h)，
+            // 双侧 ≤24），再 +24 是指示条专属车道（见下方 indicatorRow 注
+            // 释——特效卡在折叠线渐隐为零，车道内的 QML 指示条两种模式
+            // 都恒在且永不被合成器卡面盖住）
+            bottomMargin: ConfigService.baseHeight + 48
         }
-        width: StageGeo.PANEL_WIDTH
+        width: root.panelW
 
         // 指针监测：光标离开整个堆叠区（卡片之间的空隙/露边）时统一收悬停
         MouseArea {
@@ -1752,6 +2227,7 @@ PanelWindow {
                 required property int count
                 required property string idsJson
                 required property string iconsJson
+                required property string iconIdsJson
                 required property bool merged
                 required property bool enterInstant
 
@@ -1776,11 +2252,25 @@ PanelWindow {
                 readonly property real edgeFade: {
                     const h = StageConfigService.cardHeight
                     const fade = h * 0.45
-                    const top = (slot.y + h) / fade
-                    const bot = (cards.height - slot.y) / fade
+                    // 上缘按**卡顶**越界深度计（顶栏让位修复，与底缘对称）：
+                    // 滚动越顶的卡按隐藏比例淡出——特效直绘不受 QML 视口
+                    // clip 约束，旧公式按卡底算，半出的卡满 alpha 画进顶栏
+                    const top = 1 + slot.y / fade
+                    // 底缘按**卡底**计（dock 让位修复）：滚动越界的卡按
+                    // 隐藏深度淡出——特效直绘在合成器里不受 QML 视口 clip
+                    // 约束，旧公式按卡顶算，顶还在视口内的越界卡不淡出＝
+                    // 满 alpha 画进底部 dock 区盖住图标（点击也被 mask 吃掉）
+                    const bot = (cards.height - slot.y - h) / fade + 1
                     return Math.max(0, Math.min(1, Math.min(top, bot)))
                 }
-                opacity: (dimmed && StageConfigService.focusDim ? 0.72 : 1)
+                // 压暗过渡：dimmed 由 layoutCards 直写，无阻尼会让
+                // opacity 0.72↔1 瞬跳（经 fade 发布乘进特效卡 alpha＝
+                // 每次切焦整条卡列闪一下）——与 y/x/scale 同族阻尼
+                property real dimBlend: dimmed ? 1 : 0
+                Behavior on dimBlend {
+                    NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic }
+                }
+                opacity: (1 - dimBlend * (StageConfigService.focusDim ? 0.28 : 0))
                     * edgeFade
                 width: cards.width - StageGeo.CARD_WIDTH_INSET
                 height: StageConfigService.cardHeight
@@ -1804,10 +2294,20 @@ PanelWindow {
                 }
                 Behavior on scale { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
 
+                // 动画期逐帧发布（v50 恢复）：让位/重排/滚动/拖拽避让期间
+                // 特效需要中间帧（16ms 微跟随＝所见即所得）；载荷去重挡住
+                // 静止期的桥事件风暴（无变化不写盘）
+                onYChanged: root.scheduleLivePublish()
+                onXChanged: root.scheduleLivePublish()
+                onScaleChanged: root.scheduleLivePublish()
+                onOpacityChanged: root.scheduleLivePublish()
+
                 StageCard {
                     id: card
                     anchors.verticalCenter: parent.verticalCenter
                     appKey: slot.appKey
+                    mergeAnimFromKey: root._mergeAnimPending
+                        ? String(root._mergeAnimPending.from || "") : ""
                     targetId: slot.targetId
                     pid: slot.pid
                     appName: slot.appName
@@ -1816,6 +2316,7 @@ PanelWindow {
                     count: slot.count
                     idsJson: slot.idsJson
                     iconsJson: slot.iconsJson
+                    iconIdsJson: slot.iconIdsJson
                     merged: slot.merged
                     enterInstant: slot.enterInstant
                     dropHovered: root._dropMergeKey === slot.appKey
@@ -1850,6 +2351,14 @@ PanelWindow {
                     onIconActivated: function(windowId) {
                         root.engageCardWindow(slot, windowId)
                     }
+                    // 卡片动画（scale/tilt/x Behavior）期间逐帧发布活体姿态
+                    onLivePoseDirty: root.scheduleLivePublish()
+                    // 特效接管卡面视觉的让位开关——**逐卡**判定：回执的
+                    // 全局 chrome 旗标只证明"特效在画某些卡"，未发布进
+                    // stage-live 的卡（rep 未最小化等）特效根本没画，跟着
+                    // 全局旗标隐藏＝永久隐形只剩输入热区
+                    effectOwnedChrome: root.liveChromeOwned
+                        && root._liveActiveIds[slot.appKey] === true
                 }
             }
         }
@@ -1869,14 +2378,17 @@ PanelWindow {
         }
 
         // ── 底部提示条：位置点（当前视口内高亮）+ 总窗数（用户要求的
-        // "小小缩略提示"）。不随滚动移动；点数封顶 12，更多以省略号收尾。
-        // z 抬到所有卡之上（卡的 slot.z ≥ 1，默认 0 会被滚过来的卡盖住）。
+        // "小小缩略提示"）。**专属车道**（用户定稿"常驻置顶"）：住在折叠
+        // 线之下的保留带里——特效直绘卡经 edgeFade 在折叠线渐隐为零、
+        // QML 卡被视口 clip，两种模式下这里都永远可见且不被盖住；旧版
+        // 钉在折叠线上（z:1000 只管 QML 场景，实时模式被合成器卡面盖住，
+        // 静态模式盖住滚到底的末卡）。点数封顶 12，更多以省略号收尾
         Rectangle {
             visible: cardModel.count > 0
             z: 1000
             anchors {
-                bottom: parent.bottom
-                bottomMargin: 2
+                top: parent.bottom
+                topMargin: 4
                 horizontalCenter: parent.horizontalCenter
             }
             width: indicatorRow.implicitWidth + 16
@@ -1901,11 +2413,13 @@ PanelWindow {
                         anchors.verticalCenter: indicatorRow.verticalCenter
                         // 卡与视口的交集判定（slot.y 已含滚动偏移）
                         readonly property bool inView: {
+                            // slot.y 已含 −scroll：与视口（cards 高）求交，
+                            // 不要再把 scrollOffset 二次叠加（坐标系混用＝
+                            // 滚动后高亮点带整体错位）
                             const s = cardRepeater.count > index
                                 ? cardRepeater.itemAt(index) : null
-                            return s ? (s.y + s.height > root.scrollOffset - 2
-                                && s.y < root.scrollOffset + cards.height + 2)
-                                : false
+                            return s ? (s.y + s.height > -2
+                                && s.y < cards.height + 2) : false
                         }
                         width: 5
                         height: 5
@@ -1955,6 +2469,134 @@ PanelWindow {
 
     // 悬停聚焦键（组 key）：悬停卡原位放大置顶，其余卡从原位向两侧退避
     property string hoveredKey: ""
+
+    // ── 抽屉（全屏让位）：桌面出现全屏窗＝卡列滑进屏缘；贴缘悬停拉出 ──
+    // 内容列宽（卡宽可调后不再是常量；PANEL_WIDTH 仅作几何兼容旧值）
+    readonly property real panelW:
+        StageConfigService.cardWidth + StageGeo.CARD_WIDTH_INSET
+    // 无头测试覆盖（debugFullscreen verb）：null＝按真实记录判定
+    property var _fullscreenOverride: null
+    // 当前桌面有可见全屏窗＝需要让位
+    readonly property bool desktopFullscreen: _fullscreenOverride !== null
+        ? _fullscreenOverride : _computeDesktopFullscreen()
+    function _computeDesktopFullscreen(): bool {
+        WindowService.revision
+        const desktop = WindowService.currentDesktopId
+        const recs = WindowService.records || []
+        for (let i = 0; i < recs.length; i++) {
+            const r = recs[i]
+            if (r.toplevel?.fullscreen === true
+                    && r.toplevel?.minimized !== true
+                    && (r.toplevel?.onAllDesktops === true
+                        || !r.toplevel?.desktopIds
+                        || r.toplevel.desktopIds.indexOf(desktop) >= 0))
+                return true
+        }
+        return false
+    }
+    property bool _drawerPeek: false   // 收起态贴缘悬停＝拉出（可交互）
+    property real _retractPx: 0        // 0=展开；收起时动画到 _retractFull
+    readonly property real _retractFull: root.panelW + StageGeo.GLOW_PAD * 2
+    readonly property bool drawerRetracted:
+        (root.desktopFullscreen || root._stripYield || AppLauncherService.open)
+        && !root._drawerPeek
+    Behavior on _retractPx {
+        NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+    }
+    onDrawerRetractedChanged: {
+        root._retractPx = drawerRetracted ? root._retractFull : 0
+        _updateHitRegionExtent()
+        scheduleLivePublish()
+    }
+    on_RetractPxChanged: {
+        // 发布姿态经 mapToItem 自动含容器位移，逐帧发布让特效跟滑
+        scheduleLivePublish()
+        _updateHitRegionExtent()
+    }
+    property Timer _drawerPeekTimer: Timer {
+        interval: 120
+        // 全屏、侵占让位、启动台三种收起同权：都要能贴缘拉出（当初只认
+        // 全屏，让位收起后贴缘无反应）
+        onTriggered: {
+            if (root.desktopFullscreen || root._stripYield
+                    || AppLauncherService.open)
+                root._drawerPeek = true
+        }
+    }
+    property Timer _drawerUnpeekTimer: Timer {
+        interval: 700
+        onTriggered: root._drawerPeek = false
+    }
+
+    // ── 侵占让位（拉伸感知）：可见桌面窗压住卡列＝收抽屉 ──
+    // 挤压倾斜已删（v81.4 用户定稿：角度变化在弱透视下不明显，压上来
+    // 直接收进侧边）。阈值 10% 卡列宽＝窗口压过 ~24px 无内容辉光边距、
+    // 盖到真实卡身即收；回落 <5% 才回（滞回防抖动）。全屏是特例（必全
+    // 覆盖）
+    readonly property real _yieldEngage: 0.10
+    readonly property real _yieldRelease: 0.05
+    property real _stripOverlap: root._stripOverlapRaw
+    property bool _stripYield: false
+    on_StripOverlapChanged: {
+        const h = _stripOverlap
+        if (!root._stripYield && h > _yieldEngage) {
+            // 收起侧 400ms 去抖：交棒/收编飞行窗途经卡列是瞬态侵占，
+            // 立即收＝抽屉乱抖；恢复侧靠滞回本身已稳
+            root._yieldDebounce.restart()
+        } else if (root._stripYield && h < _yieldRelease) {
+            root._yieldDebounce.stop()
+            root._stripYield = false
+        } else if (h <= _yieldEngage) {
+            root._yieldDebounce.stop()
+        }
+    }
+    property Timer _yieldDebounce: Timer {
+        interval: 400
+        onTriggered: if (root._stripOverlap > _yieldEngage) root._stripYield = true
+    }
+    // 启动态 prime：重叠在重启/开条瞬间已是既成事实时，绑定初值赋值不发
+    // changed 信号 → 去抖永不启动＝条带压着窗口不让位。500ms 后按当前
+    // 值直接判定（启动期无飞行瞬态，无需 400ms 去抖）
+    property Timer _yieldPrime: Timer {
+        interval: 500
+        repeat: false
+        running: true
+        onTriggered: {
+            if (!root.open)
+                return
+            if (!root._stripYield && root._stripOverlap > _yieldEngage)
+                root._stripYield = true
+        }
+    }
+    // 同样必须 revision 锚定（几何在 records 里原地 mutate 不通知）
+    readonly property real _stripOverlapRaw: {
+        WindowService.placementRevision
+        const recs = WindowService.records || []
+        const sx1 = root.rightSide ? root.width - root.panelW
+            - StageGeo.CARD_OVERFLOW_MARGIN
+            : StageGeo.CARD_OVERFLOW_MARGIN
+        const sx2 = sx1 + root.panelW
+        const sy1 = ConfigService.barHeight
+        const sy2 = root.height - ConfigService.baseHeight
+        let worst = 0
+        for (let i = 0; i < recs.length; i++) {
+            const r = recs[i]
+            if (r.toplevel?.minimized === true
+                    || r.toplevel?.visible === false)
+                continue
+            const g = r.toplevel?.geometry
+            if (!g || g.width <= 0 || g.height <= 0)
+                continue
+            const ox = Math.min(sx2, g.x + g.width) - Math.max(sx1, g.x)
+            if (ox <= 0)
+                continue
+            const oy = Math.min(sy2, g.y + g.height) - Math.max(sy1, g.y)
+            if (oy <= 0.15 * (sy2 - sy1))
+                continue
+            worst = Math.max(worst, ox / root.panelW)
+        }
+        return worst
+    }
 
     // ── 滚动状态（scroll 模式）：滚轮驱动，clamp 由 layoutCards 回填 ──
     property real scrollOffset: 0
@@ -2031,6 +2673,13 @@ PanelWindow {
         }
     }
 
+    // 无头验证钩子：强制抽屉检测（"on"/"off"/"auto"）
+    function debugFullscreen(mode): string {
+        root._fullscreenOverride = mode === "auto" ? null
+            : mode === "on"
+        return JSON.stringify({ drawer: root.drawerRetracted })
+    }
+
     // 无头验证钩子：绕过驻留直接设/清悬停键（模拟"已停稳"）
     function debugHover(index, over): string {
         if (index < 0 || index >= cardModel.count)
@@ -2051,9 +2700,29 @@ PanelWindow {
                 continue
             slots.push({ app: s.appKey, y: Math.round(s.y),
                 scale: Math.round(s.slotScale * 100) / 100, z: s.z,
-                x: Math.round(s.x) })
+                x: Math.round(s.x),
+                live: root._liveActiveIds[s.appKey] === true,
+                painted: s.cardItem ? s.cardItem.livePainted : false })
+        }
+        // 可见窗记录探针：让位检测吃的正是这份数据，卡住时先看
+        // 目标窗到底进没进 records（bridge includeWindow 过滤与否）
+        const wins = []
+        const recs = WindowService.records || []
+        for (let i = 0; i < recs.length && wins.length < 8; i++) {
+            const r = recs[i]
+            const g = r.toplevel?.geometry
+            if (r.toplevel?.minimized === true)
+                continue
+            wins.push({ id: r.identity?.desktopId || r.toplevel?.appId || "?",
+                x: g ? Math.round(g.x) : -1, y: g ? Math.round(g.y) : -1,
+                w: g ? Math.round(g.width) : -1, h: g ? Math.round(g.height) : -1 })
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
+            chromeOwned: root.liveChromeOwned,
+            drawer: root.drawerRetracted, retractPx: root._retractPx,
+            cardsX: Math.round(cards.x), panelW: root.panelW,
+            overlap: Math.round(root._stripOverlap * 100) / 100,
+            yield: root._stripYield,
             launcherOpen: AppLauncherService.open,
             winW: Math.round(root.width),
             winH: Math.round(root.height),
@@ -2062,7 +2731,7 @@ PanelWindow {
             maxScroll: Math.round(root._maxScroll),
             totalWin: root.totalWindows, order: root._groupOrder,
             hitRegion: [stripHitRegion.y, stripHitRegion.height],
-            slots: slots })
+            wins: wins, slots: slots })
     }
 
     // 显示桌面开关状态机快照（抗打断排障）：集合/在途批次/定时器/焦点
@@ -2110,6 +2779,7 @@ PanelWindow {
             // 空态也要归零输入遮罩：早退会让 stripHitRegion 保持上一轮的
             // 非零 extent，最后一张卡消失后旧卡区域继续吞点击（输入黑洞）
             _updateHitRegionExtent()
+            scheduleLivePublish()
             return
         }
         if (StageConfigService.layoutMode === "scroll") {
@@ -2124,12 +2794,10 @@ PanelWindow {
                 // 悬停键不在模型里 = 该组已离开侧栏（被点开）但指针没动——
                 // 卡片自身辉光（MouseArea 还悬着）而布局回基础态 = "辉光但
                 // 不放大"。自愈：清掉追踪键；delegate 行字段就地换主时由
-                // onAppKeyChanged 重报悬停
-                if (root.hoveredKey !== "" && h < 0) {
-                    console.warn("[StageSidebar] hovered key left sidebar: "
-                        + root.hoveredKey)
+                // onAppKeyChanged 重报悬停（adaptive 无悬停语义，同款自愈
+                // 在 syncCards 共用入口）
+                if (root.hoveredKey !== "" && h < 0)
                     root.hoveredKey = ""
-                }
             }
             const heightEpochChanged = cards.height !== root._layoutHeight
             root._layoutHeight = cards.height
@@ -2137,6 +2805,7 @@ PanelWindow {
                 cardHeight: StageConfigService.cardHeight,
                 spacing: StageConfigService.cardSpacing,
                 scroll: root.scrollOffset,
+                centerCards: StageConfigService.centerCards,
                 retreat: StageConfigService.deckSidePeek,
                 hoveredIndex: root.dragKey !== "" ? -1 : h,
                 // 锚定**视觉**位置（mapToItem 含在途动画），不是属性 y——
@@ -2148,81 +2817,12 @@ PanelWindow {
                     ? cardRepeater.itemAt(h).mapToItem(cards, 0, 0).y
                     : undefined,
             })
-            // 拖拽排序：被拖卡跟手（y=dragY），其余按"抽出再插回目标槽"
-            // 的预览顺序落基础槽位（让位实时可见）；槽位 z 抬满、微放大
+            const opts = _layoutOptsScroll(lay)
             const dragging = root.dragKey !== ""
             for (let i = 0; i < n; i++) {
                 const slot = cardRepeater.itemAt(i)
-                if (!slot)
-                    continue
-                if (dragging) {
-                    slot.placed = true
-                    if (i === root.dragFromIndex) {
-                        slot.y = root.dragY
-                        slot.slotScale = StageGeo.DRAG_SCALE
-                        // x 跟手：纵向拖拽停在列内（抓取偏移钳制），拖向
-                        // 屏幕中心时卡随指针横移（中心合并手势的实体感）
-                        slot.slotX = root._dragClampX(slot)
-                        slot.z = StageGeo.DRAG_Z
-                        slot.dimmed = false
-                        continue
-                    }
-                    // 合并悬停中：其余卡钉在各自基础槽位（目标卡不能从
-                    // 指针下移走），只高亮目标（dropHovered 走 delegate 绑定）
-                    if (root._dropMergeKey !== "") {
-                        slot.y = lay.positions[i] ?? 0
-                        slot.slotScale = 1
-                        slot.slotX = (cards.width - slot.width) / 2
-                            + StageGeo.GLOW_PAD
-                        slot.z = n - i
-                        slot.dimmed = false
-                        continue
-                    }
-                    // 合并候选钉位：候选卡不被插入预览挤走（钉在自己的
-                    // 基础槽位，被拖卡悬停在它上方 = "叠上去"的合并隐喻）；
-                    // 其余卡照常让位——预览全程单状态，无"过卡归位/过缝
-                    // 让位"的来回翻转（实测抽搐+掉帧的根源）
-                    if (root._mergeCandidate !== ""
-                            && slot.appKey === root._mergeCandidate) {
-                        slot.y = lay.positions[i] ?? 0
-                        slot.slotScale = lay.scales[i] ?? 1
-                        slot.slotX = (cards.width
-                            - slot.width * slot.slotScale) / 2
-                            + StageGeo.GLOW_PAD
-                        slot.z = n - i
-                        slot.dimmed = false
-                        continue
-                    }
-                    let pi = i < root.dragFromIndex ? i : i - 1
-                    if (pi >= root.dragToIndex)
-                        pi += 1
-                    slot.y = lay.positions[pi] ?? 0
-                    slot.slotScale = lay.scales[pi] ?? 1
-                    slot.slotX = (cards.width - slot.width * slot.slotScale) / 2
-                        + StageGeo.GLOW_PAD
-                    slot.z = n - pi
-                    slot.dimmed = false
-                    continue
-                }
-                // ⚠️ 悬停卡的 y 冻结（跳过赋值，scrollPass 除外）：聚焦
-                // 期间任何 y 位移都会把卡从指针下方带走 = kill 循环（五轮
-                // 排查的最终结论）。缩放/x 的变化是 TopLeft 外扩（区域只
-                // 向外长，卡内指针数学上不可能被挤出）；y 是唯一危险的
-                // 自由度，冻结到悬停解除。滚动轮次全员平移（见函数头）。
-                if (i !== h) {
-                    // 首拍落位：placed 尚为 false 时 Behavior 禁用，y 直接
-                    // 跳到槽位（新卡不播"列顶→槽位"滑入）；写完置位，后续
-                    // 重排照常动画。
-                    slot.y = lay.positions[i] ?? 0
-                    slot.placed = true
-                }
-                slot.slotScale = lay.scales[i] ?? 1
-                // +GLOW_PAD：slot 在放宽的视口里，补偿视口 x 偏移保持视觉位置
-                slot.slotX = (cards.width - slot.width * slot.slotScale) / 2
-                    + StageGeo.GLOW_PAD
-                slot.z = lay.zs[i] ?? 1
-                // 压暗走 dimmed 属性（opacity 由 dimmed × edgeFade 绑定合成）
-                slot.dimmed = !!lay.dims[i]
+                if (slot)
+                    _applySlotLayout(slot, i, n, lay, dragging, h, opts)
             }
             // 滚动状态回填：槽距（滚轮步进）+ 上限（clamp；卡数变化后
             // 收敛滚动位置，超限回落触发一轮再布局）
@@ -2231,67 +2831,112 @@ PanelWindow {
             if (root.scrollOffset > root._maxScroll)
                 root.scrollOffset = root._maxScroll
             _updateHitRegionExtent()
+            scheduleLivePublish()
             return
         }
+        // adaptive：等比缩小全显（无悬停冻结/无逐卡 dims，z 按 n−i）
         const lay = _layout(n)
+        const opts = {
+            scaleAt: function() { return lay.scale },
+            armedScale: function() { return lay.scale },
+            restZ: function(i) { return n - i },
+            dimAt: function() { return false },
+        }
         const dragging = root.dragKey !== ""
         for (let i = 0; i < n; i++) {
             const slot = cardRepeater.itemAt(i)
-            if (!slot)
-                continue
-            if (dragging) {
-                slot.placed = true
-                if (i === root.dragFromIndex) {
-                    slot.y = root.dragY
-                    slot.slotScale = StageGeo.DRAG_SCALE
-                    // x 跟手（adaptive 分支同款，见 scroll 分支注释）
-                    slot.slotX = root._dragClampX(slot)
-                    slot.z = StageGeo.DRAG_Z
-                    slot.dimmed = false
-                    continue
-                }
-                if (root._dropMergeKey !== "") {
-                    slot.y = lay.positions[i] ?? 0
-                    slot.slotScale = lay.scale
-                    slot.slotX = (cards.width - slot.width * lay.scale) / 2
-                        + StageGeo.GLOW_PAD
-                    slot.z = n - i
-                    slot.dimmed = false
-                    continue
-                }
-                // 合并候选钉位（scroll 分支同款，见该处注释）
-                if (root._mergeCandidate !== ""
-                        && slot.appKey === root._mergeCandidate) {
-                    slot.y = lay.positions[i] ?? 0
-                    slot.slotScale = lay.scales?.[i] ?? lay.scale ?? 1
-                    slot.slotX = (cards.width
-                        - slot.width * slot.slotScale) / 2
-                        + StageGeo.GLOW_PAD
-                    slot.z = n - i
-                    slot.dimmed = false
-                    continue
-                }
-                let pi = i < root.dragFromIndex ? i : i - 1
-                if (pi >= root.dragToIndex)
-                    pi += 1
-                slot.y = lay.positions[pi] ?? 0
-                slot.slotScale = lay.scale
-                slot.slotX = (cards.width - slot.width * lay.scale) / 2
-                    + StageGeo.GLOW_PAD
-                slot.z = n - pi
-                slot.dimmed = false
-                continue
-            }
-            // 首拍落位（scroll 分支同款：placed 为 false 时 Behavior 禁用）
-            slot.y = lay.positions[i] ?? 0
-            slot.placed = true
-            slot.slotScale = lay.scale
-            slot.slotX = (cards.width - slot.width * lay.scale) / 2
-                + StageGeo.GLOW_PAD
-            slot.z = n - i
-            slot.dimmed = false
+            if (slot)
+                _applySlotLayout(slot, i, n, lay, dragging, -1, opts)
         }
         _updateHitRegionExtent()
+        scheduleLivePublish()
+    }
+
+    // scroll 分支的 opts：逐卡缩放（deckSidePeek 递减）、武装态回 1、
+    // 静止 z/dims 走布局产物
+    function _layoutOptsScroll(lay) {
+        return {
+            scaleAt: function(idx) { return lay.scales[idx] ?? 1 },
+            armedScale: function() { return 1 },
+            restZ: function(i) { return lay.zs[i] ?? 1 },
+            dimAt: function(i) { return !!lay.dims[i] },
+        }
+    }
+
+    // 布局应用（scroll/adaptive 共用体）：拖拽四态（被拖跟手/武装钉位/
+    // 候选钉位/插入预览）+ 静止态。分支差异全部经 opts 参数化：
+    //   scaleAt(idx) 逐槽缩放；armedScale 武装态缩放（scroll=1/adaptive=
+    //   统一 scale）；restZ 静止 z；dimAt 压暗。h = 悬停行（scroll 非
+    //   滚动轮；-1 = 无/不冻结——adaptive 与滚动轮天然走该值）
+    function _applySlotLayout(slot, i, n, lay, dragging, h, opts)
+    {
+        if (dragging) {
+            slot.placed = true
+            if (i === root.dragFromIndex) {
+                slot.y = root.dragY
+                slot.slotScale = StageGeo.DRAG_SCALE
+                // x 跟手：纵向拖拽停在列内（抓取偏移钳制），拖向屏幕中心
+                // 时卡随指针横移（中心合并手势的实体感）
+                slot.slotX = root._dragClampX(slot)
+                slot.z = StageGeo.DRAG_Z
+                slot.dimmed = false
+                return
+            }
+            // 合并悬停中：其余卡钉在各自基础槽位（目标卡不能从指针下
+            // 移走），只高亮目标（dropHovered 走 delegate 绑定）
+            if (root._dropMergeKey !== "") {
+                slot.y = lay.positions[i] ?? 0
+                slot.slotScale = opts.armedScale()
+                slot.slotX = (cards.width
+                    - slot.width * slot.slotScale) / 2 + StageGeo.GLOW_PAD
+                slot.z = n - i
+                slot.dimmed = false
+                return
+            }
+            // 合并候选钉位：候选卡不被插入预览挤走（钉在自己的基础槽位，
+            // 被拖卡悬停在它上方 = "叠上去"的合并隐喻）；其余卡照常让位
+            // ——预览全程单状态，无"过卡归位/过缝让位"的来回翻转
+            //（实测抽搐+掉帧的根源）
+            if (root._mergeCandidate !== ""
+                    && slot.appKey === root._mergeCandidate) {
+                slot.y = lay.positions[i] ?? 0
+                slot.slotScale = opts.scaleAt(i)
+                slot.slotX = (cards.width
+                    - slot.width * slot.slotScale) / 2 + StageGeo.GLOW_PAD
+                slot.z = n - i
+                slot.dimmed = false
+                return
+            }
+            // 插入预览：按"抽出再插回目标槽"的序号重映射落基础槽位
+            let pi = i < root.dragFromIndex ? i : i - 1
+            if (pi >= root.dragToIndex)
+                pi += 1
+            slot.y = lay.positions[pi] ?? 0
+            slot.slotScale = opts.scaleAt(pi)
+            slot.slotX = (cards.width
+                - slot.width * slot.slotScale) / 2 + StageGeo.GLOW_PAD
+            slot.z = n - pi
+            slot.dimmed = false
+            return
+        }
+        // ⚠️ 悬停卡的 y 冻结（跳过赋值，scrollPass 除外——滚动轮 h 恒 -1
+        // 天然全员平移）：聚焦期间任何 y 位移都会把卡从指针下方带走 =
+        // kill 循环（五轮排查的最终结论）。缩放/x 的变化是 TopLeft 外扩
+        //（区域只向外长，卡内指针数学上不可能被挤出）；y 是唯一危险的
+        // 自由度，冻结到悬停解除。
+        if (i !== h) {
+            // 首拍落位：placed 尚为 false 时 Behavior 禁用，y 直接跳到槽
+            // 位（新卡不播"列顶→槽位"滑入）；写完置位，后续重排照常动画。
+            slot.y = lay.positions[i] ?? 0
+            slot.placed = true
+        }
+        slot.slotScale = opts.scaleAt(i)
+        // +GLOW_PAD：slot 在放宽的视口里，补偿视口 x 偏移保持视觉位置
+        slot.slotX = (cards.width - slot.width * slot.slotScale) / 2
+            + StageGeo.GLOW_PAD
+        slot.z = opts.restZ(i)
+        // 压暗走 dimmed 属性（opacity 由 dimmed × edgeFade 绑定合成）
+        slot.dimmed = opts.dimAt(i)
     }
     // 根窗口 onHeightChanged 不另设：cards 锚满窗体（上下留辉光余量），
     // 窗高变化必然带动 cards 高度 → cards.onHeightChanged 已覆盖，同帧
@@ -2325,7 +2970,10 @@ PanelWindow {
             if (rep?.toplevel?.minimized)
                 continue
             const id = groups[i].targetId
-            if (!seen[id]) {
+            // 已有快照的不再请求：本函数每次 syncCards 都跑（任何 revision
+            // 变化），无图过滤＝重拍风暴（注释承诺的"只在出现/换主角时拍"
+            // 由此成立）；无图/失败重试由 _thumbRetryTimer 专职
+            if (!seen[id] && !WindowService.thumbnailUrl(id)) {
                 seen[id] = true
                 queue.push(id)
             }
@@ -2342,12 +2990,24 @@ PanelWindow {
         } else {
             _thumbRequestPacer.stop()
             root._thumbRequestQueue = []
+            // 关闭时取消在途收编（v87 审查）：_dispatchNextEngage 有
+            // enabled/open 守卫，唯独收编派发链裸奔——用户点桌面后 ~150ms
+            // 内关台前（Meta+Y/控制中心），_captureThenMinTimer 照常触发、
+            // 30ms 后 minimizeGroup 落地＝侧栏已关特效已卸，全部窗口无故
+            // 消失还带默认最小化动画
+            root._cancelPendingDemote()
+            root._deskUndoWatch = null
+            root._deskUndoWatchTimer.stop()
         }
+        scheduleLivePublish()
     }
 
     // 窗口隐藏（启动台打开/面板关闭）时 release 不再送达——拖拽必须
     // 就地中断，否则 dragKey 永久卡死（拒新拖拽 + 杀死悬停聚焦）
-    onVisibleChanged: if (!visible) _abortDrag()
+    onVisibleChanged: {
+        if (!visible)
+            _abortDrag()
+    }
 
     onSideGroupsChanged: syncCards()
 
@@ -2361,11 +3021,18 @@ PanelWindow {
 
     Connections {
         target: AppLauncherService
-        // 覆盖层关在桌面上（点外部关闭/启动应用后又回桌面）：此刻活动窗
-        // 已是空且不会再变——手动补一次桌面聚焦判定
         function onOpenChanged() {
-            if (!AppLauncherService.open
-                    && WindowService.activeWindowId === ""
+            if (AppLauncherService.open) {
+                // 老语义恢复：启动台打开＝桌面窗口整批收编进卡（与显示
+                // 桌面同款管线，记开关集——启动台里点应用＝正常激活；
+                // 点桌面空区＝deskReveal 放出）。不收＝桌面摊着窗而启动
+                // 台盖在上面，观感与老代码不一致
+                _collectDesktopToStrip(true)
+                return
+            }
+            // 覆盖层关在桌面上（点外部关闭/启动应用后又回桌面）：此刻
+            // 活动窗已是空且不会再变——手动补一次桌面聚焦判定
+            if (WindowService.activeWindowId === ""
                     && root._prevActiveId !== "")
                 root._desktopFocusTimer.restart()
         }
@@ -2380,7 +3047,14 @@ PanelWindow {
                 try {
                     const obj = JSON.parse(data)
                     if (obj && obj.merges && typeof obj.merges === "object") {
-                        root._mergeOverrides = obj.merges
+                        // 载入消毒："" 键（脏数据）会让 foreign 窗全塌一张卡
+                        const clean = {}
+                        for (const k in obj.merges) {
+                            const v = obj.merges[k]
+                            if (k !== "" && typeof v === "string")
+                                clean[k] = v
+                        }
+                        root._mergeOverrides = clean
                         syncCards()
                     }
                 } catch (e) {
@@ -2399,6 +3073,10 @@ PanelWindow {
         repeat: false
         running: root.open
         onTriggered: {
+            // 让路判定与另两家统一（v82）：启动 1.5s 恰逢换主/开关/覆盖层
+            // 空窗时裸收编＝把刚放大的窗又收回去（放大残影的另一扇门）
+            if (_deskCollectYielded())
+                return
             if (WindowService.activeWindowId === ""
                     && root._desktopFocused()
                     && StageConfigService.autoMinimize)
@@ -2455,8 +3133,11 @@ PanelWindow {
                     || root._desktopFocusTimer.running
                     || root._autoMinTimer.running)
                 return
-            // 刚 toggle 过（含撤销/恢复）让路：正常管线最长 ~600ms + 动画
+            // 让路判定统一走 _deskCollectYielded（toggle/换主/覆盖层）；
+            // 孤儿分支另留管线在途检查（上方）与 toggle 长静默窗
             if (Date.now() - root._lastDeskToggleAt < _deskHealSilenceMs)
+                return
+            if (_deskCollectYielded())
                 return
             if (!StageConfigService.autoMinimize)
                 return
@@ -2483,6 +3164,19 @@ PanelWindow {
     property int totalWindows: 0
 
     function syncCards() {
+        // 悬停键自愈（scroll 分支原有、adaptive 分支缺）：键不在模型里 =
+        // 该组已离开侧栏但指针没动；组键日后复用时 focusKey 立即为真＝
+        // 幽灵悬停（无悬停却放大/发布 hovered 姿态）
+        if (root.hoveredKey !== "") {
+            let stillHere = false
+            for (let i = 0; i < cardModel.count; i++)
+                if (cardModel.get(i).appKey === root.hoveredKey) {
+                    stillHere = true
+                    break
+                }
+            if (!stillHere)
+                root.hoveredKey = ""
+        }
         // 换位提交门：预测顺序（派发时只喂了发布）在这里等记录确认——退位
         // 组键已进 sideGroups 的这一次对账，把 applySwapOrder 转正进顺序表，
         // 与下面的 desired 计算同拍（顺序表变更与模型变更原子落地，中间
@@ -2502,8 +3196,21 @@ PanelWindow {
         // 组顺序表对账：剪除已消失 + 补全新组（只 prune 会退化成空表，
         // 见 stage-groups.mjs 的 mergeOrder 注释）
         const liveKeys = desired.map(d => d.appKey)
+        // 在途 swap 的被点键过剪枝保位（换位修复）：还原与最小化落在
+        // 两次快照时，中间那次对账会把已离场的被点键剪出顺序表——
+        // 提交门再跑 applySwapOrder 时 clickedIdx=-1 走尾插兜底＝退位
+        // 组沉到队尾、下方卡上移补位（"没有位置互换"的根源，实测
+        // engage 后新卡排队尾）。键保住在原位；swap 被提交门消费或
+        // TTL 过期清除后，常规剪枝自然恢复
+        const heldKeys = liveKeys.slice()
+        for (let s = 0; s < root._pendingSwaps.length; s++) {
+            const ck = root._pendingSwaps[s].clicked
+            if (root._groupOrder.indexOf(ck) >= 0
+                    && heldKeys.indexOf(ck) < 0)
+                heldKeys.push(ck)
+        }
         root._groupOrder = StageGroups.mergeOrder(root._groupOrder,
-            liveKeys)
+            heldKeys)
         const current = []
         for (let i = 0; i < cardModel.count; i++)
             current.push(cardModel.get(i))
@@ -2585,9 +3292,35 @@ PanelWindow {
         id: stripHitRegion
         x: StageGeo.CARD_OVERFLOW_MARGIN   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
         y: 0
-        width: StageGeo.PANEL_WIDTH
+        width: root.panelW
         height: 0
         visible: false
+    }
+
+    // 抽屉边缘探出热区（收起态启用——全屏/侵占让位同权）：贴常驻侧屏缘
+    // 12px 全高，悬停 120ms 拉出；离开 700ms 收回（mask 收起态正好只放
+    // 行这条）。peek 期间热区扩成整条卡列——指针从缘条移到卡上
+    // containsMouse 保持 true，不会在交互中途把抽屉收走（NoButton 不
+    // 挡卡片的点击/悬停，hover 事件本就并行分发不互斥）。
+    MouseArea {
+        id: drawerEdge
+        x: root.rightSide ? root.width - width : 0
+        y: 0
+        width: root._drawerPeek
+            ? root.panelW + StageGeo.GLOW_PAD * 2 : 12
+        height: root.height
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        enabled: root.drawerRetracted || root._drawerPeek
+        onContainsMouseChanged: {
+            if (containsMouse) {
+                root._drawerUnpeekTimer.stop()
+                root._drawerPeekTimer.restart()
+            } else {
+                root._drawerPeekTimer.stop()
+                root._drawerUnpeekTimer.restart()
+            }
+        }
     }
     // mask 只罩卡条是给点击穿透用的；拖拽中几何扩成全窗（见
     // _updateHitRegionExtent 头注释——指针离开输入区 = 事件停止送达 =
@@ -2626,15 +3359,34 @@ PanelWindow {
             stripHitRegion.x = cards.x   // 四量显式复位（拖拽分支扩过全窗）
             stripHitRegion.y = 0
             stripHitRegion.height = 0
-            stripHitRegion.width = StageGeo.PANEL_WIDTH
+            stripHitRegion.width = root.panelW
+            return
+        }
+        // 抽屉收起态：输入区只留贴缘细条（探出热区），卡列区全放行
+        if (root.drawerRetracted) {
+            stripHitRegion.x = root.rightSide ? root.width - 12 : 0
+            stripHitRegion.y = 0
+            stripHitRegion.width = 12
+            // 贴缘热区不伸进底部 dock 带（dock 让位修复）：收起态全高
+            // 细条会吃掉 dock 左端图标的点击
+            stripHitRegion.height = root.height
+                - (ConfigService.position === "bottom"
+                    ? ConfigService.baseHeight + 24 : 0)
             return
         }
         // ⚠️ width 必须显式复位：拖拽分支把它扩成全窗宽，漏复位 = 卡片
         // 纵向范围内整行屏幕的点击永远被吞（"点桌面收不起来"的根源）
-        stripHitRegion.width = StageGeo.PANEL_WIDTH
+        stripHitRegion.width = root.panelW
         stripHitRegion.x = cards.x
-        stripHitRegion.y = Math.max(0, Math.floor(top) - StageGeo.GLOW_PAD)
-        stripHitRegion.height = Math.ceil(bottom - stripHitRegion.y)
+        // 上下界都钳到容器范围（顶栏/dock 让位修复）：滚动越界的卡不
+        // 参与命中——mask 越过视口会盖住底部 dock 的图标点击与顶栏
+        //（Overlay 层窗口的 mask 是唯一输入闸，它们在 Top 层永远抢不
+        // 回来）；y 先钳再算 height（顺序反了会留下陈旧高度）
+        stripHitRegion.y = Math.max(cards.y,
+            Math.floor(top) - StageGeo.GLOW_PAD)
+        bottom = Math.min(bottom, cards.y + cards.height)
+        stripHitRegion.height = Math.max(0,
+            Math.ceil(bottom - stripHitRegion.y))
             + StageGeo.GLOW_PAD
     }
 }
