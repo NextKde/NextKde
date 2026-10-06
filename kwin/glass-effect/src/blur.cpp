@@ -1796,46 +1796,48 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
 
     vbo->bindArrays();
 
-    // Whole-surface scrim tone. A scrim that read the per-pixel backdrop
-    // luminance turned a variegated wallpaper into uneven light/dark blocks
-    // inside one panel. Instead, reduce the captured backdrop to a 1x1 average
-    // (pure GPU, no readback) and let every fragment share that single value.
+    // Filter local backdrop luminance independently of the material blur.
+    // Four downsample passes remove fine wallpaper detail without reducing
+    // mixed light/dark regions to a whole-window mean. This texture remains
+    // valid while per-shape blur overrides overwrite the material mip chain.
     const bool windowScrim = std::any_of(
         declaredSurfaceShapes.begin(), declaredSurfaceShapes.end(),
-        [](const SurfaceShape &shape) { return shape.scrimEnabled; });
-    GLTexture *scrimAvg = nullptr;
+        [](const SurfaceShape &shape) {
+            return shape.scrimEnabled && shape.scrimDecay <= 1.0;
+        });
+    GLTexture *scrimLuma = nullptr;
     if (windowScrim && renderInfo.framebuffers[0]
             && !backgroundRect.isEmpty()) {
         const int longest = std::max(backgroundRect.width(), backgroundRect.height());
         int levels = 0;
-        for (int side = longest; side > 1; side >>= 1)
+        for (int side = longest; side > 1 && levels < 4; side >>= 1)
             ++levels;
         if (levels <= 0) {
-            scrimAvg = renderInfo.framebuffers[0]->colorAttachment();
+            scrimLuma = renderInfo.framebuffers[0]->colorAttachment();
         } else {
-            if (renderInfo.scrimAvgLevels != levels
-                || renderInfo.scrimAvgSize != backgroundRect.size()
-                || renderInfo.scrimAvgFramebuffers.size() != static_cast<size_t>(levels)) {
-                renderInfo.scrimAvgFramebuffers.clear();
-                renderInfo.scrimAvgTextures.clear();
+            if (renderInfo.scrimLumaLevels != levels
+                || renderInfo.scrimLumaSize != backgroundRect.size()
+                || renderInfo.scrimLumaFramebuffers.size() != static_cast<size_t>(levels)) {
+                renderInfo.scrimLumaFramebuffers.clear();
+                renderInfo.scrimLumaTextures.clear();
                 // Zeroed until the chain is complete: a partially filled cache
                 // must not look valid to the next frame.
-                renderInfo.scrimAvgLevels = 0;
+                renderInfo.scrimLumaLevels = 0;
                 for (int i = 0; i < levels; ++i) {
                     const QSize size = (backgroundRect.size() / (1 << (i + 1))).expandedTo(QSize(1, 1));
                     auto texture = GLTexture::allocate(textureFormat, size);
                     if (!texture) {
-                        // Degrade to a scrim-less frame instead of returning:
+                        // Use neutral fallback luminance instead of returning:
                         // an early return here would skip unbindArrays() below
                         // and kill the whole frame's blur pass.
-                        qCWarning(KWIN_BLUR) << "Failed to allocate a scrim average texture";
+                        qCWarning(KWIN_BLUR) << "Failed to allocate a scrim luminance texture";
                         break;
                     }
                     texture->setFilter(GL_LINEAR);
                     texture->setWrapMode(GL_CLAMP_TO_EDGE);
                     auto framebuffer = std::make_unique<GLFramebuffer>(texture.get());
                     if (!framebuffer->valid()) {
-                        qCWarning(KWIN_BLUR) << "Failed to create a scrim average framebuffer";
+                        qCWarning(KWIN_BLUR) << "Failed to create a scrim luminance framebuffer";
                         break;
                     }
 #ifdef GLASS_X11
@@ -1847,21 +1849,21 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                     glClear(GL_COLOR_BUFFER_BIT);
                     EglContext::currentContext()->popFramebuffer();
 #endif
-                    renderInfo.scrimAvgTextures.push_back(std::move(texture));
-                    renderInfo.scrimAvgFramebuffers.push_back(std::move(framebuffer));
+                    renderInfo.scrimLumaTextures.push_back(std::move(texture));
+                    renderInfo.scrimLumaFramebuffers.push_back(std::move(framebuffer));
                 }
-                if (renderInfo.scrimAvgFramebuffers.size() == static_cast<size_t>(levels)) {
-                    renderInfo.scrimAvgSize = backgroundRect.size();
-                    renderInfo.scrimAvgLevels = levels;
+                if (renderInfo.scrimLumaFramebuffers.size() == static_cast<size_t>(levels)) {
+                    renderInfo.scrimLumaSize = backgroundRect.size();
+                    renderInfo.scrimLumaLevels = levels;
                 }
             }
 
-            // Halve each level with the same box-average pass the blur uses,
-            // reaching 1x1 (a single texel = the whole-surface mean colour).
+            // Halve each level with the same low-pass filter the blur uses.
+            // Linear sampling of the final level preserves smooth local tone.
             // Only on a complete chain: an allocation failure above leaves the
-            // chain partial and scrimAvg null, so this frame keeps its blur
-            // (minus the whole-surface tone) instead of losing it entirely.
-            if (renderInfo.scrimAvgFramebuffers.size() == static_cast<size_t>(levels)) {
+            // chain partial and scrimLuma null, so this frame keeps its blur
+            // (with the shader's neutral luminance fallback) instead of losing it.
+            if (renderInfo.scrimLumaFramebuffers.size() == static_cast<size_t>(levels)) {
                 ShaderManager::instance()->pushShader(m_downsamplePass.shader.get());
                 QMatrix4x4 projectionMatrix;
                 projectionMatrix.ortho(QRectF(0.0, 0.0, backgroundRect.width(), backgroundRect.height()));
@@ -1873,13 +1875,13 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                     m_downsamplePass.shader->setUniform(m_downsamplePass.halfpixelLocation, halfpixel);
                     glActiveTexture(GL_TEXTURE0);
                     read->bind();
-                    EglContext::currentContext()->pushFramebuffer(renderInfo.scrimAvgFramebuffers[i].get());
+                    EglContext::currentContext()->pushFramebuffer(renderInfo.scrimLumaFramebuffers[i].get());
                     vbo->draw(GL_TRIANGLES, 0, 6);
                     EglContext::currentContext()->popFramebuffer();
-                    read = renderInfo.scrimAvgFramebuffers[i]->colorAttachment();
+                    read = renderInfo.scrimLumaFramebuffers[i]->colorAttachment();
                 }
                 ShaderManager::instance()->popShader();
-                scrimAvg = read;
+                scrimLuma = read;
             }
         }
     }
@@ -2022,14 +2024,14 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.scrimModeLocation, 0);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.scrimCapLocation, 0.0f);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.scrimDecayLocation, 1.0f);
-    // One whole-surface scrim value from the 1x1 average above, bound at unit 1
-    // so the fragment shader samples one shared tone (no per-pixel banding).
+    // The softly filtered local backdrop, bound separately from the material
+    // texture so refraction, rim highlights and blur overrides cannot steer it.
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.scrimLumaTexLocation, 1);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.scrimLumaValidLocation,
-        scrimAvg ? 1 : 0);
-    if (scrimAvg) {
+        scrimLuma ? 1 : 0);
+    if (scrimLuma) {
         glActiveTexture(GL_TEXTURE0 + 1);
-        scrimAvg->bind();
+        scrimLuma->bind();
         glActiveTexture(GL_TEXTURE0);
     }
 
