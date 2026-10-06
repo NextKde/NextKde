@@ -75,4 +75,25 @@ assert.match(card, /scrimOpacity:\s*root\.glassOpacity/,
 assert.match(placement, /c\.glassOpacity = Qt\.binding\(function\(\)\s*\{\s*return panel\.pageFactor\(c\.pageTag\)\s*\}/,
     "a card's compositor glass fades with its page so no blurred ghost is left")
 
+// A PopupWindow anchored to the layer-shell Bar cannot take a Wayland popup
+// grab here, so an explicit full-screen catcher has to stay behind the panel:
+// without it a press on the desktop or on the Bar leaves the panel open.
+assert.match(panel, /id:\s*dismissalCatcher/,
+    "the outside-press catcher stays declared")
+assert.match(panel, /onPressed:\s*panel\.close\(\)/,
+    "the outside-press catcher dismisses the panel")
+assert.match(panel, /visible:[\s\S]{0,200}panel\.isOpen/,
+    "the catcher covers a deferred open as well as a mapped panel")
+
+// A popup measures its anchor once, when its window is created, so an open
+// request that arrives while the auto-hiding Bar is still put away must wait
+// for the Bar to settle before the window exists -- otherwise the panel
+// anchors to the hidden Bar and overlaps it once the Bar slides back.
+assert.match(panel, /readonly property bool anchorSettled:[\s\S]{0,80}barRevealProgress/,
+    "the panel gates its window on the Bar's settled reveal")
+assert.match(panel, /onAnchorSettledChanged:[\s\S]{0,160}coordinator\.openAll\(\)/,
+    "the deferred open runs once the Bar settles")
+assert.match(panel, /readonly property bool isOpen:\s*coordinator\.open \|\| panel\.pendingOpen/,
+    "a deferred open already reads as open, so the Bar reveals for it")
+
 console.log("control-center submenu state contract: ok")

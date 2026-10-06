@@ -163,6 +163,11 @@ PanelWindow {
                             right: parent.right
                             verticalCenter: parent.verticalCenter
                         }
+                        // The popup surfaces anchored to this cluster must know
+                        // when the Bar has stopped sliding, because a popup's
+                        // anchor rectangle is measured only when its window is
+                        // created (see ControlCenterPanel.anchorSettled).
+                        barRevealProgress: hide.revealProgress
                     }
                 }
             }

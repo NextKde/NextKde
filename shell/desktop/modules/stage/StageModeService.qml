@@ -20,6 +20,7 @@ QtObject {
     readonly property string flagPath: flagDir + "/stage-mode"
 
     // Plugin id matches the installed CMake target and metadata.
+    //（跨版本保持稳定 id：正常 KWin 特效靠同 Id 替换升级，避免新旧双绘）
     readonly property string effectId: "stageanim13"
 
     // 显示桌面开关：DeskCenter 空区左键 → 台前侧栏收编/放出来回切换。
@@ -38,15 +39,18 @@ QtObject {
         ? Quickshell.screens[0].height : 1080
     // kwinrc 三级回退矩形：targets 文件未命中时的粗略"顶栏之下的条带"
     // 近似（非卡位精度——精确矩形走 stage-targets.json 每窗发布，
-    // 那条链路已按全屏浮层原点 (0,0) 修正，勿按卡位精度校准这里）
+    // 那条链路已按全屏浮层原点 (0,0) 修正，勿按卡位精度校准这里）。
+    // 列宽跟随 cardWidth（v87 审查：五件套卡宽可调后固定 PANEL_WIDTH
+    // 会让右条回退带错位 ~100px；与侧栏 panelW 同一公式）
+    readonly property int _panelW:
+        StageConfigService.cardWidth + StageGeo.CARD_WIDTH_INSET
     readonly property string targetRectCmd: ""
         + "kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetX "
         + (StageConfigService.side === "right"
-            ? String(_screenW - StageGeo.PANEL_WIDTH
-                - StageGeo.CARD_OVERFLOW_MARGIN)
+            ? String(_screenW - _panelW - StageGeo.CARD_OVERFLOW_MARGIN)
             : String(StageGeo.CARD_OVERFLOW_MARGIN))
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetY " + StageGeo.PANEL_ORIGIN_Y
-        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + StageGeo.PANEL_WIDTH
+        + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetWidth " + _panelW
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetHeight " + (_screenH - StageGeo.PANEL_ORIGIN_Y)
         + " && kwriteconfig6 --file kwinrc --group Effect-stageanim --key TargetMirror "
         + (StageConfigService.side === "right" ? "true" : "false")

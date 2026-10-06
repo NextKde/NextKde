@@ -21,6 +21,50 @@ in vec2 vertex;
 #include "glass.glsl"
 #include "oklab.glsl"
 
+// Read a broad local neighbourhood from the independent 1/16-scale
+// backdrop. A separable 1:2:1 kernel plus linear texture filtering removes
+// texel boundaries and prevents high-frequency wallpaper detail steering tint.
+float localScrimLuminance(vec2 coord)
+{
+    vec2 stepSize = 1.0 / vec2(textureSize(scrimLumaTex, 0));
+    vec3 color = vec3(0.0);
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            float weight = (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
+            color += texture(scrimLumaTex, coord + vec2(x, y) * stepSize).rgb * weight;
+        }
+    }
+    return clamp(dot(color / 16.0, vec3(0.299, 0.587, 0.114)), 0.0, 1.0);
+}
+
+vec3 adaptiveScrim(vec3 background, float lum, bool whiteScrim)
+{
+    float damage = whiteScrim ? 1.0 - lum : lum;
+    float floorAlpha = 0.06 * scrimCap;
+    float peakAlpha = min(0.9999, max(floorAlpha, min(scrimDecay, scrimCap)));
+    // Rational compression keeps the resulting backdrop brightness monotonic,
+    // even at strong caps. A widened smoothstep followed by opacity clipping
+    // can still turn a smooth gradient into a dark ridge. Lower decay gently
+    // slows the response in middle tones without adding threshold boundaries.
+    float response = pow(damage, 2.0 - scrimDecay);
+    float ratio = (1.0 - peakAlpha) / (1.0 - floorAlpha);
+    float primaryAlpha = floorAlpha + (peakAlpha - floorAlpha)
+        * response / (ratio + (1.0 - ratio) * response);
+    // Blend the faint opposite tint out across the compressed brightness
+    // range, with zero slope at both ends. Limit its lift on very strong
+    // finishes and reserve room under cap, including during popup fades.
+    float compressed = damage * (1.0 - primaryAlpha);
+    float handoff = 1.0 - smoothstep(0.0, 1.0 - peakAlpha, compressed);
+    float oppositeCap = min(min(0.10, scrimCap), 0.5 * (1.0 - peakAlpha));
+    float oppositeAlpha = oppositeCap * handoff
+        * (scrimCap - primaryAlpha) / max(scrimCap, 0.0001);
+    vec3 primaryTint = whiteScrim ? vec3(1.0) : vec3(0.0);
+    // Compose the two fills directly rather than mixing straight tint and
+    // opacity separately, which creates an extra ridge during a handoff.
+    return mix(mix(background, primaryTint, primaryAlpha),
+               1.0 - primaryTint, oppositeAlpha);
+}
+
 void main(void)
 {
     // Same field as the cut below, evaluated from the fragment's own position
@@ -60,59 +104,17 @@ void main(void)
 
     if (glassEnabled == 1) {
         sum = glass(sum, cornerRadius, position, box.zw);
-        // Contrast scrim: adaptive modes use a black or white fill whose opacity rises with the
-        // backdrop's proximity to the opposite extreme, so light-on-light and
-        // dark-on-dark content both stay legible. Once either configured tint
-        // reaches its floor on a matching backdrop, it reverses to the opposite
-        // tint at a restrained 10%. The reversed tint never ramps farther with
-        // luminance, so an extreme backdrop cannot make the panel unexpectedly
-        // heavy. Both handoffs are deliberately narrow and smooth. Fixed modes
-        // bypass luminance and reversal and use scrimCap as exact opacity.
-        if (scrimMode > 0) {
-            // One value for the whole surface: the compositor reduces the
-            // backdrop to a 1x1 average and feeds it here, so every fragment
-            // of the surface shares the same scrim tone. Per-pixel backdrop
-            // luminance made a variegated wallpaper band a panel into uneven
-            // light/dark blocks; a single average keeps it uniform.
-            float lum = 0.5;
-            if (scrimLumaValid == 1)
-                lum = dot(texture(scrimLumaTex, vec2(0.5)).rgb,
-                          vec3(0.299, 0.587, 0.114));
-            // A floor of a small fraction of cap keeps the scrim from
-            // collapsing fully to invisible on a backdrop that already matches
-            // the tint; scaling with cap means see-through levels still stay
-            // nearly transparent while readable ones hold a faint presence.
-            bool fixedScrim = scrimMode >= 3;
-            bool whiteScrim = scrimMode == 2 || scrimMode == 4
-                || scrimMode == 6;
-            float floorAlpha = 0.06 * scrimCap;
-            float damage = whiteScrim ? (1.0 - lum) : lum;
-            float amount = smoothstep(0.40, 0.85, damage);
-            float scrimAlpha = fixedScrim ? scrimCap
-                : clamp(max(amount * scrimDecay, floorAlpha), 0.0, scrimCap);
+        // Fixed finishes keep their exact tone/opacity. Adaptive finishes
+        // follow broad local luminance through continuous, gently sloped curves.
+        if (scrimMode >= 3) {
+            bool whiteScrim = scrimMode == 4 || scrimMode == 6;
             vec3 tint = scrimMode == 6 ? vec3(0.92, 0.915, 0.905)
                 : scrimMode == 5 ? vec3(0.34, 0.335, 0.35)
                 : (whiteScrim ? vec3(1.0) : vec3(0.0));
-
-            if (!fixedScrim && whiteScrim) {
-                // All shipped white curves have reached their minimum by about
-                // 57% backdrop luminance. Reverse there, but hold the black
-                // result at the lowest visual tier (10%) regardless of how much
-                // brighter the backdrop gets. A lower custom cap still wins.
-                float blackAlpha = min(0.10, scrimCap);
-                float handoff = smoothstep(0.57, 0.63, lum);
-                scrimAlpha = mix(scrimAlpha, blackAlpha, handoff);
-                tint = mix(vec3(1.0), vec3(0.0), handoff);
-            } else if (!fixedScrim) {
-                // Mirror the white-to-black rule: all shipped black curves have
-                // reached their floor by about 43% luminance. Below that point,
-                // reverse to a fixed 10% white tint and never ramp it farther.
-                float whiteAlpha = min(0.10, scrimCap);
-                float handoff = 1.0 - smoothstep(0.37, 0.43, lum);
-                scrimAlpha = mix(scrimAlpha, whiteAlpha, handoff);
-                tint = mix(vec3(0.0), vec3(1.0), handoff);
-            }
-            sum.rgb = mix(sum.rgb, tint, scrimAlpha);
+            sum.rgb = mix(sum.rgb, tint, scrimCap);
+        } else if (scrimMode > 0) {
+            float lum = scrimLumaValid == 1 ? localScrimLuminance(uv) : 0.5;
+            sum.rgb = adaptiveScrim(sum.rgb, lum, scrimMode == 2);
         }
         float df = fwidth(dist);
         sum *= 1.0 - clamp(0.5 + dist / df, 0.0, 1.0);

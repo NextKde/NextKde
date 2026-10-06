@@ -31,6 +31,8 @@ QtObject {
         // 自由合并卡视觉：扇叠背板间距（px）/ 左下角图标排的图标大小 /
         // 图标排并列上限（实际还按卡宽动态封顶，超出进 "+N"）
         "fanSpacing":   { type: "int", min: 2, max: 24, def: 8 },
+        // 扇叠悬停扩散系数（悬停/武装时间距 × 此值；1.0 = 不扩散）
+        "fanHoverSpread": { type: "real", min: 1.0, max: 2.0, def: 1.4 },
         "stripIconSize": { type: "int", min: 16, max: 40, def: 24 },
         "maxIconSlots": { type: "int", min: 3, max: 8, def: 5 },
         // 合并手势驻留：被拖卡压在目标卡上停此时长才"武装"并组意图
@@ -39,6 +41,8 @@ QtObject {
         // 卡片顶部名称：可关（沉浸缩略图——整卡就是窗口内容）
         "showCardTitle": { type: "bool", def: true },
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
+        // 卡宽（卡高之外的独立自由度；默认 216 = 原 PANEL_WIDTH−24 定宽）
+        "cardWidth":    { type: "int", min: 120, max: 320, def: 216 },
         "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
@@ -76,6 +80,10 @@ QtObject {
         "thumbLiveStream": { type: "bool", def: false },
         "streamCycleOnMs": { type: "int", min: 80, max: 1000, def: 250 },
         "streamCycleOffMs": { type: "int", min: 200, max: 5000, def: 750 },
+        // 合成器活体卡（stageanim 直绘）：隐藏窗经 refOffscreenRendering
+        // 继续出帧（成本=窗口可见在桌面），特效在条带绘制过程里把窗口
+        // 纹理按卡面透视画进卡里——无 screencast 管线，本机预算内。
+        "thumbLiveEffect": { type: "bool", def: false },
         // 窗口动画特效（stageanim）的 kwinrc 投影
         "animDuration": { type: "int", min: 120, max: 2000, def: 420 },
         "glassOpacity": { type: "real", min: 0.3, max: 1.0, def: 0.65 },
@@ -95,6 +103,7 @@ QtObject {
     property string layoutMode: "scroll"
     property string side: "left"
     property int fanSpacing: 8
+    property real fanHoverSpread: 1.4
     property int stripIconSize: 24
     property int maxIconSlots: 5
     // ⚠️ 属性默认值 = 无 config.json 时的真实默认（_load 不回填 schema def，
@@ -103,6 +112,7 @@ QtObject {
     property bool debugTrace: false   // 诊断遥测（[DragTrace]），见 schema 注释
     property bool showCardTitle: true
     property int cardHeight: 148
+    property int cardWidth: 216
     property int cardSpacing: 16
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定
     property bool centerCards: true
@@ -149,6 +159,8 @@ QtObject {
     // 离屏渲染）时长；平均负载 ≈ on/(on+off) × 单流全速
     property int streamCycleOnMs: 250
     property int streamCycleOffMs: 750
+    // 合成器活体卡（stage-live.json → stageanim 直绘），见 schema 注释
+    property bool thumbLiveEffect: false
     property int animDuration: 420
     // 飞行玻璃透明度：窗口在卡片↔桌面途中半透明透见桌面，落地凝实；
     // 1.0 = 关闭玻璃感（全程不透明，纯淡出）
@@ -212,6 +224,25 @@ QtObject {
         if (v === null)
             return JSON.stringify({ ok: false, error: "invalid value for " + key })
         svc[key] = v
+        // 卡面画面模式互斥（静态快照 / 合成器实时 / PipeWire 流）：
+        // 两者同开＝QML 流画面与特效直绘叠绘冲突，set 层强制二选一
+        //（UI 怎么写都安全；全关＝静态快照）
+        const flipped = v === true
+            ? (key === "thumbLiveEffect" && svc.thumbLiveStream
+                 ? "thumbLiveStream"
+                 : (key === "thumbLiveStream" && svc.thumbLiveEffect
+                     ? "thumbLiveEffect" : ""))
+            : ""
+        if (flipped !== "")
+            svc[flipped] = false
+        // _load 未完成期间的 set 记账：回调不得用旧持久值回滚这些键
+        // （set 已 _save 落盘，回滚＝内存/文件漂移直到下次 set）；
+        // 互斥翻转的键同样要记（它也是刚被 set 的）
+        if (_loadPending) {
+            _pendingSetKeys[key] = true
+            if (flipped !== "")
+                _pendingSetKeys[flipped] = true
+        }
         revision++
         if (key === "animDuration" || key === "animEasing"
                 || key === "tiltAngle" || key === "glassOpacity"
@@ -292,14 +323,17 @@ QtObject {
         JsonConfigStore.writePath(configPath, JSON.stringify(out))
     }
 
+    property bool _loadPending: true   // Component.onCompleted 里 _load 后置 false
+    property var _pendingSetKeys: ({})
     function _load() {
         JsonConfigStore.readPath(configPath, function(data, exists) {
+            _loadPending = false
             if (!exists)
                 return
             try {
                 const obj = JSON.parse(data)
                 for (const k in _schema) {
-                    if (obj[k] === undefined)
+                    if (obj[k] === undefined || _pendingSetKeys[k])
                         continue
                     const v = _coerce(_schema[k], obj[k])
                     if (v === null)
@@ -310,7 +344,27 @@ QtObject {
                 console.warn("[StageConfig] bad config, keep defaults: " + e)
                 return
             }
-            // 启动对齐：把持久值投影到 kwinrc（覆盖 CLI 的临时试验值）
+            // 互斥收敛（v82）：两模式同 true 的手工改档（运维实践）在
+            // _load 原样复活＝叠绘冲突；面板只暴露 effect 模式，stream 让路
+            if (svc.thumbLiveEffect && svc.thumbLiveStream) {
+                console.warn("[StageConfig] live mode mutex violated"
+                    + " (effect+stream both on) — stream off")
+                svc.thumbLiveStream = false
+            }
+            // 治愈保存（v82）：_loadPending 窗口期内的 set 已把"未加载的
+            // 默认值"覆写进文件——加载完成后若仍有挂账键，按加载后的
+            // 内存真值补一次落盘（记账只防回滚，防不了文件先被污染）
+            if (Object.keys(_pendingSetKeys).length > 0) {
+                console.warn("[StageConfig] sets raced _load — healing"
+                    + " persisted file")
+                _save()
+            }
+            _pendingSetKeys = ({})
+            // 启动对齐：把持久值投影到 kwinrc（覆盖 CLI 的临时试验值）。
+            // revision 自增：onRevisionChanged 消费方（重排/重发布）在启动
+            // 加载时也要跑一遍——不 bump＝side=right 用户首帧按默认 left
+            // 渲染一闪再跳右
+            revision++
             _pushEffectConfig()
             console.info("[StageConfig] loaded revision=" + revision)
         })

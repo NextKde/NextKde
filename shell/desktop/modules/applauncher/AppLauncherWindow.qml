@@ -2913,4 +2913,5 @@ PanelWindow {
             || AppearanceConfigService.effectiveDockLiquid > 0.005))
         ? launcherSurface.blurRegion
         : null
+
 }

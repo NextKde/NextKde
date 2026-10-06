@@ -86,6 +86,47 @@ check("excludeKey drops active app group", groups.map(g => g.key),
 groups = groupRecords(wins, {});
 check("no opts: everything groups", groups.length, 5);
 
+// ── requireMinimized（视图口径：只收已最小化窗口）──
+// 放出/收集延迟期"可见未聚焦"窗不得成卡（QML 画它、发布流排除它＝闪烁）
+const minWins = [
+    rec({ windowId: "m1", identity: { desktopId: "a" },
+        toplevel: { minimized: true } }),
+    rec({ windowId: "v1", identity: { desktopId: "b" },
+        toplevel: { minimized: false } }),
+    rec({ windowId: "u1", identity: { desktopId: "c" } }),  // 无 minimized 字段
+];
+check("requireMinimized: only minimized windows",
+    groupRecords(minWins, { requireMinimized: true })
+        .map(g => g.wins.map(w => w.windowId).join(",")),
+    ["m1"]);
+check("requireMinimized: off keeps old behavior",
+    groupRecords(minWins, {}).map(g => g.key), ["a", "b", "c"]);
+// ── requireNotMinimized（v87："桌面可见窗"口径单一出处）──
+check("requireNotMinimized: only non-minimized windows",
+    groupRecords(minWins, { requireNotMinimized: true })
+        .map(g => g.wins.map(w => w.windowId).join(",")),
+    ["v1", "u1"]);
+// ── pickRepresentative 空入参守卫（v87：导出 API 不再抛 TypeError）──
+check("pickRepresentative: empty wins returns null",
+    pickRepresentative([], () => ""), null);
+check("pickRepresentative: undefined wins returns null",
+    pickRepresentative(undefined, () => ""), null);
+// 生产组合锚（v82）：sideGroups 实际以 requireMinimized+excludeKey+
+// excludeKeepMinimized 组合调用——活动组的**最小化兄弟**必须仍成卡
+//（侧栏是最小化窗的家），改检查顺序不应悄悄破坏
+check("requireMinimized+excludeKeepMinimized: active app's minimized"
+    + " sibling keeps card, desktop sibling excluded",
+    groupRecords([
+        rec({ windowId: "fa", identity: { desktopId: "app" } }),
+        rec({ windowId: "fb", identity: { desktopId: "app" },
+            toplevel: { minimized: true } }),
+        rec({ windowId: "fc", identity: { desktopId: "app" } }),
+        rec({ windowId: "bg", identity: { desktopId: "other" } }),
+    ], { skipWindowId: "fa", excludeKey: "app",
+        excludeKeepMinimized: true, requireMinimized: true })
+        .map(g => g.key + ":" + g.wins.map(w => w.windowId).join(",")),
+    ["app:fb"]);   // bg 未最小化：requireMinimized 下不成卡（视图口径）
+
 // ── 前台应用整组排除（excludeKeepMinimized）──
 // 活动窗 + 桌面兄弟 + 最小化兄弟同组：桌面兄弟不出卡，最小化兄弟保留
 //（侧栏是最小化窗口的家，否则那扇窗困在"不可见+无卡"里）
@@ -196,6 +237,17 @@ check("commit: mixed batch — first due, second pending",
         ["x", "b"], t0 + 100),
     { order: ["x", "b"],
         swaps: [{ clicked: "b", demoted: "y", at: t0 + 10 }] });
+check("commit: clicked still in sidebar → premature, kept",
+    commitDueSwaps(["chrome", "zcode"],
+        [{ clicked: "chrome", demoted: "kate", at: t0 }],
+        ["chrome", "kate", "zcode"], t0 + 500),
+    { order: ["chrome", "zcode"],
+        swaps: [{ clicked: "chrome", demoted: "kate", at: t0 }] });
+check("commit: clicked === demoted edge → kept (never premature)",
+    commitDueSwaps(["a"],
+        [{ clicked: "a", demoted: "a", at: t0 }],
+        ["a"], t0 + 100),
+    { order: ["a"], swaps: [{ clicked: "a", demoted: "a", at: t0 }] });
 check("commit: rapid alternation — both due, sequential commits",
     commitDueSwaps(["a", "b"],
         [{ clicked: "a", demoted: "x", at: t0 },
@@ -206,7 +258,7 @@ check("commit: rapid alternation — both due, sequential commits",
 // ── 模型对账 ──
 check("CARD_FIELDS shape", CARD_FIELDS,
     ["targetId", "pid", "appName", "title", "iconSource", "count",
-     "idsJson", "iconsJson", "merged"]);
+     "idsJson", "iconsJson", "iconIdsJson", "merged"]);
 
 function row(appKey, over = {}) {
     return Object.assign({ appKey, targetId: "t-" + appKey, pid: 1,
@@ -266,7 +318,7 @@ check("buildModelRows: fields + dedup",
     ]),
     [{ appKey: "a", targetId: "t1", pid: 5, appName: "A", title: "x",
         iconSource: "i", count: 2, idsJson: '["t1","t2"]',
-        iconsJson: '[]', merged: false }]);
+        iconsJson: '[]', iconIdsJson: '[]', merged: false }]);
 
 // moveOrderKey：拖拽换位
 check("move 前移尾→头", moveOrderKey(["a", "b", "c"], "c", 0), ["c", "a", "b"]);
@@ -315,8 +367,15 @@ check("move 键缺失原样", moveOrderKey(["a", "b"], "z", 0), ["a", "b"]);
     check("group key is target", groups[0].key, "b");
     check("group merged flag", groups[0].merged, true);
     const rows = buildModelRows(decorateGroups(groups, () => ""));
-    check("row icons per window", JSON.parse(rows[0].iconsJson),
-        ["icon-a", "icon-b", "icon-a"]);
+    // 图标排按图标源去重（同应用多窗一枚，首现序）——重复 N 个相同
+    // 图标是用户实测困惑点；窗口总数由标题 ×N 表达
+    check("row icons deduped per app", JSON.parse(rows[0].iconsJson),
+        ["icon-a", "icon-b"]);
+    // iconIds 与 icons 索引对齐＝该图标点击直达的首窗（v87：重复图标
+    // 按位 zip 全量 ids 会错位激活同应用兄弟窗）。fixture 组内序 =
+    // [w1(icon-a), w2(icon-b), w3(icon-a)]，去重后 icon-a→w1、icon-b→w2
+    check("row iconIds first window per icon",
+        JSON.parse(rows[0].iconIdsJson), ["w1", "w2"]);
 
     // 拆散：组内覆盖全部清除
     ov = splitGroup(ov, recs, "b");
