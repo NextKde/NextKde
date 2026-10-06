@@ -29,8 +29,18 @@ function windowId(window) {
 // 位置"（否则展开时还原回屏幕外，KWin 还会把活动窗钳到工作区右缘窄条）。
 const parkedGeometry = {};
 
-// 单屏逻辑宽 ~1696、停泊 X=5000；超过此值即"已在屏幕外"（多屏右摆再校准）
-const PARK_OFFSCREEN_X = 3000;
+// 屏外判定阈值：动态取虚拟屏（全部输出并集）右缘——单屏逻辑宽 ~1696 下
+// 旧常量 3000 会让 parkedX（右缘+100）永远检不出"已在屏幕外"＝unpark
+// 兜底救援与"档案丢失后再停泊跳过"守卫全体失效（v87 审查）；拿不到
+// virtualScreenGeometry 时退回远超单屏宽的绝对常量
+function offscreenThresholdX() {
+    try {
+        const vsg = workspace.virtualScreenGeometry;
+        return vsg.x + vsg.width;
+    } catch (geometryError) {
+        return 3000;
+    }
+}
 
 // 取出停泊档案（删除并返回普通对象 {x,y,width,height}；无档案返回 null）。
 // 复位写入必须放在 workspace.activeWindow 赋值**之后**：几何写入是异步提交
@@ -58,7 +68,7 @@ function applyRestore(window, geo) {
             return;
         }
         const stranded = window.frameGeometry;
-        if (stranded.x > PARK_OFFSCREEN_X) {
+        if (stranded.x > offscreenThresholdX()) {
             window.frameGeometry = {
                 x: 300, y: stranded.y,
                 width: stranded.width, height: stranded.height
@@ -78,7 +88,7 @@ function parkWindow(window, on) {
         if (parkedGeometry[key])
             return;
         const current = window.frameGeometry;
-        if (current.x > PARK_OFFSCREEN_X) {
+        if (current.x > offscreenThresholdX()) {
             // 档案丢失后的再次停泊：窗口已在屏幕外，把停泊位存成原始位置
             // 会永久污染档案——跳过，保持停泊现状等展开路径兜底
             print("[QuickshellWindowBridge] park skip lost-archive id=" + key

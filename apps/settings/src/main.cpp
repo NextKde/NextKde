@@ -1071,16 +1071,22 @@ public:
         callStage({QStringLiteral("set"), key, value});
     }
 
-    // 台前侧栏总开关：复用 stage-sidebar 的 show/hide
+    // 台前侧栏总开关：stage-sidebar 的 enable/disable（show/hide 经 CLI
+    // 永不可派发，见函数内注释）
     Q_INVOKABLE void stageSidebarSet(bool on) {
+        // ⚠️ 必须 enable/disable：quickshell 的 ipc CLI 把 "show" 当自己
+        // 的关键字（ipc show = 列 verb），`ipc call <t> show` 只打印列表
+        // 不派发——旧实现发 show 的那一半永远到不了 shell（开关"开不
+        // 了"的真根因之一）
         callShell(QStringLiteral("stage-sidebar"),
-                  {on ? QStringLiteral("show") : QStringLiteral("hide")},
-                  QStringLiteral("台前侧栏开关请求失败"), RequestKind::StageConfig);
+                  {on ? QStringLiteral("enable") : QStringLiteral("disable")},
+                  QStringLiteral("台前侧栏开关请求失败"), RequestKind::StageSidebar);
     }
 
     QVariantMap stageConfigFromReply(const QString &payload) {
-        // 空应答 = void IPC 复用本 Kind（stage-sidebar show/hide）或传输
-        // 失败——不是"参数被清空"。回 last-good，别把整页滑杆打成默认值
+        // 空应答 = void IPC 复用本 Kind（stage-sidebar enable/disable）或
+        // 传输失败——不是"参数被清空"。回 last-good，别把整页滑杆打成
+        // 默认值
         if (payload.isEmpty())
             return m_lastStageConfig;
         QJsonParseError parseError;
@@ -1403,6 +1409,7 @@ private:
         ApplySystemAppearance,
         FgSchedApps,
         StageConfig,
+        StageSidebar,
     };
 
     QVariantMap snapshotFromReply(const QString &payload) {
@@ -2224,6 +2231,16 @@ private:
         case RequestKind::StageConfig:
             emit stageConfigChanged(stageConfigFromReply(payload));
             break;
+        case RequestKind::StageSidebar:
+            // 侧栏开关是 void 动词（stage-sidebar enable/disable）：立即
+            // 回读 + 延迟补读。⚠️ shell 落盘是 enqueueBashChain 异步链，
+            // void 应答返回时 printf 很可能还没执行——只读一次会拿到旧
+            // 值（开关延迟到下个 5s tick 才翻转＝"点了没反应"的残余），
+            // 1.2s 后补读一次覆盖落盘完成时刻。此前完全没有回读时，快
+            // 照停在页面加载时刻，点击发的都是"已是态"的 no-op
+            fgSchedSnapshot();
+            QTimer::singleShot(1200, this, [this] { fgSchedSnapshot(); });
+            break;
         }
     }
 
@@ -2273,6 +2290,11 @@ private:
             // 传输失败同样回 last-good：QML 只需要信号离开 pending 态
             emit stageConfigChanged(stageConfigFromReply({}));
             break;
+        case RequestKind::StageSidebar:
+            // 失败也回读：快照读的是磁盘真值（调用可能已落地），给出
+            // 真实态好过停在陈旧态
+            fgSchedSnapshot();
+            break;
         }
     }
 
@@ -2314,7 +2336,7 @@ private:
     bool m_modelInspectionPending = false;
 
     // Last-good stage config snapshot. Void IPCs routed through this request
-    // kind (stage-sidebar show/hide) and failed set() replies produce no
+    // kind (stage-sidebar enable/disable) and failed set() replies produce no
     // payload — echoing them back would blank the page's sliders down to
     // schema defaults while the shell-side state is untouched.
     QVariantMap m_lastStageConfig;

@@ -201,6 +201,10 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_effects.mjs)
         set_tests_properties(kos-shell.stage-effects PROPERTIES TIMEOUT 10)
+        add_test(NAME kos-shell.stage-protocol
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_protocol.mjs)
+        set_tests_properties(kos-shell.stage-protocol PROPERTIES TIMEOUT 10)
 
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
@@ -460,7 +464,7 @@ if(BUILD_TESTING)
             kos-shell.window-placement-updates
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.process-identity
-            kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects
+            kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects kos-shell.stage-protocol
             kos-shell.appearance-config kos-shell.dock-adaptive
             kos-shell.dock-autohide kos-deskcenter.desktop-outputs
             kos-shell.screen-selection
