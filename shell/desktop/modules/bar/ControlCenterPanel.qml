@@ -1344,59 +1344,118 @@ PopupWindow {
                 color: ThemeService.foregroundColor
                 font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
             }
-            GlassText {
-                text: "›"
-                color: ThemeService.foregroundColor
-                opacity: 0.50
-                font { pixelSize: 13; weight: Font.Bold }
-            }
+        }
+        GlassText {
+            anchors { right: parent.right; top: parent.top; rightMargin: 30; topMargin: 8 }
+            text: Math.round(panel.volumePreview) + "%"
+            color: ThemeService.foregroundColor
+            opacity: 0.50
+            font { pixelSize: 9; family: "Noto Sans CJK SC" }
+        }
+        GlassText {
+            anchors { right: parent.right; top: parent.top; rightMargin: 13; topMargin: 5 }
+            text: "›"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 15; weight: Font.Bold }
         }
         MouseArea {
             id: soundPagePointer
-            anchors { left: parent.left; top: parent.top; right: parent.right }
-            height: 26
+            anchors { left: parent.left; right: parent.right; top: parent.top }
+            height: 27
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
             onClicked: panel.openSubmenu("sound")
         }
-        GlassText {
-            anchors { right: parent.right; top: parent.top; rightMargin: 14; topMargin: 8 }
-            text: Math.round(panel.volumePreview) + "%"
-            color: ThemeService.foregroundColor
-            opacity: 0.72
-            font { pixelSize: 10; family: "Noto Sans CJK SC" }
-        }
         Canvas {
             id: volumeGlyph
-            anchors { left: parent.left; leftMargin: 12; bottom: parent.bottom; bottomMargin: 12 }
-            width: 15
-            height: 15
-            property color glyphColor: ThemeService.tileGlyph
-            onGlyphColorChanged: requestPaint()
+            anchors { left: parent.left; leftMargin: 12; verticalCenter: volumeSlider.verticalCenter }
+            width: 19
+            height: 16
+            renderTarget: Canvas.Image
+
+            readonly property int volumeLevel: Math.round(panel.volumePreview)
+            readonly property bool isMuted: ControlCenterService.audioMuted
+            readonly property color ink: AppearanceTokens.content.glassInk()
+
+            onVolumeLevelChanged: requestPaint()
+            onIsMutedChanged: requestPaint()
+            onInkChanged: requestPaint()
+
             onPaint: {
                 const ctx = getContext("2d")
                 ctx.reset()
-                ctx.strokeStyle = glyphColor
-                ctx.fillStyle = glyphColor
-                ctx.lineWidth = 1.7
+                const fg = ink
+                const bodyColor = isMuted
+                    ? Qt.rgba(fg.r, fg.g, fg.b, 0.50) : fg
+
+                ctx.fillStyle = bodyColor
+                ctx.strokeStyle = fg
+                ctx.lineWidth = 1.5
+                ctx.lineCap = "round"
                 ctx.lineJoin = "round"
-                ctx.fillRect(1, 6, 3.5, 4)
-                ctx.beginPath(); ctx.moveTo(4.3, 6); ctx.lineTo(8, 3); ctx.lineTo(8, 13); ctx.lineTo(4.3, 10); ctx.closePath(); ctx.fill()
-                if (!ControlCenterService.audioMuted) {
-                    ctx.lineCap = "round"
-                    ctx.beginPath(); ctx.arc(7.2, 8, 4, -0.8, 0.8); ctx.stroke()
+
+                ctx.fillRect(1.0, 5.5, 3.2, 5.0)
+
+                ctx.beginPath()
+                ctx.moveTo(4.2, 5.5)
+                ctx.lineTo(7.5, 2.5)
+                ctx.lineTo(7.5, 13.5)
+                ctx.lineTo(4.2, 10.5)
+                ctx.closePath()
+                ctx.fill()
+
+                if (isMuted) {
+                    ctx.globalCompositeOperation = "destination-out"
+                    ctx.lineWidth = 2.6
+                    ctx.beginPath()
+                    ctx.moveTo(0.8, 2.0)
+                    ctx.lineTo(8.8, 14.0)
+                    ctx.stroke()
+
+                    ctx.globalCompositeOperation = "source-over"
+                    ctx.lineWidth = 1.5
+                    ctx.strokeStyle = fg
+                    ctx.beginPath()
+                    ctx.moveTo(0.8, 2.0)
+                    ctx.lineTo(8.8, 14.0)
+                    ctx.stroke()
                 } else {
-                    ctx.beginPath(); ctx.moveTo(10.5, 4.5); ctx.lineTo(14, 11.5); ctx.stroke()
+                    const arcs = volumeLevel > 66 ? 3 : (volumeLevel > 33 ? 2 : (volumeLevel > 0 ? 1 : 0))
+                    const cx = 6.0, cy = 8.0
+                    if (arcs >= 1) {
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, 4.2, -0.65, 0.65)
+                        ctx.stroke()
+                    }
+                    if (arcs >= 2) {
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, 7.0, -0.70, 0.70)
+                        ctx.stroke()
+                    }
+                    if (arcs >= 3) {
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, 9.8, -0.72, 0.72)
+                        ctx.stroke()
+                    }
                 }
             }
+
             Connections {
                 target: ControlCenterService
                 function onAudioMutedChanged() { volumeGlyph.requestPaint() }
             }
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -6
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: ControlCenterService.setMuted(!ControlCenterService.audioMuted)
+            }
         }
         ControlCenterSlider {
             id: volumeSlider
-            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 34; rightMargin: 17; bottomMargin: 8 }
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 36; rightMargin: 17; bottomMargin: 8 }
             value: panel.volumePreview / 100
             onPreviewChanged: function(v) {
                 panel.draggingVolume = true
