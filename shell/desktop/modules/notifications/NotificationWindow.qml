@@ -106,6 +106,13 @@ PanelWindow {
                 exitAnimation.start()
             }
 
+            Timer {
+                id: removingSafetyTimer
+                interval: root.exitDuration + 300
+                running: card.removing && !exitAnimation.running
+                onTriggered: exitAnimation.start()
+            }
+
             NumberAnimation {
                 id: exitAnimation
                 target: card
@@ -136,6 +143,7 @@ PanelWindow {
             property string _lastAppName: ""
             property string _lastIconSource: ""
             property int _lastUrgency: 1
+            onModelDataChanged: card.removing = false
             onNotificationChanged: {
                 if (card.notification) {
                     card._lastSummary = card.notification.summary || ""
@@ -144,6 +152,7 @@ PanelWindow {
                     card._lastUrgency = card.notification.urgency
                     card._lastIconSource = AppIdentityService._iconPath(
                         card.notification.image || card.notification.appIcon)
+                    card.removing = false
                 }
                 // The delegate is reused when a group's newest notification is
                 // replaced by a newer one. Without this reset the fresh notice
