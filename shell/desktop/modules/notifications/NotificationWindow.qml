@@ -535,12 +535,26 @@ PanelWindow {
                             ? card.notification.actions
                             : []
                         Rectangle {
+                            id: actionBtn
                             height: 28
                             width: actionLabel.implicitWidth + 24
                             radius: 14
-                            color: actionMouse.containsMouse
-                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
-                                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))
+                            color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                                : (actionMouse.containsMouse
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
+                                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+
+                            SelectionHighlight {
+                                objectName: "notification-action-highlight"
+                                anchors.fill: parent
+                                cornerRadius: actionBtn.radius
+                                enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                hovered: actionMouse.containsMouse
+                                pressed: actionMouse.pressed
+                                dark: ThemeService.isDark
+                                fillStrength: 0.85
+                            }
                             Text {
                                 id: actionLabel
                                 anchors.centerIn: parent

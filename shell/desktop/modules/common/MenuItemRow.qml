@@ -1,5 +1,6 @@
 import QtQuick
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // A row in a ContextMenu: icon + label, with optional checkmark (checkable),
 // submenu chevron, and a thin separator variant. Hover only changes the row's
@@ -52,13 +53,31 @@ Item {
             row.foregroundColor.b, 0.12)
     }
 
-    // Hover background (behind all other content).
+    readonly property bool _useGlassSelection: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+
+    // Glass selection plate
+    SelectionHighlight {
+        objectName: "menu-item-selection-highlight"
+        anchors.fill: parent
+        cornerRadius: AppearanceTokens.shape.medium
+        enabled: row._useGlassSelection && row.itemEnabled && !row.separator
+        hovered: row._hover
+        pressed: pointer.pressed
+        selected: row.checked
+        dark: ThemeService.isDark
+        fillStrength: 0.90
+        z: -1
+    }
+
+    // Legacy hover background (behind all other content).
     Rectangle {
         id: bg
         anchors.fill: parent
         radius: AppearanceTokens.shape.medium
+        visible: !row._useGlassSelection
         color: (row._hover && row.itemEnabled && !row.separator) ? row._hi : "transparent"
         Behavior on color { ColorAnimation { duration: 90 } }
+        z: -1
     }
 
     Row {

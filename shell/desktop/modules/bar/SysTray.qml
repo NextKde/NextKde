@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Effects
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 // StatusNotifierItem host. Referencing SystemTray claims and tracks tray items.
 Item {
@@ -332,12 +333,26 @@ Item {
                         modelData.activate()
                 }
 
+                SelectionHighlight {
+                    objectName: "tray-item-selection-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 6
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass" && !root.altModifierHeld
+                    hovered: trayMouse.containsMouse
+                    selected: trayMenu.visible && trayMenu.anchorItem === trayItem
+                    pressed: trayMouse.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.75
+                    z: -1
+                }
+
                 Rectangle {
                     anchors.fill: parent
                     radius: 5
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                        && (trayMouse.containsMouse || (trayMenu.visible && trayMenu.anchorItem === trayItem))
                     color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.08)
-                    visible: trayMouse.containsMouse
-                        || (trayMenu.visible && trayMenu.anchorItem === trayItem)
+                    z: -1
                 }
 
                 AppIcon {

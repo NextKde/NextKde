@@ -1022,7 +1022,8 @@ PopupWindow {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
-            opacity: screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
+            opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                && screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -1063,11 +1064,8 @@ PopupWindow {
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-            color: ThemeService.isDark
-                ? "#ffffff"
-                : Qt.rgba(1, 1, 1, 0.45)
-            opacity: ThemeService.isDark || (themePointer.containsMouse && !themePointer.pressed) ? 1 : 0
-            Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            color: "#ffffff"
+            opacity: ThemeService.isDark ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -1117,7 +1115,8 @@ PopupWindow {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
-            opacity: powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
+            opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                && powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -1165,10 +1164,8 @@ PopupWindow {
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-            color: ControlCenterService.doNotDisturbEnabled
-                ? (ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18))
-                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
-            opacity: ControlCenterService.doNotDisturbEnabled || (dndPointer.containsMouse && !dndPointer.pressed) ? 1 : 0
+            color: ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18)
+            opacity: ControlCenterService.doNotDisturbEnabled ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {
@@ -1216,11 +1213,8 @@ PopupWindow {
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-            color: ControlCenterService.nightLightActive
-                ? "#ffcc00"
-                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45))
-            opacity: ControlCenterService.nightLightActive || (nightLightPointer.containsMouse && !nightLightPointer.pressed) ? 1 : 0
-            Behavior on color { ColorAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            color: "#ffcc00"
+            opacity: ControlCenterService.nightLightActive ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 140 } }
         }
         Image {

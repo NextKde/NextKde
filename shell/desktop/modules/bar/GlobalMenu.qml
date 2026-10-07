@@ -4,6 +4,7 @@ import qs.desktop
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
+import "../../../Kos/Ui"
 
 // Native renderer for the active KDE AppMenu. The platform daemon translates
 // the DBusMenu wire format to plain QML data; this keeps D-Bus parsing and
@@ -172,12 +173,26 @@ Item {
                 required property var modelData
                 width: root.itemWidth(modelData)
                 height: 28
+                SelectionHighlight {
+                    objectName: "global-menu-item-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 8
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass" && modelData.enabled !== false
+                    hovered: pointer.containsMouse
+                    selected: menuPopup.visible && root.popupRootId === modelData.id
+                    pressed: pointer.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                    z: -1
+                }
                 Rectangle {
                     anchors.fill: parent
                     radius: 8
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                     color: (pointer.containsMouse || (menuPopup.visible && root.popupRootId === modelData.id))
                         ? Qt.rgba(ThemeService.foregroundColor.r,
                             ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                    z: -1
                 }
                 Text {
                     anchors.centerIn: parent
@@ -214,12 +229,26 @@ Item {
             visible: root.overflowItems.length > 0
             width: visible ? 33 : 0
             height: 28
+            SelectionHighlight {
+                objectName: "global-menu-overflow-highlight"
+                anchors.fill: parent
+                cornerRadius: 8
+                enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                hovered: morePointer.containsMouse
+                selected: menuPopup.visible && root.popupRootId === 0
+                pressed: morePointer.pressed
+                dark: ThemeService.isDark
+                fillStrength: 0.85
+                z: -1
+            }
             Rectangle {
                 anchors.fill: parent
                 radius: 8
+                visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 color: (morePointer.containsMouse || (menuPopup.visible && root.popupRootId === 0))
                     ? Qt.rgba(ThemeService.foregroundColor.r,
                         ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                z: -1
             }
             Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16; renderType: Text.NativeRendering }
             MouseArea {

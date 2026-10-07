@@ -3,6 +3,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
+import "../../../Kos/Ui"
 
 // Multi-window thumbnail preview popup with macOS-style window cards.
 PopupWindow {
@@ -257,13 +258,26 @@ PopupWindow {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     radius: 8
-                    color: plusMouse.containsMouse
-                        ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
-                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07))
-                    border.width: 1
+                    color: AppearanceTokens.surface.selectionHighlightStyle === "glass" ? "transparent"
+                        : (plusMouse.containsMouse
+                            ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.35)
+                            : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.07)))
+                    border.width: AppearanceTokens.surface.selectionHighlightStyle === "glass" ? 0 : 1
                     border.color: plusMouse.containsMouse
                         ? Qt.rgba(ThemeService.accentColor.r, ThemeService.accentColor.g, ThemeService.accentColor.b, 0.65)
                         : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.16))
+
+                    SelectionHighlight {
+                        objectName: "dock-preview-plus-highlight"
+                        anchors.fill: parent
+                        cornerRadius: plusBg.radius
+                        enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                        hovered: plusMouse.containsMouse
+                        pressed: plusMouse.pressed
+                        dark: ThemeService.isDark
+                        fillStrength: 0.80
+                        z: -1
+                    }
 
                     Behavior on color {
                         ColorAnimation { duration: 100 }
@@ -344,14 +358,28 @@ PopupWindow {
                             // longer adds a separate dark rectangle behind a
                             // window preview. Keep the active window visibly
                             // distinct when the pointer is elsewhere.
-                            color: cardMouse.containsMouse
-                                ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06))
-                                : (isWinActivated
-                                    ? Qt.rgba(ThemeService.accentColor.r,
-                                        ThemeService.accentColor.g,
-                                        ThemeService.accentColor.b, 0.16)
-                                    : "transparent")
+                            color: AppearanceTokens.surface.selectionHighlightStyle === "glass" ? "transparent"
+                                : (cardMouse.containsMouse
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.06))
+                                    : (isWinActivated
+                                        ? Qt.rgba(ThemeService.accentColor.r,
+                                            ThemeService.accentColor.g,
+                                            ThemeService.accentColor.b, 0.16)
+                                        : "transparent"))
                             border.width: 0
+
+                            SelectionHighlight {
+                                objectName: "dock-preview-card-highlight"
+                                anchors.fill: parent
+                                cornerRadius: cardBg.radius
+                                enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                hovered: cardMouse.containsMouse
+                                selected: isWinActivated
+                                pressed: cardMouse.pressed
+                                dark: ThemeService.isDark
+                                fillStrength: 0.80
+                                z: -1
+                            }
 
                             Behavior on color {
                                 ColorAnimation { duration: 100 }

@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 import "ClipboardPlacement.mjs" as ClipboardPlacement
 
 // Focusable full-screen layer containing search or anchored clipboard history.
@@ -1054,10 +1055,25 @@ PanelWindow {
                 width: resultView.width
                 height: 52
 
+                SelectionHighlight {
+                    objectName: "quicksearch-item-selection-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 20
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: resultMouse.containsMouse
+                    selected: resultItem.index === root.selectedIndex
+                    pressed: resultMouse.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                    z: -1
+                }
+
                 Rectangle {
                     anchors.fill: parent
                     radius: 20
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                     color: resultItem.index === root.selectedIndex ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
+                    z: -1
                 }
 
                 Rectangle {
@@ -1314,13 +1330,31 @@ PanelWindow {
                 width: gridView.cellWidth
                 height: gridView.cellHeight
 
+                SelectionHighlight {
+                    objectName: "quicksearch-grid-selection-highlight"
+                    anchors {
+                        fill: parent
+                        margins: 3
+                    }
+                    cornerRadius: 11
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: gridMouse.containsMouse
+                    selected: gridResultItem.index === root.selectedIndex
+                    pressed: gridMouse.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                    z: -1
+                }
+
                 Rectangle {
                     anchors {
                         fill: parent
                         margins: 3
                     }
                     radius: 11
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                     color: gridResultItem.index === root.selectedIndex ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)) : "transparent"
+                    z: -1
                 }
 
                 Rectangle {

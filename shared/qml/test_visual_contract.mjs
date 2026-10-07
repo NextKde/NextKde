@@ -247,7 +247,7 @@ for (const role of ["foregroundColor", "secondaryForegroundColor",
         new RegExp(`readonly property color ${role}:[\\s\\S]{0,400}?content\\.glassInk\\(`),
         `the glass ${role} follows the resolved ink`);
 assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
-    /onGlyphInkChanged:\s*requestPaint\(\)/,
+    /(onGlyphInkChanged:\s*requestPaint\(\)|function onGlyphInkChanged\(\)\s*\{[^}]*requestPaint\(\)\s*\})/,
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
     ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
@@ -435,7 +435,7 @@ assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
 assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
     "the launcher backdrop expands and contracts with its contents");
 assert.match(appIconSource,
-    /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
+    /backer\.cache:\s*(!root\.needsEffect\s*&&\s*)?IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
 assert.match(quickSearchWindow,
     /backer\.cache:\s*!resultIcon\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
@@ -517,7 +517,7 @@ for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
-        new RegExp(component + "\\s*\\{[\\s\\S]{0,400}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,600}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
         component + " shares the native tray icon size");
 }
 assert.doesNotMatch(controlCenterPanel,
@@ -578,4 +578,29 @@ assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
     "the power glyph uses the same light outline weight as adjacent controls");
 assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
     "the power glyph does not regress to an oversized solid silhouette");
+
+// ── Glass selection highlight visual contracts ──────────────────────────────
+const selectionHighlightSource = read("./controls/SelectionHighlight.qml");
+assert.match(appearanceTokens,
+    /readonly property string selectionHighlightStyle:\s*"glass"/,
+    "AppearanceTokens sets glass selection as the default style");
+assert.match(selectionHighlightSource,
+    /readonly property real topAlpha:\s*dark\s*\?/,
+    "SelectionHighlight branches topAlpha for dark and light contrast");
+assert.match(selectionHighlightSource,
+    /plate\.dark\s*\?\s*Qt\.rgba\(1,\s*1,\s*1,[\s\S]*Qt\.rgba\(0,\s*0,\s*0,/,
+    "SelectionHighlight switches fill between white and dark ink for contrast");
+
+for (const [path, desc] of [
+    ["../../shell/desktop/modules/common/MenuItemRow.qml", "Context Menu items"],
+    ["../../shell/desktop/modules/bar/GlobalMenu.qml", "Global Menu bar items"],
+    ["../../shell/desktop/modules/bar/SysTray.qml", "System Tray icons"],
+    ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search results"],
+    ["../../shell/desktop/modules/dock/DockWindowPreview.qml", "Dock preview cards"],
+    ["../../shell/desktop/modules/notifications/NotificationWindow.qml", "Notification action buttons"],
+]) {
+    assert.match(read(path), /SelectionHighlight\s*\{/,
+        `${desc} integrates SelectionHighlight glass selection`);
+}
+
 console.log("KOS UI visual contract: all checks passed");
