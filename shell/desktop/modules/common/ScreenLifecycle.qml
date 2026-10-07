@@ -84,12 +84,32 @@ QtObject {
         function onScreensChanged() { service.refreshAndSettle() }
     }
 
+    property int _settleRetryRemaining: 0
+
     property Timer settleTimer: Timer {
         interval: 300
         repeat: false
         onTriggered: {
             service.refresh()
             service.updateOutputConfiguration()
+            // 如果唤醒瞬间恰好命中 Qt Wayland 占位屏导致无可用输出，启动逃生重试梯队
+            if (!service.outputAvailable) {
+                service._settleRetryRemaining = 5
+                retryTimer.restart()
+            }
+        }
+    }
+
+    property Timer retryTimer: Timer {
+        interval: 500
+        repeat: false
+        onTriggered: {
+            service.refresh()
+            service.updateOutputConfiguration()
+            if (!service.outputAvailable && service._settleRetryRemaining > 0) {
+                service._settleRetryRemaining--
+                retryTimer.restart()
+            }
         }
     }
 
@@ -102,12 +122,17 @@ QtObject {
         }
     }
 
-    // 针对用户在 KDE 系统设置中仅调整优先级而不插拔屏幕的情况，设置 2s 轮询检测
+    // 针对用户在 KDE 系统设置中仅调整优先级而不插拔屏幕的情况，设置 2s 轮询检测；
+    // 并在输出异常丢失（!outputAvailable）时自动触发 refresh() 自愈逃生。
     property Timer outputPollTimer: Timer {
         interval: 2000
         running: true
         repeat: true
-        onTriggered: service.updateOutputConfiguration()
+        onTriggered: {
+            service.updateOutputConfiguration()
+            if (!service.outputAvailable)
+                service.refresh()
+        }
     }
 
     Component.onCompleted: {
