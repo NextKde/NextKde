@@ -1,5 +1,6 @@
 import QtQuick
 import qs.desktop.modules.common
+import qs.desktop.modules.dock
 import "../../../shared/qml/controls" as LiquidControls
 
 // One visual language for every slider inside Control Center. Feature rows
@@ -12,24 +13,23 @@ LiquidControls.LiquidSlider {
     id: root
     height: 30
     materialForm: AppearanceTokens.surface.paintInQml
-    trackHeight: 4
-    // Material 3: the inactive track rides on the surface variant and the active
-    // track + handle take the primary role. Glass: white over the translucent
-    // card, which is what the compositor's frost is read against.
+    trackHeight: 5
+    thumbWidth: 18
+    thumbHeight: 18
+    chromaticAberration: false
+    wobbleEnabled: false
+
+    // macOS contrast model:
+    // In dark mode: subtle translucent white track, bright white/accent active progress.
+    // In light mode: subtle translucent dark track, solid ink/accent active progress.
     trackColor: AppearanceTokens.surface.pick(
-        AppearanceTokens.colors.surfaceContainerHighest, Qt.rgba(1, 1, 1, 0.17))
+        AppearanceTokens.colors.surfaceContainerHighest,
+        AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.10))
     accentColor: AppearanceTokens.surface.pick(
-        AppearanceTokens.colors.primary, Qt.rgba(1, 1, 1, 0.42))
+        AppearanceTokens.colors.primary,
+        AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.90) : Qt.rgba(0, 0, 0, 0.72))
     thumbColor: "#ffffff"
-    thumbBorderColor: "transparent"
-    LiquidControls.SelectionHighlight {
-        objectName: "control-center-slider-highlight"
-        anchors.fill: parent
-        cornerRadius: height / 2
-        enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass" && root.enabled
-        hovered: root._hovered
-        pressed: root._pressed
-        dark: AppearanceTokens.isDarkTheme
-        fillStrength: 0.20
-    }
+    thumbBorderColor: AppearanceTokens.isDarkTheme
+        ? Qt.rgba(1, 1, 1, 0.28)
+        : Qt.rgba(0, 0, 0, 0.18)
 }

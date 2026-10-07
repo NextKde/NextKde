@@ -4,6 +4,7 @@ import Quickshell.Widgets
 import qs.desktop
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "../../../Kos/Ui"
 
 Item {
     id: root
@@ -14,16 +15,26 @@ Item {
     rotation: verticalDock ? -90 : 0
     implicitWidth: 24
     implicitHeight: 24
+    width: implicitWidth
+    height: implicitHeight
+
+    SelectionHighlight {
+        objectName: "status-settings-selection-highlight"
+        anchors.fill: parent
+        cornerRadius: 8
+        enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+        hovered: pointer.containsMouse || pointer.activeFocus
+        pressed: pointer.pressed
+        dark: AppearanceTokens.isDarkTheme
+        fillStrength: 0.85
+    }
 
     Rectangle {
-        anchors.centerIn: parent
-        width: 24
-        height: 24
-        radius: width / 2
-        color: pointer.containsMouse
-            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
-            : "transparent"
-        Behavior on color { ColorAnimation { duration: 120 } }
+        anchors.fill: parent
+        radius: 8
+        visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+            && pointer.containsMouse
+        color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
     }
 
     // 外观（描边色 / 不透明度）来自 IconAppearanceService，与状态区其余
@@ -38,6 +49,9 @@ Item {
             : ThemeService.foregroundColor
         opacity: IconAppearanceService.mode !== "color"
             ? IconAppearanceService.opacity : 1.0
+        scale: pointer.pressed ? 0.90 : pointer.containsMouse ? 1.06 : 1
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
     }
 
     MouseArea {

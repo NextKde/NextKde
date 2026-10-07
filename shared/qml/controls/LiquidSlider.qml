@@ -29,6 +29,8 @@ Item {
     property real trackHeight: 6
     property real thumbWidth: 36
     property real thumbHeight: 18
+    property bool chromaticAberration: false
+    property bool wobbleEnabled: false
 
     // ── Form ──────────────────────────────────────────────────────────────
     // A tonal shell draws the Material 3 slider: a 4dp inactive track, a 16dp
@@ -101,7 +103,8 @@ Item {
     }
 
     function triggerWobble() {
-        wobbleAnim.restart()
+        if (wobbleEnabled)
+            wobbleAnim.restart()
     }
 
     // Track container - this is what gets refracted through the glass
@@ -171,8 +174,8 @@ Item {
         transform: Scale {
             origin.x: root.thumbWidth / 2
             origin.y: root.thumbHeight / 2
-            xScale: (1 + 0.5 * root._expansion) * (1 - 0.2 * root._stretch)
-            yScale: (1 + 0.5 * root._expansion) * (1 + 0.4 * root._stretch)
+            xScale: (1 + (root.wobbleEnabled ? 0.5 : 0.08) * root._expansion) * (1 - (root.wobbleEnabled ? 0.2 : 0) * root._stretch)
+            yScale: (1 + (root.wobbleEnabled ? 0.5 : 0.08) * root._expansion) * (1 + (root.wobbleEnabled ? 0.4 : 0) * root._stretch)
         }
 
         Behavior on x {
@@ -182,7 +185,16 @@ Item {
             }
         }
 
-        // Layer 1: Base white pill (fades out when expanding)
+        // Drop shadow for tactile depth
+        Rectangle {
+            anchors.fill: parent
+            anchors.verticalCenterOffset: 1.2
+            radius: height / 2
+            color: Qt.rgba(0, 0, 0, 0.22)
+            z: -1
+        }
+
+        // Layer 1: Base white pill (fades out when expanding only if chromatic aberration is active)
         Rectangle {
             id: basePill
             anchors.fill: parent
@@ -190,7 +202,7 @@ Item {
             color: root.thumbColor
             border.width: 1
             border.color: root.thumbBorderColor
-            opacity: 1 - root._expansion
+            opacity: root.chromaticAberration ? (1 - root._expansion) : 1.0
 
             // 均匀的玻璃白渐变：不再叠加顶部高光层，避免拇指出现白色蒙层
             gradient: Gradient {
@@ -210,6 +222,7 @@ Item {
             // Chromatic aberration - RGB split edges
             // Red channel offset
             Rectangle {
+                visible: root.chromaticAberration
                 anchors.fill: parent
                 anchors.margins: -1
                 radius: height / 2
@@ -220,6 +233,7 @@ Item {
             }
             // Cyan channel offset
             Rectangle {
+                visible: root.chromaticAberration
                 anchors.fill: parent
                 anchors.margins: -1
                 radius: height / 2

@@ -595,6 +595,7 @@ for (const [path, desc] of [
     ["../../shell/desktop/modules/common/MenuItemRow.qml", "Context Menu items"],
     ["../../shell/desktop/modules/bar/GlobalMenu.qml", "Global Menu bar items"],
     ["../../shell/desktop/modules/bar/SysTray.qml", "System Tray icons"],
+    ["../../shell/desktop/modules/bar/SettingsButton.qml", "Status Settings button"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search results"],
     ["../../shell/desktop/modules/dock/DockWindowPreview.qml", "Dock preview cards"],
     ["../../shell/desktop/modules/notifications/NotificationWindow.qml", "Notification action buttons"],
