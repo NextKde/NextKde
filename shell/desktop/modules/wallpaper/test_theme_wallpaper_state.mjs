@@ -8,6 +8,7 @@ const config = {image:'/original.jpg', mode:'image', themeId:'starfield', slides
 const state = {config, takeoverPending:false, transitionSeed:0, readyOutputNames:['DP-1'],
     settledOutputNames:['DP-1'], appliedProxyKey:'original', calls:0,
     Catalog:{theme:id => ['starfield','blackhole','weather'].includes(id) ? {id} : null},
+    ThemePackService:{has: () => false, accent: () => ''},
     SpatialWallpaperService:{cancelPreparation() {}},
     AppearanceConfigService:{updateSpatialWallpaperEnabled(value) { assert.equal(value,false); }},
     WallpaperColorSource:{wallpaperUrl:'/original.jpg',preferredWallpaperUrl:''},

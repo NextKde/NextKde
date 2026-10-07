@@ -21,7 +21,13 @@ function fixture() {
             chooseTheme(id) { themes.push(id); return true; },
             setSlideshow(enabled, minutes, images) { slides.push({ enabled, minutes, images: JSON.parse(images) }); return true; },
         },
-        AppearanceConfigService: { updateSpatialWallpaperEnabled() {} },
+        // 现行架构:finish 不再直接调 prepareForEnable,而是写配置,由
+        // DesktopEnvironment 响应配置变化触发 prepareForEnable。
+        ThemePackService: { has: () => false, accent: () => '' },
+        AppearanceConfigService: {
+            spatialCalls: [],
+            updateSpatialWallpaperEnabled(value) { this.spatialCalls.push(value); }
+        },
         SpatialWallpaperService: { previewEnabled: false, canceled: 0, started: 0,
             cancelPreparation() { this.canceled++; this.previewEnabled = false; },
             prepareForEnable() { this.started++; } },
@@ -114,7 +120,8 @@ console.log('wallpaper preview: catalogs, selection, multi-output readiness and 
     state.SpatialWallpaperService.previewEnabled = true;
     state.finish(true);
     assert.deepEqual(commits, ['/a.jpg']);
-    assert.equal(state.SpatialWallpaperService.started, 1, 'apply prepares the committed spatial wallpaper');
+    assert.deepEqual(state.AppearanceConfigService.spatialCalls, [true],
+        'apply enables the spatial setting that triggers prepareForEnable downstream');
 }
 
 {

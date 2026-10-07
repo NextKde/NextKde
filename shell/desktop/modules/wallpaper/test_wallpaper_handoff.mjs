@@ -19,6 +19,9 @@ function fixture() {
         cleanupDelay: {restart() {}, stop() {}},
         switchAnimation: {running:false, start() {this.running = true;}, stop() {this.running = false;}},
         WallpaperService: {transitionSeed:0.4, reportImageFailed() {}},
+        // reportSettled 在切片外定义;测试上下文中 targetScreen 为空,其真实
+        // 实现会先行 return,这里以桩替代。
+        reportSettled() {},
         WallpaperCatalog: {resolvedTransition: value => value},
         reportReady: path => reports.push(path), console };
     Object.defineProperty(state, "transitioning", {get: () => state.switchAnimation.running || state.revealAnimation.running});
