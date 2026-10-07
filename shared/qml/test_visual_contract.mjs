@@ -578,4 +578,30 @@ assert.match(powerGlyph, /fill="none"[\s\S]*stroke-width="70"/,
     "the power glyph uses the same light outline weight as adjacent controls");
 assert.doesNotMatch(powerGlyph, /<path\s+fill=/,
     "the power glyph does not regress to an oversized solid silhouette");
+
+// ── Glass selection highlight visual contracts ──────────────────────────────
+const selectionHighlightSource = read("./controls/SelectionHighlight.qml");
+assert.match(appearanceTokens,
+    /readonly property string selectionHighlightStyle:\s*"glass"/,
+    "AppearanceTokens sets glass selection as the default style");
+assert.match(selectionHighlightSource,
+    /readonly property real topAlpha:\s*dark\s*\?/,
+    "SelectionHighlight branches topAlpha for dark and light contrast");
+assert.match(selectionHighlightSource,
+    /plate\.dark\s*\?\s*Qt\.rgba\(1,\s*1,\s*1,[\s\S]*Qt\.rgba\(0,\s*0,\s*0,/,
+    "SelectionHighlight switches fill between white and dark ink for contrast");
+
+for (const [path, desc] of [
+    ["../../shell/desktop/modules/common/MenuItemRow.qml", "Context Menu items"],
+    ["../../shell/desktop/modules/bar/GlobalMenu.qml", "Global Menu bar items"],
+    ["../../shell/desktop/modules/bar/SysTray.qml", "System Tray icons"],
+    ["../../shell/desktop/modules/bar/SettingsButton.qml", "Status Settings button"],
+    ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search results"],
+    ["../../shell/desktop/modules/dock/DockWindowPreview.qml", "Dock preview cards"],
+    ["../../shell/desktop/modules/notifications/NotificationWindow.qml", "Notification action buttons"],
+]) {
+    assert.match(read(path), /SelectionHighlight\s*\{/,
+        `${desc} integrates SelectionHighlight glass selection`);
+}
+
 console.log("KOS UI visual contract: all checks passed");

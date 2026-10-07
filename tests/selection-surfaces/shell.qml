@@ -66,10 +66,10 @@ ShellRoot {
                     check(folderHighlights.every(h => !h.enabled), "folder editing suppresses selection")
                     launcher.folderEditMode = false
                     AppearanceConfigService.shellStyle = "material"
-                    check(appHighlights.every(h => !h.enabled), "Material keeps legacy app highlighting")
-                    check(folderHighlights.every(h => !h.enabled), "Material keeps legacy folder highlighting")
+                    check(appHighlights.every(h => h.enabled), "Material uses default glass selection")
+                    check(folderHighlights.every(h => h.enabled), "Material folder apps use default glass selection")
                     AppearanceConfigService.shellStyle = "windows12"
-                    check(appHighlights.every(h => !h.enabled), "Windows keeps legacy app highlighting")
+                    check(appHighlights.every(h => h.enabled), "Windows uses default glass selection")
                     AppearanceConfigService.shellStyle = "macos"
                     check(appHighlights[1].selected, "keyboard selection survives style changes")
                     const controls = namedItems(center.contentItem, "control-center-selection-highlight")

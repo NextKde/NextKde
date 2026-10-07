@@ -24,12 +24,18 @@ Item {
 
     // The active app has a quieter resting plate; hovering it adds a brighter
     // rim rather than stacking another opaque rectangle over its background.
-    readonly property real topAlpha: (dark ? 0.08 : 0.28)
-        + selectionAmount * 0.04 + hoverAmount * 0.10 + pressAmount * 0.10
-    readonly property real bottomAlpha: (dark ? 0.02 : 0.06)
-        + selectionAmount * 0.025 + hoverAmount * 0.025 + pressAmount * 0.045
-    readonly property real rimAlpha: (dark ? 0.16 : 0.36)
-        + selectionAmount * 0.08 + hoverAmount * 0.12 + pressAmount * 0.12
+    // In dark mode: white translucent reflection on dark backdrops.
+    // In light mode: dark ink tint scrim and contour to create sharp contrast
+    // on light frosted panels, paired with a specular top glint.
+    readonly property real topAlpha: dark
+        ? (0.08 + selectionAmount * 0.05 + hoverAmount * 0.09 + pressAmount * 0.09)
+        : (0.06 + selectionAmount * 0.04 + hoverAmount * 0.06 + pressAmount * 0.08)
+    readonly property real bottomAlpha: dark
+        ? (0.02 + selectionAmount * 0.025 + hoverAmount * 0.025 + pressAmount * 0.045)
+        : (0.02 + selectionAmount * 0.02 + hoverAmount * 0.02 + pressAmount * 0.035)
+    readonly property real rimAlpha: dark
+        ? (0.16 + selectionAmount * 0.08 + hoverAmount * 0.12 + pressAmount * 0.12)
+        : (0.14 + selectionAmount * 0.06 + hoverAmount * 0.08 + pressAmount * 0.10)
 
     opacity: presence
     visible: enabled && opacity > 0
@@ -46,7 +52,7 @@ Item {
         NumberAnimation { duration: plate.pressDuration; easing.type: Easing.OutCubic }
     }
 
-    // A one-pixel lower contour keeps the white plate legible on light glass.
+    // A one-pixel lower contour keeps the plate legible on glass.
     // This is a border, not a blurred drop shadow or an offscreen pass.
     Rectangle {
         x: 0
@@ -56,20 +62,39 @@ Item {
         radius: plate.cornerRadius
         color: "transparent"
         border.width: 1
-        border.color: Qt.rgba(0, 0, 0, plate.dark ? 0.12 : 0.16)
+        border.color: plate.dark ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(0, 0, 0, 0.07)
     }
     Rectangle {
         anchors.fill: parent
         radius: plate.cornerRadius
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, plate.topAlpha * plate.fillStrength) }
-            GradientStop { position: 0.55; color: Qt.rgba(1, 1, 1, plate.bottomAlpha * plate.fillStrength) }
-            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, (plate.bottomAlpha + 0.025) * plate.fillStrength) }
+            GradientStop {
+                position: 0
+                color: plate.dark
+                    ? Qt.rgba(1, 1, 1, plate.topAlpha * plate.fillStrength)
+                    : Qt.rgba(0, 0, 0, plate.topAlpha * plate.fillStrength)
+            }
+            GradientStop {
+                position: 0.55
+                color: plate.dark
+                    ? Qt.rgba(1, 1, 1, plate.bottomAlpha * plate.fillStrength)
+                    : Qt.rgba(0, 0, 0, plate.bottomAlpha * plate.fillStrength)
+            }
+            GradientStop {
+                position: 1
+                color: plate.dark
+                    ? Qt.rgba(1, 1, 1, (plate.bottomAlpha + 0.025) * plate.fillStrength)
+                    : Qt.rgba(0, 0, 0, (plate.bottomAlpha + 0.020) * plate.fillStrength)
+            }
         }
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, plate.rimAlpha)
+        border.color: plate.dark
+            ? Qt.rgba(1, 1, 1, plate.rimAlpha)
+            : Qt.rgba(0, 0, 0, plate.rimAlpha)
     }
     // Restrained specular reflection across the flat part of the top rim.
+    // On both dark and light plates, catching overhead ambient light creates
+    // the genuine feel of a physical polished glass bevel.
     Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         y: 0
@@ -78,7 +103,12 @@ Item {
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0; color: "transparent" }
-            GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, Math.min(0.8, plate.rimAlpha + 0.24)) }
+            GradientStop {
+                position: 0.5
+                color: plate.dark
+                    ? Qt.rgba(1, 1, 1, Math.min(0.85, plate.rimAlpha + 0.24))
+                    : Qt.rgba(1, 1, 1, Math.min(0.70, (plate.rimAlpha + 0.35) * plate.fillStrength))
+            }
             GradientStop { position: 1; color: "transparent" }
         }
     }
