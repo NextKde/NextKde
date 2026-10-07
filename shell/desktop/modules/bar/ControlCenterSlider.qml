@@ -14,8 +14,8 @@ LiquidControls.LiquidSlider {
     height: 30
     materialForm: AppearanceTokens.surface.paintInQml
     trackHeight: 5
-    thumbWidth: 18
-    thumbHeight: 18
+    thumbWidth: 30
+    thumbHeight: 16
     chromaticAberration: false
     wobbleEnabled: false
 
@@ -28,8 +28,10 @@ LiquidControls.LiquidSlider {
     accentColor: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primary,
         AppearanceTokens.isDarkTheme ? Qt.rgba(1, 1, 1, 0.90) : Qt.rgba(0, 0, 0, 0.72))
-    thumbColor: "#ffffff"
+    thumbColor: AppearanceTokens.isDarkTheme
+        ? Qt.rgba(1, 1, 1, 0.38)
+        : Qt.rgba(1, 1, 1, 0.72)
     thumbBorderColor: AppearanceTokens.isDarkTheme
-        ? Qt.rgba(1, 1, 1, 0.28)
-        : Qt.rgba(0, 0, 0, 0.18)
+        ? Qt.rgba(1, 1, 1, 0.45)
+        : Qt.rgba(0, 0, 0, 0.16)
 }
