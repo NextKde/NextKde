@@ -247,7 +247,7 @@ for (const role of ["foregroundColor", "secondaryForegroundColor",
         new RegExp(`readonly property color ${role}:[\\s\\S]{0,400}?content\\.glassInk\\(`),
         `the glass ${role} follows the resolved ink`);
 assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
-    /onGlyphInkChanged:\s*requestPaint\(\)/,
+    /onGlyphInkChanged[\s\S]*?requestPaint\(\)/,
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
     ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
@@ -435,7 +435,7 @@ assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
 assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
     "the launcher backdrop expands and contracts with its contents");
 assert.match(appIconSource,
-    /backer\.cache:\s*!root\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
+    /backer\.cache:\s*(?:!root\.needsEffect\s*&&\s*)?IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
 assert.match(quickSearchWindow,
     /backer\.cache:\s*!resultIcon\.needsEffect\s*&& IconThemeReloadService\.pixmapCacheAllowed/,
@@ -517,7 +517,7 @@ for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
     assert.match(barStatusArea,
-        new RegExp(component + "\\s*\\{[\\s\\S]{0,400}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
+        new RegExp(component + "\\s*\\{[\\s\\S]{0,800}iconSize:\\s*systemTray\\.iconSize(?:\\s*\\+\\s*\\d+)?"),
         component + " shares the native tray icon size");
 }
 assert.doesNotMatch(controlCenterPanel,

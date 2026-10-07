@@ -57,15 +57,15 @@ QtObject {
     // the new sidecar state (e.g. a notification that was expired externally).
     property int sidecarRevision: 0
 
-    // ---- source bridge: hidden Repeater over the read-only model -----------
+    // ---- source bridge: hidden Instantiator over the read-only model -------
 
-    property Repeater _sourceRepeater: Repeater {
+    property Instantiator _sourceBridge: Instantiator {
         model: svc.sourceModel
-        delegate: Item {
+        delegate: QtObject {
             id: srcDelegate
             readonly property var notification: modelData
             // Trigger a rebuild when a source notification enters or leaves
-            // the Repeater. This is ESSENTIAL for replaces_id: when an app
+            // the bridge. This is ESSENTIAL for replaces_id: when an app
             // replaces a notification, Quickshell destroys the old object and
             // creates a new one (count stays 1->1, no property Changed signals
             // fire on the dead object). Without these hooks, the sidecar would
@@ -76,7 +76,7 @@ QtObject {
             Component.onDestruction: svc._scheduleUpdate()
             // Watch the properties that affect grouping/preview. Any change
             // schedules a short debounce-gated rebuild.
-            Connections {
+            property var _conn: Connections {
                 target: srcDelegate.notification
                 ignoreUnknownSignals: true
                 function onSummaryChanged() { svc._scheduleUpdate() }
@@ -99,8 +99,8 @@ QtObject {
         repeat: true
         running: true
         onTriggered: {
-            if (svc._lastCount !== svc._sourceRepeater.count) {
-                svc._lastCount = svc._sourceRepeater.count
+            if (svc._lastCount !== svc._sourceBridge.count) {
+                svc._lastCount = svc._sourceBridge.count
                 svc._scheduleUpdate()
             }
         }
@@ -117,12 +117,12 @@ QtObject {
         _updateTimer.restart()
     }
 
-    // Collect live notification objects off the hidden Repeater (the only way
-    // to read an UntypedObjectModel -- it has no .get()).
+    // Collect live notification objects off the hidden Instantiator (the only
+    // way to read an UntypedObjectModel without QQuickItem hierarchy warnings).
     function _collectNotifications() {
         const result = []
-        for (let i = 0; i < _sourceRepeater.count; i++) {
-            const item = _sourceRepeater.itemAt(i)
+        for (let i = 0; i < _sourceBridge.count; i++) {
+            const item = _sourceBridge.objectAt(i)
             if (item && item.notification)
                 result.push(item.notification)
         }
@@ -228,36 +228,54 @@ QtObject {
         const model = svc.groupsModel
         // Refresh the sidecar from the new groups.
         const nextByKey = {}
+        const nextKeySet = new Set()
         for (let i = 0; i < nextGroups.length; i++) {
             const g = nextGroups[i]
             nextByKey[g.groupKey] = {
                 notifications: g.notifications,
                 collapsed: g.collapsed
             }
+            nextKeySet.add(g.groupKey)
         }
         svc._groupsByKey = nextByKey
         // Bump the revision so bindings that read the sidecar (card.notification,
         // expand-list Repeater models) re-evaluate against the new state.
         svc.sidecarRevision = svc.sidecarRevision + 1
 
-        // Truncate the model from the tail.
-        while (model.count > nextGroups.length)
-            model.remove(model.count - 1)
+        // 1. Remove groups from model that are no longer in nextGroups (from tail to head).
+        // This ensures ListView.onRemove is called on the exact deleted delegates.
+        for (let i = model.count - 1; i >= 0; i--) {
+            const rowKey = model.get(i).groupKey
+            if (!nextKeySet.has(rowKey))
+                model.remove(i)
+        }
 
+        // 2. Insert new groups or update existing groups without overwriting different keys.
         const keys = ["groupKey", "appName", "appIcon", "count", "collapsed",
                       "latestSummary", "latestBody", "latestUrgency",
                       "latestImage", "hasActions", "hasInlineReply", "createdAt"]
-        for (let i = 0; i < nextGroups.length; i++) {
-            const g = nextGroups[i]
-            if (i >= model.count) {
-                model.append(g)
-                continue
+
+        for (let targetIdx = 0; targetIdx < nextGroups.length; targetIdx++) {
+            const targetGroup = nextGroups[targetIdx]
+            let currentIdx = -1
+            for (let j = targetIdx; j < model.count; j++) {
+                if (model.get(j).groupKey === targetGroup.groupKey) {
+                    currentIdx = j
+                    break
+                }
             }
-            const row = model.get(i)
-            for (let j = 0; j < keys.length; j++) {
-                const key = keys[j]
-                if (row[key] !== g[key])
-                    model.setProperty(i, key, g[key])
+
+            if (currentIdx === -1) {
+                model.insert(targetIdx, targetGroup)
+            } else {
+                if (currentIdx !== targetIdx)
+                    model.move(currentIdx, targetIdx, 1)
+                const row = model.get(targetIdx)
+                for (let k = 0; k < keys.length; k++) {
+                    const prop = keys[k]
+                    if (row[prop] !== targetGroup[prop])
+                        model.setProperty(targetIdx, prop, targetGroup[prop])
+                }
             }
         }
     }
@@ -321,13 +339,20 @@ QtObject {
     function dismissGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
             .filter(n => n && typeof n.dismiss === "function")
-        if (arr.length === 0)
-            return
         AppNotificationService.clearGroup(key)
         for (let i = 0; i < arr.length; i++)
             svc._pushHistory(arr[i])
         for (let j = arr.length - 1; j >= 0; j--)
             arr[j].dismiss()
+
+        // Synchronous cleanup fallback: remove the group from groupsModel immediately
+        // so the card exit animation is never stalled by delayed D-Bus/Repeater signals.
+        for (let idx = groupsModel.count - 1; idx >= 0; idx--) {
+            if (groupsModel.get(idx).groupKey === key)
+                groupsModel.remove(idx)
+        }
+        delete svc._groupsByKey[key]
+        svc.sidecarRevision++
     }
 
     // Expire every notification in a group (by key). Used by the auto-expire
@@ -336,12 +361,18 @@ QtObject {
     function expireGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
             .filter(n => n && typeof n.expire === "function")
-        if (arr.length === 0)
-            return
         for (let i = 0; i < arr.length; i++)
             svc._pushHistory(arr[i])
         for (let j = arr.length - 1; j >= 0; j--)
             arr[j].expire()
+
+        // Synchronous cleanup fallback: remove the group from groupsModel immediately.
+        for (let idx = groupsModel.count - 1; idx >= 0; idx--) {
+            if (groupsModel.get(idx).groupKey === key)
+                groupsModel.remove(idx)
+        }
+        delete svc._groupsByKey[key]
+        svc.sidecarRevision++
     }
 
     // Dismiss every notification in a group (by index). Snapshots each into
