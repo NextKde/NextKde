@@ -102,10 +102,11 @@ Item {
     // 走，否则触控板会刷出一串碎步。wheelStep 是一档走多少行程，默认 1%；设置页
     // 按真实单位传（每档一格整数 / 1% 之类），窄区间才不至于每档都被舍入掉。
     property real wheelStep: 0.01
-    // 一次滚轮事件有两种量级：鼠标是"一格 = angleDelta 的 ±120"，触控板在 Wayland
-    // 上给的是像素增量（两指滚动一定带 pixelDelta）。两者差一个数量级，用同一个阈值
-    // 会让触控板"转不动"——要刷满 120 才走一档，看起来就是没反应。所以分开累积。
-    property real wheelPixelStep: 20
+    // 一次滚轮事件有两种量级：鼠标是"一格 = angleDelta 的 ±120"；触控板在 Wayland 上
+    // pixelDelta 与 angleDelta 一起给，量级小一个数量级（实测 |angle| ≈ 12 × |px|，
+    // 所以鼠标那一格的量 ≈ 10px）。各按自己的量级累积，两种设备一档的手感才对得上：
+    // 用同一个阈值，触控板要么"转不动"，要么两格才走一档。
+    property real wheelPixelStep: 10
     property real _angleAccum: 0
     property real _pixelAccum: 0
     property bool _wheelPending: false

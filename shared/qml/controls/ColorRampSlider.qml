@@ -30,7 +30,7 @@ Item {
     // 光滚轮不接，留给滑块所在的面板滚动；按住 Ctrl 才一档一档地走。
     property real wheelStep: 0.01
     // 触控板给像素增量、鼠标给一格 120 的角度增量，分开累积（见 LiquidSlider）
-    property real wheelPixelStep: 20
+    property real wheelPixelStep: 10
     property real _angleAccum: 0
     property real _pixelAccum: 0
     property bool _wheelPending: false
