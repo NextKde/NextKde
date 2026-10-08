@@ -102,7 +102,7 @@ private:
         if (qstrcmp(interface, kos_surface_shape_manager_v1_interface.name) == 0) {
             self->m_manager = static_cast<kos_surface_shape_manager_v1 *>(
                 wl_registry_bind(registry, name,
-                    &kos_surface_shape_manager_v1_interface, std::min(version, 5u)));
+                    &kos_surface_shape_manager_v1_interface, std::min(version, 6u)));
             self->m_globalName = name;
             Q_EMIT self->available();
         }
@@ -246,6 +246,21 @@ bool SurfaceShape::fixedCaptureSupported() const
         >= KOS_SURFACE_SHAPE_V1_SET_CAPTURE_GEOMETRY_SINCE_VERSION;
 }
 
+void SurfaceShape::setMaterialOpacity(qreal opacity)
+{
+    opacity = std::clamp(opacity, 0.0, 1.0);
+    if (m_materialOpacity == opacity) return;
+    m_materialOpacity = opacity;
+    Q_EMIT materialOpacityChanged();
+    scheduleSync();
+}
+
+bool SurfaceShape::materialOpacitySupported() const
+{
+    return m_shape && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_shape))
+        >= KOS_SURFACE_SHAPE_V1_SET_MATERIAL_OPACITY_SINCE_VERSION;
+}
+
 void SurfaceShape::setScrimEnabled(bool enabled)
 {
     if (m_scrimEnabled == enabled) return;
@@ -354,6 +369,10 @@ void SurfaceShape::sync()
         const QRect capture = m_captureGeometry.toAlignedRect();
         kos_surface_shape_v1_set_capture_geometry(m_shape,
             capture.x(), capture.y(), std::max(0, capture.width()), std::max(0, capture.height()));
+    }
+    if (materialOpacitySupported()) {
+        kos_surface_shape_v1_set_material_opacity(m_shape,
+            wl_fixed_from_double(m_materialOpacity));
     }
     kos_surface_shape_v1_set_corner(m_shape,
         wl_fixed_from_double(m_radius), wl_fixed_from_double(m_exponent));

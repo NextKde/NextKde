@@ -54,6 +54,9 @@ Item {
     // Optional fixed capture bounds, independent of the animated blurAnchor outline.
     property Item captureAnchor: null
     readonly property bool fixedCaptureSupported: surfaceRegion.fixedCaptureSupported
+    // Opacity of the compositor finish, independent of QML content opacity.
+    property real materialOpacity: 1.0
+    readonly property bool materialOpacitySupported: surfaceRegion.materialOpacitySupported
 
     // ---- KWin vs QML rendering ------------------------------------------
 
@@ -201,6 +204,7 @@ Item {
         shapeItem: root.blurAnchor
         radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius
         shapeRadius: root.radius
+        materialOpacity: root.materialOpacity
         exponent: root.cornerExponent
         // A tonal form publishes no SurfaceShape. The declaration can only
         // describe a rectangle with rounded corners, and KWin paints a surface's

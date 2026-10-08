@@ -18,6 +18,10 @@ RoundedBlurRegion {
     readonly property bool fixedCaptureSupported:
         ("fixedCaptureSupported" in surfaceShape) && surfaceShape.fixedCaptureSupported
 
+    property real materialOpacity: 1.0
+    readonly property bool materialOpacitySupported:
+        ("materialOpacitySupported" in surfaceShape) && surfaceShape.materialOpacitySupported
+
     // Contrast scrim forwarded to the compositor alongside the shape. Tint
     // 0/1 is black/white. Decay 0..1 is adaptive; values above 1 select fixed
     // mode, where cap is the exact opacity.
@@ -46,6 +50,13 @@ RoundedBlurRegion {
         scrimDecay: root.scrimDecay
         blurEnabled: root.blurEnabled
         blurLevel: root.blurLevel
+    }
+
+    // Guard the optional property so an installed older native bridge still loads.
+    property var opacityBinding: Binding {
+        target: ("materialOpacity" in root.surfaceShape) ? root.surfaceShape : null
+        property: "materialOpacity"
+        value: Math.max(0, Math.min(1, root.materialOpacity))
     }
 
     property var captureBinding: Binding {

@@ -2112,6 +2112,10 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     };
 
     auto protocolShapeUniforms = [&](const SurfaceShapeDraw &draw) {
+        // Fade the complete premultiplied finish without changing capture bounds.
+        m_roundedOnscreenPass.shader->setUniform(
+            m_roundedOnscreenPass.opacityLocation,
+            modulation * static_cast<float>(draw.shape.materialOpacity));
         const QVector4D box(draw.nativeBox.x() + draw.nativeBox.width() * 0.5,
             draw.nativeBox.y() + draw.nativeBox.height() * 0.5,
             draw.nativeBox.width() * 0.5, draw.nativeBox.height() * 0.5);
@@ -2155,6 +2159,11 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         }
 
         if (GLTexture *noiseTexture = ensureNoiseTexture(noiseStrength)) {
+            const float shapeOpacity = protocolDraw
+                ? static_cast<float>(protocolDraw->shape.materialOpacity) : 1.0f;
+            // Additive noise must fade with the glass rather than remain visible.
+            glBlendColor(0.0f, 0.0f, 0.0f, modulation * shapeOpacity);
+            glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE);
             ShaderManager::instance()->pushShader(m_noisePass.shader.get());
 
             QMatrix4x4 noiseProjectionMatrix = viewport.projectionMatrix();
@@ -2282,6 +2291,8 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     }
 
     if (splitRenderRegions && frameVertexCount > 0) {
+        // Per-shape opacity applies only to content, not a window decoration.
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.opacityLocation, modulation);
         GLTexture *frameBlurredTexture = splitBlurSettings ? runBlurPass(m_decorationBlurSettings) : contentBlurredTexture;
         drawBlurredRegion(frameBlurredTexture,
                           6 + contentVertexCount,
@@ -2299,11 +2310,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // artifacts, which often happens due to the smooth color transitions in the blurred image.
 
         glEnable(GL_BLEND);
-        if (opacity < 1.0) {
-            glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE);
-        } else {
-            glBlendFunc(GL_ONE, GL_ONE);
-        }
+        // drawNoiseRegion selects the additive blend factor for each shape.
 
         const int contentNoiseStrength = splitBlurSettings
             ? contentBlurSettings.noiseStrength

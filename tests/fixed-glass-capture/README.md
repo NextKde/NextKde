@@ -26,8 +26,13 @@ the new KWin plugin loads at the next session start; do not reload the desktop's
 in-use plugin to run this test.
 
 The production launcher keeps its glass outline and capture bounds stationary
-and animates only application tiles with `LauncherIconMotion.qml`. The motion
-controller retains the panel during the 300 ms tile closing animation. The
+and animates application tiles with `LauncherIconMotion.qml`. On the
+`codex/launcher-glass-fade` variant, protocol v6 additionally fades the complete
+compositor material over 180 ms on opening and 260 ms on closing. The QML-painted
+fallback fades separately; icon opacity stays independent. An older plugin keeps
+its stationary glass finish without this fade. Both the native bridge and KWin
+plugin need rebuilding and installing for the v6 compositor fade to take effect.
+The motion controller retains the panel during the 300 ms tile closing animation. The
 fixed-capture protocol remains available to other clients; this isolated test
 exercises that capability independently of the production launcher's policy.
 

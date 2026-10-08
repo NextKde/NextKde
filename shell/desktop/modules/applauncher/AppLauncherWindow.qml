@@ -1216,7 +1216,11 @@ PanelWindow {
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
-                    // Keep the glass outline and capture bounds stationary.
+                    // Fade the complete KWin finish; never resize its outline.
+                    materialOpacity: popupMotion.glassOpacity
+                    // QML-painted themes have their own matching fade. The
+                    // native effect fades separately through protocol metadata.
+                    opacity: fallbackEnabled ? popupMotion.glassOpacity : 1
                     scrimOpacity: 1
                 }
 

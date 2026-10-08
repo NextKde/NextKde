@@ -21,6 +21,8 @@ class SurfaceShape : public QObject
     Q_PROPERTY(bool active READ isActive NOTIFY activeChanged)
     Q_PROPERTY(QRectF captureGeometry READ captureGeometry WRITE setCaptureGeometry NOTIFY captureGeometryChanged)
     Q_PROPERTY(bool fixedCaptureSupported READ fixedCaptureSupported NOTIFY activeChanged)
+    Q_PROPERTY(qreal materialOpacity READ materialOpacity WRITE setMaterialOpacity NOTIFY materialOpacityChanged)
+    Q_PROPERTY(bool materialOpacitySupported READ materialOpacitySupported NOTIFY activeChanged)
     // Contrast scrim sent over protocol v3. scrimTint 0/1 = black/white;
     // scrimDecay > 1 selects fixed mode.
     Q_PROPERTY(bool scrimEnabled READ scrimEnabled WRITE setScrimEnabled NOTIFY scrimEnabledChanged)
@@ -49,6 +51,9 @@ public:
     QRectF captureGeometry() const { return m_captureGeometry; }
     void setCaptureGeometry(const QRectF &geometry);
     bool fixedCaptureSupported() const;
+    qreal materialOpacity() const { return m_materialOpacity; }
+    void setMaterialOpacity(qreal opacity);
+    bool materialOpacitySupported() const;
     bool scrimEnabled() const { return m_scrimEnabled; }
     void setScrimEnabled(bool enabled);
     int scrimTint() const { return m_scrimTint; }
@@ -69,6 +74,7 @@ Q_SIGNALS:
     void enabledChanged();
     void activeChanged();
     void captureGeometryChanged();
+    void materialOpacityChanged();
     void scrimEnabledChanged();
     void scrimTintChanged();
     void scrimCapChanged();
@@ -96,6 +102,7 @@ private:
     wl_surface *m_surface = nullptr;
     qreal m_radius = 0.0;
     QRectF m_captureGeometry;
+    qreal m_materialOpacity = 1.0;
     qreal m_exponent = 2.0;
     bool m_enabled = true;
     bool m_scrimEnabled = false;

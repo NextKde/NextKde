@@ -19,6 +19,7 @@ struct SurfaceShape
     quint64 id = 0;
     QRectF geometry;
     QRectF captureGeometry;
+    qreal materialOpacity = 1.0;
     qreal radius = 0.0;
     qreal exponent = 2.0;
     bool enabled = true;
@@ -79,6 +80,7 @@ public: // Wayland C dispatch table callbacks.
                         uint32_t enabled, uint32_t level);
     static void setCaptureGeometry(wl_client *client, wl_resource *resource,
                                   int32_t x, int32_t y, int32_t width, int32_t height);
+    static void setMaterialOpacity(wl_client *client, wl_resource *resource, wl_fixed_t opacity);
     static void destroyShape(wl_client *client, wl_resource *resource);
 
 private:
