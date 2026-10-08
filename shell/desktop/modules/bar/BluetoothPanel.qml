@@ -98,6 +98,12 @@ AnimatedPopupWindow {
         ambientSecondary: WallpaperColorSource.secondary
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
+        // The bar popups all carry the control-center card's scrim
+        // posture. Without it this panel was one of the only bar surfaces whose
+        // glass never darkened over a bright backdrop, so its white labels sat
+        // on raw glass while every neighbouring panel was scrimmed.
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        scrimLevel: "transparent"
         adaptiveDarkScrim: true
 
         ListView {
