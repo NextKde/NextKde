@@ -26,6 +26,50 @@ Item {
 
     opacity: enabled ? 1 : 0.45
 
+    // ── Ctrl+滚轮：精细步进（与 LiquidSlider 同一条规约）──────────────────
+    // 光滚轮不接，留给滑块所在的面板滚动；按住 Ctrl 才一档一档地走。
+    property real wheelStep: 0.01
+    property real _wheelAccum: 0
+    property bool _wheelPending: false
+
+    function stepByWheel(delta) {
+        if (!enabled || delta === 0)
+            return
+        const next = Math.max(0, Math.min(1, clampedValue + delta * wheelStep))
+        if (Math.abs(next - clampedValue) < 1e-9)
+            return
+        _wheelPending = true
+        previewChanged(next)
+        wheelCommitTimer.restart()
+    }
+
+    Timer {
+        id: wheelCommitTimer
+        interval: 180
+        onTriggered: {
+            if (!root._wheelPending)
+                return
+            root._wheelPending = false
+            root.commitRequested(root.clampedValue)
+        }
+    }
+
+    WheelHandler {
+        acceptedModifiers: Qt.ControlModifier
+        enabled: root.enabled
+        onWheel: function(wheel) {
+            const dy = wheel.angleDelta.y !== 0
+                ? wheel.angleDelta.y
+                : wheel.pixelDelta.y * 8
+            root._wheelAccum += dy
+            while (Math.abs(root._wheelAccum) >= 120) {
+                root.stepByWheel(root._wheelAccum > 0 ? 1 : -1)
+                root._wheelAccum -= (root._wheelAccum > 0 ? 120 : -120)
+            }
+            wheel.accepted = true
+        }
+    }
+
     function rampColor(index) {
         return rampColors.length > index ? rampColors[index] : "transparent"
     }
@@ -88,6 +132,9 @@ Item {
         cursorShape: Qt.PointingHandCursor
 
         onPressed: function(mouse) {
+            // 拖动接管：取消还没落下的那次步进提交
+            root._wheelPending = false
+            wheelCommitTimer.stop()
             root.previewChanged(root.valueAt(mouse.x))
         }
         onPositionChanged: function(mouse) {
