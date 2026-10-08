@@ -65,6 +65,12 @@ endif()
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
     if(KOS_NODE_EXECUTABLE)
+        foreach(test timed_lyrics unpin_identity)
+            add_test(NAME kos-shell.${test}
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_${test}.mjs)
+            set_tests_properties(kos-shell.${test} PROPERTIES LABELS logic TIMEOUT 10)
+        endforeach()
         add_test(NAME kos-shell.clipboard-placement
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/test_geometry.mjs)
@@ -126,6 +132,11 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-highlight/run.mjs
                     ${KOS_QMLTESTRUNNER_EXECUTABLE})
             set_tests_properties(kos-shell.dock-selection-highlight PROPERTIES LABELS ui TIMEOUT 20)
+            add_test(NAME kos-shell.desktop-lyrics
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-lyrics/run.mjs
+                    ${KOS_QMLTESTRUNNER_EXECUTABLE})
+            set_tests_properties(kos-shell.desktop-lyrics PROPERTIES LABELS ui TIMEOUT 15)
             add_test(NAME kos-shell.date-projection
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/date-projection/run.mjs

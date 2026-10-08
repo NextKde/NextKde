@@ -1252,7 +1252,6 @@ Item {
                     Text {
                         id: fileTitleIcon
                         visible: delegateRoot.fileTitleIcon !== ""
-                        width: visible ? implicitWidth : 0
                         anchors.verticalCenter: fileTitleText.verticalCenter
                         // Place the icon beside the text actually painted,
                         // rather than at the left edge of the label's box.

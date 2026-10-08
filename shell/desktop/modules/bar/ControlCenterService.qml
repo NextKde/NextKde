@@ -15,6 +15,12 @@ QtObject {
     property var audioApplications: []
     property bool audioApplicationsAvailable: false
     property bool audioApplicationsRefreshInProgress: false
+    property var audioOutputs: []
+    property bool audioOutputsRefreshInProgress: false
+    property bool audioOutputChangeInProgress: false
+    property string _audioOutputReadError: ""
+    property string _audioOutputChangeError: ""
+    readonly property string audioOutputError: _audioOutputChangeError || _audioOutputReadError
     property bool volumeChangeInProgress: false
     property bool brightnessAvailable: false
     property int brightnessPercent: 0
@@ -108,6 +114,7 @@ QtObject {
             }
         })
         refreshAudioApplications()
+        if (anyPanelOpen) refreshAudioOutputs()
         PlatformClient.request("bluetooth.list", {}, function(response) {
             if (response?.ok) {
                 const value = response.result || ({})
@@ -165,6 +172,40 @@ QtObject {
                 audioApplicationsAvailable = false
                 audioApplications = []
             }
+        })
+    }
+
+    function refreshAudioOutputs() {
+        if (audioOutputsRefreshInProgress || audioOutputChangeInProgress) return
+        audioOutputsRefreshInProgress = true
+        PlatformClient.request("audio.outputs", {}, function(response) {
+            audioOutputsRefreshInProgress = false
+            if (response?.ok) {
+                audioOutputs = response.result?.outputs || []
+                _audioOutputReadError = ""
+            } else {
+                audioOutputs = []
+                _audioOutputReadError = response?.error?.message || "无法读取输出设备"
+            }
+        })
+    }
+
+    function retryAudioOutputs() {
+        _audioOutputChangeError = ""
+        _audioOutputReadError = ""
+        refreshAudioOutputs()
+    }
+
+    function setAudioOutput(name) {
+        if (audioOutputChangeInProgress || audioOutputsRefreshInProgress) return
+        audioOutputChangeInProgress = true
+        _audioOutputChangeError = ""
+        PlatformClient.request("audio.output.set-default", { name: name }, function(response) {
+            audioOutputChangeInProgress = false
+            if (!response?.ok)
+                _audioOutputChangeError = response?.error?.message || "切换输出设备失败"
+            refreshAudioOutputs()
+            refresh()
         })
     }
 
@@ -447,7 +488,10 @@ QtObject {
         interval: 1800
         repeat: true
         running: PlatformClient.socket.connected && service.anyPanelOpen
-        onTriggered: service.refreshAudioApplications()
+        onTriggered: {
+            service.refreshAudioApplications()
+            service.refreshAudioOutputs()
+        }
     }
     property Connections platformTransport: Connections {
         target: PlatformClient
@@ -458,6 +502,10 @@ QtObject {
                 // The client fails every outstanding callback on disconnect,
                 // which already clears these; reset defensively so no tile or
                 // session button can stay wedged by a lost response.
+                audioOutputsRefreshInProgress = false
+                audioOutputChangeInProgress = false
+                audioOutputs = []
+                _audioOutputReadError = "音频服务已断开"
                 audioApplicationsRefreshInProgress = false
                 volumeChangeInProgress = false
                 brightnessChangeInProgress = false

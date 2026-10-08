@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import QtCore
 import Quickshell
+import qs.desktop.modules.common
 import "WidgetLayout.mjs" as WidgetLayout
 
 QtObject {
@@ -29,6 +30,15 @@ QtObject {
         property int schemaVersion: 2
         property string sizesJson: "{}"
         property string orderJson: "[]"
+        property bool desktopLyricsEnabled: true
+        property real desktopLyricsX: 0.5
+        property real desktopLyricsY: 1.0
+    }
+
+    Component.onCompleted: {
+        desktopLyricsEnabled = _settings.desktopLyricsEnabled
+        desktopLyricsX = Math.max(0, Math.min(1, _settings.desktopLyricsX))
+        desktopLyricsY = Math.max(0, Math.min(1, _settings.desktopLyricsY))
     }
 
     function parsedSizes() {
@@ -94,5 +104,42 @@ QtObject {
 
     function spanFor(widgetId) {
         return WidgetLayout.spanFor(widgetId, sizeFor(widgetId))
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Music widget desktop lyrics
+    // ═══════════════════════════════════════════════════════════
+    // The lyrics HUD is an accessory of the music widget: it exists only
+    // while that widget is on the desktop, and the widget card owns the
+    // switch. Normalized X/Y keep the HUD reachable after a resize.
+    property bool desktopLyricsEnabled: true
+    property real desktopLyricsX: 0.5
+    property real desktopLyricsY: 1.0
+    property bool desktopLyricsEditing: false
+    readonly property bool desktopLyricsActive: desktopLyricsEnabled
+        && !AppearanceConfigService.isDeskCenterWidgetHidden("music")
+
+    function updateDesktopLyricsPosition(x, y) {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return
+        desktopLyricsX = Math.max(0, Math.min(1, x))
+        desktopLyricsY = Math.max(0, Math.min(1, y))
+        _settings.desktopLyricsX = desktopLyricsX
+        _settings.desktopLyricsY = desktopLyricsY
+        _settings.sync()
+        revision++
+    }
+
+    function editDesktopLyrics() {
+        if (!desktopLyricsEnabled)
+            updateDesktopLyricsEnabled(true)
+        desktopLyricsEditing = true
+    }
+
+    function updateDesktopLyricsEnabled(enabled) {
+        desktopLyricsEnabled = Boolean(enabled)
+        if (!desktopLyricsEnabled) desktopLyricsEditing = false
+        _settings.desktopLyricsEnabled = desktopLyricsEnabled
+        _settings.sync()
+        revision++
     }
 }

@@ -328,18 +328,6 @@ AnimatedPopupWindow {
             }
         }
 
-        // Desktop lyric visibility is independent of the app lyric preference.
-        MediaControlButton {
-            anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 21 }
-            width: 32; height: 32
-            iconName: "media-lyrics"
-            text: qsTr("桌面歌词")
-            checkable: true
-            checked: ConfigService.desktopLyricsEnabled
-            glassInk: ThemeService.foregroundColor
-            onClicked: ConfigService.updateDesktopLyricsEnabled(!ConfigService.desktopLyricsEnabled)
-        }
-
         // 32px side controls and the 38px play control share one centre line.
         Item {
             width: 150

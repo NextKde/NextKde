@@ -169,3 +169,21 @@ own the KDE configuration writes; Shell and Settings never invoke `qdbus6` or
 color scheme when that tool is available; applying a complete Look-and-Feel
 package is a compatibility fallback, because replacing icons and workspace
 defaults is outside the light/dark toggle contract.
+
+### Audio output selection
+
+- `audio.outputs` takes `{}` and returns `{available: true, outputs: [{name,
+  description, isDefault}]}`. The daemon reads PulseAudio-compatible `pactl`
+  JSON (including PipeWire-Pulse); names are stable sink names, not PipeWire
+  numeric node IDs. Missing tools/server or malformed replies return an error.
+- `audio.output.set-default` takes `{name}` and sets the default sink through
+  `pactl set-default-sink`. An unavailable/removed sink returns an error; the
+  client re-reads the outputs and default volume after completion. Routing of
+  streams explicitly pinned to a device remains owned by the audio server.
+- The visible output list refreshes while the control centre is open, including
+  device hotplug. Errors remain visible with a click-to-retry action.
+
+`file.launch` and `file.open-kde` use the same KDE `KIO::ApplicationLauncherJob`
+launcher as `application.launch`. A desktop-file path is resolved and parsed by
+`KService`; optional file arguments are passed as URLs. Launch failure is
+reported through the common response envelope.

@@ -223,7 +223,7 @@ operation list and examples live in
 | --- | --- | --- |
 | `applications` | launch installed desktop entries with optional URLs | KDE `KService` + `KIO::ApplicationLauncherJob`; desktop-entry parsing, activation and process grouping remain KDE-owned |
 | `clipboard` | `clipboard.set/read/save-image`, history watch/list/copy/delete/clear | Qt `QClipboard`, Wayland MIME ownership, platform-supervised cliphist |
-| `files` | open, copy, launch, transfer, trash, Trash state/empty, Open-With | Qt file APIs and `gio` |
+| `files` | open, copy, launch, transfer, trash, Trash state/empty, Open-With | Qt file APIs, KDE application launch jobs and `gio` for file operations |
 | `kwin` | snapshots, activation, desktops, thumbnails, Dock animation tickets | KWin script + internal D-Bus |
 | `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |
 | `audio` | get volume, set volume/mute | PipeWire/WirePlumber adapter |

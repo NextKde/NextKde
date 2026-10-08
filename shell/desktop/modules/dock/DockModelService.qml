@@ -472,11 +472,12 @@ QtObject {
     }
 
     function unpinApp(appId) {
-        const wanted = AppIdentityService.canonicalId(appId);
-        if (!ConfigService.removeAppItem(wanted))
+        const items = ConfigService.dockItems || [];
+        const remaining = items.filter(item => item.type !== "app"
+            || !AppIdentityService.sameApp(item.appId, appId));
+        if (remaining.length === items.length || !ConfigService.setDockItems(remaining))
             return;
-        console.log("[DockModel] unpin app=" + wanted
-                    + " items=" + JSON.stringify(ConfigService.dockItems));
+        ConfigService.scheduleSave();
         svc._refreshPresentation();
     }
 
