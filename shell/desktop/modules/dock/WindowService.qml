@@ -50,6 +50,10 @@ QtObject {
     // on command success (stage engage) reset on this instead of staying
     // stuck when the command was lost.
     signal commandFinished(string action, string ticket, bool found)
+    // 缩略图回执（stage 侧重试策略的输入）：failed 带平台侧原因（授权失效/
+    // 队列满/无效帧……）——消费方据此做重试封顶；ready 用于清零计数。
+    signal thumbnailFailed(string handleId, string message)
+    signal thumbnailReady(string handleId)
 
     property int _nextWindowNumber: 1
     property var _recordsById: ({})
@@ -898,9 +902,11 @@ QtObject {
                             svc.thumbnailRevision++;
                             console.log("[WindowService] thumbnail ready id="
                                 + event.id + " " + event.width + "x" + event.height);
+                            svc.thumbnailReady(event.id);
                         } else if (event.error) {
                             console.warn("[WindowService] thumbnail failed id="
                                 + event.id + " error=" + event.error);
+                            svc.thumbnailFailed(event.id, String(event.error));
                         }
                 } else if (event.type === "desktops") {
                         svc.desktops = Array.isArray(event.desktops)

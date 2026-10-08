@@ -968,6 +968,28 @@ print_install_summary() {
     printf '\n'
 }
 
+# Verifies that the running kos-platform is executing the binary that is
+# currently on disk. A deploy that replaced the file without restarting the
+# process (interrupted install, or any path that copies without the restart
+# step) leaves /proc/PID/exe pointing at a "(deleted)" inode. KWin's
+# screenshot sandbox resolves the caller's authorization by matching that
+# executable path against the .desktop Exec entry of org.kos.Platform
+# (X-KDE-DBUS-Restricted-Interfaces), so the stale-exe state silently rejects
+# every window-thumbnail capture -- the Stage sidebar then shows no previews
+# at all (v91 field report: 97/97 captures failed over 13 minutes). Restarting
+# is idempotent and costs a few hundred milliseconds, so the check simply
+# restarts when it detects the mismatch.
+verify_platform_binary_currentness() {
+    local pid exe
+    pid=$(systemctl --user show -p MainPID --value kos-platform.service 2>/dev/null || true)
+    [[ -n "$pid" && "$pid" != "0" ]] || return 0
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+    [[ "$exe" == *"(deleted)"* ]] || return 0
+    printf 'warn: kos-platform runs from a replaced binary (%s); restarting it' "$exe" >&2
+    printf ' so KWin screenshot authorization recovers\n' >&2
+    systemctl --user restart kos-platform.service
+}
+
 # start — make the latest installed revision take effect immediately.
 # Restarts the KOS user services. The KWin effects are only persisted to
 # kwinrc here; they load on the next KWin/session start, because hot-loading
@@ -1009,6 +1031,7 @@ start_all() {
     systemctl --user daemon-reload
     systemctl --user enable --now "${kos_units[@]}"
     systemctl --user restart "${kos_units[@]}"
+    verify_platform_binary_currentness
     enable_kwin_effects
     printf '\n'
     printf '  🚀 KOS 已启动（platform / data / shell）\n'

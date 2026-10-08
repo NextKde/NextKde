@@ -620,6 +620,45 @@ PanelWindow {
     // 缩略图失败重试：截图授权空档（kosctl install→start 间隙、守护重启）
     // 里失败的请求不会自愈，卡会永远停在图标占位符。开着侧栏时周期补拍
     // 没图的代表窗（成功即停——decorateGroups 每轮重选代表）。
+    //
+    // ⚠️ v91 放宽"最小化代表窗不重拍"守卫：该守卫源自早期 KWin"最小化
+    // 窗口截到黑帧"的实测；KWin 6.7 上实测收编中/最小化的窗口能截到正常
+    // 内容（本机 journal 采样的缩略图逐张校验亮度 0.30–0.81，无黑帧）。
+    // 不放宽则"收编那一刻截图失败"的卡＝永久占位符（今日实例：平台授权
+    // 失效 13 分钟内被收编的两张卡，图补回来也无人绑定）。放宽后的安全网：
+    //   ① 成功即停——有图就跳过，黑图不会被反复重拍；
+    //   ② 失败封顶 + 时间窗衰减——同一窗 30s 内连续失败 4 次后暂停重试
+    //      （授权持续失效等"永远拍不出"的情形不做无限重试），窗口重新
+    //      出图（thumbnailReady）或时间窗过期后自动恢复重试。
+    property var _thumbFailures: ({})       // handleId -> { count, at }
+    readonly property int _thumbRetryCap: 4
+    readonly property int _thumbFailureWindowMs: 30000
+    function _thumbFailureCount(handleId) {
+        const e = root._thumbFailures[handleId]
+        if (!e)
+            return 0
+        return (Date.now() - e.at < root._thumbFailureWindowMs) ? e.count : 0
+    }
+    property Connections _thumbReceipts: Connections {
+        target: WindowService
+        function onThumbnailReady(handleId) {
+            if (root._thumbFailures[handleId] === undefined)
+                return
+            const f = Object.assign({}, root._thumbFailures)
+            delete f[handleId]
+            root._thumbFailures = f
+        }
+        function onThumbnailFailed(handleId, message) {
+            const alive = root._thumbFailureCount(handleId)
+            const f = Object.assign({}, root._thumbFailures)
+            f[handleId] = { count: alive + 1, at: Date.now() }
+            root._thumbFailures = f
+            if (alive + 1 === root._thumbRetryCap)
+                console.warn("[StageSidebar] thumbnail retry paused id="
+                    + handleId + " after " + (alive + 1)
+                    + " failures: " + message)
+        }
+    }
     property Timer _thumbRetryTimer: Timer {
         interval: 1500
         running: root.open
@@ -630,13 +669,14 @@ PanelWindow {
                 const g = groups[i]
                 if (!g.targetId)
                     continue
-                // 最小化代表窗截到黑帧（_queueAllThumbnails 同款守卫）：
-                // 对它重试会把黑帧灌进缩略图缓存，占位符恶化成永久黑块
+                if (WindowService.thumbnailUrl(g.targetId))
+                    continue    // 成功即停：有图（含黑图）不重拍
                 const rep = WindowService.windowById(g.targetId)
-                if (rep?.toplevel?.minimized)
-                    continue
-                if (!WindowService.thumbnailUrl(g.targetId))
-                    WindowService.requestThumbnail(g.targetId)
+                if (!rep?.handleId
+                        || root._thumbFailureCount(rep.handleId)
+                            >= root._thumbRetryCap)
+                    continue    // 失败封顶：暂停无谓重试
+                WindowService.requestThumbnail(g.targetId)
             }
         }
     }
@@ -2983,15 +3023,19 @@ PanelWindow {
 
     // 缩略图是"收编快照"语义（同 macOS）：只在卡片出现/切换主角时拍新图，
     // 不做周期刷新——周期换图正是侧栏周期闪烁的根源。每组只拍代表窗口。
+    // ⚠️ v91：最小化守卫同 _thumbRetryTimer 一并放宽（KWin 6.7 实测最小化
+    // 窗口可截内容）——卡建立/换主角时即可补拍，不必等重试拍；失败封顶
+    // 沿用 _thumbFailureCount（防请求风暴）。
     function _queueAllThumbnails() {
         const seen = ({})
         const queue = []
         const groups = root.sideGroups
         for (let i = 0; i < groups.length; i++) {
-            // 最小化窗口截到黑帧：绝不请求，用既有快照或占位符
             const rep = WindowService.windowById(groups[i].targetId)
-            if (rep?.toplevel?.minimized)
-                continue
+            if (rep?.handleId
+                    && root._thumbFailureCount(rep.handleId)
+                        >= root._thumbRetryCap)
+                continue    // 失败封顶：暂停无谓重试
             const id = groups[i].targetId
             // 已有快照的不再请求：本函数每次 syncCards 都跑（任何 revision
             // 变化），无图过滤＝重拍风暴（注释承诺的"只在出现/换主角时拍"
