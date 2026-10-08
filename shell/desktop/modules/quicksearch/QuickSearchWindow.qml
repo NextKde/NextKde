@@ -1301,6 +1301,11 @@ PanelWindow {
                     }
                 }
             }
+
+            // The wheel scrolls the result list smoothly instead of in one jump per
+            // notch; the band above captures the viewport, so the frosted slice keeps
+            // following the content either way.
+            KosKineticScroll { flickable: resultView }
         }
 
         GridView {
@@ -1520,6 +1525,8 @@ PanelWindow {
                     }
                 }
             }
+
+            KosKineticScroll { flickable: gridView }
         }
 
         GlassText {

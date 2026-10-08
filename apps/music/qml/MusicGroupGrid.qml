@@ -134,5 +134,7 @@ Item {
                 }
             }
         }
+
+        KosKineticScroll { flickable: grid }
     }
 }

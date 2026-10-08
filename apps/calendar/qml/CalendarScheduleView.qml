@@ -336,5 +336,16 @@ KosCard {
                 }
             }
         }
+
+        // The timeline is a ScrollView, and a ScrollView sizes its contentItem
+        // from the content it holds: an extra child inside it collapses
+        // contentWidth/contentHeight to -1 and nothing scrolls at all. The
+        // catcher therefore sits beside the view -- reparented to the card,
+        // which a Pane's content item would otherwise take as content -- and
+        // works out the viewport rectangle from the item positions.
+        KosKineticScroll {
+            flickable: timelineScroll.contentItem
+            parent: root
+        }
     }
 }

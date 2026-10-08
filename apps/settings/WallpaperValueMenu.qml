@@ -1,4 +1,5 @@
 import "../../shared/qml/controls" as SharedControls
+import "../../shared/qml/foundation" as Foundation
 import QtQuick
 import QtQuick.Controls
 
@@ -125,6 +126,7 @@ Item {
             }
         }
         contentItem: Flickable {
+            id: valueMenuScroll
             clip: true
             contentHeight: choices.implicitHeight
             boundsBehavior: Flickable.StopAtBounds
@@ -177,6 +179,8 @@ Item {
                 }
             }
             }
+
+            Foundation.KosKineticScroll { flickable: valueMenuScroll }
         }
     }
 }

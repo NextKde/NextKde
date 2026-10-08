@@ -363,6 +363,11 @@ PopupWindow {
                     }
                 }
             }
+
+            // The menu is one column of rows: give its wheel the same glide the
+            // rest of the shell has. interactive:false (a menu that fits) disables
+            // this with it.
+            KosKineticScroll { flickable: view }
         }
 
         // A new page always starts at its first row; without this a menu opened

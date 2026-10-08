@@ -336,5 +336,7 @@ Item {
                 }
             }
         }
+
+        KosKineticScroll { flickable: trackList }
     }
 }

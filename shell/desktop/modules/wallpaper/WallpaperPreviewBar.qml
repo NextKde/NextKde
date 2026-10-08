@@ -6,6 +6,7 @@ import QtQuick.Effects
 import qs.desktop
 import qs.desktop.modules.common
 import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as WallpaperCatalog
+import "../../../Kos/Ui"
 import "../../../Kos/Ui/wallpapers" as ThemeVisuals
 
 // A small Shell-owned liquid control, activated by kos-settings through the
@@ -230,6 +231,8 @@ PanelWindow {
                         positionViewAtIndex(index, GridView.Contain)
                 }
                 Component.onCompleted: Qt.callLater(syncToPreview)
+
+                KosKineticScroll { flickable: wallpaperGrid }
             }
 
             Connections {

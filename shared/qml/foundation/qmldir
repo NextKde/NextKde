@@ -14,3 +14,4 @@ KosSwitch 1.0 KosSwitch.qml
 KosSurface 1.0 KosSurface.qml
 KosToolButton 1.0 KosToolButton.qml
 KosLyricLine 1.0 KosLyricLine.qml
+KosKineticScroll 1.0 KosKineticScroll.qml

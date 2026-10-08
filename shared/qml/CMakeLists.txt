@@ -28,6 +28,8 @@ qt_add_qml_module(kos_ui
         foundation/KosTextField.qml
         foundation/KosToolButton.qml
         foundation/KosLyricLine.qml
+        foundation/KosKineticScroll.qml
+        foundation/KosKineticScrollPhysics.mjs
         foundation/PageCachePolicy.js
         controls/ControlForm.qml
         controls/LiquidTextField.qml

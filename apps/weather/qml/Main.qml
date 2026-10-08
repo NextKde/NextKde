@@ -314,6 +314,8 @@ KosApplicationWindow {
                             }
                         }
                     }
+
+                    KosKineticScroll { flickable: searchResults }
                 }
 
                 RowLayout {
@@ -386,6 +388,8 @@ KosApplicationWindow {
                             }
                         }
                     }
+
+                    KosKineticScroll { flickable: savedLocations }
                 }
 
                 RowLayout {
@@ -441,6 +445,7 @@ KosApplicationWindow {
         }
 
         Flickable {
+            id: weatherScroll
             Layout.fillWidth: true
             Layout.fillHeight: true
             contentWidth: width
@@ -672,6 +677,7 @@ KosApplicationWindow {
                 }
 
                 Flickable {
+                    id: hourlyScroll
                     Layout.fillWidth: true
                     Layout.preferredHeight: 142
                     contentWidth: hourlyRow.implicitWidth
@@ -740,6 +746,8 @@ KosApplicationWindow {
                             }
                         }
                     }
+
+                    KosKineticScroll { flickable: hourlyScroll }
                 }
 
                 Label {
@@ -850,6 +858,8 @@ KosApplicationWindow {
                     font.pixelSize: 11
                 }
             }
+
+            KosKineticScroll { flickable: weatherScroll }
         }
     }
 }

@@ -2915,6 +2915,17 @@ PanelWindow {
                             }
                         }
                     }
+
+                        // Browser-style wheel inertia for the app grid. Declared here, at the
+                        // card level, rather than inside the grid: the header band and the
+                        // presentation overlays are siblings of the grid, and a catcher inside
+                        // the grid never sees a wheel that one of them claims first. From here it
+                        // covers the whole card and is hit first, while still letting every click
+                        // through (it handles the wheel only). In fullscreen the grid is not
+                        // interactive and the slot pager owns paging, so the catcher stands down.
+                        KosKineticScroll {
+                            flickable: appGrid
+                        }
                 }
             }
         }

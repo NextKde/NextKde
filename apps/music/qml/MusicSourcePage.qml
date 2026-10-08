@@ -200,6 +200,8 @@ Item {
                     }
                 }
             }
+
+            KosKineticScroll { flickable: sourceList }
         }
     }
 }

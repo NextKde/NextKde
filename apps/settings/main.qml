@@ -4331,6 +4331,9 @@ ApplicationWindow {
                     }
                 }
 
+                // 横向画廊：滚轮顺着惯性滑动（竖向滚轮在没有可竖向滚动的内容时
+                // 会落到唯一可滚的轴上）。
+                Foundation.KosKineticScroll { flickable: styleGallery }
             }
 
             Rectangle {
@@ -5863,6 +5866,10 @@ ApplicationWindow {
                     }
 
                 }
+
+                // 设置页正文：浏览器式惯性滚动。禁用态（页面切换动画期间
+                // enabled: pageMotion.interactive）会连同 wheel 一起失效。
+                Foundation.KosKineticScroll { flickable: pageScroll }
             }
         }
     }
