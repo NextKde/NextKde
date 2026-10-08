@@ -621,7 +621,7 @@ PanelWindow {
 
                 GlassText {
                     anchors.fill: parent
-                    visible: !searchInput.text
+                    visible: !searchInput.text && !searchInput.inputMethodComposing
                     text: root.placeholder
                     color: AppearanceTokens.content.glassInk(0.54)
                     font: searchInput.font
