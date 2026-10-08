@@ -1297,7 +1297,17 @@ install_kwin_plugins() {
         [[ "$(getenforce)" != Disabled ]]; then
         selinux_context=(-Z)
     fi
-    find "$stage_dir$kwin_system_prefix" -exec chmod go-w {} +
+    # Normalise the staged tree's modes before the copy. `cp -a` carries the
+    # *source* directory's permissions onto the destination -- including the
+    # staged root, which becomes the system prefix itself. A permissive umask
+    # is therefore not enough: running the installer under a restrictive one
+    # (e.g. `umask 077`, the usual habit while a secret is on disk) stages 0700
+    # directories, `chmod go-w` leaves them 0700, and /usr ends up 0700 --
+    # every non-root process then loses access to the whole prefix, and a
+    # reboot has no graphical session at all. Grant group/other read and
+    # directory traverse explicitly instead of only removing write.
+    find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
+    find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+r {} +
     sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     # Directories the stale files lived in are pruned only when they end up
