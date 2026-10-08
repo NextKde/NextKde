@@ -12,7 +12,13 @@ PanelWindow {
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
-    WlrLayershell.namespace: "kos-spatial-wallpaper"
+    // KWin reads this as a scope, not as our name: it maps the string to a
+    // window type ("desktop" -> WindowType::Desktop) and only Desktop/Dock-typed
+    // windows are exempt from Show Desktop hiding (KWin's
+    // Workspace::breaksShowingDesktop). Under any other scope, Meta+D hides this
+    // surface and Plasma's solid takeover backdrop reads as a black desktop while
+    // the bar and dock survive -- so this string is load bearing, not cosmetic.
+    WlrLayershell.namespace: "desktop"
     WlrLayershell.layer: WlrLayer.Bottom
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
