@@ -97,7 +97,7 @@ PopupWindow {
     // hosted by a bottom/side Dock grows away from the Dock, so keep the
     // controls nearest the Dock and place notification history above them.
     readonly property bool notificationFirst: dockHosted && dockEdge !== "top"
-    readonly property int mainControlsOffsetY: notificationFirst ? 238 : 0
+    readonly property int mainControlsOffsetY: notificationFirst ? 186 : 0
     signal networkRequested()
     signal bluetoothRequested()
     signal wifiNetworkSelected(var network)
@@ -235,8 +235,8 @@ PopupWindow {
     readonly property var submenuSourceRects: ({
         "wifi":       Qt.rect(336 - 179 - 137, 20  + mainControlsOffsetY, 137, 59),
         "bluetooth":  Qt.rect(336 - 179 - 137, 87  + mainControlsOffsetY, 137, 59),
-        "brightness": Qt.rect(336 - 20  - 296, 217 + mainControlsOffsetY, 296, 57),
-        "sound":      Qt.rect(336 - 20  - 296, 282 + mainControlsOffsetY, 296, 57),
+        "brightness": Qt.rect(336 - 20  - 296, 269 + mainControlsOffsetY, 296, 57),
+        "sound":      Qt.rect(336 - 20  - 296, 334 + mainControlsOffsetY, 296, 57),
         // Power/session sheet returns to the power-key capsule (slotCard3:
         // offsetRight 142, offsetTop 155, 52x52) so it morphs back into the
         // button it was opened from exactly like the Wi-Fi/BT pills.
@@ -300,6 +300,7 @@ PopupWindow {
             // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
             // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
             stageModeCard.visible ? stageModeCard.blurRegion : emptyRegion,
+            keepAwakeCard.visible ? keepAwakeCard.blurRegion : emptyRegion,
             sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
             submenuCard.visible ? submenuCard.blurRegion : emptyRegion
         ]
@@ -1242,6 +1243,162 @@ PopupWindow {
         }
     }
 
+    // Utility toggles share the row between the quick actions and brightness.
+    ControlCenterCard {
+        id: stageModeCard
+        ControlCenterSelection {
+            pointer: stagePointer
+            cornerRadius: stageModeCard.cardRadius
+            selected: StageModeService.enabled
+        }
+        coordinator: coordinator
+        visible: cardShown && coordinator.cardAnchor !== null
+        offsetTop: 217 + panel.mainControlsOffsetY
+        offsetRight: 172
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
+        cardWidth: 144
+        cardHeight: 44
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
+
+        Rectangle {
+            id: stageDisc
+            width: 34; height: 34; radius: 17
+            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveFill
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: stagePointer.containsMouse && !stagePointer.pressed ? 1.0 : 0.92
+            Behavior on color { ColorAnimation { duration: 140 } }
+
+            Image {
+                anchors.centerIn: parent
+                width: 18; height: 18
+                source: BundledIcons.source("window")
+                sourceSize.width: 36; sourceSize.height: 36
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    colorization: 1.0
+                    colorizationColor: StageModeService.enabled
+                        ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
+                }
+            }
+        }
+
+        GlassText {
+            anchors { left: stageDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
+            text: "前台调度"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        }
+
+        GlassText {
+            anchors { left: stageDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            text: StageModeService.enabled ? "已开启" : "已关闭"
+            color: StageModeService.enabled
+                ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
+            opacity: StageModeService.enabled ? 0.9 : 0.5
+            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        }
+
+        MouseArea {
+            id: stagePointer
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: StageModeService.toggle()
+        }
+    }
+
+    // Caffeine is held by the resident service, never the popup lifetime.
+    ControlCenterCard {
+        id: keepAwakeCard
+        ControlCenterSelection {
+            pointer: keepAwakePointer
+            cornerRadius: keepAwakeCard.cardRadius
+            selected: ControlCenterService.keepAwakeEnabled
+        }
+        coordinator: coordinator
+        visible: cardShown && coordinator.cardAnchor !== null
+        offsetTop: 217 + panel.mainControlsOffsetY
+        offsetRight: 20
+        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
+        cardWidth: 144
+        cardHeight: 44
+        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
+        blurStrength: panel.effectiveBlur
+        liquidStrength: panel.effectiveLiquid
+
+        Rectangle {
+            id: keepAwakeDisc
+            width: 34; height: 34; radius: 17
+            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
+            color: ControlCenterService.keepAwakeEnabled
+                ? ThemeService.tileActiveFill
+                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
+            opacity: keepAwakePointer.containsMouse && !keepAwakePointer.pressed ? 1.0 : 0.92
+            Behavior on color { ColorAnimation { duration: 140 } }
+
+            Image {
+                anchors.centerIn: parent
+                width: 18; height: 18
+                source: BundledIcons.source("keep-awake")
+                sourceSize.width: 36; sourceSize.height: 36
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+                layer.enabled: true
+                layer.effect: MultiEffect {
+                    colorization: 1.0
+                    colorizationColor: ControlCenterService.keepAwakeEnabled
+                        ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
+                }
+            }
+        }
+
+        GlassText {
+            anchors { left: keepAwakeDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
+            text: "保持唤醒"
+            color: ThemeService.foregroundColor
+            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
+        }
+
+        GlassText {
+            anchors { left: keepAwakeDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            text: ControlCenterService.keepAwakeChangeInProgress ? "切换中…"
+                : !ControlCenterService.keepAwakeAvailable ? "不可用"
+                : ControlCenterService.keepAwakeError ? "切换失败"
+                : ControlCenterService.keepAwakeEnabled ? "已开启" : "已关闭"
+            color: ControlCenterService.keepAwakeEnabled
+                ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
+            opacity: ControlCenterService.keepAwakeEnabled ? 0.9 : 0.5
+            font { pixelSize: 11; family: "Noto Sans CJK SC" }
+        }
+
+        ToolTip.visible: keepAwakePointer.containsMouse
+        ToolTip.delay: 500
+        ToolTip.text: ControlCenterService.keepAwakeError
+            || (!ControlCenterService.keepAwakeAvailable ? "需要 KDE 电源管理和锁屏服务"
+                : "阻止自动熄屏、锁屏和睡眠；关闭后恢复省电设置")
+        Accessible.name: "保持唤醒"
+        Accessible.description: ControlCenterService.keepAwakeEnabled ? "已开启" : "已关闭"
+        Accessible.role: Accessible.CheckBox
+        Accessible.checkable: true
+        Accessible.checked: ControlCenterService.keepAwakeEnabled
+        Accessible.onPressAction: ControlCenterService.toggleKeepAwake()
+
+        MouseArea {
+            id: keepAwakePointer
+            anchors.fill: parent
+            hoverEnabled: true
+            enabled: ControlCenterService.keepAwakeAvailable && !ControlCenterService.keepAwakeChangeInProgress
+            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: ControlCenterService.toggleKeepAwake()
+        }
+    }
+
     // ── Card 9: Display brightness ───────────────────────────────────
     ControlCenterCard {
         id: slotCard6
@@ -1252,7 +1409,7 @@ PopupWindow {
             pressed: brightnessPagePointer.pressed || brightnessSlider._pressed
         }
         coordinator: coordinator
-        offsetTop: 217 + panel.mainControlsOffsetY
+        offsetTop: 269 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
@@ -1328,7 +1485,7 @@ PopupWindow {
             pressed: soundPagePointer.pressed || volumeSlider._pressed
         }
         coordinator: coordinator
-        offsetTop: 282 + panel.mainControlsOffsetY
+        offsetTop: 334 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
@@ -1473,85 +1630,6 @@ PopupWindow {
         }
     }
 
-    // ── Card 9a: Stage mode toggle（前台调度总开关，常驻）─────────────
-    // 常驻行卡：notificationFirst 布局下位于历史卡下方（历史卡压矮到 178，
-    // 本行 206..250，主控制区 258 起，互不重叠；非 notificationFirst 同理
-    // 落在 533..577）。开=窗口收进/呼出自左侧 Stage 侧栏；关=经典
-    // magiclamp dock 动画。切换逻辑在 StageModeService。
-    ControlCenterCard {
-        id: stageModeCard
-        ControlCenterSelection {
-            pointer: stagePointer
-            cornerRadius: stageModeCard.cardRadius
-            selected: StageModeService.enabled
-        }
-        coordinator: coordinator
-        visible: cardShown && coordinator.cardAnchor !== null
-        // 顶栏布局恒在滑杆正下方（347）——原先藏在通知历史之下（533），
-        // 用户实际找不到开关；通知历史让位其下（403）。dock 布局不变
-        //（历史在上 20，本卡随后 206，主控区 238 起）。
-        offsetTop: panel.notificationFirst
-            ? (ControlCenterService.historyGroups.length > 0 ? 206 : 20)
-            : 347
-        offsetRight: 20
-        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 296
-        cardHeight: 44
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
-
-        Rectangle {
-            id: stageDisc
-            width: 34; height: 34; radius: 17
-            anchors { left: parent.left; leftMargin: 9; verticalCenter: parent.verticalCenter }
-            color: StageModeService.enabled
-                ? ThemeService.tileActiveFill
-                : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
-            opacity: stagePointer.containsMouse && !stagePointer.pressed ? 1.0 : 0.92
-            Behavior on color { ColorAnimation { duration: 140 } }
-
-            Image {
-                anchors.centerIn: parent
-                width: 18; height: 18
-                source: BundledIcons.source("window")
-                sourceSize.width: 36; sourceSize.height: 36
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                layer.enabled: true
-                layer.effect: MultiEffect {
-                    colorization: 1.0
-                    colorizationColor: StageModeService.enabled
-                        ? ThemeService.tileActiveGlyph : ThemeService.tileGlyph
-                }
-            }
-        }
-
-        GlassText {
-            anchors { left: stageDisc.right; leftMargin: 10; verticalCenter: parent.verticalCenter }
-            text: "前台调度"
-            color: ThemeService.foregroundColor
-            font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
-        }
-
-        GlassText {
-            anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-            text: StageModeService.enabled ? "已开启" : "已关闭"
-            color: StageModeService.enabled
-                ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
-            opacity: StageModeService.enabled ? 0.9 : 0.5
-            font { pixelSize: 11; family: "Noto Sans CJK SC" }
-        }
-
-        MouseArea {
-            id: stagePointer
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: StageModeService.toggle()
-        }
-    }
-
     // ── Card 9: Notification history ─────────────────────────────────
     // Session history grouped by app: dismissed/expired banners and DND
     // notifications (which are never shown) land here. Each group header
@@ -1570,7 +1648,7 @@ PopupWindow {
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
-        // 178：顶栏布局下排在恒驻的"前台调度"行卡（上方 347，44px）之下
+        // Keep notification history below the main controls in the top-bar layout.
         cardHeight: 178
         cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur

@@ -25,6 +25,8 @@ set(kos_platform_sources
     src/daemon/main.cpp
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformServer.h
+    src/daemon/KeepAwakeLease.cpp
+    src/daemon/KeepAwakeLease.h
     src/daemon/Shortcuts.cpp
     src/daemon/Shortcuts.h
     src/kwin/KWinBridge.cpp
@@ -112,6 +114,14 @@ if(BUILD_TESTING)
         find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
     endif()
     find_program(DBUS_RUN_SESSION_EXECUTABLE dbus-run-session)
+    if(DBUS_RUN_SESSION_EXECUTABLE)
+        qt_add_executable(kos-keep-awake-test tests/test_keep_awake.cpp)
+        target_link_libraries(kos-keep-awake-test PRIVATE Qt6::Core Qt6::DBus Qt6::Network)
+        add_test(NAME kos-platform.keep-awake
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-keep-awake-test>
+                $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.keep-awake PROPERTIES LABELS platform TIMEOUT 60)
+    endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
         add_test(NAME kos-platform.startup
             COMMAND ${KOS_PYTHON_EXECUTABLE}

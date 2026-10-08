@@ -22,6 +22,8 @@
 
 namespace KosPlatform {
 
+class KeepAwakeLease;
+
 // One connect request: the settings dict already carries every secret, so the
 // runner treats this as opaque data. The map never lands in a log or an argv
 // -- it goes straight into AddConnection.
@@ -167,6 +169,7 @@ private:
     QString m_socketPath;
     QHash<QLocalSocket *, QByteArray> m_buffers;
     QSet<QLocalSocket *> m_windowSubscribers;
+    QHash<QLocalSocket *, KeepAwakeLease *> m_keepAwakeLeases;
     // A Shell can reconnect after Quickshell reloads while KWin has no new
     // window event to broadcast. Retain the authoritative last snapshot so a
     // new subscriber never has to wait for unrelated window activity.

@@ -66,6 +66,7 @@ JsonlClient {
         "network.scan": true,
         "network.traffic": true,
         "nightlight.get": true,
+        "keepawake.get": true,
         "platform.ping": true,
         "state.read": true,
         "tray.identify": true

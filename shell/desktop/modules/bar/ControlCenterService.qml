@@ -48,6 +48,10 @@ QtObject {
     property bool canSuspend: true
     property bool canHibernate: false
     property bool themeChangeInProgress: false
+    property bool keepAwakeAvailable: false
+    property bool keepAwakeEnabled: false
+    property bool keepAwakeChangeInProgress: false
+    property string keepAwakeError: ""
     property bool nightLightAvailable: true
     property bool nightLightEnabled: false
     property bool nightLightActive: false
@@ -113,6 +117,7 @@ QtObject {
                 audioAvailable = false
             }
         })
+        refreshKeepAwake()
         refreshAudioApplications()
         if (anyPanelOpen) refreshAudioOutputs()
         PlatformClient.request("bluetooth.list", {}, function(response) {
@@ -156,6 +161,41 @@ QtObject {
                 }
             }
         })
+    }
+
+    function refreshKeepAwake() {
+        if (!PlatformClient.supports("keepawake")) {
+            keepAwakeAvailable = false
+            keepAwakeEnabled = false
+            return
+        }
+        PlatformClient.request("keepawake.get", {}, function(response) {
+            if (response?.ok) {
+                keepAwakeAvailable = !!response.result?.available
+                if (!keepAwakeChangeInProgress)
+                    keepAwakeEnabled = !!response.result?.enabled
+            } else {
+                keepAwakeAvailable = false
+            }
+        })
+    }
+
+    function toggleKeepAwake() {
+        if (keepAwakeChangeInProgress || !keepAwakeAvailable)
+            return false
+        keepAwakeChangeInProgress = true
+        keepAwakeError = ""
+        PlatformClient.request("keepawake.set", { enabled: !keepAwakeEnabled }, function(response) {
+            keepAwakeChangeInProgress = false
+            if (response?.ok) {
+                keepAwakeEnabled = !!response.result?.enabled
+                keepAwakeAvailable = !!response.result?.available
+            } else {
+                keepAwakeError = response?.error?.message || "保持唤醒切换失败"
+                refreshKeepAwake()
+            }
+        })
+        return true
     }
 
     function refreshAudioApplications() {
@@ -495,6 +535,7 @@ QtObject {
     }
     property Connections platformTransport: Connections {
         target: PlatformClient
+        function onCapabilitiesChanged() { service.refreshKeepAwake() }
         function onTransportChanged(connected) {
             if (connected) {
                 service.refresh()
@@ -516,6 +557,10 @@ QtObject {
                 screenshotInProgress = false
                 sessionActionInProgress = false
                 themeChangeInProgress = false
+                keepAwakeChangeInProgress = false
+                keepAwakeAvailable = false
+                keepAwakeEnabled = false
+                keepAwakeError = ""
                 nightLightChangeInProgress = false
                 _bluetoothPollTimer.stop()
             }
