@@ -41,6 +41,12 @@ Item {
         ? IconAppearanceService.opacity : 1.0
 
     BundledIcon {
+
+        // Same readability edge the bar text carries (Text.Outline).
+
+        outlined: AppearanceTokens.isDarkTheme
+
+        outlineColor: Qt.rgba(0, 0, 0, 0.40)
         id: networkGlyph
         visible: NetworkService.connectionType === "ethernet"
         anchors.centerIn: parent

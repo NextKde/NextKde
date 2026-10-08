@@ -274,6 +274,9 @@ AnimatedPopupWindow {
                 border.width: 1
                 border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0, 0, 0, 0.10)
                 WifiSignalIcon {
+                    // Matches the readability edge the popup text already carries.
+                    outlined: AppearanceTokens.isDarkTheme
+                    outlineColor: Qt.rgba(0, 0, 0, 0.40)
                     anchors.centerIn: parent
                     width: 20
                     height: 20
