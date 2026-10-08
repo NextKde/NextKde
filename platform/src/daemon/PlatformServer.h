@@ -70,6 +70,11 @@ private:
                  bool ok, const QJsonObject &result = {},
                  const QString &code = {}, const QString &message = {},
                  bool retryable = false);
+    // Drops a peer whose write backlog (kMaxClientWriteBytes) shows it is no
+    // longer draining. Deferred: the abort lands after the current dispatch
+    // returns, so callers iterating subscribers or parsing the same socket's
+    // read buffer never see it torn down mid-loop.
+    void kickStuckClient(QLocalSocket *socket);
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},
@@ -127,9 +132,17 @@ private:
                           const QString &code = {}, const QString &message = {},
                           bool retryable = false, int ttlMs = 0);
     void watchNmPath(const QString &path);
+    void unwatchNmPath(const QString &path);
     void watchBluezManager();
     void watchBluezPath(const QString &path);
     void watchBrightnessPath(const QString &service, const QString &path);
+    void unwatchBrightnessPath(const QString &key);
+    // Removes NM/brightness watches that no operation has re-confirmed within
+    // kDbusStaleWatchMs, unlinking their D-Bus match rules. NetworkManager
+    // object paths embed counters that increase on every reconnect, so without
+    // this the daemon (and the system bus) accumulate one dead subscription
+    // per reconnect for the process lifetime.
+    void pruneStaleDbusWatches();
     void watchNightLight();
     void startAudioEventWatcher(const QString &pactl);
 
@@ -189,11 +202,17 @@ private:
     qint64 m_lastClipboardPruneMs = 0;
     QHash<QString, CachedReply> m_replyCache;
     QHash<QString, QList<PendingReply>> m_inFlightReplies;
-    QSet<QString> m_nmWatchedPaths;
+    // path -> last re-confirmation (ms since epoch). The paths themselves are
+    // stable only while their object lives: NM numbers ActiveConnection/<N>,
+    // IP4Config/<N> etc. with counters that increase on every reconnect, so
+    // entries age out via pruneStaleDbusWatches() instead of accumulating one
+    // D-Bus match rule per reconnect forever.
+    QHash<QString, qint64> m_nmWatchedPaths;
     QSet<QString> m_bluezWatchedPaths;
     // "service path" pairs: the KDE brightness service name differs between
     // powerdevil generations, so the watch key carries the resolved service.
-    QSet<QString> m_brightnessWatched;
+    // Values are last re-confirmation timestamps, aged out like the NM set.
+    QHash<QString, qint64> m_brightnessWatched;
     bool m_bluezManagerWatched = false;
     bool m_nightLightWatched = false;
     QProcess *m_audioEventWatcher = nullptr;

@@ -62,6 +62,12 @@ constexpr auto kGnomeFilesMime = "x-special/gnome-copied-files";
 // client streaming without a newline, which is cut off instead of growing
 // the buffer without bound.
 constexpr qsizetype kMaxClientBufferBytes = 1024 * 1024;
+// Cap on bytes queued for a client that is not reading them. Event streams
+// (window snapshots during drags, thumbnail completions) arrive at tens per
+// second and legit replies top out well below this, so a backlog past the cap
+// means the peer stopped draining: kick it and let it reconnect instead of
+// growing the write buffer without bound.
+constexpr qint64 kMaxClientWriteBytes = 8 * 1024 * 1024;
 
 bool finiteNumber(const QJsonValue &value, double minimum, double maximum)
 {
@@ -533,6 +539,11 @@ constexpr int kDefaultCommandTimeoutMs = 8000;
 // within seconds.
 constexpr int kFailureCacheTtlMs = 5000;
 constexpr int kNetworkCacheTtlMs = 15000;
+// NM/brightness watches are re-confirmed by whichever op reads the object
+// (refresh, details, brightness.get, ...). A path nothing has re-confirmed
+// for this long is no longer part of any current view; its match rule is
+// dropped so monotonically numbered NM paths cannot pile up forever.
+constexpr qint64 kDbusStaleWatchMs = 5 * 60 * 1000;
 constexpr int kBluetoothCacheTtlMs = 20000;
 constexpr int kAudioCacheTtlMs = 30000;
 constexpr int kBrightnessCacheTtlMs = 10000;
@@ -2148,6 +2159,19 @@ QString PlatformServer::operation(const QJsonObject &request) const
     return request.value(QStringLiteral("operation")).toString();
 }
 
+void PlatformServer::kickStuckClient(QLocalSocket *socket)
+{
+    if (!socket)
+        return;
+    // Deferred on purpose: abort() emits disconnected() synchronously, and a
+    // caller deeper in the stack (readClient's reference into m_buffers, the
+    // subscriber iteration in broadcastKWinEvent) must not see the socket torn
+    // down mid-dispatch. The connection is bound to `socket` as its context,
+    // so a peer that disconnects first cancels the kick rather than aborting a
+    // deleted object.
+    QTimer::singleShot(0, socket, [socket]() { socket->abort(); });
+}
+
 void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
                               bool ok, const QJsonObject &result,
                               const QString &code, const QString &message,
@@ -2155,6 +2179,10 @@ void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
 {
     if (!socket || socket->state() != QLocalSocket::ConnectedState)
         return;
+    if (socket->bytesToWrite() > kMaxClientWriteBytes) {
+        kickStuckClient(socket);
+        return;
+    }
     QJsonObject response{{QStringLiteral("version"), kProtocolVersion},
                          {QStringLiteral("requestId"), requestId(request)},
                          {QStringLiteral("ok"), ok}};
@@ -2170,6 +2198,10 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 {
     if (!socket || socket->state() != QLocalSocket::ConnectedState)
         return;
+    if (socket->bytesToWrite() > kMaxClientWriteBytes) {
+        kickStuckClient(socket);
+        return;
+    }
     QString eventName = event.value(QStringLiteral("type")).toString();
     if (eventName == QStringLiteral("snapshot"))
         eventName = QStringLiteral("window.snapshot");
@@ -2345,10 +2377,26 @@ void PlatformServer::completeInFlight(const QString &key, bool ok,
 
 void PlatformServer::watchNmPath(const QString &path)
 {
-    if (path.isEmpty() || path == QStringLiteral("/") || m_nmWatchedPaths.contains(path))
+    if (path.isEmpty() || path == QStringLiteral("/"))
         return;
-    m_nmWatchedPaths.insert(path);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_nmWatchedPaths.contains(path)) {
+        // Re-confirmation: refresh the age so pruneStaleDbusWatches keeps it.
+        m_nmWatchedPaths.insert(path, now);
+        return;
+    }
+    m_nmWatchedPaths.insert(path, now);
     QDBusConnection::systemBus().connect(QString::fromLatin1(kNmService), path,
+        QStringLiteral("org.freedesktop.DBus.Properties"),
+        QStringLiteral("PropertiesChanged"),
+        this, SLOT(nmPropertiesChanged(QString,QVariantMap,QStringList)));
+}
+
+void PlatformServer::unwatchNmPath(const QString &path)
+{
+    if (m_nmWatchedPaths.remove(path) == 0)
+        return;
+    QDBusConnection::systemBus().disconnect(QString::fromLatin1(kNmService), path,
         QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"),
         this, SLOT(nmPropertiesChanged(QString,QVariantMap,QStringList)));
@@ -2385,13 +2433,51 @@ void PlatformServer::watchBluezPath(const QString &path)
 void PlatformServer::watchBrightnessPath(const QString &service, const QString &path)
 {
     const QString key = service + QLatin1Char(' ') + path;
-    if (service.isEmpty() || path.isEmpty() || m_brightnessWatched.contains(key))
+    if (service.isEmpty() || path.isEmpty())
         return;
-    m_brightnessWatched.insert(key);
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_brightnessWatched.contains(key)) {
+        m_brightnessWatched.insert(key, now);
+        return;
+    }
+    m_brightnessWatched.insert(key, now);
     QDBusConnection::sessionBus().connect(service, path,
         QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"),
         this, SLOT(brightnessPropertiesChanged(QString,QVariantMap,QStringList)));
+}
+
+void PlatformServer::unwatchBrightnessPath(const QString &key)
+{
+    if (m_brightnessWatched.remove(key) == 0)
+        return;
+    const qsizetype cut = key.indexOf(QLatin1Char(' '));
+    if (cut <= 0)
+        return;
+    QDBusConnection::sessionBus().disconnect(key.left(cut), key.mid(cut + 1),
+        QStringLiteral("org.freedesktop.DBus.Properties"),
+        QStringLiteral("PropertiesChanged"),
+        this, SLOT(brightnessPropertiesChanged(QString,QVariantMap,QStringList)));
+}
+
+void PlatformServer::pruneStaleDbusWatches()
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // Collect before removing: unwatch* mutate the maps being walked.
+    QStringList expired;
+    for (auto it = m_nmWatchedPaths.cbegin(); it != m_nmWatchedPaths.cend(); ++it) {
+        if (now - it.value() > kDbusStaleWatchMs)
+            expired.append(it.key());
+    }
+    for (const QString &path : std::as_const(expired))
+        unwatchNmPath(path);
+    expired.clear();
+    for (auto it = m_brightnessWatched.cbegin(); it != m_brightnessWatched.cend(); ++it) {
+        if (now - it.value() > kDbusStaleWatchMs)
+            expired.append(it.key());
+    }
+    for (const QString &key : std::as_const(expired))
+        unwatchBrightnessPath(key);
 }
 
 void PlatformServer::watchNightLight()
@@ -2430,7 +2516,15 @@ void PlatformServer::bluezInterfacesRemoved(const QDBusObjectPath &path,
                                             const QStringList &)
 {
     // The object is gone; let the next list call re-subscribe if it returns.
-    m_bluezWatchedPaths.remove(path.path());
+    // Unlink the match rule too: dropping only the set entry left the
+    // subscription behind on the system bus.
+    if (m_bluezWatchedPaths.remove(path.path()) > 0) {
+        QDBusConnection::systemBus().disconnect(QString::fromLatin1(kBluezService),
+            path.path(),
+            QStringLiteral("org.freedesktop.DBus.Properties"),
+            QStringLiteral("PropertiesChanged"),
+            this, SLOT(bluezPropertiesChanged(QString,QVariantMap,QStringList)));
+    }
     invalidateReplies(QStringLiteral("bluetooth."));
 }
 
@@ -2543,6 +2637,10 @@ void PlatformServer::runNetworkRefresh(QLocalSocket *socket,
         const NetworkWorkerResult out = watcher->result();
         for (const QString &path : out.watchPaths)
             watchNmPath(path);
+        // This refresh re-confirmed every live path (root + devices + the
+        // selected connection's sub-objects); anything older than
+        // kDbusStaleWatchMs is a leftover from a dead object.
+        pruneStaleDbusWatches();
         if (!out.detailsKey.isEmpty() && !out.detailsKey.endsWith(QLatin1Char(':')))
             storeReply(out.detailsKey, kNetworkCacheTtlMs, true, out.detailsPrefill);
         completeInFlight(key, out.ok, out.result, out.code, out.message,
@@ -2567,6 +2665,7 @@ void PlatformServer::runNetworkDetails(QLocalSocket *socket,
         const NetworkWorkerResult out = watcher->result();
         for (const QString &path : out.watchPaths)
             watchNmPath(path);
+        pruneStaleDbusWatches();
         completeInFlight(key, out.ok, out.result, out.code, out.message,
                          out.retryable, kNetworkCacheTtlMs);
     });
@@ -2600,6 +2699,7 @@ void PlatformServer::runNetworkConnect(QLocalSocket *socket,
         const NetworkWorkerResult out = watcher->result();
         for (const QString &path : out.watchPaths)
             watchNmPath(path);
+        pruneStaleDbusWatches();
         completeInFlight(key, out.ok, out.result, out.code, out.message,
                          out.retryable, kNetworkConnectTtlMs);
     });
@@ -4867,6 +4967,10 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
                                 QStringLiteral("/org/kde/ScreenBrightness"));
             for (const QString &displayId : displayIds)
                 watchBrightnessPath(brightnessService, screenBrightnessPath(displayId));
+            // The brightness poll doubles as the aging heartbeat: even in a
+            // session that never opens the network popup, stale watches are
+            // still dropped.
+            pruneStaleDbusWatches();
             respond(socket, request, true, kdeBrightness);
             storeReply(key, kBrightnessCacheTtlMs, true, kdeBrightness);
             return true;
