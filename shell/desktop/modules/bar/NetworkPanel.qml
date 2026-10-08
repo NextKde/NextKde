@@ -60,6 +60,8 @@ AnimatedPopupWindow {
             && panel.dockEdge === "left" ? -8 : 0
     }
 
+    readonly property var targetScreen: ScreenLifecycle.activeScreen
+
     // Real liquid glass: a compositor blur region on the panel surface, so
     // windows behind the Wi-Fi list are visible through the glass (QML-only
     // surfaces cannot sample the compositor buffer). The panel owns that region
@@ -97,11 +99,77 @@ AnimatedPopupWindow {
         hide()
     }
 
+    // If the display server ever closes the popup behind our back, fold the
+    // open state too.
+    onClosed: {
+        if (panel.requestedOpen)
+            panel.close()
+    }
+
     Connections {
         target: ScreenLifecycle
         function onOutputAvailableChanged() {
             if (!ScreenLifecycle.outputAvailable)
                 panel.close()
+        }
+    }
+
+    // ── Outside-press and focus-loss dismissal ───────────────────────
+    // An AnimatedPopupWindow anchored to the layer-shell Bar cannot take a Wayland
+    // popup grab, so an explicit full-screen transparent catcher covers presses
+    // on the desktop or the Bar itself when the network list is open.
+    PanelWindow {
+        id: dismissalCatcher
+        screen: panel.targetScreen
+        visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null
+            && panel.requestedOpen && !networkDialogOverlay.requestedOpen
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "quickshell-networkpanel-backdrop"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.ArrowCursor
+            onPressed: panel.close()
+        }
+    }
+
+    Connections {
+        target: WindowService
+        function onActiveWindowIdChanged() {
+            if (networkDialogOverlay.requestedOpen)
+                return
+            if (panel.requestedOpen)
+                panel.close()
+        }
+    }
+
+    Connections {
+        target: ContextMenuCoordinator
+        function onActiveMenuChanged() {
+            if (ContextMenuCoordinator.activeMenu
+                    && !networkDialogOverlay.requestedOpen
+                    && panel.requestedOpen)
+                panel.close()
+        }
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: panel.requestedOpen || networkDialogOverlay.requestedOpen
+        onActivated: {
+            if (networkDialogOverlay.requestedOpen) {
+                panel.closeNetworkDialog()
+            } else {
+                panel.close()
+            }
         }
     }
 
