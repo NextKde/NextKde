@@ -1,9 +1,10 @@
-// The KWin conflict repair, against a fake kglobalaccel on a private session
+// The KWin shortcut repair, against a fake kglobalaccel on a private session
 // bus (the test runs under dbus-run-session): the fake answers
-// getGlobalShortcutsByKey with the a(ssssssaiai) shape the real daemon uses
-// and records setShortcut calls, so the test pins both the wire format and
-// the exact repair — release Meta+Tab from "Walk Through Windows", keep
-// Alt+Tab, SetPresent set — plus the cases the repair must not touch.
+// /component/kwin's allShortcutInfos with the a(ssssssaiai) shape the real
+// daemon uses and records setShortcut calls, so the test pins both the wire
+// format and the exact repairs — release Meta+Tab from "Walk Through
+// Windows" while keeping Alt+Tab and SetPresent, heal that same action after
+// it lost its present state, and leave everything else untouched.
 
 #include "../src/daemon/KWinShortcutConflicts.h"
 
@@ -60,22 +61,16 @@ const QDBusArgument &operator>>(const QDBusArgument &argument,
     argument >> info.actionUnique >> info.actionFriendly
              >> info.componentUnique >> info.componentFriendly
              >> info.contextUnique >> info.contextFriendly;
-    info.keys.clear();
-    argument.beginArray();
-    while (!argument.atEnd()) {
-        int key = 0;
-        argument >> key;
-        info.keys.append(key);
+    for (QList<int> *target : {&info.keys, &info.defaults}) {
+        target->clear();
+        argument.beginArray();
+        while (!argument.atEnd()) {
+            int key = 0;
+            argument >> key;
+            target->append(key);
+        }
+        argument.endArray();
     }
-    argument.endArray();
-    info.defaults.clear();
-    argument.beginArray();
-    while (!argument.atEnd()) {
-        int key = 0;
-        argument >> key;
-        info.defaults.append(key);
-    }
-    argument.endArray();
     argument.endStructure();
     return argument;
 }
@@ -105,26 +100,19 @@ struct HeldShortcut {
     QString componentUnique;
     QString componentFriendly;
     QList<int> keys;
+    QList<int> defaults;
 };
 
 class FakeKGlobalAccel : public QObject, protected QDBusContext
 {
     Q_OBJECT
-    // The same interface shape kglobalacceld exposes, including the type
-    // annotation that maps the struct list onto a(ssssssaiai).
-    Q_CLASSINFO("D-Bus Interface", "org.kde.KGlobalAccel")
+    // The same type annotation kglobalacceld's introspection carries, mapping
+    // the struct list onto a(ssssssaiai).
     Q_CLASSINFO("D-Bus Introspection", ""
-"  <interface name=\"org.kde.KGlobalAccel\">\n"
-"    <method name=\"getGlobalShortcutsByKey\">\n"
-"      <arg direction=\"in\" type=\"i\" name=\"key\"/>\n"
+"  <interface name=\"org.kde.kglobalaccel.Component\">\n"
+"    <method name=\"allShortcutInfos\">\n"
 "      <arg direction=\"out\" type=\"a(ssssssaiai)\" name=\"shortcuts\"/>\n"
 "      <annotation name=\"org.qtproject.QtDBus.QtTypeName.Out0\" value=\"QList&lt;ShortcutInfo&gt;\"/>\n"
-"    </method>\n"
-"    <method name=\"setShortcut\">\n"
-"      <arg direction=\"in\" type=\"as\" name=\"actionId\"/>\n"
-"      <arg direction=\"in\" type=\"ai\" name=\"keys\"/>\n"
-"      <arg direction=\"in\" type=\"u\" name=\"flags\"/>\n"
-"      <arg direction=\"out\" type=\"ai\" name=\"result\"/>\n"
 "    </method>\n"
 "  </interface>\n")
 public:
@@ -135,17 +123,15 @@ public:
     };
 
     QList<HeldShortcut> held;
-    QList<int> queriedKeys;
+    int queries = 0;
     QList<Release> releases;
 
 public slots:
-    QList<ShortcutInfo> getGlobalShortcutsByKey(int key)
+    QList<ShortcutInfo> allShortcutInfos()
     {
-        queriedKeys.append(key);
+        ++queries;
         QList<ShortcutInfo> reply;
         for (const HeldShortcut &shortcut : held) {
-            if (!shortcut.keys.contains(key))
-                continue;
             reply.append(ShortcutInfo{shortcut.actionUnique,
                                       shortcut.actionFriendly,
                                       shortcut.componentUnique,
@@ -153,7 +139,7 @@ public slots:
                                       QStringLiteral("default"),
                                       QStringLiteral("Default Context"),
                                       shortcut.keys,
-                                      shortcut.keys});
+                                      shortcut.defaults});
         }
         return reply;
     }
@@ -179,13 +165,21 @@ int main(int argc, char **argv)
         FakeKGlobalAccel fake;
         require(bus.registerService(QStringLiteral("org.kde.kglobalaccel")),
                 "kglobalaccel service registration");
+        require(bus.registerObject(QStringLiteral("/component/kwin"),
+                                   QStringLiteral("org.kde.kglobalaccel.Component"),
+                                   &fake, QDBusConnection::ExportAllSlots),
+                "component object registration");
         require(bus.registerObject(QStringLiteral("/kglobalaccel"),
                                    QStringLiteral("org.kde.KGlobalAccel"), &fake,
                                    QDBusConnection::ExportAllSlots),
-                "kglobalaccel object registration");
+                "accel object registration");
 
         const int altTab = key("Alt+Tab");
         const int metaTab = key("Meta+Tab");
+        const QStringList walkThroughId{QStringLiteral("kwin"),
+                                        QStringLiteral("Walk Through Windows"),
+                                        QStringLiteral("KWin"),
+                                        QStringLiteral("遍历窗口")};
 
         // 1. The regression this repair exists for: KOS takes Meta+Tab, and
         //    KWin's "Walk Through Windows" holds {Meta+Tab, Alt+Tab} — the
@@ -193,86 +187,95 @@ int main(int argc, char **argv)
         //    Alt+Tab, carrying the SetPresent flag that revives it.
         fake.held = {
             {QStringLiteral("Walk Through Windows"), QStringLiteral("遍历窗口"),
-             QStringLiteral("kwin"), QStringLiteral("KWin"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {metaTab, altTab},
              {metaTab, altTab}},
         };
         fake.releases.clear();
-        fake.queriedKeys.clear();
         QString error;
-        QStringList released =
-            KosPlatform::releaseKWinKeyConflicts({QStringLiteral("Meta+Tab")},
-                                                 &error);
+        QStringList repaired = KosPlatform::repairKWinKeyConflicts(
+            {QStringLiteral("Meta+Tab")}, &error);
         require(error.isEmpty(), "query must not fail");
-        require(released.size() == 1, "exactly one repair expected");
-        require(released.first().contains(QStringLiteral("Walk Through Windows")),
+        require(fake.queries == 1, "exactly one allShortcutInfos query");
+        require(repaired.size() == 1, "exactly one repair expected");
+        require(repaired.first().contains(QStringLiteral("Walk Through Windows")),
                 "the repair must name the action");
-        require(released.first().contains(QStringLiteral("Alt+Tab")),
+        require(repaired.first().contains(QStringLiteral("Meta+Tab")),
+                "the repair must report the released key");
+        require(repaired.first().contains(QStringLiteral("Alt+Tab")),
                 "the repair must report the kept key");
-        require(fake.queriedKeys == QList<int>{metaTab},
-                "every combo must be queried");
         require(fake.releases.size() == 1, "exactly one setShortcut expected");
-        require(fake.releases.first().actionId
-                    == QStringList{QStringLiteral("kwin"),
-                                   QStringLiteral("Walk Through Windows"),
-                                   QStringLiteral("KWin"),
-                                   QStringLiteral("遍历窗口")},
+        require(fake.releases.first().actionId == walkThroughId,
                 "actionId must carry the registry's four fields");
         require(fake.releases.first().keys == QList<int>{altTab},
                 "Alt+Tab must survive the release");
         // The wire value is the point: SetPresent (0x1/0x2 across daemon
         // generations) with no-autoloading semantics; 0x4 alone does not
-        // revive a conflict-deactivated action (verified on Plasma 6.7.4).
+        // revive a dead action (verified on Plasma 6.7.4).
         require(fake.releases.first().flags == 0x3u, "SetPresent flags");
 
-        // 2. A single-key action whose only key KOS takes is fully replaced;
+        // 2. The heal case: the conflict is already released (the action only
+        //    holds Alt+Tab), but a lost present state stops it from firing
+        //    while the registry still lists it. The default keys still
+        //    involve Meta+Tab, so the action is re-presented.
+        fake.held = {
+            {QStringLiteral("Walk Through Windows"), QStringLiteral("遍历窗口"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {altTab},
+             {altTab, metaTab}},
+        };
+        fake.releases.clear();
+        repaired = KosPlatform::repairKWinKeyConflicts(
+            {QStringLiteral("Meta+Tab")}, &error);
+        require(error.isEmpty(), "heal must not error");
+        require(repaired.size() == 1, "the victim must be healed");
+        require(repaired.first().contains(QStringLiteral("re-presented")),
+                "the repair must say it re-presented the action");
+        require(fake.releases.size() == 1, "exactly one setShortcut expected");
+        require(fake.releases.first().keys == QList<int>{altTab},
+                "the active keys must not change");
+        require(fake.releases.first().flags == 0x3u, "SetPresent flags");
+
+        // 3. A single-key action whose only key KOS takes is fully replaced;
         //    the repair stays out of it (standard conflict handling owns it).
         fake.held = {
             {QStringLiteral("Show Desktop"), QStringLiteral("暂时显示桌面"),
-             QStringLiteral("kwin"), QStringLiteral("KWin"), {key("Meta+D")}},
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {key("Meta+D")},
+             {key("Meta+D")}},
         };
         fake.releases.clear();
-        released = KosPlatform::releaseKWinKeyConflicts(
+        repaired = KosPlatform::repairKWinKeyConflicts(
             {QStringLiteral("Meta+D")}, &error);
         require(error.isEmpty(), "single-key action must not error");
-        require(released.isEmpty(), "nothing to report for a full replacement");
+        require(repaired.isEmpty(), "nothing to report for a full replacement");
         require(fake.releases.isEmpty(),
                 "a fully replaced action must be left alone");
 
-        // 3. Other components keep KGlobalAccel's own conflict handling.
+        // 4. Actions KOS never collides with — neither by active nor by
+        //    default keys — are never touched, even when they hold other
+        //    Meta chords; other components' rows are ignored on principle.
         fake.held = {
+            {QStringLiteral("Expose"), QStringLiteral("显示/隐藏窗口平铺"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"),
+             {QKeySequence(QStringLiteral("Ctrl+F9"))[0].toCombined(),
+              key("Meta+F9")},
+             {QKeySequence(QStringLiteral("Ctrl+F9"))[0].toCombined(),
+              key("Meta+F9")}},
             {QStringLiteral("some-action"), QStringLiteral("Some Action"),
              QStringLiteral("plasmashell"), QStringLiteral("Plasma"),
-             {key("Meta+V")}},
+             {metaTab}, {metaTab}},
         };
         fake.releases.clear();
-        released = KosPlatform::releaseKWinKeyConflicts(
-            {QStringLiteral("Meta+V")}, &error);
-        require(released.isEmpty(), "non-KWin holders are not repaired");
-        require(fake.releases.isEmpty(), "non-KWin holders are not rewritten");
+        repaired = KosPlatform::repairKWinKeyConflicts(
+            {QStringLiteral("Meta+Tab")}, &error);
+        require(repaired.isEmpty(), "non-involved actions are not repaired");
+        require(fake.releases.isEmpty(), "non-involved actions are not rewritten");
 
-        // 4. One action holding two of the combos gets a single release
-        //    computed from its full original key set.
-        fake.held = {
-            {QStringLiteral("Custom Action"), QStringLiteral("Custom"),
-             QStringLiteral("kwin"), QStringLiteral("KWin"),
-             {key("Meta+B"), key("Meta+V"), key("Meta+W")}},
-        };
-        fake.releases.clear();
-        released = KosPlatform::releaseKWinKeyConflicts(
-            {QStringLiteral("Meta+B"), QStringLiteral("Meta+V")}, &error);
-        require(released.size() == 1, "one release for one action");
-        require(fake.releases.size() == 1, "no per-combo duplicate releases");
-        require(fake.releases.first().keys == QList<int>{key("Meta+W")},
-                "only the untouched key remains");
-        require(fake.releases.first().flags == 0x3u, "SetPresent flags");
-
-        // 5. Nothing holds the key: nothing happens.
+        // 5. Nothing listed: nothing happens.
         fake.held.clear();
         fake.releases.clear();
-        released = KosPlatform::releaseKWinKeyConflicts(
+        repaired = KosPlatform::repairKWinKeyConflicts(
             {QStringLiteral("Meta+Y")}, &error);
         require(error.isEmpty(), "empty registry is not an error");
-        require(released.isEmpty() && fake.releases.isEmpty(),
+        require(repaired.isEmpty() && fake.releases.isEmpty(),
                 "no holder, no repair");
     } catch (const std::exception &e) {
         qCritical() << "FAILED:" << e.what();

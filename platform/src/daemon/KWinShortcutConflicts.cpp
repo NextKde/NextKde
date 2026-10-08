@@ -4,7 +4,6 @@
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDebug>
-#include <QHash>
 #include <QKeyCombination>
 #include <QKeySequence>
 #include <QVariant>
@@ -15,25 +14,29 @@ namespace {
 
 const QString kAccelService = QStringLiteral("org.kde.kglobalaccel");
 const QString kAccelPath = QStringLiteral("/kglobalaccel");
+const QString kAccelComponentPath = QStringLiteral("/component/kwin");
+const QString kAccelComponentInterface =
+    QStringLiteral("org.kde.kglobalaccel.Component");
 const QString kAccelInterface = QStringLiteral("org.kde.KGlobalAccel");
 
 // kglobalacceld's `setShortcut` flags (the uint on the D-Bus call). SetPresent
-// brings a shortcut back from the conflict-deactivated state — the daemon's
+// brings a shortcut back from the non-present state — the daemon's
 // `setInactive` is `setIsPresent(false)`, and nothing else clears that flag.
 // 0x1/0x2 are the historical SetPresent/NoAutoloading numbering, 0x4 the
 // modern NoAutoloading. 0x3 covers SetPresent under both numberings and is
 // what re-recording the shortcut in System Settings effectively sends;
-// verified against Plasma 6.7.4, where 0x3 revives a killed KWin action while
-// 0x4 alone (keys updated, present flag untouched) does not.
+// verified against Plasma 6.7.4, where 0x3 revives a dead action while 0x4
+// alone (keys updated, present flag untouched) does not.
 constexpr uint kSetPresentFlags = 0x1 | 0x2;
 
 constexpr int kCallTimeoutMs = 2000;
 
-struct KWinAction {
+struct KWinShortcut {
     // {componentUnique, actionUnique, componentFriendly, actionFriendly} —
     // the actionId form the daemon's setShortcut expects.
     QStringList actionId;
     QList<int> keys;
+    QList<int> defaultKeys;
 };
 
 int combinedKey(const QString &combo)
@@ -49,10 +52,20 @@ QString keyText(int combined)
     return text.isEmpty() ? QString::number(combined) : text;
 }
 
-// The D-Bus reply is a(ssssssaiai): for every shortcut, the action id, its
-// friendly name, the owning component and context, then the active keys and
-// the defaults. Only KWin actions are collected, only their active keys kept.
-bool parseShortcutInfos(const QVariant &value, QList<KWinAction> *out)
+QString keyListText(const QList<int> &keys)
+{
+    QStringList parts;
+    parts.reserve(keys.size());
+    for (const int key : keys)
+        parts.append(keyText(key));
+    return parts.join(QStringLiteral(", "));
+}
+
+// The reply is a(ssssssaiai): for every shortcut, the action id, its friendly
+// name, the owning component and context, then the active and the default
+// keys. Both key sets matter: the active keys are what to keep, the defaults
+// identify the actions a KOS combo can ever collide with.
+bool parseShortcutInfos(const QVariant &value, QList<KWinShortcut> *out)
 {
     if (!value.canConvert<QDBusArgument>())
         return false;
@@ -67,66 +80,40 @@ bool parseShortcutInfos(const QVariant &value, QList<KWinAction> *out)
         QString contextUnique;
         QString contextFriendly;
         QList<int> keys;
+        QList<int> defaultKeys;
         array >> actionUnique >> actionFriendly >> componentUnique
               >> componentFriendly >> contextUnique >> contextFriendly;
-        array.beginArray();
-        while (!array.atEnd()) {
-            int key = 0;
-            array >> key;
-            keys.append(key);
+        for (QList<int> *target : {&keys, &defaultKeys}) {
+            target->clear();
+            array.beginArray();
+            while (!array.atEnd()) {
+                int key = 0;
+                array >> key;
+                target->append(key);
+            }
+            array.endArray();
         }
-        array.endArray();
-        // The defaults are walked for cursor consistency, then discarded.
-        array.beginArray();
-        while (!array.atEnd()) {
-            int ignored = 0;
-            array >> ignored;
-        }
-        array.endArray();
         array.endStructure();
 
-        if (componentUnique == QLatin1String("kwin")) {
-            out->append(KWinAction{
-                QStringList{componentUnique, actionUnique, componentFriendly,
-                            actionFriendly},
-                keys,
-            });
-        }
+        // /component/kwin only ever lists KWin's own shortcuts; the check is
+        // defense in depth, not a filter anyone should rely on.
+        if (componentUnique != QLatin1String("kwin"))
+            continue;
+
+        out->append(KWinShortcut{
+            QStringList{componentUnique, actionUnique, componentFriendly,
+                        actionFriendly},
+            keys,
+            defaultKeys,
+        });
     }
     array.endArray();
     return true;
 }
 
-// Queries the KWin actions that hold `key`. On failure `error` is set and the
-// result is empty — the caller decides whether that is fatal (it is not).
-QList<KWinAction> keyHolders(const QDBusConnection &bus, int key,
-                             QString *error)
-{
-    QDBusMessage call = QDBusMessage::createMethodCall(
-        kAccelService, kAccelPath, kAccelInterface,
-        QStringLiteral("getGlobalShortcutsByKey"));
-    call.setArguments({key});
-    const QDBusMessage reply = bus.call(call, QDBus::Block, kCallTimeoutMs);
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        if (error)
-            *error = QStringLiteral("KGlobalAccel query for %1 failed: %2")
-                         .arg(keyText(key), reply.errorMessage());
-        return {};
-    }
-    QList<KWinAction> actions;
-    if (!parseShortcutInfos(reply.arguments().value(0), &actions)) {
-        if (error)
-            *error = QStringLiteral(
-                         "KGlobalAccel reply for %1 was not understood")
-                         .arg(keyText(key));
-        return {};
-    }
-    return actions;
-}
-
 } // namespace
 
-QStringList releaseKWinKeyConflicts(const QStringList &combos, QString *error)
+QStringList repairKWinKeyConflicts(const QStringList &combos, QString *error)
 {
     QList<int> comboKeys;
     for (const QString &combo : combos) {
@@ -138,67 +125,77 @@ QStringList releaseKWinKeyConflicts(const QStringList &combos, QString *error)
         return {};
 
     const QDBusConnection bus = QDBusConnection::sessionBus();
-
-    // Collect first, release second: one KWin action can hold two of the
-    // combos, and the registry view goes stale the moment the first release
-    // lands. Collecting gives every action one release computed from its full
-    // original key set.
-    QHash<QString, KWinAction> kwinActions;
-    for (const int key : comboKeys) {
-        QString queryError;
-        const QList<KWinAction> holders = keyHolders(bus, key, &queryError);
-        if (!queryError.isEmpty()) {
-            if (error)
-                *error = queryError;
-            return {};
-        }
-        for (const KWinAction &action : holders) {
-            if (action.keys.contains(key))
-                kwinActions.insert(action.actionId.at(1), action);
-        }
+    QDBusMessage call = QDBusMessage::createMethodCall(
+        kAccelService, kAccelComponentPath, kAccelComponentInterface,
+        QStringLiteral("allShortcutInfos"));
+    const QDBusMessage reply = bus.call(call, QDBus::Block, kCallTimeoutMs);
+    if (reply.type() == QDBusMessage::ErrorMessage) {
+        if (error)
+            *error = QStringLiteral("KGlobalAccel query failed: %1")
+                         .arg(reply.errorMessage());
+        return {};
     }
 
-    QStringList released;
-    for (const KWinAction &action : kwinActions) {
+    QList<KWinShortcut> shortcuts;
+    if (!parseShortcutInfos(reply.arguments().value(0), &shortcuts)) {
+        if (error)
+            *error = QStringLiteral("KGlobalAccel reply was not understood");
+        return {};
+    }
+
+    QStringList repaired;
+    for (const KWinShortcut &shortcut : shortcuts) {
         QList<int> releasedKeys;
         QList<int> remaining;
-        for (const int key : action.keys) {
+        for (const int key : shortcut.keys) {
             if (comboKeys.contains(key))
                 releasedKeys.append(key);
             else
                 remaining.append(key);
         }
-        // Every key of the action is taken by KOS (full replacement, standard
-        // conflict handling) — or none is (nothing to do). Either way this
-        // repair stays out of it.
-        if (releasedKeys.isEmpty() || remaining.isEmpty())
+        bool collidesEver = false;
+        for (const int key : shortcut.defaultKeys) {
+            if (comboKeys.contains(key)) {
+                collidesEver = true;
+                break;
+            }
+        }
+        // Touch exactly two kinds of action: those currently holding a KOS
+        // key (release it) and those whose defaults involve one (heal a lost
+        // present state). Everything else — including actions fully replaced
+        // by KOS, where nothing would remain — is left to KGlobalAccel.
+        if (releasedKeys.isEmpty() && !collidesEver)
+            continue;
+        if (remaining.isEmpty())
             continue;
 
-        QDBusMessage call = QDBusMessage::createMethodCall(
+        QDBusMessage setCall = QDBusMessage::createMethodCall(
             kAccelService, kAccelPath, kAccelInterface,
             QStringLiteral("setShortcut"));
-        call.setArguments({action.actionId, QVariant::fromValue(remaining),
-                           QVariant::fromValue(kSetPresentFlags)});
-        const QDBusMessage reply = bus.call(call, QDBus::Block, kCallTimeoutMs);
-        if (reply.type() == QDBusMessage::ErrorMessage) {
+        setCall.setArguments({shortcut.actionId,
+                              QVariant::fromValue(remaining),
+                              QVariant::fromValue(kSetPresentFlags)});
+        const QDBusMessage setReply =
+            bus.call(setCall, QDBus::Block, kCallTimeoutMs);
+        if (setReply.type() == QDBusMessage::ErrorMessage) {
             qWarning().noquote()
-                << "[kos-platform] releasing KWin shortcut keys failed for"
-                << action.actionId.at(1) << ":" << reply.errorMessage();
+                << "[kos-platform] repairing KWin shortcut failed for"
+                << shortcut.actionId.at(1) << ":" << setReply.errorMessage();
             continue;
         }
 
-        QStringList releasedText;
-        QStringList remainingText;
-        for (const int key : releasedKeys)
-            releasedText.append(keyText(key));
-        for (const int key : remaining)
-            remainingText.append(keyText(key));
-        released.append(QStringLiteral("%1: released %2 (kept %3)")
-                            .arg(action.actionId.at(1),
-                                 releasedText.join(QStringLiteral(", ")),
-                                 remainingText.join(QStringLiteral(", "))));
+        if (!releasedKeys.isEmpty()) {
+            repaired.append(QStringLiteral("%1: released %2 (kept %3)")
+                                .arg(shortcut.actionId.at(1),
+                                     keyListText(releasedKeys),
+                                     keyListText(remaining)));
+        } else {
+            repaired.append(QStringLiteral("%1: re-presented (keys %2)")
+                                .arg(shortcut.actionId.at(1),
+                                     keyListText(remaining)));
+        }
     }
-    return released;
+    return repaired;
 }
 
 } // namespace KosPlatform
