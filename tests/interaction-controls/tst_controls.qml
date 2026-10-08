@@ -68,6 +68,9 @@ Item {
             // 清掉上一个用例可能还挂着的步进提交，免得它落进本用例的计数
             slider._wheelPending = false
             ramp._wheelPending = false
+            slider._pixelAccum = 0; slider._angleAccum = 0
+            ramp._pixelAccum = 0; ramp._angleAccum = 0
+            kos._pixelAccum = 0; kos._angleAccum = 0
             sliderHost.visible = true; slider.enabled = true
             preview = confirmedValue; dragging = false
             wait(250)
@@ -182,6 +185,43 @@ Item {
             wait(60)
             fuzzyCompare(kos.value, 0.51, 1e-6)
             compare(kosMoved, 1, "照旧走宿主的 moved() 回写")
+        }
+
+        // ── 触控板：Wayland 上给的是像素增量，不是鼠标的一格 120 ──────────
+        // 直接喂 accumulateWheel，免得依赖测试框架怎么造事件（它只给 angleDelta）。
+        function test_touchpad_pixels_accumulate_to_one_step() {
+            preview = 0.5
+            for (let i = 0; i < 3; ++i)
+                slider.accumulateWheel(0, 5)
+            wait(30)
+            fuzzyCompare(preview, 0.5, 1e-9, "5px 三次还没够一档")
+            slider.accumulateWheel(0, 5)
+            wait(30)
+            fuzzyCompare(preview, 0.51, 1e-6, "攒够 20px 走一档")
+        }
+        function test_touchpad_swipe_steps_several_but_commits_once() {
+            preview = 0.5
+            slider.accumulateWheel(0, 120)      // 一次两指滑动 ≈ 120px
+            wait(320)
+            fuzzyCompare(preview, 0.56, 1e-6, "触控板一划要走好几档，不能像是转不动")
+            compare(commits, 1, "一整段滑动仍然只提交一次")
+        }
+        function test_mouse_notch_is_still_one_step() {
+            preview = 0.5
+            slider.accumulateWheel(120, 0)      // 鼠标一格
+            wait(60)
+            fuzzyCompare(preview, 0.51, 1e-6)
+        }
+        function test_touchpad_path_on_color_ramp_and_kos_slider() {
+            rampPreview = 0.5
+            ramp.accumulateWheel(0, 20)
+            wait(30)
+            fuzzyCompare(rampPreview, 0.51, 1e-6, "配色滑块也认像素增量")
+            kos.value = 0.5
+            kos.accumulateWheel(0, 40)
+            wait(30)
+            fuzzyCompare(kos.value, 0.52, 1e-6, "KosSlider 一档 = stepSize")
+            compare(kosMoved, 2)
         }
     }
 }

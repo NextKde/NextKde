@@ -102,7 +102,12 @@ Item {
     // 走，否则触控板会刷出一串碎步。wheelStep 是一档走多少行程，默认 1%；设置页
     // 按真实单位传（每档一格整数 / 1% 之类），窄区间才不至于每档都被舍入掉。
     property real wheelStep: 0.01
-    property real _wheelAccum: 0
+    // 一次滚轮事件有两种量级：鼠标是"一格 = angleDelta 的 ±120"，触控板在 Wayland
+    // 上给的是像素增量（两指滚动一定带 pixelDelta）。两者差一个数量级，用同一个阈值
+    // 会让触控板"转不动"——要刷满 120 才走一档，看起来就是没反应。所以分开累积。
+    property real wheelPixelStep: 20
+    property real _angleAccum: 0
+    property real _pixelAccum: 0
     property bool _wheelPending: false
 
     // 收一档。基准取当前显示值（visualValue），与拖动同一条规矩：宿主把请求夹住
@@ -118,6 +123,24 @@ Item {
         _wheelPending = true
         previewChanged(next)
         wheelCommitTimer.restart()
+    }
+
+    // 喂进一次滚轮增量。pixelY 非 0 = 触控板（连续滚动），按像素攒；否则按鼠标的
+    // 一格（120）攒。攒够一档才走，余量留着给下一次。
+    function accumulateWheel(angleY, pixelY) {
+        if (pixelY !== 0) {
+            _pixelAccum += pixelY
+            while (Math.abs(_pixelAccum) >= wheelPixelStep) {
+                stepByWheel(_pixelAccum > 0 ? 1 : -1)
+                _pixelAccum -= (_pixelAccum > 0 ? wheelPixelStep : -wheelPixelStep)
+            }
+        } else if (angleY !== 0) {
+            _angleAccum += angleY
+            while (Math.abs(_angleAccum) >= 120) {
+                stepByWheel(_angleAccum > 0 ? 1 : -1)
+                _angleAccum -= (_angleAccum > 0 ? 120 : -120)
+            }
+        }
     }
 
     Timer {
@@ -138,15 +161,7 @@ Item {
         acceptedModifiers: Qt.ControlModifier
         enabled: root.enabled
         onWheel: function(wheel) {
-            const dy = wheel.angleDelta.y !== 0
-                ? wheel.angleDelta.y
-                : wheel.pixelDelta.y * 8
-            root._wheelAccum += dy
-            // 攒够一格（120）才走一档，余量留着，下一格接着用
-            while (Math.abs(root._wheelAccum) >= 120) {
-                root.stepByWheel(root._wheelAccum > 0 ? 1 : -1)
-                root._wheelAccum -= (root._wheelAccum > 0 ? 120 : -120)
-            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
             wheel.accepted = true
         }
     }

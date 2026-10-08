@@ -19,7 +19,10 @@ Slider {
     property real wheelStep: root.stepSize > 0
         ? root.stepSize
         : (root.to - root.from) / 100
-    property real _wheelAccum: 0
+    // 触控板给像素增量、鼠标给一格 120 的角度增量，分开累积（见 LiquidSlider）
+    property real wheelPixelStep: 20
+    property real _angleAccum: 0
+    property real _pixelAccum: 0
 
     function _stepByWheel(delta) {
         if (!enabled || delta === 0)
@@ -32,19 +35,27 @@ Slider {
         root.moved()
     }
 
+    function accumulateWheel(angleY, pixelY) {
+        if (pixelY !== 0) {
+            _pixelAccum += pixelY
+            while (Math.abs(_pixelAccum) >= wheelPixelStep) {
+                _stepByWheel(_pixelAccum > 0 ? 1 : -1)
+                _pixelAccum -= (_pixelAccum > 0 ? wheelPixelStep : -wheelPixelStep)
+            }
+        } else if (angleY !== 0) {
+            _angleAccum += angleY
+            while (Math.abs(_angleAccum) >= 120) {
+                _stepByWheel(_angleAccum > 0 ? 1 : -1)
+                _angleAccum -= (_angleAccum > 0 ? 120 : -120)
+            }
+        }
+    }
+
     WheelHandler {
         acceptedModifiers: Qt.ControlModifier
         enabled: root.enabled
         onWheel: function(wheel) {
-            const dy = wheel.angleDelta.y !== 0
-                ? wheel.angleDelta.y
-                : wheel.pixelDelta.y * 8
-            root._wheelAccum += dy
-            // 攒够一格（120）才走一档，余量留着，下一格接着用
-            while (Math.abs(root._wheelAccum) >= 120) {
-                root._stepByWheel(root._wheelAccum > 0 ? 1 : -1)
-                root._wheelAccum -= (root._wheelAccum > 0 ? 120 : -120)
-            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
             wheel.accepted = true
         }
     }
