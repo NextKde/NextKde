@@ -2393,7 +2393,8 @@ PopupWindow {
                         width: submenuWifiList.width
                         height: 42
                         radius: 10
-                        color: wifiRowMouse.containsMouse
+                        color: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                            && wifiRowMouse.containsMouse
                             ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)))
                             : "transparent"
                         Behavior on color { ColorAnimation { duration: 100 } }
@@ -2669,7 +2670,8 @@ PopupWindow {
                         width: submenuBtList.width
                         height: 42
                         radius: 10
-                        color: btRowMouse.containsMouse
+                        color: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                            && btRowMouse.containsMouse
                             ? (AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)))
                             : "transparent"
                         Behavior on color { ColorAnimation { duration: 100 } }

@@ -418,15 +418,38 @@ AnimatedPopupWindow {
             clip: true
             spacing: 2
             model: NetworkService.wifiEnabled ? NetworkService.nearbyWifi : []
-            delegate: Rectangle {
+            delegate: Item {
+                id: wifiRow
                 required property int index
                 required property var modelData
                 width: wifiList.width
                 height: 46
-                radius: 10
-                color: networkRowMouse.containsMouse
-                    ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                Behavior on color { ColorAnimation { duration: 110 } }
+
+                SelectionHighlight {
+                    objectName: "network-wifi-row-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 10
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: networkRowMouse.containsMouse
+                    pressed: networkRowMouse.pressed
+                    selected: Boolean(modelData.active)
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 10
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                        && (networkRowMouse.containsMouse || Boolean(modelData.active))
+                    color: networkRowMouse.containsMouse
+                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06))
+                        : (Boolean(modelData.active)
+                            ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                            : "transparent")
+                    Behavior on color { ColorAnimation { duration: 110 } }
+                }
+
                 Text {
                     visible: modelData.active
                     anchors { left: parent.left; leftMargin: 8; verticalCenter: parent.verticalCenter }
@@ -549,16 +572,50 @@ AnimatedPopupWindow {
                 height: 1
                 color: Qt.rgba(1, 1, 1, 0.16)
             }
-            Text {
-                anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                text: "无线局域网设置…"
-                color: panelSurface.foregroundColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.50)
-                font { pixelSize: 14; weight: Font.DemiBold }
+
+            Item {
+                anchors {
+                    fill: parent
+                    leftMargin: 8
+                    rightMargin: 8
+                    topMargin: 5
+                    bottomMargin: 5
+                }
+
+                SelectionHighlight {
+                    objectName: "network-settings-footer-highlight"
+                    anchors.fill: parent
+                    cornerRadius: 10
+                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                    hovered: settingsFooterMouse.containsMouse
+                    pressed: settingsFooterMouse.pressed
+                    dark: ThemeService.isDark
+                    fillStrength: 0.85
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 10
+                    visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
+                        && settingsFooterMouse.containsMouse
+                    color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.06)
+                    Behavior on color { ColorAnimation { duration: 110 } }
+                }
+
+                Text {
+                    anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
+                    text: "无线局域网设置…"
+                    color: panelSurface.foregroundColor
+                    style: Text.Outline
+                    styleColor: Qt.rgba(0, 0, 0, 0.50)
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
             }
+
             MouseArea {
+                id: settingsFooterMouse
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onClicked: panel.openWirelessSettings()
             }
