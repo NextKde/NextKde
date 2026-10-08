@@ -23,6 +23,8 @@ qt_standard_project_setup()
 
 set(kos_platform_sources
     src/daemon/main.cpp
+    src/daemon/KWinShortcutConflicts.cpp
+    src/daemon/KWinShortcutConflicts.h
     src/daemon/PlatformServer.cpp
     src/daemon/PlatformServer.h
     src/daemon/KeepAwakeLease.cpp
@@ -121,6 +123,25 @@ if(BUILD_TESTING)
             COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-keep-awake-test>
                 $<TARGET_FILE:kos-platform>)
         set_tests_properties(kos-platform.keep-awake PROPERTIES LABELS platform TIMEOUT 60)
+
+        # The KWin conflict repair talks to kglobalaccel over the session bus,
+        # so the test runs on a private bus under dbus-run-session with a fake
+        # daemon: it proves both the bytes on the wire (a(ssssssaiai)) and the
+        # exact repair call (release Meta+Tab, keep Alt+Tab, SetPresent set).
+        qt_add_executable(kos-kwin-shortcut-conflict-test
+            tests/test_shortcut_conflicts.cpp
+            src/daemon/KWinShortcutConflicts.cpp
+            src/daemon/KWinShortcutConflicts.h)
+        target_link_libraries(kos-kwin-shortcut-conflict-test PRIVATE
+            Qt6::Core
+            Qt6::DBus
+            Qt6::Gui)
+        add_test(NAME kos-platform.kwin-shortcut-conflict
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} --
+                $<TARGET_FILE:kos-kwin-shortcut-conflict-test>)
+        set_tests_properties(kos-platform.kwin-shortcut-conflict PROPERTIES
+            LABELS platform
+            TIMEOUT 30)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND DBUS_RUN_SESSION_EXECUTABLE)
         add_test(NAME kos-platform.startup
