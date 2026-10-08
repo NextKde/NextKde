@@ -539,6 +539,11 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    qt_add_executable(kos-legacy-glass-blur-test
+        kwin/glass-effect/tests/test_legacy_blur_region.cpp)
+    target_link_libraries(kos-legacy-glass-blur-test PRIVATE Qt6::Core Qt6::Gui)
+    add_test(NAME kos-glass.legacy-blur-region COMMAND kos-legacy-glass-blur-test)
+    set_tests_properties(kos-glass.legacy-blur-region PROPERTIES LABELS platform TIMEOUT 10)
 endif()
 if(KOS_BUILD_CALENDAR OR KOS_BUILD_TODO)
     find_package(KF6CalendarCore 6.0 REQUIRED)

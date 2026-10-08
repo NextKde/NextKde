@@ -11,6 +11,9 @@
 #include "blurconfig.h"
 #include "settings.h"
 #include "surfaceshapemanager.h"
+#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+#include "legacyblurregion.h"
+#endif
 
 #include "core/pixelgrid.h"
 #ifndef GLASS_X11
@@ -257,6 +260,11 @@ BlurEffect::BlurEffect()
             this, [this](SurfaceInterface *surface) {
         for (EffectWindow *window : effects->stackingOrder()) {
             if (window->surface() == surface) {
+#ifndef GLASS_KWIN_67
+                // The 6.6 fallback region follows shape creation, movement,
+                // disable and destruction, not just legacy blurChanged signals.
+                updateBlurRegion(window);
+#endif
                 // A blur override appearing, disappearing or changing level
                 // changes how far the repaint region has to expand, not just
                 // what is drawn this frame.
@@ -584,6 +592,21 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
             hasExplicitBlurRequest = true;
         }
     }
+
+#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+    if (!content.has_value() && isQuickshellWindow(w) && m_surfaceShapeManager && w->surface()) {
+        const auto region = legacySurfaceBlurRegion(std::nullopt,
+            m_surfaceShapeManager->shapesFor(w->surface()));
+        if (region.has_value()) {
+            BlurRegion fallback;
+            for (const QRect &rect : *region) {
+                fallback += Rect(rect);
+            }
+            content = fallback;
+            hasExplicitBlurRequest = true;
+        }
+    }
+#endif
 
     if (w->decorationHasAlpha() && decorationSupportsBlurBehind(w)) {
         frame = decorationBlurRegion(w);
