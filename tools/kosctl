@@ -1307,9 +1307,13 @@ install_kwin_plugins() {
     # reboot has no graphical session at all. Grant group/other read and
     # directory traverse explicitly instead of only removing write.
     find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
-    find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+r {} +
+    find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+rX {} +
     sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    # Belt: the prefix itself is what a bad umask breaks first, and restoring
+    # its 0755 here is exactly the manual recovery -- cheap, and it makes the
+    # system-wide lockout impossible even if a future staging step slips.
+    sudo chmod 755 "$kwin_system_prefix"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
