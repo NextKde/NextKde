@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import Quickshell
@@ -3090,52 +3091,70 @@ PopupWindow {
                     leftMargin: 14
                     rightMargin: 14
                 }
-                height: 52
+                height: 18 + audioOutputList.height + 28
 
                 GlassText {
-                    anchors { left: parent.left; top: parent.top }
-                    text: "输出设备"
+                    text: qsTr("输出设备")
                     color: ThemeService.foregroundColor
                     opacity: 0.60
-                    font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                    font.pixelSize: 10
                 }
-
-                Rectangle {
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        topMargin: 18
-                        bottom: parent.bottom
-                    }
-                    radius: 10
-                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05))
-                    border.width: 1
-                    border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(0, 0, 0, 0.08))
-
-                    Row {
-                        anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                        spacing: 8
-
-                        GlassText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "✓"
-                            color: "#0a84ff"
-                            font { pixelSize: 12; weight: Font.Bold }
-                        }
-
-                        GlassText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "🔊"
-                            font.pixelSize: 12
-                        }
-
-                        GlassText {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "默认音频输出设备"
+                ListView {
+                    id: audioOutputList
+                    anchors { top: parent.top; topMargin: 18; left: parent.left; right: parent.right }
+                    // Every device stays visible up to three rows; past that the
+                    // list scrolls under an as-needed scrollbar instead of growing
+                    // into the application-volume section below.
+                    height: Math.min(contentHeight, 3 * 30 + 2 * spacing)
+                    clip: true
+                    spacing: 3
+                    model: ControlCenterService.audioOutputs
+                    ScrollBar.vertical: ScrollBar {
+                        policy: ScrollBar.AsNeeded
+                        contentItem: Rectangle {
+                            implicitWidth: 3
+                            radius: 1.5
                             color: ThemeService.foregroundColor
-                            font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
+                            opacity: 0.35
                         }
+                    }
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: ListView.view.width
+                        height: 30
+                        radius: 8
+                        color: modelData.isDefault ? Qt.rgba(0.1, 0.5, 1, 0.20) : Qt.rgba(0.5, 0.5, 0.5, 0.10)
+                        GlassText {
+                            anchors { fill: parent; leftMargin: 10; rightMargin: 10 }
+                            verticalAlignment: Text.AlignVCenter
+                            text: (modelData.isDefault ? "✓  " : "    ") + modelData.description
+                            elide: Text.ElideRight
+                            color: ThemeService.foregroundColor
+                            font.pixelSize: 11
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !ControlCenterService.audioOutputChangeInProgress
+                                && !ControlCenterService.audioOutputsRefreshInProgress
+                            cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: ControlCenterService.setAudioOutput(modelData.name)
+                        }
+                    }
+                }
+                GlassText {
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                    height: 24
+                    text: ControlCenterService.audioOutputChangeInProgress ? qsTr("正在切换…")
+                        : ControlCenterService.audioOutputError || (ControlCenterService.audioOutputs.length
+                            ? "" : ControlCenterService.audioOutputsRefreshInProgress ? qsTr("正在读取…") : qsTr("没有可用输出设备"))
+                    color: ThemeService.foregroundColor
+                    elide: Text.ElideRight
+                    font.pixelSize: 10
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: ControlCenterService.audioOutputError.length > 0
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: ControlCenterService.retryAudioOutputs()
                     }
                 }
             }
