@@ -289,6 +289,13 @@ AnimatedPopupWindow {
         ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
         material: "thick"
         adaptiveDarkScrim: true
+            // The bar popups all carry the control-center card's scrim
+            // posture. Without it these three were the only bar surfaces whose
+            // glass never darkened over a bright backdrop, so their white labels
+            // sat on raw glass while every neighbouring panel was scrimmed --
+            // the two tones were visibly different side by side.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: "transparent"
     }
 
     Column {
@@ -377,6 +384,13 @@ AnimatedPopupWindow {
             ambientSecondary: WallpaperColorSource.secondary
             ambientStrength: 0.72
             surfaceOpacity: 0.94
+            // The bar popups all carry the control-center card's scrim
+            // posture. Without it these three were the only bar surfaces whose
+            // glass never darkened over a bright backdrop, so their white labels
+            // sat on raw glass while every neighbouring panel was scrimmed --
+            // the two tones were visibly different side by side.
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop
+            scrimLevel: "transparent"
             materialDepth: 1.8
             Column {
                 anchors {
