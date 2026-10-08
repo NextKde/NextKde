@@ -51,10 +51,17 @@ Slider {
         }
     }
 
-    WheelHandler {
-        acceptedModifiers: Qt.ControlModifier
+    // 滚轮挂在 MouseArea 自己的 onWheel 上（独立 WheelHandler 在这一层拿不到，
+    // 见 LiquidSlider）。acceptedButtons: NoButton —— 只要滚轮，不抢 Slider 的拖动。
+    MouseArea {
+        anchors.fill: parent
+        acceptedButtons: Qt.NoButton
         enabled: root.enabled
         onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
             root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
             wheel.accepted = true
         }

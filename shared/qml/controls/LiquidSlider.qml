@@ -156,17 +156,6 @@ Item {
         }
     }
 
-    // 只认 Ctrl（触控板两指滚动 + Ctrl 走的也是这条路），其余滚轮一律不接，
-    // 留给所在面板滚动。挂在控件自己身上，盖在 MouseArea 上，才拿得到滚轮。
-    WheelHandler {
-        acceptedModifiers: Qt.ControlModifier
-        enabled: root.enabled
-        onWheel: function(wheel) {
-            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
-            wheel.accepted = true
-        }
-    }
-
     opacity: enabled ? 1.0 : 0.45
 
     function positionForPointer(pointerX) {
@@ -490,6 +479,19 @@ Item {
         enabled: root.enabled
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+
+        // 滚轮挂在 MouseArea 自己的 onWheel 上：MouseArea 盖满整个控件，独立的
+        // WheelHandler 拿不到滚轮（实测滚轮完全收不到，见其提交说明），在这一层才
+        // 收得到。只认 Ctrl（触控板两指滚动 + Ctrl 走的也是这条路）；不按 Ctrl 就
+        // 放行，让所在面板照旧滚动。
+        onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
+            wheel.accepted = true
+        }
 
         property real startX: 0
         property real startValue: 0

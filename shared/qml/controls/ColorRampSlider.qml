@@ -73,15 +73,6 @@ Item {
         }
     }
 
-    WheelHandler {
-        acceptedModifiers: Qt.ControlModifier
-        enabled: root.enabled
-        onWheel: function(wheel) {
-            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
-            wheel.accepted = true
-        }
-    }
-
     function rampColor(index) {
         return rampColors.length > index ? rampColors[index] : "transparent"
     }
@@ -142,6 +133,17 @@ Item {
         anchors.fill: parent
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
+
+        // 滚轮挂在 MouseArea 自己的 onWheel 上（独立 WheelHandler 在这层拿不到，
+        // 见 LiquidSlider）。只认 Ctrl，不按 Ctrl 就放行给所在面板。
+        onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
+            wheel.accepted = true
+        }
 
         onPressed: function(mouse) {
             // 拖动接管：取消还没落下的那次步进提交
