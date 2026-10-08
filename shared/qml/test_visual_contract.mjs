@@ -599,6 +599,7 @@ for (const [path, desc] of [
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search results"],
     ["../../shell/desktop/modules/dock/DockWindowPreview.qml", "Dock preview cards"],
     ["../../shell/desktop/modules/notifications/NotificationWindow.qml", "Notification action buttons"],
+    ["../../shell/desktop/modules/bar/NetworkPanel.qml", "Network panel Wi-Fi list and settings"],
 ]) {
     assert.match(read(path), /SelectionHighlight\s*\{/,
         `${desc} integrates SelectionHighlight glass selection`);
