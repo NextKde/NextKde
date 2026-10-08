@@ -125,6 +125,11 @@ if(BUILD_TESTING)
         # Destination-shape contract for file.copy: a path that already exists
         # must be replaceable, and the shapes that must stay rejected (a
         # symlink, a missing component under a file) must keep failing.
+        add_test(NAME kos-platform.media-feedback
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_media_feedback.py
+                $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.media-feedback PROPERTIES LABELS platform TIMEOUT 60)
         add_test(NAME kos-platform.file-copy
             COMMAND ${KOS_PYTHON_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_file_copy.py

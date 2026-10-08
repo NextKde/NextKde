@@ -5,6 +5,8 @@
 #endif
 
 #include <QObject>
+#include <KService>
+#include <QUrl>
 #include <QDBusObjectPath>
 #include <QHash>
 #include <QJsonObject>
@@ -71,6 +73,9 @@ private:
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},
                     int timeoutMs = -1,
                     const QString &cacheKey = QString(), int cacheTtlMs = 0);
+    void launchDesktopService(QLocalSocket *socket, const QJsonObject &request,
+                              const KService::Ptr &service, const QList<QUrl> &urls);
+    void runAudioOutputs(QLocalSocket *socket, const QJsonObject &request);
     void applySystemTheme(QLocalSocket *socket, const QJsonObject &request,
                           bool dark);
     void runNetworkRefresh(QLocalSocket *socket, const QJsonObject &request);

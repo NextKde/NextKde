@@ -3340,6 +3340,72 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
     return false;
 }
 
+void PlatformServer::runAudioOutputs(QLocalSocket *socket, const QJsonObject &request)
+{
+    // Cached like every other audio read: the resident `pactl subscribe`
+    // watcher invalidates audio.* on each event, so the control centre's
+    // periodic poll is a cache hit unless a device actually changed.
+    if (serveCachedReply(socket, request, QStringLiteral("audio.outputs"))
+        || queueIfInFlight(QStringLiteral("audio.outputs"), socket, request))
+        return;
+    const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+    if (pactl.isEmpty()) {
+        completeInFlight(QStringLiteral("audio.outputs"), false, {},
+                         QStringLiteral("audio-unavailable"),
+                         QStringLiteral("音频设备服务不可用（需要 pactl）"), true, kAudioCacheTtlMs);
+        return;
+    }
+    auto *process = new QProcess(this);
+    process->setProgram(pactl);
+    process->setArguments({QStringLiteral("--format=json"), QStringLiteral("info")});
+    connect(process, &QProcess::errorOccurred, this,
+            [this, process](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) return;
+        completeInFlight(QStringLiteral("audio.outputs"), false, {},
+                         QStringLiteral("audio-unavailable"),
+                         QStringLiteral("无法读取音频设备"), true, kAudioCacheTtlMs);
+        process->deleteLater();
+    });
+    connect(process, &QProcess::finished, this,
+            [this, process, first = true, defaultName = QString()]
+            (int code, QProcess::ExitStatus status) mutable {
+        QJsonParseError error;
+        const auto document = QJsonDocument::fromJson(process->readAllStandardOutput(), &error);
+        if (code != 0 || status != QProcess::NormalExit || error.error != QJsonParseError::NoError
+            || (first ? !document.isObject() : !document.isArray())) {
+            completeInFlight(QStringLiteral("audio.outputs"), false, {},
+                             QStringLiteral("audio-unavailable"),
+                             QStringLiteral("无法读取音频设备，请重试"), true, kAudioCacheTtlMs);
+            process->deleteLater();
+            return;
+        }
+        if (first) {
+            defaultName = document.object().value(QStringLiteral("default_sink_name")).toString();
+            first = false;
+            process->setArguments({QStringLiteral("--format=json"), QStringLiteral("list"), QStringLiteral("sinks")});
+            process->start();
+            return;
+        }
+        QJsonArray outputs;
+        for (const auto &value : document.array()) {
+            const auto sink = value.toObject();
+            const QString name = sink.value(QStringLiteral("name")).toString();
+            if (name.isEmpty()) continue;
+            const QString description = sink.value(QStringLiteral("description")).toString();
+            outputs.append(QJsonObject{{QStringLiteral("name"), name},
+                {QStringLiteral("description"), description.isEmpty() ? name : description},
+                {QStringLiteral("isDefault"), name == defaultName}});
+        }
+        completeInFlight(QStringLiteral("audio.outputs"), true,
+                {{QStringLiteral("outputs"), outputs}, {QStringLiteral("available"), true}},
+                {}, {}, true, kAudioCacheTtlMs);
+        process->deleteLater();
+    });
+    // One watchdog bounds the complete two-command operation.
+    armProcessWatchdog(process, 10000);
+    process->start();
+}
+
 bool PlatformServer::handleApplication(QLocalSocket *socket,
                                        const QJsonObject &request)
 {
@@ -3390,6 +3456,18 @@ bool PlatformServer::handleApplication(QLocalSocket *socket,
         urls.append(url);
     }
 
+    launchDesktopService(socket, request, service, urls);
+    return true;
+}
+
+void PlatformServer::launchDesktopService(QLocalSocket *socket, const QJsonObject &request,
+                                          const KService::Ptr &service, const QList<QUrl> &urls)
+{
+    if (!service || !service->isApplication()) {
+        respond(socket, request, false, {}, QStringLiteral("invalid-desktop-file"),
+                QStringLiteral("应用启动器无效"), false);
+        return;
+    }
     auto *job = new KIO::ApplicationLauncherJob(service, this);
     job->setUrls(urls);
     const QPointer<QLocalSocket> guardedSocket(socket);
@@ -3411,7 +3489,6 @@ bool PlatformServer::handleApplication(QLocalSocket *socket,
                             {QStringLiteral("pids"), pids}});
     });
     job->start();
-    return true;
 }
 
 bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject &request)
@@ -3495,10 +3572,9 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
             respond(socket, request, false, {}, QStringLiteral("invalid-path"), QStringLiteral("文件路径无效"), false);
             return true;
         }
-        QStringList args{QStringLiteral("launch"), desktop};
-        if (!target.isEmpty())
-            args.append(target);
-        runCommand(socket, request, QStringLiteral("gio"), args, {}, 30000);
+        const KService::Ptr service(new KService(desktop));
+        launchDesktopService(socket, request, service,
+                             target.isEmpty() ? QList<QUrl>{} : QList<QUrl>{QUrl::fromLocalFile(target)});
         return true;
     }
     if (op == QStringLiteral("file.trash")) {
@@ -3776,15 +3852,13 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                 return;
             }
             const QString desktop = resolveDesktopFile(applicationId);
-            if (desktop.isEmpty()
-                || !QProcess::startDetached(QStringLiteral("gio"),
-                                            {QStringLiteral("launch"), desktop, path})) {
+            if (desktop.isEmpty()) {
                 respond(guardedSocket.data(), request, false, {}, QStringLiteral("open-with-failed"),
                         QStringLiteral("无法启动选中的应用"), true);
                 return;
             }
-            respond(guardedSocket.data(), request, true,
-                    QJsonObject{{QStringLiteral("desktopId"), applicationId}});
+            launchDesktopService(guardedSocket.data(), request, KService::Ptr(new KService(desktop)),
+                                 {QUrl::fromLocalFile(path)});
         });
         return true;
     }
@@ -4389,6 +4463,27 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
     if (op == QStringLiteral("shortcuts.uninstall")) {
         removeShortcuts();
         respond(socket, request, true, QJsonObject{{QStringLiteral("uninstalled"), true}});
+        return true;
+    }
+    if (op == QStringLiteral("audio.outputs")) {
+        runAudioOutputs(socket, request);
+        return true;
+    }
+    if (op == QStringLiteral("audio.output.set-default")) {
+        const QString name = payload.value(QStringLiteral("name")).toString();
+        static const QRegularExpression validName(QStringLiteral("^[A-Za-z0-9_][A-Za-z0-9_.:-]{0,511}$"));
+        if (!validName.match(name).hasMatch()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-audio-output"),
+                    QStringLiteral("音频输出设备无效"), false);
+            return true;
+        }
+        invalidateReplies(QStringLiteral("audio."));
+        runCommand(socket, request, QStringLiteral("pactl"),
+                   {QStringLiteral("set-default-sink"), name},
+                   [this](const QByteArray &output, int code) {
+            invalidateReplies(QStringLiteral("audio."));
+            return parseOutput(output, code);
+        }, 10000);
         return true;
     }
     if (op == QStringLiteral("audio.get")) {
