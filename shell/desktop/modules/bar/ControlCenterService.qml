@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
@@ -40,7 +41,7 @@ QtObject {
     property bool sessionActionInProgress: false
     property alias logoutInProgress: service.sessionActionInProgress
     property string lastSessionError: ""
-    property string currentUserName: Quickshell.env("USER") || "用户"
+    property string currentUserName: Quickshell.env("USER") || I18n.tr("User")
     property bool canSuspend: true
     property bool canHibernate: false
     property bool themeChangeInProgress: false
@@ -151,7 +152,8 @@ QtObject {
                 keepAwakeEnabled = !!response.result?.enabled
                 keepAwakeAvailable = !!response.result?.available
             } else {
-                keepAwakeError = response?.error?.message || "保持唤醒切换失败"
+                keepAwakeError = response?.error?.message
+                    || I18n.tr("Failed to toggle Keep Awake")
                 refreshKeepAwake()
             }
         })
@@ -185,7 +187,8 @@ QtObject {
                 _audioOutputReadError = ""
             } else {
                 audioOutputs = []
-                _audioOutputReadError = response?.error?.message || "无法读取输出设备"
+                _audioOutputReadError = response?.error?.message
+                    || I18n.tr("Could not read output devices")
             }
         })
     }
@@ -203,7 +206,8 @@ QtObject {
         PlatformClient.request("audio.output.set-default", { name: name }, function(response) {
             audioOutputChangeInProgress = false
             if (!response?.ok)
-                _audioOutputChangeError = response?.error?.message || "切换输出设备失败"
+                _audioOutputChangeError = response?.error?.message
+                    || I18n.tr("Failed to switch output device")
             refreshAudioOutputs()
             refresh()
         })
@@ -396,7 +400,7 @@ QtObject {
         PlatformClient.request("screenshot.capture", {}, function(response) {
             screenshotInProgress = false
             if (!response?.ok)
-                lastSessionError = response?.error?.message || "截图失败"
+                lastSessionError = response?.error?.message || I18n.tr("Screenshot failed")
         })
         return true
     }
@@ -425,13 +429,13 @@ QtObject {
     // overlay is just a window -- a very large, very convincing one, with a
     // real PAM conversation behind it, that the compositor will happily route
     // global shortcuts past and drop when the process dies.
-    function lockSession() { return _sessionAction("session.lock", "锁屏失败") }
-    function suspendSystem() { return _sessionAction("session.suspend", "睡眠操作失败") }
-    function hibernateSystem() { return _sessionAction("session.hibernate", "休眠操作失败") }
-    function rebootSystem() { return _sessionAction("session.reboot", "重启操作失败") }
-    function powerOffSystem() { return _sessionAction("session.poweroff", "关机操作失败") }
-    function switchUser() { return _sessionAction("session.switch-user", "切换用户失败") }
-    function logoutCurrentSession() { return _sessionAction("session.logout", "注销失败") }
+    function lockSession() { return _sessionAction("session.lock", I18n.tr("Failed to lock the screen")) }
+    function suspendSystem() { return _sessionAction("session.suspend", I18n.tr("Failed to suspend")) }
+    function hibernateSystem() { return _sessionAction("session.hibernate", I18n.tr("Failed to hibernate")) }
+    function rebootSystem() { return _sessionAction("session.reboot", I18n.tr("Failed to reboot")) }
+    function powerOffSystem() { return _sessionAction("session.poweroff", I18n.tr("Failed to power off")) }
+    function switchUser() { return _sessionAction("session.switch-user", I18n.tr("Failed to switch user")) }
+    function logoutCurrentSession() { return _sessionAction("session.logout", I18n.tr("Failed to log out")) }
 
     function toggleDarkMode() {
         if (themeChangeInProgress)
@@ -440,7 +444,8 @@ QtObject {
         PlatformClient.request("theme.toggle", {}, function(response) {
             themeChangeInProgress = false
             if (!response?.ok)
-                lastSessionError = response?.error?.message || "主题切换失败"
+                lastSessionError = response?.error?.message
+                    || I18n.tr("Failed to toggle theme")
         })
         return true
     }
@@ -467,7 +472,8 @@ QtObject {
             } else {
                 nightLightEnabled = previousEnabled
                 nightLightActive = previousActive
-                const message = response?.error?.message || "夜灯切换失败"
+                const message = response?.error?.message
+                    || I18n.tr("Failed to toggle Night Light")
                 console.warn("[ControlCenter] nightlight.toggle failed: " + message)
                 lastSessionError = message
             }
@@ -506,7 +512,7 @@ QtObject {
                 audioOutputsRefreshInProgress = false
                 audioOutputChangeInProgress = false
                 audioOutputs = []
-                _audioOutputReadError = "音频服务已断开"
+                _audioOutputReadError = I18n.tr("Audio service disconnected")
                 audioApplicationsRefreshInProgress = false
                 volumeChangeInProgress = false
                 brightnessChangeInProgress = false

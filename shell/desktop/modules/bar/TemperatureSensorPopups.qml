@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -119,8 +120,8 @@ Item {
             Text {
                 id: tooltipText
                 anchors.centerIn: parent
-                text: "CPU 平均 " + root.currentC + "°C · 5 分钟最高 "
-                    + root.maximum5MinuteC + "°C"
+                text: I18n.tr("CPU avg %1°C · 5 min max %2°C")
+                    .arg(root.currentC).arg(root.maximum5MinuteC)
                 color: ThemeService.foregroundColor
                 font {
                     family: "Noto Sans CJK SC"
@@ -192,13 +193,14 @@ Item {
                         spacing: 2
 
                         GlassText {
-                            text: "温度传感器"
+                            text: I18n.tr("Temperature Sensors")
                             color: ThemeService.foregroundColor
                             font { family: "Noto Sans CJK SC"; pixelSize: 16; weight: Font.DemiBold }
                         }
 
                         GlassText {
-                            text: "每 10 秒更新 · " + MetricsService.sensors.length + " 个读数"
+                            text: I18n.tr("Updates every 10 s · %1 readings")
+                                .arg(MetricsService.sensors.length)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
                             font { family: "Noto Sans CJK SC"; pixelSize: 11 }
                         }
@@ -233,8 +235,8 @@ Item {
                     spacing: 8
                     Repeater {
                         model: [
-                            { label: "平均 CPU", value: root.currentC + "°C" },
-                            { label: "5 分钟最高", value: root.maximum5MinuteC + "°C" }
+                            { label: I18n.tr("Avg CPU"), value: root.currentC + "°C" },
+                            { label: I18n.tr("5 min max"), value: root.maximum5MinuteC + "°C" }
                         ]
                         delegate: Rectangle {
                             width: (parent.width - 8) / 2
@@ -256,8 +258,8 @@ Item {
                     spacing: 8
                     Repeater {
                         model: [
-                            { label: "下行", value: NetworkService.formatRate(NetworkService.downloadBytesPerSecond) },
-                            { label: "上行", value: NetworkService.formatRate(NetworkService.uploadBytesPerSecond) }
+                            { label: I18n.tr("Down"), value: NetworkService.formatRate(NetworkService.downloadBytesPerSecond) },
+                            { label: I18n.tr("Up"), value: NetworkService.formatRate(NetworkService.uploadBytesPerSecond) }
                         ]
                         delegate: Rectangle {
                             width: (parent.width - 8) / 2
@@ -280,14 +282,14 @@ Item {
 
                     UsageRing {
                         width: (parent.width - 8) / 2
-                        label: "内存"
+                        label: I18n.tr("Memory")
                         detail: root.formatBytes(MetricsService.memoryUsedBytes) + " / " + root.formatBytes(MetricsService.memoryTotalBytes)
                         value: root.memoryUsage
                         accentColor: "#5e5ce6"
                     }
                     UsageRing {
                         width: (parent.width - 8) / 2
-                        label: "磁盘 /"
+                        label: I18n.tr("Disk /")
                         detail: root.formatBytes(MetricsService.diskUsedBytes) + " / " + root.formatBytes(MetricsService.diskTotalBytes)
                         value: root.diskUsage
                         accentColor: "#30d158"
@@ -302,7 +304,8 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
-                            text: "内存趋势 · 最近 " + MetricsService.memoryHistory.length * 10 + " 秒"
+                            text: I18n.tr("Memory trend · last %1 s")
+                                .arg(MetricsService.memoryHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
                             font { family: "Noto Sans CJK SC"; pixelSize: 10 }
                         }
@@ -312,7 +315,9 @@ Item {
                         width: (parent.width - 12) / 2
                         spacing: 3
                         GlassText {
-                            text: "CPU 趋势 · " + Math.round(MetricsService.cpuUsage * 100) + "% · 最近 " + MetricsService.cpuHistory.length * 10 + " 秒"
+                            text: I18n.tr("CPU trend · %1% · last %2 s")
+                                .arg(Math.round(MetricsService.cpuUsage * 100))
+                                .arg(MetricsService.cpuHistory.length * 10)
                             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
                             font { family: "Noto Sans CJK SC"; pixelSize: 10 }
                         }
@@ -324,7 +329,9 @@ Item {
                     width: parent.width
                     spacing: 3
                     GlassText {
-                        text: "CPU 平均频率 · " + Math.round(MetricsService.cpuFrequencyMhz) + " MHz · 最近 " + MetricsService.frequencyHistory.length * 10 + " 秒"
+                        text: I18n.tr("Avg CPU frequency · %1 MHz · last %2 s")
+                            .arg(Math.round(MetricsService.cpuFrequencyMhz))
+                            .arg(MetricsService.frequencyHistory.length * 10)
                         color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
                         font { family: "Noto Sans CJK SC"; pixelSize: 10 }
                     }
@@ -337,7 +344,7 @@ Item {
                 }
 
                 GlassText {
-                    text: "实时读数"
+                    text: I18n.tr("Live readings")
                     color: ThemeService.foregroundColor
                     font { family: "Noto Sans CJK SC"; pixelSize: 12; weight: Font.DemiBold }
                 }

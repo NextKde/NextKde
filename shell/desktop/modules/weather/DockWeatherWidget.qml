@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -197,7 +198,7 @@ Item {
             spacing: 2
             Text {
                 width: parent.width
-                text: "体感 " + WeatherService.apparentTemperature
+                text: I18n.tr("Feels like %1").arg(WeatherService.apparentTemperature)
                 color: ThemeService.foregroundColor
                 opacity: 0.88
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -205,7 +206,7 @@ Item {
             }
             Text {
                 width: parent.width
-                text: "湿度 " + WeatherService.humidity
+                text: I18n.tr("Humidity %1").arg(WeatherService.humidity)
                 color: ThemeService.foregroundColor
                 opacity: 0.74
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -237,7 +238,7 @@ Item {
             }
         }
         Text {
-            text: "· 体感 " + WeatherService.apparentTemperature
+            text: I18n.tr("· Feels like %1").arg(WeatherService.apparentTemperature)
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter

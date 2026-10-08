@@ -11,6 +11,7 @@ import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
 import qs.desktop.modules.platform
 import qs.desktop.modules.stage
+import "../../../shared/qml/i18n"
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 
@@ -711,7 +712,8 @@ PopupWindow {
             }
             GlassText {
                 width: parent.width
-                text: NetworkService.wifiEnabled ? (NetworkService.ssid || "未连接") : "已关闭"
+                text: NetworkService.wifiEnabled
+                    ? (NetworkService.ssid || I18n.tr("Not connected")) : I18n.tr("Off")
                 elide: Text.ElideRight
                 color: wifiCard.materialSecondaryForegroundColor
                 opacity: 1.0
@@ -872,7 +874,8 @@ PopupWindow {
             }
             GlassText {
                 width: parent.width
-                text: ControlCenterService.bluetoothPowered ? "已开启" : "已关闭"
+                text: ControlCenterService.bluetoothPowered
+                    ? I18n.tr("On") : I18n.tr("Off")
                 color: bluetoothCard.materialSecondaryForegroundColor
                 opacity: 1.0
                 font { pixelSize: 10; family: "Noto Sans CJK SC" }
@@ -951,14 +954,15 @@ PopupWindow {
             spacing: 2
             GlassText {
                 width: parent.width
-                text: panel.player?.trackTitle || "未在播放"
+                text: panel.player?.trackTitle || I18n.tr("Not playing")
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
                 font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
             GlassText {
                 width: parent.width
-                text: DockMprisService.loading ? DockMprisService.playbackStatus : panel.player?.trackArtist || "媒体控制"
+                text: DockMprisService.loading ? DockMprisService.playbackStatus
+                    : panel.player?.trackArtist || I18n.tr("Media controls")
                 elide: Text.ElideRight
                 color: ThemeService.foregroundColor
                 opacity: 0.70
@@ -973,7 +977,7 @@ PopupWindow {
             TransportButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-previous"
-                text: qsTr("上一首")
+                text: I18n.tr("Previous")
                 enabled: panel.player?.canGoPrevious ?? false
                 onClicked: DockMprisService.previous()
             }
@@ -981,7 +985,7 @@ PopupWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 primary: true
                 iconName: panel.player?.isPlaying ? "media-pause" : "media-play"
-                text: panel.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                text: panel.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 busy: DockMprisService.loading
                 enabled: panel.player?.canTogglePlaying ?? false
                 onClicked: DockMprisService.togglePlayPause()
@@ -989,7 +993,7 @@ PopupWindow {
             TransportButton {
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-next"
-                text: qsTr("下一首")
+                text: I18n.tr("Next")
                 enabled: panel.player?.canGoNext ?? false
                 onClicked: DockMprisService.next()
             }
@@ -1281,14 +1285,14 @@ PopupWindow {
 
         GlassText {
             anchors { left: stageDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
-            text: "台前调度"
+            text: I18n.tr("Stage scheduling")
             color: ThemeService.foregroundColor
             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
         }
 
         GlassText {
             anchors { left: stageDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
-            text: StageModeService.enabled ? "已开启" : "已关闭"
+            text: StageModeService.enabled ? I18n.tr("On") : I18n.tr("Off")
             color: StageModeService.enabled
                 ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
             opacity: StageModeService.enabled ? 0.9 : 0.5
@@ -1350,17 +1354,17 @@ PopupWindow {
 
         GlassText {
             anchors { left: keepAwakeDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
-            text: "保持唤醒"
+            text: I18n.tr("Keep Awake")
             color: ThemeService.foregroundColor
             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
         }
 
         GlassText {
             anchors { left: keepAwakeDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
-            text: ControlCenterService.keepAwakeChangeInProgress ? "切换中…"
-                : !ControlCenterService.keepAwakeAvailable ? "不可用"
-                : ControlCenterService.keepAwakeError ? "切换失败"
-                : ControlCenterService.keepAwakeEnabled ? "已开启" : "已关闭"
+            text: ControlCenterService.keepAwakeChangeInProgress ? I18n.tr("Switching…")
+                : !ControlCenterService.keepAwakeAvailable ? I18n.tr("Unavailable")
+                : ControlCenterService.keepAwakeError ? I18n.tr("Switch failed")
+                : ControlCenterService.keepAwakeEnabled ? I18n.tr("On") : I18n.tr("Off")
             color: ControlCenterService.keepAwakeEnabled
                 ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
             opacity: ControlCenterService.keepAwakeEnabled ? 0.9 : 0.5
@@ -1370,10 +1374,10 @@ PopupWindow {
         ToolTip.visible: keepAwakePointer.containsMouse
         ToolTip.delay: 500
         ToolTip.text: ControlCenterService.keepAwakeError
-            || (!ControlCenterService.keepAwakeAvailable ? "需要 KDE 电源管理和锁屏服务"
-                : "阻止自动熄屏、锁屏和睡眠；关闭后恢复省电设置")
-        Accessible.name: "保持唤醒"
-        Accessible.description: ControlCenterService.keepAwakeEnabled ? "已开启" : "已关闭"
+            || (!ControlCenterService.keepAwakeAvailable ? I18n.tr("Requires KDE power management and lock screen services")
+                : I18n.tr("Blocks automatic sleep, screen lock and suspend; turning it off restores power saving"))
+        Accessible.name: I18n.tr("Keep Awake")
+        Accessible.description: ControlCenterService.keepAwakeEnabled ? I18n.tr("On") : I18n.tr("Off")
         Accessible.role: Accessible.CheckBox
         Accessible.checkable: true
         Accessible.checked: ControlCenterService.keepAwakeEnabled
@@ -1411,14 +1415,15 @@ PopupWindow {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             spacing: 4
             GlassText {
-                text: "显示亮度"
+                text: I18n.tr("Display Brightness")
                 color: ThemeService.foregroundColor
                 font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
             }
         }
         GlassText {
             anchors { right: parent.right; top: parent.top; rightMargin: 30; topMargin: 8 }
-            text: ControlCenterService.brightnessAvailable ? Math.round(panel.brightnessPreview) + "%" : "无亮度设备"
+            text: ControlCenterService.brightnessAvailable
+                ? Math.round(panel.brightnessPreview) + "%" : I18n.tr("No brightness device")
             color: ThemeService.foregroundColor
             opacity: 0.50
             font { pixelSize: 9; family: "Noto Sans CJK SC" }
@@ -1486,7 +1491,7 @@ PopupWindow {
             anchors { left: parent.left; top: parent.top; leftMargin: 14; topMargin: 8 }
             spacing: 4
             GlassText {
-                text: "声音"
+                text: I18n.tr("Sound")
                 color: ThemeService.foregroundColor
                 font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
             }
@@ -1790,12 +1795,12 @@ PopupWindow {
 
                 Repeater {
                     model: [
-                        { icon: "lock", label: "锁定屏幕", danger: false, action: "lock" },
-                        { icon: "suspend", label: "睡眠", danger: false, action: "suspend" },
-                        { icon: "switchUser", label: "切换用户", danger: false, action: "switch" },
-                        { icon: "logout", label: "注销", danger: true, action: "logout" },
-                        { icon: "reboot", label: "重新启动", danger: true, action: "reboot" },
-                        { icon: "powerOff", label: "关机", danger: true, action: "poweroff" }
+                        { icon: "lock", label: I18n.tr("Lock Screen"), danger: false, action: "lock" },
+                        { icon: "suspend", label: I18n.tr("Sleep"), danger: false, action: "suspend" },
+                        { icon: "switchUser", label: I18n.tr("Switch User"), danger: false, action: "switch" },
+                        { icon: "logout", label: I18n.tr("Log Out"), danger: true, action: "logout" },
+                        { icon: "reboot", label: I18n.tr("Restart"), danger: true, action: "reboot" },
+                        { icon: "powerOff", label: I18n.tr("Power Off"), danger: true, action: "poweroff" }
                     ]
 
                     delegate: Item {
@@ -1942,8 +1947,8 @@ PopupWindow {
                     right: parent.right
                 }
                 horizontalAlignment: Text.AlignHCenter
-                text: panel.confirmActionLabel === "poweroff" ? "确定要关机吗？"
-                    : (panel.confirmActionLabel === "reboot" ? "确定要重启吗？" : "确定要注销吗？")
+                text: panel.confirmActionLabel === "poweroff" ? I18n.tr("Power off now?")
+                    : (panel.confirmActionLabel === "reboot" ? I18n.tr("Restart now?") : I18n.tr("Log out now?"))
                 color: sessionConfirm.contentForegroundColor
                 font { pixelSize: 16; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -1956,7 +1961,7 @@ PopupWindow {
                     right: parent.right
                 }
                 horizontalAlignment: Text.AlignHCenter
-                text: "未保存的工作可能会丢失"
+                text: I18n.tr("Unsaved work may be lost")
                 color: sessionConfirm.contentSecondaryColor
                 font { pixelSize: 12; family: "Noto Sans CJK SC" }
             }
@@ -1977,7 +1982,7 @@ PopupWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: "取消"
+                        text: I18n.tr("Cancel")
                         color: sessionConfirm.contentForegroundColor
                         font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
@@ -1999,8 +2004,8 @@ PopupWindow {
 
                     Text {
                         anchors.centerIn: parent
-                        text: panel.confirmActionLabel === "poweroff" ? "关机"
-                            : (panel.confirmActionLabel === "reboot" ? "重启" : "注销")
+                        text: panel.confirmActionLabel === "poweroff" ? I18n.tr("Power Off")
+                            : (panel.confirmActionLabel === "reboot" ? I18n.tr("Restart") : I18n.tr("Log Out"))
                         color: "#ff3b30"
                         font { pixelSize: 13; weight: Font.Medium; family: "Noto Sans CJK SC" }
                     }
@@ -2155,9 +2160,9 @@ PopupWindow {
                     verticalCenter: parent.verticalCenter
                 }
                 text: panel.submenuShownPage === "wifi" ? "Wi‑Fi"
-                    : (panel.submenuShownPage === "bluetooth" ? "蓝牙"
-                    : (panel.submenuShownPage === "brightness" ? "显示亮度"
-                    : (panel.submenuShownPage === "sound" ? "声音" : "")))
+                    : (panel.submenuShownPage === "bluetooth" ? I18n.tr("Bluetooth")
+                    : (panel.submenuShownPage === "brightness" ? I18n.tr("Display Brightness")
+                    : (panel.submenuShownPage === "sound" ? I18n.tr("Sound") : "")))
                 color: AppearanceTokens.content.glassInk()
                 font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
             }
@@ -2246,13 +2251,13 @@ PopupWindow {
                     spacing: 8
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "Wi‑Fi 已关闭"
+                        text: I18n.tr("Wi‑Fi is off")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 14; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "在上方开启开关以查看附近网络"
+                        text: I18n.tr("Turn on the switch above to see nearby networks")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
@@ -2277,7 +2282,7 @@ PopupWindow {
 
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        text: "附近网络"
+                        text: I18n.tr("Nearby Networks")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 11; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
@@ -2285,7 +2290,7 @@ PopupWindow {
                     GlassText {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: NetworkService.wifiScanInProgress
-                        text: "正在扫描…"
+                        text: I18n.tr("Scanning…")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
@@ -2359,7 +2364,7 @@ PopupWindow {
                                 rightMargin: 6
                                 verticalCenter: parent.verticalCenter
                             }
-                            text: modelData.ssid || "隐藏网络"
+                            text: modelData.ssid || I18n.tr("Hidden network")
                             elide: Text.ElideRight
                             color: AppearanceTokens.content.glassInk()
                             font {
@@ -2417,7 +2422,7 @@ PopupWindow {
                                 border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
                                 GlassText {
                                     anchors.centerIn: parent
-                                    text: "断开"
+                                    text: I18n.tr("Disconnect")
                                     color: AppearanceTokens.content.glassInk()
                                     font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                                 }
@@ -2464,7 +2469,7 @@ PopupWindow {
                     GlassText {
                         anchors.centerIn: parent
                         visible: submenuWifiList.count === 0 && !NetworkService.wifiScanInProgress
-                        text: "未搜索到 Wi‑Fi 网络"
+                        text: I18n.tr("No Wi‑Fi networks detected")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
@@ -2486,7 +2491,7 @@ PopupWindow {
 
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "网络设置…"
+                    text: I18n.tr("Network settings…")
                     color: AppearanceTokens.content.glassInk()
                     font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
                 }
@@ -2533,13 +2538,13 @@ PopupWindow {
                     spacing: 8
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "蓝牙已关闭"
+                        text: I18n.tr("Bluetooth is off")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 13; weight: Font.Bold; family: "Noto Sans CJK SC" }
                     }
                     GlassText {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "在上方开启开关以连接设备"
+                        text: I18n.tr("Turn on the switch above to connect devices")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
@@ -2563,7 +2568,7 @@ PopupWindow {
 
                     GlassText {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                        text: "设备"
+                        text: I18n.tr("Devices")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
@@ -2571,7 +2576,7 @@ PopupWindow {
                     GlassText {
                         anchors { right: parent.right; verticalCenter: parent.verticalCenter }
                         visible: ControlCenterService.bluetoothDevicesRefreshInProgress
-                        text: "正在刷新…"
+                        text: I18n.tr("Refreshing…")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 9; family: "Noto Sans CJK SC" }
                     }
@@ -2660,14 +2665,14 @@ PopupWindow {
 
                             GlassText {
                                 width: parent.width
-                                text: modelData.name || "未知设备"
+                                text: modelData.name || I18n.tr("Unknown device")
                                 elide: Text.ElideRight
                                 color: AppearanceTokens.content.glassInk()
                                 font { pixelSize: 11; weight: modelData.connected ? Font.DemiBold : Font.Normal; family: "Noto Sans CJK SC" }
                             }
 
                             GlassText {
-                                text: modelData.connected ? "已连接" : "未连接"
+                                text: modelData.connected ? I18n.tr("Connected") : I18n.tr("Not connected")
                                 color: AppearanceTokens.content.glassInk()
                                 font { pixelSize: 9; family: "Noto Sans CJK SC" }
                             }
@@ -2707,7 +2712,7 @@ PopupWindow {
                     GlassText {
                         anchors.centerIn: parent
                         visible: submenuBtList.count === 0 && !ControlCenterService.bluetoothDevicesRefreshInProgress
-                        text: "未发现已配对设备"
+                        text: I18n.tr("No paired devices found")
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
@@ -2729,7 +2734,7 @@ PopupWindow {
 
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "蓝牙设置…"
+                    text: I18n.tr("Bluetooth settings…")
                     color: AppearanceTokens.content.glassInk()
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
@@ -2792,7 +2797,7 @@ PopupWindow {
 
                         GlassText {
                             anchors { left: parent.left; right: displayBrightnessPercent.left; top: parent.top; rightMargin: 8 }
-                            text: modelData.label || modelData.id || "显示器"
+                            text: modelData.label || modelData.id || I18n.tr("Display")
                             elide: Text.ElideRight
                             color: AppearanceTokens.content.glassInk()
                             font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
@@ -2806,7 +2811,8 @@ PopupWindow {
                         }
                         GlassText {
                             anchors { left: parent.left; top: parent.top; topMargin: 20 }
-                            text: modelData.isInternal ? "内置屏幕" : "外接显示器"
+                            text: modelData.isInternal
+                                ? I18n.tr("Built-in display") : I18n.tr("External display")
                             color: AppearanceTokens.content.glassInk()
                             font { pixelSize: 9; family: "Noto Sans CJK SC" }
                         }
@@ -2831,7 +2837,7 @@ PopupWindow {
             GlassText {
                 anchors.centerIn: parent
                 visible: ControlCenterService.brightnessDisplays.length === 0
-                text: "未发现可调节亮度的显示器"
+                text: I18n.tr("No brightness-adjustable displays found")
                 color: AppearanceTokens.content.glassInk()
                 font { pixelSize: 11; family: "Noto Sans CJK SC" }
             }
@@ -2846,7 +2852,7 @@ PopupWindow {
                 }
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "显示设置…"
+                    text: I18n.tr("Display settings…")
                     color: AppearanceTokens.content.glassInk()
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
@@ -2890,7 +2896,7 @@ PopupWindow {
 
                 GlassText {
                     anchors { left: parent.left; top: parent.top; topMargin: 2 }
-                    text: "主音量"
+                    text: I18n.tr("Master Volume")
                     color: ThemeService.foregroundColor
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }
@@ -3029,7 +3035,7 @@ PopupWindow {
                 height: 18 + audioOutputList.height + 28
 
                 GlassText {
-                    text: qsTr("输出设备")
+                    text: I18n.tr("Output devices")
                     color: ThemeService.foregroundColor
                     opacity: 0.60
                     font.pixelSize: 10
@@ -3081,9 +3087,10 @@ PopupWindow {
                 GlassText {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                     height: 24
-                    text: ControlCenterService.audioOutputChangeInProgress ? qsTr("正在切换…")
+                    text: ControlCenterService.audioOutputChangeInProgress ? I18n.tr("Switching…")
                         : ControlCenterService.audioOutputError || (ControlCenterService.audioOutputs.length
-                            ? "" : ControlCenterService.audioOutputsRefreshInProgress ? qsTr("正在读取…") : qsTr("没有可用输出设备"))
+                            ? "" : ControlCenterService.audioOutputsRefreshInProgress
+                                ? I18n.tr("Reading…") : I18n.tr("No available output devices"))
                     color: ThemeService.foregroundColor
                     elide: Text.ElideRight
                     font.pixelSize: 10
@@ -3112,7 +3119,7 @@ PopupWindow {
                 GlassText {
                     id: soundApplicationsTitle
                     anchors { left: parent.left; top: parent.top }
-                    text: "应用音量"
+                    text: I18n.tr("Application Volume")
                     color: ThemeService.foregroundColor
                     opacity: 0.60
                     font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
@@ -3122,7 +3129,8 @@ PopupWindow {
                     visible: ControlCenterService.audioApplications.length === 0
                     anchors.centerIn: parent
                     anchors.verticalCenterOffset: 8
-                    text: ControlCenterService.audioApplicationsRefreshInProgress ? "正在读取…" : "没有活动的音频应用"
+                    text: ControlCenterService.audioApplicationsRefreshInProgress
+                        ? I18n.tr("Reading…") : I18n.tr("No active audio applications")
                     color: ThemeService.foregroundColor
                     opacity: 0.45
                     font { pixelSize: 10; family: "Noto Sans CJK SC" }
@@ -3197,7 +3205,7 @@ PopupWindow {
                                     top: parent.top
                                     topMargin: 5
                                 }
-                                text: appVolumeRow.modelData.name || "音频应用"
+                                text: appVolumeRow.modelData.name || I18n.tr("Audio application")
                                 elide: Text.ElideRight
                                 color: ThemeService.foregroundColor
                                 font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
@@ -3260,7 +3268,7 @@ PopupWindow {
 
                 GlassText {
                     anchors { left: parent.left; leftMargin: 16; verticalCenter: parent.verticalCenter }
-                    text: "声音设置…"
+                    text: I18n.tr("Sound settings…")
                     color: soundSettingsMouse.containsMouse ? "#0a84ff" : ThemeService.foregroundColor
                     font { pixelSize: 11; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                 }

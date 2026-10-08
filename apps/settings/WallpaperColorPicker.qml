@@ -39,19 +39,19 @@ Dialog {
             ToolButton {
                 objectName: "wallpaperEyedropper"
                 visible: picker.eyedropperAvailable
-                text: "取色"
-                Accessible.name: "从屏幕取色"
+                text: I18n.tr("Pick color")
+                Accessible.name: I18n.tr("Pick color from screen")
                 onClicked: picker.eyedropperRequested()
             }
-            Label { text:"颜色"; color:picker.colors.primaryText; font.pixelSize:18; font.weight:Font.DemiBold; Layout.fillWidth:true; horizontalAlignment:Text.AlignHCenter }
-            ToolButton { contentItem: SharedControls.VectorIcon { name: "close"; size: 20; color: picker.colors.primaryText } Accessible.name:"关闭"; onClicked:picker.close() }
+            Label { text:I18n.tr("Color"); color:picker.colors.primaryText; font.pixelSize:18; font.weight:Font.DemiBold; Layout.fillWidth:true; horizontalAlignment:Text.AlignHCenter }
+            ToolButton { contentItem: SharedControls.VectorIcon { name: "close"; size: 20; color: picker.colors.primaryText } Accessible.name:I18n.tr("Close"); onClicked:picker.close() }
         }
         TabBar {
             Layout.fillWidth: true
             currentIndex: picker.selectedTab
             onCurrentIndexChanged: picker.selectedTab = currentIndex
             Repeater {
-                model: ["网格", "光谱", "滑块"]
+                model: [I18n.tr("Grid"), I18n.tr("Spectrum"), I18n.tr("Slider")]
                 TabButton { required property string modelData; text: modelData }
             }
         }
@@ -106,7 +106,7 @@ Dialog {
                 anchors.fill: parent
                 spacing: 18
                 Repeater {
-                    model: ["红", "绿", "蓝"]
+                    model: [I18n.tr("Red"), I18n.tr("Green"), I18n.tr("Blue")]
                     delegate: ColumnLayout {
                         required property int index
                         required property string modelData
@@ -159,8 +159,8 @@ Dialog {
         Label { Layout.fillWidth:true; text:picker.errorMessage; visible:text.length>0; wrapMode:Text.Wrap; color:"#e66f73" }
         RowLayout {
             Layout.alignment: Qt.AlignRight
-            Button { text:"取消"; onClicked:picker.close() }
-            Button { text:"使用此颜色"; onClicked:picker.colorApplied(picker.selectedColor) }
+            Button { text:I18n.tr("Cancel"); onClicked:picker.close() }
+            Button { text:I18n.tr("Use this color"); onClicked:picker.colorApplied(picker.selectedColor) }
         }
     }
 }

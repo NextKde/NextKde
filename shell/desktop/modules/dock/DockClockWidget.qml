@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
@@ -35,7 +36,8 @@ Item {
     }
 
     function shortWeekday(date) {
-        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()]
+        return [I18n.tr("Sun"), I18n.tr("Mon"), I18n.tr("Tue"), I18n.tr("Wed"),
+            I18n.tr("Thu"), I18n.tr("Fri"), I18n.tr("Sat")][date.getDay()]
     }
 
     // Clock has no content-owned palette like weather or album artwork, so it
@@ -232,7 +234,7 @@ Item {
             Text {
                 width: parent.width
                 height: Math.round(widget.iconSize * 0.27)
-                text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月d日")
+                text: I18n.fmt(calendarClock.dayDate, I18n.tr("MMMM d, yyyy"))
                     + " " + widget.shortWeekday(calendarClock.dayDate)
                 color: ThemeService.foregroundColor
                 opacity: 0.82
@@ -257,13 +259,13 @@ Item {
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日落"
+                label: I18n.tr("Sunset")
                 value: WeatherService.sunsetTime
             }
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日出"
+                label: I18n.tr("Sunrise")
                 value: WeatherService.sunriseTime
             }
         }
@@ -293,7 +295,7 @@ Item {
             }
         }
         Text {
-            text: "· 日落 " + WeatherService.sunsetTime
+            text: I18n.tr("· Sunset %1").arg(WeatherService.sunsetTime)
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter

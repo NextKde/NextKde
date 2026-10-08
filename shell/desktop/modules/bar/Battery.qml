@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Services.UPower
 import QtQuick
 import QtQuick.Effects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 
@@ -104,8 +105,8 @@ Item {
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
         primaryText: root.isCharging
-            ? "充电中 · " + root.percent + "%"
-            : "电池 · " + root.percent + "%"
+            ? I18n.tr("Charging · %1%").arg(root.percent)
+            : I18n.tr("Battery · %1%").arg(root.percent)
     }
 
     readonly property var batteryDevice: UPower.displayDevice

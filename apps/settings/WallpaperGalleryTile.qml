@@ -70,7 +70,7 @@ Rectangle {
     Text {
         anchors.centerIn: parent
         visible: !tile.isSwatch && tile.imageMissing
-        text: "图片不存在"
+        text: I18n.tr("Image missing")
         color: "#8e8e93"
         font.pixelSize: 12
     }

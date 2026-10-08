@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -180,7 +181,7 @@ AnimatedPopupWindow {
 
                 Text {
                     width: parent.width
-                    text: popup.player?.trackTitle || "未播放曲目"
+                    text: popup.player?.trackTitle || I18n.tr("No track playing")
                     color: ThemeService.foregroundColor
                     elide: Text.ElideRight
                     font {
@@ -190,7 +191,7 @@ AnimatedPopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: popup.player?.trackArtist || "未知艺术家"
+                    text: popup.player?.trackArtist || I18n.tr("Unknown artist")
                     color: ThemeService.foregroundColor
                     opacity: 0.72
                     elide: Text.ElideRight
@@ -345,7 +346,7 @@ AnimatedPopupWindow {
                 x: 9.5
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-previous"
-                text: qsTr("上一首")
+                text: I18n.tr("Previous")
                 enabled: popup.player?.canGoPrevious ?? false
                 onClicked: DockMprisService.previous()
             }
@@ -353,7 +354,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 primary: true
                 iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
-                text: popup.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                text: popup.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 busy: DockMprisService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
                 onClicked: DockMprisService.togglePlayPause()
@@ -362,7 +363,7 @@ AnimatedPopupWindow {
                 x: 109.5
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-next"
-                text: qsTr("下一首")
+                text: I18n.tr("Next")
                 enabled: popup.player?.canGoNext ?? false
                 onClicked: DockMprisService.next()
             }

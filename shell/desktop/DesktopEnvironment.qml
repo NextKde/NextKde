@@ -2,6 +2,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick
+import "../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.dock
 import qs.desktop.modules.quicksearch
@@ -663,6 +664,22 @@ Item {
                     && ScreenLifecycle.activeScreen !== null,
                 desktopFilesReady: DesktopFilesService.ready,
             })
+        }
+    }
+
+    // Language preference endpoint for the standalone Settings app. I18nService
+    // owns persistence and applies the value to the shared I18n singleton;
+    // every I18n.tr() binding re-evaluates when it changes.
+    IpcHandler {
+        target: "i18n-settings"
+
+        function snapshot(): string {
+            return I18nService.snapshot()
+        }
+
+        function updateLanguage(language: string): string {
+            I18nService.setLanguage(language)
+            return I18nService.snapshot()
         }
     }
 

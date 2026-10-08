@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -46,8 +47,10 @@ PanelWindow {
     // The item is passed whole so a pinned row and a history row share one path.
     signal pasteRequested(var item, bool copyOnly)
 
-    readonly property string modeTitle: mode === "app" ? "应用" : (mode === "clipboard" ? "剪贴板" : "窗口")
-    readonly property string placeholder: mode === "app" ? "搜索已安装的应用" : (mode === "clipboard" ? "搜索剪贴板历史" : "搜索已打开的窗口")
+    readonly property string modeTitle: mode === "app" ? I18n.tr("Apps")
+        : (mode === "clipboard" ? I18n.tr("Clipboard") : I18n.tr("Windows"))
+    readonly property string placeholder: mode === "app" ? I18n.tr("Search installed apps")
+        : (mode === "clipboard" ? I18n.tr("Search clipboard history") : I18n.tr("Search open windows"))
 
     readonly property var windowResults: {
         // Explicitly depend on the service revision so title, activation, and
@@ -103,13 +106,13 @@ PanelWindow {
             const pinned = ClipboardService.pinned || [];
             for (let i = 0; i < pinned.length; i++) {
                 const item = pinned[i];
-                const title = item.isImage ? "图片" : item.preview;
+                const title = item.isImage ? I18n.tr("Image") : item.preview;
                 if (needle && !title.toLowerCase().includes(needle))
                     continue;
                 matches.push({
                     kind: "clipboard",
                     title: title,
-                    subtitle: item.isImage ? "固定图片 · 回车复制" : "固定文本 · 回车复制",
+                    subtitle: item.isImage ? I18n.tr("Pinned image · Enter to copy") : I18n.tr("Pinned text · Enter to copy"),
                     icon: BundledIcons.source(item.isImage
                         ? "image-x-generic" : "edit-paste"),
                     isImage: item.isImage,
@@ -131,8 +134,8 @@ PanelWindow {
                 const pinId = ClipboardService.pinIdFor(entry);
                 matches.push({
                     kind: "clipboard",
-                    title: entry.isImage ? "图片" : entry.preview,
-                    subtitle: entry.isImage ? "图片剪贴板 · " + entry.preview.slice(2, -2) : "文本剪贴板 · 回车复制",
+                    title: entry.isImage ? I18n.tr("Image") : entry.preview,
+                    subtitle: entry.isImage ? I18n.tr("Image clipboard · %1").arg(entry.preview.slice(2, -2)) : I18n.tr("Text clipboard · Enter to copy"),
                     icon: BundledIcons.source(entry.isImage
                         ? "image-x-generic" : "edit-paste"),
                     isImage: entry.isImage,
@@ -555,7 +558,8 @@ PanelWindow {
 
                 GlassText {
                     text: root.modeTitle + (root.mode === "clipboard"
-                        ? (root.clipboardPinnedOnly ? " · 固定" : " · 最新优先") : "") + " · Tab"
+                        ? (root.clipboardPinnedOnly ? I18n.tr(" · Pinned") : I18n.tr(" · Newest first")) : "")
+                        + I18n.tr(" · Tab")
                     color: AppearanceTokens.content.glassInk(0.46)
                     font.pixelSize: 11
                     anchors.verticalCenter: parent.verticalCenter
@@ -581,7 +585,7 @@ PanelWindow {
                     GlassText {
                         id: clearText
                         anchors.centerIn: parent
-                        text: "清空"
+                        text: I18n.tr("Clear")
                         color: clearMouse.containsMouse
                             ? "#ff453a"
                             : AppearanceTokens.content.glassInk(0.60)
@@ -623,7 +627,7 @@ PanelWindow {
                     GlassText {
                         id: pinFilterText
                         anchors.centerIn: parent
-                        text: "固定 " + ClipboardService.pinnedCount
+                        text: I18n.tr("Pinned %1").arg(ClipboardService.pinnedCount)
                         color: root.clipboardPinnedOnly
                             ? (ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : "#0066cc")
                             : AppearanceTokens.content.glassInk(0.60)
@@ -757,7 +761,7 @@ PanelWindow {
                     width: parent.width
                     GlassText {
                         width: parent.width - 24
-                        text: "剪贴板偏好设置"
+                        text: I18n.tr("Clipboard Preferences")
                         font { pixelSize: 13; bold: true; family: "Noto Sans CJK SC" }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -794,14 +798,14 @@ PanelWindow {
                         width: parent.width - 46
                         spacing: 2
                         GlassText {
-                            text: "监控图片内容"
+                            text: I18n.tr("Monitor image content")
                             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
                             styleColor: dialog.textOutlineColor
                         }
                         GlassText {
-                            text: "自动记录截图与复制的图片"
+                            text: I18n.tr("Automatically record screenshots and copied images")
                             font.pixelSize: 10
                             color: AppearanceTokens.content.glassInk(0.55)
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -843,7 +847,7 @@ PanelWindow {
                     spacing: 6
 
                     GlassText {
-                        text: "历史保留数量"
+                        text: I18n.tr("History size")
                         font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
                         color: ThemeService.foregroundColor
                         style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -870,7 +874,7 @@ PanelWindow {
 
                                 GlassText {
                                     anchors.centerIn: parent
-                                    text: modelData + " 条"
+                                    text: I18n.tr("%1 entries").arg(modelData)
                                     font.pixelSize: 11
                                     color: ClipboardService.maxItems === modelData
                                         ? (ThemeService.isDark ? "#64b5ff" : "#0066cc")
@@ -914,7 +918,7 @@ PanelWindow {
                         GlassText {
                             width: parent.width - 20
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "⌨ 配置系统全局快捷键 (Meta+V)"
+                            text: I18n.tr("⌨ Configure global shortcut (Meta+V)")
                             font { pixelSize: 11; family: "Noto Sans CJK SC" }
                             color: ThemeService.foregroundColor
                             style: ThemeService.isDark ? Text.Outline : Text.Normal
@@ -1103,7 +1107,7 @@ PanelWindow {
 
                         GlassText {
                             anchors.centerIn: parent
-                            text: "最新"
+                            text: I18n.tr("Newest")
                             color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.94) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
                             font.pixelSize: 9
                             font.weight: Font.DemiBold
@@ -1298,7 +1302,7 @@ PanelWindow {
 
                     GlassText {
                         anchors.centerIn: parent
-                        text: "最新"
+                        text: I18n.tr("Newest")
                         color: ThemeService.isDark ? Qt.rgba(0.84, 0.93, 1, 0.96) : Qt.rgba(0.0, 0.45, 0.85, 1.0)
                         font.pixelSize: 8
                         font.weight: Font.DemiBold
@@ -1423,7 +1427,8 @@ PanelWindow {
                         top: parent.top
                         topMargin: 71
                     }
-                    text: gridResultItem.modelData.subtitle.replace("图片剪贴板 · ", "")
+                    text: gridResultItem.modelData.subtitle.replace(
+                        I18n.tr("Image clipboard · %1").arg(""), "")
                     color: AppearanceTokens.content.glassInk(0.54)
                     horizontalAlignment: Text.AlignHCenter
                     elide: Text.ElideRight
@@ -1460,10 +1465,10 @@ PanelWindow {
             height: 40
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            text: root.mode === "app" ? "未找到匹配的应用"
+            text: root.mode === "app" ? I18n.tr("No matching apps")
                 : (root.mode === "clipboard"
-                    ? (root.clipboardPinnedOnly ? "还没有固定任何内容" : "剪贴板历史为空")
-                    : "未找到匹配的窗口")
+                    ? (root.clipboardPinnedOnly ? I18n.tr("Nothing pinned yet") : I18n.tr("Clipboard history is empty"))
+                    : I18n.tr("No matching windows"))
             color: AppearanceTokens.content.glassInk(0.52)
             font.pixelSize: 13
             style: ThemeService.isDark ? Text.Outline : Text.Normal

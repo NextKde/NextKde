@@ -34,18 +34,18 @@ ColumnLayout {
                 Layout.fillWidth: true
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Text {text:"空间壁纸";color:page.colors.primaryText;font.pixelSize:15;font.weight:Font.DemiBold}
+                    Text {text:I18n.tr("Spatial wallpaper");color:page.colors.primaryText;font.pixelSize:15;font.weight:Font.DemiBold}
                     Text {
                         // A build made without KOS_BUILD_SPATIAL has no worker
                         // and therefore no spatial.resources capability; say so
                         // instead of offering a switch that cannot do anything.
-                        text: page.resources.available === false ? "此版本未构建空间壁纸组件"
+                        text: page.resources.available === false ? I18n.tr("This build does not include the spatial wallpaper component")
                             : page.resources.busy
-                            ? (page.resources.stage || "正在准备…")
+                            ? (page.resources.stage || I18n.tr("Preparing…"))
                                 + (Number(page.resources.progress) >= 0
                                     ? " · " + Math.round(Number(page.resources.progress) * 100) + "%" : "")
-                            : page.resources.checking ? "正在检查资源…"
-                            : page.resources.enabled ? "已开启" : "首次开启会下载所需资源"
+                            : page.resources.checking ? I18n.tr("Checking resources…")
+                            : page.resources.enabled ? I18n.tr("On") : I18n.tr("Required resources are downloaded on first enablement")
                         color:page.colors.secondaryText;font.pixelSize:12
                     }
                 }
@@ -64,7 +64,7 @@ ColumnLayout {
                 }
             }
             Text {
-                text:"缓存 " + (Number(page.resources.generatedBytes || 0)/1073741824).toFixed(2) + " / 2 GB · 自动清理最旧内容"
+                text:I18n.tr("Cache: ") + (Number(page.resources.generatedBytes || 0)/1073741824).toFixed(2) + I18n.tr(" / 2 GB · oldest entries are pruned automatically")
                 color:page.colors.secondaryText;font.pixelSize:12
             }
             Text {

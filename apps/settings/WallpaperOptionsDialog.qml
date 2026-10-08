@@ -15,7 +15,7 @@ Dialog {
     signal fitChosen(string mode)
     signal transitionChosen(string style)
     signal takeoverChosen(bool enabled)
-    title: "壁纸选项"
+    title: I18n.tr("Wallpaper options")
     background: Rectangle {
         radius: 22
         color: dialog.colors.dark ? "#ed25282e" : "#f8f9fbfd"
@@ -40,7 +40,7 @@ Dialog {
             anchors.right: parent.right
             anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            label: "完成"
+            label: I18n.tr("Done")
             colors: dialog.colors
             emphasized: true
             onClicked: dialog.close()
@@ -59,12 +59,12 @@ Dialog {
                 WallpaperSettingsRow {
                     width: parent.width
                     colors: dialog.colors
-                    label: "填充方式"
+                    label: I18n.tr("Fill mode")
                     separator: true
                     LiquidControls.LiquidSelect {
                         objectName: "wallpaperFitMenu"
                         accentColor: dialog.colors.accent
-                        model: ["填满屏幕", "完整显示", "拉伸", "居中"]
+                        model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
                         currentIndex: Math.max(0, ["crop", "fit", "stretch", "center"].indexOf(dialog.fitMode))
                         onActivated: function(index) {
                             dialog.fitChosen(["crop", "fit", "stretch", "center"][index])
@@ -74,7 +74,7 @@ Dialog {
                 WallpaperSettingsRow {
                     width: parent.width
                     colors: dialog.colors
-                    label: "切换效果"
+                    label: I18n.tr("Switch effect")
                     separator: true
                     LiquidControls.LiquidSelect {
                         objectName: "wallpaperTransitionMenu"
@@ -90,7 +90,7 @@ Dialog {
                 WallpaperSettingsRow {
                     width: parent.width
                     colors: dialog.colors
-                    label: "由 KOS 显示壁纸"
+                    label: I18n.tr("KOS draws the wallpaper")
                     LiquidControls.LiquidGlassSwitch {
                         id: toggle
                         enabled: dialog.takeoverAvailable && !dialog.takeoverPending
@@ -108,8 +108,8 @@ Dialog {
         Text {
             Layout.fillWidth: true
             text: dialog.takeoverAvailable
-                ? "关闭 KOS 壁纸后恢复 Plasma 壁纸。开启空间壁纸会暂停自动切换。"
-                : "当前平台服务版本不支持壁纸接管，请更新后再使用。"
+                ? I18n.tr("Restores the Plasma wallpaper when KOS wallpaper is turned off. Enabling spatial wallpaper pauses auto-switching.")
+                : I18n.tr("The current platform service version does not support wallpaper takeover; please update first.")
             color: dialog.colors.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap

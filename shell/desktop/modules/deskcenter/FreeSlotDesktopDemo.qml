@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import "DesktopGridMetrics.mjs" as DesktopGridMetrics
 import Qt5Compat.GraphicalEffects
 import Quickshell
@@ -250,7 +251,7 @@ Item {
     function displayName(entry) {
         const path = entry && entry.path ? entry.path : ""
         const name = (entry && (entry.title || entry.name))
-            || path.split("/").pop() || "未命名"
+            || path.split("/").pop() || I18n.tr("Untitled")
         if (showExtensions || (entry && entry.kind === "folder"))
             return name
         const extensionIndex = name.lastIndexOf(".")
@@ -902,7 +903,7 @@ Item {
         Text {
             anchors.centerIn: parent
             text: root.externalDragAction === Qt.MoveAction
-                ? "移动到桌面" : "复制到桌面"
+                ? I18n.tr("Move to desktop") : I18n.tr("Copy to desktop")
             color: Qt.rgba(1, 1, 1, 0.78)
         }
     }

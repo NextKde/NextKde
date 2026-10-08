@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -217,7 +218,7 @@ PanelWindow {
 
                                 Text {
                                     id: desktopLabel
-                                    text: modelData.name || ("桌面 " + (index + 1))
+                                    text: modelData.name || I18n.tr("Desktop %1").arg(index + 1)
                                     color: isCurrent ? "#ffffff" : Qt.rgba(1, 1, 1, 0.78)
                                     font { pixelSize: 12; weight: isCurrent ? Font.Bold : Font.DemiBold }
                                     anchors.verticalCenter: parent.verticalCenter
@@ -334,7 +335,7 @@ PanelWindow {
                                             }
 
                                             Text {
-                                                text: modelData.identity?.name || modelData.title || "应用"
+                                                text: modelData.identity?.name || modelData.title || I18n.tr("App")
                                                 color: "white"
                                                 font { pixelSize: 12; weight: Font.Bold }
                                                 elide: Text.ElideRight
@@ -426,7 +427,7 @@ PanelWindow {
 
                                                 Text {
                                                     anchors.horizontalCenter: parent.horizontalCenter
-                                                    text: modelData.title || "窗口预览"
+                                                    text: modelData.title || I18n.tr("Window preview")
                                                     color: Qt.rgba(1, 1, 1, 0.40)
                                                     font.pixelSize: 11
                                                     elide: Text.ElideRight
@@ -474,7 +475,7 @@ PanelWindow {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: "当前桌面没有打开的应用窗口"
+                        text: I18n.tr("No open app windows on this desktop")
                         color: Qt.rgba(1, 1, 1, 0.45)
                         font { pixelSize: 13; weight: Font.Medium }
                     }

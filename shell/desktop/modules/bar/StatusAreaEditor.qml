@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -22,7 +23,8 @@ AnimatedPopupWindow {
         AppearanceTokens.colors.primary, "#0a84ff")
     readonly property var ids: ["network", "battery", "settings", "notifications", "controlcenter"]
     readonly property var labels: ({
-        network: "网络", battery: "电池", settings: "设置", notifications: "通知历史", controlcenter: "控制中心"
+        network: I18n.tr("Network"), battery: I18n.tr("Battery"),
+        settings: I18n.tr("Settings"), notifications: I18n.tr("Notification History"), controlcenter: I18n.tr("Control Center")
     })
     readonly property var symbols: ({
         network: "⌁", battery: "▱", settings: "⚙", notifications: "♧", controlcenter: "◉"
@@ -72,12 +74,12 @@ AnimatedPopupWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "状态栏"
+                    text: I18n.tr("Status Area")
                     color: editor.foregroundColor
                     font { pixelSize: 14; weight: Font.DemiBold }
                 }
                 Text {
-                    text: "拖动排序，点按显示或隐藏"
+                    text: I18n.tr("Drag to reorder, tap to show or hide")
                     color: editor.foregroundColor
                     opacity: 0.58
                     font.pixelSize: 11
@@ -92,7 +94,7 @@ AnimatedPopupWindow {
                             editor.foregroundColor.b, 0.10))
                     Text {
                         anchors.centerIn: parent
-                        text: "完成"
+                        text: I18n.tr("Done")
                         color: AppearanceTokens.surface.pick(
                             AppearanceTokens.colors.primaryContainerForeground,
                             editor.foregroundColor)
@@ -151,7 +153,8 @@ AnimatedPopupWindow {
                             }
                             Text {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: cellCard.requiredCell ? "固定" : (cellCard.active ? "−" : "+")
+                                text: cellCard.requiredCell
+                                    ? I18n.tr("Pinned") : (cellCard.active ? "−" : "+")
                                 color: cellCard.requiredCell ? editor.foregroundColor
                                     : (cellCard.active ? "#ff453a" : editor.accentColor)
                                 opacity: cellCard.requiredCell ? 0.55 : 1

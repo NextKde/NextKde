@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import "../../../shared/qml/i18n"
 import "./AdaptiveMath.mjs" as AdaptiveMath
 import qs.desktop
 import qs.desktop.modules.applauncher
@@ -604,8 +605,8 @@ Item {
         property bool hasBeenVisible: false
 
         Component.onCompleted: setItems([
-            { icon: "folder-open", label: "打开回收站", cmd: "open" },
-            { icon: "user-trash", label: "清空回收站", cmd: "empty" }
+            { icon: "folder-open", label: I18n.tr("Open Trash"), cmd: "open" },
+            { icon: "user-trash", label: I18n.tr("Empty Trash"), cmd: "empty" }
         ])
 
         onAboutToShow: hasBeenVisible = true
@@ -642,34 +643,34 @@ Item {
             setItems([
                 {
                     icon: "align-bottom",
-                    label: "底部吸附",
+                    label: I18n.tr("Dock to bottom"),
                     cmd: "bottom",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottom"
                 },
                 {
                     icon: "align-center",
-                    label: "底部紧凑",
+                    label: I18n.tr("Compact bottom"),
                     cmd: "bottomWide",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "bottomWide"
                 },
                 {
                     icon: "align-center",
-                    label: "屏幕居中",
+                    label: I18n.tr("Center on screen"),
                     cmd: "center",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "center"
                 },
                 {
                     icon: "align-fullscreen",
-                    label: "全屏覆盖",
+                    label: I18n.tr("Fullscreen"),
                     cmd: "fullscreen",
                     checkable: true,
                     checked: AppLauncherConfigService.displayMode === "fullscreen"
                 },
                 { separator: true },
-                { icon: "preferences-system", label: "启动台设置…", cmd: "settings" }
+                { icon: "preferences-system", label: I18n.tr("Launcher settings…"), cmd: "settings" }
             ])
         }
 
@@ -776,7 +777,7 @@ Item {
             activeBackgroundGap: container.activeBackgroundGap
             // 启动器使用仓库中的 SVG，避免系统图标主题改变这个固定入口。
             iconSource: Qt.resolvedUrl("../../assets/applauncher.svg")
-            displayName: "应用程序"
+            displayName: I18n.tr("Applications")
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
@@ -818,7 +819,7 @@ Item {
             // 回收站是这条统一链路的例外：图案跟随系统图标主题。
             iconSource: SystemIconResolver.source("trash",
                 DockTrashService.hasItems ? "full" : "empty")
-            displayName: "回收站"
+            displayName: I18n.tr("Trash")
             showContextMenu: false
             customContextMenu: true
             allowEdit: false
@@ -1223,7 +1224,7 @@ Item {
         Text {
             id: componentEditLabel
             anchors.centerIn: parent
-            text: "+ 组件"
+            text: I18n.tr("+ Widgets")
             color: AppearanceTokens.surface.pick(
                 AppearanceTokens.colors.primaryContainerForeground,
                 ThemeService.foregroundColor)

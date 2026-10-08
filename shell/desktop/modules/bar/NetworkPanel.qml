@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -235,13 +236,13 @@ AnimatedPopupWindow {
             return
         }
         if (selectedNetwork.enterprise && !requestedUsername.length) {
-            dialogError = "请输入用户名"
+            dialogError = I18n.tr("Enter a username")
             usernameInput.forceActiveFocus()
             return
         }
         if (selectedNetwork.enterprise) {
             if (!requestedPassword.length) {
-                dialogError = "请输入 Wi‑Fi 密码"
+                dialogError = I18n.tr("Enter the Wi‑Fi password")
                 passwordInput.forceActiveFocus()
                 return
             }
@@ -291,7 +292,7 @@ AnimatedPopupWindow {
         Text {
             visible: false
             anchors { left: parent.left; top: parent.top; leftMargin: 13; topMargin: 10 }
-            text: NetworkService.wifiEnabled ? "附近 Wi‑Fi" : "Wi‑Fi 已关闭"
+            text: NetworkService.wifiEnabled ? I18n.tr("Nearby Wi‑Fi") : I18n.tr("Wi‑Fi is off")
             color: ThemeService.foregroundColor
             style: Text.Outline
             styleColor: Qt.rgba(0, 0, 0, 0.50)
@@ -438,7 +439,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 visible: NetworkService.wifiEnabled && NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
-                text: "正在扫描…"
+                text: I18n.tr("Scanning…")
                 color: panelSurface.secondaryForegroundColor
                 opacity: 0.5
                 font.pixelSize: 12
@@ -447,7 +448,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 visible: NetworkService.wifiEnabled && !NetworkService.wifiScanInProgress
                     && NetworkService.nearbyWifi.length === 0
-                text: "未发现可用 Wi‑Fi"
+                text: I18n.tr("No Wi‑Fi networks found")
                 color: panelSurface.secondaryForegroundColor
                 opacity: 0.5
                 font.pixelSize: 12
@@ -498,7 +499,7 @@ AnimatedPopupWindow {
 
                 Text {
                     anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                    text: "无线局域网设置…"
+                    text: I18n.tr("WLAN settings…")
                     color: panelSurface.foregroundColor
                     style: Text.Outline
                     styleColor: Qt.rgba(0, 0, 0, 0.50)
@@ -596,21 +597,22 @@ AnimatedPopupWindow {
                 spacing: 9
                 Text {
                     width: parent.width
-                    text: "加入 “" + (panel.selectedNetwork?.ssid || "Wi‑Fi") + "”"
+                    text: I18n.tr("Join \u201C%1\u201D")
+                        .arg(panel.selectedNetwork?.ssid || "Wi‑Fi")
                     color: networkDialogOverlay.contentForegroundColor
                     elide: Text.ElideRight
                     font { pixelSize: 18; weight: Font.Bold }
                 }
                 GlassText {
                     width: parent.width
-                    text: NetworkService.wifiConnectInProgress ? "正在加入此无线局域网…"
-                        : (panel.selectedNetwork?.active ? "当前已连接此无线局域网。"
+                    text: NetworkService.wifiConnectInProgress ? I18n.tr("Joining this WLAN…")
+                        : (panel.selectedNetwork?.active ? I18n.tr("Already connected to this WLAN.")
                         : (panel.selectedNetwork?.enterprise
-                            ? "输入用户名和密码加入此无线局域网。"
+                            ? I18n.tr("Enter a username and password to join this WLAN.")
                             : (panel.useSavedCredentials
-                                ? "将使用已保存的密码加入此无线局域网。"
+                                ? I18n.tr("The saved password will be used to join this WLAN.")
                                 : (panel.selectedNetwork?.secured
-                                ? "输入密码加入此无线局域网。" : "加入此无线局域网。"))))
+                                ? I18n.tr("Enter the password to join this WLAN.") : I18n.tr("Join this WLAN.")))))
                     color: networkDialogOverlay.contentSecondaryColor
                     wrapMode: Text.WordWrap
                     font.pixelSize: 14
@@ -659,7 +661,8 @@ AnimatedPopupWindow {
                     }
                     GlassText {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: panel.showAnonymousIdentity ? "收起" : "匿名身份"
+                        text: panel.showAnonymousIdentity
+                            ? I18n.tr("Hide") : I18n.tr("Anonymous identity")
                         color: networkDialogOverlay.contentSecondaryColor
                         font.pixelSize: 10
                         MouseArea {
@@ -698,7 +701,7 @@ AnimatedPopupWindow {
                         clip: true
                         font.pixelSize: 14
                         onTextEdited: panel.requestedUsername = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: "用户名"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !usernameInput.text && !usernameInput.activeFocus; text: I18n.tr("Username"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise)
@@ -726,7 +729,7 @@ AnimatedPopupWindow {
                         font.pixelSize: 14
                         onTextEdited: panel.requestedPassword = text
                         Keys.onPressed: function(event) { if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) { panel.confirmConnection(); event.accepted = true } }
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: "密码"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !passwordInput.text && !passwordInput.activeFocus; text: I18n.tr("Password"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                     Rectangle {
                         visible: Boolean(panel.selectedNetwork?.enterprise
@@ -751,7 +754,7 @@ AnimatedPopupWindow {
                         clip: true
                         font.pixelSize: 14
                         onTextEdited: panel.requestedAnonymousIdentity = text
-                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: "匿名身份（可选）"; color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
+                        GlassText { anchors.verticalCenter: parent.verticalCenter; visible: !anonymousIdentityInput.text && !anonymousIdentityInput.activeFocus; text: I18n.tr("Anonymous identity (optional)"); color: networkDialogOverlay.contentSecondaryColor; font.pixelSize: 14 }
                     }
                 }
                 Rectangle {
@@ -766,13 +769,14 @@ AnimatedPopupWindow {
                     border.color: Qt.rgba(0.28, 0.64, 1, 0.36)
                     GlassText {
                         anchors { left: parent.left; leftMargin: 13; verticalCenter: parent.verticalCenter }
-                        text: panel.confirmForgetNetwork ? "忘记此网络？" : "✓  已保存密码"
+                        text: panel.confirmForgetNetwork
+                            ? I18n.tr("Forget this network?") : I18n.tr("✓  Password saved")
                         color: networkDialogOverlay.contentForegroundColor
                         font { pixelSize: 12; weight: Font.DemiBold }
                     }
                     GlassText {
                         anchors { right: parent.right; rightMargin: 60; verticalCenter: parent.verticalCenter }
-                        text: panel.confirmForgetNetwork ? "取消" : "更换"
+                        text: panel.confirmForgetNetwork ? I18n.tr("Cancel") : I18n.tr("Change")
                         color: networkDialogOverlay.contentSecondaryColor
                         font.pixelSize: 11
                         MouseArea {
@@ -792,7 +796,7 @@ AnimatedPopupWindow {
                     GlassText {
                         anchors { right: parent.right; rightMargin: 13; verticalCenter: parent.verticalCenter }
                         text: NetworkService.wifiForgetInProgress ? "…"
-                            : (panel.confirmForgetNetwork ? "确认" : "忘记")
+                            : (panel.confirmForgetNetwork ? I18n.tr("Confirm") : I18n.tr("Forget"))
                         color: panel.confirmForgetNetwork ? "#d93025" : networkDialogOverlay.contentSecondaryColor
                         opacity: NetworkService.wifiForgetInProgress ? 0.5 : 1.0
                         font.pixelSize: 11
@@ -816,7 +820,7 @@ AnimatedPopupWindow {
                     visible: !panel.selectedNetwork?.active && !panel.selectedNetwork?.enterprise
                         && !panel.useSavedCredentials
                     width: parent.width
-                    text: "密码将由 NetworkManager 安全保存。"
+                    text: I18n.tr("The password will be stored securely by NetworkManager.")
                     color: networkDialogOverlay.contentTertiaryColor
                     wrapMode: Text.WordWrap
                     font.pixelSize: 13

@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
 import qs.desktop.modules.deskcenter
@@ -89,7 +90,7 @@ Scope {
                         border.color: Qt.rgba(1, 1, 1, 0.22)
                         Text {
                             anchors.centerIn: parent
-                            text: qsTr("↔ 移动")
+                            text: I18n.tr("↔ Move")
                             color: "white"
                             font.pixelSize: 12
                         }
@@ -106,12 +107,12 @@ Scope {
                         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 9 }
                         spacing: 28
                         Text {
-                            text: qsTr("拖动歌词框调整位置")
+                            text: I18n.tr("Drag the lyrics box to adjust its position")
                             color: Qt.rgba(1, 1, 1, 0.72)
                             font.pixelSize: 12
                         }
                         Repeater {
-                            model: [qsTr("恢复默认位置"), qsTr("完成")]
+                            model: [I18n.tr("Reset position"), I18n.tr("Done")]
                             delegate: Text {
                                 required property int index
                                 required property string modelData
@@ -136,7 +137,9 @@ Scope {
                         anchors.leftMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.rightMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.topMargin: nextText.visible ? 13 : 14
-                        text: lyricWindow.currentLine || (DeskCenterConfigService.desktopLyricsEditing ? qsTr("拖动这里调整歌词位置") : "")
+                        text: lyricWindow.currentLine
+                            || (DeskCenterConfigService.desktopLyricsEditing
+                                ? I18n.tr("Drag here to adjust the lyrics position") : "")
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight

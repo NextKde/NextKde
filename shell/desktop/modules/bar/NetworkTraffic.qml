@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -86,14 +87,16 @@ Item {
         Column {
             spacing: -1
             Text {
-                text: "下行 " + NetworkService.formatRate(NetworkService.downloadBytesPerSecond)
+                text: I18n.tr("Down %1").arg(
+                    NetworkService.formatRate(NetworkService.downloadBytesPerSecond))
                 color: ThemeService.barInk
                 style: AppearanceTokens.bar.macStyle ? Text.Normal : Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
                 font { family: "SF Pro Display"; pixelSize: 9; weight: Font.DemiBold }
             }
             Text {
-                text: "上行 " + NetworkService.formatRate(NetworkService.uploadBytesPerSecond)
+                text: I18n.tr("Up %1").arg(
+                    NetworkService.formatRate(NetworkService.uploadBytesPerSecond))
                 color: ThemeService.barInk
                 style: AppearanceTokens.bar.macStyle ? Text.Normal : Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)

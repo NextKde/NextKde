@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Services.SystemTray
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
 // 系统托盘应用身份智能解析服务 / System Tray Identity Service
@@ -27,9 +28,9 @@ QtObject {
         "rustdesk": "RustDesk",
         "karing": "Karing",
         "sunshine": "Sunshine",
-        "wechat": "微信",
-        "fcitx": "输入法",
-        "fcitx5": "输入法",
+        "wechat": I18n.tr("WeChat"),
+        "fcitx": I18n.tr("Input Method"),
+        "fcitx5": I18n.tr("Input Method"),
         "google-chrome": "Google Chrome",
         "chrome": "Google Chrome",
         "chromium": "Chromium",

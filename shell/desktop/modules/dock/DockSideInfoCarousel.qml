@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
@@ -119,7 +120,7 @@ Item {
 
     function pageText(candidate) {
         if (candidate === musicPage)
-            return "音乐"
+            return I18n.tr("Music")
         if (candidate === weatherPage)
             return WeatherService.temperature
         if (candidate === temperaturePage) {

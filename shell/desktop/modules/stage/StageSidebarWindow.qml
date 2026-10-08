@@ -5,6 +5,7 @@ import Quickshell.Io
 // ⚠️ ScreencastingRequest 是本模块的类型（活体缩略图流开单窗口用）——
 // 曾被"未使用"审计误删导致 shell crash-loop（is not a type），勿再删
 import org.kde.taskmanager
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 import qs.desktop.modules.applauncher
@@ -2393,7 +2394,7 @@ PanelWindow {
             x: 12
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
-            text: "没有其他窗口\n切换窗口后这里显示卡片"
+            text: I18n.tr("No other windows\nCards appear here after switching windows")
             color: Qt.rgba(1, 1, 1, 0.30)
             font.pixelSize: 11
             topPadding: 18
@@ -2464,7 +2465,7 @@ PanelWindow {
                 }
 
                 Text {
-                    text: root.totalWindows + " 窗"
+                    text: I18n.tr("%1 windows").arg(root.totalWindows)
                     color: Qt.rgba(1, 1, 1, 0.60)
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }

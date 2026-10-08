@@ -2,6 +2,7 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -59,8 +60,9 @@ PopupWindow {
     // title; with several windows the count is the only aggregate the strip
     // itself can state.
     readonly property string toolbarLabel: {
-        const label = appName.trim().length > 0 ? appName.trim() : "窗口"
-        return windowCount > 1 ? label + " · " + windowCount + " 个窗口" : label
+        const label = appName.trim().length > 0 ? appName.trim() : I18n.tr("Window")
+        return windowCount > 1
+            ? I18n.tr("%1 · %2 windows").arg(label).arg(windowCount) : label
     }
     readonly property real cardWidth: 174
     readonly property real cardHeight: 124
@@ -471,7 +473,8 @@ PopupWindow {
 
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
-                                        text: cardDelegate.thumbUrl ? "正在刷新…" : "正在获取预览…"
+                                        text: cardDelegate.thumbUrl
+                                            ? I18n.tr("Refreshing…") : I18n.tr("Loading preview…")
                                         color: ThemeService.foregroundColor
                                         style: Text.Outline
                                         styleColor: Qt.rgba(0, 0, 0, 0.40)
@@ -495,7 +498,8 @@ PopupWindow {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 anchors.margins: 7
-                                text: cardDelegate.winTitle || preview.appName || "窗口"
+                                text: cardDelegate.winTitle || preview.appName
+                                    || I18n.tr("Window")
                                 color: ThemeService.foregroundColor
                                 style: Text.Outline
                                 styleColor: Qt.rgba(0, 0, 0, 0.45)

@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import "../../../shared/qml/i18n"
 
 // QML boundary for local depth and optional spatial assets. Transport, model
 // downloads, hashing and CPU work remain owned by kos-platform / services/ai.
@@ -20,7 +21,7 @@ QtObject {
     function generate(imagePath) {
         const path = String(imagePath || "").trim()
         if (!path) {
-            failed(path, "invalid-image-path", "图片路径不能为空", false)
+            failed(path, "invalid-image-path", I18n.tr("Image path cannot be empty"), false)
             return
         }
 
@@ -35,7 +36,7 @@ QtObject {
             if (!response || !response.ok) {
                 const error = response && response.error ? response.error : ({})
                 failed(path, String(error.code || "depth-generation-failed"),
-                    String(error.message || "深度图生成失败"), !!error.retryable)
+                    String(error.message || I18n.tr("Depth map generation failed")), !!error.retryable)
                 return
             }
             const result = response.result || ({})

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 
@@ -111,9 +112,9 @@ Item {
 
                 Repeater {
                     model: [
-                        { label: "平均温度", value: widget.currentC,
+                        { label: I18n.tr("Avg temperature"), value: widget.currentC,
                             accent: "#64d2ff" },
-                        { label: "最高温度", value: widget.maximum5MinuteC,
+                        { label: I18n.tr("Max temperature"), value: widget.maximum5MinuteC,
                             accent: "#ff6b62" }
                     ]
                     delegate: Item {
@@ -259,7 +260,7 @@ Item {
             }
         }
         Text {
-            text: "· 峰值 " + (widget.available
+            text: I18n.tr("· Peak %1").arg(widget.available
                 ? widget.maximum5MinuteC + "°" : "--°")
             color: "white"
             opacity: 0.68

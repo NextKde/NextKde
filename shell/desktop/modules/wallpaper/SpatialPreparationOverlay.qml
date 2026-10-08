@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 
 // Preparation and failures use the same global dialog as trash confirmation.
@@ -9,16 +10,16 @@ DesktopConfirmDialog {
     readonly property string message: SpatialWallpaperService.errorMessage
     readonly property bool hasStatus: preparing || message.length > 0
 
-    titleText: preparing ? "正在生成空间壁纸" : "空间壁纸未开启"
+    titleText: preparing ? I18n.tr("Generating spatial wallpaper") : I18n.tr("Spatial wallpaper is not enabled")
     bodyText: preparing
-        ? ((SpatialResourceService.stage || "正在准备景深效果…")
+        ? ((SpatialResourceService.stage || I18n.tr("Preparing depth effect…"))
             + (SpatialResourceService.busy && SpatialResourceService.progress >= 0
                 ? " · " + Math.round(SpatialResourceService.progress * 100) + "%" : ""))
         : message
     iconName: "spatial-wallpaper"
     destructive: false
     confirmVisible: false
-    cancelText: preparing ? "取消" : "关闭"
+    cancelText: preparing ? I18n.tr("Cancel") : I18n.tr("Close")
     dismissOnBackdrop: !preparing
     onRejected: SpatialWallpaperService.cancelActivation()
 

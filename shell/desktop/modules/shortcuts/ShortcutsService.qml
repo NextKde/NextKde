@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
 // KOS global shortcuts — one owner for defaults, user rebindings, and the
@@ -25,19 +26,19 @@ QtObject {
     property bool ready: false
 
     readonly property var defaults: [
-        { id: "net.local.kos-launcher", description: "应用启动器",
+        { id: "net.local.kos-launcher", description: I18n.tr("App Launcher"),
           target: "applauncher", action: "toggle", combo: "Meta+Space" },
-        { id: "net.local.kos-window-switcher", description: "快速搜索",
+        { id: "net.local.kos-window-switcher", description: I18n.tr("Quick Search"),
           target: "quicksearch", action: "toggle window", combo: "Meta+Shift+Space" },
-        { id: "net.local.kos-control-center", description: "控制中心",
+        { id: "net.local.kos-control-center", description: I18n.tr("Control Center"),
           target: "control-center", action: "toggle", combo: "Meta+B" },
-        { id: "net.local.kos-overview", description: "工作区概览",
+        { id: "net.local.kos-overview", description: I18n.tr("Workspace Overview"),
           target: "overview", action: "toggle", combo: "Meta+Tab" },
-        { id: "net.local.kos-stage", description: "Stage 侧边栏",
+        { id: "net.local.kos-stage", description: I18n.tr("Stage Sidebar"),
           target: "stage-sidebar", action: "toggle", combo: "Meta+Y" },
-        { id: "net.local.kos-clipboard", description: "剪贴板历史",
+        { id: "net.local.kos-clipboard", description: I18n.tr("Clipboard History"),
           target: "quicksearch", action: "toggle clipboard", combo: "Meta+V" },
-        { id: "net.local.kos-show-desktop", description: "显示/返回桌面",
+        { id: "net.local.kos-show-desktop", description: I18n.tr("Show / Return to Desktop"),
           target: "desktop", action: "toggle", combo: "Meta+D" },
     ]
 
@@ -78,12 +79,13 @@ QtObject {
         const combo = String(rawCombo || "").trim()
         const known = defaults.find(item => item.id === id)
         if (!known)
-            return _snapshotObject("未知的快捷键：" + id)
+            return _snapshotObject(I18n.tr("Unknown shortcut: %1").arg(id))
         if (!isValidCombo(combo))
-            return _snapshotObject("无效的快捷键组合：" + combo)
+            return _snapshotObject(I18n.tr("Invalid shortcut combination: %1").arg(combo))
         const duplicate = effectiveShortcuts().find(item => item.id !== id && item.combo === combo)
         if (duplicate)
-            return _snapshotObject("快捷键 " + combo + " 已被「" + duplicate.description + "」使用")
+            return _snapshotObject(I18n.tr("Shortcut %1 is already used by \"%2\"")
+                .arg(combo).arg(duplicate.description))
         if (combo === known.combo)
             delete overrides[id]
         else
@@ -96,7 +98,7 @@ QtObject {
 
     function resetShortcut(id) {
         if (!defaults.find(item => item.id === id))
-            return _snapshotObject("未知的快捷键：" + id)
+            return _snapshotObject(I18n.tr("Unknown shortcut: %1").arg(id))
         delete overrides[id]
         overridesChanged()
         saveTimer.restart()

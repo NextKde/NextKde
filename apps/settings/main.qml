@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls
 import "../../shared/qml/foundation" as Foundation
 import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
+import "../../shared/qml/i18n"
 
 ApplicationWindow {
     id: window
@@ -15,7 +16,7 @@ ApplicationWindow {
     minimumWidth: 1030
     minimumHeight: 560
     visible: true
-    title: "kos设置界面"
+    title: I18n.tr("KOS settings")
     color: theme.background
 
     property int currentPage: 1
@@ -142,9 +143,9 @@ ApplicationWindow {
     QtObject {
         id: glassStyles
         readonly property var options: [
-            { id: "liquid", label: "液态玻璃" },
-            { id: "soft", label: "柔光玻璃" },
-            { id: "frosted", label: "磨砂玻璃" }
+            { id: "liquid", label: I18n.tr("Liquid glass") },
+            { id: "soft", label: I18n.tr("Soft-light glass") },
+            { id: "frosted", label: I18n.tr("Frosted glass") }
         ]
         function indexOf(rawStyle) {
             const style = String(rawStyle)
@@ -188,15 +189,15 @@ ApplicationWindow {
 
     readonly property var contentByPage: [
         {
-            subtitle: "显示",
+            subtitle: I18n.tr("Show"),
             groups: []
         },
         {
-            subtitle: "主题",
+            subtitle: I18n.tr("Theme"),
             groups: []
         },
         {
-            subtitle: "顶栏",
+            subtitle: I18n.tr("Top bar"),
             groups: []
         },
         {
@@ -204,34 +205,34 @@ ApplicationWindow {
             groups: []
         },
         {
-            subtitle: "启动台",
+            subtitle: I18n.tr("Launcher"),
             groups: []
         },
         {
-            subtitle: "快捷键",
+            subtitle: I18n.tr("Shortcuts"),
             groups: []
         },
         {
-            subtitle: "接入状态",
+            subtitle: I18n.tr("Integration status"),
             groups: []
         },
         {
-            subtitle: "玻璃调试",
+            subtitle: I18n.tr("Glass debugging"),
             groups: []
         },
         {
-            subtitle: "壁纸",
+            subtitle: I18n.tr("Wallpaper"),
             groups: []
         },
         {
-            subtitle: "服务和组件",
+            subtitle: I18n.tr("Services and components"),
             groups: []
         },
         {
-            subtitle: "台前调度",
+            subtitle: I18n.tr("Stage scheduling"),
             groups: []
         },
-        { subtitle: "窗口和动画", groups: [] }
+        { subtitle: I18n.tr("Windows and animations"), groups: [] }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -314,7 +315,7 @@ ApplicationWindow {
             spacing: 3
 
             Text {
-                text: "kos-settings 开发者热更新模式"
+                text: I18n.tr("kos-settings developer hot-reload mode")
                 color: "#241700"
                 font.pixelSize: 17
                 font.weight: Font.Bold
@@ -322,7 +323,7 @@ ApplicationWindow {
 
             Text {
                 width: parent.width
-                text: "和启动台加载的安装模式不一样"
+                text: I18n.tr("differs from the install mode loaded by the launcher")
                 color: Qt.rgba(0.14, 0.09, 0, 0.78)
                 font.pixelSize: 13
             }
@@ -584,18 +585,18 @@ ApplicationWindow {
         property bool stageAdvanced: false
 
         readonly property var stagePresets: [
-            { id: "lite", name: "轻盈", detail: "小巧卡片 · 轻微倾斜 · 利落动效",
+            { id: "lite", name: I18n.tr("Lithe"), detail: I18n.tr("Compact cards · slight tilt · crisp motion"),
               values: { cardHeight: 145, cardSpacing: 14, tiltAngle: 16,
                         deckRestTilt: 16, hoverScale: 1.0,
                         cardEnterDuration: 190, tiltAnimDuration: 220,
                         animDuration: 340, cardGlow: 0.08, cardDepth: 0.28 } },
-            { id: "standard", name: "标准", detail: "中等卡片 · 适度倾斜 · 平衡动效",
+            { id: "standard", name: I18n.tr("Standard"), detail: I18n.tr("Medium cards · moderate tilt · balanced motion"),
               values: { cardHeight: 170, cardSpacing: 20, tiltAngle: 28,
                         deckRestTilt: 28, hoverScale: 1.0,
                         cardEnterDuration: 240, tiltAnimDuration: 280,
                         animDuration: 400, cardGlow: 0.14, cardDepth: 0.40 } },
             // 「立体」= 用户 2026-09-30 定稿手感（204/28/40×2，悬停放大关）
-            { id: "vivid", name: "立体", detail: "大卡片 · 强倾斜 · 从容动效",
+            { id: "vivid", name: I18n.tr("Dimensional"), detail: I18n.tr("Large cards · strong tilt · relaxed motion"),
               values: { cardHeight: 204, cardSpacing: 28, tiltAngle: 40,
                         deckRestTilt: 40, hoverScale: 1.0,
                         cardEnterDuration: 280, tiltAnimDuration: 340,
@@ -679,20 +680,20 @@ ApplicationWindow {
                 spacing: 4
 
                 Text {
-                    text: "台前调度"
+                    text: I18n.tr("Stage scheduling")
                     color: theme.primaryText
                     font { pixelSize: 15; weight: Font.DemiBold }
                 }
                 Text {
                     Layout.fillWidth: true
                     text: !fgSchedPage.snapshot.resourceSchedulingAvailable
-                        ? "台前侧栏可独立使用。资源调度需要另外安装并运行 fg-schedd；当前未检测到该组件。"
-                        : "外部资源调度守护运行时，前台应用获得高 CPU 优先级与防杀保护；切到后台 10 秒后"
-                          + "自动降低资源优先级（nice "
+                        ? I18n.tr("The stage sidebar works on its own. Resource scheduling additionally requires fg-schedd to be installed and running; it was not detected.")
+                        : I18n.tr("While the external scheduler daemon runs, foreground apps get high CPU priority and kill protection; 10 seconds after going to the background ")
+                          + I18n.tr("Lower resource priority automatically (nice ")
                           + (fgSchedPage.snapshot.bgNice !== undefined ? "+" + fgSchedPage.snapshot.bgNice : "+5")
-                          + "、磁盘 IO 降为低优先"
-                          + "；若为大小核异构 CPU，后台自动限制到效率核）。"
-                          + "名单内的应用切后台后保持全速。改动约 5 秒内自动生效。"
+                          + I18n.tr(" and disk I/O is lowered in priority")
+                          + I18n.tr("; on hybrid CPUs background is limited to efficiency cores automatically).")
+                          + I18n.tr("Apps on the list stay at full speed in the background. Changes apply within about 5 seconds.")
                     color: theme.secondaryText
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -714,7 +715,7 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "台前侧栏"
+                    text: I18n.tr("Stage sidebar")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
@@ -728,14 +729,14 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "启用台前调度侧栏"
+                            text: I18n.tr("Enable stage-manager sidebar")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "屏幕侧缘常驻的窗口卡片栏（左/右可选）：点卡放大换主，收编的应用缩为玻璃卡"
-                                  + "（也可在右上角控制中心开关）。"
+                            text: I18n.tr("A window-card rail docked to the screen edge (left/right): tap a card to promote it, collected apps shrink into glass cards")
+                                  + I18n.tr(" (also toggleable from the control center in the top right).")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -757,7 +758,7 @@ ApplicationWindow {
 
                 // ── 风格预设：一键套用整组观感（三张等宽卡） ──
                 Text {
-                    text: "风格预设"
+                    text: I18n.tr("Style preset")
                     color: theme.primaryText
                     font { pixelSize: 13; weight: Font.Medium }
                 }
@@ -826,7 +827,7 @@ ApplicationWindow {
 
                 // ── 快速调节：三个主参数（其余全在高级自定义） ──
                 StageSliderRow {
-                    label: "卡片大小"
+                    label: I18n.tr("Card size")
                     unit: " px"
                     minV: 100
                     maxV: 220
@@ -836,7 +837,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "卡片宽度"
+                    label: I18n.tr("Card width")
                     unit: " px"
                     minV: 120
                     maxV: 320
@@ -847,7 +848,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "倾斜强度"
+                    label: I18n.tr("Tilt strength")
                     unit: "°"
                     minV: 0
                     maxV: 40
@@ -867,7 +868,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "动效速度"
+                    label: I18n.tr("Motion speed")
                     unit: "×"
                     minV: 0.5
                     maxV: 1.6
@@ -905,14 +906,14 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "高级自定义"
+                            text: I18n.tr("Advanced customization")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "展开全部参数：布局与位置、手势与动效细节、玻璃质感、"
-                                  + "收编节拍、窗口切换动画。"
+                            text: I18n.tr("Expand all parameters: layout and position, gesture and motion details, glass texture, ")
+                                  + I18n.tr("collect timing and window-switch animations.")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -938,7 +939,7 @@ ApplicationWindow {
                     // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）；
                     // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），schema 同步
                     StageSliderRow {
-                        label: "卡片倾斜角度"
+                        label: I18n.tr("Card tilt angle")
                     unit: "°"
                     minV: 0
                     maxV: 40
@@ -950,7 +951,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "卡片间距"
+                    label: I18n.tr("Card spacing")
                     unit: " px"
                     minV: 4
                     maxV: 48
@@ -960,7 +961,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "卡片高度"
+                    label: I18n.tr("Card height")
                     unit: " px"
                     minV: 100
                     maxV: 220
@@ -970,7 +971,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "悬停放大"
+                    label: I18n.tr("Hover zoom")
                     unit: "×"
                     minV: 1.0
                     maxV: 1.2
@@ -981,7 +982,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "点击响应延迟"
+                    label: I18n.tr("Click response delay")
                     unit: " ms"
                     minV: 60
                     maxV: 500
@@ -991,7 +992,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "悬停驻留"
+                    label: I18n.tr("Hover dwell")
                     unit: " ms"
                     minV: 0
                     maxV: 800
@@ -1001,7 +1002,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "卡片入场动效"
+                    label: I18n.tr("Card entrance motion")
                     unit: " ms"
                     minV: 100
                     maxV: 800
@@ -1011,7 +1012,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "倾斜动效"
+                    label: I18n.tr("Tilt motion")
                     unit: " ms"
                     minV: 100
                     maxV: 800
@@ -1029,14 +1030,14 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "自动收编后台窗口"
+                            text: I18n.tr("Auto-collect background windows")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "切换活动窗口后，把非活动窗口自动最小化收进侧栏"
-                                  + "（同应用窗口豁免）。"
+                            text: I18n.tr("After switching the active window, non-active windows are minimized into the sidebar automatically")
+                                  + I18n.tr(" (windows of the same app are exempt).")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1054,7 +1055,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "自动收编延迟"
+                    label: I18n.tr("Auto-collect delay")
                     unit: " ms"
                     minV: 200
                     maxV: 3000
@@ -1068,7 +1069,7 @@ ApplicationWindow {
                 // 该键零消费点，翻动只改 config 死值——schema 键保留兼容）
 
                 Text {
-                    text: "卡片布局"
+                    text: I18n.tr("Card layout")
                     color: theme.primaryText
                     font.pixelSize: 13
                 }
@@ -1079,10 +1080,10 @@ ApplicationWindow {
 
                     Repeater {
                         model: [
-                            { id: "scroll", label: "完整滚动（默认）",
-                              detail: "卡片完整显示、永不重叠；固定间距自然排列，超出侧栏可滚轮连续滚动（底部位置点+窗数提示）" },
-                            { id: "adaptive", label: "自适应缩小",
-                              detail: "卡片全部完整显示，随窗口数量等比缩小" },
+                            { id: "scroll", label: I18n.tr("Continuous scrolling (default)"),
+                              detail: I18n.tr("Cards shown in full and never overlapping; laid out with fixed spacing, scrolling continuously when they exceed the sidebar (position dots + window count at the bottom)") },
+                            { id: "adaptive", label: I18n.tr("Adaptive shrink"),
+                              detail: I18n.tr("All cards shown in full, scaling down as window count grows") },
                         ]
 
                         delegate: Rectangle {
@@ -1120,7 +1121,7 @@ ApplicationWindow {
                 }
 
                 Text {
-                    text: "侧栏位置"
+                    text: I18n.tr("Sidebar position")
                     color: theme.primaryText
                     font.pixelSize: 13
                 }
@@ -1131,8 +1132,8 @@ ApplicationWindow {
 
                     Repeater {
                         model: [
-                            { id: "left", label: "屏幕左侧（默认）" },
-                            { id: "right", label: "屏幕右侧" },
+                            { id: "left", label: I18n.tr("Left of screen (default)") },
+                            { id: "right", label: I18n.tr("Right of screen") },
                         ]
 
                         delegate: Rectangle {
@@ -1171,7 +1172,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "合并卡扇叠间距"
+                    label: I18n.tr("Merged card fan spacing")
                     unit: " px"
                     minV: 2
                     maxV: 24
@@ -1182,7 +1183,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "扇叠悬停扩散"
+                    label: I18n.tr("Fan spread on hover")
                     unit: " ×"
                     minV: 1.0
                     maxV: 2.0
@@ -1198,7 +1199,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "左下角图标大小"
+                    label: I18n.tr("Bottom-left icon size")
                     unit: " px"
                     minV: 16
                     maxV: 40
@@ -1209,8 +1210,8 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "图标排并列上限"
-                    unit: " 枚"
+                    label: I18n.tr("Max icons per row")
+                    unit: I18n.tr(" items")
                     minV: 3
                     maxV: 8
                     active: true
@@ -1220,7 +1221,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "合并驻留时长"
+                    label: I18n.tr("Merge dwell time")
                     unit: " ms"
                     minV: 200
                     maxV: 1200
@@ -1238,13 +1239,13 @@ ApplicationWindow {
                         spacing: 2
 
                         Text {
-                            text: "显示卡片名称"
+                            text: I18n.tr("Show card titles")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "关 = 沉浸缩略图：整卡只展示窗口内容，不显示顶部名称（关闭按钮悬停仍在）"
+                            text: I18n.tr("Off = immersive thumbnails: the card shows only window content without the title (the close button stays on hover)")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1262,7 +1263,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "静置倾斜角"
+                    label: I18n.tr("Rest tilt angle")
                     unit: "°"
                     minV: 0
                     maxV: 40
@@ -1274,7 +1275,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "退避距离"
+                    label: I18n.tr("Retreat distance")
                     unit: " px"
                     minV: 4
                     maxV: 60
@@ -1293,13 +1294,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "聚焦压暗退避卡片"
+                            text: I18n.tr("Dim retreated cards on focus")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "悬停聚焦时把退避的卡片压暗以突出主体；关闭则退避卡片保持原亮度。"
+                            text: I18n.tr("Dim retreated cards on hover focus to emphasize the main one; off keeps them at normal brightness.")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1327,13 +1328,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "卡片垂直居中"
+                            text: I18n.tr("Center cards vertically")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "自适应模式：卡片放得下时在侧栏垂直居中，贴满时顶部锚定。"
+                            text: I18n.tr("Adaptive: cards center vertically when they fit; anchored to the top when full.")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1357,10 +1358,10 @@ ApplicationWindow {
                 //    配置层互斥仍在 ──
                 Text {
                     Layout.fillWidth: true
-                    text: "卡面画面模式 — 当前："
+                    text: I18n.tr("Card content mode — current: ")
                         + (fgSchedPage.stageSnapshot.thumbLiveEffect === true
-                            ? "实时（合成器直绘，窗口内容持续更新）"
-                            : "静态快照（收编时拍照，稳定省电）")
+                            ? I18n.tr("Live (compositor-drawn, window content keeps updating)")
+                            : I18n.tr("Static snapshot (captured on collect; stable and power-efficient)"))
                     color: theme.accent
                     font { pixelSize: 12; weight: Font.Medium }
                     wrapMode: Text.WordWrap
@@ -1378,13 +1379,13 @@ ApplicationWindow {
                         spacing: 4
 
                         Text {
-                            text: "实时卡片（合成器直绘）"
+                            text: I18n.tr("Live cards (compositor-drawn)")
                             color: theme.primaryText
                             font { pixelSize: 13; weight: Font.Medium }
                         }
                         Text {
                             Layout.fillWidth: true
-                            text: "收进卡片的窗口实时显示画面（视频/终端输出持续更新）。走合成器直绘通道（无 PipeWire），窗口内容更新才会产生开销，与桌面上开着这些应用相当。特效未生效时自动回退静态快照。"
+                            text: I18n.tr("Windows collected into cards show their content live (video/terminal output keeps updating). Uses the compositor direct-draw path (no PipeWire); overhead only occurs when window content updates, comparable to keeping those apps on the desktop. Falls back to static snapshots automatically if effects are unavailable.")
                             color: theme.secondaryText
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
@@ -1422,13 +1423,13 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "玻璃质感"
+                    text: I18n.tr("Glass texture")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
 
                 StageSliderRow {
-                    label: "卡片圆角"
+                    label: I18n.tr("Card corner radius")
                     unit: " px"
                     minV: 0
                     maxV: 24
@@ -1438,7 +1439,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "背板浓度"
+                    label: I18n.tr("Backdrop density")
                     unit: ""
                     minV: 0.2
                     maxV: 0.95
@@ -1449,7 +1450,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "顶部受光"
+                    label: I18n.tr("Top-lit")
                     unit: ""
                     minV: 0
                     maxV: 0.3
@@ -1460,7 +1461,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "描边亮度"
+                    label: I18n.tr("Outline brightness")
                     unit: ""
                     minV: 0
                     maxV: 0.4
@@ -1474,7 +1475,7 @@ ApplicationWindow {
                     // 辉光是静态快照的扇叠背板效果（实时直绘模式无辉光
                     // pass，v57 撤）——实时模式下隐藏防"拖了没反应"
                     visible: fgSchedPage.stageSnapshot.thumbLiveEffect !== true
-                    label: "聚焦辉光强度（静态模式）"
+                    label: I18n.tr("Focus glow strength (static mode)")
                     unit: ""
                     minV: 0
                     maxV: 0.4
@@ -1485,7 +1486,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "纵深压暗"
+                    label: I18n.tr("Depth dimming")
                     unit: ""
                     minV: 0
                     maxV: 0.6
@@ -1496,7 +1497,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "缩略图清晰度"
+                    label: I18n.tr("Thumbnail sharpness")
                     unit: " px"
                     minV: 160
                     maxV: 640
@@ -1523,13 +1524,13 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "收编与刷新节拍"
+                    text: I18n.tr("Collect and refresh timing")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
 
                 StageSliderRow {
-                    label: "收编快照等待"
+                    label: I18n.tr("Collect snapshot wait")
                     unit: " ms"
                     minV: 100
                     maxV: 1500
@@ -1539,7 +1540,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "收编派发延迟"
+                    label: I18n.tr("Collect dispatch delay")
                     unit: " ms"
                     minV: 10
                     maxV: 200
@@ -1549,7 +1550,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "桌面收编去抖"
+                    label: I18n.tr("Desktop collect debounce")
                     unit: " ms"
                     minV: 50
                     maxV: 1000
@@ -1560,8 +1561,8 @@ ApplicationWindow {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "收编两拍：先等快照（多窗连拍需要时间）、矩形落盘后再延迟派发最小化"
-                          + "（与展开动画对拍）。"
+                    text: I18n.tr("Two-phase collect: wait for the snapshot first (multi-window captures take time), persist the rectangles, then dispatch the minimization")
+                          + I18n.tr(" (matched against the expand animation).")
                     color: theme.secondaryText
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
@@ -1585,13 +1586,13 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "窗口切换动画"
+                    text: I18n.tr("Window switch animation")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
 
                 StageSliderRow {
-                    label: "动画时长"
+                    label: I18n.tr("Animation duration")
                     unit: " ms"
                     minV: 120
                     maxV: 2000
@@ -1601,7 +1602,7 @@ ApplicationWindow {
                 }
 
                 StageSliderRow {
-                    label: "飞行玻璃透明度"
+                    label: I18n.tr("Flying glass opacity")
                     unit: "×"
                     minV: 0.3
                     maxV: 1.0
@@ -1612,7 +1613,7 @@ ApplicationWindow {
                 }
 
                 Text {
-                    text: "缓动曲线"
+                    text: I18n.tr("Easing curve")
                     color: theme.primaryText
                     font.pixelSize: 13
                 }
@@ -1623,12 +1624,12 @@ ApplicationWindow {
 
                     Repeater {
                         model: [
-                            { id: "OutCubic", label: "快出缓停（默认）" },
-                            { id: "OutQuad", label: "更平缓" },
-                            { id: "InOutCubic", label: "慢-快-慢" },
-                            { id: "OutBack", label: "末端回弹" },
-                            { id: "InOutQuad", label: "柔和两端" },
-                            { id: "Linear", label: "匀速" },
+                            { id: "OutCubic", label: I18n.tr("Fast out, gentle stop (default)") },
+                            { id: "OutQuad", label: I18n.tr("Gentler") },
+                            { id: "InOutCubic", label: I18n.tr("Slow-fast-slow") },
+                            { id: "OutBack", label: I18n.tr("End overshoot") },
+                            { id: "InOutQuad", label: I18n.tr("Soft edges") },
+                            { id: "Linear", label: I18n.tr("Linear") },
                         ]
 
                         delegate: Rectangle {
@@ -1667,10 +1668,10 @@ ApplicationWindow {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "窗口从卡片长出/缩回的动画；改动画时长与曲线立即生效，"
-                          + "也可用命令行 stage-anim 临时调节。飞行玻璃透明度："
-                          + "窗口在卡片↔桌面途中呈半透明（透见桌面），落地凝实；"
-                          + "1.00 = 关闭玻璃感。"
+                    text: I18n.tr("Animation for windows growing out of / back into cards; duration and curve changes apply instantly, ")
+                          + I18n.tr("Also adjustable temporarily via the stage-anim CLI. Flying glass opacity: ")
+                          + I18n.tr("Windows are translucent mid-flight between card and desktop (desktop shows through), solidifying on landing; ")
+                          + I18n.tr("1.00 disables the glass feel.")
                     color: theme.secondaryText
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
@@ -1697,14 +1698,14 @@ ApplicationWindow {
                     spacing: 4
 
                     Text {
-                        text: "冻结最小化的窗口"
+                        text: I18n.tr("Freeze minimized windows")
                         color: theme.primaryText
                         font { pixelSize: 14; weight: Font.Medium }
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "收进侧栏 3 分钟后整树暂停（省 CPU，恢复偶发异常）。"
-                            + "默认停用：后台仅限制资源，绝不暂停进程。"
+                        text: I18n.tr("Suspends the whole tree after 3 minutes in the sidebar (saves CPU; restore may occasionally glitch).")
+                            + I18n.tr("Off by default: the background is only resource-limited; processes are never frozen.")
                         color: theme.secondaryText
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -1737,7 +1738,7 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "后台内存节省"
+                    text: I18n.tr("Background memory saving")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
@@ -1749,14 +1750,14 @@ ApplicationWindow {
                     // 三档选择：关 / 标准 / 激进 / 极限
                     Repeater {
                         model: [
-                            { id: "off", label: "关闭",
-                              detail: "后台不动内存" },
-                            { id: "once", label: "标准",
-                              detail: "切后台 60 秒后压缩一次（冷页挤进 zram，切回时略慢一拍）" },
-                            { id: "aggressive", label: "激进压缩",
-                              detail: "进入后台持续压缩（每 5 分钟重压），内存占用降到最低" },
-                            { id: "kill", label: "极限",
-                              detail: "先持续压缩，后台 10 分钟后直接结束应用——内存归零。未保存工作会丢失（浏览器可恢复会话）；把不想被结束的应用加进下方名单即可豁免" }
+                            { id: "off", label: I18n.tr("Off"),
+                              detail: I18n.tr("Leave background memory alone") },
+                            { id: "once", label: I18n.tr("Standard"),
+                              detail: I18n.tr("Compresses once after 60 seconds in the background (cold pages squeezed into zram; switching back is slightly slower)") },
+                            { id: "aggressive", label: I18n.tr("Aggressive compression"),
+                              detail: I18n.tr("Compresses continuously in the background (recompressed every 5 minutes), minimizing memory use") },
+                            { id: "kill", label: I18n.tr("Extreme"),
+                              detail: I18n.tr("Compresses continuously, then kills the app after 10 minutes in the background — memory goes to zero. Unsaved work is lost (browsers can restore sessions); add apps you want spared to the list below") }
                         ]
 
                         delegate: Rectangle {
@@ -1826,13 +1827,13 @@ ApplicationWindow {
                     Layout.fillWidth: true
 
                     Text {
-                        text: "内存状态"
+                        text: I18n.tr("Memory state")
                         color: theme.primaryText
                         font { pixelSize: 14; weight: Font.Medium }
                     }
                     Item { Layout.fillWidth: true }
                     Text {
-                        text: "刷新"
+                        text: I18n.tr("Refresh")
                         color: fgSchedMemMouse.containsMouse
                             ? theme.accent : theme.secondaryText
                         font.pixelSize: 12
@@ -1853,8 +1854,8 @@ ApplicationWindow {
                     text: {
                         const st = fgSchedPage.memStatus
                         if (st.memAvailableKb === undefined)
-                            return "读取中…"
-                        return "可用内存 " + fgSchedPage.gb(st.memAvailableKb)
+                            return I18n.tr("Reading…")
+                        return I18n.tr("Available memory ") + fgSchedPage.gb(st.memAvailableKb)
                             + " / " + fgSchedPage.gb(st.memTotalKb)
                     }
                     color: theme.primaryText
@@ -1865,12 +1866,12 @@ ApplicationWindow {
                     text: {
                         const st = fgSchedPage.memStatus
                         if (st.zramOrigKb === undefined)
-                            return "zram 压缩池不可读"
+                            return I18n.tr("zram compression pool is not readable")
                         const ratio = st.zramComprKb > 0
                             ? (st.zramOrigKb / st.zramComprKb).toFixed(1) : "—"
-                        return "压缩池（zram）：已压 " + fgSchedPage.gb(st.zramComprKb)
-                            + "（原 " + fgSchedPage.gb(st.zramOrigKb)
-                            + "，压缩比 " + ratio + ":1）"
+                        return I18n.tr("Compression pool (zram): compressed ") + fgSchedPage.gb(st.zramComprKb)
+                            + I18n.tr(" (originally ") + fgSchedPage.gb(st.zramOrigKb)
+                            + I18n.tr(", compression ratio ") + ratio + ":1）"
                     }
                     color: theme.secondaryText
                     font.pixelSize: 12
@@ -1878,12 +1879,12 @@ ApplicationWindow {
                 Text {
                     Layout.fillWidth: true
                     text: fgSchedPage.snapshot.reclaimMode === "kill"
-                        ? "极限模式：后台应用先被持续压缩，10 分钟后直接结束进程"
-                          + "（内存归零）。数据安全靠应用自身的会话恢复；"
-                          + "豁免名单外的应用一律会杀——有未保存工作时请把它加进"
-                          + "下方名单。"
-                        : "激进模式会把后台应用的内存页反复压进压缩池：内存占用大幅下降，"
-                          + "代价是切回该应用时画面停顿一瞬（页面从压缩池换回）。"
+                        ? I18n.tr("Extreme mode: background apps are compressed continuously, then killed after 10 minutes")
+                          + I18n.tr(" (memory zeroed). Data safety relies on the app's own session restore; ")
+                          + I18n.tr("Apps outside the exemption list are always killed — if it has unsaved work, add it to the ")
+                          + I18n.tr("list below.")
+                        : I18n.tr("Aggressive mode squeezes background apps' memory pages into the pool repeatedly: usage drops sharply, ")
+                          + I18n.tr("The cost is a brief stall when switching back (pages are swapped in from the compression pool).")
                     color: fgSchedPage.snapshot.reclaimMode === "kill" ? "#ff9f0a" : theme.tertiaryText
                     font.pixelSize: 11
                     wrapMode: Text.WordWrap
@@ -1906,15 +1907,15 @@ ApplicationWindow {
                 spacing: 10
 
                 Text {
-                    text: "后台全资源运行名单"
+                    text: I18n.tr("Full-resource background list")
                     color: theme.primaryText
                     font { pixelSize: 14; weight: Font.Medium }
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: "名单内的应用切到后台后不降级、不限核（跑常驻服务、"
-                          + "挂机下载、后台 agent 用）。填应用类名"
-                          + "（如 org.kde.konsole），或从下面出现过的应用里选。"
+                    text: I18n.tr("Apps on the list keep full priority and cores in the background (for resident services, ")
+                          + I18n.tr("for idle downloads or background agents). Fill in app class names")
+                          + I18n.tr(" (e.g. org.kde.konsole), or pick from the apps seen below.")
                     color: theme.secondaryText
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
@@ -1949,7 +1950,7 @@ ApplicationWindow {
                             Layout.maximumWidth: 130
                         }
                         Text {
-                            text: "移除"
+                            text: I18n.tr("Remove")
                             color: "#ff453a"
                             font.pixelSize: 12
 
@@ -1966,7 +1967,7 @@ ApplicationWindow {
 
                 Text {
                     visible: (fgSchedPage.snapshot.fullResources || []).length === 0
-                    text: "名单为空：所有应用后台都会被限制资源"
+                    text: I18n.tr("List is empty: every app gets resource-limited in the background")
                     color: theme.tertiaryText
                     font.pixelSize: 12
                 }
@@ -1991,12 +1992,12 @@ ApplicationWindow {
                         valueRole: "appId"
                         enabled: count > 0
                         displayText: count > 0
-                            ? currentText : "点右侧刷新，扫描当前运行的应用"
+                            ? currentText : I18n.tr("Tap refresh on the right to scan currently running apps")
                         font.pixelSize: 12
                     }
 
                     Button {
-                        text: fgSchedPage.runningApps.length > 0 ? "添加" : "刷新"
+                        text: fgSchedPage.runningApps.length > 0 ? I18n.tr("Add") : I18n.tr("Refresh")
                         enabled: fgSchedPage.runningApps.length === 0
                             || (knownAppsBox.count > 0
                                 && knownAppsBox.currentValue !== undefined
@@ -2020,7 +2021,7 @@ ApplicationWindow {
                     TextField {
                         id: manualInput
                         Layout.fillWidth: true
-                        placeholderText: "手动输入类名，如 org.kde.konsole"
+                        placeholderText: I18n.tr("Type a class name manually, e.g. org.kde.konsole")
                         font.pixelSize: 12
                         onAccepted: {
                             if (text.trim().length > 0) {
@@ -2031,7 +2032,7 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "添加"
+                        text: I18n.tr("Add")
                         enabled: manualInput.text.trim().length > 0
                         onClicked: {
                             fgSchedPage.bridge.fgSchedAddFull(manualInput.text)
@@ -2057,7 +2058,7 @@ ApplicationWindow {
 
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             // The reply lands on integrationSnapshotChanged; the bridge does
@@ -2071,52 +2072,52 @@ ApplicationWindow {
             enabled: integrationPage.bridge !== null
             function onIntegrationSnapshotChanged(state) {
                 integrationPage.snapshot = state
-                integrationPage.errorText = integrationPage.bridge.lastError || ""
+                integrationPage.errorText = I18n.tr(integrationPage.bridge.lastError) || ""
             }
         }
 
         function notificationState() {
             const provider = snapshot.notificationProvider || "none"
             if (provider === "kos")
-                return { label: "KOS 已接管", color: "#30d158",
-                    detail: "通知将显示在 KOS 通知中心" }
+                return { label: I18n.tr("KOS has taken over"), color: "#30d158",
+                    detail: I18n.tr("Notifications will appear in the KOS notification center") }
             if (provider === "plasma")
-                return { label: "Plasma 接管", color: "#ff9f0a",
-                    detail: "KOS 正在等待 org.freedesktop.Notifications 所有权" }
+                return { label: I18n.tr("Plasma takeover"), color: "#ff9f0a",
+                    detail: I18n.tr("KOS is waiting for the org.freedesktop.Notifications name") }
             if (provider === "other")
-                return { label: "其他程序接管", color: "#ff9f0a",
-                    detail: snapshot.notificationCommand || snapshot.notificationOwner || "未知通知服务" }
-            return { label: "未注册", color: "#ff453a",
-                detail: "当前没有可用的桌面通知服务" }
+                return { label: I18n.tr("Another program has taken over"), color: "#ff9f0a",
+                    detail: snapshot.notificationCommand || snapshot.notificationOwner || I18n.tr("Unknown notification service") }
+            return { label: I18n.tr("Not registered"), color: "#ff453a",
+                detail: I18n.tr("No desktop notification service available") }
         }
 
         function statusRow(icon, tint, title, ready, readyLabel, detail) {
             return { icon: icon, tint: tint, title: title,
-                label: ready ? readyLabel : "未连接",
+                label: ready ? readyLabel : I18n.tr("Not connected"),
                 color: ready ? "#30d158" : "#ff453a", detail: detail }
         }
 
         readonly property var notification: notificationState()
         readonly property var rows: [
             statusRow("K", "#0a84ff", "KOS Shell", !!snapshot.shellReady,
-                "运行中", "设置页与 Quickshell IPC 通道"),
-            statusRow("↔", "#5ac8fa", "平台桥接", !!snapshot.platformConnected,
-                "已连接", "窗口、网络、音频与系统操作"),
-            statusRow("D", "#34c759", "数据服务", !!snapshot.dataConnected,
-                "已连接", "系统指标、活动记录与桌面文件"),
-            statusRow("▦", "#af52de", "桌面组件", !!snapshot.desktopWidgetsVisible,
-                "已显示", snapshot.desktopFilesReady
-                    ? "时钟、天气、资源卡片与桌面文件已就绪"
-                    : "组件层已显示，桌面文件仍在同步"),
-            { icon: "N", tint: "#ff9500", title: "通知接管",
+                I18n.tr("Running"), I18n.tr("Settings page and Quickshell IPC channel")),
+            statusRow("↔", "#5ac8fa", I18n.tr("Platform bridge"), !!snapshot.platformConnected,
+                I18n.tr("Connected"), I18n.tr("Windows, network, audio and system actions")),
+            statusRow("D", "#34c759", I18n.tr("Data service"), !!snapshot.dataConnected,
+                I18n.tr("Connected"), I18n.tr("System metrics, activity records and desktop files")),
+            statusRow("▦", "#af52de", I18n.tr("Desktop widgets"), !!snapshot.desktopWidgetsVisible,
+                I18n.tr("Shown"), snapshot.desktopFilesReady
+                    ? I18n.tr("Clock, weather, resource cards and desktop files are ready")
+                    : I18n.tr("Widget layer shown; desktop files still syncing")),
+            { icon: "N", tint: "#ff9500", title: I18n.tr("Notification takeover"),
                 label: notification.label, color: notification.color,
                 detail: notification.detail },
-            statusRow("G", "#64d2ff", "Glass 特效", !!snapshot.glassLoaded,
-                "已加载", "KWin 模糊与液态玻璃效果"),
-            statusRow("A", "#ff375f", "Dock 窗口动画",
-                !!snapshot.dockAnimationLoaded, "已加载", "KWin Dock 缩放／Genie 动画"),
-            statusRow("I", "#bf5af2", "桌面输入桥接",
-                !!snapshot.contextMenuInputLoaded, "已加载", "全局点击与菜单收起事件")
+            statusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded,
+                I18n.tr("Loaded"), I18n.tr("KWin blur and liquid glass effects")),
+            statusRow("A", "#ff375f", I18n.tr("Dock window animation"),
+                !!snapshot.dockAnimationLoaded, I18n.tr("Loaded"), I18n.tr("KWin Dock zoom / genie animation")),
+            statusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"),
+                !!snapshot.contextMenuInputLoaded, I18n.tr("Loaded"), I18n.tr("Global clicks and menu dismiss events"))
         ]
 
         RowLayout {
@@ -2127,7 +2128,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: snapshot.updatedAt
-                    ? "最后检查 " + snapshot.updatedAt : "正在读取实时状态…"
+                    ? I18n.tr("Last checked ") + snapshot.updatedAt : I18n.tr("Reading live state…")
                 color: theme.secondaryText
                 font.pixelSize: 12
             }
@@ -2143,7 +2144,7 @@ ApplicationWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "刷新"
+                    text: I18n.tr("Refresh")
                     color: theme.primaryText
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
@@ -2421,7 +2422,7 @@ ApplicationWindow {
         }
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.dockSnapshot()
@@ -2453,32 +2454,32 @@ ApplicationWindow {
             function onDockSnapshotChanged(state) {
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
-                    dockPage.errorText = dockPage.bridge.lastError
+                    dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
             }
             function onDockNotificationBadgeVisibilityChanged(state) {
                 dockPage.notificationBadgeUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
-                    dockPage.errorText = dockPage.bridge.lastError
+                    dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
             }
             function onDockRevealIndicatorVisibilityChanged(state) {
                 dockPage.revealIndicatorUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
-                    dockPage.errorText = dockPage.bridge.lastError
+                    dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
             }
             function onDockBuiltinVisibilityChanged(state) {
                 dockPage.builtinUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
-                    dockPage.errorText = dockPage.bridge.lastError
+                    dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
             }
         }
 
         Component.onCompleted: refresh()
 
         Text {
-            text: "大小和位置".toUpperCase()
+            text: I18n.tr("Size and position").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -2504,7 +2505,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "▰"; tint: "#0a84ff" }
                         Text {
-                            text: "Dock 高度"
+                            text: I18n.tr("Dock height")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -2537,7 +2538,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "悬停效果".toUpperCase()
+            text: I18n.tr("Hover effects").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -2566,9 +2567,9 @@ ApplicationWindow {
                         SettingIcon { symbol: "◍"; tint: "#0a84ff" }
                         ColumnLayout {
                             spacing: 1
-                            Text { text: "悬停放大"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: I18n.tr("Hover to zoom"); color: theme.primaryText; font.pixelSize: 14 }
                             Text {
-                                text: "放大时同步上移；100% 关闭，最高 300%"
+                                text: I18n.tr("Scales up and lifts together; 100% disables, up to 300%")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2603,7 +2604,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "内置图标"
+            text: I18n.tr("Built-in icons")
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -2624,8 +2625,8 @@ ApplicationWindow {
                 Repeater {
                     id: builtinRepeater
                     model: [
-                        { id: "launcher", stateKey: "showLauncher", label: "启动台", symbol: "❖", tint: "#ff9500" },
-                        { id: "trash", stateKey: "showTrash", label: "回收站", symbol: "♲", tint: "#8e8e93" }
+                        { id: "launcher", stateKey: "showLauncher", label: I18n.tr("Launcher"), symbol: "❖", tint: "#ff9500" },
+                        { id: "trash", stateKey: "showTrash", label: I18n.tr("Trash"), symbol: "♲", tint: "#8e8e93" }
                     ]
 
                     delegate: Item {
@@ -2710,7 +2711,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "窗口".toUpperCase()
+            text: I18n.tr("Window").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -2731,7 +2732,7 @@ ApplicationWindow {
                 spacing: 12
                 SettingIcon { symbol: "▦"; tint: "#5856d6" }
                 Text {
-                    text: "是否按应用合并窗口"
+                    text: I18n.tr("Merge windows by app")
                     color: theme.primaryText
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
@@ -2754,7 +2755,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "DOCK 程序栏".toUpperCase()
+            text: I18n.tr("DOCK APP BAR").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -2782,7 +2783,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "▣"; tint: "#0a84ff" }
                         Text {
-                            text: "Dock 位置"
+                            text: I18n.tr("Dock position")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -2815,11 +2816,11 @@ ApplicationWindow {
                         SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
                         ColumnLayout {
                             spacing: 1
-                            Text { text: "内容样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: I18n.tr("Content style"); color: theme.primaryText; font.pixelSize: 14 }
                             Text {
                                 text: dockPage.dockContentStyleIndex === 0
-                                    ? "应用、窗口与组件紧凑排列"
-                                    : "应用和窗口靠前，其他组件靠后"
+                                    ? I18n.tr("Apps, windows and widgets laid out compactly")
+                                    : I18n.tr("Apps and windows come first, other components behind")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2827,8 +2828,8 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             model: [
-                                { id: "compact", label: "紧凑" },
-                                { id: "relaxed", label: "宽松" }
+                                { id: "compact", label: I18n.tr("Compact") },
+                                { id: "relaxed", label: I18n.tr("Comfortable") }
                             ]
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             itemWidthOverride: 62
@@ -2851,13 +2852,13 @@ ApplicationWindow {
                         SettingIcon { symbol: "▭"; tint: "#af52de" }
                         ColumnLayout {
                             spacing: 1
-                            Text { text: "Dock 样式"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: I18n.tr("Dock style"); color: theme.primaryText; font.pixelSize: 14 }
                             Text {
                                 text: dockPage.dockStyleIndex === 0
-                                    ? "自适应内容并保留主题间距"
+                                    ? I18n.tr("Adapt to content and keep theme spacing")
                                     : (dockPage.dockStyleIndex === 1
-                                        ? "贴合屏幕边缘并延伸为任务栏"
-                                        : "隐藏 Dock 背景，保留组件背景")
+                                        ? I18n.tr("Hugs the screen edge and extends into a taskbar")
+                                        : I18n.tr("Hide the Dock background but keep the widget background"))
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2866,9 +2867,9 @@ ApplicationWindow {
                         SettingsNavBar {
                             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                             model: [
-                                { id: "floating", label: "悬浮" },
-                                { id: "taskbar", label: "任务栏" },
-                                { id: "transparent", label: "全透明" }
+                                { id: "floating", label: I18n.tr("Floating") },
+                                { id: "taskbar", label: I18n.tr("Taskbar") },
+                                { id: "transparent", label: I18n.tr("Fully transparent") }
                             ]
                             itemWidthOverride: 62
                             currentIndex: dockPage.dockStyleIndex
@@ -2889,7 +2890,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◉"; tint: "#0a84ff" }
                         Text {
-                            text: "Dock 显示方式"
+                            text: I18n.tr("Dock display")
                             color: theme.primaryText
                             font.pixelSize: 14
                             font.weight: Font.DemiBold
@@ -2898,9 +2899,9 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: visibilityNavBar
                             model: [
-                                { id: "always", label: "始终显示" },
-                                { id: "smart", label: "智能隐藏" },
-                                { id: "persistent", label: "持续隐藏" }
+                                { id: "always", label: I18n.tr("Always show") },
+                                { id: "smart", label: I18n.tr("Smart hide") },
+                                { id: "persistent", label: I18n.tr("Keep hidden") }
                             ]
                             itemWidthOverride: 76
                             currentIndex: dockPage.visibilityModeIndex
@@ -2924,9 +2925,9 @@ ApplicationWindow {
                         SettingIcon { symbol: "●"; tint: "#ff3b30" }
                         ColumnLayout {
                             spacing: 1
-                            Text { text: "显示通知角标"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: I18n.tr("Show notification badges"); color: theme.primaryText; font.pixelSize: 14 }
                             Text {
-                                text: "在应用图标上显示通知数字和提醒红点"
+                                text: I18n.tr("Show notification counts and badges on app icons")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2938,7 +2939,7 @@ ApplicationWindow {
                             enabled: dockPage.stateReady && !dockPage.notificationBadgeUpdatePending
                             accentColor: theme.role("primary", "#0a84ff")
                             trackColor: theme.divider
-                            Accessible.name: "显示通知角标"
+                            Accessible.name: I18n.tr("Show notification badges")
                             onToggled: function(checked) {
                                 dockPage.saveNotificationBadgeVisibility(checked)
                             }
@@ -2958,9 +2959,9 @@ ApplicationWindow {
                         SettingIcon { symbol: "━"; tint: "#8e8e93" }
                         ColumnLayout {
                             spacing: 1
-                            Text { text: "显示隐藏提示条"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text { text: I18n.tr("Show the hide hint bar"); color: theme.primaryText; font.pixelSize: 14 }
                             Text {
-                                text: "关闭后仍可移到屏幕边缘唤出 Dock"
+                                text: I18n.tr("After turning it off, moving to the screen edge still summons the Dock")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2972,7 +2973,7 @@ ApplicationWindow {
                             enabled: dockPage.stateReady && !dockPage.revealIndicatorUpdatePending
                             accentColor: theme.role("primary", "#0a84ff")
                             trackColor: theme.divider
-                            Accessible.name: "显示隐藏提示条"
+                            Accessible.name: I18n.tr("Show the hide hint bar")
                             onToggled: function(checked) {
                                 dockPage.saveRevealIndicatorVisibility(checked)
                             }
@@ -3047,7 +3048,7 @@ ApplicationWindow {
 
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.appearanceSnapshot()
@@ -3111,7 +3112,7 @@ ApplicationWindow {
 
         function setSystemAppearance(index) {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.applySystemAppearance(index === 1)
@@ -3138,13 +3139,13 @@ ApplicationWindow {
             function onAppearanceSnapshotChanged(state) {
                 displayPage.applyState(state)
                 if (displayPage.bridge.lastError)
-                    displayPage.errorText = displayPage.bridge.lastError
+                    displayPage.errorText = I18n.tr(displayPage.bridge.lastError)
             }
             function onSystemAppearanceApplied(accepted) {
                 if (accepted)
                     displayPage.errorText = ""
                 else if (displayPage.bridge.lastError)
-                    displayPage.errorText = displayPage.bridge.lastError
+                    displayPage.errorText = I18n.tr(displayPage.bridge.lastError)
             }
         }
 
@@ -3152,7 +3153,7 @@ ApplicationWindow {
 
         Text {
             visible: displayPage.showSystemAppearance
-            text: "系统外观".toUpperCase()
+            text: I18n.tr("System appearance").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -3184,7 +3185,7 @@ ApplicationWindow {
 
                         SettingIcon { symbol: "◐"; tint: "#5ac8fa" }
                         Text {
-                            text: "外观模式"
+                            text: I18n.tr("Appearance mode")
                             color: theme.primaryText
                             font.pixelSize: 15
                             font.weight: Font.DemiBold
@@ -3193,8 +3194,8 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: systemAppearanceNavBar
                             model: [
-                                { id: "light", label: "浅色" },
-                                { id: "dark", label: "深色" }
+                                { id: "light", label: I18n.tr("Light") },
+                                { id: "dark", label: I18n.tr("Dark") }
                             ]
                             currentIndex: theme.dark ? 1 : 0
                             onSelectionChanged: function(index) {
@@ -3232,7 +3233,7 @@ ApplicationWindow {
 
                         SettingIcon { symbol: "◈"; tint: "#64d2ff" }
                         Text {
-                            text: "液态玻璃跟随外观模式"
+                            text: I18n.tr("Liquid glass follows the appearance mode")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -3259,7 +3260,7 @@ ApplicationWindow {
 
         Text {
             visible: displayPage.showSpatialWallpaper
-            text: "空间壁纸"
+            text: I18n.tr("Spatial wallpaper")
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -3286,14 +3287,14 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 3
                     Text {
-                        text: "启用空间壁纸视差"
+                        text: I18n.tr("Enable spatial wallpaper parallax")
                         color: theme.primaryText
                         font.pixelSize: 14
                         font.weight: Font.DemiBold
                     }
                     Text {
                         Layout.fillWidth: true
-                        text: "模型只在本机运行。首次启用会下载并用 CPU 生成深度缓存；之后仅在壁纸变化时重新处理。"
+                        text: I18n.tr("The model runs locally only. First enablement downloads it and generates the depth cache on CPU; afterwards only wallpaper changes are reprocessed.")
                         color: theme.secondaryText
                         font.pixelSize: 11
                         wrapMode: Text.Wrap
@@ -3319,7 +3320,7 @@ ApplicationWindow {
 
         Text {
             visible: displayPage.showGlassMaterial
-            text: (displayPage.isMaterialDesign ? "背景模糊" : "玻璃材质").toUpperCase()
+            text: (displayPage.isMaterialDesign ? I18n.tr("Background blur") : I18n.tr("Glass material")).toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -3348,7 +3349,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◇"; tint: "#64d2ff" }
                         Text {
-                            text: "材质风格"
+                            text: I18n.tr("Material style")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -3387,7 +3388,7 @@ ApplicationWindow {
 
                         SettingIcon { symbol: "◌"; tint: "#5ac8fa" }
                         Text {
-                            text: "模糊强度"
+                            text: I18n.tr("Blur strength")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -3438,7 +3439,7 @@ ApplicationWindow {
 
                         SettingIcon { symbol: "≈"; tint: "#af52de" }
                         Text {
-                            text: "液态强度"
+                            text: I18n.tr("Liquid strength")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -3503,10 +3504,10 @@ ApplicationWindow {
         readonly property var visibleControls: controls.filter(function(control) {
             if (showAdvanced)
                 return true
-            if (control.section === "色彩")
+            if (control.section === "Colour")
                 return ["Brightness", "Saturation", "Contrast"]
                     .indexOf(control.key) >= 0
-            if (control.section !== "材质")
+            if (control.section !== "Material")
                 return false
             // Keep only controls that visibly contribute to the selected
             // material. Shader-development controls remain under 高级参数.
@@ -3524,7 +3525,7 @@ ApplicationWindow {
         }
         function updateValue(key, value) {
             if (!bridge) {
-                errorText = "设置桥不可用"
+                errorText = I18n.tr("Settings bridge unavailable")
                 return
             }
             // Fire-and-forget: the reply re-reads what was actually stored
@@ -3539,7 +3540,7 @@ ApplicationWindow {
             function onGlassDebugSnapshotChanged(controls, presetStyle) {
                 glassDebugPage.controls = controls
                 glassDebugPage.presetStyle = presetStyle
-                glassDebugPage.errorText = glassDebugPage.bridge.lastError || ""
+                glassDebugPage.errorText = I18n.tr(glassDebugPage.bridge.lastError) || ""
             }
         }
 
@@ -3551,11 +3552,11 @@ ApplicationWindow {
 
         Text {
             Layout.fillWidth: true
-            text: "「材质」分组就是当前材质风格（" + glassDebugPage.presetStyleLabel
-                + "）的预设值：改动写进该预设、立即生效并在重启后保留，切换材质风格会换用另一套。"
-                + "「折射强度」还会乘以顶部的「液态强度」，实际生效值 = 液态强度 × 该值。"
-                + "其余分组直接写 kwinrc 的 [Effect-blurplus]，外观主题不接管它们，改动会保留；"
-                + "标「设计值」的行由外观主题决定，只读。"
+            text: I18n.tr("The Material group IS the current material style (") + glassDebugPage.presetStyleLabel
+                + I18n.tr(" ) preset: changes are written to that preset, apply immediately, survive restarts, and switching material styles swaps in the other set.")
+                + I18n.tr("Refraction strength is multiplied by Liquid strength above; effective value = liquid strength × this value.")
+                + I18n.tr("Other groups write straight to kwinrc [Effect-blurplus]; the appearance theme does not manage them and the changes persist;")
+                + I18n.tr("Rows marked Designed value come from the appearance theme and are read-only.")
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -3570,7 +3571,7 @@ ApplicationWindow {
             Text {
                 Layout.fillWidth: true
                 text: glassDebugPage.showAdvanced
-                    ? "正在显示全部 KWin 参数" : "仅显示影响玻璃观感的核心参数"
+                    ? I18n.tr("Showing all KWin parameters") : I18n.tr("Shows only the core parameters that affect the glass look")
                 color: theme.secondaryText
                 font.pixelSize: 12
             }
@@ -3579,7 +3580,7 @@ ApplicationWindow {
                 onToggled: glassDebugPage.showAdvanced = checked
             }
             Text {
-                text: "高级参数"
+                text: I18n.tr("Advanced parameters")
                 color: theme.primaryText
                 font.pixelSize: 12
             }
@@ -3615,7 +3616,7 @@ ApplicationWindow {
                             anchors.leftMargin: 16
                             anchors.top: parent.top
                             anchors.topMargin: 4
-                            text: modelData.section
+                            text: I18n.tr(modelData.section)
                             visible: index === 0 || glassDebugPage.visibleControls[index - 1].section !== modelData.section
                             color: theme.secondaryText
                             font.pixelSize: 10
@@ -3629,12 +3630,12 @@ ApplicationWindow {
                             anchors.leftMargin: 16
                             anchors.rightMargin: 16
                             spacing: 12
-                            Text { text: modelData.label; color: theme.primaryText; font.pixelSize: 13 }
+                            Text { text: I18n.tr(modelData.label); color: theme.primaryText; font.pixelSize: 13 }
                             Text {
                                 // The rows the shell owns: their value is stored in
                                 // the active material preset, not in kwinrc.
                                 visible: modelData.presetBacked === true
-                                text: "预设"
+                                text: I18n.tr("Preset")
                                 color: theme.secondaryText
                                 font.pixelSize: 10
                             }
@@ -3643,7 +3644,7 @@ ApplicationWindow {
                                 // sync, so it is shown for reference but offers no
                                 // control: an edit here would silently revert.
                                 visible: modelData.readOnly === true
-                                text: "设计值"
+                                text: I18n.tr("Designed value")
                                 color: theme.secondaryText
                                 font.pixelSize: 10
                             }
@@ -3688,9 +3689,9 @@ ApplicationWindow {
                                 visible: modelData.key === "TintMode"
                                 spacing: 6
                                 property var modes: [
-                                    { value: 0, label: "关闭" },
-                                    { value: 1, label: "恒暗" },
-                                    { value: 2, label: "跟随主题" }
+                                    { value: 0, label: I18n.tr("Off") },
+                                    { value: 1, label: I18n.tr("Constant dark") },
+                                    { value: 2, label: I18n.tr("Follow theme") }
                                 ]
                                 Repeater {
                                     model: parent.modes
@@ -3784,7 +3785,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "小组件外观"
+            text: I18n.tr("Widget appearance")
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -3801,11 +3802,11 @@ ApplicationWindow {
                 anchors.rightMargin: 16
                 spacing: 12
                 SettingIcon { symbol: "▦"; tint: "#5ac8fa" }
-                Text { text: "卡片样式"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                Text { text: I18n.tr("Card style"); color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
                 Item { Layout.fillWidth: true }
                 SettingsNavBar {
                     objectName: "widget-style-picker"
-                    model: [{ id: "color", label: "彩色卡片" }, { id: "glass", label: "玻璃" }]
+                    model: [{ id: "color", label: I18n.tr("Colorful cards") }, { id: "glass", label: I18n.tr("Glass") }]
                     itemWidthOverride: 78
                     currentIndex: widgetAppearance.style === "glass" ? 1 : 0
                     disabled: !widgetAppearance.loaded || window.materialForm
@@ -3827,8 +3828,8 @@ ApplicationWindow {
             Layout.leftMargin: 13
             Layout.rightMargin: 13
             text: window.materialForm
-                ? "Material Design 使用主题色卡片；其他主题可单独选择彩色卡片或玻璃。"
-                : "玻璃效果跟随主题中的材质设置。此选项不会改变应用图标颜色。"
+                ? I18n.tr("Material Design uses theme-colored cards; other themes can pick colorful cards or glass separately.")
+                : I18n.tr("Glass effects follow the material settings in the theme. This option does not change app icon colors.")
             wrapMode: Text.Wrap
             color: theme.secondaryText
             font.pixelSize: 12
@@ -3861,10 +3862,10 @@ ApplicationWindow {
         readonly property color pureHue: Qt.hsva(huePosition, 1, 1, 1)
         readonly property color selectedColor: toneColor(tonePosition)
         readonly property var presets: [
-            { label: "紫色", color: "#a855f7" },
-            { label: "红色", color: "#ef4444" },
-            { label: "蓝色", color: "#3b82f6" },
-            { label: "橙色", color: "#f97316" }
+            { label: I18n.tr("Purple"), color: "#a855f7" },
+            { label: I18n.tr("Red"), color: "#ef4444" },
+            { label: I18n.tr("Blue"), color: "#3b82f6" },
+            { label: I18n.tr("Orange"), color: "#f97316" }
         ]
         readonly property var hueRamp: [
             Qt.hsva(0 / 6, 1, 1, 1), Qt.hsva(1 / 6, 1, 1, 1),
@@ -3951,7 +3952,7 @@ ApplicationWindow {
         Component.onCompleted: refresh()
 
         Text {
-            text: "图标外观".toUpperCase()
+            text: I18n.tr("Icon appearance").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -3972,10 +3973,10 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "◐"; tint: "#af52de" }
-                        Text { text: "图标颜色"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Text { text: I18n.tr("Icon color"); color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
-                            model: [{ id: "color", label: "彩色" }, { id: "grayscale", label: "黑白" }, { id: "tint", label: "染色" }]
+                            model: [{ id: "color", label: I18n.tr("Colorful") }, { id: "grayscale", label: I18n.tr("Black and white") }, { id: "tint", label: I18n.tr("Tinted") }]
                             currentIndex: iconAppearance.modeIndex
                             onSelectionChanged: function(index) { iconAppearance.saveMode(index) }
                         }
@@ -3987,7 +3988,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "◔"; tint: "#5ac8fa" }
-                        Text { text: "不透明度"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Opacity"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         Text { text: Math.round(iconAppearance.iconOpacity * 100) + "%"; color: theme.secondaryText; font.pixelSize: 12 }
                         LiquidControls.LiquidSlider {
@@ -4008,7 +4009,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 10
                         SettingIcon { symbol: "●"; tint: iconAppearance.tintColor }
-                        Text { text: "颜色"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Color"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             model: iconAppearance.presets
@@ -4021,7 +4022,7 @@ ApplicationWindow {
                     width: parent.width; height: iconAppearance.modeIndex === 2 ? 48 : 0; visible: height > 0
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
-                        Text { text: "自定义"; color: theme.secondaryText; font.pixelSize: 13 }
+                        Text { text: I18n.tr("Custom"); color: theme.secondaryText; font.pixelSize: 13 }
                         Item { Layout.fillWidth: true }
                         LiquidControls.ColorRampSlider {
                             Layout.preferredWidth: 190; value: iconAppearance.huePosition; rampColors: iconAppearance.hueRamp; thumbColor: iconAppearance.pureHue
@@ -4037,7 +4038,7 @@ ApplicationWindow {
                     width: parent.width; height: iconAppearance.modeIndex === 2 ? 48 : 0; visible: height > 0
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
-                        Text { text: "明暗"; color: theme.secondaryText; font.pixelSize: 13 }
+                        Text { text: I18n.tr("Light and dark"); color: theme.secondaryText; font.pixelSize: 13 }
                         Item { Layout.fillWidth: true }
                         LiquidControls.ColorRampSlider {
                             Layout.preferredWidth: 190; value: iconAppearance.tonePosition; rampColors: iconAppearance.toneRamp; thumbColor: iconAppearance.selectedColor
@@ -4238,19 +4239,21 @@ ApplicationWindow {
         // {id, colors: [#rrggbb, ...]}; empty until a wallpaper seed exists.
         property var colorSchemes: []
         property string errorText: ""
+        // 界面语言（zh-CN / en），经 i18n-settings IPC 由 Shell 持有与落盘。
+        property string language: "zh-CN"
         readonly property var styles: [
             {
                 id: "macos",
                 name: "macOS",
                 feature: "LIQUID GLASS",
-                description: "悬浮 Dock、通透顶部栏与更柔和的大圆角组件",
+                description: I18n.tr("Floating Dock, translucent top bar and softer large-radius components"),
                 accent: "#0a84ff"
             },
             {
                 id: "material",
                 name: "Material Design",
                 feature: "MONET TONAL",
-                description: "Tonal 表面、状态指示和标准化层级与动效",
+                description: I18n.tr("Tonal surfaces, state indicators and standardized hierarchy with motion"),
                 accent: "#6750a4"
             }
         ]
@@ -4266,8 +4269,8 @@ ApplicationWindow {
         }
 
         function schemeName(id) {
-            return id === "chinese" ? "中国传统色"
-                : (id === "japanese" ? "日系配色" : "莫奈色")
+            return id === "chinese" ? I18n.tr("Chinese traditional colors")
+                : (id === "japanese" ? I18n.tr("Japanese palettes") : I18n.tr("Monet colors"))
         }
 
         // One accent per source, so the selected card reads at a glance the way
@@ -4311,7 +4314,7 @@ ApplicationWindow {
 
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.appearanceSnapshot()
@@ -4319,7 +4322,7 @@ ApplicationWindow {
 
         function selectStyle(style) {
             if (!bridge || !isValidStyle(style)) {
-                errorText = bridge ? "未知的主题形态" : "尚未构建 Settings 桥接程序"
+                errorText = bridge ? I18n.tr("Unknown theme shape") : I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.updateShellStyle(style)
@@ -4330,10 +4333,22 @@ ApplicationWindow {
         // detour through macOS or Windows 12.
         function selectMaterialColorScheme(scheme) {
             if (!bridge || !isValidMaterialColorScheme(scheme)) {
-                errorText = bridge ? "未知的配色来源" : "尚未构建 Settings 桥接程序"
+                errorText = bridge ? I18n.tr("Unknown palette source") : I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.updateMaterialColorScheme(scheme)
+        }
+
+        function isValidLanguage(lang) {
+            return lang === "zh-CN" || lang === "en"
+        }
+
+        function setLanguage(lang) {
+            if (!bridge || !isValidLanguage(lang)) {
+                errorText = bridge ? I18n.tr("Unknown language") : I18n.tr("The Settings bridge has not been built")
+                return
+            }
+            bridge.updateLanguage(lang)
         }
 
         Connections {
@@ -4344,14 +4359,30 @@ ApplicationWindow {
                 themeMaterialSettings.applyState(state)
                 globalAppearanceSettings.applyState(state)
                 if (themePage.bridge.lastError)
-                    themePage.errorText = themePage.bridge.lastError
+                    themePage.errorText = I18n.tr(themePage.bridge.lastError)
             }
         }
 
-        Component.onCompleted: refresh()
+        Connections {
+            target: themePage.bridge
+            enabled: themePage.bridge !== null
+            function onI18nSnapshotChanged(state) {
+                if (state && state.language !== undefined
+                        && state.language !== "") {
+                    themePage.language = String(state.language)
+                    I18n.language = themePage.language
+                }
+            }
+        }
+
+        Component.onCompleted: {
+            refresh()
+            if (bridge)
+                bridge.i18nSnapshot()
+        }
 
         Text {
-            text: "界面形态".toUpperCase()
+            text: I18n.tr("Interface shape").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -4574,7 +4605,7 @@ ApplicationWindow {
                                         color: Qt.rgba(0.04, 0.52, 1, 0.16)
                                         Text {
                                             anchors.centerIn: parent
-                                            text: "当前"
+                                            text: I18n.tr("Now")
                                             color: styleCard.modelData.accent
                                             font.pixelSize: 11
                                             font.weight: Font.DemiBold
@@ -4653,7 +4684,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "主题色系"
+                                text: I18n.tr("Theme palette")
                                 color: theme.primaryText
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -4661,10 +4692,10 @@ ApplicationWindow {
                             Text {
                                 text: {
                                     if (themePage.materialColorScheme === "monet")
-                                        return "Material You：按壁纸色相推导整套色调"
+                                        return I18n.tr("Material You: derive the whole palette from the wallpaper hue")
                                     if (themePage.materialAccentName)
-                                        return "当前主色：" + themePage.materialAccentName
-                                    return "壁纸主色没有足够接近的传统色，已回退莫奈"
+                                        return I18n.tr("Current seed color: ") + themePage.materialAccentName
+                                    return I18n.tr("No traditional color close enough to the wallpaper seed; fell back to Monet")
                                 }
                                 color: theme.secondaryText
                                 font.pixelSize: 11
@@ -4684,7 +4715,7 @@ ApplicationWindow {
                     Text {
                         Layout.fillWidth: true
                         visible: themePage.colorSchemes.length === 0
-                        text: "正在等待壁纸取色，稍后这里会出现三张色卡"
+                        text: I18n.tr("Waiting for wallpaper color extraction; three swatches will appear here")
                         color: theme.secondaryText
                         font.pixelSize: 11
                     }
@@ -4849,6 +4880,54 @@ ApplicationWindow {
         }
 
         Text {
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 64
+            Layout.preferredHeight: implicitHeight
+            radius: 26
+            color: theme.dark ? "#000000" : "#ffffff"
+            border.width: 1
+            border.color: theme.floatingBorder
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 12
+                SettingIcon { symbol: "文"; tint: "#0a84ff" }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: I18n.tr("Language")
+                        color: theme.primaryText
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        text: I18n.tr("Switch the interface language; applies live.")
+                        color: theme.secondaryText
+                        font.pixelSize: 11
+                    }
+                }
+                SettingsNavBar {
+                    Layout.preferredWidth: 172
+                    Layout.preferredHeight: 30
+                    size: "tiny"
+                    barHeight: 30
+                    itemWidthOverride: 86
+                    // 语言选项固定显示各自语言的写法，不参与翻译。
+                    model: [
+                        { id: "zh-CN", label: "简体中文" },
+                        { id: "en", label: "English" }
+                    ]
+                    currentIndex: themePage.language === "en" ? 1 : 0
+                    onSelectionChanged: function(index) {
+                        themePage.setLanguage(index === 1 ? "en" : "zh-CN")
+                    }
+                }
+            }
+        }
             Layout.fillWidth: true
             Layout.leftMargin: 13
             Layout.rightMargin: 13
@@ -4912,7 +4991,7 @@ ApplicationWindow {
 
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.appearanceSnapshot()
@@ -4949,7 +5028,7 @@ ApplicationWindow {
 
         function setBarIntegratedWithDock(enabled) {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.updateBarIntegratedWithDock(enabled)
@@ -4974,14 +5053,14 @@ ApplicationWindow {
             function onAppearanceSnapshotChanged(state) {
                 barPage.applyState(state)
                 if (barPage.bridge.lastError)
-                    barPage.errorText = barPage.bridge.lastError
+                    barPage.errorText = I18n.tr(barPage.bridge.lastError)
             }
         }
 
         Component.onCompleted: refresh()
 
         Text {
-            text: "显示与布局".toUpperCase()
+            text: I18n.tr("Display and layout").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -5009,7 +5088,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "⎍"; tint: "#5ac8fa" }
                         Text {
-                            text: "顶栏形态"
+                            text: I18n.tr("Top bar shape")
                             color: theme.primaryText
                             font.pixelSize: 15
                             font.weight: Font.DemiBold
@@ -5018,9 +5097,9 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: barLayoutNavBar
                             model: [
-                                { id: "full", label: "全宽贴边" },
-                                { id: "floating", label: "悬浮胶囊" },
-                                { id: "transparent", label: "全透明" }
+                                { id: "full", label: I18n.tr("Full-width edge to edge") },
+                                { id: "floating", label: I18n.tr("Floating capsule") },
+                                { id: "transparent", label: I18n.tr("Fully transparent") }
                             ]
                             itemWidthOverride: 76
                             currentIndex: barPage.barLayoutModeIndex
@@ -5049,7 +5128,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◉"; tint: "#0a84ff" }
                         Text {
-                            text: "Bar 显示方式"
+                            text: I18n.tr("Bar display")
                             color: theme.primaryText
                             font.pixelSize: 15
                             font.weight: Font.DemiBold
@@ -5058,9 +5137,9 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: barVisibilityNavBar
                             model: [
-                                { id: "always", label: "始终显示" },
-                                { id: "smart", label: "智能隐藏" },
-                                { id: "persistent", label: "持续隐藏" }
+                                { id: "always", label: I18n.tr("Always show") },
+                                { id: "smart", label: I18n.tr("Smart hide") },
+                                { id: "persistent", label: I18n.tr("Keep hidden") }
                             ]
                             itemWidthOverride: 76
                             currentIndex: barPage.barVisibilityModeIndex
@@ -5092,13 +5171,13 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "Bar 融入 Dock"
+                                text: I18n.tr("Bar merges into Dock")
                                 color: theme.primaryText
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
                             }
                             Text {
-                                text: "仅在 Dock 位于底部时生效；侧边 Dock 自动保留顶部 Bar"
+                                text: I18n.tr("Only applies when the Dock sits at the bottom; side Docks keep the top Bar automatically")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -5297,7 +5376,7 @@ ApplicationWindow {
 
         function refresh() {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.shortcutsSnapshot()
@@ -5321,7 +5400,7 @@ ApplicationWindow {
             function onShortcutsSnapshotChanged(state) {
                 shortcutsPage.applyState(state)
                 if (shortcutsPage.bridge.lastError)
-                    shortcutsPage.errorText = shortcutsPage.bridge.lastError
+                    shortcutsPage.errorText = I18n.tr(shortcutsPage.bridge.lastError)
             }
         }
 
@@ -5366,7 +5445,7 @@ ApplicationWindow {
         Component.onCompleted: refresh()
 
         Text {
-            text: "点击任一键位胶囊后按下新的组合键即可更换；Esc 取消。"
+            text: I18n.tr("Click a key capsule then press the new combination to rebind; Esc cancels.")
             color: theme.secondaryText
             font.pixelSize: 12
             wrapMode: Text.Wrap
@@ -5427,7 +5506,7 @@ ApplicationWindow {
                             }
                             Text {
                                 text: shortcutRow.modelData.custom
-                                    ? "自定义快捷键" : "默认快捷键"
+                                    ? I18n.tr("Custom shortcut") : I18n.tr("Default shortcut")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -5439,7 +5518,7 @@ ApplicationWindow {
                             anchors.rightMargin: 14
                             anchors.verticalCenter: parent.verticalCenter
                             visible: shortcutRow.modelData.custom
-                            text: "恢复默认"
+                            text: I18n.tr("Reset to default")
                             color: theme.dark ? "#64b5ff" : "#0066cc"
                             font.pixelSize: 11
                             font.weight: Font.DemiBold
@@ -5477,8 +5556,8 @@ ApplicationWindow {
                             Text {
                                 anchors.centerIn: parent
                                 text: comboPill.recording
-                                    ? "按下新的组合键…"
-                                    : (shortcutRow.rowCombo || "点击设置")
+                                    ? I18n.tr("Press a new key combination…")
+                                    : (shortcutRow.rowCombo || I18n.tr("Tap to configure"))
                                 color: comboPill.recording
                                     ? (theme.dark ? "#64b5ff" : "#0066cc")
                                     : theme.primaryText
@@ -5638,14 +5717,14 @@ ApplicationWindow {
             function onLauncherSnapshotChanged(snap) {
                 launcherPage.applySnapshot(snap)
                 if (launcherPage.bridge.lastError)
-                    launcherPage.errorText = launcherPage.bridge.lastError
+                    launcherPage.errorText = I18n.tr(launcherPage.bridge.lastError)
             }
         }
 
         Component.onCompleted: reloadFromBridge()
 
         Text {
-            text: "显示形态".toUpperCase()
+            text: I18n.tr("Display shape").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -5667,7 +5746,7 @@ ApplicationWindow {
                     spacing: 12
                     SettingIcon { symbol: "❖"; tint: "#ff9500" }
                     Text {
-                        text: "启动台形态"
+                        text: I18n.tr("Launcher shape")
                         color: theme.primaryText
                         font.pixelSize: 14
                     }
@@ -5675,10 +5754,10 @@ ApplicationWindow {
                     SettingsNavBar {
                         id: launcherModeNavBar
                         model: [
-                            { id: "bottom",     label: "底部吸附" },
-                            { id: "bottomWide", label: "底部紧凑" },
-                            { id: "center",     label: "屏幕居中" },
-                            { id: "fullscreen", label: "全屏覆盖" }
+                            { id: "bottom",     label: I18n.tr("Dock to bottom") },
+                            { id: "bottomWide", label: I18n.tr("Compact bottom") },
+                            { id: "center",     label: I18n.tr("Center on screen") },
+                            { id: "fullscreen", label: I18n.tr("Fullscreen") }
                         ]
                         itemWidthOverride: 76
                         currentIndex: launcherPage.displayModeIndex
@@ -5691,7 +5770,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "网格、图标与文字".toUpperCase()
+            text: I18n.tr("Grid, icons and text").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -5718,16 +5797,16 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "◉"; tint: "#ff9500" }
                         Text {
-                            text: "图标大小"
+                            text: I18n.tr("Icon Size")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             model: [
-                                { id: "small", label: "小" },
-                                { id: "medium", label: "中" },
-                                { id: "large", label: "大" }
+                                { id: "small", label: I18n.tr("Small") },
+                                { id: "medium", label: I18n.tr("Medium") },
+                                { id: "large", label: I18n.tr("Large") }
                             ]
                             itemWidthOverride: 56
                             currentIndex: launcherPage.iconSizeIndex
@@ -5756,16 +5835,16 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "↔"; tint: "#5ac8fa" }
                         Text {
-                            text: "网格密度"
+                            text: I18n.tr("Grid density")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             model: [
-                                { id: "compact", label: "紧凑" },
-                                { id: "balanced", label: "标准" },
-                                { id: "spacious", label: "宽松" }
+                                { id: "compact", label: I18n.tr("Compact") },
+                                { id: "balanced", label: I18n.tr("Standard") },
+                                { id: "spacious", label: I18n.tr("Comfortable") }
                             ]
                             itemWidthOverride: 56
                             currentIndex: launcherPage.densityIndex
@@ -5794,7 +5873,7 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "B"; tint: "#ff9500" }
                         Text {
-                            text: "字体粗细"
+                            text: I18n.tr("Font weight")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
@@ -5802,9 +5881,9 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: launcherFontWeightNavBar
                             model: [
-                                { id: "normal", label: "常规" },
-                                { id: "medium", label: "中黑" },
-                                { id: "bold",   label: "粗体" }
+                                { id: "normal", label: I18n.tr("General") },
+                                { id: "medium", label: I18n.tr("Medium black") },
+                                { id: "bold",   label: I18n.tr("Bold") }
                             ]
                             itemWidthOverride: 56
                             currentIndex: launcherPage.fontWeightIndex
@@ -5833,13 +5912,13 @@ ApplicationWindow {
                         spacing: 12
                         SettingIcon { symbol: "↺"; tint: "#8e8e93" }
                         Text {
-                            text: "恢复推荐布局"
+                            text: I18n.tr("Restore recommended layout")
                             color: theme.primaryText
                             font.pixelSize: 14
                         }
                         Item { Layout.fillWidth: true }
                         Text {
-                            text: "仅当前形态"
+                            text: I18n.tr("Current shape only")
                             color: theme.secondaryText
                             font.pixelSize: 11
                         }
@@ -5852,7 +5931,7 @@ ApplicationWindow {
                                 : Qt.rgba(0.04, 0.52, 1.0, 0.12)
                             Text {
                                 anchors.centerIn: parent
-                                text: "恢复"
+                                text: I18n.tr("Restore")
                                 color: theme.dark ? "#64b5ff" : "#0066cc"
                                 font.pixelSize: 11
                                 font.weight: Font.DemiBold
@@ -5911,7 +5990,7 @@ ApplicationWindow {
                 spacing: 0
 
                 Text {
-                    text: "设置"
+                    text: I18n.tr("Settings")
                     color: theme.primaryText
                     font.pixelSize: 26
                     font.weight: Font.Bold
@@ -5928,7 +6007,7 @@ ApplicationWindow {
                         anchors.fill: parent
                         leftPadding: 36
                         rightPadding: 10
-                        placeholderText: "搜索"
+                        placeholderText: I18n.tr("Search")
                         glassColor: theme.searchField
                         textColor: theme.primaryText
                         mutedTextColor: theme.secondaryText
@@ -5968,7 +6047,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 1
-                            label: "主题"
+                            label: I18n.tr("Theme")
                             navSymbol: "◈"
                             navTint: "#af52de"
                         }
@@ -5984,7 +6063,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 8
-                            label: "壁纸"
+                            label: I18n.tr("Wallpaper")
                             navSymbol: "▧"
                             navTint: "#64d2ff"
                         }
@@ -5992,7 +6071,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 2
-                            label: "顶栏"
+                            label: I18n.tr("Top bar")
                             navSymbol: "⎍"
                             navTint: "#5ac8fa"
                         }
@@ -6000,7 +6079,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 3
-                            label: "Dock"
+                            label: I18n.tr("Dock")
                             navSymbol: "▰"
                             navTint: "#0a84ff"
                         }
@@ -6008,7 +6087,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 4
-                            label: "启动台"
+                            label: I18n.tr("Launcher")
                             navSymbol: "❖"
                             navTint: "#ff9500"
                         }
@@ -6032,7 +6111,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 5
-                            label: "快捷键"
+                            label: I18n.tr("Shortcuts")
                             navSymbol: "⌘"
                             navTint: "#5856d6"
                         }
@@ -6040,7 +6119,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 6
-                            label: "接入状态"
+                            label: I18n.tr("Integration status")
                             navSymbol: "✓"
                             navTint: "#30d158"
                         }
@@ -6048,7 +6127,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 9
-                            label: "服务和组件"
+                            label: I18n.tr("Services and components")
                             navSymbol: "◇"
                             navTint: "#5ac8fa"
                         }
@@ -6056,7 +6135,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 7
-                            label: "玻璃调试"
+                            label: I18n.tr("Glass debugging")
                             navSymbol: "⚙"
                             navTint: "#64d2ff"
                         }
@@ -6064,7 +6143,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 10
-                            label: "台前调度"
+                            label: I18n.tr("Stage scheduling")
                             navSymbol: "⏵"
                             navTint: "#ff9f0a"
                         }

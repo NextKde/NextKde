@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell.Services.UPower
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.platform
@@ -82,7 +83,7 @@ QtObject {
     readonly property bool weatherAvailable: themeId === "weather" && WeatherService.available
     readonly property bool isDay: !weatherAvailable || WeatherService.isDay
     readonly property string temperature: weatherAvailable ? WeatherService.temperature : "--°"
-    readonly property string city: weatherAvailable ? WeatherService.cityName : "天气光景"
+    readonly property string city: weatherAvailable ? WeatherService.cityName : I18n.tr("Weather scene")
 
     function covered(screen) {
         // Explicit dependencies: KWin updates records in place for geometry changes.

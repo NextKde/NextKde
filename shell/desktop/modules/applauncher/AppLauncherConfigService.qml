@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 
@@ -279,7 +280,7 @@ QtObject {
             type: "folder",
             id: "folder-" + Date.now() + "-"
                 + Math.floor(Math.random() * 1000000),
-            name: "文件夹",
+            name: I18n.tr("Folder"),
             appIds: [targetAppId, sourceAppId],
         }
         const replacementIndex = Math.min(sourceIndex, targetIndex)
@@ -403,7 +404,7 @@ QtObject {
     }
 
     function renameFolder(folderId, requestedName) {
-        const name = (requestedName || "").trim() || "文件夹"
+        const name = (requestedName || "").trim() || I18n.tr("Folder")
         const next = _normalizeRootItems(rootItems)
         for (let i = 0; i < next.length; i++) {
             const folder = next[i]

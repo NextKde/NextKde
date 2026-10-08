@@ -494,7 +494,7 @@ public:
         const QFileInfo info(path);
         if (path.isEmpty() || !info.isFile() || !info.isReadable()
                 || !isGalleryImage(info) || !QImageReader(info.absoluteFilePath()).canRead()) {
-            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            setLastError(QStringLiteral("Select an image readable on this machine"));
             return {};
         }
         QDir dir(galleryDirPath());
@@ -507,7 +507,7 @@ public:
         // 已在库中,都能命中。
         const QByteArray sourceMd5 = galleryFileMd5(info.absoluteFilePath());
         if (sourceMd5.isEmpty()) {
-            setLastError(QStringLiteral("无法读取图片内容"));
+            setLastError(QStringLiteral("Could not read the image content"));
             return {};
         }
         const bool isJpeg = info.suffix().compare(QLatin1String("jpg"), Qt::CaseInsensitive) == 0
@@ -538,11 +538,11 @@ public:
             if (!out.open(QIODevice::WriteOnly)
                     || out.write(payload) != qsizetype(payload.size()) || !out.commit()) {
                 out.cancelWriting();
-                setLastError(QStringLiteral("复制图片失败:%1").arg(info.fileName()));
+                setLastError(QStringLiteral("Failed to copy image: %1").arg(info.fileName()));
                 return {};
             }
         } else if (!QFile::copy(info.absoluteFilePath(), target)) {
-            setLastError(QStringLiteral("复制图片失败:%1").arg(info.fileName()));
+            setLastError(QStringLiteral("Failed to copy image: %1").arg(info.fileName()));
             return {};
         }
         return target;
@@ -555,7 +555,7 @@ public:
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
         const QDir folder(path);
         if (path.isEmpty() || !folder.exists()) {
-            setLastError(QStringLiteral("文件夹不存在或不可读取"));
+            setLastError(QStringLiteral("The folder does not exist or is not readable"));
             return -1;
         }
         constexpr int kMaxFolderImages = 200;
@@ -581,11 +581,11 @@ public:
         const QString managed = QFileInfo(galleryDirPath()).canonicalFilePath();
         if (canonical.isEmpty() || managed.isEmpty()
                 || !canonical.startsWith(managed + QLatin1Char('/'))) {
-            setLastError(QStringLiteral("只能移除图集内的图片"));
+            setLastError(QStringLiteral("Only images inside the gallery can be removed"));
             return false;
         }
         if (!QFile::moveToTrash(canonical)) {
-            setLastError(QStringLiteral("移入回收站失败:%1")
+            setLastError(QStringLiteral("Failed to move to trash: %1")
                              .arg(QFileInfo(canonical).fileName()));
             return false;
         }
@@ -598,7 +598,7 @@ public:
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
         const QFileInfo info(path);
         if (!info.exists()) {
-            setLastError(QStringLiteral("文件不存在,无法打开所在文件夹"));
+            setLastError(QStringLiteral("File does not exist; cannot open its folder"));
             emit wallpaperSnapshotChanged({});
             return;
         }
@@ -610,7 +610,7 @@ public:
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
         const QFileInfo image(path);
         if (!image.isFile() || !image.isReadable()) {
-            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            setLastError(QStringLiteral("Select an image readable on this machine"));
             emit wallpaperSnapshotChanged({});
             return;
         }
@@ -622,7 +622,7 @@ public:
         const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
         if (!QFileInfo(path).isFile() || !QFileInfo(path).isReadable()) {
-            setLastError(QStringLiteral("请选择本机可读取的图片"));
+            setLastError(QStringLiteral("Select an image readable on this machine"));
             emit wallpaperSnapshotChanged({});
             return;
         }
@@ -639,7 +639,7 @@ public:
                                              int angle) {
         const QRegularExpression format(QStringLiteral("^#[0-9a-fA-F]{6}$"));
         if (!format.match(start).hasMatch() || !format.match(end).hasMatch()) {
-            setLastError(QStringLiteral("请输入有效的六位十六进制颜色，例如 #A8C8F0"));
+            setLastError(QStringLiteral("Enter a valid six-digit hex color, e.g. #A8C8F0"));
             return {};
         }
         angle = ((angle % 360) + 360) % 360;
@@ -651,7 +651,7 @@ public:
         const QString path = folder + QLatin1Char('/') + key + QStringLiteral(".png");
         if (QFileInfo::exists(path)) return path;
         if (!QDir().mkpath(folder)) {
-            setLastError(QStringLiteral("无法创建颜色壁纸缓存"));
+            setLastError(QStringLiteral("Could not create the color wallpaper cache"));
             return {};
         }
         QImage image(start == end ? QSize(16, 16) : QSize(1920, 1080), QImage::Format_RGB32);
@@ -670,7 +670,7 @@ public:
         }
         QSaveFile file(path);
         if (!file.open(QIODevice::WriteOnly) || !image.save(&file, "PNG") || !file.commit()) {
-            setLastError(QStringLiteral("无法生成颜色壁纸"));
+            setLastError(QStringLiteral("Could not generate the color wallpaper"));
             return {};
         }
         setLastError({});
@@ -706,7 +706,7 @@ public:
             const QDBusMessage reply = watcher->reply();
             watcher->deleteLater();
             if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-                emit wallpaperColorPickFailed(QStringLiteral("取色已取消或当前桌面不支持屏幕取色"));
+                emit wallpaperColorPickFailed(QStringLiteral("Color picking was cancelled or the desktop does not support screen color picking"));
                 return;
             }
             const QDBusArgument value = reply.arguments().first().value<QDBusArgument>();
@@ -887,7 +887,7 @@ public:
         callShell(QStringLiteral("dock-settings"),
                   {QStringLiteral("updateBuiltinVisibility"), id,
                    visible ? QStringLiteral("true") : QStringLiteral("false")},
-                  QStringLiteral("Dock 图标显示设置请求失败"),
+                  QStringLiteral("Dock icon display request failed"),
                   RequestKind::DockBuiltinVisibility);
     }
 
@@ -895,7 +895,7 @@ public:
         callShell(QStringLiteral("dock-settings"),
                   {QStringLiteral("updateNotificationBadgeVisibility"),
                    visible ? QStringLiteral("true") : QStringLiteral("false")},
-                  QStringLiteral("Dock 通知角标设置请求失败"),
+                  QStringLiteral("Dock notification badge request failed"),
                   RequestKind::DockNotificationBadgeVisibility);
     }
 
@@ -903,7 +903,7 @@ public:
         callShell(QStringLiteral("dock-settings"),
                   {QStringLiteral("updateRevealIndicatorVisibility"),
                    visible ? QStringLiteral("true") : QStringLiteral("false")},
-                  QStringLiteral("Dock 隐藏提示条设置请求失败"),
+                  QStringLiteral("Dock hide hint bar request failed"),
                   RequestKind::DockRevealIndicatorVisibility);
     }
 
@@ -1023,7 +1023,7 @@ public:
     // 去重成 {name, appId}），供"从运行应用添加"下拉框使用。
     Q_INVOKABLE void fgSchedRunningApps() {
         callShell(QStringLiteral("fg-sched"), {QStringLiteral("runningApps")},
-                  QStringLiteral("运行应用清单请求失败"), RequestKind::FgSchedApps);
+                  QStringLiteral("Running apps list request failed"), RequestKind::FgSchedApps);
     }
 
     Q_INVOKABLE void fgSchedSnapshot() {
@@ -1115,7 +1115,7 @@ public:
     // （窗口动画时长与曲线经 reconfigureEffect 即时生效）。
     void callStage(const QStringList &arguments) {
         callShell(QStringLiteral("stage-config"), arguments,
-                  QStringLiteral("台前调度参数请求失败"), RequestKind::StageConfig);
+                  QStringLiteral("Stage scheduling parameters request failed"), RequestKind::StageConfig);
     }
 
     Q_INVOKABLE void stageConfigSnapshot() {
@@ -1135,7 +1135,7 @@ public:
         // 了"的真根因之一）
         callShell(QStringLiteral("stage-sidebar"),
                   {on ? QStringLiteral("enable") : QStringLiteral("disable")},
-                  QStringLiteral("台前侧栏开关请求失败"), RequestKind::StageSidebar);
+                  QStringLiteral("Stage sidebar toggle request failed"), RequestKind::StageSidebar);
     }
 
     QVariantMap stageConfigFromReply(const QString &payload) {
@@ -1148,7 +1148,7 @@ public:
         const QJsonDocument document = QJsonDocument::fromJson(
             payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("台前调度参数返回无效"));
+            setLastError(QStringLiteral("Stage scheduling parameters response is invalid"));
             return m_lastStageConfig;
         }
         const QJsonObject object = document.object();
@@ -1157,7 +1157,7 @@ public:
                 && object.contains(QStringLiteral("error"))
                 && !object.contains(QStringLiteral("revision"))) {
             setLastError(object.value(QStringLiteral("error")).toString(
-                QStringLiteral("台前调度参数写入失败")));
+                QStringLiteral("Failed to write stage scheduling parameters")));
             return m_lastStageConfig;
         }
         setLastError({});
@@ -1245,7 +1245,7 @@ public:
     Q_INVOKABLE void glassDebugSnapshot() {
         callShell(QStringLiteral("appearance-settings"),
                   {QStringLiteral("snapshot")},
-                  QStringLiteral("外观设置请求失败"), RequestKind::GlassDebug);
+                  QStringLiteral("Appearance settings request failed"), RequestKind::GlassDebug);
     }
 
     // Fire-and-forget: the reply (a full snapshot for preset-backed keys)
@@ -1255,7 +1255,7 @@ public:
     Q_INVOKABLE void updateGlassDebugValue(const QString &key, const QVariant &value) {
         const QVariantMap match = glassDebugSpec(key);
         if (match.isEmpty()) {
-            setLastError(QStringLiteral("未知的 KWin 参数：%1").arg(key));
+            setLastError(QStringLiteral("Unknown KWin parameter: %1").arg(key));
             emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
             return;
         }
@@ -1264,7 +1264,7 @@ public:
         // every appearance sync. Refuse the write rather than let the value
         // silently revert, and say why so the failure is not a mystery.
         if (match.value(QStringLiteral("readOnly")).toBool()) {
-            setLastError(QStringLiteral("该参数由外观设计值决定，无法在此修改"));
+            setLastError(QStringLiteral("This parameter is decided by the appearance design value and cannot be changed here"));
             emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
             return;
         }
@@ -1285,7 +1285,7 @@ public:
                       {QStringLiteral("updateGlassPresetParameter"),
                        QString::fromLatin1(preset->parameter),
                        QString::number(stored.toDouble() / preset->toKwinrc, 'f', 3)},
-                      QStringLiteral("外观设置请求失败"), RequestKind::GlassDebug);
+                      QStringLiteral("Appearance settings request failed"), RequestKind::GlassDebug);
             return;
         }
         QSettings config(QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
@@ -1297,7 +1297,7 @@ public:
         if (effects.isValid())
             effects.asyncCall(QStringLiteral("reconfigureEffect"), QStringLiteral("glass"));
         if (config.status() != QSettings::NoError) {
-            setLastError(QStringLiteral("写入 KWin 配置失败"));
+            setLastError(QStringLiteral("Failed to write the KWin configuration"));
             emit glassDebugSnapshotChanged(glassDebugSpecs(), glassPresetStyle());
             return;
         }
@@ -1420,7 +1420,7 @@ public:
         callShell(QStringLiteral("appearance-settings"),
                   {QStringLiteral("applySystemAppearance"),
                    dark ? QStringLiteral("true") : QStringLiteral("false")},
-                  QStringLiteral("外观设置请求失败"),
+                  QStringLiteral("Appearance settings request failed"),
                   RequestKind::ApplySystemAppearance);
     }
 
@@ -1431,7 +1431,15 @@ public:
             return;
         m_integrationPending = true;
         callShell(QStringLiteral("integration-status"), {QStringLiteral("snapshot")},
-                  QStringLiteral("接入状态请求失败"), RequestKind::Integration);
+                  QStringLiteral("Integration status request failed"), RequestKind::Integration);
+    }
+
+    Q_INVOKABLE void i18nSnapshot() {
+        callI18n({QStringLiteral("snapshot")});
+    }
+
+    Q_INVOKABLE void updateLanguage(const QString &language) {
+        callI18n({QStringLiteral("updateLanguage"), language});
     }
 
 signals:
@@ -1460,6 +1468,7 @@ signals:
     void fgSchedRunningAppsChanged(const QVariantList &apps);
     void fgSchedMemStatusChanged(const QVariantMap &status);
     void stageConfigChanged(const QVariantMap &snapshot);
+    void i18nSnapshotChanged(const QVariantMap &snapshot);
 
 private:
     // What the requesting page wants back once the IPC reply lands: every
@@ -1479,6 +1488,7 @@ private:
         FgSchedApps,
         StageConfig,
         StageSidebar,
+        I18nSnapshot,
     };
 
     struct DockRequest {
@@ -1494,14 +1504,14 @@ private:
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的 Dock 配置"));
+            setLastError(QStringLiteral("The desktop environment returned an invalid Dock configuration"));
             return {};
         }
 
         const QJsonObject object = document.object();
         if (!object.contains(QStringLiteral("baseHeight"))
                 || !object.contains(QStringLiteral("windowGrouping"))) {
-            setLastError(QStringLiteral("桌面环境返回的 Dock 配置不完整"));
+            setLastError(QStringLiteral("The Dock configuration from the desktop environment is incomplete"));
             return {};
         }
 
@@ -1552,15 +1562,15 @@ private:
             QString detail = payload.simplified();
             if (detail.size() > 140)
                 detail = detail.left(137) + QStringLiteral("...");
-            setLastError(QStringLiteral("壁纸 IPC 返回内容无法解析（%1）：%2")
+            setLastError(QStringLiteral("Could not parse the wallpaper IPC response (%1): %2")
                 .arg(parseError.errorString(), detail.isEmpty()
-                    ? QStringLiteral("空响应") : detail));
+                    ? QStringLiteral("empty response") : detail));
             return {};
         }
         const QJsonObject object = document.object();
         if (!object.contains(QStringLiteral("fitMode"))
                 || !object.contains(QStringLiteral("transition"))) {
-            setLastError(QStringLiteral("桌面环境返回的壁纸配置不完整"));
+            setLastError(QStringLiteral("The wallpaper configuration from the desktop environment is incomplete"));
             return {};
         }
         setLastError({});
@@ -1604,6 +1614,25 @@ private:
         };
     }
 
+    QVariantMap i18nSnapshotFromReply(const QString &payload) {
+        if (payload.isEmpty())
+            return {};
+
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            setLastError(QStringLiteral("The desktop environment returned an invalid language configuration"));
+            return {};
+        }
+
+        const QJsonObject object = document.object();
+        setLastError({});
+        return {
+            {QStringLiteral("language"),
+             object.value(QStringLiteral("language")).toString(QStringLiteral("zh-CN"))},
+        };
+    }
+
     QVariantMap appearanceSnapshotFromReply(const QString &payload) {
         if (payload.isEmpty())
             return {};
@@ -1611,7 +1640,7 @@ private:
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的外观配置"));
+            setLastError(QStringLiteral("The desktop environment returned an invalid appearance configuration"));
             return {};
         }
 
@@ -1625,7 +1654,7 @@ private:
                 || !object.contains(QStringLiteral("shellStyle"))
                 || !object.contains(QStringLiteral("barIntegratedWithDock"))
                 || !object.contains(QStringLiteral("dockWindowAnimationStyle"))) {
-            setLastError(QStringLiteral("桌面环境返回的外观配置不完整"));
+            setLastError(QStringLiteral("The appearance configuration from the desktop environment is incomplete"));
             return {};
         }
 
@@ -1710,13 +1739,13 @@ private:
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的启动台配置"));
+            setLastError(QStringLiteral("The desktop environment returned an invalid launcher configuration"));
             return {};
         }
 
         const QJsonObject object = document.object();
         if (!object.contains(QStringLiteral("displayMode"))) {
-            setLastError(QStringLiteral("桌面环境返回的启动台配置不完整"));
+            setLastError(QStringLiteral("The launcher configuration from the desktop environment is incomplete"));
             return {};
         }
 
@@ -1735,7 +1764,7 @@ private:
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的接入状态"));
+            setLastError(QStringLiteral("The desktop environment returned an invalid integration status"));
             return {{QStringLiteral("shellReady"), false}};
         }
         setLastError({});
@@ -1749,13 +1778,13 @@ private:
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            setLastError(QStringLiteral("桌面环境返回了无效的快捷键配置"));
+            setLastError(QStringLiteral("The desktop environment returned an invalid shortcuts configuration"));
             return {};
         }
 
         const QJsonObject object = document.object();
         if (!object.contains(QStringLiteral("shortcuts"))) {
-            setLastError(QStringLiteral("桌面环境返回的快捷键配置不完整"));
+            setLastError(QStringLiteral("The shortcuts configuration from the desktop environment is incomplete"));
             return {};
         }
 
@@ -1818,39 +1847,39 @@ private:
                 {QStringLiteral("readOnly"), readOnly},
                 {QStringLiteral("value"), value}});
         };
-        add("BlurFinetune", "模糊精调", "模糊", "int", 0, 10, 1, 3);
-        add("NoiseStrength", "内容噪点", "模糊", "int", 0, 100, 1, 5);
-        add("DecorationNoiseStrength", "窗口装饰噪点", "模糊", "int", 0, 100, 1, 5);
-        add("DockNoiseStrength", "Dock 噪点", "模糊", "int", 0, 100, 1, 5);
-        add("BlurSaturationCompensation", "模糊饱和度补偿", "模糊", "bool", 0, 1, 1, true);
-        add("Brightness", "亮度", "色彩", "real", 0, 2, .01, 1.0);
-        add("Saturation", "饱和度", "色彩", "real", 0, 3, .01, 1.0);
-        add("Contrast", "对比度", "色彩", "real", 0, 2, .01, 1.0);
-        add("OklabSaturation", "使用 OKLab 饱和度", "色彩", "bool", 0, 1, 1, false);
-        add("RefractionStrength", "折射强度", "材质", "real", 0, 20, .1, 0.0);
-        add("RefractionEdgeSize", "折射边缘范围", "材质", "real", 0, 50, .1, 20.0);
-        add("RefractionNormalPow", "折射法线曲线", "材质", "real", .1, 10, .1, 2.0);
-        add("RefractionRGBFringing", "RGB 色散", "材质", "real", 0, 20, .1, 1.0);
-        add("RefractionOffsetStrength", "主体折射强度", "材质", "real", 0, 20, .1, 0.0);
-        add("MaterialSoftness", "柔和度", "材质", "real", 0, 1, .01, 0.0);
-        add("MaterialReflectionStrength", "宽反射强度", "材质", "real", 0, 1, .01, 0.0);
-        add("ExcludeDecorations", "窗口装饰不应用染色", "适用范围", "bool", 0, 1, 1, false);
-        add("MenuCornerRadius", "菜单圆角", "圆角", "real", 0, 100, 1, 0.0);
-        add("DockCornerRadius", "Dock 圆角", "圆角", "real", 0, 100, 1, 0.0);
-        add("CornerExponent", "圆角连续度", "圆角", "real", 2, 8, .1, 3.0);
-        add("UseDeclaredCornerRadius", "优先使用应用声明圆角", "圆角", "bool", 0, 1, 1, false);
-        add("IgnoreContentBlurRegion", "忽略内容模糊区域", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCorners", "动态圆角", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeDocks", "动态圆角排除 Dock", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeTooltips", "动态圆角排除 Tooltip", "圆角", "bool", 0, 1, 1, false);
-        add("DynamicCornersExcludeMenus", "动态圆角排除菜单", "圆角", "bool", 0, 1, 1, false);
-        add("OnlyQuickshell", "仅处理 Quickshell", "窗口匹配", "bool", 0, 1, 1, true);
-        add("WindowClasses", "窗口类列表", "窗口匹配", "string", 0, 0, 0, QStringLiteral("quickshell"));
-        add("BlurMatching", "匹配列表内窗口", "窗口匹配", "bool", 0, 1, 1, true);
-        add("BlurDecorations", "强制模糊窗口装饰", "窗口匹配", "bool", 0, 1, 1, false);
-        add("BlurMenus", "强制模糊菜单", "窗口匹配", "bool", 0, 1, 1, false);
-        add("BlurDocks", "强制模糊 Dock", "窗口匹配", "bool", 0, 1, 1, false);
-        add("SkipEmptyDockBlurRegions", "跳过空 Dock 模糊区域", "窗口匹配", "bool", 0, 1, 1, true);
+        add("BlurFinetune", "Blur finetune", "Blur", "int", 0, 10, 1, 3);
+        add("NoiseStrength", "Content noise", "Blur", "int", 0, 100, 1, 5);
+        add("DecorationNoiseStrength", "Decoration noise", "Blur", "int", 0, 100, 1, 5);
+        add("DockNoiseStrength", "Dock noise", "Blur", "int", 0, 100, 1, 5);
+        add("BlurSaturationCompensation", "Blur saturation compensation", "Blur", "bool", 0, 1, 1, true);
+        add("Brightness", "Brightness", "Colour", "real", 0, 2, .01, 1.0);
+        add("Saturation", "Saturation", "Colour", "real", 0, 3, .01, 1.0);
+        add("Contrast", "Contrast", "Colour", "real", 0, 2, .01, 1.0);
+        add("OklabSaturation", "Use OKLab saturation", "Colour", "bool", 0, 1, 1, false);
+        add("RefractionStrength", "Refraction strength", "Material", "real", 0, 20, .1, 0.0);
+        add("RefractionEdgeSize", "Refraction edge range", "Material", "real", 0, 50, .1, 20.0);
+        add("RefractionNormalPow", "Refraction normal curve", "Material", "real", .1, 10, .1, 2.0);
+        add("RefractionRGBFringing", "RGB fringing", "Material", "real", 0, 20, .1, 1.0);
+        add("RefractionOffsetStrength", "Subject refraction strength", "Material", "real", 0, 20, .1, 0.0);
+        add("MaterialSoftness", "Softness", "Material", "real", 0, 1, .01, 0.0);
+        add("MaterialReflectionStrength", "Wide reflection strength", "Material", "real", 0, 1, .01, 0.0);
+        add("ExcludeDecorations", "Skip tint on decorations", "Scope", "bool", 0, 1, 1, false);
+        add("MenuCornerRadius", "Menu corner radius", "Corners", "real", 0, 100, 1, 0.0);
+        add("DockCornerRadius", "Dock corner radius", "Corners", "real", 0, 100, 1, 0.0);
+        add("CornerExponent", "Corner continuity", "Corners", "real", 2, 8, .1, 3.0);
+        add("UseDeclaredCornerRadius", "Prefer app-declared corner radius", "Corners", "bool", 0, 1, 1, false);
+        add("IgnoreContentBlurRegion", "Ignore content blur region", "Corners", "bool", 0, 1, 1, false);
+        add("DynamicCorners", "Dynamic corners", "Corners", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeDocks", "Dynamic corners exclude Dock", "Corners", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeTooltips", "Dynamic corners exclude tooltips", "Corners", "bool", 0, 1, 1, false);
+        add("DynamicCornersExcludeMenus", "Dynamic corners exclude menus", "Corners", "bool", 0, 1, 1, false);
+        add("OnlyQuickshell", "Quickshell only", "Window matching", "bool", 0, 1, 1, true);
+        add("WindowClasses", "Window class list", "Window matching", "string", 0, 0, 0, QStringLiteral("quickshell"));
+        add("BlurMatching", "Match listed windows", "Window matching", "bool", 0, 1, 1, true);
+        add("BlurDecorations", "Force blur decorations", "Window matching", "bool", 0, 1, 1, false);
+        add("BlurMenus", "Force blur menus", "Window matching", "bool", 0, 1, 1, false);
+        add("BlurDocks", "Force blur Dock", "Window matching", "bool", 0, 1, 1, false);
+        add("SkipEmptyDockBlurRegions", "Skip empty Dock blur regions", "Window matching", "bool", 0, 1, 1, true);
         config.endGroup();
         return result;
     }
@@ -1958,7 +1987,7 @@ private:
 
     void callDock(const QStringList &arguments) {
         callShell(QStringLiteral("dock-settings"), arguments,
-                  QStringLiteral("Dock 设置请求失败"), RequestKind::Dock);
+                  QStringLiteral("Dock settings request failed"), RequestKind::Dock);
     }
 
     void pumpDockRequests() {
@@ -1998,22 +2027,27 @@ private:
         if (m_wallpaperBusy || m_wallpaperQueue.isEmpty()) return;
         m_wallpaperBusy = true;
         callShell(QStringLiteral("wallpaper-settings"), m_wallpaperQueue.takeFirst(),
-                  QStringLiteral("壁纸设置请求失败"), RequestKind::Wallpaper);
+                  QStringLiteral("Wallpaper settings request failed"), RequestKind::Wallpaper);
     }
 
     void callAppearance(const QStringList &arguments) {
         callShell(QStringLiteral("appearance-settings"), arguments,
-                  QStringLiteral("外观设置请求失败"), RequestKind::Appearance);
+                  QStringLiteral("Appearance settings request failed"), RequestKind::Appearance);
     }
 
     void callLauncher(const QStringList &arguments) {
         callShell(QStringLiteral("applauncher-settings"), arguments,
-                  QStringLiteral("启动台设置请求失败"), RequestKind::Launcher);
+                  QStringLiteral("Launcher settings request failed"), RequestKind::Launcher);
     }
 
     void callShortcuts(const QStringList &arguments) {
         callShell(QStringLiteral("shortcuts-settings"), arguments,
-                  QStringLiteral("快捷键设置请求失败"), RequestKind::Shortcuts);
+                  QStringLiteral("Shortcuts request failed"), RequestKind::Shortcuts);
+    }
+
+    void callI18n(const QStringList &arguments) {
+        callShell(QStringLiteral("i18n-settings"), arguments,
+                  QStringLiteral("Language settings request failed"), RequestKind::I18nSnapshot);
     }
 
     static QString installedShellDirectory() {
@@ -2178,7 +2212,7 @@ private:
                 QString reason = QString::fromUtf8(
                     process->readAllStandardError()).trimmed();
                 if (process->property("timedOut").toBool())
-                    reason = QStringLiteral("桌面环境没有响应（超过 5 秒）");
+                    reason = QStringLiteral("The desktop environment did not respond (over 5 seconds)");
                 else if (reason.isEmpty())
                     reason = fallbackError;
                 advance(reason);
@@ -2194,7 +2228,7 @@ private:
                 return;
             const bool preferred = index == 0;
             const int maxAttempts = preferred ? 2 : 1;
-            const QString reason = QStringLiteral("无法启动 Quickshell IPC");
+            const QString reason = QStringLiteral("Could not start the Quickshell IPC");
             if (attempt + 1 < maxAttempts) {
                 startShellAttempt(target, arguments, reason, kind,
                                   shellPaths, index, attempt + 1, reason);
@@ -2321,7 +2355,7 @@ private:
                 accepted = document.object()
                     .value(QStringLiteral("accepted")).toBool();
             if (!accepted && m_lastError.isEmpty())
-                setLastError(QStringLiteral("桌面环境拒绝了主题切换请求"));
+                setLastError(QStringLiteral("The desktop environment rejected the theme switch request"));
             emit systemAppearanceApplied(accepted);
             break;
         }
@@ -2357,6 +2391,9 @@ private:
             // 照停在页面加载时刻，点击发的都是"已是态"的 no-op
             fgSchedSnapshot();
             QTimer::singleShot(1200, this, [this] { fgSchedSnapshot(); });
+            break;
+        case RequestKind::I18nSnapshot:
+            emit i18nSnapshotChanged(i18nSnapshotFromReply(payload));
             break;
         }
     }
@@ -2415,6 +2452,9 @@ private:
             // 失败也回读：快照读的是磁盘真值（调用可能已落地），给出
             // 真实态好过停在陈旧态
             fgSchedSnapshot();
+            break;
+        case RequestKind::I18nSnapshot:
+            emit i18nSnapshotChanged({});
             break;
         }
     }

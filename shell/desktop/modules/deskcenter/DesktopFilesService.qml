@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import QtCore
 import Quickshell
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import "DesktopOutputs.mjs" as DesktopOutputs
@@ -122,7 +123,7 @@ QtObject {
             if (success)
                 success(response.result || ({}))
         } else if (failure) {
-            failure(response?.error?.message || "操作未完成")
+            failure(response?.error?.message || I18n.tr("Operation did not complete"))
         }
     }
 
@@ -243,7 +244,7 @@ QtObject {
 
     function renameEntry(entry, name, onSuccess) {
         if (!entry?.path || !directory || !validName(name)) {
-            lastError = "名称不能为空，且不能包含 /"
+            lastError = I18n.tr("Name cannot be empty and cannot contain /")
             return false
         }
         const target = directory + "/" + name.trim()
@@ -284,11 +285,11 @@ QtObject {
                 return !!path && path !== folder?.path && source.indexOf(path) === index
             })
         if (paths.length === 0 || !folder?.path || folder.kind !== "folder") {
-            lastError = "无法移动到该文件夹"
+            lastError = I18n.tr("Cannot move to that folder")
             return false
         }
         if (paths.some(function(path) { return folder.path.indexOf(path + "/") === 0 })) {
-            lastError = "不能移动到自身的子文件夹"
+            lastError = I18n.tr("Cannot move into its own subfolder")
             return false
         }
         _platform("file.transfer", { paths: paths, destination: folder.path, mode: "move" }, function() {
@@ -326,7 +327,7 @@ QtObject {
             } else {
                 service.clipboardMode = ""
                 service.clipboardPaths = []
-                service.lastError = "无法写入文件剪贴板"
+                service.lastError = I18n.tr("Failed to write the file clipboard")
             }
         })
     }
@@ -338,7 +339,7 @@ QtObject {
             const result = response?.ok ? response.result || ({}) : ({})
             const paths = Array.isArray(result.paths) ? result.paths : []
             if (!paths.length) {
-                service.lastError = "剪贴板中没有可粘贴的文件"
+                service.lastError = I18n.tr("No files to paste in the clipboard")
                 return
             }
             const mode = result.mode === "cut" ? "move" : "copy"
@@ -354,7 +355,7 @@ QtObject {
     function importExternalUrls(urls, action, output) {
         const paths = DesktopOutputs.localPaths(urls)
         if (!paths.length) {
-            lastError = "只能拖入本地文件"
+            lastError = I18n.tr("Only local files can be dropped")
             return
         }
         const local = paths.filter(function(path) { return DesktopOutputs.isDesktopPath(path, service.directory) })

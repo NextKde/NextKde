@@ -8,6 +8,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
@@ -155,8 +156,10 @@ PanelWindow {
         root.editMode = false
     }
     readonly property var widgetLabels: ({
-        clock: "时钟", weather: "天气", calendar: "日历", todo: "待办",
-        system: "系统", activity: "活动", music: "音乐"
+        clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
+        calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
+        system: I18n.tr("System"), activity: I18n.tr("Activity"),
+        music: I18n.tr("Music")
     })
     readonly property var widgetSymbols: ({
         clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
@@ -207,7 +210,7 @@ PanelWindow {
                 day: "numeric"
             }).format(date)
         } catch (error) {
-            return "农历日期"
+            return I18n.tr("Lunar date")
         }
     }
 
@@ -223,7 +226,10 @@ PanelWindow {
         const total = Math.max(0, Math.round(seconds || 0))
         const hours = Math.floor(total / 3600)
         const minutes = Math.floor((total % 3600) / 60)
-        return hours > 0 ? hours + "小时" + (minutes ? minutes + "分" : "") : minutes + "分"
+        if (hours > 0)
+            return I18n.tr("%1 h %2").arg(hours)
+                .arg(minutes > 0 ? I18n.tr("%1 min").arg(minutes) : "")
+        return I18n.tr("%1 min").arg(minutes)
     }
 
     function addTimerMinute() {
@@ -248,7 +254,8 @@ PanelWindow {
         }
         timerRunning = true
         timerHasStarted = true
-        sendTimerNotification("倒计时开始", "剩余 " + formattedTimer())
+        sendTimerNotification(I18n.tr("Timer started"),
+            I18n.tr("%1 remaining").arg(formattedTimer()))
     }
 
     Timer {
@@ -263,7 +270,7 @@ PanelWindow {
             root.timerSeconds = 0
             root.timerRunning = false
             root.timerHasStarted = false
-            root.sendTimerNotification("倒计时结束", "计时已完成")
+            root.sendTimerNotification(I18n.tr("Timer finished"), I18n.tr("Time is up"))
         }
     }
 
@@ -421,8 +428,8 @@ PanelWindow {
 
         Repeater {
             model: [
-                { id: "add", label: "+ 组件" },
-                { id: "done", label: "完成" }
+                { id: "add", label: I18n.tr("+ Widgets") },
+                { id: "done", label: I18n.tr("Done") }
             ]
             delegate: Rectangle {
                 required property var modelData
@@ -631,8 +638,9 @@ PanelWindow {
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
-                    text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键编辑"
+                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
+                        DeskCenterConfigService.sizeFor(card.modelData.id)]
+                        + " · " + I18n.tr("Right-click to edit")
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
                 }
@@ -669,7 +677,7 @@ PanelWindow {
                 Text {
                     id: editSizeText
                     anchors.centerIn: parent
-                    text: ({ small: "小", medium: "中", large: "大" })[
+                    text: ({ small: I18n.tr("Small"), medium: I18n.tr("Medium"), large: I18n.tr("Large") })[
                         DeskCenterConfigService.sizeFor(card.modelData.id)]
                     color: AppearanceTokens.surface.pick(
                         AppearanceTokens.colors.primaryContainerForeground, "white")
@@ -894,7 +902,7 @@ PanelWindow {
                             }
                         }
                         Text {
-                            text: "结束于 " + root.formattedTimerEndTime()
+                            text: I18n.tr("Ends at %1").arg(root.formattedTimerEndTime())
                             color: Qt.rgba(1, 1, 1, 0.72)
                             font { pixelSize: 10; weight: Font.DemiBold }
                         }
@@ -917,7 +925,7 @@ PanelWindow {
 	                                    ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.72)
                                 Text {
                                     anchors.centerIn: parent
-                                    text: modelData + "分"
+                                    text: I18n.tr("%1 min").arg(modelData)
 	                                    color: AppearanceTokens.content.onBackdrop ? "white" : "#ffb028"
                                     font { pixelSize: 8; weight: Font.DemiBold }
                                 }
@@ -933,23 +941,28 @@ PanelWindow {
                         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 5 }
                         spacing: 22
                         Repeater {
-                            model: ["取消", root.timerRunning ? "暂停"
-                                : (root.timerHasStarted ? "继续" : "开始")]
+                            model: [
+                                { id: "cancel", label: I18n.tr("Cancel") },
+                                { id: root.timerRunning ? "pause"
+                                        : (root.timerHasStarted ? "resume" : "start"),
+                                    label: root.timerRunning ? I18n.tr("Pause")
+                                        : (root.timerHasStarted ? I18n.tr("Resume") : I18n.tr("Start")) }
+                            ]
                             delegate: Rectangle {
                                 required property var modelData
                                 width: 38
                                 height: 21
                                 radius: height / 2
-	                                color: modelData !== "取消"
+	                                color: modelData.id !== "cancel"
 	                                    ? (AppearanceTokens.content.onBackdrop ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.24))
                                     : Qt.rgba(1, 1, 1, 0.13)
                                 border.width: 1
-	                                border.color: modelData !== "取消"
+	                                border.color: modelData.id !== "cancel"
 	                                    ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffa515") : Qt.rgba(1, 1, 1, 0.22)
                                 Text {
                                     anchors.centerIn: parent
-                                    text: modelData
-	                                    color: modelData !== "取消"
+                                    text: modelData.label
+	                                    color: modelData.id !== "cancel"
 	                                        ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffb028") : "white"
                                     font { pixelSize: 9; weight: Font.DemiBold }
                                 }
@@ -957,7 +970,7 @@ PanelWindow {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (modelData === "取消") {
+                                        if (modelData.id === "cancel") {
                                             root.timerRunning = false
                                             root.timerSeconds = 0
                                             root.timerDuration = 0
@@ -1001,14 +1014,14 @@ PanelWindow {
                 }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
                     color: "white"
                     font { pixelSize: 11; weight: Font.Bold }
                 }
-                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: Qt.formatDateTime(calendarClock.dayDate, "d日 dddd"); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
+                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: I18n.fmt(calendarClock.dayDate, I18n.tr("d dddd")); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
                 Text {
                     anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "dddd")
+                    text: I18n.fmt(calendarClock.dayDate, "dddd")
                     color: "#3c3c43"
                     font.pixelSize: 9
                 }
@@ -1198,8 +1211,9 @@ PanelWindow {
                 Text {
                     anchors { right: parent.right; bottom: weeklyForecast.top; rightMargin: 16; bottomMargin: 3 }
                     text: WeatherService.forecastDays.length > 0
-                        ? "最高 " + WeatherService.forecastDays[0].high + "°  最低 "
-                            + WeatherService.forecastDays[0].low + "°" : "正在更新预报"
+                        ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
+                            .arg(WeatherService.forecastDays[0].low)
+                        : I18n.tr("Updating forecast")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -1238,7 +1252,7 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         visible: WeatherService.forecastDays.length === 0
-                        text: WeatherService.loading ? "正在获取 7 日预报…" : "暂无 7 日预报"
+                        text: WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast")
 	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
                         font.pixelSize: 11
                     }
@@ -1267,9 +1281,9 @@ PanelWindow {
                     spacing: 18
                     Repeater {
                         model: [
-                            { label: "音量", value: Math.round(ControlCenterService.volumePercent) + "%", amount: ControlCenterService.volumePercent / 100 },
-                            { label: "湿度", value: WeatherService.humidity, amount: Math.min(1, Number(WeatherService.humidity.replace("%", "")) / 100) },
-                            { label: "天气", value: WeatherService.temperature, amount: 0.72 }
+                            { label: I18n.tr("Volume"), value: Math.round(ControlCenterService.volumePercent) + "%", amount: ControlCenterService.volumePercent / 100 },
+                            { label: I18n.tr("Humidity"), value: WeatherService.humidity, amount: Math.min(1, Number(WeatherService.humidity.replace("%", "")) / 100) },
+                            { label: I18n.tr("Weather"), value: WeatherService.temperature, amount: 0.72 }
                         ]
                         delegate: Item {
                             required property var modelData
@@ -1319,7 +1333,7 @@ PanelWindow {
                 }
                 Text {
                     anchors { left: parent.left; bottom: parent.bottom; leftMargin: 12; bottomMargin: 8 }
-                    text: "精选画面"
+                    text: I18n.tr("Featured")
                     color: "white"
                     font { pixelSize: 11; weight: Font.DemiBold }
                 }
@@ -1357,7 +1371,7 @@ PanelWindow {
                         ? systemContent.metrics.memoryUsedBytes / systemContent.metrics.memoryTotalBytes : 0
                     readonly property real storageValue: systemContent.metrics.diskTotalBytes > 0
                         ? systemContent.metrics.diskUsedBytes / systemContent.metrics.diskTotalBytes : 0
-                    readonly property var labels: ["CPU", "内存", "存储"]
+                    readonly property var labels: ["CPU", I18n.tr("Memory"), I18n.tr("Storage")]
                     readonly property var icons: ["cpu", "memory", "drive-harddisk"]
                     readonly property var values: [cpuValue, memoryValue, storageValue]
                     readonly property var colors: AppearanceTokens.content.onBackdrop
@@ -1368,7 +1382,7 @@ PanelWindow {
 
                     function detailFor(metric) {
                         if (metric === 0)
-                            return "实时使用率"
+                            return I18n.tr("Live usage")
                         if (metric === 1)
                             return root.formatMetricBytes(systemContent.metrics.memoryUsedBytes)
                                 + " / " + root.formatMetricBytes(systemContent.metrics.memoryTotalBytes)
@@ -1501,7 +1515,7 @@ PanelWindow {
                                 font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
-                                text: "当前"
+                                text: I18n.tr("Now")
 	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
@@ -1521,7 +1535,7 @@ PanelWindow {
                                 font { family: "SF Pro Display"; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
                             }
                             Text {
-                                text: "最高"
+                                text: I18n.tr("High")
 	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
                                 font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
                             }
@@ -1540,7 +1554,7 @@ PanelWindow {
                         Text {
                             id: memoryTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
+                            text: I18n.tr("Memory  %1%").arg(Math.round(activityRings.memoryValue * 100))
 	                            color: activityRings.hoveredMetric === 1
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
                                 : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
@@ -1562,7 +1576,7 @@ PanelWindow {
                         Text {
                             id: cpuTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
+                            text: I18n.tr("CPU  %1%").arg(Math.round(activityRings.cpuValue * 100))
 	                            color: activityRings.hoveredMetric === 0
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
                                 : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
@@ -1583,7 +1597,7 @@ PanelWindow {
                         Text {
                             id: frequencyTrendLabel
                             anchors { left: parent.left; top: parent.top }
-                            text: "平均频率  " + Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0) + " MHz"
+                            text: I18n.tr("Avg frequency  %1 MHz").arg(Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0))
 	                            color: AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
@@ -1631,10 +1645,10 @@ PanelWindow {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: uptimeHeatmap.hoveredDay
-                                    ? uptimeHeatmap.hoveredDay.key + " · 开机时长："
-                                        + root.formatDuration(uptimeHeatmap.hoveredDay.seconds)
-                                    : "已开机：" + root.formatDuration(
-                                        root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0)
+                                    ? I18n.tr("%1 · Uptime: %2").arg(uptimeHeatmap.hoveredDay.key)
+                                        .arg(root.formatDuration(uptimeHeatmap.hoveredDay.seconds))
+                                    : I18n.tr("Uptime: %1").arg(root.formatDuration(
+                                        root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0))
 	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
                                 font { family: "SF Pro Display"; pixelSize: 14; weight: Font.DemiBold }
                             }
@@ -1749,13 +1763,13 @@ PanelWindow {
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 12; topMargin: 7 }
-                    text: "备忘录"
+                    text: I18n.tr("Notes")
                     color: "white"
                     font { pixelSize: 11; weight: Font.Bold }
                 }
                 Text {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 42 }
-                    text: "暂时没有更多备忘"
+                    text: I18n.tr("No more notes for now")
                     color: "#333238"
                     font.pixelSize: 11
                 }
@@ -1770,13 +1784,13 @@ PanelWindow {
                     Item {
                 anchors.fill: parent
                 Text {
-                    text: "桌面工作区"
+                    text: I18n.tr("Desktop Workspace")
                     color: "white"
                     anchors { left: parent.left; top: parent.top; leftMargin: 18; topMargin: 42 }
                     font { pixelSize: 24; weight: Font.DemiBold }
                 }
                 GlassText {
-                    text: "日历、天气和媒体会在此保持一目了然"
+                    text: I18n.tr("Calendar, weather and media stay at a glance here")
                     wrapMode: Text.Wrap
                     color: Qt.rgba(1, 1, 1, 0.74)
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 18; rightMargin: 18; bottomMargin: 20 }
@@ -1967,7 +1981,7 @@ PanelWindow {
                         Text {
                             id: musicTitle
                             anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -22 }
-                            text: musicContent.player?.trackTitle || "暂无播放内容"
+                            text: musicContent.player?.trackTitle || I18n.tr("Nothing playing")
                             elide: Text.ElideRight
                             horizontalAlignment: Text.AlignHCenter
 	                            color: AppearanceTokens.content.ink("white")
@@ -2072,11 +2086,11 @@ PanelWindow {
                                         : index === 2 ? "media-next"
                                         : index === 3 ? "media-lyrics"
                                         : musicContent.player?.isPlaying ? "media-pause" : "media-play"
-                                    text: index === 0 ? qsTr("上一首")
-                                        : index === 2 ? qsTr("下一首")
+                                    text: index === 0 ? I18n.tr("Previous")
+                                        : index === 2 ? I18n.tr("Next")
                                         : index === 3 ? (DockMprisService.desktopLyricsAllowed
-                                            ? qsTr("桌面歌词") : qsTr("播放器已关闭桌面歌词"))
-                                        : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                                            ? I18n.tr("Desktop Lyrics") : I18n.tr("Player has desktop lyrics off"))
+                                        : musicContent.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                                     enabled: index === 3 ? DockMprisService.desktopLyricsAllowed : (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
@@ -2111,7 +2125,11 @@ PanelWindow {
                     anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 18; rightMargin: 18; topMargin: 44 }
                     spacing: 10
                     Repeater {
-                        model: ["应用库", "刷新天气", "媒体"]
+                        model: [
+                            { id: "library", label: I18n.tr("App Library") },
+                            { id: "refresh", label: I18n.tr("Refresh Weather") },
+                            { id: "media", label: I18n.tr("Media") }
+                        ]
                         delegate: Rectangle {
                             required property var modelData
                             width: (parent.width - parent.spacing * 2) / 3
@@ -2120,14 +2138,14 @@ PanelWindow {
                             color: Qt.rgba(1, 1, 1, 0.14)
                             border.width: 1
                             border.color: Qt.rgba(1, 1, 1, 0.15)
-                            GlassText { anchors.centerIn: parent; text: modelData; color: "white"; font { pixelSize: 12; weight: Font.DemiBold } }
+                            GlassText { anchors.centerIn: parent; text: modelData.label; color: "white"; font { pixelSize: 12; weight: Font.DemiBold } }
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (modelData === "应用库")
+                                    if (modelData.id === "library")
                                         AppLauncherService.show()
-                                    else if (modelData === "刷新天气")
+                                    else if (modelData.id === "refresh")
                                         WeatherService.refresh()
                                     else
                                         DockMprisService.togglePlayPause()
@@ -2198,7 +2216,7 @@ PanelWindow {
                         }
                         Text {
                             anchors { left: parent.left; top: parent.top; margins: 14 }
-                            text: "提醒事项"
+                            text: I18n.tr("Reminders")
                             color: AppearanceTokens.content.ink("white")
                             font { pixelSize: 13; weight: Font.Bold }
                         }
@@ -2213,7 +2231,7 @@ PanelWindow {
                         Text {
                             visible: todoContent.widgetSize === "small"
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: "项待办"
+                            text: I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
@@ -2238,7 +2256,8 @@ PanelWindow {
                                     }
                                     Text {
                                         anchors { left: parent.left; right: dueText.left; verticalCenter: parent.verticalCenter; leftMargin: 22; rightMargin: 8 }
-                                        text: String(PimWidgetService.value(parent.modelData, "title", "未命名任务"))
+                                        text: String(PimWidgetService.value(parent.modelData, "title",
+                                            I18n.tr("Untitled task")))
                                         color: AppearanceTokens.content.ink("#303038")
                                         elide: Text.ElideRight
                                         font { pixelSize: 11; weight: Font.Medium }
@@ -2273,9 +2292,9 @@ PanelWindow {
                                 // launches the app, whose PIM client
                                 // activates the service on demand.
                                 text: PimWidgetService.ready
-                                    ? "今天已全部完成"
+                                    ? I18n.tr("All done for today")
                                     : (PimWidgetService.state === PimWidgetService.stateLoading
-                                       ? "正在载入待办…" : "未连接待办服务")
+                                       ? I18n.tr("Loading todos…") : I18n.tr("Todo service not connected"))
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
@@ -2357,20 +2376,20 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: calendarHeader
-                    text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
                     horizontalAlignment: Text.AlignHCenter
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 15; weight: Font.Bold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "d日")
+                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("d"))
 	                    color: AppearanceTokens.content.ink("#15151a")
                     font { family: "SF Pro Display"; pixelSize: 32; weight: Font.DemiBold }
                 }
                 Text {
                     anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
-                    text: Qt.formatDateTime(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
+                    text: I18n.fmt(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
 	                    color: AppearanceTokens.content.ink("#4d4d55", 0.74)
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
@@ -2384,7 +2403,8 @@ PanelWindow {
                         delegate: Text {
                             required property var modelData
                             width: parent.width
-                            text: "• " + String(PimWidgetService.value(modelData, "title", "日程"))
+                            text: "• " + String(PimWidgetService.value(modelData, "title",
+                                I18n.tr("Event")))
                             color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, "#4d4d55")
                             elide: Text.ElideRight
                             font.pixelSize: 9
@@ -2393,7 +2413,7 @@ PanelWindow {
                     Text {
                         visible: calendarContent.todayEvents.length === 0
                             && PimWidgetService.state === PimWidgetService.stateUnavailable
-                        text: "未连接日历服务"
+                        text: I18n.tr("Calendar service not connected")
                         color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
                         elide: Text.ElideRight
                         font.pixelSize: 9
@@ -2406,7 +2426,8 @@ PanelWindow {
                         width: parent.width
                         height: 15
                         Repeater {
-                            model: ["一", "二", "三", "四", "五", "六", "日"]
+                            model: [I18n.tr("Mo"), I18n.tr("Tu"), I18n.tr("We"), I18n.tr("Th"),
+                                I18n.tr("Fr"), I18n.tr("Sa"), I18n.tr("Su")]
                             delegate: Text {
                                 required property var modelData
                                 required property int index
@@ -2888,7 +2909,7 @@ PanelWindow {
         function commitRename(entry, name) {
             const newName = (name ?? "").trim()
             if (!entry?.path || !root.desktopFiles.validName(newName)) {
-                root.desktopFiles.lastError = "名称不能为空，且不能包含 /"
+                root.desktopFiles.lastError = I18n.tr("Name cannot be empty and cannot contain /")
                 return false
             }
             const newPath = root.desktopFiles.directory + "/" + newName
@@ -2897,7 +2918,7 @@ PanelWindow {
                     return candidate.path === newPath
                 })
                 if (clash) {
-                    root.desktopFiles.lastError = "该名称已被占用"
+                    root.desktopFiles.lastError = I18n.tr("That name is already in use")
                     return false
                 }
             }
@@ -3042,7 +3063,7 @@ PanelWindow {
             // Resolve through the same desktop-entry identity layer used by
             // the Dock.  gio returns filenames (for example nvim.desktop),
             // while the visible label must be the entry's Name field.
-            try { return AppIdentityService.resolve(id)?.name || id } catch (_) { return id || "默认应用" }
+            try { return AppIdentityService.resolve(id)?.name || id } catch (_) { return id || I18n.tr("Default app") }
         }
 
         function openWithIdAt(index) {
@@ -3051,7 +3072,7 @@ PanelWindow {
 
         function defaultOpenText() {
             const handler = root.desktopFiles.openWith.defaultId
-            return handler ? "使用 " + applicationName(handler) + " 打开" : "打开"
+            return handler ? I18n.tr("Open with %1").arg(applicationName(handler)) : I18n.tr("Open")
         }
 
         function showMenu(entry, windowPoint) {
@@ -3144,15 +3165,44 @@ PanelWindow {
 
         function buildContextItems() {
         const FOLDER_COLORS = [
-            ["默认", ""], ["🔴 红", "#FF6B6B"], ["🟠 橙", "#FFA94D"], ["🟡 黄", "#FFD43B"],
-            ["🟢 绿", "#69DB7C"], ["🔵 蓝", "#4DABF7"], ["🟣 紫", "#9775FA"],
-            ["🩷 粉", "#F783AC"], ["⚫ 灰", "#868E96"]
+            [I18n.tr("Default"), ""], [I18n.tr("🔴 Red"), "#FF6B6B"], [I18n.tr("🟠 Orange"), "#FFA94D"],
+            [I18n.tr("🟡 Yellow"), "#FFD43B"], [I18n.tr("🟢 Green"), "#69DB7C"],
+            [I18n.tr("🔵 Blue"), "#4DABF7"], [I18n.tr("🟣 Purple"), "#9775FA"],
+            [I18n.tr("🩷 Pink"), "#F783AC"], [I18n.tr("⚫ Gray"), "#868E96"]
             ]
             const EMOJI_CATS = [
-            ["常用", [["📁 文件夹","📁"],["📂 打开的文件夹","📂"],["🗂️ 分类文件夹","🗂️"],["📦 包裹","📦"],["⭐ 星标","⭐"],["🔥 热门","🔥"],["💡 灵感","💡"],["❤️ 收藏","❤️"],["✨ 精选","✨"],["📌 置顶","📌"],["🎯 目标","🎯"],["💎 珍藏","💎"]]],
-            ["学习", [["📚 书籍","📚"],["📖 阅读","📖"],["✏️ 笔记","✏️"],["📝 备忘录","📝"],["🎓 学业","🎓"],["🔬 研究","🔬"],["🧪 实验","🧪"],["💻 编程","💻"],["🖥️ 工作站","🖥️"],["📐 设计","📐"],["🎨 创意","🎨"],["🎵 音乐","🎵"]]],
-            ["生活", [["🏠 主页","🏠"],["🏡 居家","🏡"],["🛒 购物","🛒"],["🍳 烹饪","🍳"],["☕ 咖啡","☕"],["🌿 植物","🌿"],["🎮 游戏","🎮"],["🎬 影视","🎬"],["📷 照片","📷"],["✈️ 旅行","✈️"],["🚗 出行","🚗"],["💰 财务","💰"]]],
-            ["符号", [["🔵 蓝点","🔵"],["🟢 绿点","🟢"],["🟡 黄点","🟡"],["🟠 橙点","🟠"],["🔴 红点","🔴"],["🟣 紫点","🟣"],["⚫ 黑点","⚫"],["⚪ 白点","⚪"],["⬛ 方块","⬛"],["🔶 菱形","🔶"],["⚡ 闪电","⚡"],["🌈 彩虹","🌈"]]]
+            { id: "frequent", label: I18n.tr("Frequent"), icon: "star", rows: [
+                ["📁 " + I18n.tr("Folder"), "📁"], ["📂 " + I18n.tr("Open folder"), "📂"],
+                ["🗂️ " + I18n.tr("Organized folder"), "🗂️"], ["📦 " + I18n.tr("Package"), "📦"],
+                ["⭐ " + I18n.tr("Star"), "⭐"], ["🔥 " + I18n.tr("Hot"), "🔥"],
+                ["💡 " + I18n.tr("Idea"), "💡"], ["❤️ " + I18n.tr("Favorites"), "❤️"],
+                ["✨ " + I18n.tr("Curated"), "✨"], [I18n.tr("📌 Pinned"), "📌"],
+                ["🎯 " + I18n.tr("Goal"), "🎯"], ["💎 " + I18n.tr("Collection"), "💎"]
+            ] },
+            { id: "study", label: I18n.tr("Study"), icon: "bookmark", rows: [
+                ["📚 " + I18n.tr("Books"), "📚"], ["📖 " + I18n.tr("Reading"), "📖"],
+                ["✏️ " + I18n.tr("Notes"), "✏️"], ["📝 " + I18n.tr("Memo"), "📝"],
+                ["🎓 " + I18n.tr("Academic"), "🎓"], ["🔬 " + I18n.tr("Research"), "🔬"],
+                ["🧪 " + I18n.tr("Experiment"), "🧪"], ["💻 " + I18n.tr("Coding"), "💻"],
+                ["🖥️ " + I18n.tr("Workstation"), "🖥️"], ["📐 " + I18n.tr("Design"), "📐"],
+                ["🎨 " + I18n.tr("Creative"), "🎨"], ["🎵 " + I18n.tr("Music"), "🎵"]
+            ] },
+            { id: "life", label: I18n.tr("Life"), icon: "home", rows: [
+                ["🏠 " + I18n.tr("Home"), "🏠"], ["🏡 " + I18n.tr("Homestead"), "🏡"],
+                ["🛒 " + I18n.tr("Shopping"), "🛒"], ["🍳 " + I18n.tr("Cooking"), "🍳"],
+                ["☕ " + I18n.tr("Coffee"), "☕"], ["🌿 " + I18n.tr("Plants"), "🌿"],
+                ["🎮 " + I18n.tr("Games"), "🎮"], ["🎬 " + I18n.tr("Movies"), "🎬"],
+                ["📷 " + I18n.tr("Photos"), "📷"], ["✈️ " + I18n.tr("Travel"), "✈️"],
+                ["🚗 " + I18n.tr("Commute"), "🚗"], ["💰 " + I18n.tr("Finance"), "💰"]
+            ] },
+            { id: "symbols", label: I18n.tr("Symbols"), icon: "star", rows: [
+                ["🔵 " + I18n.tr("Blue dot"), "🔵"], ["🟢 " + I18n.tr("Green dot"), "🟢"],
+                ["🟡 " + I18n.tr("Yellow dot"), "🟡"], ["🟠 " + I18n.tr("Orange dot"), "🟠"],
+                ["🔴 " + I18n.tr("Red dot"), "🔴"], ["🟣 " + I18n.tr("Purple dot"), "🟣"],
+                ["⚫ " + I18n.tr("Black dot"), "⚫"], ["⚪ " + I18n.tr("White dot"), "⚪"],
+                ["⬛ " + I18n.tr("Square"), "⬛"], ["🔶 " + I18n.tr("Diamond"), "🔶"],
+                ["⚡ " + I18n.tr("Lightning"), "⚡"], ["🌈 " + I18n.tr("Rainbow"), "🌈"]
+            ] }
             ]
             const e = contextEntry
             const path = e?.path ?? ""
@@ -3164,24 +3214,21 @@ PanelWindow {
             if (e) {
                 items.push(_ctxAct(defaultOpenText(), "openEntry", "folder-open"))
                 if (selectedEntries().length === 1)
-                    items.push(_ctxAct("重命名", "rename", "edit-rename"))
+                    items.push(_ctxAct(I18n.tr("Rename"), "rename", "edit-rename"))
 
                 // 自定义外观 applies to every desktop entry. The path-based
                 // storage retains the setting across filesystem snapshots.
                 const colorKids = FOLDER_COLORS.map(([label, val]) =>
                     _ctxCheck(label, "setColor", val, curColor === val, "color-picker"))
-                const appearKids = [ _ctxSub("颜色", colorKids, "color-picker") ]
-                for (const [catTitle, list] of EMOJI_CATS) {
-                    const rows = [_ctxCheck("无", "setEmoji", "", curEmoji === "", "placeholder-dot")]
-                        .concat(list.map(([label, em]) =>
+                const appearKids = [ _ctxSub(I18n.tr("Color"), colorKids, "color-picker") ]
+                for (const cat of EMOJI_CATS) {
+                    const rows = [_ctxCheck(I18n.tr("None"), "setEmoji", "", curEmoji === "", "placeholder-dot")]
+                        .concat(cat.rows.map(([label, em]) =>
                             _ctxCheck(label, "setEmoji", em, curEmoji === em, "placeholder-dot")))
-                    const categoryIcon = catTitle === "学习" ? "bookmark"
-                        : catTitle === "生活" ? "home"
-                        : catTitle === "符号" ? "star" : "star"
-                    appearKids.push(_ctxSub(catTitle, rows, categoryIcon))
+                    appearKids.push(_ctxSub(cat.label, rows, cat.icon))
                 }
-                appearKids.push(_ctxAct("移除自定义", "removeCustom", "edit-clear"))
-                items.push(_ctxSub("自定义外观", appearKids, "customize-appearance"))
+                appearKids.push(_ctxAct(I18n.tr("Remove customization"), "removeCustom", "edit-clear"))
+                items.push(_ctxSub(I18n.tr("Customize Appearance"), appearKids, "customize-appearance"))
 
                 // 打开方式（动态）
                 if (canChooseOpenWith(e)) {
@@ -3191,39 +3238,42 @@ PanelWindow {
                         if (id)
                             owKids.push({ icon: "placeholder-dot", label: applicationName(id), cmd: "openWith", value: id, enabled: true })
                     }
-                    owKids.push(_ctxAct("其他应用程序…", "openWithMore", ""))
-                    items.push(_ctxSub("打开方式", owKids, "open-with"))
+                    owKids.push(_ctxAct(I18n.tr("Other applications…"), "openWithMore", ""))
+                    items.push(_ctxSub(I18n.tr("Open With"), owKids, "open-with"))
                 }
 
-                items.push(_ctxAct("复制", "copy", "edit-copy"))
-                items.push(_ctxAct("剪切", "cut", "edit-cut"))
-                items.push(_ctxAct("移到废纸篓", "trash", "user-trash"))
-                items.push(_ctxAct("在文件管理器中打开", "open", "folder-open"))
+                items.push(_ctxAct(I18n.tr("Copy"), "copy", "edit-copy"))
+                items.push(_ctxAct(I18n.tr("Cut"), "cut", "edit-cut"))
+                items.push(_ctxAct(I18n.tr("Move to Trash"), "trash", "user-trash"))
+                items.push(_ctxAct(I18n.tr("Open in File Manager"), "open", "folder-open"))
             } else {
                 // desktop background
-                items.push(_ctxAct("添加小组件…", "addWidgets", "arrange"))
-                items.push(_ctxAct("编辑小组件", "editWidgets", "edit-rename"))
-                items.push(_ctxAct("新建文件", "newFile", "document-new"))
-                items.push(_ctxAct("新建文件夹", "newFolder", "folder-new"))
-                items.push(_ctxAct("粘贴", "paste", "edit-paste"))
+                items.push(_ctxAct(I18n.tr("Add Widgets…"), "addWidgets", "arrange"))
+                items.push(_ctxAct(I18n.tr("Edit Widgets"), "editWidgets", "edit-rename"))
+                items.push(_ctxAct(I18n.tr("New File"), "newFile", "document-new"))
+                items.push(_ctxAct(I18n.tr("New Folder"), "newFolder", "folder-new"))
+                items.push(_ctxAct(I18n.tr("Paste"), "paste", "edit-paste"))
                 const arrange = [
-                    _ctxAct("按名称", "arrangeByName", "sort-name"), _ctxAct("按类型", "arrangeByType", "sort-type"),
-                    _ctxAct("按修改时间（最新）", "arrangeModifiedNew", "clock"),
-                    _ctxAct("按修改时间（最早）", "arrangeModifiedOld", "clock")
+                    _ctxAct(I18n.tr("By Name"), "arrangeByName", "sort-name"),
+                    _ctxAct(I18n.tr("By Type"), "arrangeByType", "sort-type"),
+                    _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew", "clock"),
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld", "clock")
                 ]
-                items.push(_ctxSub("整理方式", arrange, "arrange"))
-                items.push(_ctxAct("重置图标排序", "resetLayout", "reset-layout"))
-                items.push(_ctxCheck("显示文件扩展名", "toggleExtensions", null,
+                items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
+                items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout", "reset-layout"))
+                items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
                     desktopLayout.showExtensions, "text-x-generic"))
-                const sizeKids = [[40, "小"], [56, "中"], [72, "大"]]
+                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px, "placeholder-dot"))
-                items.push(_ctxSub("图标大小", sizeKids, "image-x-generic"))
-                const spacingKids = [["comfortable", "宽松"], ["compact", "紧凑"], ["dense", "更紧凑"]]
+                items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "image-x-generic"))
+                const spacingKids = [
+                    ["comfortable", I18n.tr("Comfortable")], ["compact", I18n.tr("Compact")],
+                    ["dense", I18n.tr("Dense")]]
                     .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
                         desktopLayout.iconSpacing === value, "placeholder-dot"))
-                items.push(_ctxSub("图标间距", spacingKids, "arrange"))
-                items.push(_ctxAct("刷新", "refresh", "view-refresh"))
+                items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "arrange"))
+                items.push(_ctxAct(I18n.tr("Refresh"), "refresh", "view-refresh"))
             }
             return items
         }
@@ -3332,7 +3382,7 @@ PanelWindow {
             }
             function onLastErrorChanged() {
                 if (root.desktopFiles.lastError && root.desktopOutput === root.desktopFiles.defaultOutput)
-                    root.sendTimerNotification("桌面文件", root.desktopFiles.lastError)
+                    root.sendTimerNotification(I18n.tr("Desktop Files"), root.desktopFiles.lastError)
             }
         }
 
@@ -3364,7 +3414,7 @@ PanelWindow {
             z: 19
             Text {
                 anchors.centerIn: parent
-                text: "复制到桌面"
+                text: I18n.tr("Copy to desktop")
                 color: Qt.rgba(1, 1, 1, 0.78)
                 font { pixelSize: 13; weight: Font.DemiBold }
             }
@@ -3950,7 +4000,7 @@ PanelWindow {
                                 return e.path === newPath
                             })
                             if (clash) {
-                                root.desktopFiles.lastError = "该名称已被占用"
+                                root.desktopFiles.lastError = I18n.tr("That name is already in use")
                                 return
                             }
                         }
@@ -4162,7 +4212,7 @@ PanelWindow {
             }
             Text {
                 anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: 14 }
-                text: "打开方式"
+                text: I18n.tr("Open With")
                 color: "white"
                 font { pixelSize: 13; weight: Font.DemiBold }
             }
@@ -4175,7 +4225,7 @@ PanelWindow {
             }
             Text {
                 anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 57 }
-                text: root.desktopFiles.openWith.mime || "未能识别文件类型"
+                text: root.desktopFiles.openWith.mime || I18n.tr("Unrecognized file type")
                 color: Qt.rgba(1, 1, 1, 0.42)
                 font.pixelSize: 9
             }
@@ -4203,7 +4253,7 @@ PanelWindow {
                 }
                 Text {
                     visible: root.desktopFiles.openWith.handlers.length === 0
-                    text: "系统没有找到可用的关联应用。"
+                    text: I18n.tr("No associated applications found on the system.")
                     color: Qt.rgba(1, 1, 1, 0.52)
                     font.pixelSize: 10
                 }
@@ -4212,21 +4262,25 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 12 }
                 spacing: 8
                 Repeater {
-                    model: ["取消", "仅此一次", "设为默认"]
+                    model: [
+                        { id: "cancel", label: I18n.tr("Cancel") },
+                        { id: "once", label: I18n.tr("Just Once") },
+                        { id: "default", label: I18n.tr("Set as Default") }
+                    ]
                     delegate: Rectangle {
                         required property var modelData
-                        width: modelData === "设为默认" ? 64 : modelData === "仅此一次" ? 64 : 52
+                        width: modelData.id === "default" ? 64 : modelData.id === "once" ? 64 : 52
                         height: 26
                         radius: 7
-                        color: modelData === "设为默认" ? "#4385dc" : Qt.rgba(1, 1, 1, 0.10)
-                        opacity: modelData === "取消" || openWithDialog.selectedHandler ? 1 : 0.45
-                        Text { anchors.centerIn: parent; text: modelData; color: "white"; font.pixelSize: 10 }
+                        color: modelData.id === "default" ? "#4385dc" : Qt.rgba(1, 1, 1, 0.10)
+                        opacity: modelData.id === "cancel" || openWithDialog.selectedHandler ? 1 : 0.45
+                        Text { anchors.centerIn: parent; text: modelData.label; color: "white"; font.pixelSize: 10 }
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData === "取消") openWithMotion.close()
+                                if (modelData.id === "cancel") openWithMotion.close()
                                 else if (openWithDialog.selectedHandler) {
-                                    if (modelData === "仅此一次")
+                                    if (modelData.id === "once")
                                         root.desktopFiles.launchWith(openWithDialog.entry, openWithDialog.selectedHandler)
                                     else
                                         root.desktopFiles.setDefaultOpenWith(root.desktopFiles.openWith.mime, openWithDialog.selectedHandler)

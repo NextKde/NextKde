@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -386,7 +387,7 @@ PopupWindow {
                         width: parent.width
                         visible: root.displayedPage.parents.length > 0
                         icon: "back"
-                        label: "返回"
+                        label: I18n.tr("Back")
                         foregroundColor: root.effectiveForegroundColor
                         onClicked: root.back()
                     }

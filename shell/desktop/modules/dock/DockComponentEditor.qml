@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
@@ -15,7 +16,8 @@ AnimatedPopupWindow {
     property Item anchorItem: null
     property bool pointerInside: false
     readonly property var labels: ({
-        music: "音乐", weather: "天气", clock: "时钟", metrics: "系统"
+        music: I18n.tr("Music"), weather: I18n.tr("Weather"),
+        clock: I18n.tr("Clock"), metrics: I18n.tr("System")
     })
     readonly property var symbols: ({
         music: "♫", weather: "☀", clock: "◷", metrics: "⌁"
@@ -70,12 +72,12 @@ AnimatedPopupWindow {
             RowLayout {
                 Layout.fillWidth: true
                 Text {
-                    text: "Dock 组件"
+                    text: I18n.tr("Dock Widgets")
                     color: ThemeService.foregroundColor
                     font { pixelSize: 14; weight: Font.DemiBold }
                 }
                 Text {
-                    text: "拖动排序，点按添加或移除"
+                    text: I18n.tr("Drag to reorder, tap to add or remove")
                     color: ThemeService.foregroundColor
                     opacity: 0.58
                     font.pixelSize: 11
@@ -88,7 +90,7 @@ AnimatedPopupWindow {
                         Qt.rgba(1, 1, 1, ThemeService.isDark ? 0.13 : 0.72))
                     Text {
                         anchors.centerIn: parent
-                        text: "完成"
+                        text: I18n.tr("Done")
                         color: AppearanceTokens.surface.pick(
                             AppearanceTokens.colors.primaryContainerForeground,
                             ThemeService.foregroundColor)
@@ -221,12 +223,12 @@ AnimatedPopupWindow {
                 ColumnLayout {
                     spacing: 1
                     Text {
-                        text: "自动轮播"
+                        text: I18n.tr("Auto rotate")
                         color: ThemeService.foregroundColor
                         font { pixelSize: 13; weight: Font.DemiBold }
                     }
                     Text {
-                        text: "关闭后仍可悬停并使用滚轮切换"
+                        text: I18n.tr("When off, hover and scroll wheel still switch pages")
                         color: ThemeService.foregroundColor
                         opacity: 0.58
                         font.pixelSize: 10

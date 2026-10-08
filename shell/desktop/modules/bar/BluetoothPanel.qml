@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -159,7 +160,7 @@ AnimatedPopupWindow {
                 visible: ControlCenterService.bluetoothPowered
                     && !ControlCenterService.bluetoothDevicesRefreshInProgress
                     && ControlCenterService.bluetoothDevices.length === 0
-                text: "未发现已配对设备"
+                text: I18n.tr("No paired devices found")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -167,7 +168,7 @@ AnimatedPopupWindow {
             GlassText {
                 anchors.centerIn: parent
                 visible: ControlCenterService.bluetoothDevicesRefreshInProgress
-                text: "正在刷新…"
+                text: I18n.tr("Refreshing…")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -175,7 +176,7 @@ AnimatedPopupWindow {
             GlassText {
                 anchors.centerIn: parent
                 visible: !ControlCenterService.bluetoothPowered
-                text: "蓝牙已关闭"
+                text: I18n.tr("Bluetooth is off")
                 color: surface.secondaryForegroundColor
                 opacity: 0.52
                 font.pixelSize: 12
@@ -193,7 +194,7 @@ AnimatedPopupWindow {
             }
             Text {
                 anchors { left: parent.left; leftMargin: 18; verticalCenter: parent.verticalCenter }
-                text: "蓝牙设置…"
+                text: I18n.tr("Bluetooth settings…")
                 color: surface.foregroundColor
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.50)

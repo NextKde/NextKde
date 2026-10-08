@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
@@ -116,14 +117,16 @@ Item {
         minimumWidth: 150
         primaryText: root.connected
             ? (NetworkService.connectionType === "ethernet"
-                ? "有线网络" : (NetworkService.ssid || "Wi‑Fi"))
+                ? I18n.tr("Wired network") : (NetworkService.ssid || "Wi‑Fi"))
             : (NetworkService.deviceState === "connecting"
-                ? "正在连接网络…" : "未连接网络")
+                ? I18n.tr("Connecting to network…") : I18n.tr("Network disconnected"))
         secondaryText: !root.connected ? "" : (root.hasIssue
             ? (NetworkService.connectivity === "portal"
-                ? "需要网页登录认证" : "网络受限，无法访问互联网")
+                ? I18n.tr("Web sign-in required")
+                : I18n.tr("Limited connectivity, no internet access"))
             : ((NetworkService.ipv4.length > 0
-                ? "已连接 · " + NetworkService.ipv4 : "已连接互联网")
+                ? I18n.tr("Connected · %1").arg(NetworkService.ipv4)
+                : I18n.tr("Connected to the internet"))
                 // The rate snapshot comes from NetworkService's own sampling,
                 // so this stays live in both the top Bar and the Dock host.
                 + (NetworkService.deviceName

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -61,7 +62,7 @@ Item {
         shown: hoverArea.containsMouse && !root.panelOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
-        primaryText: "控制中心"
+        primaryText: I18n.tr("Control Center")
         minimumWidth: 92
     }
 }

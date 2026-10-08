@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Effects
 import Quickshell.Services.Mpris
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui"
 
@@ -208,7 +209,7 @@ Item {
                 primary: true
                 iconSize: Math.max(14, widget.iconSize * 0.36)
                 iconName: widget.player?.isPlaying ? "media-pause" : "media-play"
-                text: widget.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                text: widget.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
                 enabled: widget.player?.canTogglePlaying ?? false
                 busy: DockMprisService.loading
                 onClicked: DockMprisService.togglePlayPause()
@@ -404,7 +405,7 @@ Item {
 
     component DockPrevBtn: DockControlButton {
         iconName: "media-previous"
-        text: qsTr("上一首")
+        text: I18n.tr("Previous")
         onClicked: DockMprisService.previous()
     }
 
@@ -412,14 +413,14 @@ Item {
         property bool isPlaying: false
         primary: true
         iconName: isPlaying ? "media-pause" : "media-play"
-        text: isPlaying ? qsTr("暂停") : qsTr("播放")
+        text: isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
         busy: DockMprisService.loading
         onClicked: DockMprisService.togglePlayPause()
     }
 
     component DockNextBtn: DockControlButton {
         iconName: "media-next"
-        text: qsTr("下一首")
+        text: I18n.tr("Next")
         onClicked: DockMprisService.next()
     }
 }

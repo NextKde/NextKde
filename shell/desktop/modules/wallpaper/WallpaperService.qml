@@ -3,6 +3,7 @@ pragma Singleton
 import QtQuick
 import QtCore
 import Quickshell
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import "../../../Kos/Ui"
@@ -184,8 +185,8 @@ QtObject {
             return false
         if (!takeoverAvailable) {
             errorMessage = PlatformClient.capabilityProbeComplete
-                ? "当前平台服务版本不支持壁纸接管"
-                : "平台服务尚未准备好"
+                ? I18n.tr("The current platform service version does not support wallpaper takeover")
+                : I18n.tr("The platform service is not ready yet")
             return false
         }
         if (enabled) {
@@ -222,7 +223,7 @@ QtObject {
                 service.errorMessage = ""
             } else {
                 service.errorMessage = response?.error?.message
-                    || "Plasma 壁纸恢复失败"
+                    || I18n.tr("Failed to restore the Plasma wallpaper")
             }
         })
     }
@@ -290,7 +291,7 @@ QtObject {
                 service.errorMessage = ""
             } else {
                 service.errorMessage = response?.error?.message
-                    || "Plasma 纯色占位图设置失败"
+                    || I18n.tr("Failed to set the Plasma solid-color placeholder")
                 if (service.proxyRetryCount++ < 3)
                     retryProxy.restart()
             }

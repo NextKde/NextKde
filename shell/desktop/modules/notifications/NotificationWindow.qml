@@ -4,6 +4,7 @@ import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
@@ -569,21 +570,10 @@ PanelWindow {
                                 anchors.centerIn: parent
                                 text: {
                                     const raw = modelData.text || modelData.identifier || ""
-                                    // Some apps (e.g. QQ) send English action labels.
-                                    // Map common ones to Chinese for display.
-                                    const map = {
-                                        "view": "查看",
-                                        "View": "查看",
-                                        "reply": "回复",
-                                        "Reply": "回复",
-                                        "open": "打开",
-                                        "Open": "打开",
-                                        "close": "关闭",
-                                        "Close": "关闭",
-                                        "mark as read": "标为已读",
-                                        "Mark as read": "标为已读"
-                                    }
-                                    return map[raw] || raw
+                                    // Some apps send lowercase or alternate-case
+                                    // action labels; tr() maps the common ones and
+                                    // falls back to the raw label otherwise.
+                                    return I18n.tr(raw) || raw
                                 }
                                 color: card.foregroundColor
                                 font.pixelSize: 12

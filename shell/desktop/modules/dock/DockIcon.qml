@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
 import "DockMagnification.mjs" as Magnification
@@ -1006,19 +1007,19 @@ Item {
                 const pinned = icon.isPinnedItem || DockModelService.isAppPinned(icon.appId)
                 menu.clear()
                 if (icon.isWindowItem) {
-                    menu.addItem("window-restore", "激活窗口", "activate")
-                    menu.addItem("window-minimize", "最小化", "minimize")
-                    menu.addItem("window-close", "关闭窗口", "close")
-                    menu.addItem("window-new", "新建窗口", "new_window")
+                    menu.addItem("window-restore", I18n.tr("Activate window"), "activate")
+                    menu.addItem("window-minimize", I18n.tr("Minimize"), "minimize")
+                    menu.addItem("window-close", I18n.tr("Close window"), "close")
+                    menu.addItem("window-new", I18n.tr("New window"), "new_window")
                     menu.addItem(pinned ? "unpin" : "pin",
-                        pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
+                        pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
                 } else {
-                    menu.addItem("folder-open", "打开", "open")
-                    menu.addItem("window-new", "新建窗口", "new_window")
+                    menu.addItem("folder-open", I18n.tr("Open"), "open")
+                    menu.addItem("window-new", I18n.tr("New window"), "new_window")
                     menu.addItem(pinned ? "unpin" : "pin",
-                        pinned ? "取消固定" : "固定此应用", pinned ? "unpin" : "pin")
+                        pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
                     if (icon.isRunning)
-                        menu.addItem("window-close", "关闭所有窗口", "close_all")
+                        menu.addItem("window-close", I18n.tr("Close all windows"), "close_all")
                 }
                 DockModelService.activeContextMenu = menu
                 DockModelService.openDockPopup(menu)

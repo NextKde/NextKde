@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
 
@@ -49,7 +50,7 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
 
             Text {
-                text: "平均温度 " + root.currentC + "°"
+                text: I18n.tr("Avg temperature %1°").arg(root.currentC)
                 color: ThemeService.barInk
                 style: ThemeService.isDark && !AppearanceTokens.bar.macStyle
                     ? Text.Outline : Text.Normal
@@ -62,7 +63,7 @@ Item {
             }
 
             Text {
-                text: "最高温度 " + root.maximum5MinuteC + "°"
+                text: I18n.tr("Max temperature %1°").arg(root.maximum5MinuteC)
                 color: ThemeService.barInk
                 style: ThemeService.isDark && !AppearanceTokens.bar.macStyle
                     ? Text.Outline : Text.Normal

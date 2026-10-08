@@ -1,5 +1,6 @@
 import Quickshell
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
@@ -39,7 +40,7 @@ Item {
 
         GlassText {
             anchors.verticalCenter: parent.verticalCenter
-            text: Qt.formatDateTime(clock.date, "M月d日 dddd")
+            text: I18n.fmt(clock.date, I18n.tr("dddd, MMMM d"))
             color: ThemeService.barInk
             outlineEnabled: !AppearanceTokens.bar.macStyle
             renderType: Text.NativeRendering

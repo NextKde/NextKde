@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
 import qs.desktop
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as WallpaperCatalog
 import "../../../Kos/Ui/wallpapers" as ThemeVisuals
@@ -45,7 +46,7 @@ PanelWindow {
         const index = effects.map(item => item.id).indexOf(WallpaperService.transition)
         const effect = effects[(index + 1) % effects.length]
         if (WallpaperService.setTransition(effect.id))
-            effectFeedback.show("已切换动态效果为：" + effect.label, "media-shuffle")
+            effectFeedback.show(I18n.tr("Dynamic effect switched to: %1").arg(effect.label), "media-shuffle")
     }
 
     color: "transparent"
@@ -268,17 +269,17 @@ PanelWindow {
             Repeater {
                 id: sideActions
                 model: (WallpaperPreviewService.mode === "image" ? [
-                    { action: "spatial-wallpaper", icon: "spatial-wallpaper", label: "开启空间壁纸服务" }
+                    { action: "spatial-wallpaper", icon: "spatial-wallpaper", label: I18n.tr("Enable spatial wallpaper service") }
                 ] : WallpaperPreviewService.mode === "slideshow" ? [
-                    { action: "select-all", icon: "select-all", label: "选择全部图片" },
+                    { action: "select-all", icon: "select-all", label: I18n.tr("Select all images") },
                     { action: "play-pause", icon: WallpaperPreviewService.slideshowPlaying ? "media-pause" : "media-play",
-                        label: WallpaperPreviewService.slideshowPlaying ? "暂停预览" : "播放预览" }
+                        label: WallpaperPreviewService.slideshowPlaying ? I18n.tr("Pause preview") : I18n.tr("Play preview") }
                 ] : []).concat([
-                    { action: "transition", icon: "media-shuffle", label: "切换效果" },
-                    { action: "settings", icon: "status-settings", label: "设置" },
-                    { action: "exit", icon: "window-close", label: "退出预览" },
+                    { action: "transition", icon: "media-shuffle", label: I18n.tr("Switch effect") },
+                    { action: "settings", icon: "status-settings", label: I18n.tr("Settings") },
+                    { action: "exit", icon: "window-close", label: I18n.tr("Exit preview") },
                     { action: "apply", icon: "check", label: WallpaperPreviewService.mode === "slideshow"
-                        ? "应用已选 " + WallpaperPreviewService.selectedImages.length + " 张" : "应用壁纸" }
+                        ? I18n.tr("Apply %1 selected").arg(WallpaperPreviewService.selectedImages.length) : I18n.tr("Apply wallpaper") }
                 ])
                 delegate: AbstractButton {
                     id: sideButton
@@ -294,8 +295,8 @@ PanelWindow {
                             || (WallpaperPreviewService.selectedImages.length >= 2 && !WallpaperPreviewService.pending)
                     opacity: enabled ? 1 : 0.4
                     text: modelData.action === "spatial-wallpaper"
-                        ? (SpatialWallpaperService.preparationRequested ? "取消准备"
-                            : SpatialWallpaperService.previewEnabled ? "关闭空间效果" : modelData.label)
+                        ? (SpatialWallpaperService.preparationRequested ? I18n.tr("Cancel preparation")
+                            : SpatialWallpaperService.previewEnabled ? I18n.tr("Disable spatial effect") : modelData.label)
                         : modelData.label
                     Accessible.name: modelData.action === "transition"
                         ? text + "：" + (WallpaperCatalog.transitions.find(item => item.id === WallpaperService.transition)?.label || "")
@@ -358,9 +359,9 @@ PanelWindow {
     DesktopConfirmDialog {
         id: spatialServiceDialog
         targetScreen: stage.screen
-        titleText: "空间壁纸服务未开启"
-        bodyText: "开启后可生成空间效果。首次开启会下载所需资源。"
-        confirmText: "开启服务"
+        titleText: I18n.tr("Spatial wallpaper service is not enabled")
+        bodyText: I18n.tr("Once enabled, spatial effects can be generated. The first run downloads the required resources.")
+        confirmText: I18n.tr("Enable service")
         iconName: "spatial-wallpaper"
         destructive: false
         onAccepted: SpatialWallpaperService.prepareForEnable()
@@ -432,7 +433,7 @@ PanelWindow {
                 anchors.fill: parent
                 z: 1
                 Repeater {
-                    model: ["图像", "色彩", "幻灯片", "主题"]
+                    model: [I18n.tr("Image"), I18n.tr("Colors"), I18n.tr("Slideshow"), I18n.tr("Theme")]
                     delegate: Item {
                         id: option
                         required property int index

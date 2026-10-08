@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 
 // System-level destructive confirmation. It shares the same centered,
@@ -6,10 +7,10 @@ import qs.desktop.modules.common
 KosFloatPanel {
     id: popup
 
-    property string titleText: "确定要清空回收站吗？"
-    property string bodyText: "所有项目都将被永久删除。\n此操作无法撤销。"
-    property string confirmText: "清空回收站"
-    property string cancelText: "取消"
+    property string titleText: I18n.tr("Empty the Trash?")
+    property string bodyText: I18n.tr("All items will be permanently deleted.\nThis action cannot be undone.")
+    property string confirmText: I18n.tr("Empty Trash")
+    property string cancelText: I18n.tr("Cancel")
     property bool confirmVisible: true
     property string iconName: "user-trash"
     property bool destructive: true
@@ -153,7 +154,7 @@ KosFloatPanel {
 
                         Text {
                             anchors.centerIn: parent
-                            text: popup.confirmBusy ? "正在处理…" : popup.confirmText
+                            text: popup.confirmBusy ? I18n.tr("Working…") : popup.confirmText
                             color: popup.confirmBusy
                                 ? Qt.rgba(1.0, 0.23, 0.19, 0.55)
                                 : popup.destructive ? "#ff3b30" : popup.contentForegroundColor

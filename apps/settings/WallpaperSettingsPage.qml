@@ -164,7 +164,7 @@ ColumnLayout {
     function beginPreview(path) {
         if (!bridgeCompatible || previewPending) return
         if (galleryCategory === "themes" || String(path).startsWith("theme:")) {
-            if (!themeBridgeCompatible) { errorText = "请更新设置程序以使用主题壁纸"; return }
+            if (!themeBridgeCompatible) { errorText = I18n.tr("Update the settings app to use theme wallpapers"); return }
             const id = String(path).startsWith("theme:") ? String(path).slice(6) : themeId
             if (!WallpaperCatalog.theme(id) && packItems.every(item => item.id !== id)) return
             bridge.previewWallpaperSession("theme:" + id, {
@@ -174,7 +174,7 @@ ColumnLayout {
             return
         }
         if (!previewAvailable) {
-            errorText = "当前没有可用的显示器，无法启动壁纸预览。"
+            errorText = I18n.tr("No available displays; wallpaper preview cannot start.")
             return
         }
         const candidates = galleryCategory === "colors" ? colorItems : imageItems
@@ -183,7 +183,7 @@ ColumnLayout {
             initial = selectedSlideshowImages[0]
         else if (!candidates.some(item => item.path === initial) && candidates.length)
             initial = candidates[0].path
-        if (!initial) { errorText = "请先添加壁纸"; return }
+        if (!initial) { errorText = I18n.tr("Add a wallpaper first"); return }
         errorText = ""
         bridge.previewWallpaperSession(initial, {
             thumbnails: previewThumbnails(),
@@ -216,9 +216,9 @@ ColumnLayout {
         customDialog.errorMessage = ""
         const hex = value.toString().toUpperCase()
         const item = WallpaperCatalog.colorGradient(hex, colorDepth)
-        item.title = custom ? "自定义" : "当前色彩"
+        item.title = custom ? I18n.tr("Custom") : I18n.tr("Current color")
         const path = bridge.wallpaperColorImage(item.start, item.end, item.angle)
-        if (!path) { customDialog.errorMessage = bridge.lastError || "无法生成颜色"; return }
+        if (!path) { customDialog.errorMessage = bridge.lastError || I18n.tr("Could not generate a color"); return }
         selectedBaseColor = value
         if (custom) {
             item.custom = true
@@ -259,7 +259,7 @@ ColumnLayout {
         if (packageIndex > 0)
             return value.slice(0, packageIndex).split("/").pop()
         const name = value.split("/").pop().replace(/\.[^.]+$/, "")
-        return name || "未选择壁纸"
+        return name || I18n.tr("No wallpaper selected")
     }
 
     function isSwatchSelected(hex) {
@@ -430,12 +430,12 @@ ColumnLayout {
 
     function setSlideshow(enabled, interval) {
         if (!bridgeCompatible) {
-            errorText = "设置程序版本过旧，请更新后再使用壁纸功能。"
+            errorText = I18n.tr("The settings app is too old; please update before using wallpaper features.")
             return
         }
         const playlist = slideshowPlaylist()
         if (enabled && playlist.length < 2) {
-            errorText = "请选择至少两张图片以开始幻灯片。"
+            errorText = I18n.tr("Select at least two images to start a slideshow.")
             return
         }
         errorText = ""
@@ -457,7 +457,7 @@ ColumnLayout {
             bridge.inspectWallpaperModels()
         } else if (bridge) {
             modelsChecking = false
-            errorText = "设置程序与壁纸界面版本不匹配，请更新设置程序。"
+            errorText = I18n.tr("The settings app and wallpaper interface versions do not match; please update the settings app.")
         }
     }
 
@@ -480,7 +480,7 @@ ColumnLayout {
             } else if (page.enableAfterPreparation && page.spatialPrepared
                     && !depthReady) {
                 page.enableAfterPreparation = false
-                page.errorText = "深度模型校验未通过，空间壁纸未开启。"
+                page.errorText = I18n.tr("Depth model verification failed; spatial wallpaper is off.")
             }
         }
     }
@@ -495,9 +495,9 @@ ColumnLayout {
 
     Platform.FileDialog {
         id: fileDialog
-        title: "选择壁纸"
+        title: I18n.tr("Choose wallpaper")
         fileMode: Platform.FileDialog.OpenFiles
-        nameFilters: ["图片 (*.jpg *.jpeg *.png *.webp *.bmp *.avif)"]
+        nameFilters: [I18n.tr("Images (*.jpg *.jpeg *.png *.webp *.bmp *.avif)")]
         // 导入=复制进托管图集;点瓦片才是应用。完成后本地刷新枚举。
         onAccepted: if (page.bridgeCompatible) {
             page.galleryCategory = "images"
@@ -507,7 +507,7 @@ ColumnLayout {
 
     Platform.FolderDialog {
         id: folderDialog
-        title: "选择壁纸文件夹"
+        title: I18n.tr("Choose wallpaper folder")
         // 导入文件夹 = 把其中图片复制进托管图集(一次性快照,之后文件夹新增
         // 不会自动出现,需要重新导入)。
         onAccepted: {
@@ -515,7 +515,7 @@ ColumnLayout {
                 return
             page.galleryCategory = "images"
             if (page.bridge.importGalleryFolder(selectedFolder.toString()) === 0)
-                page.errorText = "文件夹内没有支持的图片。"
+                page.errorText = I18n.tr("No supported images in that folder.")
             page.refreshGallery()
         }
     }
@@ -544,7 +544,7 @@ ColumnLayout {
         id: modelDialog
         modal: true
         width: 380
-        title: "准备空间壁纸模型"
+        title: I18n.tr("Prepare spatial wallpaper model")
         standardButtons: Dialog.Ok | Dialog.Cancel
         onAccepted: page.beginSpatialPreparation()
         contentItem: Item {
@@ -554,7 +554,7 @@ ColumnLayout {
                 anchors.fill: parent
                 wrapMode: Text.Wrap
                 color: page.colors.primaryText
-                text: "先下载并校验本机深度模型，再生成当前壁纸的素材。完成后自动开启空间壁纸。"
+                text: I18n.tr("Downloads and verifies the local depth model first, then generates assets for the current wallpaper. Spatial wallpaper turns on automatically afterwards.")
             }
         }
     }
@@ -607,7 +607,7 @@ ColumnLayout {
                     text: page.currentIsTheme
                         ? (WallpaperCatalog.theme(page.displayedThemeId)?.label
                             || page.packItems.find(item => item.id === page.displayedThemeId)?.label
-                            || "主题壁纸")
+                            || I18n.tr("Theme wallpaper"))
                         : page.displayName(page.image)
                     color: page.colors.primaryText
                     font.pixelSize: 14
@@ -615,18 +615,18 @@ ColumnLayout {
                 }
                 Text {
                     text: !page.bridgeCompatible
-                        ? "设置程序版本不匹配"
+                        ? I18n.tr("Settings app version mismatch")
                         : !page.previewAvailable
-                            ? "当前环境暂不支持桌面预览"
-                            : "进入全屏模拟桌面，应用后才会更换壁纸"
+                            ? I18n.tr("Desktop preview is not supported in this environment yet")
+                            : I18n.tr("Enters a fullscreen simulated desktop; the wallpaper changes only after Apply")
                     color: page.colors.secondaryText
                     font.pixelSize: 12
                 }
             }
             Text {
                 objectName: "currentWallpaperPreviewLabel"
-                text: page.previewPending ? "正在载入…"
-                    : page.previewAvailable && page.bridgeCompatible ? "桌面预览  ›" : "不可用"
+                text: page.previewPending ? I18n.tr("Loading…")
+                    : page.previewAvailable && page.bridgeCompatible ? I18n.tr("Desktop preview  ›") : I18n.tr("Unavailable")
                 color: page.previewAvailable && page.bridgeCompatible
                     ? page.colors.accent : page.colors.secondaryText
                 font.pixelSize: 13
@@ -656,12 +656,12 @@ ColumnLayout {
             WallpaperSettingsRow {
                 width: parent.width
                 colors: page.colors
-                label: "填充方式"
+                label: I18n.tr("Fill mode")
                 separator: true
                 LiquidControls.LiquidSelect {
                     objectName: "wallpaperFitMenu"
                     accentColor: page.colors.accent
-                    model: ["填满屏幕", "完整显示", "拉伸", "居中"]
+                    model: [I18n.tr("Fill the screen"), I18n.tr("Show in full"), I18n.tr("Stretch"), I18n.tr("Centered")]
                     currentIndex: Math.max(0, ["crop", "fit", "stretch", "center"].indexOf(page.fitMode))
                     onActivated: function(index) {
                         if (page.bridgeCompatible)
@@ -673,7 +673,7 @@ ColumnLayout {
             WallpaperSettingsRow {
                 width: parent.width
                 colors: page.colors
-                label: "切换效果"
+                label: I18n.tr("Switch effect")
                 separator: true
                 LiquidControls.LiquidSelect {
                     objectName: "wallpaperTransitionMenu"
@@ -691,7 +691,7 @@ ColumnLayout {
             WallpaperSettingsRow {
                 width: parent.width
                 colors: page.colors
-                label: "由 KOS 显示壁纸"
+                label: I18n.tr("KOS draws the wallpaper")
                 // 底下还有一行小字注释，这行收矮一点，注释就不显得悬空。
                 height: 46
                 LiquidControls.LiquidGlassSwitch {
@@ -714,8 +714,8 @@ ColumnLayout {
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 text: page.takeoverAvailable
-                    ? "关闭 KOS 壁纸后恢复 Plasma 壁纸。开启空间壁纸会暂停自动切换。"
-                    : "当前平台服务版本不支持壁纸接管，请更新后再使用。"
+                    ? I18n.tr("Restores the Plasma wallpaper when KOS wallpaper is turned off. Enabling spatial wallpaper pauses auto-switching.")
+                    : I18n.tr("The current platform service version does not support wallpaper takeover; please update first.")
                 color: page.colors.tertiaryText
                 font.pixelSize: 10
                 wrapMode: Text.Wrap
@@ -728,7 +728,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 16
         visible: page.spatialBusy || page.spatialPreparing || page.modelsChecking
-        text: page.modelsChecking ? "正在检查空间壁纸模型…" : "正在准备空间壁纸，可在预览或服务和组件中取消…"
+        text: page.modelsChecking ? I18n.tr("Checking the spatial wallpaper model…") : I18n.tr("Preparing spatial wallpaper; cancel from the preview or Services and components…")
         color: page.colors.secondaryText
         font.pixelSize: 12
     }
@@ -755,12 +755,12 @@ ColumnLayout {
                 id: typeRow
                 width: parent.width
                 colors: page.colors
-                label: "壁纸类型"
+                label: I18n.tr("Wallpaper type")
                 separator: true
                 LiquidControls.LiquidSelect {
                     objectName: "wallpaperTypeMenu"
                     accentColor: page.colors.accent
-                    model: ["图像", "色彩", "幻灯片", "主题壁纸"]
+                    model: [I18n.tr("Image"), I18n.tr("Colors"), I18n.tr("Slideshow"), I18n.tr("Theme wallpaper")]
                     currentIndex: ["images", "colors", "slideshow", "themes"].indexOf(page.galleryCategory)
                     onActivated: function(index) {
                         page.chooseCategory(index)
@@ -775,7 +775,7 @@ ColumnLayout {
                 height: visible ? implicitHeight : 0
                 width: parent.width
                 colors: page.colors
-                label: "切换频率"
+                label: I18n.tr("Switch interval")
                 separator: true
                 LiquidControls.LiquidSelect {
                     objectName: "frequencyMenu"
@@ -790,7 +790,7 @@ ColumnLayout {
                 }
                 WallpaperTextButton {
                     objectName: "slideshowSelectAll"
-                    label: "全选"
+                    label: I18n.tr("Select all")
                     colors: page.colors
                     onClicked: page.selectAllImages()
                 }
@@ -802,7 +802,7 @@ ColumnLayout {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: page.galleryCategory === "themes"
                 height: visible ? contentHeight + 16 : 0
-                text: "桌面无窗口持续 10 秒后自动播放，窗口出现即暂停。预览始终播放。"
+                text: I18n.tr("Plays automatically after 10 seconds without windows on the desktop and pauses when windows appear. The preview always plays.")
                 color: page.colors.secondaryText
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -821,7 +821,7 @@ ColumnLayout {
                     objectName: "addCustomColorButton"
                     visible: page.galleryCategory === "colors"
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "自定义颜色"
+                    text: I18n.tr("Custom colors")
                     color: page.bridgeCompatible ? page.colors.accent : page.colors.tertiaryText
                     font.pixelSize: 12
                     font.weight: Font.Medium
@@ -841,7 +841,7 @@ ColumnLayout {
                     objectName: "importImagesButton"
                     visible: page.galleryCategory !== "colors" && page.galleryCategory !== "themes"
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "导入图片"
+                    text: I18n.tr("Import images")
                     color: page.bridgeCompatible
                         ? page.colors.accent : page.colors.tertiaryText
                     font.pixelSize: 12
@@ -858,7 +858,7 @@ ColumnLayout {
                     objectName: "importFolderButton"
                     visible: page.galleryCategory !== "colors" && page.galleryCategory !== "themes"
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "导入文件夹"
+                    text: I18n.tr("Import folder")
                     color: page.bridgeCompatible
                         ? page.colors.accent : page.colors.tertiaryText
                     font.pixelSize: 12
@@ -962,7 +962,7 @@ ColumnLayout {
                 visible: page.galleryHasMore
                 horizontalAlignment: Text.AlignHCenter
                 text: page.galleryExpanded
-                    ? "收起" : "展开全部（" + page.galleryItems.length + " 张）"
+                    ? I18n.tr("Hide") : I18n.tr("Expand all (") + page.galleryItems.length + I18n.tr(" images)")
                 color: page.colors.accent
                 font.pixelSize: 12
                 font.weight: Font.Medium
@@ -979,12 +979,12 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         Layout.leftMargin: 13
-        text: page.galleryCategory === "themes" ? "点击应用，右下角箭头进入桌面动态预览。桌面无窗口持续 10 秒后自动播放，电池模式自动降低开销。"
+        text: page.galleryCategory === "themes" ? I18n.tr("Tap an app, then use the arrow in the bottom-right for the animated desktop preview. It plays automatically after 10 seconds without desktop windows and lowers its cost on battery.")
             : page.galleryCategory === "slideshow"
-            ? "已选 " + page.selectedSlideshowImages.length + " 张 · 选择至少两张后自动开始，可在桌面预览中试播。"
-            : page.galleryCategory === "colors" ? "点击色彩应用渐变壁纸；自定义颜色会保留在列表中，可悬停删除。"
-            : page.galleryItems.length ? "点选图片，直接应用为桌面壁纸。"
-            : "暂无图片，可添加图片或文件夹。"
+            ? I18n.tr("Selected ") + page.selectedSlideshowImages.length + I18n.tr(" images · slideshow starts with at least two, preview on the desktop.")
+            : page.galleryCategory === "colors" ? I18n.tr("Tap a color to apply a gradient wallpaper; custom colors stay in the list and can be removed on hover.")
+            : page.galleryItems.length ? I18n.tr("Pick an image to apply it as the desktop wallpaper directly.")
+            : I18n.tr("No images yet; add images or a folder.")
         color: page.colors.secondaryText
         font.pixelSize: 12
         wrapMode: Text.Wrap

@@ -4,6 +4,7 @@ import org.kde.pipewire
 // ⚠️ ScreencastingRequest 在本模块（勿按直觉挪去 pipewire——删过一次
 // 就 crash-loop："is not a type"）
 import org.kde.taskmanager
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.dock
 import "stage-geometry.mjs" as StageGeo
 
@@ -210,8 +211,8 @@ Item {
         const hoverT = scrollMode ? 0
             : StageConfigService.tiltAngle
         const title = card.count > 1
-            ? (card.appName || card.title || "应用") + " ×" + card.count
-            : (card.appName || card.title || "应用")
+            ? (card.appName || card.title || I18n.tr("App")) + " ×" + card.count
+            : (card.appName || card.title || I18n.tr("App"))
         return {
             x: Math.round(pp.x),
             y: Math.round(pp.y),
@@ -504,8 +505,8 @@ Item {
                 // 沉浸缩略图上白字需要描边兜可读性
                 visible: StageConfigService.showCardTitle
                 text: card.count > 1
-                    ? (card.appName || card.title || "应用") + " ×" + card.count
-                    : (card.appName || card.title || "应用")
+                    ? (card.appName || card.title || I18n.tr("App")) + " ×" + card.count
+                    : (card.appName || card.title || I18n.tr("App"))
                 color: "white"
                 style: Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.55)
@@ -687,7 +688,7 @@ Item {
                 anchors.centerIn: parent
                 visible: !preview.visible && !liveStream.visible
                 width: Math.min(parent.width - 16, contentWidth)
-                text: card.title || "窗口"
+                text: card.title || I18n.tr("Window")
                 color: Qt.rgba(1, 1, 1, 0.40)
                 font.pixelSize: 10
                 elide: Text.ElideRight

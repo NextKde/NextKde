@@ -2,6 +2,7 @@ import QtQuick
 import QtQml.Models
 import Quickshell
 import Quickshell.Services.SystemTray
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
 // Bridges system tray item attention signals into desktop notifications.
@@ -46,10 +47,12 @@ QtObject {
     }
 
     function _notify(item) {
-        const appName = SysTrayIdentityService.friendlyName(item) || item.title || "系统通知"
+        const appName = SysTrayIdentityService.friendlyName(item) || item.title
+            || I18n.tr("System notification")
         const summary = item.tooltipTitle || appName
         const body = item.tooltipDescription
-            || (item.status === SystemTrayItem.NeedsAttention ? "新消息" : "状态更新")
+            || (item.status === SystemTrayItem.NeedsAttention
+                ? I18n.tr("New message") : I18n.tr("Status update"))
         const icon = item.icon || ""
 
         if (!_canNotify(item, summary, body))

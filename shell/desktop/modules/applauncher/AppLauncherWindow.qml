@@ -3,6 +3,7 @@ import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -436,9 +437,9 @@ PanelWindow {
         appContextMenu.application = app
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
-        appContextMenu.addItem("application-open", "打开应用", "open")
-        appContextMenu.addItem("edit-rename", "编辑应用", "edit")
-        appContextMenu.addItem("pin", "固定到 Dock", "pin")
+        appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
+        appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
+        appContextMenu.addItem("pin", I18n.tr("Pin to Dock"), "pin")
         appContextMenu.show()
     }
 
@@ -490,7 +491,7 @@ PanelWindow {
     function pasteClipboardIcon() {
         if (!editingApplication)
             return;
-        editorIconStatus = "正在从剪贴板导入 PNG…";
+        editorIconStatus = I18n.tr("Importing PNG from clipboard…");
         AppLauncherConfigService.importClipboardPngIcon(editingApplication.id);
     }
 
@@ -533,7 +534,7 @@ PanelWindow {
     function commitFolderRename() {
         if (!openFolder)
             return;
-        const name = folderRenameText.trim() || "文件夹";
+        const name = folderRenameText.trim() || I18n.tr("Folder");
         AppLauncherConfigService.renameFolder(openFolder.id, name);
         const refreshed = rootGridItems.find(function (item) {
             return item.type === "folder" && item.id === root.openFolder.id;
@@ -1113,7 +1114,9 @@ PanelWindow {
         function onCustomIconImportFinished(appId, path, success) {
             if (!root.editingApplication || root.editingApplication.id !== appId)
                 return;
-            root.editorIconStatus = success ? "图标已导入，点击保存生效" : "导入失败：请确认已复制 PNG 图片，且安装了 wl-clipboard";
+            root.editorIconStatus = success
+                ? I18n.tr("Icon imported — click Save to apply")
+                : I18n.tr("Import failed: copy a PNG image first and make sure wl-clipboard is installed");
             if (success)
                 root.editorIcon = path;
         }
@@ -1121,9 +1124,9 @@ PanelWindow {
 
     FileDialog {
         id: customIconFileDialog
-        title: "选择应用图标"
+        title: I18n.tr("Choose an app icon")
         fileMode: FileDialog.OpenFile
-        nameFilters: ["图片和 SVG (*.svg *.png *.jpg *.jpeg *.webp)", "所有文件 (*)"]
+        nameFilters: [I18n.tr("Images and SVG (*.svg *.png *.jpg *.jpeg *.webp)"), I18n.tr("All files (*)")]
         // PanelWindow is a Quickshell proxy, not a QWindow. Its private
         // backing window is the QQuickWindow required by Qt Quick Dialogs.
         parentWindow: root._backingWindow
@@ -1139,7 +1142,7 @@ PanelWindow {
                 return;
             const importedPath = AppLauncherConfigService.importCustomIcon(root.editingApplication.id, selectedFile);
             if (importedPath)
-                root.editorIconStatus = "正在导入图标…";
+                root.editorIconStatus = I18n.tr("Importing icon…");
         }
     }
 
@@ -1415,7 +1418,7 @@ PanelWindow {
                                         // must not start a second scale animation.
                                         scale: 1
 
-                                        placeholderText: "搜索应用"
+                                        placeholderText: I18n.tr("Search apps")
                                         // This is an input affordance, not a second
                                         // liquid surface. KWin renders the launcher
                                         // material behind it; the field keeps only its
@@ -1554,7 +1557,7 @@ PanelWindow {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "完成"
+                                    text: I18n.tr("Done")
                                     color: "white"
                                     font {
                                         pixelSize: 13
@@ -2129,7 +2132,8 @@ PanelWindow {
                     GlassText {
                         anchors.centerIn: parent
                         visible: !root.openFolder && root.filteredApplications.length === 0
-                        text: root.applications.length === 0 ? "正在加载应用程序…" : "未找到匹配的应用"
+                        text: root.applications.length === 0
+                            ? I18n.tr("Loading applications…") : I18n.tr("No matching apps")
                         color: root.launcherForegroundColor
                         opacity: 0.55
                         font.pixelSize: 14
@@ -2308,7 +2312,7 @@ PanelWindow {
                                     id: folderTitle
                                     anchors.centerIn: parent
                                     visible: !root.folderRenameActive
-                                    text: root.displayedFolder ? root.displayedFolder.name : "文件夹"
+                                    text: root.displayedFolder ? root.displayedFolder.name : I18n.tr("Folder")
                                     color: AppLauncherService.dockForegroundColor
                                     style: Text.Outline
                                     styleColor: Qt.rgba(0, 0, 0, 0.38)
@@ -2387,7 +2391,7 @@ PanelWindow {
                                             easing.type: Easing.OutCubic
                                         }
                                     }
-                                    text: "完成"
+                                    text: I18n.tr("Done")
                                     color: AppLauncherService.dockForegroundColor
                                     style: Text.Outline
                                     styleColor: Qt.rgba(0, 0, 0, 0.38)
@@ -2738,7 +2742,7 @@ PanelWindow {
                                             left: parent.left
                                             verticalCenter: parent.verticalCenter
                                         }
-                                        text: "编辑应用"
+                                        text: I18n.tr("Edit app")
                                         color: AppLauncherService.dockForegroundColor
                                         style: Text.Outline
                                         styleColor: Qt.rgba(0, 0, 0, 0.38)
@@ -2803,11 +2807,11 @@ PanelWindow {
                                         model: [
                                             {
                                                 name: "file",
-                                                label: "选择图片文件"
+                                                label: I18n.tr("Choose image file")
                                             },
                                             {
                                                 name: "clipboard",
-                                                label: "粘贴剪贴板图片"
+                                                label: I18n.tr("Paste image from clipboard")
                                             },
                                         ]
                                         delegate: Rectangle {
@@ -2857,7 +2861,7 @@ PanelWindow {
                                 }
 
                                 GlassText {
-                                    text: "显示名称"
+                                    text: I18n.tr("Display name")
                                     color: AppLauncherService.dockForegroundColor
                                     opacity: 0.72
                                     font.pixelSize: 11
@@ -2891,7 +2895,7 @@ PanelWindow {
                                 }
 
                                 GlassText {
-                                    text: "图标名称或本地路径"
+                                    text: I18n.tr("Icon name or local path")
                                     color: AppLauncherService.dockForegroundColor
                                     opacity: 0.72
                                     font.pixelSize: 11
@@ -2936,15 +2940,15 @@ PanelWindow {
                                         model: [
                                             {
                                                 name: "reset",
-                                                label: "恢复默认"
+                                                label: I18n.tr("Reset to default")
                                             },
                                             {
                                                 name: "hide",
-                                                label: "隐藏应用"
+                                                label: I18n.tr("Hide app")
                                             },
                                             {
                                                 name: "save",
-                                                label: "保存"
+                                                label: I18n.tr("Save")
                                             },
                                         ]
                                         delegate: Rectangle {

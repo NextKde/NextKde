@@ -1,6 +1,7 @@
 pragma Singleton
 
 import QtQuick
+import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
 
 // Network presentation model. NetworkManager is an implementation detail of
@@ -220,7 +221,8 @@ QtObject {
             savedProfileUuid: String(savedProfileUuid || ""), device: wifiDeviceName }, function(response) {
             const success = !!response?.ok
             wifiConnectInProgress = false
-            wifiConnectError = success ? "" : "无法连接，请检查密码或网络状态"
+            wifiConnectError = success ? ""
+                : I18n.tr("Could not connect. Check the password or network status")
             if (success)
                 refresh()
             wifiConnectionFinished(target, success)
@@ -243,7 +245,8 @@ QtObject {
             anonymousIdentity: String(anonymousIdentity || "") }, function(response) {
             const success = !!response?.ok
             wifiConnectInProgress = false
-            wifiConnectError = success ? "" : "无法完成 802.1X 认证，请确认账号、密码和认证方式"
+            wifiConnectError = success ? ""
+                : I18n.tr("802.1X authentication failed. Check the identity, password and EAP method")
             if (success)
                 refresh()
             wifiConnectionFinished(target, success)
@@ -266,7 +269,7 @@ QtObject {
                 wifiPostDisconnectScanTimer.restart()
             }
             else
-                wifiDisconnectError = "无法断开当前 Wi‑Fi"
+                wifiDisconnectError = I18n.tr("Could not disconnect from this Wi‑Fi")
         })
         return true
     }
@@ -284,7 +287,7 @@ QtObject {
             if (success)
                 refreshWifiNetworks()
             else
-                wifiForgetError = "无法忘记此网络"
+                wifiForgetError = I18n.tr("Could not forget this network")
             wifiForgetFinished(target, success)
         })
         return true
@@ -305,7 +308,7 @@ QtObject {
                 if (desired)
                     wifiEnableScanTimer.restart()
             } else {
-                wifiToggleError = "无法切换 Wi‑Fi，请检查 NetworkManager"
+                wifiToggleError = I18n.tr("Could not toggle Wi‑Fi. Check NetworkManager")
             }
         })
         return true
