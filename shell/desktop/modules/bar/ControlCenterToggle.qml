@@ -32,6 +32,9 @@ Item {
         dark: AppearanceTokens.isDarkTheme
     }
     BundledIcon {
+        // Same readability edge the bar text carries (Text.Outline).
+        outlined: AppearanceTokens.isDarkTheme
+        outlineColor: Qt.rgba(0, 0, 0, 0.40)
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize

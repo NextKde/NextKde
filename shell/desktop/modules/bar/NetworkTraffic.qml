@@ -41,12 +41,10 @@ Item {
                 target: root
                 function onGlyphInkChanged() { directionGlyph.requestPaint() }
             }
-            onPaint: {
-                const ctx = getContext("2d")
-                ctx.reset()
-                ctx.strokeStyle = root.glyphInk
-                ctx.lineWidth = 1.35
-                ctx.lineCap = "round"
+            // The two labels beside this glyph carry Text.Outline; the arrows
+            // are painted, not typeset, so they draw the same edge themselves:
+            // the whole mark once more with a wider stroke underneath.
+            function traceArrows(ctx) {
                 ctx.beginPath()
                 // Keep the opposing arrows offset: together they read as one
                 // compact traffic glyph, rather than two independent controls.
@@ -58,6 +56,22 @@ Item {
                 ctx.moveTo(9.5, 15.5); ctx.lineTo(9.5, 10.5)
                 ctx.moveTo(7.4, 12.5); ctx.lineTo(9.5, 10.3); ctx.lineTo(11.6, 12.5)
                 ctx.stroke()
+            }
+            onPaint: {
+                const ctx = getContext("2d")
+                ctx.reset()
+                ctx.lineCap = "round"
+                ctx.lineJoin = "round"
+                if (AppearanceTokens.isDarkTheme) {
+                    ctx.save()
+                    ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.38)
+                    ctx.lineWidth = 1.35 + 2.2
+                    traceArrows(ctx)
+                    ctx.restore()
+                }
+                ctx.strokeStyle = root.glyphInk
+                ctx.lineWidth = 1.35
+                traceArrows(ctx)
             }
         }
 

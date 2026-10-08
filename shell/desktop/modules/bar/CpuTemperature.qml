@@ -36,6 +36,10 @@ Item {
             height: 19
             kind: "temperature"
             glyphColor: ThemeService.foregroundColor
+            // The labels beside this glyph carry a Text.Outline edge; the
+            // glyph takes the same one so the row reads as a single mark.
+            outlined: ThemeService.isDark
+            outlineColor: Qt.rgba(0, 0, 0, 0.40)
             anchors.verticalCenter: parent.verticalCenter
         }
 

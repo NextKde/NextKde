@@ -8,21 +8,33 @@ Item {
 
     property string kind: "temperature" // "temperature" | "clock"
     property color glyphColor: "white"
+    // The same readability edge the bar text carries (Text.Outline). Off by
+    // default: the Dock's own cards already sit on opaque fills, and only the
+    // Bar asks for the extra edge.
+    property bool outlined: false
+    property color outlineColor: Qt.rgba(0, 0, 0, 0.40)
 
-    Image {
+    // BundledIcon rather than a raw Image because it owns both halves of what
+    // this glyph needs: painting the white mask in glyphColor, and drawing the
+    // readability edge around it.
+    BundledIcon {
         anchors.fill: parent
         visible: root.kind === "clock"
-        source: BundledIcons.source("time")
-        fillMode: Image.PreserveAspectFit
-        smooth: true
+        name: "time"
+        size: Math.min(root.width, root.height)
+        color: root.glyphColor
+        outlined: root.outlined
+        outlineColor: root.outlineColor
     }
 
-    Image {
+    BundledIcon {
         anchors.fill: parent
         visible: root.kind === "temperature"
-        source: BundledIcons.source("cpu-temperature")
-        fillMode: Image.PreserveAspectFit
-        smooth: true
+        name: "cpu-temperature"
+        size: Math.min(root.width, root.height)
+        color: root.glyphColor
+        outlined: root.outlined
+        outlineColor: root.outlineColor
     }
 
     Canvas {

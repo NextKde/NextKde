@@ -40,6 +40,9 @@ Item {
     // 外观（描边色 / 不透明度）来自 IconAppearanceService，与状态区其余
     // 图标保持一致；图案本身来自 BundledIcons，不查系统主题。
     BundledIcon {
+        // Same readability edge the bar text carries (Text.Outline).
+        outlined: AppearanceTokens.isDarkTheme
+        outlineColor: Qt.rgba(0, 0, 0, 0.40)
         anchors.centerIn: parent
         width: root.iconSize
         height: root.iconSize

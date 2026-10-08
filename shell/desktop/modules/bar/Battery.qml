@@ -19,14 +19,21 @@ Item {
         ? IconAppearanceService.styledSymbolicColor()
         : ThemeService.foregroundColor
     opacity: tintActive ? IconAppearanceService.opacity : 1.0
-    layer.enabled: tintActive
+    // The bar text carries a Text.Outline edge so it holds over a bright
+    // backdrop; the battery is drawn from QML rectangles, which have no text
+    // style, so the same edge comes from a shadow layer instead. Tint mode
+    // keeps the stronger drop shadow it always had.
+    readonly property bool iconOutlined: !tintActive
+        && AppearanceTokens.isDarkTheme
+    layer.enabled: tintActive || iconOutlined
     layer.effect: MultiEffect {
         shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.82)
-        shadowOpacity: 0.62
-        shadowBlur: 0.32
-        shadowVerticalOffset: 0.7
-        shadowScale: 1.04
+        shadowColor: tintActive
+            ? Qt.rgba(0, 0, 0, 0.82) : Qt.rgba(0, 0, 0, 0.40)
+        shadowOpacity: tintActive ? 0.62 : 1.0
+        shadowBlur: tintActive ? 0.32 : 0.22
+        shadowVerticalOffset: tintActive ? 0.7 : 0.0
+        shadowScale: tintActive ? 1.04 : 1.0
     }
 
     implicitWidth: iconSize

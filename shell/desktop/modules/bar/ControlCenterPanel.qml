@@ -644,6 +644,9 @@ PopupWindow {
             Behavior on color { ColorAnimation { duration: 140 } }
             Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
             WifiSignalIcon {
+                // Matches the readability edge the popup text already carries.
+                outlined: AppearanceTokens.isDarkTheme
+                outlineColor: Qt.rgba(0, 0, 0, 0.40)
                 anchors.centerIn: parent
                 width: 20; height: 20
                 opacity: NetworkService.wifiToggleInProgress ? 0 : 1
@@ -1915,6 +1918,12 @@ PopupWindow {
                         border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.25) : Qt.rgba(0, 0, 0, 0.10))
 
                         BundledIcon {
+
+                            // Same readability edge the bar text carries (Text.Outline).
+
+                            outlined: AppearanceTokens.isDarkTheme
+
+                            outlineColor: Qt.rgba(0, 0, 0, 0.40)
                             anchors.centerIn: parent
                             width: 16
                             height: 16
@@ -1995,6 +2004,12 @@ PopupWindow {
                             spacing: 10
 
                             BundledIcon {
+
+                                // Same readability edge the bar text carries (Text.Outline).
+
+                                outlined: AppearanceTokens.isDarkTheme
+
+                                outlineColor: Qt.rgba(0, 0, 0, 0.40)
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 20
                                 height: 20
@@ -2078,6 +2093,12 @@ PopupWindow {
                     sessionConfirm.contentForegroundColor.b, 0.34)
 
                 BundledIcon {
+
+                    // Same readability edge the bar text carries (Text.Outline).
+
+                    outlined: AppearanceTokens.isDarkTheme
+
+                    outlineColor: Qt.rgba(0, 0, 0, 0.40)
                     anchors.centerIn: parent
                     width: 26
                     height: 26
@@ -2487,6 +2508,12 @@ PopupWindow {
                         }
 
                         WifiSignalIcon {
+
+                            // Matches the readability edge the popup text already carries.
+
+                            outlined: AppearanceTokens.isDarkTheme
+
+                            outlineColor: Qt.rgba(0, 0, 0, 0.40)
                             anchors {
                                 left: parent.left
                                 leftMargin: 26
