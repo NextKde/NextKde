@@ -19,7 +19,7 @@ inline std::optional<QRegion> legacySurfaceBlurRegion(
     QRegion region;
     for (const SurfaceShape &shape : shapes) {
         if (shape.enabled && shape.geometry.width() > 0 && shape.geometry.height() > 0) {
-            region += shape.geometry.toAlignedRect();
+            region += surfaceCaptureBounds(shape).toAlignedRect();
         }
     }
     if (region.isEmpty()) {

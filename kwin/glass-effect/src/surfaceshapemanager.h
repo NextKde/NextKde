@@ -18,6 +18,7 @@ struct SurfaceShape
 {
     quint64 id = 0;
     QRectF geometry;
+    QRectF captureGeometry;
     qreal radius = 0.0;
     qreal exponent = 2.0;
     bool enabled = true;
@@ -34,6 +35,14 @@ struct SurfaceShape
     bool blurEnabled = false;
     uint blurLevel = 1;
 };
+
+// Keep legacy shapes unchanged. A fixed capture also has to contain its
+// outline, including a spring overshoot supplied by the client.
+inline QRectF surfaceCaptureBounds(const SurfaceShape &shape)
+{
+    return shape.captureGeometry.isEmpty() ? shape.geometry
+        : shape.captureGeometry.united(shape.geometry);
+}
 
 class SurfaceShapeManager : public QObject
 {
@@ -68,6 +77,8 @@ public: // Wayland C dispatch table callbacks.
                          wl_fixed_t cap, wl_fixed_t decay);
     static void setBlur(wl_client *client, wl_resource *resource,
                         uint32_t enabled, uint32_t level);
+    static void setCaptureGeometry(wl_client *client, wl_resource *resource,
+                                  int32_t x, int32_t y, int32_t width, int32_t height);
     static void destroyShape(wl_client *client, wl_resource *resource);
 
 private:

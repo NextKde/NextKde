@@ -12,6 +12,11 @@ RoundedBlurRegion {
 
     property real exponent: 2.0
     property bool shapeEnabled: true
+    // The blur/capture mask can stay fixed while this item's outline expands.
+    property Item shapeItem: item
+    property real shapeRadius: radius
+    readonly property bool fixedCaptureSupported:
+        ("fixedCaptureSupported" in surfaceShape) && surfaceShape.fixedCaptureSupported
 
     // Contrast scrim forwarded to the compositor alongside the shape. Tint
     // 0/1 is black/white. Decay 0..1 is adaptive; values above 1 select fixed
@@ -31,8 +36,8 @@ RoundedBlurRegion {
     // This object must not be placed in Region's default `regions` list: it
     // is protocol state, not an additional geometric primitive.
     property var surfaceShape: SurfaceShape {
-        target: root.item
-        radius: root.radius
+        target: root.shapeItem
+        radius: root.shapeRadius
         exponent: root.exponent
         enabled: root.shapeEnabled
         scrimEnabled: root.scrimEnabled
@@ -41,5 +46,11 @@ RoundedBlurRegion {
         scrimDecay: root.scrimDecay
         blurEnabled: root.blurEnabled
         blurLevel: root.blurLevel
+    }
+
+    property var captureBinding: Binding {
+        target: ("captureGeometry" in root.surfaceShape) ? root.surfaceShape : null
+        property: "captureGeometry"
+        value: root.item !== root.shapeItem ? root.itemRect : Qt.rect(0, 0, 0, 0)
     }
 }

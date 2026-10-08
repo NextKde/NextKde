@@ -102,7 +102,7 @@ private:
         if (qstrcmp(interface, kos_surface_shape_manager_v1_interface.name) == 0) {
             self->m_manager = static_cast<kos_surface_shape_manager_v1 *>(
                 wl_registry_bind(registry, name,
-                    &kos_surface_shape_manager_v1_interface, std::min(version, 4u)));
+                    &kos_surface_shape_manager_v1_interface, std::min(version, 5u)));
             self->m_globalName = name;
             Q_EMIT self->available();
         }
@@ -232,6 +232,20 @@ void SurfaceShape::setEnabled(bool enabled)
     m_enabled = enabled; Q_EMIT enabledChanged(); scheduleSync();
 }
 
+void SurfaceShape::setCaptureGeometry(const QRectF &geometry)
+{
+    if (m_captureGeometry == geometry) return;
+    m_captureGeometry = geometry;
+    Q_EMIT captureGeometryChanged();
+    scheduleSync();
+}
+
+bool SurfaceShape::fixedCaptureSupported() const
+{
+    return m_shape && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_shape))
+        >= KOS_SURFACE_SHAPE_V1_SET_CAPTURE_GEOMETRY_SINCE_VERSION;
+}
+
 void SurfaceShape::setScrimEnabled(bool enabled)
 {
     if (m_scrimEnabled == enabled) return;
@@ -336,6 +350,11 @@ void SurfaceShape::sync()
     kos_surface_shape_v1_set_geometry(m_shape,
         qRound(geometry.x()), qRound(geometry.y()),
         qRound(geometry.width()), qRound(geometry.height()));
+    if (fixedCaptureSupported()) {
+        const QRect capture = m_captureGeometry.toAlignedRect();
+        kos_surface_shape_v1_set_capture_geometry(m_shape,
+            capture.x(), capture.y(), std::max(0, capture.width()), std::max(0, capture.height()));
+    }
     kos_surface_shape_v1_set_corner(m_shape,
         wl_fixed_from_double(m_radius), wl_fixed_from_double(m_exponent));
     kos_surface_shape_v1_set_enabled(m_shape,

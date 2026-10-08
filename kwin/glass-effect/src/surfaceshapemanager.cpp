@@ -31,6 +31,7 @@ static const struct kos_surface_shape_v1_interface s_shapeImplementation{
     SurfaceShapeManager::destroyShape,
     SurfaceShapeManager::setScrim,
     SurfaceShapeManager::setBlur,
+    SurfaceShapeManager::setCaptureGeometry,
 };
 
 SurfaceShapeManager::SurfaceShapeManager(Display *display, QObject *parent)
@@ -38,10 +39,10 @@ SurfaceShapeManager::SurfaceShapeManager(Display *display, QObject *parent)
 {
     // Must advertise the interface version the protocol declares, or a
     // conformant client binds at 1 and can never send the since=3 set_scrim
-    // or the since=4 set_blur (it would have to skip them silently). The
-    // resources below already create their shape objects at 4.
+    // or the since=4/5 blur/capture requests. Shape resource versions follow
+    // the actual negotiated manager version below.
     m_global = wl_global_create(*display, &kos_surface_shape_manager_v1_interface,
-                                4, this, bindManager);
+                                5, this, bindManager);
 }
 
 SurfaceShapeManager::~SurfaceShapeManager()
@@ -83,7 +84,7 @@ void SurfaceShapeManager::bindManager(wl_client *client, void *data,
                                       uint32_t version, uint32_t id)
 {
     wl_resource *resource = wl_resource_create(client,
-        &kos_surface_shape_manager_v1_interface, std::min(version, 4u), id);
+        &kos_surface_shape_manager_v1_interface, std::min(version, 5u), id);
     wl_resource_set_implementation(resource, &s_managerImplementation, data, nullptr);
 }
 
@@ -105,7 +106,7 @@ void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
     shape->manager = manager;
     shape->surface = surface;
     shape->value.id = manager->m_nextId++;
-    // shape 资源版本跟随 manager 资源的实际协商版本（bind 侧已 min(version,4)）
+    // shape 资源版本跟随 manager 资源的实际协商版本（bind 侧已 min(version,5)）
     // ——写死 4 会让 v1 客户端拿到标成 v4 的资源，将来按版本门控全失真
     shape->resource = wl_resource_create(client, &kos_surface_shape_v1_interface,
                                           wl_resource_get_version(resource), id);
@@ -161,6 +162,17 @@ void SurfaceShapeManager::setCorner(wl_client *, wl_resource *resource,
     }
     shape->value.radius = std::clamp(wl_fixed_to_double(radius), 0.0, 4096.0);
     shape->value.exponent = std::clamp(wl_fixed_to_double(exponent), 2.0, 8.0);
+    shape->manager->changed(shape);
+}
+
+void SurfaceShapeManager::setCaptureGeometry(wl_client *, wl_resource *resource,
+                                            int32_t x, int32_t y, int32_t width, int32_t height)
+{
+    auto *shape = static_cast<ShapeResource *>(wl_resource_get_user_data(resource));
+    if (!shape->manager) return;
+    const QRectF capture(x, y, std::max(width, 0), std::max(height, 0));
+    if (shape->value.captureGeometry == capture) return;
+    shape->value.captureGeometry = capture;
     shape->manager->changed(shape);
 }
 

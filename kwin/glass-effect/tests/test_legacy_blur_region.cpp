@@ -43,6 +43,25 @@ int main(int argc, char **argv)
         check(!legacySurfaceBlurRegion(std::nullopt, {right}), "invalid geometry must not trigger whole-surface blur");
         left.geometry = QRectF(1.25, 2.5, 10.5, 11.25);
         check(legacySurfaceBlurRegion(std::nullopt, {left})->boundingRect() == left.geometry.toAlignedRect(), "fractional bounds must cover the declared shape");
+        SurfaceShape expanding;
+        expanding.captureGeometry = QRectF(100, 50, 832, 632);
+        for (int frame = 0; frame <= 60; ++frame) {
+            const qreal progress = frame / 60.0;
+            const qreal width = 176 + 624 * progress;
+            const qreal height = 48 + 552 * progress;
+            expanding.geometry = QRectF(116 + (800 - width) / 2, 66 + 600 - height, width, height);
+            const auto capture = legacySurfaceBlurRegion(std::nullopt, {expanding});
+            check(capture && capture->boundingRect() == expanding.captureGeometry.toAlignedRect(),
+                  "expanding and offset outlines must retain the complete fixed capture");
+            check(capture->contains(expanding.geometry.toAlignedRect()), "capture must contain every animation frame");
+        }
+        expanding.enabled = false;
+        check(!legacySurfaceBlurRegion(std::nullopt, {expanding}), "closing a fixed-capture shape must remove its request");
+        expanding.enabled = true;
+        expanding.geometry = QRectF(90, 40, 900, 700);
+        check(surfaceCaptureBounds(expanding).contains(expanding.geometry), "an out-of-bounds outline must not sample outside its allocation");
+        expanding.captureGeometry = QRectF();
+        check(surfaceCaptureBounds(expanding) == expanding.geometry, "clearing fixed capture must restore the legacy policy");
         qInfo("Legacy glass blur region tests passed");
     } catch (const std::exception &error) {
         qCritical("%s", error.what());

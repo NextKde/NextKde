@@ -51,6 +51,9 @@ Item {
     // anchors to it, so its own x/y read 0 wherever the glass sits; point this
     // at the wrapper, whose x/y carry that offset. Defaults to the panel.
     property Item blurAnchor: root
+    // Optional fixed capture bounds, independent of the animated blurAnchor outline.
+    property Item captureAnchor: null
+    readonly property bool fixedCaptureSupported: surfaceRegion.fixedCaptureSupported
 
     // ---- KWin vs QML rendering ------------------------------------------
 
@@ -194,8 +197,10 @@ Item {
     // radius, exponent, or a SurfaceShape declaration beside the panel.
     KosRoundedBlurRegion {
         id: surfaceRegion
-        item: root.blurAnchor
-        radius: root.radius
+        item: root.captureAnchor && fixedCaptureSupported && !root.tonal ? root.captureAnchor : root.blurAnchor
+        shapeItem: root.blurAnchor
+        radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius
+        shapeRadius: root.radius
         exponent: root.cornerExponent
         // A tonal form publishes no SurfaceShape. The declaration can only
         // describe a rectangle with rounded corners, and KWin paints a surface's

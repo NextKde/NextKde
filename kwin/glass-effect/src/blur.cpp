@@ -1497,8 +1497,8 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     // away or zero-sized must not take the surface's whole glass with it: the
     // region geometry it was meant to refine is then the only thing left, and
     // dropping it leaves the window unblurred until something else happens to
-    // damage those pixels. That reads as "the middle of the Dock has no glass"
-    // rather than as a missing shape.
+    // damage those pixels. Fixed-capture shapes are the exception: their capture
+    // rectangle is storage, so an empty outline must produce no visible glass.
     if (!declaredSurfaceShapes.isEmpty() && frameShape.isEmpty()) {
         QVector<SurfaceShapeDraw> draws;
         decltype(effectiveContentShape) shapeGeometry;
@@ -1511,7 +1511,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         QRect declaredShapeBounds;
         for (const SurfaceShape &shape : declaredSurfaceShapes) {
             declaredShapeBounds = declaredShapeBounds.united(
-                shape.geometry.toAlignedRect());
+                surfaceCaptureBounds(shape).toAlignedRect());
         }
         const QPoint declaredShapeTranslation = effectShape.boundingRect().topLeft()
             - declaredShapeBounds.topLeft();
@@ -1585,6 +1585,11 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         if (!draws.isEmpty()) {
             effectiveContentShape = shapeGeometry;
             surfaceShapeDraws = draws;
+        } else if (std::any_of(declaredSurfaceShapes.cbegin(), declaredSurfaceShapes.cend(),
+                               [](const SurfaceShape &shape) { return !shape.captureGeometry.isEmpty(); })) {
+            // A fixed capture is storage, not a fallback visible rectangle.
+            // If its animated outline is clipped away, paint no glass.
+            return;
         } else if (shapeTraceEnabled()) {
             qCWarning(shapeTraceCategory())
                 << "glass trace: shapes declared but none drawable, keeping the"
@@ -1649,6 +1654,9 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     }
 
     if (renderInfo.framebuffers.size() != (m_maxIterationCount + 1) || renderInfo.textures[0]->size() != backgroundRect.size() || renderInfo.textures[0]->internalFormat() != textureFormat) {
+        if (shapeTraceEnabled()) {
+            qCWarning(shapeTraceCategory()) << "glass trace: allocating capture chain" << backgroundRect.size();
+        }
         renderInfo.framebuffers.clear();
         renderInfo.textures.clear();
 

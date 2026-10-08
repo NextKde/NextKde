@@ -34,9 +34,17 @@ PanelWindow {
     // Keep visibility independent from PanelWindow.screen: screen resolution
     // depends on the backing surface and would form a binding loop here.
     property bool outputAvailable: false
-    readonly property real contentRevealProgress: popupMotion.progress
-    property bool gridEntranceActive: false
     readonly property bool panelVisible: popupMotion.mapped && (AppLauncherService.dockWidth > 0 || isFullscreenMode || isCenterMode)
+    // GridView delegates (icons, folder 3x3 previews, labels) dominate the
+    // launcher's heap cost, and the model bindings below kept them alive
+    // indefinitely: closing only hid the window while the fullscreen pagers
+    // stayed populated, so one fullscreen visit permanently parked a whole
+    // page of delegates. Models gate on this flag and empty once the close
+    // animation has finished plus a grace period, so quick reopen never
+    // pays the rebuild. The window itself must stay mapped — Quickshell
+    // discards its backing QQuickWindow on visible:false.
+    property bool contentAlive: true
+    readonly property int contentGraceMs: 3000
 
     readonly property string displayMode: AppLauncherConfigService.displayMode
     readonly property var layoutProfile: AppLauncherConfigService.profileForMode(displayMode)
@@ -90,34 +98,40 @@ PanelWindow {
         && AppLauncherService.dockPosition !== "right"
     readonly property bool dockAtLeft: AppLauncherService.dockPosition === "left"
     readonly property bool dockAtRight: AppLauncherService.dockPosition === "right"
-    readonly property real panelOriginX: isBottomMode
-        ? (dockAtLeft ? 0 : dockAtRight ? 1 : 0.5) : 0.5
-    readonly property real panelOriginY: isBottomMode && dockAtBottom ? 1 : 0.5
-    readonly property real panelWidthProgress: isBottomMode && dockAtBottom
-        ? 0.35 + 0.65 * contentRevealProgress : contentRevealProgress
-    readonly property real panelHeightProgress: isBottomMode && !dockAtBottom
-        ? 0.35 + 0.65 * contentRevealProgress : contentRevealProgress
 
     Component.onCompleted: console.log("[AppLauncherWindow] created")
     onOpenChanged: {
         console.log("[AppLauncherWindow] received open=" + open);
         if (open) {
+            contentGraceTimer.stop();
+            const needsContentRebuild = !root.contentAlive;
+            root.contentAlive = true;
             if (root.panelVisible)
                 searchFocusTimer.restart();
             if (applicationsDirty)
                 applicationCatalogRefresh.restart();
             root.cancelFullscreenPageTransition();
             root.syncPagerSlots();
-            popupMotion.open();
+            // Let model/delegate creation settle before starting a cold-open
+            // animation. Theme icon loading must remain on the GUI thread.
+            // A close before this deferred call must not reopen the surface.
+            if (needsContentRebuild) {
+                Qt.callLater(function () {
+                    if (root.open)
+                        popupMotion.open();
+                });
+            } else {
+                popupMotion.open();
+            }
         } else {
             popupMotion.close();
         }
     }
 
-    PopupMotion {
+    LauncherMotion {
         id: popupMotion
-        openDuration: 300
-        closeDuration: 240
+        target: launcherContent
+        restingY: 0
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -893,11 +907,14 @@ PanelWindow {
     visible: root.outputAvailable
     onPanelVisibleChanged: {
         if (panelVisible) {
+            contentGraceTimer.stop();
             selectedIndex = 0;
             fullscreenPage = 0;
             keyboardSelectionActive = false;
+            contentAlive = true;
             searchFocusTimer.restart();
         } else {
+            contentGraceTimer.restart();
             dismissApplicationMenu();
             editMode = false;
             folderEditMode = false;
@@ -925,6 +942,15 @@ PanelWindow {
         interval: 1
         repeat: false
         onTriggered: searchBar.forceActiveFocus()
+    }
+    Timer {
+        id: contentGraceTimer
+        interval: root.contentGraceMs
+        repeat: false
+        onTriggered: {
+            if (!root.open && !root.panelVisible)
+                root.contentAlive = false;
+        }
     }
 
     Timer {
@@ -1131,7 +1157,7 @@ PanelWindow {
         anchors.right: (root.isBottomMode && root.dockAtRight) ? parent.right : undefined
         width: root.isFullscreenMode ? parent.width : root.launcherWidth
         height: root.isFullscreenMode ? parent.height : root.launcherHeight
-        clip: true
+        clip: root.isFullscreenMode
 
         // The fullscreen presentation owns the entire output, not merely the
         // centered app grid. Create this wheel receiver only for that mode so
@@ -1139,7 +1165,7 @@ PanelWindow {
         // extra wheel receiver at all.
         Loader {
             active: root.isFullscreenMode
-            enabled: root.open && root.contentRevealProgress > 0.95
+            enabled: popupMotion.interactive
             anchors.fill: parent
             z: 90
             sourceComponent: Component {
@@ -1162,23 +1188,46 @@ PanelWindow {
         Item {
             id: launcherCard
             objectName: "launcher-motion-frame"
-            width: launcherRevealClip.width * root.panelWidthProgress
-            height: launcherRevealClip.height * root.panelHeightProgress
-            x: (launcherRevealClip.width - width) * root.panelOriginX
-            y: (launcherRevealClip.height - height) * root.panelOriginY
-            visible: root.panelVisible && root.contentRevealProgress > 0
+            width: launcherRevealClip.width
+            height: launcherRevealClip.height
+            visible: root.panelVisible
             enabled: root.open
-            clip: true
+            // Content layout and clipping stay independent of the backdrop.
+            clip: false
 
             Item {
                 id: background
                 objectName: "launcher-stable-layout"
                 width: launcherRevealClip.width
                 height: launcherRevealClip.height
-                x: (launcherCard.width - width) * root.panelOriginX
-                y: (launcherCard.height - height) * root.panelOriginY
                 property real radius: root.isFullscreenMode ? 0
                     : (AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28))
+
+                // Fixed backdrop capture bounds with padding for edge samples.
+                // This metadata item paints nothing.
+                Item {
+                    id: launcherCaptureFrame
+                    x: root.isFullscreenMode ? 0 : -16
+                    y: root.isFullscreenMode ? 0 : -16
+                    width: background.width + (root.isFullscreenMode ? 0 : 32)
+                    height: background.height + (root.isFullscreenMode ? 0 : 32)
+                }
+
+                // Only this metadata item changes geometry. The real glass
+                // panel, capture region and content layout keep their size.
+                Item {
+                    id: launcherOutline
+                    readonly property bool expanding: launcherSurface.fixedCaptureSupported
+                        && !AppearanceTokens.surface.paintInQml && !root.isFullscreenMode
+                    readonly property real progress: Math.max(0, Math.min(1, popupMotion.backdropProgress))
+                    readonly property real tail: expanding ? Math.min(1, progress / 0.08) : 1
+                    width: (expanding ? Math.min(160, background.width)
+                        + (background.width - Math.min(160, background.width)) * progress : background.width) * tail
+                    height: (expanding ? Math.min(64, background.height)
+                        + (background.height - Math.min(64, background.height)) * progress : background.height) * tail
+                    x: (background.width - width) / 2
+                    y: background.height - height
+                }
 
                 // The shared panel owns the rounded blur mask and exact corner
                 // declaration. BackgroundEffect below publishes that region;
@@ -1186,26 +1235,29 @@ PanelWindow {
                 LiquidGlassPanel {
                     id: launcherSurface
                     objectName: "launcher-glass-surface"
-                    x: -background.x
-                    y: -background.y
-                    width: launcherCard.width
-                    height: launcherCard.height
-                    radius: Math.min(background.radius, width / 2, height / 2)
-                    blurAnchor: launcherCard
+                    captureAnchor: launcherCaptureFrame
+                    blurAnchor: launcherOutline
+                    width: background.width
+                    height: background.height
+                    radius: Math.min(background.radius, launcherOutline.width / 2, launcherOutline.height / 2)
                     layer.enabled: fallbackEnabled && continuousCorners
-                    opacity: fallbackEnabled ? root.contentRevealProgress : 1
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
-                    scrimOpacity: root.contentRevealProgress
+                    // Only this backdrop publishes changing geometry. The
+                    // content's render-thread translation is independent.
+                    scrimOpacity: 1
                 }
 
                 Item {
                     id: launcherContent
                     objectName: "launcher-motion-content"
-                    anchors.fill: parent
+                    width: parent.width
+                    height: parent.height
+                    y: popupMotion.restingY
+                    scale: 1
                     focus: root.open && !root.externalDialogOpen
-                    opacity: root.contentRevealProgress
+                    opacity: 0
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
@@ -1232,14 +1284,6 @@ PanelWindow {
                         }
                         event.accepted = true;
                     }
-                    transform: [
-                        Scale {
-                            origin.x: launcherContent.width * root.panelOriginX
-                            origin.y: launcherContent.height * root.panelOriginY
-                            xScale: root.contentRevealProgress
-                            yScale: root.contentRevealProgress
-                        }
-                    ]
 
                     MouseArea {
                         id: fullscreenBgDismiss
@@ -1565,7 +1609,7 @@ PanelWindow {
                             cellHeight: root.isFullscreenMode
                                 ? Math.max(122, tileHeight + root.gridGap)
                                 : tileHeight + root.gridGap
-                            model: !root.isFullscreenMode
+                            model: root.contentAlive && !root.isFullscreenMode
                                 ? root.filteredApplications : []
                             // Card presentations only. In fullscreen the
                             // persistent slot pager takes over entirely, so
@@ -1601,30 +1645,13 @@ PanelWindow {
                             readonly property bool launching: root.launchFeedbackItem === appDelegate
                             readonly property real dropTargetOffsetX: (root.rootDragTargetIndex % appGrid.columnCount) * appGrid.cellWidth + appGrid.cellWidth / 2 - (appDelegate.x + appDelegate.width / 2)
                             readonly property real dropTargetOffsetY: Math.floor(root.rootDragTargetIndex / appGrid.columnCount) * appGrid.cellHeight + appGrid.cellHeight / 2 - (appDelegate.y + appDelegate.height / 2)
-                            // Rows fade in together in a restrained cascade only
-                            // while the launcher initially opens. This remains a
-                            // visual layer and never changes GridView cell geometry.
-                            property bool entrancePending: root.gridEntranceActive && root.query.trim().length === 0
                             width: appGrid.cellWidth
                             height: appGrid.cellHeight
                             readonly property bool manipulating: dragging || dropping
                             z: manipulating ? 10 : 0
                             scale: manipulating ? 1.10 : (launching ? 0.93 : 1.0)
-                            opacity: manipulating ? 0.90 : (launching ? 0.82 : (entrancePending ? 0.0 : 1.0))
+                            opacity: manipulating ? 0.90 : (launching ? 0.82 : 1.0)
 
-                            Component.onCompleted: {
-                                if (entrancePending)
-                                    entranceDelay.restart();
-                            }
-
-                            Timer {
-                                id: entranceDelay
-                                // Delay by row, not every individual app, so the grid
-                                // feels composed rather than like a typewriter.
-                                interval: Math.min(120, Math.floor(index / Math.max(1, appGrid.columnCount)) * 24)
-                                repeat: false
-                                onTriggered: appDelegate.entrancePending = false
-                            }
                             transform: Translate {
                                 x: appDelegate.dragging ? reorderDrag.translation.x : (appDelegate.dropping ? appDelegate.dropOffsetX : root.rootPreviewOffset(index).x)
                                 y: appDelegate.dragging ? reorderDrag.translation.y : (appDelegate.dropping ? appDelegate.dropOffsetY : root.rootPreviewOffset(index).y)
@@ -1657,211 +1684,230 @@ PanelWindow {
                                 }
                             }
 
-                            Rectangle {
-                                id: appCard
-                                anchors.centerIn: parent
-                                width: Math.round(root.gridIconSize + 30)
-                                height: Math.round(root.gridIconSize
-                                    + root.configFontSize * 2 + 20)
-                                radius: Math.max(10, Math.round(root.gridIconSize * 0.25))
-                                readonly property bool mergeTarget:
-                                    root.folderMergeTargetKey === root._itemKey(modelData)
-                                readonly property bool keyboardSelected:
-                                    root.keyboardSelectionActive
-                                    && (index + appDelegate.GridView.view.pageBaseIndex) === root.selectedIndex
-                                // Drop/merge feedback keeps its blue semantic state;
-                                // the glass plate replaces only normal hover/selection.
-                                color: mergeTarget
-                                    ? Qt.rgba(0.36, 0.68, 1, root.folderMergeArmed ? 0.30 : 0.14)
-                                    : root.glassSelectionEnabled ? "transparent"
-                                    : keyboardSelected ? Qt.rgba(1, 1, 1, 0.18)
-                                    : appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
-                                SelectionHighlight {
-                                    objectName: "launcher-app-selection-highlight"
-                                    anchors.fill: parent
-                                    cornerRadius: appCard.radius
-                                    enabled: root.glassSelectionEnabled && appMouse.enabled
-                                        && !root.editMode && !appDelegate.manipulating && !appCard.mergeTarget
-                                    hovered: appMouse.containsMouse
-                                    selected: appCard.keyboardSelected
-                                    pressed: appMouse.pressed
-                                    dark: AppearanceTokens.isDarkTheme
-                                }
-                                border.width: root.folderMergeTargetKey === root._itemKey(modelData) ? 1 : 0
-                                border.color: Qt.rgba(0.36, 0.68, 1, root.folderMergeTargetKey === root._itemKey(modelData) ? 0.20 + root.folderMergeProgress * 0.42 : 0)
-                                rotation: 0
-                                SequentialAnimation {
-                                    id: editWiggle
-                                    running: root.editMode && !appDelegate.manipulating
-                                    loops: Animation.Infinite
-                                    NumberAnimation {
-                                        target: appCard
-                                        property: "rotation"
-                                        from: -2.2
-                                        to: 2.2
-                                        duration: 110
-                                        easing.type: Easing.InOutSine
-                                    }
-                                    NumberAnimation {
-                                        target: appCard
-                                        property: "rotation"
-                                        from: 2.2
-                                        to: -2.2
-                                        duration: 110
-                                        easing.type: Easing.InOutSine
-                                    }
-                                    onRunningChanged: {
-                                        if (!running)
-                                            appCard.rotation = 0;
-                                    }
-                                }
-
-                                // Holding a dragged app over this card fills the
-                                // line during the folderMergeTimer dwell. The line is
-                                // deliberately light: it explains the gesture while
-                                // leaving the app artwork and glass treatment intact.
+                            LauncherIconMotion {
+                                target: appEntrance
+                                opened: popupMotion.requestedOpen
+                                // Search/page delegates born after opening appear
+                                // directly, rather than replaying the entrance.
+                                animateOnCompleted: !popupMotion.settledOpen
+                                offsetX: Math.max(-32, Math.min(32,
+                                    (appDelegate.x + appDelegate.width / 2
+                                        - appDelegate.GridView.view.width / 2) * 0.2))
+                                offsetY: Math.max(-24, Math.min(24,
+                                    (appDelegate.y + appDelegate.height / 2
+                                        - appDelegate.GridView.view.contentY
+                                        - appDelegate.GridView.view.height / 2) * 0.2))
+                            }
+                            Item {
+                                id: appEntrance
+                                width: parent.width
+                                height: parent.height
                                 Rectangle {
-                                    visible: root.folderMergeTargetKey === root._itemKey(modelData)
-                                    anchors {
-                                        left: parent.left
-                                        bottom: parent.bottom
-                                        leftMargin: 13
-                                        bottomMargin: 5
+                                    id: appCard
+                                    anchors.centerIn: parent
+                                    width: Math.round(root.gridIconSize + 30)
+                                    height: Math.round(root.gridIconSize
+                                        + root.configFontSize * 2 + 20)
+                                    radius: Math.max(10, Math.round(root.gridIconSize * 0.25))
+                                    readonly property bool mergeTarget:
+                                        root.folderMergeTargetKey === root._itemKey(modelData)
+                                    readonly property bool keyboardSelected:
+                                        root.keyboardSelectionActive
+                                        && (index + appDelegate.GridView.view.pageBaseIndex) === root.selectedIndex
+                                    // Drop/merge feedback keeps its blue semantic state;
+                                    // the glass plate replaces only normal hover/selection.
+                                    color: mergeTarget
+                                        ? Qt.rgba(0.36, 0.68, 1, root.folderMergeArmed ? 0.30 : 0.14)
+                                        : root.glassSelectionEnabled ? "transparent"
+                                        : keyboardSelected ? Qt.rgba(1, 1, 1, 0.18)
+                                        : appMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                    SelectionHighlight {
+                                        objectName: "launcher-app-selection-highlight"
+                                        anchors.fill: parent
+                                        cornerRadius: appCard.radius
+                                        enabled: root.glassSelectionEnabled && appMouse.enabled
+                                            && !root.editMode && !appDelegate.manipulating && !appCard.mergeTarget
+                                        hovered: appMouse.containsMouse
+                                        selected: appCard.keyboardSelected
+                                        pressed: appMouse.pressed
+                                        dark: AppearanceTokens.isDarkTheme
                                     }
-                                    width: Math.max(0, (parent.width - 26) * root.folderMergeProgress)
-                                    height: 2
-                                    radius: height / 2
-                                    color: Qt.rgba(0.48, 0.76, 1, 0.95)
-                                }
-
-                                AppIcon {
-                                    visible: modelData.type === "app"
-                                    width: root.gridIconSize
-                                    height: root.gridIconSize
-                                    anchors {
-                                        top: parent.top
-                                        horizontalCenter: parent.horizontalCenter
-                                        topMargin: 8
+                                    border.width: root.folderMergeTargetKey === root._itemKey(modelData) ? 1 : 0
+                                    border.color: Qt.rgba(0.36, 0.68, 1, root.folderMergeTargetKey === root._itemKey(modelData) ? 0.20 + root.folderMergeProgress * 0.42 : 0)
+                                    rotation: 0
+                                    SequentialAnimation {
+                                        id: editWiggle
+                                        running: root.editMode && !appDelegate.manipulating
+                                        loops: Animation.Infinite
+                                        NumberAnimation {
+                                            target: appCard
+                                            property: "rotation"
+                                            from: -2.2
+                                            to: 2.2
+                                            duration: 110
+                                            easing.type: Easing.InOutSine
+                                        }
+                                        NumberAnimation {
+                                            target: appCard
+                                            property: "rotation"
+                                            from: 2.2
+                                            to: -2.2
+                                            duration: 110
+                                            easing.type: Easing.InOutSine
+                                        }
+                                        onRunningChanged: {
+                                            if (!running)
+                                                appCard.rotation = 0;
+                                        }
                                     }
-                                    source: modelData.type === "app" ? modelData.app.icon : ""
-                                    opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
-                                    saturation: IconAppearanceService.saturation
-                                    tintEnabled: IconAppearanceService.tintEnabled
-                                    tintColor: IconAppearanceService.tintColor
-                                }
 
-                                // Folder artwork is a compact 3×3 preview of its first
-                                // nine apps. It intentionally stays within the same
-                                // icon footprint as ordinary root applications. KWin owns
-                                // the transparent glass beneath this preview.
-                                Rectangle {
-                                    visible: modelData.type === "folder"
-                                    width: root.gridIconSize
-                                    height: root.gridIconSize
-                                    anchors {
-                                        top: parent.top
-                                        horizontalCenter: parent.horizontalCenter
-                                        topMargin: 8
+                                    // Holding a dragged app over this card fills the
+                                    // line during the folderMergeTimer dwell. The line is
+                                    // deliberately light: it explains the gesture while
+                                    // leaving the app artwork and glass treatment intact.
+                                    Rectangle {
+                                        visible: root.folderMergeTargetKey === root._itemKey(modelData)
+                                        anchors {
+                                            left: parent.left
+                                            bottom: parent.bottom
+                                            leftMargin: 13
+                                            bottomMargin: 5
+                                        }
+                                        width: Math.max(0, (parent.width - 26) * root.folderMergeProgress)
+                                        height: 2
+                                        radius: height / 2
+                                        color: Qt.rgba(0.48, 0.76, 1, 0.95)
                                     }
-                                    radius: Math.max(8, Math.round(root.configIconSize * 0.23))
-                                    color: "transparent"
-                                    border.width: 1
-                                    border.color: root.isDark
-                                        ? Qt.rgba(1, 1, 1, 0.14)
-                                        : Qt.rgba(0, 0, 0, 0.12)
 
-                                    Grid {
+                                    AppIcon {
+                                        visible: modelData.type === "app"
+                                        width: root.gridIconSize
+                                        height: root.gridIconSize
                                         anchors {
                                             top: parent.top
-                                        topMargin: Math.max(3, Math.round(root.gridIconSize * 0.115))
                                             horizontalCenter: parent.horizontalCenter
+                                            topMargin: 8
                                         }
-                                        columns: 3
-                                        spacing: Math.max(1, Math.round(root.gridIconSize * 0.04))
-                                        Repeater {
-                                            model: modelData.type === "folder" ? modelData.apps.slice(0, 9) : []
-                                            delegate: AppIcon {
-                                                required property var modelData
-                                                width: Math.max(8, Math.round(root.gridIconSize * 0.23))
-                                                height: width
-                                                source: modelData.icon
-                                                opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
-                                                saturation: IconAppearanceService.saturation
-                                                tintEnabled: IconAppearanceService.tintEnabled
-                                                tintColor: IconAppearanceService.tintColor
+                                        source: modelData.type === "app" ? modelData.app.icon : ""
+                                        opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                        saturation: IconAppearanceService.saturation
+                                        tintEnabled: IconAppearanceService.tintEnabled
+                                        tintColor: IconAppearanceService.tintColor
+                                    }
+
+                                    // Folder artwork is a compact 3×3 preview of its first
+                                    // nine apps. It intentionally stays within the same
+                                    // icon footprint as ordinary root applications. KWin owns
+                                    // the transparent glass beneath this preview.
+                                    Rectangle {
+                                        visible: modelData.type === "folder"
+                                        width: root.gridIconSize
+                                        height: root.gridIconSize
+                                        anchors {
+                                            top: parent.top
+                                            horizontalCenter: parent.horizontalCenter
+                                            topMargin: 8
+                                        }
+                                        radius: Math.max(8, Math.round(root.configIconSize * 0.23))
+                                        color: "transparent"
+                                        border.width: 1
+                                        border.color: root.isDark
+                                            ? Qt.rgba(1, 1, 1, 0.14)
+                                            : Qt.rgba(0, 0, 0, 0.12)
+
+                                        Grid {
+                                            anchors {
+                                                top: parent.top
+                                            topMargin: Math.max(3, Math.round(root.gridIconSize * 0.115))
+                                                horizontalCenter: parent.horizontalCenter
+                                            }
+                                            columns: 3
+                                            spacing: Math.max(1, Math.round(root.gridIconSize * 0.04))
+                                            Repeater {
+                                                model: modelData.type === "folder" ? modelData.apps.slice(0, 9) : []
+                                                delegate: AppIcon {
+                                                    required property var modelData
+                                                    width: Math.max(8, Math.round(root.gridIconSize * 0.23))
+                                                    height: width
+                                                    source: modelData.icon
+                                                    opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                                    saturation: IconAppearanceService.saturation
+                                                    tintEnabled: IconAppearanceService.tintEnabled
+                                                    tintColor: IconAppearanceService.tintColor
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                // A restrained outline keeps labels readable over the
-                                // translucent launcher material and changing wallpaper.
-                                GlassText {
-                                    id: appName
-                                    anchors {
-                                        top: parent.top
-                                        topMargin: root.gridIconSize + 13
-                                        horizontalCenter: parent.horizontalCenter
-                                    }
-                                    width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
-                                    text: modelData.type === "folder" ? modelData.name : modelData.app.name
-                                    color: root.launcherForegroundColor
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                    wrapMode: Text.NoWrap
-                                    font {
-                                        pixelSize: root.isFullscreenMode
-                                            ? Math.max(11, root.configFontSize + 1)
-                                            : root.configFontSize
-                                        weight: root.resolvedFontWeight
-                                        letterSpacing: 0.3
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: appMouse
-                                    anchors.fill: parent
-                                    enabled: root.editingApplication === null
-                                    hoverEnabled: true
-                                    preventStealing: !root.editMode
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                    onPressed: appDelegate.heldForEdit = false
-                                    onPressAndHold: {
-                                        // Long press is spatial editing: it enables
-                                        // drag sorting and app-to-app folder creation.
-                                        // App settings remain a deliberate right-click
-                                        // menu action so the two gestures never clash.
-                                        // Launchpad pages deliberately remain stable;
-                                        // rearranging across page boundaries belongs in
-                                        // the bottom/center organizer views.
-                                        if (root.isFullscreenMode)
-                                            return;
-                                        appDelegate.heldForEdit = true;
-                                        root.editMode = true;
-                                    }
-                                    onClicked: function (mouse) {
-                                        if (root.fullscreenSwipeSuppressClick)
-                                            return;
-                                        if (appDelegate.heldForEdit)
-                                            return;
-                                        // Edit mode is spatial manipulation. Root apps
-                                        // neither launch nor open a context menu while
-                                        // it is active; folders still open so their
-                                        // contained apps can be sorted/removed.
-                                        if (root.editMode) {
-                                            if (mouse.button === Qt.LeftButton && modelData.type === "folder")
-                                                root.showFolder(modelData, appDelegate);
-                                            return;
+                                    // A restrained outline keeps labels readable over the
+                                    // translucent launcher material and changing wallpaper.
+                                    GlassText {
+                                        id: appName
+                                        anchors {
+                                            top: parent.top
+                                            topMargin: root.gridIconSize + 13
+                                            horizontalCenter: parent.horizontalCenter
                                         }
-                                        if (mouse.button === Qt.RightButton && modelData.type === "app") {
-                                            root.showApplicationMenu(modelData.app, appDelegate);
-                                        } else {
-                                            if (modelData.type === "folder")
-                                                root.showFolder(modelData, appDelegate);
-                                            else if (!root.editMode)
-                                                root.launchApplication(modelData.app, appDelegate);
+                                        width: Math.min(Math.round(root.gridIconSize + Math.max(24, root.configFontSize * 3)), implicitWidth)
+                                        text: modelData.type === "folder" ? modelData.name : modelData.app.name
+                                        color: root.launcherForegroundColor
+                                        horizontalAlignment: Text.AlignHCenter
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                        wrapMode: Text.NoWrap
+                                        font {
+                                            pixelSize: root.isFullscreenMode
+                                                ? Math.max(11, root.configFontSize + 1)
+                                                : root.configFontSize
+                                            weight: root.resolvedFontWeight
+                                            letterSpacing: 0.3
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: appMouse
+                                        anchors.fill: parent
+                                        enabled: root.editingApplication === null
+                                        hoverEnabled: true
+                                        preventStealing: !root.editMode
+                                        cursorShape: Qt.PointingHandCursor
+                                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                        onPressed: appDelegate.heldForEdit = false
+                                        onPressAndHold: {
+                                            // Long press is spatial editing: it enables
+                                            // drag sorting and app-to-app folder creation.
+                                            // App settings remain a deliberate right-click
+                                            // menu action so the two gestures never clash.
+                                            // Launchpad pages deliberately remain stable;
+                                            // rearranging across page boundaries belongs in
+                                            // the bottom/center organizer views.
+                                            if (root.isFullscreenMode)
+                                                return;
+                                            appDelegate.heldForEdit = true;
+                                            root.editMode = true;
+                                        }
+                                        onClicked: function (mouse) {
+                                            if (root.fullscreenSwipeSuppressClick)
+                                                return;
+                                            if (appDelegate.heldForEdit)
+                                                return;
+                                            // Edit mode is spatial manipulation. Root apps
+                                            // neither launch nor open a context menu while
+                                            // it is active; folders still open so their
+                                            // contained apps can be sorted/removed.
+                                            if (root.editMode) {
+                                                if (mouse.button === Qt.LeftButton && modelData.type === "folder")
+                                                    root.showFolder(modelData, appDelegate);
+                                                return;
+                                            }
+                                            if (mouse.button === Qt.RightButton && modelData.type === "app") {
+                                                root.showApplicationMenu(modelData.app, appDelegate);
+                                            } else {
+                                                if (modelData.type === "folder")
+                                                    root.showFolder(modelData, appDelegate);
+                                                else if (!root.editMode)
+                                                    root.launchApplication(modelData.app, appDelegate);
+                                            }
                                         }
                                     }
                                 }
@@ -1954,7 +2000,7 @@ PanelWindow {
                         property int assignedPage: 0
                         readonly property int clampedPage: Math.max(0,
                             Math.min(root.fullscreenPageCount - 1, assignedPage))
-                        visible: root.open && root.isFullscreenMode
+                        visible: root.panelVisible && root.isFullscreenMode
                             && (slot === 0
                                 || (slot > 0 && root.fullscreenSwipeDirection === 1
                                     && root.fullscreenPage < root.fullscreenPageCount - 1)
@@ -1970,7 +2016,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.isFullscreenMode
+                        model: root.contentAlive && root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {
@@ -1984,7 +2030,7 @@ PanelWindow {
                         property int assignedPage: 0
                         readonly property int clampedPage: Math.max(0,
                             Math.min(root.fullscreenPageCount - 1, assignedPage))
-                        visible: root.open && root.isFullscreenMode
+                        visible: root.panelVisible && root.isFullscreenMode
                             && (slot === 0
                                 || (slot > 0 && root.fullscreenSwipeDirection === 1
                                     && root.fullscreenPage < root.fullscreenPageCount - 1)
@@ -2000,7 +2046,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.isFullscreenMode
+                        model: root.contentAlive && root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {
@@ -2014,7 +2060,7 @@ PanelWindow {
                         property int assignedPage: 0
                         readonly property int clampedPage: Math.max(0,
                             Math.min(root.fullscreenPageCount - 1, assignedPage))
-                        visible: root.open && root.isFullscreenMode
+                        visible: root.panelVisible && root.isFullscreenMode
                             && (slot === 0
                                 || (slot > 0 && root.fullscreenSwipeDirection === 1
                                     && root.fullscreenPage < root.fullscreenPageCount - 1)
@@ -2030,7 +2076,7 @@ PanelWindow {
                         cellWidth: appGrid.cellWidth
                         cellHeight: appGrid.cellHeight
                         property int pageBaseIndex: clampedPage * appGrid.fullscreenPageSize
-                        model: root.isFullscreenMode
+                        model: root.contentAlive && root.isFullscreenMode
                             ? root.fullscreenPageSlice(clampedPage) : []
                         delegate: appGrid.delegate
                         transform: Translate {

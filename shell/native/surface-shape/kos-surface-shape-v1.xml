@@ -4,7 +4,7 @@
     SPDX-License-Identifier: MIT
   </copyright>
 
-  <interface name="kos_surface_shape_manager_v1" version="4">
+  <interface name="kos_surface_shape_manager_v1" version="5">
     <description summary="surface-local compositor shape metadata">
       Creates independent shape declarations for regions inside a wl_surface.
       Coordinates and radius use surface-local logical units.
@@ -28,7 +28,7 @@
     request (set_role is a no-op), and each new request is appended after
     destroy so the destructor opcode is unchanged.
   -->
-  <interface name="kos_surface_shape_v1" version="4">
+  <interface name="kos_surface_shape_v1" version="5">
     <request name="set_geometry">
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
@@ -83,6 +83,19 @@
     <request name="set_blur" since="4">
       <arg name="enabled" type="uint"/>
       <arg name="level" type="uint"/>
+    </request>
+    <request name="set_capture_geometry" since="5">
+      <description summary="fixed backdrop capture separate from the visible outline">
+        Surface-local logical rectangle containing this shape throughout its
+        animation. The compositor uses it for background capture and alignment;
+        set_geometry still controls the visible outline, refraction and rim.
+        A zero width or height restores the geometry-based capture policy.
+        Clients must check the negotiated version before sending this request.
+      </description>
+      <arg name="x" type="int"/>
+      <arg name="y" type="int"/>
+      <arg name="width" type="int"/>
+      <arg name="height" type="int"/>
     </request>
   </interface>
 </protocol>

@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQuickItem>
+#include <QRectF>
 
 class QQuickWindow;
 struct kos_surface_shape_v1;
@@ -18,6 +19,8 @@ class SurfaceShape : public QObject
     Q_PROPERTY(qreal exponent READ exponent WRITE setExponent NOTIFY exponentChanged)
     Q_PROPERTY(bool enabled READ isEnabled WRITE setEnabled NOTIFY enabledChanged)
     Q_PROPERTY(bool active READ isActive NOTIFY activeChanged)
+    Q_PROPERTY(QRectF captureGeometry READ captureGeometry WRITE setCaptureGeometry NOTIFY captureGeometryChanged)
+    Q_PROPERTY(bool fixedCaptureSupported READ fixedCaptureSupported NOTIFY activeChanged)
     // Contrast scrim sent over protocol v3. scrimTint 0/1 = black/white;
     // scrimDecay > 1 selects fixed mode.
     Q_PROPERTY(bool scrimEnabled READ scrimEnabled WRITE setScrimEnabled NOTIFY scrimEnabledChanged)
@@ -43,6 +46,9 @@ public:
     bool isEnabled() const { return m_enabled; }
     void setEnabled(bool enabled);
     bool isActive() const { return m_shape != nullptr; }
+    QRectF captureGeometry() const { return m_captureGeometry; }
+    void setCaptureGeometry(const QRectF &geometry);
+    bool fixedCaptureSupported() const;
     bool scrimEnabled() const { return m_scrimEnabled; }
     void setScrimEnabled(bool enabled);
     int scrimTint() const { return m_scrimTint; }
@@ -62,6 +68,7 @@ Q_SIGNALS:
     void exponentChanged();
     void enabledChanged();
     void activeChanged();
+    void captureGeometryChanged();
     void scrimEnabledChanged();
     void scrimTintChanged();
     void scrimCapChanged();
@@ -88,6 +95,7 @@ private:
     kos_surface_shape_v1 *m_shape = nullptr;
     wl_surface *m_surface = nullptr;
     qreal m_radius = 0.0;
+    QRectF m_captureGeometry;
     qreal m_exponent = 2.0;
     bool m_enabled = true;
     bool m_scrimEnabled = false;
