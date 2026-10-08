@@ -25,14 +25,12 @@ stationary full-size launcher backdrop while content animates. For production,
 the new KWin plugin loads at the next session start; do not reload the desktop's
 in-use plugin to run this test.
 
-The real launcher uses `LauncherMotion.qml` for a 320 ms OutCubic outline
-progress and `LauncherIconMotion.qml` for render-thread tile transforms. Its
-content layout, glass panel and padded capture item keep their final dimensions;
-only a separate metadata item changes the visible outline. Refraction and rim
-lighting follow that outline in the compositor's existing shader. Fixed capture
-avoids resizing the texture chain; it does not freeze background updates or
-remove the per-frame blur work.
+The production launcher keeps its glass outline and capture bounds stationary
+and animates only application tiles with `LauncherIconMotion.qml`. The motion
+controller retains the panel during the 300 ms tile closing animation. The
+fixed-capture protocol remains available to other clients; this isolated test
+exercises that capability independently of the production launcher's policy.
 
-Fullscreen and QML-painted material presentations keep their stationary
-backgrounds. The application catalog remains unrestricted; the 50-tile prototype
-is a separate repeatable motion fixture.
+Fixed capture avoids resizing the texture chain; it does not freeze background
+updates or remove the per-frame blur work. The application catalog remains
+unrestricted; the 50-tile prototype is a separate repeatable motion fixture.

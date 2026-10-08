@@ -131,7 +131,6 @@ PanelWindow {
     LauncherMotion {
         id: popupMotion
         target: launcherContent
-        restingY: 0
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -1203,49 +1202,21 @@ PanelWindow {
                 property real radius: root.isFullscreenMode ? 0
                     : (AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 28))
 
-                // Fixed backdrop capture bounds with padding for edge samples.
-                // This metadata item paints nothing.
-                Item {
-                    id: launcherCaptureFrame
-                    x: root.isFullscreenMode ? 0 : -16
-                    y: root.isFullscreenMode ? 0 : -16
-                    width: background.width + (root.isFullscreenMode ? 0 : 32)
-                    height: background.height + (root.isFullscreenMode ? 0 : 32)
-                }
-
-                // Only this metadata item changes geometry. The real glass
-                // panel, capture region and content layout keep their size.
-                Item {
-                    id: launcherOutline
-                    readonly property bool expanding: launcherSurface.fixedCaptureSupported
-                        && !AppearanceTokens.surface.paintInQml && !root.isFullscreenMode
-                    readonly property real progress: Math.max(0, Math.min(1, popupMotion.backdropProgress))
-                    readonly property real tail: expanding ? Math.min(1, progress / 0.08) : 1
-                    width: (expanding ? Math.min(160, background.width)
-                        + (background.width - Math.min(160, background.width)) * progress : background.width) * tail
-                    height: (expanding ? Math.min(64, background.height)
-                        + (background.height - Math.min(64, background.height)) * progress : background.height) * tail
-                    x: (background.width - width) / 2
-                    y: background.height - height
-                }
-
                 // The shared panel owns the rounded blur mask and exact corner
                 // declaration. BackgroundEffect below publishes that region;
                 // KWin alone renders the blur, refraction and highlights.
                 LiquidGlassPanel {
                     id: launcherSurface
                     objectName: "launcher-glass-surface"
-                    captureAnchor: launcherCaptureFrame
-                    blurAnchor: launcherOutline
+                    blurAnchor: background
                     width: background.width
                     height: background.height
-                    radius: Math.min(background.radius, launcherOutline.width / 2, launcherOutline.height / 2)
+                    radius: Math.min(background.radius, width / 2, height / 2)
                     layer.enabled: fallbackEnabled && continuousCorners
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
-                    // Only this backdrop publishes changing geometry. The
-                    // content's render-thread translation is independent.
+                    // Keep the glass outline and capture bounds stationary.
                     scrimOpacity: 1
                 }
 
@@ -1254,10 +1225,10 @@ PanelWindow {
                     objectName: "launcher-motion-content"
                     width: parent.width
                     height: parent.height
-                    y: popupMotion.restingY
+                    y: 0
                     scale: 1
                     focus: root.open && !root.externalDialogOpen
-                    opacity: 0
+                    opacity: 1
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
