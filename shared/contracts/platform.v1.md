@@ -98,6 +98,15 @@ Current operation groups are:
   to `"KOS Shell"`. The daemon calls `org.freedesktop.Notifications.Notify`
   when the service is registered and otherwise spawns `notify-send` with a
   fixed argv; fields are length-capped and never reach a shell)
+- `keepawake.get`, `keepawake.set` (KDE caffeine toggle; `set` requires a
+  boolean `enabled`, returns `{available, enabled}`; `get` also returns
+  `pending`). Availability requires PowerDevil and ScreenSaver. Both inhibitors
+  must succeed before reporting enabled; partial failure rolls back. Each
+  client socket owns a separate D-Bus connection and its inhibition cookies.
+  Disabling, socket disconnect (including Shell reload/crash), daemon exit,
+  or either KDE service changing owner releases the lease. State is transient
+  and defaults to off after reconnect. The toggle does not intercept
+  manual session actions or write power configuration.
 - `nightlight.get`, `nightlight.toggle` (KWin Night Color; `toggle` writes
   `NightColor/Active` to kwinrc and applies through the NightLight D-Bus
   interface. Once the config write has committed, a failure to uninhibit /

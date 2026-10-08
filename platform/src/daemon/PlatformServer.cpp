@@ -1,5 +1,6 @@
 #include "PlatformServer.h"
 #include "Shortcuts.h"
+#include "KeepAwakeLease.h"
 #include "../kwin/KWinBridge.h"
 #include "../wallpaper/PlasmaWallpaperAdapter.h"
 
@@ -2042,6 +2043,8 @@ PlatformServer::~PlatformServer()
     // QLocalServer owns accepted sockets and is destroyed after the tracking
     // containers below. Disconnect first so socket destruction cannot call
     // clientDisconnected() after those containers have already been freed.
+    qDeleteAll(m_keepAwakeLeases);
+    m_keepAwakeLeases.clear();
     for (QLocalSocket *socket : m_buffers.keys())
         QObject::disconnect(socket, nullptr, this, nullptr);
 }
@@ -2129,6 +2132,7 @@ void PlatformServer::clientDisconnected()
     auto *socket = qobject_cast<QLocalSocket *>(sender());
     if (!socket)
         return;
+    delete m_keepAwakeLeases.take(socket);
     m_windowSubscribers.remove(socket);
     m_buffers.remove(socket);
     socket->deleteLater();
@@ -5329,8 +5333,72 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("spatial.resources"),
 #endif
                 QStringLiteral("session.visibility"),
+                QStringLiteral("keepawake"),
             }},
         });
+        return;
+    }
+    if (op == QStringLiteral("keepawake.get") || op == QStringLiteral("keepawake.set")) {
+        auto *lease = m_keepAwakeLeases.value(socket);
+        const auto state = [lease] {
+            return QJsonObject{{"available", KeepAwakeLease::available()},
+                               {"enabled", lease && lease->enabled()},
+                               {"pending", lease && !lease->enabled()}};
+        };
+        if (op == QStringLiteral("keepawake.get")) {
+            respond(socket, request, true, state());
+            return;
+        }
+        const auto enabled = request.value("payload").toObject().value("enabled");
+        if (!enabled.isBool()) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-payload"),
+                    QStringLiteral("enabled 必须为布尔值"));
+            return;
+        }
+        if (lease && !lease->enabled()) {
+            respond(socket, request, false, {}, QStringLiteral("busy"),
+                    QStringLiteral("保持唤醒正在切换"), true);
+            return;
+        }
+        if (!enabled.toBool()) {
+            delete m_keepAwakeLeases.take(socket);
+            respond(socket, request, true, {{"available", KeepAwakeLease::available()}, {"enabled", false}});
+            return;
+        }
+        if (lease) {
+            respond(socket, request, true, state());
+            return;
+        }
+        if (!KeepAwakeLease::available()) {
+            respond(socket, request, false, {}, QStringLiteral("unavailable"),
+                    QStringLiteral("KDE 电源管理或锁屏服务不可用"), true);
+            return;
+        }
+        lease = new KeepAwakeLease(this);
+        m_keepAwakeLeases.insert(socket, lease);
+        const QPointer<QLocalSocket> guarded(socket);
+        connect(lease, &KeepAwakeLease::finished, this,
+            [this, guarded, request, lease](bool ok, const QString &message) {
+                if (!guarded || m_keepAwakeLeases.value(guarded.data()) != lease)
+                    return;
+                if (!ok) {
+                    m_keepAwakeLeases.remove(guarded.data());
+                    lease->deleteLater();
+                }
+                respond(guarded.data(), request, ok, {{"available", KeepAwakeLease::available()}, {"enabled", ok}},
+                        ok ? QString() : QStringLiteral("inhibit-failed"), message, !ok);
+            });
+        connect(lease, &KeepAwakeLease::invalidated, this,
+            [this, guarded, request, lease] {
+                if (!guarded || m_keepAwakeLeases.value(guarded.data()) != lease)
+                    return;
+                m_keepAwakeLeases.remove(guarded.data());
+                if (!lease->enabled())
+                    respond(guarded.data(), request, false, {}, QStringLiteral("unavailable"),
+                            QStringLiteral("KDE 服务已重启，请重试"), true);
+                lease->deleteLater();
+            });
+        lease->start();
         return;
     }
     if (op == QStringLiteral("session.visibility")) {
