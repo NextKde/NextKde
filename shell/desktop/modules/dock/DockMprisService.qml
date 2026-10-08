@@ -1,5 +1,7 @@
 pragma Singleton
 import QtQuick
+import qs.desktop.modules.deskcenter
+import "TimedLyrics.mjs" as TimedLyrics
 import Quickshell.Services.Mpris
 
 // ────────────────────────────────────────────────────────────────
@@ -34,13 +36,43 @@ QtObject {
         return metadataString("kos:playbackState") === "Loading"
     }
     property string _metadataSignature: ""
+    readonly property string _lyricText: {
+        const revision = metadataRevision
+        return metadataString("xesam:asText")
+    }
+    // Presence matters: an empty KOS line intentionally clears an interlude.
+    readonly property bool _hasLiveLyrics: {
+        const revision = metadataRevision
+        return activePlayer?.metadata?.["kos:currentLyric"] !== undefined
+            && activePlayer?.metadata?.["kos:currentLyric"] !== null
+    }
+    readonly property var _lyricLines: TimedLyrics.parse(_lyricText)
+    readonly property int _lyricIndex: TimedLyrics.indexAt(_lyricLines, activePlayer?.position ?? 0)
+    // Any lyric source counts: KOS live lines, LRC-timed or untimed plain
+    // text. Only a track with none of these hides the widget lyrics switch.
+    readonly property bool lyricsAvailable: _hasLiveLyrics || _lyricText.length > 0
     readonly property string currentLyric: {
         const revision = metadataRevision
-        return metadataString("kos:currentLyric") || metadataString("xesam:asText")
+        if (_hasLiveLyrics) return metadataString("kos:currentLyric")
+        if (_lyricLines.length) return _lyricIndex < 0 ? "" : _lyricLines[_lyricIndex].text
+        return _lyricText
     }
     readonly property string nextLyric: {
         const revision = metadataRevision
-        return metadataString("kos:nextLyric")
+        if (_hasLiveLyrics) return metadataString("kos:nextLyric")
+        return _lyricLines[_lyricIndex + 1]?.text ?? ""
+    }
+    // MPRIS position is lazy (DockMusicPopup pokes it on the same terms):
+    // poll the player only while timed lyrics are enabled on the desktop,
+    // at line-switch granularity, never while the shell is idle.
+    property Timer lyricPositionTimer: Timer {
+        interval: 500
+        repeat: true
+        running: DeskCenterConfigService.desktopLyricsActive
+            && svc.activePlayer !== null && svc.activePlayer.isPlaying
+            && svc.activePlayer.positionSupported
+            && !svc._hasLiveLyrics && svc._lyricLines.length > 0
+        onTriggered: svc.activePlayer.positionChanged()
     }
 
     function metadataString(key) {
@@ -103,7 +135,8 @@ QtObject {
         const player = activePlayer
         const signature = [player?.trackArtUrl ?? "", player?.trackTitle ?? "",
             player?.trackArtist ?? "", metadataString("kos:currentLyric"),
-            metadataString("kos:nextLyric"), metadataString("kos:playbackStatus"),
+            metadataString("kos:nextLyric"), metadataString("xesam:asText"),
+            metadataString("kos:playbackStatus"),
             metadataString("kos:playbackState"), player?.isPlaying ?? false].join("\u001f")
         if (signature !== _metadataSignature) {
             _metadataSignature = signature

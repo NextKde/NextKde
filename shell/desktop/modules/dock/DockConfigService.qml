@@ -130,8 +130,8 @@ QtObject {
     ]
 
     // Compatibility projection for the current Dock UI and AppGroupService.
-    // Never edit this directly in new code: use setDockItems/addAppItem/
-    // removeAppItem so all Dock persistence has one source of truth.
+    // Never edit this directly in new code: use setDockItems/addAppItem
+    // so all Dock persistence has one source of truth.
     property var pinnedAppIds: [
         "org.kde.dolphin.desktop",
         "org.kde.kate.desktop",
@@ -255,11 +255,6 @@ QtObject {
     // the row so nothing rotates any more.
     property string infoCardMode: "carousel"
     property bool infoCardAutoRotate: true
-    property bool desktopLyricsEnabled: true
-    function updateDesktopLyricsEnabled(enabled) {
-        desktopLyricsEnabled = Boolean(enabled)
-        scheduleSave()
-    }
     readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
     // One ordered list is the whole component model. Zero items hides the
     // region, one is naturally fixed, and multiple items rotate or expand.
@@ -516,26 +511,6 @@ QtObject {
         return changed
     }
 
-    function removeAppItem(appId) {
-        const items = _normalizeDockItems(svc.dockItems)
-        const remaining = []
-        let removed = false
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i]
-            if (item.type === "app" && item.appId === appId) {
-                removed = true
-                continue
-            }
-            remaining.push(item)
-        }
-        if (!removed)
-            return false
-        const changed = setDockItems(remaining)
-        if (changed)
-            scheduleSave()
-        return changed
-    }
-
     // ═══════════════════════════════════════════════════════════
     // Persistence — JSON through the platform daemon's state ops
     // ═══════════════════════════════════════════════════════════
@@ -569,7 +544,6 @@ QtObject {
             // Information cards (v6)
             infoCardMode: svc.infoCardMode,
             infoCardAutoRotate: svc.infoCardAutoRotate,
-            desktopLyricsEnabled: svc.desktopLyricsEnabled,
             infoCardOrder: svc.infoCardOrder,
         }
         const json = JSON.stringify(obj, null, 2)
@@ -649,8 +623,6 @@ QtObject {
         }
         if (obj.infoCardAutoRotate !== undefined)
             svc.infoCardAutoRotate = Boolean(obj.infoCardAutoRotate)
-        if (obj.desktopLyricsEnabled !== undefined)
-            svc.desktopLyricsEnabled = Boolean(obj.desktopLyricsEnabled)
         if (Array.isArray(obj.infoCardOrder)) {
             svc.infoCardOrder = normalizedInfoCardOrder(obj.infoCardOrder)
         } else if (obj.showWidgets === false) {

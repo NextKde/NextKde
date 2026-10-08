@@ -2027,28 +2027,36 @@ PanelWindow {
                             spacing: 10
                             Repeater {
                                 // Keep delegates alive when play/pause changes.
-                                model: 3
+                                model: 4
                                 delegate: DeskMediaButton {
                                     required property int index
+                                    visible: index !== 3 || DockMprisService.lyricsAvailable
                                     primary: index === 1
                                     busy: index === 1 && DockMprisService.loading
+                                    checkable: index === 3
+                                    checked: index === 3
+                                        && DeskCenterConfigService.desktopLyricsEnabled
                                     iconName: index === 0 ? "media-previous"
                                         : index === 2 ? "media-next"
+                                        : index === 3 ? "media-lyrics"
                                         : musicContent.player?.isPlaying ? "media-pause" : "media-play"
                                     text: index === 0 ? qsTr("上一首")
                                         : index === 2 ? qsTr("下一首")
+                                        : index === 3 ? qsTr("桌面歌词")
                                         : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
-                                    enabled: musicContent.hasPlayer
+                                    enabled: index === 3 || (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
-                                            : (musicContent.player?.canTogglePlaying ?? false))
+                                            : (musicContent.player?.canTogglePlaying ?? false)))
                                     glassInk: AppearanceTokens.content.onBackdrop
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)
                                     onClicked: {
                                         if (index === 0) DockMprisService.previous()
                                         else if (index === 1) DockMprisService.togglePlayPause()
-                                        else DockMprisService.next()
+                                        else if (index === 2) DockMprisService.next()
+                                        else DeskCenterConfigService.updateDesktopLyricsEnabled(
+                                            !DeskCenterConfigService.desktopLyricsEnabled)
                                     }
                         }
                     }

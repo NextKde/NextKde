@@ -573,3 +573,26 @@ order. It must not reuse the Dock's visual order or pinned list.
 Use `AppGroupService` for grouping and add provider-specific workspace data
 as optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
+
+### Desktop lyrics
+
+Desktop lyrics are an accessory of the desktop music widget, not a Dock
+feature: the widget card carries the on/off switch (DeskCenterConfigService,
+persisted in deskcenter-widgets.ini), and the HUD exists only while the music
+widget itself is on the desktop — hiding the widget through the widget
+library or the Settings page also stops the lyric position polling.
+The switch itself only appears while the current track actually has lyrics
+(KOS live lines, LRC-timed or untimed plain text).
+The HUD has an always-visible Move button so placement is discoverable
+where lyrics are displayed. Normally only this button accepts pointer input.
+Placement temporarily enables pointer input over the lyric card; dragging
+stores normalized coordinates, and Done restores click-through behaviour outside the Move button. The
+position survives restarts and is bounded to the active output after resizing.
+The placement preview works even when no player supplies lyrics.
+
+`DockMprisService` prefers KOS live lyric metadata (including intentional empty
+lines). Otherwise it parses LRC in `xesam:asText`, reads the current MPRIS
+position every 500 ms only while playing with timed lyrics actually enabled
+(MPRIS position is lazy; the poll is skipped entirely for live lyrics and
+untimed text), and chooses the current/next timed line.
+Seeking recomputes the index; pauses stop polling. Untimed lyrics remain text.
