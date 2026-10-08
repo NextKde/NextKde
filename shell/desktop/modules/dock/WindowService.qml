@@ -671,7 +671,11 @@ QtObject {
     // 拿焦点。必须走单个 activate-group 原子命令——连续的 activate 会被
     // _kwinActivationTimer 的单槽合并吞掉兄弟窗的还原（dock/侧栏两条入口
     // 都踩过）。activationRequested 只对 focus 窗发一次（stage 退位交换）。
-    function activateGroup(windowIds, focusId) {
+    // forceAnim：卡侧调用（显示桌面放出/撤销看门狗/拖拽中心）传 true——
+    // 目标窗"应该"在卡里，快照滞后导致它其实已在桌面时，桥注入一次真翻转
+    // 播完整的"从卡片展开"动画（同值写入会被 KWin 静默短路、无动画）；
+    // dock 点击不传——对已在桌面的窗它是抬前语义，注入反而制造伪影。
+    function activateGroup(windowIds, focusId, forceAnim) {
         const ids = [];
         for (let i = 0; i < windowIds.length; i++) {
             const record = windowById(windowIds[i]);
@@ -690,7 +694,7 @@ QtObject {
             ? focusRecord.handleId : ids[ids.length - 1];
         activationRequested(focusId);
         _sendKwinCommand({ action: "activate-group", ids: ids,
-            focusId: focusHandle });
+            focusId: focusHandle, forceAnim: forceAnim === true });
     }
 
     // 同拍交换（点击卡片）：激活目标组 + 收编退位组走**一条原子命令**——
@@ -723,7 +727,11 @@ QtObject {
         activationRequested(focusId);
         _sendKwinCommand({ action: "engage-swap", ids: actHandles,
             focusId: focusHandle, minimizeIds: minHandles,
-            ticket: ticket || undefined });
+            ticket: ticket || undefined,
+            // 点卡 = 从卡位展开语义：目标窗若已不在最小化态（快照滞后/
+            // 上一手还原提前落地），桥注入真翻转补出展开动画（见桥内
+            // restoreWithAnimation 注释）
+            forceAnim: true });
     }
 
 

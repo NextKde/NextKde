@@ -509,10 +509,12 @@ PanelWindow {
     // 走此包装：activateGroup 会同步发 activationRequested → 回灌
     // activateWithSwap 把刚激活/正要还原的窗又收编一遍（v82 P0——
     // _engagingDispatch 原本只护 engage 派发路径，这些直调全裸奔）
+    // forceAnim=true：卡侧语义的"从卡位展开"——目标窗其实已在桌面
+    //（快照滞后）时由桥注入真翻转补出展开动画，否则窗口瞬现
     function _activateGroupGuarded(ids, focusId) {
         _engagingDispatch = true
         try {
-            WindowService.activateGroup(ids, focusId)
+            WindowService.activateGroup(ids, focusId, true)
         } finally {
             _engagingDispatch = false
         }
@@ -755,6 +757,15 @@ PanelWindow {
             root._deskUndoWatch = null
             if (!w)
                 return
+            // 落地核对：undo 后迟到的最小化可能从未落地（批次被后续
+            // 操作取消/窗口已被旁路还原）——此刻不能再"还原"：activateGroup
+            // 会给无辜窗口抢焦点，卡侧的展开注入更会对"从未离开桌面的窗"
+            // 播一遍错误的"从卡片长出"动画。只处理真的被收进卡的窗口。
+            if (!_anyMinimized(w.ids)) {
+                console.info("[StageSidebar] desk undo: nothing landed,"
+                    + " skip restore (" + w.ids.length + " window(s))")
+                return
+            }
             const cur = WindowService.activeWindowId
             if (cur !== "" && w.ids.indexOf(cur) < 0) {
                 _markEngagingByIds(w.ids)
@@ -2140,8 +2151,8 @@ PanelWindow {
         // margin（1656），卡片拉成 1632 宽，倾斜透视在大宽度上产生极端
         // 剪切（"切右侧时卡片被拉长"的真因，2026-09-30 实锤）
         x: (root.rightSide
-               ? parent.width - root.panelW - StageGeo.CARD_OVERFLOW_MARGIN
-               : StageGeo.CARD_OVERFLOW_MARGIN)
+               ? parent.width - root.panelW - root._stripInset
+               : root._stripInset)
             // 抽屉滑移：收起时滑向常驻侧屏缘（左条向左/右条向右），
             // 发布姿态经 mapToItem 自动跟随
             + (root.rightSide ? root._retractPx : -root._retractPx)
@@ -2474,6 +2485,13 @@ PanelWindow {
     // 内容列宽（卡宽可调后不再是常量；PANEL_WIDTH 仅作几何兼容旧值）
     readonly property real panelW:
         StageConfigService.cardWidth + StageGeo.CARD_WIDTH_INSET
+    // 卡片列原点在面板窗内的 x：卡片左/右缘距屏缘 = stripMargin（设置页
+    // 「距离屏幕边缘」），列内缩进 CARD_X_INSET 与之相抵——默认
+    // stripMargin 32 时列原点 = 20（= 原 CARD_OVERFLOW_MARGIN 定值，
+    // 全屏浮层化后它只作列贴缘偏移，已被本参数取代）。单一事实来源：
+    // cards.x / 抽屉滑出距离 / 侵占判定 / kwinrc 回退矩形都从它推。
+    readonly property real _stripInset:
+        StageConfigService.stripMargin - StageGeo.CARD_X_INSET
     // 无头测试覆盖（debugFullscreen verb）：null＝按真实记录判定
     property var _fullscreenOverride: null
     // 当前桌面有可见全屏窗＝需要让位
@@ -2496,7 +2514,10 @@ PanelWindow {
     }
     property bool _drawerPeek: false   // 收起态贴缘悬停＝拉出（可交互）
     property real _retractPx: 0        // 0=展开；收起时动画到 _retractFull
-    readonly property real _retractFull: root.panelW + StageGeo.GLOW_PAD * 2
+    // 滑出距离：列原点偏移 + 列宽 + 两侧辉光余量（stripMargin 调大时列
+    // 离屏缘更远，滑出距离必须同步加长，否则收起态卡片仍露在屏上）
+    readonly property real _retractFull:
+        root._stripInset + root.panelW + StageGeo.GLOW_PAD * 2
     readonly property bool drawerRetracted:
         (root.desktopFullscreen || root._stripYield || AppLauncherService.open)
         && !root._drawerPeek
@@ -2572,9 +2593,11 @@ PanelWindow {
     readonly property real _stripOverlapRaw: {
         WindowService.placementRevision
         const recs = WindowService.records || []
-        const sx1 = root.rightSide ? root.width - root.panelW
-            - StageGeo.CARD_OVERFLOW_MARGIN
-            : StageGeo.CARD_OVERFLOW_MARGIN
+        // 判定基准 = 列基础 x（不含抽屉滑移——收起让位判定本身不需要
+        // 跟踪滑出过程）；stripMargin 改动后侵占阈值随列位置同步
+        const sx1 = root.rightSide
+            ? root.width - root.panelW - root._stripInset
+            : root._stripInset
         const sx2 = sx1 + root.panelW
         const sy1 = ConfigService.barHeight
         const sy2 = root.height - ConfigService.baseHeight
@@ -3290,7 +3313,9 @@ PanelWindow {
     // 滚动/拖拽变化时由 layoutCards 尾部刷新；无卡=零高全穿透。
     Item {
         id: stripHitRegion
-        x: StageGeo.CARD_OVERFLOW_MARGIN   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
+        x: root.rightSide   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
+            ? root.width - root.panelW - root._stripInset
+            : root._stripInset
         y: 0
         width: root.panelW
         height: 0

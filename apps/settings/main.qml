@@ -840,18 +840,13 @@ ApplicationWindow {
                     minV: 0
                     maxV: 40
                     decimals: 1
-                    // 读当前模式的"活键"：scroll 的可见倾角是静置倾斜角，
-                    // adaptive 才是悬停倾角——读另一个会"拖了没反应/反应
-                    // 减半"。写两键同值（用户手感即两键同档，不分静置/悬停）
-                    current: fgSchedPage.stageSnapshot.layoutMode === "adaptive"
-                        ? (fgSchedPage.stageSnapshot.tiltAngle !== undefined
-                            ? fgSchedPage.stageSnapshot.tiltAngle : 22)
-                        : (fgSchedPage.stageSnapshot.deckRestTilt !== undefined
-                            ? fgSchedPage.stageSnapshot.deckRestTilt : 10)
-                    onCommit: function(v) {
-                        fgSchedPage.stageSet("tiltAngle", v)
-                        fgSchedPage.stageSet("deckRestTilt", v)
-                    }
+                    // 悬停倾斜角（tiltAngle）：鼠标悬停时卡片倾斜的强度，
+                    // 0 = 悬停放平阅读。静止姿态的解耦旋钮是高级自定义里
+                    // 的「静置倾斜角度」（deckRestTilt）——两键各自独立，
+                    // 不再同写同值
+                    current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
+                        ? fgSchedPage.stageSnapshot.tiltAngle : 22
+                    onCommit: function(v) { fgSchedPage.stageSet("tiltAngle", v) }
                 }
 
                 StageSliderRow {
@@ -923,19 +918,22 @@ ApplicationWindow {
                     visible: fgSchedPage.stageAdvanced
                     spacing: 10
 
-                    // adaptive 专属（scroll 模式下不生效，按模式禁用防"调了没反应"）；
-                    // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），schema 同步
+                    // 静置倾斜角（deckRestTilt）：静止（含 adaptive 完整
+                    // 显示）与交棒时的卡片倾角——双模式统一生效；悬停
+                    // 倾角是「倾斜强度」（tiltAngle）——两旋钮解耦。
+                    // 上限 40 = 特效 stageanim 的钳位（>40° 顶点镜像），
+                    // schema 同步
                     StageSliderRow {
-                        label: "卡片倾斜角度"
-                    unit: "°"
-                    minV: 0
-                    maxV: 40
-                    decimals: 1
-                    active: fgSchedPage.stageSnapshot.layoutMode === "adaptive"
-                    current: fgSchedPage.stageSnapshot.tiltAngle !== undefined
-                        ? fgSchedPage.stageSnapshot.tiltAngle : 22
-                    onCommit: function(v) { fgSchedPage.stageSet("tiltAngle", v) }
-                }
+                        label: "静置倾斜角度"
+                        unit: "°"
+                        minV: 0
+                        maxV: 40
+                        decimals: 1
+                        active: true
+                        current: fgSchedPage.stageSnapshot.deckRestTilt !== undefined
+                            ? fgSchedPage.stageSnapshot.deckRestTilt : 10
+                        onCommit: function(v) { fgSchedPage.stageSet("deckRestTilt", v) }
+                    }
 
                 StageSliderRow {
                     label: "卡片间距"
@@ -1158,6 +1156,18 @@ ApplicationWindow {
                     }
                 }
 
+                // 侧栏（卡片列）距屏幕左/右缘的净距：调大后卡片离屏缘更远
+                //（布局/特效矩形/抽屉滑出距离三处同源跟随）
+                StageSliderRow {
+                    label: "距离屏幕边缘"
+                    unit: " px"
+                    minV: 0
+                    maxV: 120
+                    current: fgSchedPage.stageSnapshot.stripMargin !== undefined
+                        ? fgSchedPage.stageSnapshot.stripMargin : 32
+                    onCommit: function(v) { fgSchedPage.stageSet("stripMargin", v) }
+                }
+
                 StageSliderRow {
                     label: "合并卡扇叠间距"
                     unit: " px"
@@ -1247,18 +1257,6 @@ ApplicationWindow {
                             fgSchedPage.stageSet("showCardTitle", checked)
                         }
                     }
-                }
-
-                StageSliderRow {
-                    label: "静置倾斜角"
-                    unit: "°"
-                    minV: 0
-                    maxV: 40
-                    decimals: 1
-                    active: fgSchedPage.stageSnapshot.layoutMode === "scroll"
-                    current: fgSchedPage.stageSnapshot.deckRestTilt !== undefined
-                        ? fgSchedPage.stageSnapshot.deckRestTilt : 10
-                    onCommit: function(v) { fgSchedPage.stageSet("deckRestTilt", v) }
                 }
 
                 StageSliderRow {

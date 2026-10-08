@@ -6,11 +6,11 @@
 // 面板窗宽 = 常驻左侧条宽（窗口 implicitWidth / exclusiveZone /
 // StageModeService 的 TargetWidth 三处同源）
 export const PANEL_WIDTH = 240
-// 悬停放大 + 辉光 + 倾斜的横向溢出余量：面板窗比常驻条两侧各宽这么多
-//（内容列仍居中 PANEL_WIDTH），避免放大后的卡/辉光被窗缘硬切（输入用
-// mask 限制回内容列，余量区点击穿透到桌面）。取值按"辉光外扩 13px ×
-// 悬停放大 1.05 + 倾斜投影 ~6px"（≈19）再留 1px——exclusiveZone 会把它
-// 一并保留（窗口不被辉光盖到），改辉光层数/悬停放大时同步核此值。
+// （历史遗值）全屏浮层化前的横向溢出余量：面板窗曾比常驻条两侧各宽
+// 这么多（悬停放大 + 辉光 + 倾斜投影的溢出，见旧注释）。全屏浮层化后
+// 窗口恒全屏、该职责消失——卡片列贴缘偏移改由 stripMargin（配置项，
+// 设置页「距离屏幕边缘」可调）承担，默认 32 = 本值 + CARD_X_INSET。
+// 全代码不再消费本常量，仅为旧引用可读保留。
 export const CARD_OVERFLOW_MARGIN = 20
 // 卡宽 = 列宽 − 24（左右各 12 内边距）
 export const CARD_WIDTH_INSET = 24
@@ -37,7 +37,7 @@ export const ENGAGE_FADE_MS = 180       // 点卡交棒/被吞卡淡出（_merge
 // StageSidebarWindow 的 _mergeExitRatio（手势时序类参数，不进几何库）
 // 辉光裁剪放宽：滚动视口只裁上下（滚动方向），左右各放宽这么多——
 // 悬停辉光外扩 13px×放大 1.05 + 倾斜投影后 ≈19px 超出卡面 inset，
-// 整条 clip 会把辉光侧边切掉（要与 CARD_OVERFLOW_MARGIN 同步核算）
+// 整条 clip 会把辉光侧边切掉（取值口径与列内 inset 的余量核算同源）
 export const GLOW_PAD = 22
 
 // ── 卡面真透视（与 shaders/stage_tilt.frag 互为孪生，改一处同步另一处）──

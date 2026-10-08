@@ -476,6 +476,28 @@ function setActiveWindow(window) {
     }
 }
 
+// ── 展开动画保证：状态感知翻转 ──
+// stageanim 的收/放动画全部寄生在 minimizedChanged 上，而 KWin 的
+// setMinimized 对同值写入直接 return（window.cpp：m_minimized ==
+// effectiveSet 即短路，不发信号）。编排侧的快照滞后/多路重复批次会
+// 写出同值——典型：窗口经旁路（alt-tab/上一手还原）已回到桌面、卡片
+// 还没随快照消失时点卡——写 false 是静默 no-op＝窗口瞬现、无动画。
+// 修复：需要展开而窗口已展开时，注入一次同 tick 真翻转（true→false）。
+// KWin TimeLine 语义（effect/timeline.cpp）：新建后 elapsed=0，Forward
+// 下 value()=0；紧随的 setDirection(Backward) 在 elapsed==0 且
+// sourceRedirectMode=Relaxed 时**不镜像** elapsed，value()=1−progress
+// 从 1.0 起步＝完整的"从卡片展开"动画；两次写入之间没有合成帧，窗口
+// 不会闪现。若该窗展开动画正在播放（elapsed>0），两次 toggleDirection
+// 各镜像一次 elapsed＝净零，动画连续无抖动。
+// ⚠️ 仅 forceAnim 命令（点卡/卡侧整组放出）注入：dock 点应用对"已在
+// 桌面的窗"是抬前语义，注入会先藏再从卡片长出（无中生有的伪影）。
+function restoreWithAnimation(window, forceAnim) {
+    if (forceAnim === true && !window.minimized) {
+        window.minimized = true;
+    }
+    window.minimized = false;
+}
+
 function snapshot() {
     const all = workspace.windowList();
     // The real KWin-active window, scanned UNFILTERED (transient dialogs
@@ -746,7 +768,7 @@ function handleCommand(serialized) {
                 // 工作区"钳位会在异步重放里盖掉之后排队的任何写入（实测）
                 if (geo)
                     groupWindow.frameGeometry = geo;
-                groupWindow.minimized = false;
+                restoreWithAnimation(groupWindow, command.forceAnim);
                 // 实时卡片模式把后台窗压在桌面底层（keepBelow）；整组激活
                 // 即走向前台，压底标记必须一并摘掉
                 groupWindow.keepBelow = false;
@@ -797,7 +819,7 @@ function handleCommand(serialized) {
                 // 会触发活动窗钳位的异步重放，盖掉后续写入）
                 if (geo)
                     groupWindow.frameGeometry = geo;
-                groupWindow.minimized = false;
+                restoreWithAnimation(groupWindow, command.forceAnim);
                 groupWindow.keepBelow = false;
                 if (geo)
                     restores.push({ window: groupWindow, geo: geo });
@@ -877,11 +899,11 @@ function handleCommand(serialized) {
             // before making it active, otherwise KWin may accept the request but
             // leave it invisible. 停泊窗必须先复位几何再激活（否则激活到屏幕外）。
             const geo = takeParkedGeometry(window);
-            // 先复位再解除最小化（同 activate-group：重映射在停泊位上会
-            // 触发活动窗钳位的异步重放）
+            // 先复位再解除最小化（同 activate-group：重映射在停泊位上
+            // 会触发活动窗钳位的异步重放）
             if (geo)
                 window.frameGeometry = geo;
-            window.minimized = false;
+            restoreWithAnimation(window, command.forceAnim);
             setActiveWindow(window);
             // 激活后再写一次复位（保险带：任何钳位/重放时序都盖不过最后写）
             applyRestore(window, geo);

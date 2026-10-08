@@ -203,10 +203,11 @@ Item {
             ? parent.slotScale : 1.0
         // ⚠️ mapToItem 实测（plate 是 plane 的子项，坐标手工加会偏 (74,115)）
         const pp = plate.mapToItem(null, 0, 0)
-        const restTilt = scrollMode
-            ? StageConfigService.deckRestTilt : 0
-        const hoverT = scrollMode ? 0
-            : StageConfigService.tiltAngle
+        // 静止/悬停双旋钮解耦（与 tiltCur 同源）：静止姿态 = 静置倾斜角
+        //（两模式统一，adaptive 完整显示也有静置姿态）；悬停终态 =
+        // 悬停倾斜角（特效 cursorPos 自驱悬停引擎的终点）
+        const restTilt = StageConfigService.deckRestTilt
+        const hoverT = StageConfigService.tiltAngle
         const title = card.count > 1
             ? (card.appName || card.title || "应用") + " ×" + card.count
             : (card.appName || card.title || "应用")
@@ -224,10 +225,9 @@ Item {
             z: parent && parent.z !== undefined ? parent.z : 0,
             hoverScale: StageConfigService.hoverScale,
             hoverTilt: card.rightSide ? -hoverT : hoverT,
-            // engaging 交棒保持倾角（scroll=deckRestTilt / adaptive=tiltAngle，
-            // 老语义：交棒时卡不压平到 0）
-            engagingTilt: (card.rightSide ? -1 : 1)
-                * (scrollMode ? restTilt : hoverT),
+            // engaging 交棒保持静置角（与 kwinrc TiltAngle 投影同源：
+            // 展开窗口动画的起摆姿态；交棒时卡不压平）
+            engagingTilt: (card.rightSide ? -1 : 1) * restTilt,
             hoverMs: StageConfigService.cardEnterDuration + 40,
             tiltMs: StageConfigService.tiltAnimDuration,
             enterMs: StageConfigService.cardEnterDuration,
@@ -287,20 +287,24 @@ Item {
     // delegate 上的定时器会在派发窗口内随 delegate 销毁而丢派发），
     // 卡片淡出动画由 engaging 驱动的 opacity/tilt Behavior 承担。
 
-    // ── 倾角状态机（角度交给着色器做真透视）：scroll = 静置统一倾角
-    // （deckRestTilt，可调到 45°）、悬停聚焦放平便于阅读、交棒保持倾角
-    //（kwinrc TiltAngle 同源投影给展开窗口动画）；adaptive = 平铺、
-    // 悬停/点击才倾斜（tiltAngle）。
+    // ── 倾角状态机（角度交给着色器做真透视）：悬停/静止双旋钮解耦 ──
+    // 静止 = 静置倾斜角（deckRestTilt，两模式统一——adaptive 完整显示
+    // 也有静置姿态）；悬停 = 悬停倾斜角（tiltAngle，0 = 悬停放平阅读）；
+    // 交棒（engaging）保持静置角——kwinrc TiltAngle 同源投影给展开窗口
+    // 动画，卡片淡出姿态与窗口起摆姿态零跳变。
+    // ⚠️ 悬停倾斜下 plane 内的关闭钮被透视投影挪位，热区对齐改走
+    // _closeProj（见 closeHit）；"按钮角区瞄准摆平"已废除——活体模式下
+    // 卡面由特效直绘，QML 的摆平从没生效过（两侧不一致的既存缺陷），
+    // 统一由热区跟随解决。
     // ⚠️ schema 键 deckRestTilt/deckSidePeek 是牌堆时代遗名（持久化配置
-    // 不能改名），现役语义都属 scroll 模式。
-    readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
+    // 不能改名）：deckRestTilt 现役语义 = 双模式的静置倾角；
+    // deckSidePeek 仍属 scroll 模式。
     property real tiltCur: dragging ? 0
-        : (scrollMode
-            ? ((isHovered && !engaging) ? 0
-                : StageConfigService.deckRestTilt)
-            : ((engaging || (isHovered && !buttonAim))
+        : (engaging
+            ? StageConfigService.deckRestTilt
+            : (isHovered
                 ? StageConfigService.tiltAngle
-                : 0))
+                : StageConfigService.deckRestTilt))
     Behavior on tiltCur {
         NumberAnimation {
             duration: card.engaging ? 180 : StageConfigService.tiltAnimDuration
@@ -315,17 +319,36 @@ Item {
     // 时指针移上拆分钮 = isHovered 翻 false → hovered(false) → 窗口侧
     // 清 hoveredKey 整列回基础槽位 = 卡在静止指针底下移位 → 悬停失而
     // 复得 → 布局弹回 = 抖动 + tilt/scale 来回翻转（"拆分钮点不到"）。
-    // 瞄准态：指针进入按钮角区（自适应模式的悬停倾斜会把视觉钮转离
-    // 固定热区——点击落空）。进入角区即摆平卡片（tilt→0），视觉钮回到
-    // 未倾斜位＝与热区重合，点击必中。合成进 isHovered：瞄准时卡不缩回。
-    readonly property bool buttonAim: buttonAimHover.containsMouse
-        || closeHit.containsMouse || splitHit.containsMouse
+    // 按钮角区合成进 isHovered：指针在角区（按钮间的空隙）时卡不缩回。
     readonly property bool isHovered: cardMouse.containsMouse
         || closeHit.containsMouse
         || splitHit.containsMouse
         || iconRowHover.containsMouse
         || buttonAimHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
+
+    // ── 关闭钮热区的透视跟随（悬停倾斜的点击对齐）──
+    // 关闭钮视觉在 plane 内、随真透视投影（倾斜卡面上的钮被挪位），而
+    // 热区是轴对齐固定矩形——不跟随的话悬停倾斜（tiltAngle>0）下指针点
+    // "看到的钮"会落在热区外、被整卡 MouseArea 接走（点关闭反被展开）。
+    // 按与 stage_tilt.frag 同源的针孔公式把热区中心从平面位投到视觉位
+    //（tiltProject 孪生；Δ = 投影后 − 平面位）。角用 tiltCur 绑定：
+    // 拖拽摆平/悬停补间都自动连续跟随（含 Behavior），两模式一致。
+    // 拆分芯片/图标排是"正视覆盖层"（用户定稿不随倾斜）——热区与芯片
+    // 都在固定位，天然对齐，不动。
+    readonly property var _closeProj: {
+        // 热区中心平面位（相对卡中心）：宽 24 锚右上 6/6 + 卡头 18 中心
+        const hu = card.width / 2 - 18
+        const hv = 18 - card.height / 2
+        const rad = (card.rightSide ? -1 : 1) * card.tiltCur * Math.PI / 180
+        const s = Math.sin(rad), c = Math.cos(rad)
+        const k = StageGeo.TILT_FOCAL / (StageGeo.TILT_FOCAL + hu * s)
+        return {
+            dx: hu * c * k - hu,
+            dy: (hv + card.perspectiveYOff) * k
+                - card.perspectiveYOff - hv,
+        }
+    }
 
     // 合并完成的可拆分提示：merged 原地翻真（首次拖卡合并就是这条路径）
     // 时拆分钮自动亮一小会儿——拆分钮平时只在悬停时显现，合并完指针不在
@@ -811,19 +834,17 @@ Item {
     // 关闭钮热区必须在卡根层级：视觉树渲染进 visible:false 的透视层
     //（plane，着色器源），层内 MouseArea 不收输入——整卡 cardMouse 把
     // 点击全接走（"关闭按钮点不动"的根因）。plane/plate 与根坐标 1:1
-    // 对齐（plane.x=-16/plate.x=16 抵消），热区与视觉钮重合（外扩 2px
-    // 容差）。
+    // 对齐（plane.x=-16/plate.x=16 抵消）。
+    // x/y 显式定位 = 基准位（右上 6/6）+ _closeProj 透视位移：视觉钮在
+    // 投影位、热区跟到同位（悬停倾斜下不跟随会"点关闭变展开"，见
+    // _closeProj 注释）。
     MouseArea {
         id: closeHit
         z: 1
         width: 24
         height: 24
-        anchors {
-            top: parent.top
-            right: parent.right
-            topMargin: 6
-            rightMargin: 6
-        }
+        x: parent.width - width - 6 + card._closeProj.dx
+        y: 6 + card._closeProj.dy
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: card.closeAllRequested()
@@ -831,7 +852,7 @@ Item {
 
     // 按钮角区热区：覆盖两个按钮的更大区域（NoButton 不截点击；声明在
     // cardMouse 之后=角区内它是 hover 顶层，压住 cardMouse；closeHit/
-    // splitHit z:1 在按钮上仍是最顶层——三态合成见 buttonAim）。
+    // splitHit z:1 在按钮上仍是最顶层——isHovered 合成见上）。
     // ⚠️ 固定锚右上：视觉钮（cardClose/cardSplit）在头部永远位于卡面
     // 右上（头部横贯 plate、关闭钮锚右），不随 side 镜像——镜像到左上
     // 会瞄准错侧（2026-09-30 修正）。
