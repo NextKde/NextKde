@@ -413,11 +413,14 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /PopupMotion\s*\{[\s\S]*openDuration:\s*300[\s\S]*closeDuration:\s*240/,
-    "the large launcher surface uses a slower reversible entrance and exit");
+    /LauncherMotion\s*\{[\s\S]*target:\s*launcherContent/,
+    "the launcher coordinates tile motion while retaining its content container");
+const launcherMotion = read("../../shell/desktop/modules/applauncher/LauncherMotion.qml");
+assert.match(launcherMotion, /interval:\s*300[\s\S]*!motion\.requestedOpen[\s\S]*motion\.mapped = false/,
+    "the launcher remains mapped until its closing tile animations finish");
 assert.match(appLauncherWindow,
-    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
-    "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
+    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*root\.contentAlive && !root\.isFullscreenMode/,
+    "Launchpad retains its catalogue while delegates follow the content lifetime and visible mode");
 assert.match(appLauncherWindow,
     /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
     "Launchpad retains one backing window while a real output is available");
@@ -430,10 +433,10 @@ assert.match(appLauncherWindow,
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
     "the closed Launchpad surface never publishes a compositor blur region");
-assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
-    "launcher native glass follows the animated card, not the fixed layout");
-assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
-    "the launcher backdrop expands and contracts with its contents");
+assert.match(appLauncherWindow, /blurAnchor:\s*background/,
+    "launcher native glass follows the stationary backdrop");
+assert.match(appLauncherWindow, /id:\s*launcherCard[\s\S]*width:\s*launcherRevealClip\.width\s+height:\s*launcherRevealClip\.height/,
+    "the launcher backdrop retains its full dimensions during tile motion");
 assert.match(appIconSource,
     /backer\.cache:\s*(?:!root\.needsEffect\s*&&\s*)?IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
@@ -500,7 +503,7 @@ assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
 assert.match(networkPanel,
-    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    /WifiSignalIcon\s*\{[^{}]*signalStrength:\s*NetworkService\.signalStrength/,
     "the network panel reuses the live Wi-Fi signal glyph");
 for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
     const start = controlCenterPanel.indexOf(marker);

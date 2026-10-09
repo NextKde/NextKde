@@ -17,6 +17,7 @@ ShellRoot {
     property var grid: null
     property var cards: null
     property var combinations: []
+    property real holdStartedAt: 0
 
     function find(item, name) {
         if (item.objectName === name) return item
@@ -67,9 +68,19 @@ ShellRoot {
                     check(test.cards.count === 1, "clock restored through library button")
                     desktop.leaveWidgetEditMode()
                     events.mousePress(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
+                    holdStartedAt = Date.now()
                     interval = 1000
                     break
                 case 4:
+                    // The platform hold timer and this fixture timer can be
+                    // dispatched on adjacent frames under load. Wait for the
+                    // actual gesture, with a bounded deadline.
+                    if (!desktop.editMode && Date.now() - holdStartedAt
+                            < test.background.pressAndHoldInterval + 1000) {
+                        test.stage = 4
+                        interval = 50
+                        return
+                    }
                     check(desktop.editMode, "file-grid background long press enters edit mode")
                     events.mouseMove(test.background, 125, 125, 0, Qt.LeftButton, Qt.NoModifier)
                     check(!test.background.parent.selectionBoxActive, "long press consumes subsequent selection drag")
@@ -78,6 +89,7 @@ ShellRoot {
                     check(!desktop.editMode && !desktop.widgetLibraryOpen, "Escape leaves widget editing")
                     events.mousePress(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
                     events.mouseMove(test.background, 160, 160, 0, Qt.LeftButton, Qt.NoModifier)
+                    interval = test.background.pressAndHoldInterval + 250
                     break
                 case 5:
                     check(!desktop.editMode, "box selection must not become a long press")
