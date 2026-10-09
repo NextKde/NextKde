@@ -1788,6 +1788,10 @@ PopupWindow {
                     color: AppearanceTokens.content.glassInk(0.30)
                     font { pixelSize: 11; family: "Noto Sans CJK SC" }
                 }
+
+                // Wheel scrolling with inertia (notification history is the one list
+                // here that regularly outgrows its panel).
+                KosKineticScroll { flickable: historyList }
             }
         }
     }
@@ -2644,6 +2648,8 @@ PopupWindow {
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 12; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
                     }
+
+                    KosKineticScroll { flickable: submenuWifiList }
                 }
             }
 
@@ -2885,6 +2891,8 @@ PopupWindow {
                         color: AppearanceTokens.content.glassInk()
                         font { pixelSize: 11; family: "Noto Sans CJK SC" }
                     }
+
+                    KosKineticScroll { flickable: submenuBtList }
                 }
             }
 
@@ -3247,6 +3255,8 @@ PopupWindow {
                             onClicked: ControlCenterService.setAudioOutput(modelData.name)
                         }
                     }
+
+                    KosKineticScroll { flickable: audioOutputList }
                 }
                 GlassText {
                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom }

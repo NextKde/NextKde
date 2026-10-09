@@ -347,6 +347,8 @@ KosApplicationWindow {
                         onClicked: root.selectFilter("list",
                             String(root.value(modelData, "id", "inbox")))
                     }
+
+                    KosKineticScroll { flickable: listNavigation }
                 }
 
                 Label {
@@ -601,6 +603,8 @@ KosApplicationWindow {
                                 border.color: AppTheme.withAlpha(AppTheme.accent, 0.58)
                             }
                         }
+
+                        KosKineticScroll { flickable: taskList }
                     }
                 }
             }

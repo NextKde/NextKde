@@ -2982,6 +2982,12 @@ PanelWindow {
                             }
                         }
                     }
+
+                    // Keep the wheel catcher behind grid controls; fullscreen paging stays native.
+                    KosKineticScroll {
+                        flickable: appGrid
+                        parent: appGrid.contentItem
+                    }
                 }
             }
         }

@@ -23,3 +23,5 @@ KosComboBox 1.0 KosComboBox.qml
 KosTextArea 1.0 KosTextArea.qml
 KosWorkspaceDialog 1.0 KosWorkspaceDialog.qml
 KosItemDelegate 1.0 KosItemDelegate.qml
+
+KosKineticScroll 1.0 KosKineticScroll.qml

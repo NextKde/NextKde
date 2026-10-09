@@ -315,6 +315,7 @@ KosApplicationWindow {
                             }
                         }
                     }
+                    KosKineticScroll { flickable: searchResults }
                 }
 
                 RowLayout {
@@ -387,6 +388,7 @@ KosApplicationWindow {
                             }
                         }
                     }
+                    KosKineticScroll { flickable: savedLocations }
                 }
 
                 RowLayout {

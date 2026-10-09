@@ -90,6 +90,14 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_visual_contract.mjs
         )
         set_tests_properties(kos-ui.visual-contract PROPERTIES TIMEOUT 10)
+        # The wheel-scroll curve itself (KosKineticScrollPhysics.mjs): distance
+        # per notch, time to settle, the coast after a spin, the bounds. A
+        # compositor can only show these as "it felt wrong".
+        add_test(NAME kos-ui.kinetic-scroll-physics
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/foundation/test_kinetic_scroll.mjs
+        )
+        set_tests_properties(kos-ui.kinetic-scroll-physics PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-ui.color-scheme
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/color-scheme/test_color_scheme.mjs
@@ -457,6 +465,18 @@ if(BUILD_TESTING)
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_motion.qml)
         set_tests_properties(kos-ui.shared-motion PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
+        add_test(NAME kos-ui.kinetic-scroll
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_scroll.qml)
+        set_tests_properties(kos-ui.kinetic-scroll PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 30)
+        add_test(NAME kos-ui.kinetic-input
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_input.qml)
+        set_tests_properties(kos-ui.kinetic-input PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 20)
     endif()
