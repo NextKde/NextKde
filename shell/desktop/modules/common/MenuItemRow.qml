@@ -125,11 +125,7 @@ Item {
             font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
             font.pixelSize: 13
             font.weight: Font.DemiBold
-            // 保持默认的 QtRendering（距离场），不要改回 Text.NativeRendering：
-            // 菜单文字画在 LiquidGlassPanel 的 squircle layer（FBO）里，弹层打开还带
-            // scale 动画，原生渲染预先生成的字形位图经这层重采样必然发糊；距离场
-            // 对 layer、分数缩放和缩放动画免疫。NativeRendering 是平面渲染时代的遗留，
-            // 只在"1:1、静止、无变换"时更锐。
+            // 使用默认距离场渲染，减少原生字形在菜单缩放时的像素化。
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter
