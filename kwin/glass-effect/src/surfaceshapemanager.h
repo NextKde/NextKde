@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QHash>
+#include <QElapsedTimer>
+#include <optional>
 #include <QObject>
 #include <QRectF>
 #include <QVector>
@@ -19,6 +21,7 @@ struct SurfaceShape
     quint64 id = 0;
     QRectF geometry;
     QRectF captureGeometry;
+    qreal materialOpacity = 1.0;
     qreal radius = 0.0;
     qreal exponent = 2.0;
     bool enabled = true;
@@ -44,6 +47,21 @@ inline QRectF surfaceCaptureBounds(const SurfaceShape &shape)
         : shape.captureGeometry.united(shape.geometry);
 }
 
+struct SurfaceReveal
+{
+    QRectF geometry;
+    qreal progress = 1.0;
+
+    qreal scale() const { return 0.8 + 0.2 * progress; }
+    QPointF anchor() const { return QPointF(geometry.center().x(), geometry.bottom()); }
+    QRectF visibleGeometry() const {
+        const qreal width = geometry.width() * scale();
+        const qreal height = geometry.height() * scale();
+        return QRectF(geometry.center().x() - width / 2,
+                      geometry.bottom() - height, width, height);
+    }
+};
+
 class SurfaceShapeManager : public QObject
 {
     Q_OBJECT
@@ -53,9 +71,14 @@ public:
     ~SurfaceShapeManager() override;
 
     QVector<SurfaceShape> shapesFor(const SurfaceInterface *surface) const;
+    std::optional<SurfaceReveal> revealFor(const SurfaceInterface *surface) const;
+    void advanceAnimations();
+    void completeAnimations();
 
 Q_SIGNALS:
     void surfaceShapesChanged(KWin::SurfaceInterface *surface);
+    // Timeline-only updates do not invalidate the fixed capture/blur region.
+    void revealFrameChanged(KWin::SurfaceInterface *surface, const QRectF &captureBounds);
 
 private:
     struct ShapeResource;
@@ -79,12 +102,16 @@ public: // Wayland C dispatch table callbacks.
                         uint32_t enabled, uint32_t level);
     static void setCaptureGeometry(wl_client *client, wl_resource *resource,
                                   int32_t x, int32_t y, int32_t width, int32_t height);
+    static void setMaterialOpacity(wl_client *client, wl_resource *resource, wl_fixed_t opacity);
+    static void setReveal(wl_client *client, wl_resource *resource,
+                          uint32_t enabled, uint32_t opened, uint32_t duration, uint32_t serial);
     static void destroyShape(wl_client *client, wl_resource *resource);
 
 private:
     void changed(ShapeResource *shape);
     void remove(ShapeResource *shape);
 
+    QElapsedTimer m_clock;
     wl_global *m_global = nullptr;
     quint64 m_nextId = 1;
     QHash<const SurfaceInterface *, QVector<ShapeResource *>> m_shapes;
