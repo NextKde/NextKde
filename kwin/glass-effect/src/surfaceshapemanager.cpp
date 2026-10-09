@@ -19,6 +19,7 @@ struct SurfaceShapeManager::ShapeResource
     bool revealEnabled = false;
     bool revealOpened = false;
     bool revealRunning = false;
+    bool revealCompletionPending = false;
     qreal progress = 0;
     qreal startProgress = 0;
     qint64 startTime = 0;
@@ -130,9 +131,21 @@ void SurfaceShapeManager::advanceAnimations()
             Q_EMIT revealFrameChanged(shape->surface, surfaceCaptureBounds(shape->value));
             if (t >= 1) {
                 shape->revealRunning = false;
-                kos_surface_shape_v1_send_reveal_finished(shape->resource,
-                    shape->revealOpened, shape->serial);
+                // Notify only after the endpoint frame has been drawn.
+                shape->revealCompletionPending = true;
             }
+        }
+    }
+}
+
+void SurfaceShapeManager::completeAnimations()
+{
+    for (const auto &list : std::as_const(m_shapes)) {
+        for (ShapeResource *shape : list) {
+            if (!shape->revealCompletionPending) continue;
+            shape->revealCompletionPending = false;
+            kos_surface_shape_v1_send_reveal_finished(shape->resource,
+                shape->revealOpened, shape->serial);
         }
     }
 }
@@ -254,6 +267,7 @@ void SurfaceShapeManager::setReveal(wl_client *, wl_resource *resource,
     shape->revealEnabled = enabled != 0;
     shape->revealOpened = opened != 0;
     shape->serial = serial;
+    shape->revealCompletionPending = false;
     if (!wasEnabled) shape->progress = 0;
     shape->startProgress = shape->progress;
     shape->startTime = shape->manager->m_clock.elapsed();

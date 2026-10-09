@@ -1108,6 +1108,16 @@ QRectF BlurEffect::dynamicCornerRect(EffectWindow *w) const
     return w->frameGeometry();
 }
 
+void BlurEffect::postPaintScreen()
+{
+    effects->postPaintScreen();
+#ifndef GLASS_X11
+    // Client focus, hover and model work must not begin before the endpoint
+    // frame's GPU commands have been submitted by the window draw chain.
+    if (m_surfaceShapeManager) m_surfaceShapeManager->completeAnimations();
+#endif
+}
+
 #ifdef GLASS_KWIN_67
 void BlurEffect::prePaintScreen(ScreenPrePaintData &data)
 #else

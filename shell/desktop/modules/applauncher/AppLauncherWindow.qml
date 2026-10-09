@@ -106,16 +106,20 @@ PanelWindow {
             contentGraceTimer.stop();
             const needsContentRebuild = !root.contentAlive;
             root.contentAlive = true;
-            if (root.panelVisible)
-                searchFocusTimer.restart();
-            if (applicationsDirty)
+            // Populate a cold catalog before mapping, not on the final frames.
+            const needsCatalogBuild = applicationsDirty && applications.length === 0;
+            if (needsCatalogBuild) {
+                applicationCatalogRefresh.stop();
+                root.rebuildApplications();
+            } else if (applicationsDirty) {
                 applicationCatalogRefresh.restart();
+            }
             root.cancelFullscreenPageTransition();
             root.syncPagerSlots();
             // Let model/delegate creation settle before starting a cold-open
             // animation. Theme icon loading must remain on the GUI thread.
             // A close before this deferred call must not reopen the surface.
-            if (needsContentRebuild) {
+            if (needsContentRebuild || needsCatalogBuild) {
                 Qt.callLater(function () {
                     if (root.open)
                         popupMotion.open();
@@ -133,8 +137,11 @@ PanelWindow {
         target: launcherContent
         surface: launcherSurface
         onSettledOpenChanged: {
-            if (settledOpen)
+            if (settledOpen) {
                 searchFocusTimer.restart();
+                if (root.applicationsDirty)
+                    applicationCatalogRefresh.restart();
+            }
         }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
@@ -192,10 +199,14 @@ PanelWindow {
     // coalesced here instead of becoming work on the launcher's opening frame.
     Timer {
         id: applicationCatalogRefresh
-        interval: root.open ? popupMotion.openDuration + 20 : 750
+        interval: root.open ? 160 : 750
         repeat: false
         running: true
         onTriggered: {
+            // Keep the current model throughout either transition. Completion
+            // or hiding will reschedule a dirty catalog after it settles.
+            if (root.panelVisible && !popupMotion.settledOpen)
+                return;
             if (root.applicationsDirty)
                 root.rebuildApplications();
         }
@@ -916,8 +927,10 @@ PanelWindow {
             fullscreenPage = 0;
             keyboardSelectionActive = false;
             contentAlive = true;
-            searchFocusTimer.restart();
         } else {
+            searchFocusTimer.stop();
+            if (root.applicationsDirty)
+                applicationCatalogRefresh.restart();
             contentGraceTimer.restart();
             dismissApplicationMenu();
             editMode = false;
@@ -943,9 +956,13 @@ PanelWindow {
     focusable: root.open && !externalDialogOpen
     Timer {
         id: searchFocusTimer
-        interval: 1
+        // Give the compositor endpoint frame room before focus/IME scene updates.
+        interval: 80
         repeat: false
-        onTriggered: searchBar.forceActiveFocus()
+        onTriggered: {
+            if (root.open && popupMotion.interactive && !root.externalDialogOpen)
+                searchBar.forceActiveFocus();
+        }
     }
     Timer {
         id: contentGraceTimer

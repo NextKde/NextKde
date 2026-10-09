@@ -36,8 +36,12 @@ Capture bounds remain at the final rectangle throughout the transition. The
 controller stays enabled at rest, so reaching progress 1 does not switch shader
 paths. On closing, a transparent declaration remains authoritative until the
 client's blur-region commit catches up; zero-opacity material skips capture and
-blur work. Serial-tagged completion events retire the panel instead of a fixed
-client timer, and reversals continue from the current compositor progress.
+blur work. Serial-tagged completion events are dispatched from postPaintScreen,
+after the endpoint draw chain, and retire the panel instead of a fixed client
+timer. Reversals continue from the current compositor progress. Search focus is
+deferred by 80 ms after opening settles; dirty catalog refreshes wait 160 ms and
+never replace delegates during a transition. A cold empty catalog is populated
+before mapping the panel.
 
 Both the native bridge and KWin plugin must be rebuilt and installed. An older
 plugin, fullscreen launcher or QML-painted theme uses one whole-content

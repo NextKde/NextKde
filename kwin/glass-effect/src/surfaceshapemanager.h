@@ -73,6 +73,7 @@ public:
     QVector<SurfaceShape> shapesFor(const SurfaceInterface *surface) const;
     std::optional<SurfaceReveal> revealFor(const SurfaceInterface *surface) const;
     void advanceAnimations();
+    void completeAnimations();
 
 Q_SIGNALS:
     void surfaceShapesChanged(KWin::SurfaceInterface *surface);
