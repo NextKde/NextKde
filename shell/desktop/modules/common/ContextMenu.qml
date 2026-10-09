@@ -193,8 +193,14 @@ PopupWindow {
     readonly property real menuSurfaceHeight: Math.min(root.menuContentHeight,
         root.menuMaxHeight)
 
-    implicitWidth: 240
-    implicitHeight: root.menuSurfaceHeight + 12
+    // Reserve a fixed transparent gutter for the spring overshoot. The popup
+    // and capture textures never resize during animation.
+    readonly property real revealPadding: root.capsuleReveal && root.macosPopupMotion
+        ? Math.ceil(Math.max(240, root.menuSurfaceHeight + 12) * 0.035) + 2 : 0
+    readonly property real finalWidth: root.width - 2 * root.revealPadding
+    readonly property real finalHeight: root.height - 2 * root.revealPadding
+    implicitWidth: 240 + 2 * root.revealPadding
+    implicitHeight: root.menuSurfaceHeight + 12 + 2 * root.revealPadding
     color: "transparent"
     grabFocus: !root.macosPopupMotion || popupMotion.interactive
     mask: root.macosPopupMotion && !popupMotion.interactive ? emptyInputRegion : null
@@ -220,6 +226,8 @@ PopupWindow {
         margins.top: root.customMargins !== null ? (root.customMargins.top ?? 0)
             : (root.customMarginsTop !== null ? root.customMarginsTop : (root.centerBelowAnchor ? 0
             : (root.position === "bottom" ? -8 : 0)))
+                + (root.position === "bottom" && !root.centerBelowAnchor
+                    ? (root.placeBelow ? -root.revealPadding : root.revealPadding) : 0)
         margins.bottom: root.customMargins !== null ? (root.customMargins.bottom ?? 0) : 0
         margins.right: root.customMargins !== null ? (root.customMargins.right ?? 0)
             : (root.position === "right" ? -8 : 8)
@@ -285,12 +293,13 @@ PopupWindow {
         property real openContentStart: 0
         readonly property real openProgress: Math.max(0, Math.min(1,
             (timeline - openTimelineStart) / Math.max(0.0001, 1 - openTimelineStart)))
-        // A damped spring, bounded by the popup allocation. It reaches the
-        // edge, compresses slightly and settles without clipping overshoot.
-        // Closing remains monotonic, including a close during the rebound.
-        readonly property real springProgress: Math.max(0, Math.min(1,
-            (1 - Math.exp(-8 * openProgress) * Math.cos(12 * openProgress))
-                / (1 - Math.exp(-8) * Math.cos(12))))
+        // One smooth expansion and one soft settle (about 3% overshoot).
+        // No clipping or repeated oscillations: both break the velocity curve
+        // and read as a shake. Closing remains monotonic.
+        readonly property real springProgress: {
+            const t = openProgress - 1
+            return 1 + 1.9 * t * t * t + 0.9 * t * t
+        }
         readonly property real openShape: openShapeStart + (1 - openShapeStart) * springProgress
         readonly property real openMaterial: openMaterialStart + (1 - openMaterialStart)
             * (1 - Math.pow(1 - Math.min(1, openProgress / 0.4), 3))
@@ -328,16 +337,17 @@ PopupWindow {
                 }
             }
         }
-        readonly property real sourceWidth: Math.min(root.width,
+        readonly property real sourceWidth: Math.min(root.finalWidth,
             Math.max(48, root.capsuleSourceWidth > 0 ? root.capsuleSourceWidth
                 : (root.anchorItem ? root.anchorItem.width : 96)))
-        readonly property real sourceHeight: Math.min(root.height, 59)
+        readonly property real sourceHeight: Math.min(root.finalHeight, 59)
         // Keep the source inside this popup's allocation, at the edge nearest
         // its anchor. The final menu geometry and row layout remain fixed.
-        width: sourceWidth + (root.width - sourceWidth) * progress
-        height: sourceHeight + (root.height - sourceHeight) * progress
+        width: sourceWidth + (root.finalWidth - sourceWidth) * progress
+        height: sourceHeight + (root.finalHeight - sourceHeight) * progress
         x: (root.width - width) / 2
-        y: root.position === "bottom" && !root.placeBelow ? root.height - height : 0
+        y: root.position === "bottom" && !root.placeBelow
+            ? root.height - root.revealPadding - height : root.revealPadding
         clip: morphing
     }
 
@@ -382,10 +392,10 @@ PopupWindow {
         Item {
             // Reveal a stable list through the growing capsule, just like the
             // Wi-Fi submenu; never squash or relayout the text while opening.
-            x: -revealFrame.x
-            y: -revealFrame.y
-            width: root.width
-            height: root.height
+            x: root.revealPadding - revealFrame.x
+            y: root.revealPadding - revealFrame.y
+            width: root.finalWidth
+            height: root.finalHeight
             opacity: revealFrame.contentProgress
 
             // Viewport for the menu rows. It never grows past root.menuSurfaceHeight,
