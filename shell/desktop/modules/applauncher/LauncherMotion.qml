@@ -35,7 +35,7 @@ Item {
         prepare();
         requestedOpen = false;
         if (mapped)
-            startGlassFade(0, 300, Easing.InCubic);
+            startGlassFade(0, 200, Easing.OutCubic);
         else
             glassFinished = true;
         changing = false;

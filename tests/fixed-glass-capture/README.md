@@ -62,7 +62,7 @@ The `codex/launcher-icon-motion-soft-glass` variant restores the original tile
 spread: X/Y displacement contracts 20% toward the grid center (capped at 32/24
 pixels), scale is 0.8→1 over 300 ms, and opacity fades over 200 ms. Tile layouts
 and icon textures remain fixed. The glass outline stays at its final dimensions,
-fades in over 100 ms so tile motion remains visible, and fades out over 300 ms.
+fades in over 100 ms so tile motion remains visible, and fades out over 200 ms with the same OutCubic curve as the tiles.
 The panel retires after both the glass fade and actual tile jobs finish, including
 interrupted animations and delegate destruction; there is no fixed settle timer.
 
