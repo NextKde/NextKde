@@ -374,6 +374,7 @@ Item {
     // from the rest of the shell.
     ContextMenu {
         id: trashContextMenu
+        capsuleReveal: true
         anchorItem: trashIcon
         position: ConfigService.position
         baseColor: ThemeService.backgroundColor
@@ -408,6 +409,7 @@ Item {
     // away from the rest of the shell.
     ContextMenu {
         id: appLauncherContextMenu
+        capsuleReveal: true
         anchorItem: appLauncherIcon
         position: ConfigService.position
         baseColor: ThemeService.backgroundColor

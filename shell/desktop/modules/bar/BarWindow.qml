@@ -93,6 +93,11 @@ PanelWindow {
         // and exact corner declaration in backdrop themes.
         LiquidGlassPanel {
             id: barSurface
+            // Transparent layout must retire the shape as well as the blur
+            // region: the compositor can recover a backdrop from live shapes.
+            visible: !root.transparentMode
+                && (AppearanceConfigService.effectiveBarBlur > 0.005
+                    || AppearanceConfigService.effectiveBarLiquid > 0.005)
             anchors.fill: parent
             radius: AppearanceConfigService.barLayoutMode === "floating"
                 ? barWrapper.height * 0.5 : 0

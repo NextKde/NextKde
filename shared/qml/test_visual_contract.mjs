@@ -56,8 +56,8 @@ const uiModuleCmake = read("./CMakeLists.txt");
 assert.doesNotMatch(uiModuleCmake,
     /colorize\/(?:Artwork|Wallpaper)ColorSource\.qml/,
     "standalone Kos.Ui never packages Quickshell-only color samplers");
-assert.match(windowSource, /color:\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
-    "glass mode clears the native window exactly once");
+assert.match(windowSource, /color:\s*modernDesign\s*\|\|\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
+    "glass and rounded windows clear the native window exactly once");
 assert.match(windowSource, /background:[\s\S]*color:\s*AppTheme\.windowSurface/,
     "window background uses the material surface selected by the shared theme");
 assert.match(windowSource, /color:\s*AppTheme\.windowTintSurface/,
@@ -147,10 +147,26 @@ assert.match(pageCacheSource, /_lastUsed[\s\S]*PageCachePolicy\.trim/,
 assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIndex/,
     "inactive page construction cannot block the selected page");
 
+const collapsibleSidebar = read("./foundation/KosSidebar.qml");
+assert.match(collapsibleSidebar, /color:\s*AppTheme\.sidebarSurface/,
+    "collapsible sidebars retain the adaptive semantic material");
+assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
+    "collapsible sidebars do not expose desktop content");
+assert.match(collapsibleSidebar, /enabled:\s*expanded/,
+    "collapsed navigation cannot take keyboard focus");
 for (const app of ["calendar", "todo", "weather", "music"]) {
     const source = read(`../../apps/${app}/qml/Main.qml`);
-    assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
-        `${app} has an adaptive semantic sidebar material`);
+    if (app === "music") {
+        assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
+            `${app} has an adaptive semantic sidebar material`);
+    } else {
+        assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
+            `${app} uses the adaptive collapsible sidebar`);
+        assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
+            `${app} provides a way to restore collapsed navigation`);
+        assert.match(source, /KosWindowControls\s*\{\s*targetWindow:\s*root/,
+            `${app} exposes its frameless window controls`);
+    }
     assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
         `${app} sidebar does not expose desktop content`);
     assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
@@ -376,7 +392,7 @@ for (const [widget, desktopId] of [
     ["Weather", "kos-weather"],
     ["Calendar", "kos-calendar"],
     ["Todo", "kos-todo"],
-    ["Music", "kos-music"]
+    ["Music", "listenfree"]
 ]) {
     assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
         `${widget} widget launches its matching installed application`);
@@ -413,11 +429,14 @@ const appIconSource = read("../../shell/desktop/modules/common/AppIcon.qml");
 const iconThemeReloadSource = read("../../shell/desktop/modules/common/IconThemeReloadService.qml");
 const quickSearchWindow = read("../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml");
 assert.match(appLauncherWindow,
-    /PopupMotion\s*\{[\s\S]*openDuration:\s*300[\s\S]*closeDuration:\s*240/,
-    "the large launcher surface uses a slower reversible entrance and exit");
+    /LauncherMotion\s*\{[\s\S]*target:\s*launcherContent/,
+    "the launcher coordinates tile motion while retaining its content container");
+const launcherMotion = read("../../shell/desktop/modules/applauncher/LauncherMotion.qml");
+assert.match(launcherMotion, /interval:\s*300[\s\S]*!motion\.requestedOpen[\s\S]*motion\.mapped = false/,
+    "the launcher remains mapped until its closing tile animations finish");
 assert.match(appLauncherWindow,
-    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*!root\.isFullscreenMode/,
-    "Launchpad keeps its resolved catalogue and visible-mode delegates warm between opens");
+    /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*root\.contentAlive && !root\.isFullscreenMode/,
+    "Launchpad retains its catalogue while delegates follow the content lifetime and visible mode");
 assert.match(appLauncherWindow,
     /property bool outputAvailable:\s*false[\s\S]*visible:\s*root\.outputAvailable/,
     "Launchpad retains one backing window while a real output is available");
@@ -430,10 +449,10 @@ assert.match(appLauncherWindow,
 assert.match(appLauncherWindow,
     /BackgroundEffect\.blurRegion:[\s\S]*root\.panelVisible/,
     "the closed Launchpad surface never publishes a compositor blur region");
-assert.match(appLauncherWindow, /blurAnchor:\s*launcherCard/,
-    "launcher native glass follows the animated card, not the fixed layout");
-assert.match(appLauncherWindow, /width:\s*launcherRevealClip\.width \* root\.panelWidthProgress[\s\S]*height:\s*launcherRevealClip\.height \* root\.panelHeightProgress/,
-    "the launcher backdrop expands and contracts with its contents");
+assert.match(appLauncherWindow, /blurAnchor:\s*background/,
+    "launcher native glass follows the stationary backdrop");
+assert.match(appLauncherWindow, /id:\s*launcherCard[\s\S]*width:\s*launcherRevealClip\.width\s+height:\s*launcherRevealClip\.height/,
+    "the launcher backdrop retains its full dimensions during tile motion");
 assert.match(appIconSource,
     /backer\.cache:\s*(?:!root\.needsEffect\s*&&\s*)?IconThemeReloadService\.pixmapCacheAllowed/,
     "shared app icons cache decoded pixmaps only on the direct-render path");
@@ -500,7 +519,7 @@ assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
 assert.match(networkPanel,
-    /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
+    /WifiSignalIcon\s*\{[^{}]*signalStrength:\s*NetworkService\.signalStrength/,
     "the network panel reuses the live Wi-Fi signal glyph");
 for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
     const start = controlCenterPanel.indexOf(marker);

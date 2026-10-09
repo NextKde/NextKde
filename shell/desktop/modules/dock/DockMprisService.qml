@@ -51,6 +51,10 @@ QtObject {
     // Any lyric source counts: KOS live lines, LRC-timed or untimed plain
     // text. Only a track with none of these hides the widget lyrics switch.
     readonly property bool lyricsAvailable: _hasLiveLyrics || _lyricText.length > 0
+    readonly property bool desktopLyricsAllowed: {
+        const revision = metadataRevision
+        return metadataString("kos:desktopLyricsEnabled") !== "false"
+    }
     readonly property string currentLyric: {
         const revision = metadataRevision
         if (_hasLiveLyrics) return metadataString("kos:currentLyric")
@@ -68,7 +72,7 @@ QtObject {
     property Timer lyricPositionTimer: Timer {
         interval: 500
         repeat: true
-        running: DeskCenterConfigService.desktopLyricsActive
+        running: DeskCenterConfigService.desktopLyricsActive && svc.desktopLyricsAllowed
             && svc.activePlayer !== null && svc.activePlayer.isPlaying
             && svc.activePlayer.positionSupported
             && !svc._hasLiveLyrics && svc._lyricLines.length > 0
@@ -137,7 +141,7 @@ QtObject {
             player?.trackArtist ?? "", metadataString("kos:currentLyric"),
             metadataString("kos:nextLyric"), metadataString("xesam:asText"),
             metadataString("kos:playbackStatus"),
-            metadataString("kos:playbackState"), player?.isPlaying ?? false].join("\u001f")
+            metadataString("kos:playbackState"), metadataString("kos:desktopLyricsEnabled"), player?.isPlaying ?? false].join("\u001f")
         if (signature !== _metadataSignature) {
             _metadataSignature = signature
             metadataRevision++
@@ -170,7 +174,9 @@ QtObject {
     // ── Select the best active player ──
     // Priority: playing > paused > any > none
     function _updateActivePlayer() {
-        const refs = svc._playerRefs
+        // Stable service-name ordering gives the lock screen the same tie-break.
+        const refs = svc._playerRefs.slice().sort((a, b) =>
+            String(a?.dbusName ?? "").localeCompare(String(b?.dbusName ?? "")))
         if (!refs || refs.length === 0) {
             activePlayer = null
             hasPlayingPlayer = false

@@ -1,37 +1,10 @@
 import QtQuick
 import "KosKineticScrollPhysics.mjs" as Physics
 
-// Wheel scrolling with browser-style inertia, for any Flickable-shaped view.
-//
-// Declared *inside* the view it drives:
-//
-//     ListView {
-//         id: resultView
-//         contentHeight: ...
-//         KineticScroll { flickable: resultView }
-//     }
-//
-// The component claims the wheel ahead of the Flickable's own handling. While
-// the wheel turns it moves the view *itself* -- no animation between events, so
-// the view is exactly the input and never lags the hand. When the events stop,
-// the speed the gesture was carrying is released as a short glide; the next
-// event cancels it outright, so a reversal bites on the next notch instead of a
-// few hundred pixels later. All of that arithmetic lives in
-// KosKineticScrollPhysics.mjs, where it is replayed in node.
-//
-// The host view keeps its geometry, its model and its delegates exactly as they
-// were -- and it keeps its native drag and flick, because the component only
-// runs while the view is standing still.
-//
-// Two properties of the placement matter:
-//
-//   * It has to be a child of the view, and it positions itself from the
-//     view's contentX/contentY so that it covers the *viewport* rather than the
-//     content: a Flickable's children live in content coordinates, and only
-//     (contentX, contentY) maps to the visible top-left corner.
-//   * It must be left unanchored and uncontested. Nothing about the view's
-//     scrolling changes shape here, so an outright `enabled: false` is the way
-//     to keep the wheel for a view that wants its own handling.
+// Opt-in mouse-wheel inertia for ordinary lists. Place inside a Flickable;
+// its content item hosts the low-priority catcher behind interactive children.
+// Pixel scrolling stays native so trackpads keep their existing inertia.
+// FrameAnimation integrates only rendered frames and sleeps when settled.
 Item {
     id: root
 
@@ -51,6 +24,11 @@ Item {
     // cannot scroll sideways ignore this by themselves (their range collapses
     // to a single value).
     property bool horizontal: true
+    property bool reducedMotion: AppTheme.reduceMotion
+    property bool _animating: false
+    onReducedMotionChanged: if (reducedMotion) _release()
+    onVisibleChanged: if (!visible) _release()
+    onEnabledChanged: if (!enabled) _release()
 
     // The view's scroll ranges. Recomputed when its content changes size, which
     // is what keeps a filtered list from resting outside its new bounds.
@@ -101,8 +79,8 @@ Item {
     y: _viewportOrigin.y
     width: flickable ? flickable.width : 0
     height: flickable ? flickable.height : 0
-    // Above the delegates and below any popup the host floats over the view.
-    z: 1000
+    // Input belongs to controls and nested views before this fallback.
+    z: -1
 
     // Motion state, one axis each: where the view is drawn, where the wheel
     // asked for it to be, and how fast it is travelling between the two.
@@ -113,7 +91,6 @@ Item {
     // animation has to stand down instead of dragging it back.
     property real _writtenY: NaN
     property real _writtenX: NaN
-    property double _lastTick: 0
     // When the previous wheel event of this gesture arrived: the gap to it is
     // the only speed signal a wheel gives, and a gap wider than the momentum
     // window means a new gesture rather than a continuing one.
@@ -130,16 +107,23 @@ Item {
 
     // Give the view back, with no motion left in either axis.
     function _release() {
-        _ticker.stop();
-        _lastTick = 0;
+        _animating = false;
+        _handTimer.stop();
+        _lastWheel = 0;
         _adopt();
     }
 
-    // A wheel event: move the view now, and remember how fast the gesture is
-    // going, so the glide knows what to inherit when the events stop.
+    // A wheel event updates the target and gesture speed. The next rendered
+    // frame moves the view; event frequency does not advance simulation time.
     function _onWheel(angleX, angleY, pixelX, pixelY, shiftHeld) {
-        if (!flickable)
-            return;
+        if (!flickable || !enabled || !visible || !flickable.interactive)
+            return false;
+        // Pixel events already carry continuous-device/OS inertia. Leave
+        // these, Ctrl gestures and reduced motion to the native controls.
+        if (pixelX !== 0 || pixelY !== 0 || reducedMotion) {
+            _release();
+            return false;
+        }
         // The newest operation owns the view: a glide is cancelled outright and
         // the input continues from where the view actually is, so a reversal
         // bites on this very event.
@@ -147,7 +131,7 @@ Item {
         // been scrolled natively since); one that interrupts a gesture in flight
         // continues from where the view actually is, and push() is what cancels
         // the glide and any reversal.
-        if (!_ticker.running)
+        if (!_animating)
             _adopt();
 
         const canScrollVertically = verticalRange.max > verticalRange.min;
@@ -160,12 +144,24 @@ Item {
             vertical = { delta: 0, continuous: vertical.continuous };
         } else if (vertical.delta !== 0 && horizontal.delta === 0
                 && !canScrollVertically && canScrollSideways) {
-            // A view that can only travel sideways (the wallpaper strip, a
-            // horizontal film strip) takes the plain wheel: with nothing to
+            // A view that can only travel sideways takes the plain wheel:
+            // with nothing to
             // scroll vertically, refusing the event would just park it.
             horizontal = vertical;
             vertical = { delta: 0, continuous: vertical.continuous };
         }
+        if (!root.horizontal && vertical.delta === 0 && horizontal.delta !== 0) {
+            vertical = horizontal;
+            horizontal = { delta: 0, continuous: false };
+        }
+        const movesVertical = vertical.delta !== 0 && canScrollVertically
+            && (Physics.clamp(_vertical.target - vertical.delta, verticalRange.min, verticalRange.max) !== _vertical.target
+                || (_animating && _vertical.position !== _vertical.target));
+        const movesHorizontal = horizontal.delta !== 0 && canScrollSideways
+            && (Physics.clamp(_horizontal.target - horizontal.delta, horizontalRange.min, horizontalRange.max) !== _horizontal.target
+                || (_animating && _horizontal.position !== _horizontal.target));
+        if (!movesVertical && !movesHorizontal)
+            return false;
         // How fast this gesture is running: KWin and high-resolution wheels
         // deliver a notch as a ramp of events, and the gap between them is the
         // only speed signal there is.
@@ -173,40 +169,32 @@ Item {
         const dtSince = _lastWheel === 0 ? Infinity : (now - _lastWheel) / 1000;
         _lastWheel = now;
         _handTimer.restart();
-        // A view that opted out of sideways travel takes such an event on its
-        // vertical axis rather than dropping it (Shift+wheel on a list).
-        if (!root.horizontal && vertical.delta === 0 && horizontal.delta !== 0) {
-            vertical = horizontal;
-            horizontal = { delta: 0, continuous: false };
-        }
         // Qt's sign: a wheel turned away from the user reports a positive
         // angleDelta and scrolls *towards the start* of the content.
         if (horizontal.delta !== 0)
             Physics.push(_horizontal, -horizontal.delta, horizontalRange, dtSince);
         if (vertical.delta !== 0)
             Physics.push(_vertical, -vertical.delta, verticalRange, dtSince);
-        // Start the spring on this event rather than one interval later, so the
-        // motion begins on the frame the wheel was turned.
-        _lastTick = 0;
-        _ticker.restart();
-        _tick();
+        // Changing the target schedules rendering; input never advances physics.
+        _animating = true;
+        return true;
     }
 
     // The hand stopped turning the wheel: hand the gesture's speed to the glide
     // and start pumping frames for it.
     function _handStopped() {
+        _lastWheel = 0;
         const vertical = Physics.release(_vertical, verticalRange);
         const horizontal = root.horizontal
             ? Physics.release(_horizontal, horizontalRange) : false;
         if (vertical || horizontal) {
-            _lastTick = 0;
-            _ticker.start();
+            _animating = true;
         }
     }
 
     // One frame of whichever phase the axis is in: the spring following the
     // wheel, or the glide it was released into.
-    function _tick() {
+    function _tick(frameSeconds) {
         if (!enabled || !flickable || flickable.moving || !flickable.interactive) {
             _release();
             return;
@@ -220,13 +208,9 @@ Item {
             return;
         }
 
-        // See frameDt: measured, capped, and one nominal frame for the tick that
-        // runs on the wheel event itself.
-        const now = Date.now();
-        const dt = Physics.frameDt(now, _lastTick);
-        _lastTick = now;
-        if (dt <= 0)
-            return;
+        // Integrate once per rendered frame, never once per input event.
+        const dt = Math.min(Math.max(0, frameSeconds), Physics.CONFIG.maxFrameTime);
+        if (dt <= 0) return;
 
         const verticalMoving = Physics.advance(_vertical, dt, verticalRange);
         const horizontalMoving = root.horizontal
@@ -239,25 +223,16 @@ Item {
         if (root.horizontal)
             flickable.contentX = _writtenX = _horizontal.position;
         if (!verticalMoving && !horizontalMoving) {
-            _ticker.stop();
-            _lastTick = 0;
+            _animating = false;
         }
     }
 
     Component.onCompleted: _adopt()
     onFlickableChanged: _adopt()
 
-    // 16ms is a sampling interval, not a frame promise: the motion is driven by
-    // measured elapsed time (above), so a late tick moves further instead of
-    // running slow. FrameAnimation would tie this to the render loop, but it
-    // does not advance at all where no frames are produced (offscreen loads,
-    // compositor stalls), which is exactly where a frozen scroll would look
-    // like a hung shell.
-    Timer {
-        id: _ticker
-        interval: 16
-        repeat: true
-        onTriggered: root._tick()
+    FrameAnimation {
+        running: root._animating && root.visible && root.enabled
+        onTriggered: root._tick(frameTime)
     }
 
     // The hand stopped: no wheel event for CONFIG.releaseDelay means the gesture
@@ -268,16 +243,8 @@ Item {
         onTriggered: root._handStopped()
     }
 
-    // A MouseArea rather than a WheelHandler, deliberately.
-    //
-    // A WheelHandler silently receives nothing on the shell's Wayland surfaces:
-    // measured on a live session, every WheelHandler in this tree -- one on each
-    // level of the launcher's delivery chain -- stayed silent while the grid
-    // scrolled under the same wheel, and the only sensor that ever reported the
-    // event was a MouseArea's onWheel. (The shell's own fullscreen pager wheel
-    // receiver is written the same way.) acceptedButtons stays NoButton so this
-    // claims the wheel and nothing else: presses, clicks and hover all continue
-    // to the content underneath.
+    // MouseArea provides the established shell wheel path. NoButton preserves
+    // clicks/drags; low stacking priority preserves child wheel handlers.
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.NoButton
@@ -286,10 +253,13 @@ Item {
         // must not start scrolling because inertia was added.
         enabled: root.enabled && root.flickable !== null && root.flickable.interactive
         onWheel: function (event) {
-            root._onWheel(event.angleDelta.x, event.angleDelta.y,
+            if (event.modifiers & Qt.ControlModifier) {
+                event.accepted = false;
+                return;
+            }
+            event.accepted = root._onWheel(event.angleDelta.x, event.angleDelta.y,
                 event.pixelDelta.x, event.pixelDelta.y,
                 (event.modifiers & Qt.ShiftModifier) !== 0);
-            event.accepted = true;
         }
     }
 }

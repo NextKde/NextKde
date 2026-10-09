@@ -422,8 +422,6 @@ KosApplicationWindow {
                         onClicked: root.openPlaylist(Number(modelData.id),
                                                      String(modelData.name))
                     }
-
-                    KosKineticScroll { flickable: playlistList }
                 }
 
                 RowLayout {
@@ -856,8 +854,6 @@ KosApplicationWindow {
                                         }
                                     }
                                 }
-
-                                KosKineticScroll { flickable: folderList }
                             }
 
                             Label {

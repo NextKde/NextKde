@@ -43,6 +43,9 @@
 #include <array>
 #include <cerrno>
 #include <memory>
+#if defined(__GLIBC__)
+#include <malloc.h>
+#endif
 #include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -61,6 +64,27 @@ constexpr int kMaxThumbnailConcurrency = 2;
 constexpr qsizetype kMaxThumbnailQueue = 32;
 constexpr qint64 kThumbnailFreshMs = 5000;
 constexpr int kThumbnailWorkerThreads = 4;
+
+// A raw screenshot frame is tens of MB of RGBA. After the first large block is
+// freed glibc raises its dynamic mmap threshold, so later captures of the same
+// size are served from the heap arenas and their pages are not returned to the
+// OS on free -- the daemon's RSS ratchets up in ~25 MB steps while Dock/Stage
+// previews are live and does not come back down. Hand the freed arenas back
+// after each capture batch. Throttled: a trim walks every arena, and captures
+// complete at a few hertz while previews are open.
+void trimCaptureMemory()
+{
+#if defined(__GLIBC__)
+    static std::atomic<qint64> lastTrimMs{0};
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    qint64 last = lastTrimMs.load(std::memory_order_relaxed);
+    if (now - last < 5000)
+        return;
+    if (!lastTrimMs.compare_exchange_strong(last, now, std::memory_order_relaxed))
+        return;
+    malloc_trim(0);
+#endif
+}
 
 class Bridge final : public QObject {
     Q_OBJECT
@@ -461,10 +485,12 @@ private:
                 expectedBytes->store(0);
                 // The reader exits on the expected-size check within one poll
                 // cycle; reap it off-thread so this callback never blocks.
-                // Fire-and-forget: we only need waitForFinished to return, the
-                // QFuture is intentionally discarded.
+                // Reap off-thread and consume any partial pixels before trimming.
                 m_thumbnailPool.start(
-                    [pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
+                    [pixelsFuture]() mutable {
+                        const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
+                        const QByteArray discardedPixels = pixelsFuture.takeResult();
+                    });
                 publishThumbnailError(id, reply.error().message());
                 endThumbnailCapture(id);
                 return;
@@ -491,7 +517,12 @@ private:
             const QPointer<Bridge> guard(this);
             m_thumbnailPool.start([guard, id, pixelsFuture, width, height, stride,
                                format, expectedSize, serial]() mutable {
-                const QByteArray bytes = pixelsFuture.result();
+                // Release the capture's heap pages on every exit path, the
+                // failure branches below included.
+                const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
+                // Consume the future's stored result; result() leaves another
+                // reference alive in the task/watcher after this scope's trim.
+                const QByteArray bytes = pixelsFuture.takeResult();
                 if (!guard)
                     return;
                 QMetaObject::invokeMethod(guard, [guard, id] {

@@ -1,0 +1,73 @@
+--- a/src/plugins/Transports/http/httpstreamreader.h
++++ b/src/plugins/Transports/http/httpstreamreader.h
+@@ -81,6 +81,7 @@
+     bool seek (qint64 pos) override;
+     qint64 size() const override;
+     void wakeReader() { m_dataArrived.wakeAll(); }
++    bool waitForBufferSpace(size_t incoming); // caller holds m_mutex
+     void cancelRead();
+     /**
+      *  helper functions
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -56,6 +56,11 @@
+     }
+ 
+     size_t data_size = size * nmemb;
++    if(!dl->waitForBufferSpace(data_size))
++    {
++        dl->mutex()->unlock();
++        return 0;
++    }
+     // Keep 1–2 MiB of consumed data for decoder frame-header lookbacks.
+     // Compact in chunks, not on every read. ICY streams retain no history.
+     if(dl->stream()->buf_offset > 2 * 1024 * 1024)
+@@ -254,6 +259,7 @@
+             const qint64 delta = pos - m_readOffset;
+             m_stream.buf_offset = static_cast<size_t>(static_cast<qint64>(m_stream.buf_offset) + delta);
+             m_stream.buf_fill = static_cast<size_t>(static_cast<qint64>(m_stream.buf_fill) - delta);
++            m_dataArrived.wakeAll();
+             m_readOffset = pos;
+             m_skipBytes = 0;
+             m_cachedCursor = -1;
+@@ -356,6 +362,7 @@
+             const qint64 delta = m_cachedCursor - m_readOffset;
+             m_stream.buf_offset = size_t(qint64(m_stream.buf_offset) + delta);
+             m_stream.buf_fill = size_t(qint64(m_stream.buf_fill) - delta);
++            m_dataArrived.wakeAll();
+             m_readOffset = m_cachedCursor;
+             m_skipBytes = 0;
+             m_cachedCursor = -1;
+@@ -376,6 +383,7 @@
+         const qint64 skip = qMin(m_skipBytes, static_cast<qint64>(m_stream.buf_fill));
+         m_stream.buf_offset += static_cast<size_t>(skip);
+         m_stream.buf_fill -= static_cast<size_t>(skip);
++        m_dataArrived.wakeAll();
+         m_readOffset += skip;
+         m_skipBytes -= skip;
+     }
+@@ -566,6 +574,16 @@
+     }
+ }
+ 
++bool HttpStreamReader::waitForBufferSpace(size_t incoming)
++{
++    // Bound unread compressed audio instead of downloading up to 150 MB into RAM.
++    // Keep the configured prebuffer and the existing seek/lookback caches.
++    const size_t highWater = qMax<size_t>(4 * 1024 * 1024, m_prebufferSize + incoming);
++    while(!m_stream.aborted && !m_cancelled.load() && m_stream.buf_fill + incoming > highWater)
++        m_dataArrived.wait(&m_mutex);
++    return !m_stream.aborted && !m_cancelled.load();
++}
++
+ qint64 HttpStreamReader::readBuffer(char* data, qint64 maxlen)
+ {
+     if (m_stream.buf_fill > 0 && !m_stream.aborted)
+@@ -573,6 +591,7 @@
+         int len = qMin<qint64>(m_stream.buf_fill, maxlen);
+         memcpy(data, m_stream.buf + m_stream.buf_offset, len);
+         m_stream.buf_fill -= len;
++        m_dataArrived.wakeAll();
+         if (m_stream.totalSize > 0 && !m_stream.icy_metaint)
+             m_stream.buf_offset += static_cast<size_t>(len);
+         else

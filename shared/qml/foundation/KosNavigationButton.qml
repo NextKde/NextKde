@@ -11,7 +11,7 @@ Button {
     hoverEnabled: true
     leftPadding: 14
     rightPadding: 14
-    implicitHeight: Math.round(42 * AppTheme.densityScale)
+    implicitHeight: Math.round((AppTheme.modernDesign ? 38 : 42) * AppTheme.densityScale)
     transformOrigin: Item.Center
     scale: !enabled ? 1 : (down ? AppTheme.pressScale
                                : (hovered ? AppTheme.hoverScale : 1))
@@ -21,6 +21,7 @@ Button {
     }
 
     contentItem: Row {
+        clip: true
         spacing: 10
 
         Label {

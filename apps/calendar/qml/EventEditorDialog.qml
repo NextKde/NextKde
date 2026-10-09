@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosDialog {
+KosWorkspaceDialog {
     id: root
 
     property string editingId: ""
@@ -160,10 +160,13 @@ KosDialog {
     onAccepted: saveRequested(editingId, eventPayload())
 
     contentItem: ScrollView {
+        id: editorScroll
+        contentWidth: availableWidth
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         clip: true
 
         ColumnLayout {
-            width: parent.width
+            width: editorScroll.availableWidth
             spacing: 12
 
             Label {
@@ -171,7 +174,7 @@ KosDialog {
                 color: AppTheme.mutedText
             }
 
-            LiquidTextField {
+            KosTextField {
                 id: titleField
                 Layout.fillWidth: true
                 placeholderText: qsTr("Event title")
@@ -181,7 +184,7 @@ KosDialog {
             RowLayout {
                 Layout.fillWidth: true
 
-                CheckBox {
+                KosCheckBox {
                     id: allDayCheck
                     text: qsTr("All day")
                     onToggled: {
@@ -209,13 +212,13 @@ KosDialog {
                 rowSpacing: 8
 
                 Label { text: qsTr("Start"); color: AppTheme.mutedText }
-                LiquidTextField {
+                KosTextField {
                     id: startDateField
                     Layout.fillWidth: true
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Start date")
                 }
-                LiquidTextField {
+                KosTextField {
                     id: startTimeField
                     Layout.preferredWidth: 96
                     placeholderText: "HH:MM"
@@ -224,13 +227,13 @@ KosDialog {
                 }
 
                 Label { text: qsTr("End"); color: AppTheme.mutedText }
-                LiquidTextField {
+                KosTextField {
                     id: endDateField
                     Layout.fillWidth: true
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("End date")
                 }
-                LiquidTextField {
+                KosTextField {
                     id: endTimeField
                     Layout.preferredWidth: 96
                     placeholderText: "HH:MM"
@@ -240,7 +243,7 @@ KosDialog {
             }
 
             Label { text: qsTr("Location"); color: AppTheme.mutedText }
-            LiquidTextField {
+            KosTextField {
                 id: locationField
                 Layout.fillWidth: true
                 placeholderText: qsTr("Optional location")
@@ -261,7 +264,7 @@ KosDialog {
                     anchors.margins: 12
                     spacing: 8
 
-                    CheckBox {
+                    KosCheckBox {
                         id: linkTodoCheck
                         text: qsTr("Also show this event as a task in Todo")
                         font.weight: Font.DemiBold
@@ -286,7 +289,7 @@ KosDialog {
                         ColumnLayout {
                             Layout.fillWidth: true
                             Label { text: qsTr("Todo list"); color: AppTheme.mutedText }
-                            ComboBox {
+                            KosComboBox {
                                 id: todoListBox
                                 Layout.fillWidth: true
                                 model: root.availableLists
@@ -298,7 +301,7 @@ KosDialog {
                         ColumnLayout {
                             Layout.fillWidth: true
                             Label { text: qsTr("Priority"); color: AppTheme.mutedText }
-                            ComboBox {
+                            KosComboBox {
                                 id: todoPriorityBox
                                 Layout.fillWidth: true
                                 model: [qsTr("None"), qsTr("Low"), qsTr("Medium"),
@@ -316,7 +319,7 @@ KosDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Label { text: qsTr("Repeat"); color: AppTheme.mutedText }
-                    ComboBox {
+                    KosComboBox {
                         id: recurrenceBox
                         Layout.fillWidth: true
                         model: [qsTr("Does not repeat"), qsTr("Daily"), qsTr("Weekly"),
@@ -328,7 +331,7 @@ KosDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Label { text: qsTr("Reminder"); color: AppTheme.mutedText }
-                    ComboBox {
+                    KosComboBox {
                         id: reminderBox
                         Layout.fillWidth: true
                         model: [qsTr("None"), qsTr("At start"), qsTr("5 minutes before"),
@@ -344,7 +347,7 @@ KosDialog {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 130
 
-                TextArea {
+                KosTextArea {
                     id: descriptionField
                     placeholderText: qsTr("Optional notes")
                     wrapMode: TextEdit.Wrap
@@ -352,11 +355,11 @@ KosDialog {
                 }
             }
 
-            Button {
+            KosButton {
                 Layout.alignment: Qt.AlignLeft
                 text: qsTr("Delete event")
                 visible: root.editing
-                palette.buttonText: AppTheme.destructive
+                destructive: true
                 onClicked: {
                     root.deleteRequested(root.editingId)
                     root.close()

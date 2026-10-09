@@ -562,10 +562,6 @@ PopupWindow {
                 }
 
             }
-
-                // A one-row strip: the wheel reaches contentX (KosKineticScroll falls
-                // back to the sideways axis when there is nothing to scroll vertically).
-                KosKineticScroll { flickable: cardsFlickable }
         }
     }
 

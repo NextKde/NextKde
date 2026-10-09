@@ -137,8 +137,6 @@ Item {
                         Behavior on scale { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         Behavior on color { ColorAnimation { duration: 240 } }
                     }
-
-                    KosKineticScroll { flickable: lyricList }
                 }
 
             }

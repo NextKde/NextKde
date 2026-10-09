@@ -91,17 +91,15 @@ export function clamp(value, min, max) {
 
 // One scroll event, in pixels, plus which profile it belongs to.
 //
-// angleDelta is the notched (discrete) channel and pixelDelta the continuous
-// one. A device may report both (a high-resolution wheel reports an angle that
-// sums to 120 per notch plus its own pixel motion); the notched channel wins
-// when it is present, so the distance stays the platform's 0.6px/unit.
+// Pixel deltas identify continuous input even when an angle is also present.
+// The QML companion hands these events to native scrolling without a glide.
 export function wheelStep(angleDelta, pixelDelta, config = CONFIG) {
-    const angle = angleDelta || 0;
-    if (angle !== 0)
-        return { delta: angle * config.angleStep, continuous: false };
     const pixels = pixelDelta || 0;
     if (pixels !== 0)
         return { delta: pixels, continuous: true };
+    const angle = angleDelta || 0;
+    if (angle !== 0)
+        return { delta: angle * config.angleStep, continuous: false };
     return { delta: 0, continuous: false };
 }
 

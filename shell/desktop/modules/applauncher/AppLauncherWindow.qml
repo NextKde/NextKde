@@ -99,6 +99,23 @@ PanelWindow {
     readonly property bool dockAtLeft: AppLauncherService.dockPosition === "left"
     readonly property bool dockAtRight: AppLauncherService.dockPosition === "right"
 
+    function inspectGlass() {
+        const region = launcherSurface.blurRegion;
+        const shape = region ? region.surfaceShape : null;
+        return JSON.stringify({
+            screen: root.screen ? root.screen.name : null,
+            open: root.open, outputAvailable: root.outputAvailable,
+            visible: root.visible, panelVisible: root.panelVisible,
+            glassOpacity: popupMotion.glassOpacity, pendingIcons: popupMotion.pendingIcons,
+            settledOpen: popupMotion.settledOpen,
+            blurDeclared: BackgroundEffect.blurRegion !== null,
+            shapeActive: shape ? shape.active : false,
+            shapeEnabled: shape ? shape.enabled : false,
+            materialOpacity: shape ? shape.materialOpacity : null,
+            geometry: {x: background.x, y: background.y, width: background.width, height: background.height}
+        });
+    }
+
     Component.onCompleted: console.log("[AppLauncherWindow] created")
     onOpenChanged: {
         console.log("[AppLauncherWindow] received open=" + open);
@@ -106,16 +123,20 @@ PanelWindow {
             contentGraceTimer.stop();
             const needsContentRebuild = !root.contentAlive;
             root.contentAlive = true;
-            if (root.panelVisible)
-                searchFocusTimer.restart();
-            if (applicationsDirty)
+            // Populate a cold catalog before mapping, not on the final frames.
+            const needsCatalogBuild = applicationsDirty && applications.length === 0;
+            if (needsCatalogBuild) {
+                applicationCatalogRefresh.stop();
+                root.rebuildApplications();
+            } else if (applicationsDirty) {
                 applicationCatalogRefresh.restart();
+            }
             root.cancelFullscreenPageTransition();
             root.syncPagerSlots();
             // Let model/delegate creation settle before starting a cold-open
             // animation. Theme icon loading must remain on the GUI thread.
             // A close before this deferred call must not reopen the surface.
-            if (needsContentRebuild) {
+            if (needsContentRebuild || needsCatalogBuild) {
                 Qt.callLater(function () {
                     if (root.open)
                         popupMotion.open();
@@ -131,6 +152,13 @@ PanelWindow {
     LauncherMotion {
         id: popupMotion
         target: launcherContent
+        onSettledOpenChanged: {
+            if (settledOpen) {
+                searchFocusTimer.restart();
+                if (root.applicationsDirty)
+                    applicationCatalogRefresh.restart();
+            }
+        }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -187,10 +215,14 @@ PanelWindow {
     // coalesced here instead of becoming work on the launcher's opening frame.
     Timer {
         id: applicationCatalogRefresh
-        interval: root.open ? popupMotion.openDuration + 20 : 750
+        interval: root.open ? 160 : 750
         repeat: false
         running: true
         onTriggered: {
+            // Keep the current model throughout either transition. Completion
+            // or hiding will reschedule a dirty catalog after it settles.
+            if (root.panelVisible && !popupMotion.settledOpen)
+                return;
             if (root.applicationsDirty)
                 root.rebuildApplications();
         }
@@ -911,8 +943,10 @@ PanelWindow {
             fullscreenPage = 0;
             keyboardSelectionActive = false;
             contentAlive = true;
-            searchFocusTimer.restart();
         } else {
+            searchFocusTimer.stop();
+            if (root.applicationsDirty)
+                applicationCatalogRefresh.restart();
             contentGraceTimer.restart();
             dismissApplicationMenu();
             editMode = false;
@@ -938,9 +972,13 @@ PanelWindow {
     focusable: root.open && !externalDialogOpen
     Timer {
         id: searchFocusTimer
-        interval: 1
+        // Give the compositor endpoint frame room before focus/IME scene updates.
+        interval: 80
         repeat: false
-        onTriggered: searchBar.forceActiveFocus()
+        onTriggered: {
+            if (root.open && popupMotion.interactive && !root.externalDialogOpen)
+                searchBar.forceActiveFocus();
+        }
     }
     Timer {
         id: contentGraceTimer
@@ -1035,6 +1073,7 @@ PanelWindow {
 
     ContextMenu {
         id: appContextMenu
+        capsuleReveal: true
         property var application: null
         baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
@@ -1190,7 +1229,9 @@ PanelWindow {
             width: launcherRevealClip.width
             height: launcherRevealClip.height
             visible: root.panelVisible
-            enabled: root.open
+            // Defer input until the tile jobs finish so clicks and hover
+            // cannot interrupt the entrance motion.
+            enabled: popupMotion.interactive
             // Content layout and clipping stay independent of the backdrop.
             clip: false
 
@@ -1215,8 +1256,13 @@ PanelWindow {
                     layer.enabled: fallbackEnabled && continuousCorners
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
-                    scrimLevel: "balanced"
-                    // Keep the glass outline and capture bounds stationary.
+                    // Adaptive tint, one preset above the Dock's subtle level.
+                    scrimLevel: "transparent"
+                    // Keep the outline fixed and soften only the complete finish.
+                    materialOpacity: popupMotion.glassOpacity
+                    // QML-painted themes have their own matching fade. The
+                    // native effect fades separately through protocol metadata.
+                    opacity: fallbackEnabled ? popupMotion.glassOpacity : 1
                     scrimOpacity: 1
                 }
 
@@ -1336,122 +1382,144 @@ PanelWindow {
                             }
                             height: 49
 
-                            LiquidControls.LiquidTextField {
-                                id: searchBar
-                                anchors {
-                                    horizontalCenter: parent.horizontalCenter
-                                    verticalCenter: parent.verticalCenter
-                                }
-                                // The pill stays centered in the header band;
-                                // only its width follows the band.
+                            Item {
+                                id: searchSlot
+                                anchors.centerIn: parent
+                                // Keep layout fixed while the field follows the
+                                // same contracted pose and timeline as a tile.
                                 width: Math.min(460, Math.max(300, parent.width * 0.46))
                                 height: 35
 
-                                placeholderText: "搜索应用"
-                                // This is an input affordance, not a second
-                                // liquid surface. KWin renders the launcher
-                                // material behind it; the field keeps only its
-                                // ordinary focus and contrast treatment.
-                                glassColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(1, 1, 1, 0.10))
-                                cornerRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.medium, height)
-                                outlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.08))
-                                focusedOutlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, Qt.rgba(1, 1, 1, 0.24))
-                                textColor: root.launcherForegroundColor
-                                mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
-                                    root.launcherForegroundColor.g,
-                                    root.launcherForegroundColor.b, 0.45)
-                                font.pixelSize: 12
-                                leftPadding: 32
-                                rightPadding: text.length > 0 ? 32 : 12
-                                selectionColor: Qt.rgba(1, 1, 1, 0.30)
-                                selectedTextColor: AppLauncherService.dockForegroundColor
-                                enabled: !root.editMode && !root.openFolder
-
-                                onTextEdited: {
-                                    root.cancelFullscreenPageTransition();
-                                    root.query = text;
-                                    root.selectedIndex = 0;
-                                    root.fullscreenPage = 0;
-                                    root.keyboardSelectionActive = text.length > 0;
-                                }
-                                Keys.onPressed: function (event) {
-                                    const columns = appGrid.columnCount;
-                                    if (event.key === Qt.Key_Left) {
-                                        root.moveSelection(-1);
-                                    } else if (event.key === Qt.Key_Right) {
-                                        root.moveSelection(1);
-                                    } else if (event.key === Qt.Key_Up) {
-                                        root.moveSelection(-columns);
-                                    } else if (event.key === Qt.Key_Down) {
-                                        root.moveSelection(columns);
-                                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                                        root.activateSelected();
-                                    } else if (event.key === Qt.Key_Escape) {
-                                        if (!root.clearSearch())
-                                            AppLauncherService.hide();
-                                    } else {
-                                        return;
-                                    }
-                                    event.accepted = true;
+                                LauncherIconMotion {
+                                    target: searchEntrance
+                                    controller: popupMotion
+                                    opened: popupMotion.requestedOpen
+                                    animateOnCompleted: !popupMotion.settledOpen
+                                    offsetX: 0
+                                    offsetY: Math.max(-24, Math.min(24,
+                                        (header.y + searchSlot.y + searchSlot.height / 2
+                                            - appGrid.y - appGrid.height / 2) * 0.2))
                                 }
 
-                                GlassText {
-                                    anchors {
-                                        left: parent.left
-                                        leftMargin: 11
-                                        verticalCenter: parent.verticalCenter
-                                    }
-                                    text: "⌕"
-                                    color: root.launcherForegroundColor
-                                    // The icon lights up while the field is
-                                    // expanded (focused or holding a query).
-                                    opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
-                                    Behavior on opacity { NumberAnimation { duration: 300 } }
-                                    font.pixelSize: 17
-                                }
+                                Item {
+                                    id: searchEntrance
+                                    width: parent.width
+                                    height: parent.height
 
-                                GlassText {
-                                    anchors {
-                                        right: parent.right
-                                        rightMargin: 10
-                                        verticalCenter: parent.verticalCenter
-                                    }
-                                    // Liquid orb pop-in/out, after the reference's
-                                    // spring cubic-bezier(0.34, 1.56, 0.64, 1):
-                                    // scale 0.5 -> 1 with overshoot, rotate -90 -> 0.
-                                    visible: opacity > 0.01
-                                    opacity: searchBar.text.length > 0
-                                        ? (searchClearMouse.containsMouse ? 0.95 : 0.58) : 0.0
-                                    scale: searchBar.text.length > 0 ? 1.0 : 0.5
-                                    rotation: searchBar.text.length > 0 ? 0 : -90
-                                    Behavior on opacity { NumberAnimation { duration: 180 } }
-                                    Behavior on scale {
-                                        NumberAnimation {
-                                            duration: 450
-                                            easing.type: Easing.Bezier
-                                            easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
-                                        }
-                                    }
-                                    Behavior on rotation {
-                                        NumberAnimation {
-                                            duration: 450
-                                            easing.type: Easing.Bezier
-                                            easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
-                                        }
-                                    }
-                                    text: "×"
-                                    color: root.launcherForegroundColor
-                                    font {
-                                        pixelSize: 17
-                                        weight: Font.DemiBold
-                                    }
-                                    MouseArea {
-                                        id: searchClearMouse
+                                    LiquidControls.LiquidTextField {
+                                        id: searchBar
                                         anchors.fill: parent
-                                        anchors.margins: -4
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.clearSearch()
+                                        // Entrance motion belongs to the wrapper; focus
+                                        // must not start a second scale animation.
+                                        scale: 1
+
+                                        placeholderText: "搜索应用"
+                                        // This is an input affordance, not a second
+                                        // liquid surface. KWin renders the launcher
+                                        // material behind it; the field keeps only its
+                                        // ordinary focus and contrast treatment.
+                                        glassColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.layer4, Qt.rgba(1, 1, 1, 0.10))
+                                        cornerRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.medium, height)
+                                        outlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outlineVariant, Qt.rgba(1, 1, 1, 0.08))
+                                        focusedOutlineColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, Qt.rgba(1, 1, 1, 0.24))
+                                        textColor: root.launcherForegroundColor
+                                        mutedTextColor: Qt.rgba(root.launcherForegroundColor.r,
+                                            root.launcherForegroundColor.g,
+                                            root.launcherForegroundColor.b, 0.45)
+                                        font.pixelSize: 12
+                                        leftPadding: 32
+                                        rightPadding: text.length > 0 ? 32 : 12
+                                        selectionColor: Qt.rgba(1, 1, 1, 0.30)
+                                        selectedTextColor: AppLauncherService.dockForegroundColor
+                                        enabled: !root.editMode && !root.openFolder
+
+                                        onTextEdited: {
+                                            root.cancelFullscreenPageTransition();
+                                            root.query = text;
+                                            root.selectedIndex = 0;
+                                            root.fullscreenPage = 0;
+                                            root.keyboardSelectionActive = text.length > 0;
+                                        }
+                                        Keys.onPressed: function (event) {
+                                            const columns = appGrid.columnCount;
+                                            if (event.key === Qt.Key_Left) {
+                                                root.moveSelection(-1);
+                                            } else if (event.key === Qt.Key_Right) {
+                                                root.moveSelection(1);
+                                            } else if (event.key === Qt.Key_Up) {
+                                                root.moveSelection(-columns);
+                                            } else if (event.key === Qt.Key_Down) {
+                                                root.moveSelection(columns);
+                                            } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                                root.activateSelected();
+                                            } else if (event.key === Qt.Key_Escape) {
+                                                if (!root.clearSearch())
+                                                    AppLauncherService.hide();
+                                            } else {
+                                                return;
+                                            }
+                                            event.accepted = true;
+                                        }
+
+                                        GlassText {
+                                            anchors {
+                                                left: parent.left
+                                                leftMargin: 11
+                                                verticalCenter: parent.verticalCenter
+                                            }
+                                            text: "⌕"
+                                            color: root.launcherForegroundColor
+                                            // The icon lights up while the field is
+                                            // expanded (focused or holding a query).
+                                            opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
+                                            Behavior on opacity { NumberAnimation { duration: 300 } }
+                                            font.pixelSize: 17
+                                        }
+
+                                        GlassText {
+                                            anchors {
+                                                right: parent.right
+                                                rightMargin: 10
+                                                verticalCenter: parent.verticalCenter
+                                            }
+                                            // Liquid orb pop-in/out, after the reference's
+                                            // spring cubic-bezier(0.34, 1.56, 0.64, 1):
+                                            // scale 0.5 -> 1 with overshoot, rotate -90 -> 0.
+                                            visible: opacity > 0.01
+                                            opacity: searchBar.text.length > 0
+                                                ? (searchClearMouse.containsMouse ? 0.95 : 0.58) : 0.0
+                                            scale: searchBar.text.length > 0 ? 1.0 : 0.5
+                                            rotation: searchBar.text.length > 0 ? 0 : -90
+                                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                                            Behavior on scale {
+                                                NumberAnimation {
+                                                    duration: 450
+                                                    easing.type: Easing.Bezier
+                                                    easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
+                                                }
+                                            }
+                                            Behavior on rotation {
+                                                NumberAnimation {
+                                                    duration: 450
+                                                    easing.type: Easing.Bezier
+                                                    easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
+                                                }
+                                            }
+                                            text: "×"
+                                            color: root.launcherForegroundColor
+                                            font {
+                                                pixelSize: 17
+                                                weight: Font.DemiBold
+                                            }
+                                            MouseArea {
+                                                id: searchClearMouse
+                                                anchors.fill: parent
+                                                anchors.margins: -4
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: root.clearSearch()
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1657,9 +1725,8 @@ PanelWindow {
 
                             LauncherIconMotion {
                                 target: appEntrance
+                                controller: popupMotion
                                 opened: popupMotion.requestedOpen
-                                // Search/page delegates born after opening appear
-                                // directly, rather than replaying the entrance.
                                 animateOnCompleted: !popupMotion.settledOpen
                                 offsetX: Math.max(-32, Math.min(32,
                                     (appDelegate.x + appDelegate.width / 2
@@ -2916,16 +2983,11 @@ PanelWindow {
                         }
                     }
 
-                        // Browser-style wheel inertia for the app grid. Declared here, at the
-                        // card level, rather than inside the grid: the header band and the
-                        // presentation overlays are siblings of the grid, and a catcher inside
-                        // the grid never sees a wheel that one of them claims first. From here it
-                        // covers the whole card and is hit first, while still letting every click
-                        // through (it handles the wheel only). In fullscreen the grid is not
-                        // interactive and the slot pager owns paging, so the catcher stands down.
-                        KosKineticScroll {
-                            flickable: appGrid
-                        }
+                    // Keep the wheel catcher behind grid controls; fullscreen paging stays native.
+                    KosKineticScroll {
+                        flickable: appGrid
+                        parent: appGrid.contentItem
+                    }
                 }
             }
         }

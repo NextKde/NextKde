@@ -11,10 +11,12 @@ dialog. KDE compositor integration remains in `apps/common`; when native blur
 is unavailable these portable QML surfaces automatically use a high-opacity
 fallback.
 
-It also owns the shell's wheel scrolling: `KosKineticScroll` is a non-visual
-companion for any `Flickable`, `ListView` or `GridView` that gives the wheel
-browser-style inertia (aim, accelerate, coast, stop exactly on the target)
-instead of the platform's per-notch step. Drop it inside the view:
+`KosKineticScroll` adds mouse-wheel inertia to selected long lists. It runs
+behind child controls and nested views, leaves Ctrl gestures and pixel-based
+trackpad scrolling to native handlers, and respects `AppTheme.reduceMotion`.
+Motion advances once per rendered frame through `FrameAnimation`; no timer
+continues integrating a hidden view. An empty range or a settled boundary
+passes the wheel onward.
 
 ```qml
 ListView {
@@ -23,8 +25,9 @@ ListView {
 }
 ```
 
-The curve and its tuning live in `KosKineticScrollPhysics.mjs`, which has no
-QML dependency and is replayed by `test_kinetic_scroll.mjs`. A `ScrollView`
-cannot take the companion as a child -- an extra child in its `contentItem`
-unsizes the view (`contentWidth`/`contentHeight` become -1) -- so those declare
-it beside the view with `parent:` pointing at a plain ancestor.
+The arithmetic lives in `KosKineticScrollPhysics.mjs` and has pure Node tests.
+QML regression tests cover motion, sliders, nested views, trackpad handoff and
+reduced motion. Menus, Dock previews, calendar ScrollView, wallpaper strip and
+legacy music remain native in this integration. ListenFree is not changed.
+A catcher declared beside a view must use a plain ancestor for its parent;
+placing extra children in a ScrollView can invalidate its content sizing.

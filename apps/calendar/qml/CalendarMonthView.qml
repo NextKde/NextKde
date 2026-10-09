@@ -41,7 +41,11 @@ KosCard {
     }
 
     contentItem: GridLayout {
+        id: monthGrid
+        readonly property real dayHeight: Math.max(0, (height - 30 - 6 * rowSpacing) / 6)
         columns: 7
+        uniformCellWidths: true
+        uniformCellHeights: false
         columnSpacing: 3
         rowSpacing: 3
 
@@ -52,6 +56,8 @@ KosCard {
                 required property int index
                 Layout.fillWidth: true
                 Layout.preferredHeight: 30
+                Layout.minimumHeight: 30
+                Layout.maximumHeight: 30
                 text: root.weekdayName(index)
                 color: AppTheme.mutedText
                 horizontalAlignment: Text.AlignHCenter
@@ -77,7 +83,12 @@ KosCard {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.minimumHeight: 54
+                Layout.minimumHeight: 0
+                Layout.preferredHeight: monthGrid.dayHeight
+                Layout.maximumHeight: monthGrid.dayHeight
+                Layout.minimumWidth: 0
+                clip: true
+                readonly property int visibleItemCount: Math.max(0, Math.min(3, Math.floor((height - topPadding - bottomPadding - 26) / 20)))
                 leftPadding: 6
                 rightPadding: 6
                 topPadding: 5
@@ -110,6 +121,13 @@ KosCard {
                         }
 
                         Item { Layout.fillWidth: true }
+                        Label {
+                            text: "+" + (dayButton.dayItems.length - dayButton.visibleItemCount)
+                            visible: dayButton.dayItems.length > dayButton.visibleItemCount
+                            color: AppTheme.mutedText; font.pixelSize: 9
+                            Accessible.name: qsTr("%1 items; select this date to view all").arg(dayButton.dayItems.length)
+                        }
+
 
                         KosToolButton {
                             text: "+"
@@ -127,7 +145,7 @@ KosCard {
                     }
 
                     Repeater {
-                        model: dayButton.dayItems.slice(0, 3)
+                        model: dayButton.dayItems.slice(0, dayButton.visibleItemCount)
 
                         delegate: Rectangle {
                             id: itemChip
@@ -168,14 +186,6 @@ KosCard {
                                 }
                             }
                         }
-                    }
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("+%1 more").arg(dayButton.dayItems.length - 3)
-                        color: AppTheme.mutedText
-                        font.pixelSize: 9
-                        visible: dayButton.dayItems.length > 3
                     }
 
                     Item { Layout.fillHeight: true }

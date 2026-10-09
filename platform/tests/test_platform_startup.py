@@ -108,6 +108,41 @@ def main():
                 fail("platform.ping missing capability " + capability + ": "
                      + buf.decode().strip(), output)
 
+        # Malformed replies must obey the same write cap as events and normal
+        # replies. Keep each input batch small and never drain this peer's
+        # output: the total input stays below the separate 1 MiB read cap.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as stalled:
+            stalled.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+            stalled.settimeout(2)
+            stalled.connect(sock_path)
+            stalled.sendall(b"invalid\n")
+            line = b""
+            while b"\n" not in line:
+                line += stalled.recv(4096)
+            if json.loads(line.splitlines()[0]).get("error", {}).get("code") != "invalid-json":
+                fail("malformed request reply changed", output)
+            kicked = False
+            for _ in range(1200):
+                try:
+                    stalled.sendall(b"x\n" * 128)
+                except (BrokenPipeError, ConnectionResetError):
+                    kicked = True
+                    break
+                time.sleep(0.002)
+            if not kicked:
+                fail("non-reading malformed-request client was not disconnected", output)
+
+        # Deferred abort must leave the daemon and other clients usable.
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as healthy:
+            healthy.settimeout(5)
+            healthy.connect(sock_path)
+            healthy.sendall(b'{"version":1,"requestId":"after-backpressure",'
+                            b'"operation":"platform.ping","payload":{}}\n')
+            with healthy.makefile("rb") as stream:
+                response = json.loads(stream.readline())
+            if not response.get("ok"):
+                fail("daemon unhealthy after backpressure disconnect", output)
+
         # An absent positioning bridge is a supported, bounded fallback.
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as anchor_client:
             anchor_client.settimeout(2)

@@ -128,6 +128,8 @@ Item {
         when: windowShown
 
         function init() {
+            kineticContent._release()
+            kineticContent.reducedMotion = false
             beside.contentY = 0
             scrollView.contentItem.contentY = 0
             kinetic.contentY = 0
@@ -189,6 +191,7 @@ Item {
         // wheel is turning.
         function test_a_single_notch_does_not_jump() {
             mouseWheel(kinetic, 150, 100, 0, -120)
+            tryVerify(function() { return kinetic.contentY > 0 }, 300)
             const firstFrame = kinetic.contentY
             verify(firstFrame > 0 && firstFrame < 72,
                 "a notch must ease in, not jump: " + firstFrame)

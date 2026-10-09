@@ -16,7 +16,8 @@ option(KOS_BUILD_KWIN_PLUGINS "Build the KWin plugins and the window decoration"
 option(KOS_BUILD_CALENDAR "Build the Calendar application" OFF)
 option(KOS_BUILD_TODO "Build the Todo application" OFF)
 option(KOS_BUILD_WEATHER "Build the Weather application" OFF)
-option(KOS_BUILD_MUSIC "Build the Music application" OFF)
+option(KOS_BUILD_MUSIC "Build the legacy Music application" OFF)
+option(KOS_BUILD_LISTENFREE "Build KOS ListenFree (requires its native SDK)" OFF)
 # The depth engine (kos-ai) needs OpenCV and the ONNX Runtime, and the 3D
 # wallpaper plugin needs Qt Quick 3D. KOS_BUILD_SPATIAL decides whether they are
 # built; the resolution below turns it into KOS_SPATIAL_ENABLED, which both this
@@ -435,6 +436,14 @@ if(BUILD_TESTING)
     # only check that keeps shared/contracts/platform.v1.md, ShortcutsService's
     # default table and the daemon's generated handler in agreement.
     find_program(KOS_PYTHON_EXECUTABLE NAMES python3 python)
+    if(KOS_PYTHON_EXECUTABLE)
+        add_test(NAME kos-app.default-registration
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-registration/test_registration.py)
+        set_tests_properties(kos-app.default-registration PROPERTIES LABELS data TIMEOUT 10)
+        add_test(NAME kos-app.install-dependencies
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-install/test_dependencies.py)
+        set_tests_properties(kos-app.install-dependencies PROPERTIES LABELS data TIMEOUT 10)
+    endif()
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
     find_program(KOS_INTERACTION_QUICKSHELL NAMES quickshell)
@@ -464,6 +473,12 @@ if(BUILD_TESTING)
         set_tests_properties(kos-ui.kinetic-scroll PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
             LABELS ui TIMEOUT 30)
+        add_test(NAME kos-ui.kinetic-input
+            COMMAND ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_input.qml)
+        set_tests_properties(kos-ui.kinetic-input PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
         add_test(NAME kos-ui.interaction-runtime
@@ -676,6 +691,12 @@ if(BUILD_TESTING)
     # yet. Without this line the test carries no label and no layer runs it.
     set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
     if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-lockscreen.media-selection
+            COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/media)
+        set_tests_properties(kos-lockscreen.media-selection PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
+            LABELS ui TIMEOUT 15)
         add_test(NAME kos-lockscreen.wake-authentication
             COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/headless/tst_wake.qml)
@@ -696,6 +717,9 @@ if(KOS_BUILD_WEATHER)
 endif()
 if(KOS_BUILD_MUSIC)
     add_subdirectory(apps/music)
+endif()
+if(KOS_BUILD_LISTENFREE)
+    add_subdirectory(apps/listenfree)
 endif()
 
 # The shell imports this QML module even without compositor effects.

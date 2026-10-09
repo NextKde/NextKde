@@ -52,8 +52,8 @@ check(wheelStep(-120, 0).delta === -72 && !wheelStep(-120, 0).continuous,
 check(wheelStep(15, 0).delta === 9, "an angle delta scales linearly");
 check(wheelStep(0, -7).delta === -7 && wheelStep(0, -7).continuous,
     "a pixel-only event is a continuous device and travels 1:1");
-check(wheelStep(-120, -7).delta === -72 && !wheelStep(-120, -7).continuous,
-    "a device reporting both keeps the platform's distance");
+check(wheelStep(-120, -7).delta === -7 && wheelStep(-120, -7).continuous,
+    "a device reporting both keeps the continuous pixel channel");
 check(wheelStep(0, 0).delta === 0, "an empty event moves nothing");
 check(NOTCH === 72, "and it scrolls towards the end of the content");
 

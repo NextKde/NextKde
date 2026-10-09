@@ -1,0 +1,10 @@
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal">
+  <head><metadata><iTunesMetadata>
+    <translations><translation xml:lang="zh"><text for="L2">再次</text></translation></translations>
+    <transliterations><transliteration><text for="L2">a gain</text></transliteration></transliterations>
+  </iTunesMetadata></metadata></head>
+  <body><div>
+    <p begin="1s" end="1.9s" itunes:key="L1"><span begin="00:01.000" end="00:01.400">Hello </span><span begin="00:01.400" end="00:01.900">world</span><span ttm:role="x-translation">你好世界</span><span ttm:role="x-roman">he lo</span></p>
+    <p begin="00:03.000" end="00:03.500" itunes:key="L2"><span begin="3s" end="3.5s">Again</span></p>
+  </div></body>
+</tt>

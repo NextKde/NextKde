@@ -26,6 +26,63 @@ Item {
 
     opacity: enabled ? 1 : 0.45
 
+    // ── Ctrl+滚轮：精细步进（与 LiquidSlider 同一条规约）──────────────────
+    // 光滚轮不接，留给滑块所在的面板滚动；按住 Ctrl 才一档一档地走。
+    property real wheelStep: 0.01
+    // 触控板给像素增量、鼠标给一格 120 的角度增量，分开累积（见 LiquidSlider）
+    property real wheelPixelStep: 10
+    property real _angleAccum: 0
+    property real _pixelAccum: 0
+    property bool _wheelPending: false
+
+    function cancelWheelInteraction() {
+        _wheelPending = false
+        wheelCommitTimer.stop()
+        _angleAccum = 0
+        _pixelAccum = 0
+    }
+    onEnabledChanged: if (!enabled) cancelWheelInteraction()
+    onVisibleChanged: if (!visible) cancelWheelInteraction()
+
+    function stepByWheel(delta) {
+        if (!enabled || !visible || pointerArea.pressed || delta === 0)
+            return
+        const next = Math.max(0, Math.min(1, clampedValue + delta * wheelStep))
+        if (Math.abs(next - clampedValue) < 1e-9)
+            return
+        _wheelPending = true
+        previewChanged(next)
+        wheelCommitTimer.restart()
+    }
+
+    function accumulateWheel(angleY, pixelY) {
+        if (!enabled || !visible || pointerArea.pressed) return
+        if (pixelY !== 0) {
+            _pixelAccum += pixelY
+            while (Math.abs(_pixelAccum) >= wheelPixelStep) {
+                stepByWheel(_pixelAccum > 0 ? 1 : -1)
+                _pixelAccum -= (_pixelAccum > 0 ? wheelPixelStep : -wheelPixelStep)
+            }
+        } else if (angleY !== 0) {
+            _angleAccum += angleY
+            while (Math.abs(_angleAccum) >= 120) {
+                stepByWheel(_angleAccum > 0 ? 1 : -1)
+                _angleAccum -= (_angleAccum > 0 ? 120 : -120)
+            }
+        }
+    }
+
+    Timer {
+        id: wheelCommitTimer
+        interval: 180
+        onTriggered: {
+            if (!root._wheelPending)
+                return
+            root._wheelPending = false
+            root.commitRequested(root.clampedValue)
+        }
+    }
+
     function rampColor(index) {
         return rampColors.length > index ? rampColors[index] : "transparent"
     }
@@ -87,7 +144,20 @@ Item {
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
 
+        // 滚轮挂在 MouseArea 自己的 onWheel 上（独立 WheelHandler 在这层拿不到，
+        // 见 LiquidSlider）。只认 Ctrl，不按 Ctrl 就放行给所在面板。
+        onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
+            wheel.accepted = true
+        }
+
         onPressed: function(mouse) {
+            // 拖动接管：取消还没落下的那次步进提交
+            root.cancelWheelInteraction()
             root.previewChanged(root.valueAt(mouse.x))
         }
         onPositionChanged: function(mouse) {

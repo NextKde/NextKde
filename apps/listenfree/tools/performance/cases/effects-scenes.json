@@ -1,0 +1,66 @@
+{
+  "report": "@RESULTS@/effects-scenes/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "basic",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "songs",
+      "action": "setup",
+      "ms": 4000
+    },
+    {
+      "name": "nowplaying",
+      "action": "nowplaying",
+      "ms": 3000,
+      "seek": 45000
+    },
+    {
+      "name": "monet",
+      "action": "enter",
+      "style": "monet",
+      "ms": 5000,
+      "seek": 45000
+    },
+    {
+      "name": "monet-frozen",
+      "action": "pause",
+      "ms": 4000,
+      "freezeLyric": 52435,
+      "compareEffects": true
+    },
+    {
+      "name": "diorama-frozen",
+      "action": "style",
+      "value": "diorama",
+      "ms": 4000,
+      "freezeLyric": 52435,
+      "compareEffects": true
+    },
+    {
+      "name": "monet-refocus",
+      "action": "style",
+      "value": "monet",
+      "ms": 4000,
+      "freezeLyric": 61200,
+      "compareEffects": true
+    },
+    {
+      "name": "diorama-refocus",
+      "action": "style",
+      "value": "diorama",
+      "ms": 4000,
+      "freezeLyric": 61200,
+      "compareEffects": true
+    },
+    {
+      "name": "return",
+      "action": "leave",
+      "ms": 2000
+    }
+  ],
+  "renderReadbackMs": 500,
+  "foreground": false,
+  "profile": "@PROFILE@"
+}
