@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 import qs.desktop.modules.common
@@ -304,7 +305,12 @@ PopupWindow {
         captureAnchor: revealFrame.morphing ? captureFrame : null
         // The content corner mask still needs a client layer. Reuse its final
         // texture allocation instead of resizing the FBO on every animation frame.
-        layer.textureSize: revealFrame.morphing ? Qt.size(root.width, root.height) : Qt.size(0, 0)
+        // Explicit texture sizes are physical pixels; Qt only applies the window's
+        // device pixel ratio automatically when textureSize is left empty.
+        layer.textureSize: revealFrame.morphing
+            ? Qt.size(Math.ceil(root.width * Screen.devicePixelRatio),
+                Math.ceil(root.height * Screen.devicePixelRatio))
+            : Qt.size(0, 0)
         radius: revealFrame.morphing
             ? root.menuRadius + (Math.min(revealFrame.sourceWidth, revealFrame.sourceHeight) / 2
                 - root.menuRadius) * (1 - revealFrame.progress)
