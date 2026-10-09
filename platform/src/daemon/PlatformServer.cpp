@@ -2100,8 +2100,7 @@ void PlatformServer::readClient()
                               {QStringLiteral("error"), errorObject(
                                    QStringLiteral("request-too-large"),
                                    QStringLiteral("请求超出大小限制"), false)}};
-        socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
-        socket->flush();
+        writeClientMessage(socket, response);
         // Emits disconnected() -> clientDisconnected(), which removes the
         // buffer and schedules the socket for deletion.
         socket->disconnectFromServer();
@@ -2126,11 +2125,13 @@ void PlatformServer::readClient()
                                   {QStringLiteral("error"), errorObject(
                                        QStringLiteral("invalid-json"),
                                        QStringLiteral("请求不是有效 JSON"), false)}};
-            socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
-            socket->flush();
+            if (!writeClientMessage(socket, response))
+                return;
             continue;
         }
         handleRequest(socket, document.object());
+        if (socket->property("kosBackpressureClosing").toBool())
+            return;
     }
     // Bytes after the last newline are a partial line; keep them for the
     // next readyRead and drop only what was consumed.
@@ -2161,8 +2162,9 @@ QString PlatformServer::operation(const QJsonObject &request) const
 
 void PlatformServer::kickStuckClient(QLocalSocket *socket)
 {
-    if (!socket)
+    if (!socket || socket->property("kosBackpressureClosing").toBool())
         return;
+    socket->setProperty("kosBackpressureClosing", true);
     // Deferred on purpose: abort() emits disconnected() synchronously, and a
     // caller deeper in the stack (readClient's reference into m_buffers, the
     // subscriber iteration in broadcastKWinEvent) must not see the socket torn
@@ -2172,17 +2174,31 @@ void PlatformServer::kickStuckClient(QLocalSocket *socket)
     QTimer::singleShot(0, socket, [socket]() { socket->abort(); });
 }
 
+bool PlatformServer::writeClientMessage(QLocalSocket *socket, const QJsonObject &message)
+{
+    if (!socket || socket->state() != QLocalSocket::ConnectedState
+            || socket->property("kosBackpressureClosing").toBool())
+        return false;
+    const QByteArray bytes = QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n';
+    // Include this message in the limit, including malformed-request replies.
+    if (bytes.size() > kMaxClientWriteBytes
+            || socket->bytesToWrite() > kMaxClientWriteBytes - bytes.size()) {
+        kickStuckClient(socket);
+        return false;
+    }
+    if (socket->write(bytes) != bytes.size()) {
+        kickStuckClient(socket);
+        return false;
+    }
+    socket->flush();
+    return true;
+}
+
 void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
                               bool ok, const QJsonObject &result,
                               const QString &code, const QString &message,
                               bool retryable)
 {
-    if (!socket || socket->state() != QLocalSocket::ConnectedState)
-        return;
-    if (socket->bytesToWrite() > kMaxClientWriteBytes) {
-        kickStuckClient(socket);
-        return;
-    }
     QJsonObject response{{QStringLiteral("version"), kProtocolVersion},
                          {QStringLiteral("requestId"), requestId(request)},
                          {QStringLiteral("ok"), ok}};
@@ -2190,18 +2206,11 @@ void PlatformServer::respond(QLocalSocket *socket, const QJsonObject &request,
         response.insert(QStringLiteral("result"), result);
     else
         response.insert(QStringLiteral("error"), errorObject(code, message, retryable));
-    socket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + '\n');
-    socket->flush();
+    writeClientMessage(socket, response);
 }
 
 void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
 {
-    if (!socket || socket->state() != QLocalSocket::ConnectedState)
-        return;
-    if (socket->bytesToWrite() > kMaxClientWriteBytes) {
-        kickStuckClient(socket);
-        return;
-    }
     QString eventName = event.value(QStringLiteral("type")).toString();
     if (eventName == QStringLiteral("snapshot"))
         eventName = QStringLiteral("window.snapshot");
@@ -2210,8 +2219,7 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
     QJsonObject message{{QStringLiteral("version"), kProtocolVersion},
                         {QStringLiteral("event"), eventName},
                         {QStringLiteral("payload"), event}};
-    socket->write(QJsonDocument(message).toJson(QJsonDocument::Compact) + '\n');
-    socket->flush();
+    writeClientMessage(socket, message);
 }
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)

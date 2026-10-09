@@ -75,6 +75,7 @@ private:
     // returns, so callers iterating subscribers or parsing the same socket's
     // read buffer never see it torn down mid-loop.
     void kickStuckClient(QLocalSocket *socket);
+    bool writeClientMessage(QLocalSocket *socket, const QJsonObject &message);
     void runCommand(QLocalSocket *socket, const QJsonObject &request,
                     const QString &program, const QStringList &arguments,
                     std::function<QJsonObject(const QByteArray &, int)> parser = {},

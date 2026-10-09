@@ -485,10 +485,12 @@ private:
                 expectedBytes->store(0);
                 // The reader exits on the expected-size check within one poll
                 // cycle; reap it off-thread so this callback never blocks.
-                // Fire-and-forget: we only need waitForFinished to return, the
-                // QFuture is intentionally discarded.
+                // Reap off-thread and consume any partial pixels before trimming.
                 m_thumbnailPool.start(
-                    [pixelsFuture]() mutable { pixelsFuture.waitForFinished(); });
+                    [pixelsFuture]() mutable {
+                        const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
+                        const QByteArray discardedPixels = pixelsFuture.takeResult();
+                    });
                 publishThumbnailError(id, reply.error().message());
                 endThumbnailCapture(id);
                 return;
@@ -518,7 +520,9 @@ private:
                 // Release the capture's heap pages on every exit path, the
                 // failure branches below included.
                 const auto trimAfterCapture = qScopeGuard([] { trimCaptureMemory(); });
-                const QByteArray bytes = pixelsFuture.result();
+                // Consume the future's stored result; result() leaves another
+                // reference alive in the task/watcher after this scope's trim.
+                const QByteArray bytes = pixelsFuture.takeResult();
                 if (!guard)
                     return;
                 QMetaObject::invokeMethod(guard, [guard, id] {
