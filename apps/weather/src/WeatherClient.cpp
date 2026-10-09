@@ -110,6 +110,16 @@ WeatherClient::WeatherClient(QObject *parent)
     connectSocket();
 }
 
+WeatherClient::~WeatherClient()
+{
+    // The socket outlives the member timers. Do not let its destructor emit
+    // disconnected into reconnect handlers after those timers were destroyed.
+    m_socket.disconnect(this);
+    m_socket.abort();
+    m_reconnectTimer.stop();
+    m_snapshotFallbackTimer.stop();
+}
+
 bool WeatherClient::ready() const
 {
     return m_ready;
