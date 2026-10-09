@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import QtQuick.Effects
 import QtQml.Models
 import QtCore
@@ -2065,7 +2066,7 @@ PanelWindow {
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
                                             : (musicContent.player?.canTogglePlaying ?? false)))
-                                    ToolTip.visible: hovered && (enabled || index === 3)
+                                    Controls.ToolTip.visible: hovered && (enabled || index === 3)
                                     glassInk: AppearanceTokens.content.onBackdrop
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)
