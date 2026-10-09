@@ -1,0 +1,213 @@
+{
+  "report": "@RESULTS@/browsing-final/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "threaded",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "songs",
+      "action": "setup",
+      "ms": 10000,
+      "seek": 50000
+    },
+    {
+      "name": "discover",
+      "action": "route",
+      "value": "discover",
+      "ms": 12000,
+      "mutations": [
+        {
+          "name": "discoverScroll",
+          "property": "contentY",
+          "value": 0
+        }
+      ],
+      "expectedLyricLines": 89
+    },
+    {
+      "name": "playlist-0",
+      "action": "click",
+      "nameOfItem": "discoverRecommendation",
+      "index": 0,
+      "ms": 12000
+    },
+    {
+      "name": "discover-return-0",
+      "action": "mini",
+      "ms": 5000
+    },
+    {
+      "name": "playlist-1",
+      "action": "click",
+      "nameOfItem": "discoverRecommendation",
+      "index": 1,
+      "ms": 12000
+    },
+    {
+      "name": "discover-return-1",
+      "action": "mini",
+      "ms": 5000
+    },
+    {
+      "name": "playlist-2",
+      "action": "click",
+      "nameOfItem": "discoverRecommendation",
+      "index": 2,
+      "ms": 12000
+    },
+    {
+      "name": "discover-return-2",
+      "action": "mini",
+      "ms": 5000
+    },
+    {
+      "name": "mosaic-setting",
+      "action": "setting",
+      "key": "appearance.albumLayout",
+      "value": "Mosaic",
+      "ms": 2000
+    },
+    {
+      "name": "mosaic",
+      "action": "route",
+      "value": "library/albums",
+      "ms": 10000
+    },
+    {
+      "name": "mosaic-pan-1",
+      "action": "noop",
+      "ms": 1800,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 576
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 288
+        }
+      ]
+    },
+    {
+      "name": "mosaic-pan-2",
+      "action": "noop",
+      "ms": 1800,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 1152
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 576
+        }
+      ]
+    },
+    {
+      "name": "mosaic-pan-3",
+      "action": "noop",
+      "ms": 1800,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 1728
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 864
+        }
+      ]
+    },
+    {
+      "name": "mosaic-pan-4",
+      "action": "noop",
+      "ms": 1800,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 1152
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 576
+        }
+      ]
+    },
+    {
+      "name": "mosaic-pan-5",
+      "action": "noop",
+      "ms": 1800,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 576
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 288
+        }
+      ]
+    },
+    {
+      "name": "mosaic-pan-6",
+      "action": "noop",
+      "ms": 8000,
+      "mutations": [
+        {
+          "name": "albumMosaicPage",
+          "property": "panX",
+          "value": 0
+        },
+        {
+          "name": "albumMosaicPage",
+          "property": "panY",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "artists",
+      "action": "route",
+      "value": "library/artists",
+      "ms": 8000
+    },
+    {
+      "name": "artist-hero",
+      "action": "collection",
+      "kind": "Artist",
+      "value": "Taylor Swift",
+      "ms": 20000
+    },
+    {
+      "name": "artist-back",
+      "action": "mini",
+      "ms": 8000
+    },
+    {
+      "name": "songs-return",
+      "action": "route",
+      "value": "library/songs",
+      "ms": 10000
+    },
+    {
+      "name": "cooldown",
+      "action": "noop",
+      "ms": 60000
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "requireUnlocked": true,
+  "profile": "@PROFILE@"
+}

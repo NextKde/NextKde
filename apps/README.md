@@ -6,7 +6,7 @@ Every direct child is a standalone Qt Quick application and a separate
 process. Applications may import `shared/`, communicate with `services/`
 through documented contracts, and must never import `shell/desktop/`.
 
-The application workspace is configured from the repository root. Four build
+The application workspace is configured from the repository root. Five build
 options and matching CMake presets keep the new applications independently
 manageable:
 
@@ -15,9 +15,10 @@ manageable:
 | Calendar | `kos-calendar` | `calendar-dev` |
 | Todo | `kos-todo` | `todo-dev` |
 | Weather | `kos-weather` | `weather-dev` |
-| Music | `kos-music` | `music-dev` |
+| Music (legacy, retained) | `kos-music` | `music-dev` |
+| KOS ListenFree (default music player) | `listenfree` | `listenfree-dev` |
 
-Use `apps-dev` to build all four. Each application owns its executable, QML
+Use `apps-dev` to build all five. Each application owns its executable, QML
 module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
 small application runtime rather than a feature layer; applications do not
 import one another. The Weather preset additionally builds and installs its Go
@@ -25,7 +26,7 @@ data service, which the application starts on demand.
 
 ## Development: QML hot reload
 
-Every application can load its QML from a source tree and hot reload it, so QML
+The four apps using `apps/common` can load their QML from a source tree and hot reload it, so QML
 edits need neither a rebuild nor a restart:
 
 ```bash
@@ -54,22 +55,28 @@ For a persistent per-user installation on Plasma, run:
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` builds all four applications, rather than only the app you
-intend to open. In addition to the base requirements in the repository README,
-install these Arch build dependencies first:
+`./tools/kosctl install apps` (or `install-apps.sh`) builds Calendar, Todo,
+Weather and ListenFree. It first checks system dependencies and reports missing
+packages with Arch `pacman` or Ubuntu `apt` commands. Install the reported
+packages and rerun the same command; it does not automatically run sudo.
 
-```sh
-sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
-```
+Arch rolling releases and Ubuntu 26.04+ provide the required Qt 6.10+.
+Ubuntu 22.04/24.04/25.10 stock Qt is too old; those releases need a complete
+compatible Qt/KF6 toolchain. Go 1.26+ is also required by the data service.
+The checker verifies QML runtime modules and the SQLite driver as well as
+headers and build tools. Run `python3 tools/check-apps-dependencies.py` for
+just the preflight check.
 
-`kcalendarcore` is required by Calendar and Todo; GStreamer and TagLib are
-required by Music. Go is required by Weather and is already part of the core
-KOS build requirements. Runtime GStreamer codec/plugin packages are separate:
-install the ones needed for the audio formats and output backends you use.
-Building a single app with its corresponding CMake preset needs only that
-app's direct dependencies.
+The installer downloads checksum-verified QuickJS-ng and Qmmp sources, applies
+the included audio patches and builds a private SDK under
+`.build/listenfree-sdk`. If system TagLib is older than 2.3.1, it builds that
+privately too. The first installation needs internet access and takes longer;
+later installations reuse the SDK while its build fingerprint matches.
+No manually prepared SDK is required. `KOS_LISTENFREE_SDK=/path/to/sdk` remains
+available for an existing compatible SDK. System packages and CPU architecture
+are discovered on the target device; the builder uses no host-specific paths.
 
-This performs a Release build and test pass, installs the binaries under
+This performs a Release build, installs the binaries under
 `~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
 enables the core `kos-data.service`, registers the D-Bus-activated PIM service,
 and refreshes Plasma's application cache. The desktop entries contain absolute executable paths, so
@@ -86,3 +93,9 @@ compositor advertises them, with a readable solid fallback everywhere else.
 
 `settings` predates this workspace and remains on its existing build path
 until its source-path-dependent QML loader is migrated separately.
+
+## Default applications
+
+Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. ListenFree replaces legacy KOS Music in the installed bundle; the old source remains in the repository for now. The music widget raises the current MPRIS player, or opens ListenFree when no session exists.
+
+Run `./tools/kosctl install apps`; see the [Linux build instructions](listenfree/packaging/linux/README.md) for the private SDK layout and manual builds. Dependencies and compilation are checked before deployment. After the new player passes its runtime check, registration removes and backs up the legacy binaries, desktop entry, icon and AppStream metadata. User data is retained. Existing defaults for other music players and later user choices remain unchanged.

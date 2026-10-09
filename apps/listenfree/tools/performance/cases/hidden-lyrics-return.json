@@ -1,0 +1,81 @@
+{
+  "report": "@RESULTS@/hidden-lyrics-return/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "threaded",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "cold-30s",
+      "action": "resize",
+      "width": 1066,
+      "height": 709,
+      "ms": 30000
+    },
+    {
+      "name": "setup",
+      "action": "setup",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "nowplaying",
+      "action": "nowplaying",
+      "ms": 4000,
+      "expectedLyricLines": 89
+    },
+    {
+      "name": "pause",
+      "action": "pause",
+      "ms": 2000,
+      "seek": 50000
+    },
+    {
+      "name": "fullscreen",
+      "action": "fullscreen",
+      "ms": 2000
+    },
+    {
+      "name": "monet",
+      "action": "enter",
+      "style": "monet",
+      "ms": 4000
+    },
+    {
+      "name": "monet-return",
+      "action": "leave",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "fume",
+      "action": "enter",
+      "style": "fume",
+      "ms": 4000
+    },
+    {
+      "name": "fume-return",
+      "action": "leave",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "profile": "@PROFILE@",
+  "requireUnlocked": true
+}

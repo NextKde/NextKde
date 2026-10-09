@@ -96,7 +96,10 @@ Item {
         item.useSharedActiveBackground = false
         for (const style of ["material", "windows12"]) {
             AppearanceConfigService.shellStyle = style
-            check(!glass.enabled && legacy.visible, style + " must retain its legacy selection")
+            check(glass.enabled && glass.selected && glass.hovered,
+                style + " must use the shared glass selection and hover")
+            check(!legacy.visible && !legacyHover.visible,
+                style + " must not stack legacy plates with glass")
         }
         AppearanceConfigService.shellStyle = "macos"
         console.log("REPORT " + edge + " selection/hover, urgency, edit and style compatibility passed")

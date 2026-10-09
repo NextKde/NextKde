@@ -1,0 +1,22 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 28, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "portable",
+      "displayName": "ListenFree Portable Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/portable",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "F:/QT/6.11.2/mingw_64;${sourceDir}/.vcpkg_installed/x64-mingw-dynamic",
+        "CMAKE_CXX_COMPILER": "F:/QT/Tools/mingw1310_64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "F:/QT/Tools/Ninja/ninja.exe",
+        "LISTENFREE_BUILD_TESTS": "ON",
+        "LISTENFREE_BUILD_QMMP_BACKEND": "ON",
+        "LISTENFREE_BUILD_MPV_BACKEND": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [{ "name": "portable", "configurePreset": "portable", "jobs": 4 }]
+}

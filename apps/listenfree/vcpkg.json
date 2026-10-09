@@ -1,0 +1,19 @@
+{
+  "name": "listenfree-desktop",
+  "version-string": "0.3.1",
+  "builtin-baseline": "2687ff07e8ca1e7f56030e809c8c2c5227975a7b",
+  "dependencies": [
+    "quickjs-ng",
+    "taglib"
+  ],
+  "overrides": [
+    {
+      "name": "quickjs-ng",
+      "version": "0.16.2"
+    },
+    {
+      "name": "taglib",
+      "version": "2.3.1"
+    }
+  ]
+}

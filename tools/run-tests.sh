@@ -24,7 +24,7 @@ build_dir=${KOS_TEST_BUILD_DIR:-"$project_dir/.build/tests"}
 # scratch directory inside the build tree is what makes a parallel run survive.
 export TMPDIR="${KOS_TEST_TMPDIR:-$build_dir/tmp}"
 export GOTMPDIR="${GOTMPDIR:-$build_dir/tmp}"
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR" "$GOTMPDIR"
 
 # GOCACHE is deliberately not set here. services/data-service/CMakeLists.txt
 # (:18, :47) passes an absolute GOCACHE to every `go` invocation it makes, so a

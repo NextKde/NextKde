@@ -13,7 +13,7 @@ Item {
     property bool focused: false
     property bool showInnerHighlight: true
 
-    readonly property real effectiveElevation: Math.max(0, elevation)
+    readonly property real effectiveElevation: Math.max(0, elevation) * (AppTheme.modernDesign ? 0.38 : 1)
         * (pressed ? 0.42 : (hovered ? 1.18 : 1))
 
     implicitWidth: 48

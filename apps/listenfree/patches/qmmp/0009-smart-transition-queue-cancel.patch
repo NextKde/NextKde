@@ -1,0 +1,92 @@
+--- a/src/qmmp/soundcore.h
++++ b/src/qmmp/soundcore.h
+@@ -172,6 +172,7 @@
+     // ListenFree: finish the current decoder after a bounded overlap, retaining
+     // the queued decoder/output and effect state for manual transitions.
+     bool finishCurrentAfter(qint64 milliseconds);
++    void cancelQueuedSource();
+     qint64 transitionRemaining() const;
+     /*!
+      *  Stops playback
+--- a/src/qmmp/soundcore.cpp
++++ b/src/qmmp/soundcore.cpp
+@@ -421,6 +421,18 @@
+     auto *engine = QmmpAudioEngine::instance();
+     return engine && nextTrackAccepted() && engine->finishCurrentAfter(milliseconds);
+ }
++
++void SoundCore::cancelQueuedSource()
++{
++    Q_D(SoundCore);
++    // Deliver an already completed handoff before cancelling the next slot.
++    qApp->sendPostedEvents(this, 0);
++    qDeleteAll(d->sources);
++    d->sources.clear();
++    if(auto *engine = qobject_cast<QmmpAudioEngine *>(d->engine))
++        engine->cancelQueuedDecoders();
++    d->nextState = SoundCorePrivate::NO_ENGINE;
++}
+ qint64 SoundCore::transitionRemaining() const
+ {
+     auto *engine = QmmpAudioEngine::instance();
+--- a/src/qmmp/qmmpaudioengine_p.h
++++ b/src/qmmp/qmmpaudioengine_p.h
+@@ -58,6 +58,7 @@
+     void stop() override;
+     void pause() override;
+     bool finishCurrentAfter(qint64 milliseconds);
++    void cancelQueuedDecoders();
+     qint64 transitionRemaining() const;
+     void addEffect(EffectFactory *factory);
+     void removeEffect(EffectFactory *factory);
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -738,3 +738,16 @@
+     const auto frames = m_transitionFrames.load();
+     return frames < 0 ? -1 : frames * 1000 / qMax(1U,m_transitionRate.load());
+ }
++
++void QmmpAudioEngine::cancelQueuedDecoders()
++{
++    QMutexLocker lock(mutex());
++    m_transitionFrames = -1;
++    m_next = false;
++    while(!m_decoders.isEmpty())
++    {
++        Decoder *decoder = m_decoders.dequeue();
++        m_inputs.take(decoder)->deleteLater();
++        delete decoder;
++    }
++}
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.h
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.h
+@@ -61,6 +61,7 @@
+     QString m_path;
+     void prepareEnvelope();
+     qint64 m_overlap;
++    bool m_manualOnly = false;
+     int m_state = WAITING;
+     SoundCore *m_core;
+     StateHandler *m_handler;
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -32,6 +32,7 @@
+     m_handler = StateHandler::instance();
+     QSettings settings;
+     m_overlap = settings.value(u"Crossfade/overlap"_s, 6000).toLongLong();
++    m_manualOnly = settings.value(u"Crossfade/manualOnly"_s, false).toBool();
+ }
+ 
+ CrossfadePlugin::~CrossfadePlugin()
+@@ -59,6 +60,11 @@
+     // the configured overlap does not shrink with output buffer latency.
+     const qint64 decodedMs = m_decodedSamples * 1000 / (sampleRate() * channels());
+     const qint64 manualRemaining = m_core->transitionRemaining();
++    if(m_manualOnly && manualRemaining < 0 && m_buffer_at == 0)
++    {
++        m_state = WAITING;
++        return;
++    }
+     const qint64 remaining = manualRemaining >= 0 ? manualRemaining : m_core->duration() - std::max(decodedMs, elapsed);
+     if (manualRemaining >= 0 && (m_state == WAITING || m_state == CHECKING))
+         m_state = PREPARING;

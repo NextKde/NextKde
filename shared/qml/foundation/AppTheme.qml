@@ -7,6 +7,7 @@ QtObject {
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.
+    property bool modernDesign: false
     property string appearanceMode: "system"
     property string materialMode: "auto"
     property real materialOpacity: 0.86
@@ -19,11 +20,11 @@ QtObject {
         colorGroup: SystemPalette.Active
     }
 
-    readonly property color lightWindowSeed: "#f3f6fb"
+    readonly property color lightWindowSeed: modernDesign ? "#edf0f4" : "#f3f6fb"
     readonly property color lightBaseSeed: "#ffffff"
     readonly property color lightSidebarSeed: "#e8eef7"
     readonly property color lightTextSeed: "#172033"
-    readonly property color darkWindowSeed: "#151a23"
+    readonly property color darkWindowSeed: modernDesign ? "#20232a" : "#151a23"
     readonly property color darkBaseSeed: "#202733"
     readonly property color darkSidebarSeed: "#263142"
     readonly property color darkTextSeed: "#f4f7fb"
@@ -137,15 +138,15 @@ QtObject {
     readonly property color warning: dark ? "#ffb340" : "#b96800"
     readonly property color destructive: dark ? "#ff6961" : "#d83b3b"
 
-    readonly property int smallRadius: 10
-    readonly property int mediumRadius: 16
+    readonly property int smallRadius: modernDesign ? 12 : 10
+    readonly property int mediumRadius: modernDesign ? 20 : 16
     readonly property int largeRadius: 24
     readonly property int spacing: 12
     readonly property int pageMargin: 24
     readonly property real densityScale: Math.max(0.88, Math.min(1.28,
         (Application.font.pixelSize > 0 ? Application.font.pixelSize : 13) / 13))
-    readonly property int controlHeight: Math.round(36 * densityScale)
-    readonly property int sidebarWidth: Math.round(246 * densityScale)
+    readonly property int controlHeight: Math.round((modernDesign ? 34 : 36) * densityScale)
+    readonly property int sidebarWidth: Math.round((modernDesign ? 224 : 246) * densityScale)
     readonly property int compactSidebarWidth: Math.round(196 * densityScale)
     readonly property int motionFast: reduceMotion ? 0 : 120
     readonly property int motionNormal: reduceMotion ? 0 : 220
