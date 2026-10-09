@@ -4,6 +4,7 @@
 
 #include <QEvent>
 #include <QGuiApplication>
+#include <QPlatformSurfaceEvent>
 #include <QtGui/qguiapplication_platform.h>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -350,8 +351,18 @@ void SurfaceShape::handleWindowChanged(QQuickWindow *window)
 
 bool SurfaceShape::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_window && event->type() == QEvent::PlatformSurface)
-        scheduleSync();
+    if (watched == m_window && event->type() == QEvent::PlatformSurface) {
+        const auto *surfaceEvent = static_cast<QPlatformSurfaceEvent *>(event);
+        if (surfaceEvent->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+            // Output migration can replace the wl_surface while retaining the
+            // QQuickWindow. Drop the old proxy before destruction: a new surface
+            // may reuse the same address before the next polish, so comparing
+            // native pointers in sync() alone cannot detect the replacement.
+            releaseShape();
+        } else {
+            scheduleSync();
+        }
+    }
     return QObject::eventFilter(watched, event);
 }
 
