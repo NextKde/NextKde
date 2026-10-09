@@ -251,8 +251,9 @@ PopupWindow {
 
     PopupMotion {
         id: popupMotion
-        openDuration: root.capsuleReveal ? AppearanceTokens.motion.normalDuration
+        openDuration: root.capsuleReveal ? 320
             : AppearanceTokens.motion.popupOpenDuration
+        openEasing: root.capsuleReveal ? Easing.Linear : Easing.OutCubic
         closeDuration: root.capsuleReveal ? AppearanceTokens.motion.fastDuration
             : AppearanceTokens.motion.popupCloseDuration
         onClosed: {
@@ -266,10 +267,67 @@ PopupWindow {
     // to exclude here.
     BackgroundEffect.blurRegion: root.visible && glass.opacity > 0 ? glass.blurRegion : null
 
+    // Keep backdrop capture and blur buffers at the final size. Only the SDF
+    // outline changes during the reveal; older bridges retain their fallback.
+    Item {
+        id: captureFrame
+        width: root.width
+        height: root.height
+    }
+
     Item {
         id: revealFrame
         readonly property bool morphing: root.capsuleReveal && root.macosPopupMotion
-        readonly property real progress: morphing ? popupMotion.progress : 1
+        readonly property real timeline: morphing ? Math.max(0, Math.min(1, popupMotion.progress)) : 1
+        property real openTimelineStart: 0
+        property real openShapeStart: 0
+        property real openMaterialStart: 0
+        property real openContentStart: 0
+        readonly property real openProgress: Math.max(0, Math.min(1,
+            (timeline - openTimelineStart) / Math.max(0.0001, 1 - openTimelineStart)))
+        // A damped spring, bounded by the popup allocation. It reaches the
+        // edge, compresses slightly and settles without clipping overshoot.
+        // Closing remains monotonic, including a close during the rebound.
+        readonly property real springProgress: Math.max(0, Math.min(1,
+            (1 - Math.exp(-8 * openProgress) * Math.cos(12 * openProgress))
+                / (1 - Math.exp(-8) * Math.cos(12))))
+        readonly property real openShape: openShapeStart + (1 - openShapeStart) * springProgress
+        readonly property real openMaterial: openMaterialStart + (1 - openMaterialStart)
+            * (1 - Math.pow(1 - Math.min(1, openProgress / 0.4), 3))
+        readonly property real openContent: openContentStart + (1 - openContentStart)
+            * (1 - Math.pow(1 - Math.max(0, Math.min(1, (openProgress - 0.08) / 0.47)), 3))
+        property real closeTimelineStart: 1
+        property real closeShapeStart: 1
+        readonly property real closeProgress: Math.min(1, timeline / Math.max(0.0001, closeTimelineStart))
+        readonly property real progress: !morphing ? 1 : popupMotion.requestedOpen
+            ? openShape : closeShapeStart * closeProgress
+        readonly property real materialProgress: morphing
+            ? (popupMotion.requestedOpen
+                ? openMaterial
+                : closeProgress * closeMaterialStart) : 1
+        readonly property real contentProgress: morphing
+            ? (popupMotion.requestedOpen
+                ? openContent
+                : closeProgress * closeContentStart) : 1
+        property real closeMaterialStart: 1
+        property real closeContentStart: 1
+        Connections {
+            target: popupMotion
+            function onRequestedOpenChanged() {
+                if (!popupMotion.requestedOpen) {
+                    revealFrame.closeTimelineStart = revealFrame.timeline
+                    revealFrame.closeShapeStart = revealFrame.openShape
+                    revealFrame.closeMaterialStart = revealFrame.openMaterial
+                    revealFrame.closeContentStart = revealFrame.openContent
+                } else {
+                    const p = revealFrame.closeProgress
+                    revealFrame.openShapeStart = revealFrame.closeShapeStart * p
+                    revealFrame.openMaterialStart = revealFrame.closeMaterialStart * p
+                    revealFrame.openContentStart = revealFrame.closeContentStart * p
+                    revealFrame.openTimelineStart = revealFrame.timeline
+                }
+            }
+        }
         readonly property real sourceWidth: Math.min(root.width,
             Math.max(48, root.capsuleSourceWidth > 0 ? root.capsuleSourceWidth
                 : (root.anchorItem ? root.anchorItem.width : 96)))
@@ -288,6 +346,10 @@ PopupWindow {
         parent: revealFrame
         anchors.fill: parent
         blurAnchor: revealFrame.morphing ? revealFrame : glass
+        captureAnchor: revealFrame.morphing ? captureFrame : null
+        // The content corner mask still needs a client layer. Reuse its final
+        // texture allocation instead of resizing the FBO on every spring tick.
+        layer.textureSize: revealFrame.morphing ? Qt.size(root.width, root.height) : Qt.size(0, 0)
         radius: revealFrame.morphing
             ? root.menuRadius + (Math.min(revealFrame.sourceWidth, revealFrame.sourceHeight) / 2
                 - root.menuRadius) * (1 - revealFrame.progress)
@@ -302,13 +364,14 @@ PopupWindow {
         // readability scrim as notification cards.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
         scrimLevel: "balanced"
-        materialOpacity: revealFrame.morphing ? popupMotion.progress * pageMotion.progress : 1
+        materialOpacity: revealFrame.morphing ? revealFrame.materialProgress * pageMotion.progress : 1
         scale: (!root.capsuleReveal && root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale
                 + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
             : 1
         transformOrigin: Item.Top
-        opacity: (root.macosPopupMotion ? popupMotion.progress : 1) * pageMotion.progress
+        opacity: (revealFrame.morphing ? revealFrame.materialProgress
+            : (root.macosPopupMotion ? popupMotion.progress : 1)) * pageMotion.progress
         enabled: (!root.macosPopupMotion || popupMotion.interactive) && pageMotion.interactive
         transform: Translate {
             y: (!root.capsuleReveal && root.macosPopupMotion && popupMotion.progress < 0.999)
@@ -323,6 +386,7 @@ PopupWindow {
             y: -revealFrame.y
             width: root.width
             height: root.height
+            opacity: revealFrame.contentProgress
 
             // Viewport for the menu rows. It never grows past root.menuSurfaceHeight,
             // so the surface stays on the output; anything beyond that scrolls.
