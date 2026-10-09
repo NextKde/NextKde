@@ -106,6 +106,8 @@ PanelWindow {
             // wrapper so the published glass follows the slide (matching the
             // Dock's dockWrapper anchor) instead of staying pinned at y=0.
             blurAnchor: barWrapper
+            scrimEnabled: AppearanceTokens.surface.usesBackdrop && !root.transparentMode
+            scrimLevel: "transparent"
             // BarWindow keeps its established tonal layer0 paint below. This
             // panel exists here solely as the compositor surface declaration.
             fallbackEnabled: false
