@@ -35,6 +35,10 @@ if(_kwin_effecthandler)
         target_compile_definitions(stageanim13 PRIVATE KOS_KWIN_PAINT_TIME_API)
     else()
         message(STATUS "KWin API: prePaint hooks without presentTime (6.7-style)")
+        # 6.7+ 端口的编译开关（自建 ItemRendererOpenGL 替代 scene()->renderer()）。
+        # ⚠️ 不能依赖构建缓存：干净配置丢这个定义 = STAGE_LIVE_CONTENT_RENDER=0
+        # 静默编译成静态玻璃卡（2026-10-09 实锤本机缓存路径）
+        target_compile_definitions(stageanim13 PRIVATE ANLAND_KWIN_67)
     endif()
 endif()
 

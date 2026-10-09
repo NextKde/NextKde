@@ -15,6 +15,10 @@
 #include "opengl/glframebuffer.h"
 #include "opengl/glshader.h"
 #include "opengl/gltexture.h"
+#if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API)
+#include "scene/itemrenderer.h"
+#include "opengl/egldisplay.h"
+#endif
 
 // 6.6 公开的离屏渲染入口（Compositor::scene()->renderer()）在 6.7+ 被收进
 // KWin 进程内部（kwinApp()->scene() / renderer(RenderDevice*) 均不在公开头
@@ -22,6 +26,10 @@
 // 保留 QML 快照与交互，避免用空背板替代窗口内容。
 #ifdef KOS_KWIN_PAINT_TIME_API
 #define STAGE_LIVE_CONTENT_RENDER 1
+#elif defined(ANLAND_KWIN_67)
+// 6.7 端口：scene()->renderer() 不可达，自建 ItemRendererOpenGL
+#define STAGE_LIVE_CONTENT_RENDER 1
+#define STAGE_LIVE_CONTENT_RENDER_67 1
 #else
 #define STAGE_LIVE_CONTENT_RENDER 0
 #endif
@@ -163,6 +171,7 @@ struct LiveCard
     // 挂起等窗口真开始装卡飞行（isMinimized/最小化动画）才同拍起摆
     bool enterHold = false;
     qreal fade = 1.0;
+    qreal cardOpacity = 1.0; // 整卡透明度旋钮（面板 cardOpacity；缺省=不透明）
     bool closeHot = false;
     TimeLine fadeTl{std::chrono::milliseconds(180)};
     bool fadeAnimating = false;
@@ -289,6 +298,10 @@ private:
     std::unique_ptr<GLTexture> m_cursorTex;
     qint64 m_cursorImgKey = 0;
     QPointF m_cursorHotspot;
+#if STAGE_LIVE_CONTENT_RENDER_67
+    ItemRenderer *m_itemRenderer67 = nullptr;
+    EglDisplay *m_eglDisplay67 = nullptr;
+#endif
     bool m_liveEnabled = true; // kwinrc LiveCards 总闸（默认开，排障用）
 };
 
