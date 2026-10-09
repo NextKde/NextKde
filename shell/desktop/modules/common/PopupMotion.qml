@@ -11,6 +11,7 @@ QtObject {
     property int openDuration: AppearanceTokens.motion.popupOpenDuration
     property int closeDuration: AppearanceTokens.motion.popupCloseDuration
     property int openEasing: Easing.OutCubic
+    property int closeEasing: Easing.InCubic
     readonly property bool interactive: requestedOpen && progress > 0.01
     signal closed()
 
@@ -48,7 +49,7 @@ QtObject {
         animation.duration = Math.max(1,
             Math.round(fullDuration * Math.abs(targetProgress - progress)))
         animation.easing.type = targetProgress > progress
-            ? openEasing : Easing.InCubic
+            ? openEasing : closeEasing
         animation.start()
     }
 
