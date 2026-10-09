@@ -1,0 +1,194 @@
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -95,6 +95,10 @@
+ 
+     delete m_output;
+     prepareEffects(m_decoders.head());
++    for (Effect* effect : std::as_const(m_effects))
++        if (effect->factory() && effect->factory()->properties().shortName == "crossfade")
++            effect->configure(effect->sampleRate(), effect->channelMap());
++
+     if(!(m_output = createOutput()))
+         return false;
+     m_dithering->setFormats(m_decoders.head()->audioParameters().format(), m_output->outputAudioParameters().format());
+@@ -221,6 +225,12 @@
+         {
+             mutex()->lock ();
+             m_seekTime = time;
++            m_transitionFrames = -1;
++            for (Effect* effect : std::as_const(m_effects)) {
++                if (effect->factory() && effect->factory()->properties().shortName == "crossfade")
++                    effect->configure(effect->sampleRate(), effect->channelMap());
++            }
++
+             mutex()->unlock();
+         }
+     }
+@@ -742,7 +752,13 @@
+ bool QmmpAudioEngine::finishCurrentAfter(qint64 milliseconds)
+ {
+     QMutexLocker lock(mutex());
+-    if (!m_decoder || m_decoders.isEmpty()) return false;
++    if (!m_decoder || m_decoders.isEmpty() || m_transitionFrames.load() >= 0) return false;
++    // A different PCM layout destroys the retained effect at prepareEffects().
++    // Refuse before buffering any tail, so the ordinary handoff retains A intact.
++    const auto current = m_decoder->audioParameters();
++    const auto incoming = m_decoders.head()->audioParameters();
++    if (current.sampleRate() != incoming.sampleRate() || current.channelMap() != incoming.channelMap() ||
++        m_decoders.head()->totalTime() < std::max<qint64>(3000, milliseconds * 2) || m_inputs.value(m_decoders.head())->isWaiting()) return false;
+     m_transitionRate = m_decoder->audioParameters().sampleRate();
+     m_transitionFrames = qBound<qint64>(qint64(0), milliseconds, qint64(12000)) * m_transitionRate.load() / 1000;
+     return true;
+@@ -758,6 +774,9 @@
+     QMutexLocker lock(mutex());
+     m_transitionFrames = -1;
+     m_next = false;
++    for (Effect* effect : std::as_const(m_effects))
++        if (effect->factory() && effect->factory()->properties().shortName == "crossfade")
++            effect->configure(effect->sampleRate(), effect->channelMap());
+     while(!m_decoders.isEmpty())
+     {
+         Decoder *decoder = m_decoders.dequeue();
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -63,6 +63,7 @@
+     if(m_manualOnly && manualRemaining < 0 && m_buffer_at == 0)
+     {
+         m_state = WAITING;
++        m_readOffset = 0;
+         return;
+     }
+     const qint64 remaining = manualRemaining >= 0 ? manualRemaining : m_core->duration() - std::max(decodedMs, elapsed);
+@@ -87,19 +88,8 @@
+     case PREPARING:
+         if(m_core->duration() && (remaining < m_overlap))
+         {
+-            if(m_buffer_at + b->samples > m_buffer_size)
+-            {
+-                m_buffer_size = m_buffer_at + b->samples;
+-                float *tmp = m_buffer;
+-                m_buffer = (float *)realloc(m_buffer, m_buffer_size * sizeof(float));
+-                if(!m_buffer)
+-                {
+-                    qCWarning(plugin, "unable to allocate  %zu bytes", m_buffer_size);
+-                    m_buffer_size = 0;
+-                    if(tmp)
+-                        free(tmp);
+-                }
+-            }
++            // Capacity is allocated once at configure(), never grown in DSP.
++            if(m_buffer_at + b->samples > m_buffer_size) return;
+ 
+             if(m_buffer)
+             {
+@@ -113,21 +103,23 @@
+             prepareEnvelope();
+             m_state = PROCESSING;
+             const size_t samples = qMin(m_buffer_at, b->samples);
+-            mix(b->data, m_buffer, samples);
++            mix(b->data, m_buffer + m_readOffset, samples);
+             m_buffer_at -= samples;
+-            memmove(m_buffer, m_buffer + samples, m_buffer_at * sizeof(float));
++            m_readOffset += samples;
+         }
+         break;
+     case PROCESSING:
+         if (m_buffer_at > 0)
+         {
+             size_t samples = qMin(m_buffer_at, b->samples);
+-            mix(b->data, m_buffer, samples);
++            mix(b->data, m_buffer + m_readOffset, samples);
+             m_buffer_at -= samples;
+-            memmove(m_buffer, m_buffer + samples, m_buffer_at * sizeof(float));
++            m_readOffset += samples;
+         }
+-        else
++        else {
+             m_state = WAITING;
++            m_readOffset = 0;
++        }
+         break;
+     default:
+         ;
+@@ -138,10 +130,19 @@
+ void CrossfadePlugin::configure(quint32 freq, ChannelMap map)
+ {
+     Effect::configure(freq, map);
++    m_overlap = std::clamp<qint64>(m_overlap, 20, 1800);
++    const size_t capacity = (size_t(freq) * size_t(channels()) * size_t(m_overlap) / 1000)
++                    + 2 * QMMP_BLOCK_FRAMES * size_t(channels());
++    if (capacity != m_buffer_size || !m_buffer) {
++        free(m_buffer);
++        m_buffer = static_cast<float*>(malloc(capacity * sizeof(float)));
++        m_buffer_size = m_buffer ? capacity : 0;
++    }
++    m_buffer_at = 0; m_readOffset = 0; m_state = WAITING;
+ }
+ 
+-// Adapted from LX's RMS tail analysis and equal-power crossfade. Only the
+-// explicit Crossfade mode trims quiet tails; ordinary gapless is bit-preserving.
++// Conservative 20ms RMS windows on the already decoded tail. Only a continuous
++// near-silent end is trimmed; never interpret quiet music as an outro.
+ void CrossfadePlugin::prepareEnvelope()
+ {
+     const size_t window = std::max<size_t>(1, sampleRate() / 50) * channels();
+@@ -152,7 +153,7 @@
+         for(size_t i = start; i < start + window; ++i) energy += m_buffer[i] * m_buffer[i];
+         peakRms = std::max(peakRms, std::sqrt(energy / window));
+     }
+-    const double threshold = std::clamp(peakRms * 0.12, 0.001, 0.012);
++    const double threshold = std::clamp(peakRms * 0.015, 0.0001, 0.001);
+     size_t keep = m_buffer_at;
+     const size_t minimum = size_t(sampleRate()) * channels() / 4;
+     while(keep > minimum + window)
+@@ -163,24 +164,27 @@
+         keep -= window;
+     }
+     if(m_buffer_at - keep >= size_t(sampleRate()) * channels() * 3 / 10)
+-        m_buffer_at = keep;
++        m_buffer_at = std::min(m_buffer_at, keep + 2 * window); // retain 40ms of decay margin
++    m_readOffset = 0;
+     m_mix_total = m_buffer_at;
+ }
+ 
+ void CrossfadePlugin::mix(float *cur_buf, float *prev_buf, size_t samples)
+ {
+     const size_t channelCount = std::max(1, channels());
+-    const double frames = std::max<size_t>(1, m_mix_total / channelCount - 1);
++    const double frames = double(std::max<size_t>(2, m_mix_total / channelCount) - 1);
+     const size_t consumed = m_mix_total - m_buffer_at;
+     for(size_t i = 0; i < samples; i += channelCount)
+     {
+         const double progress = std::min(1.0, double((consumed + i) / channelCount) / frames);
+-        const double angle = progress * 1.5707963267948966;
+-        const double incoming = std::sin(angle), outgoing = std::cos(angle);
++        // Complementary smoothstep gains have zero slope at both endpoints.
++        // Their sum stays 1 even for correlated full-scale tracks: no hard clip.
++        const double incoming = progress * progress * (3.0 - 2.0 * progress);
++        const double outgoing = 1.0 - incoming;
+         for(size_t channel = 0; channel < channelCount && i + channel < samples; ++channel)
+         {
+             const auto at = i + channel;
+-            cur_buf[at] = qBound(-1.0f, float(cur_buf[at] * incoming + prev_buf[at] * outgoing), 1.0f);
++            cur_buf[at] = float(cur_buf[at] * incoming + prev_buf[at] * outgoing);
+         }
+     }
+ }
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.h
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.h
+@@ -42,6 +42,7 @@
+     void configure(quint32 freq, ChannelMap map) override;
+ 
+ private:
++    friend class SmartMixDspTests;
+     enum State
+     {
+         WAITING = 0,
+@@ -56,6 +57,7 @@
+     size_t m_buffer_at = 0;
+     size_t m_buffer_size = 0;
+     size_t m_mix_total = 0;
++    size_t m_readOffset = 0;
+     quint64 m_decodedSamples = 0;
+     qint64 m_lastElapsed = 0;
+     QString m_path;

@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+listenfree_app='@CMAKE_INSTALL_PREFIX@/opt/listenfree'
+export LD_LIBRARY_PATH="$listenfree_app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QMMP_PLUGINS="$listenfree_app/qmmp"
+export LISTENFREE_QMMP_OUTPUT="${LISTENFREE_QMMP_OUTPUT:-pulse}"
+exec "$listenfree_app/listenfree" "$@"

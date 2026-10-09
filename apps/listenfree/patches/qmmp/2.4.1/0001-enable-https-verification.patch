@@ -1,0 +1,16 @@
+diff --git a/src/plugins/Transports/http/httpstreamreader.cpp b/src/plugins/Transports/http/httpstreamreader.cpp
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -344,9 +344,9 @@ void HttpStreamReader::run()
+     curl_easy_setopt(m_handle, CURLOPT_WRITEDATA, this);
+     curl_easy_setopt(m_handle, CURLOPT_HEADERDATA, this);
+     curl_easy_setopt(m_handle, CURLOPT_HEADERFUNCTION, curl_header);
+-    // Disable SSL
+-    curl_easy_setopt(m_handle, CURLOPT_SSL_VERIFYPEER, false);
+-    curl_easy_setopt(m_handle, CURLOPT_SSL_VERIFYHOST, 0);
++    // Keep libcurl's certificate and host verification enabled for HTTPS.
++    curl_easy_setopt(m_handle, CURLOPT_SSL_VERIFYPEER, true);
++    curl_easy_setopt(m_handle, CURLOPT_SSL_VERIFYHOST, 2L);
+     // Enable progress meter
+     curl_easy_setopt(m_handle, CURLOPT_NOPROGRESS, 0);
+     curl_easy_setopt(m_handle, CURLOPT_XFERINFODATA, this);

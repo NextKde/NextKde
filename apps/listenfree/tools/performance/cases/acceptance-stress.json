@@ -1,0 +1,208 @@
+{
+  "report": "@RESULTS@/acceptance-stress/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "threaded",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "cold-30s",
+      "action": "resize",
+      "width": 1066,
+      "height": 709,
+      "ms": 30000
+    },
+    {
+      "name": "songs",
+      "action": "setup",
+      "ms": 6000
+    },
+    {
+      "name": "nowplaying",
+      "action": "nowplaying",
+      "ms": 5000,
+      "expectedLyricLines": 89
+    },
+    {
+      "name": "fullscreen",
+      "action": "fullscreen",
+      "ms": 2000
+    },
+    {
+      "name": "monet",
+      "action": "enter",
+      "style": "monet",
+      "ms": 8000,
+      "seek": 50000
+    },
+    {
+      "name": "diorama",
+      "action": "style",
+      "value": "diorama",
+      "ms": 8000,
+      "seek": 50000
+    },
+    {
+      "name": "claddagh",
+      "action": "style",
+      "value": "claddagh",
+      "ms": 8000,
+      "seek": 50000
+    },
+    {
+      "name": "fume",
+      "action": "style",
+      "value": "fume",
+      "ms": 5000
+    },
+    {
+      "name": "spectrum",
+      "action": "visual",
+      "value": "spectrum",
+      "ms": 7000
+    },
+    {
+      "name": "ambient",
+      "action": "visual",
+      "value": "ambient",
+      "ms": 7000
+    },
+    {
+      "name": "visual-off",
+      "action": "visual",
+      "value": "none",
+      "ms": 3000
+    },
+    {
+      "name": "queue",
+      "action": "queue",
+      "ms": 6000
+    },
+    {
+      "name": "queue-scroll",
+      "action": "queueScroll",
+      "value": 35,
+      "ms": 6000
+    },
+    {
+      "name": "queue-close",
+      "action": "queueClose",
+      "ms": 5000
+    },
+    {
+      "name": "mv",
+      "action": "background",
+      "value": "mv",
+      "video": "@VIDEO@",
+      "ms": 10000,
+      "seek": 4000
+    },
+    {
+      "name": "mv-pause",
+      "action": "pause",
+      "ms": 5000
+    },
+    {
+      "name": "mv-resume",
+      "action": "play",
+      "ms": 4000
+    },
+    {
+      "name": "mv-clear",
+      "action": "background",
+      "value": "blur",
+      "ms": 6000
+    },
+    {
+      "name": "leave",
+      "action": "leave",
+      "ms": 3000
+    },
+    {
+      "name": "enter-1",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-1",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "enter-2",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-2",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "enter-3",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-3",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "enter-4",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-4",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "enter-5",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-5",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "enter-6",
+      "action": "enter",
+      "style": "claddagh",
+      "ms": 5000,
+      "seek": 50000
+    },
+    {
+      "name": "exit-6",
+      "action": "leave",
+      "ms": 5000
+    },
+    {
+      "name": "mini",
+      "action": "mini",
+      "ms": 5000
+    },
+    {
+      "name": "cooldown",
+      "action": "noop",
+      "ms": 75000
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "profile": "@PROFILE@",
+  "requireUnlocked": true
+}

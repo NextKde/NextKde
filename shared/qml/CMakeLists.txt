@@ -12,9 +12,18 @@ qt_add_qml_module(kos_ui
     RESOURCE_PREFIX /qt/qml
     QML_FILES
         foundation/AppTheme.qml
+        foundation/KosSidebar.qml
+        foundation/KosSidebarToggle.qml
+        foundation/KosCheckBox.qml
+        foundation/KosComboBox.qml
+        foundation/KosTextArea.qml
         foundation/KosApplicationWindow.qml
+        foundation/KosWindowControls.qml
+        foundation/KosWindowResizeHandles.qml
         foundation/KosButton.qml
         foundation/KosCard.qml
+        foundation/KosWorkspaceDialog.qml
+        foundation/KosItemDelegate.qml
         foundation/KosDialog.qml
         foundation/KosEmptyState.qml
         foundation/KosNavigationButton.qml
@@ -28,6 +37,8 @@ qt_add_qml_module(kos_ui
         foundation/KosTextField.qml
         foundation/KosToolButton.qml
         foundation/KosLyricLine.qml
+        foundation/KosKineticScroll.qml
+        foundation/KosKineticScrollPhysics.mjs
         foundation/PageCachePolicy.js
         controls/ControlForm.qml
         controls/LiquidTextField.qml

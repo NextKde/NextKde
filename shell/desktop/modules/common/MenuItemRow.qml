@@ -125,7 +125,7 @@ Item {
             font.family: "SF Pro Display, Noto Sans CJK SC, sans-serif"
             font.pixelSize: 13
             font.weight: Font.DemiBold
-            renderType: Text.NativeRendering
+            // 使用默认距离场渲染，减少原生字形在菜单缩放时的像素化。
             color: row.foregroundColor
             opacity: row.itemEnabled ? 1.0 : 0.6
             anchors.verticalCenter: parent.verticalCenter

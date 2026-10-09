@@ -12,6 +12,7 @@ class WeatherClientTest : public QObject {
 private slots:
     void initTestCase();
     void readsVersionedSnapshot();
+    void destroysConnectedClient();
     void rejectsUnsupportedSnapshot();
     void reconnectsWhenServiceAppearsAfterInitialFailure();
 };
@@ -150,6 +151,22 @@ void WeatherClientTest::reconnectsWhenServiceAppearsAfterInitialFailure()
     if (serverSocket->state() != QLocalSocket::UnconnectedState)
         QVERIFY(serverSocket->waitForDisconnected(1000));
     QTRY_VERIFY_WITH_TIMEOUT(!client.connected(), 1000);
+}
+
+void WeatherClientTest::destroysConnectedClient()
+{
+    QTemporaryDir stateDirectory, runtimeDirectory;
+    qputenv("XDG_STATE_HOME", stateDirectory.path().toUtf8());
+    qputenv("XDG_RUNTIME_DIR", runtimeDirectory.path().toUtf8());
+    QLocalServer server;
+    QVERIFY(server.listen(runtimeDirectory.filePath("kos-data.sock")));
+    auto *client = new WeatherClient;
+    QTRY_VERIFY_WITH_TIMEOUT(client->connected(), 1000);
+    QTRY_VERIFY(server.hasPendingConnections());
+    auto *peer = server.nextPendingConnection();
+    QVERIFY(peer);
+    delete client; // Must not restart a destroyed timer or corrupt the allocator.
+    QTRY_COMPARE(peer->state(), QLocalSocket::UnconnectedState);
 }
 
 QTEST_GUILESS_MAIN(WeatherClientTest)

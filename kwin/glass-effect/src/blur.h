@@ -115,6 +115,7 @@ public:
     static bool enabledByDefault();
 
     void reconfigure(ReconfigureFlags flags) override;
+    void postPaintScreen() override;
 #ifdef GLASS_KWIN_67
     void prePaintScreen(ScreenPrePaintData &data) override;
 

@@ -39,7 +39,7 @@ Button {
     background: KosSurface {
         implicitWidth: 72
         implicitHeight: AppTheme.controlHeight
-        radius: Math.min(AppTheme.smallRadius, height / 2)
+        radius: AppTheme.modernDesign ? height / 2 : Math.min(AppTheme.smallRadius, height / 2)
         fillColor: {
             if (root.emphasized)
                 return root.down ? AppTheme.accentPressed

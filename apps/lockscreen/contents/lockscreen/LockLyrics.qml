@@ -1,16 +1,13 @@
 import QtQuick
+import QtQuick.Window
 import org.kde.plasma.workspace.dbus as DBus
 
-// Reads KOS Music's standard MPRIS metadata directly from the session bus.
+// Reads NextKDE music players' MPRIS metadata directly from the session bus.
 // It is loaded independently by LockScreen.qml, so media integration can fail
 // without ever taking the authentication surface down.
 Item {
     id: root
     objectName: "lockLyrics"
-    // DBusPropertyMap mutates nested values without replacing its map object.
-    // Depend on an explicit revision so currentLine/nextLine re-evaluate after
-    // the asynchronous GetAll/update("Metadata") response completes.
-    property int metadataRevision: 0
 
     function unwrap(value) {
         let result = value
@@ -26,54 +23,106 @@ Item {
         return result
     }
 
-    function metadataText(key) {
-        const revision = metadataRevision
-        if (!serviceWatcher.registered || !mpris.properties)
-            return ""
-        const metadata = root.unwrap(mpris.properties["Metadata"])
-        if (!metadata)
-            return ""
-        const value = root.unwrap(metadata[key])
-        return value === null || value === undefined ? "" : String(value)
+    // Discover all MPRIS services, including per-instance names. Both the
+    // Dock and lock screen use Playing > Paused > other, then service name.
+    property var serviceNames: []
+    property var playerSources: []
+    property int playerRevision: 0
+    property bool discoveryPending: false
+    function discoverPlayers() {
+        if (discoveryPending) return
+        discoveryPending = true
+        DBus.SessionBus.asyncCall({service: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+            iface: "org.freedesktop.DBus", member: "ListNames", arguments: []}, function(reply) {
+                const names = Array.from(reply.value || [])
+                    .filter(name => String(name).indexOf("org.mpris.MediaPlayer2.") === 0).sort()
+                if (names.join("\n") !== root.serviceNames.join("\n")) root.serviceNames = names
+                root.discoveryPending = false
+            }, function() { root.discoveryPending = false })
     }
-
-    readonly property string currentLine:
-        metadataText("kos:currentLyric") || metadataText("xesam:asText")
-    readonly property string nextLine: metadataText("kos:nextLyric")
-
-    implicitWidth: 820
-    implicitHeight: currentLine.length > 0 ? (nextLine.length > 0 ? 84 : 58) : 0
-    visible: serviceWatcher.registered && currentLine.length > 0
-
-    DBus.DBusServiceWatcher {
-        id: serviceWatcher
-        busType: DBus.BusType.Session
-        watchedService: "org.mpris.MediaPlayer2.kosmusic"
-    }
-
-    DBus.Properties {
-        id: mpris
-        busType: DBus.BusType.Session
-        service: serviceWatcher.registered ? serviceWatcher.watchedService : ""
-        path: "/org/mpris/MediaPlayer2"
-        iface: "org.mpris.MediaPlayer2.Player"
-
-        onPropertiesChanged: function(interfaceName, changedProperties, invalidatedProperties) {
-            // Force recursive decoding of the nested a{sv} map on dynamic lyric
-            // updates. The completed refresh advances metadataRevision below.
-            if (changedProperties && changedProperties["Metadata"] !== undefined) {
-                update("Metadata")
-                metadataRefreshTimer.restart()
-            }
-        }
-        onRefreshed: root.metadataRevision++
-    }
-
+    Component.onCompleted: discoverPlayers()
     Timer {
-        id: metadataRefreshTimer
-        interval: 80
-        repeat: false
-        onTriggered: root.metadataRevision++
+        interval: 2000; repeat: true
+        running: root.Window.window ? root.Window.window.visible : false
+        onTriggered: root.discoverPlayers()
+    }
+    readonly property var activeSource: {
+        const revision = playerRevision
+        const sources = playerSources.filter(source => source && source.available)
+            .sort((a, b) => a.serviceName.localeCompare(b.serviceName))
+        return sources.find(source => source.playbackStatus === "Playing")
+            || sources.find(source => source.playbackStatus === "Paused") || sources[0] || null
+    }
+    function metadataText(key) { return activeSource ? activeSource.metadataText(key) : "" }
+    readonly property bool lyricsAllowed: metadataText("kos:lockscreenLyricsEnabled") !== "false"
+    readonly property string currentLine: lyricsAllowed ? metadataText("kos:currentLyric") || metadataText("xesam:asText") : ""
+    readonly property string nextLine: lyricsAllowed ? metadataText("kos:nextLyric") : ""
+    readonly property string trackTitle: metadataText("xesam:title")
+    readonly property string trackArtist: metadataText("xesam:artist")
+    readonly property bool playing: !!activeSource && activeSource.playing
+    readonly property string statusText: {
+        const state = metadataText("kos:playbackState")
+        return state === "Loading" || state === "Buffering" ? qsTr("正在加载…")
+            : state === "Error" ? qsTr("播放失败")
+            : playing ? qsTr("正在播放") : state === "Stopped" || state === "Idle" ? qsTr("已停止") : qsTr("已暂停")
+    }
+    function control(method) {
+        if (!activeSource || !activeSource.available || ["Previous", "PlayPause", "Next"].indexOf(method) < 0) return
+        DBus.SessionBus.asyncCall({ service: activeSource.serviceName, path: "/org/mpris/MediaPlayer2",
+            iface: "org.mpris.MediaPlayer2.Player", member: method, arguments: [] }, function() {}, function() {})
+    }
+    implicitWidth: 820
+    implicitHeight: trackTitle.length > 0 ? 64 + (currentLine.length > 0 ? (nextLine.length > 0 ? 72 : 48) : 0) : 0
+    visible: !!activeSource && activeSource.available && trackTitle.length > 0
+
+    component LyricSource: Item {
+        id: source
+        required property string serviceName
+        property int revision: 0
+        readonly property bool available: watcher.registered
+        readonly property string playbackStatus: {
+            const current = revision
+            return available && properties.properties ? String(root.unwrap(properties.properties["PlaybackStatus"]) || "") : ""
+        }
+        readonly property bool playing: playbackStatus === "Playing"
+        onRevisionChanged: root.playerRevision++
+        Component.onCompleted: root.playerSources = root.playerSources.concat([source])
+        Component.onDestruction: root.playerSources = root.playerSources.filter(item => item !== source)
+        readonly property bool hasTrack: metadataText("xesam:title").length > 0
+        function metadataText(key) {
+            const current = revision
+            if (!available || !properties.properties) return ""
+            const metadata = root.unwrap(properties.properties["Metadata"])
+            const value = metadata ? root.unwrap(metadata[key]) : null
+            return value === null || value === undefined ? "" : String(value)
+        }
+        DBus.DBusServiceWatcher {
+            id: watcher
+            busType: DBus.BusType.Session
+            watchedService: source.serviceName
+            onRegisteredChanged: source.revision++
+        }
+        DBus.Properties {
+            id: properties
+            busType: DBus.BusType.Session
+            service: watcher.registered ? watcher.watchedService : ""
+            path: "/org/mpris/MediaPlayer2"
+            iface: "org.mpris.MediaPlayer2.Player"
+            onPropertiesChanged: function(interfaceName, changedProperties, invalidatedProperties) {
+                if (changedProperties && changedProperties["Metadata"] !== undefined) update("Metadata")
+                if (changedProperties && changedProperties["PlaybackStatus"] !== undefined) update("PlaybackStatus")
+                refreshTimer.restart()
+            }
+            onRefreshed: source.revision++
+        }
+        Timer { id: refreshTimer; interval: 80; onTriggered: source.revision++ }
+    }
+    Repeater {
+        model: root.serviceNames
+        delegate: LyricSource {
+            required property string modelData
+            serviceName: modelData
+        }
     }
 
     Rectangle {
@@ -83,14 +132,75 @@ Item {
         border.width: 1
         border.color: Qt.rgba(1, 1, 1, 0.18)
 
+        Image {
+            id: cover
+            x: 16; y: 12; width: 40; height: 40
+            source: root.metadataText("mpris:artUrl")
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            visible: status === Image.Ready
+        }
+        Text {
+            objectName: "lockTrackTitle"
+            x: cover.visible ? 68 : 24; y: 12
+            width: parent.width - x - mediaControls.width - 32
+            text: root.trackTitle + (root.trackArtist.length ? " · " + root.trackArtist : "")
+            textFormat: Text.PlainText
+            color: "white"; font.pixelSize: 15; font.weight: Font.DemiBold
+            elide: Text.ElideRight
+        }
+        Text {
+            x: cover.visible ? 68 : 24; y: 34
+            text: root.statusText
+            color: Qt.rgba(1, 1, 1, 0.6); font.pixelSize: 12
+        }
+        Row {
+            id: mediaControls
+            anchors { right: parent.right; rightMargin: 18; top: parent.top; topMargin: 14 }
+            spacing: 8
+            Repeater {
+                model: ["Previous", "PlayPause", "Next"]
+                delegate: Rectangle {
+                    required property string modelData
+                    width: 36; height: 36; radius: 18
+                    color: mediaHover.hovered ? "#35ffffff" : "#16ffffff"
+                    Canvas {
+                        anchors.centerIn: parent
+                        width: 18; height: 18
+                        property string method: parent.modelData
+                        property bool paused: !root.playing
+                        onPausedChanged: requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset(); ctx.fillStyle = "white"
+                            if (method === "PlayPause" && !paused) {
+                                ctx.fillRect(4, 3, 3, 12); ctx.fillRect(11, 3, 3, 12)
+                            } else {
+                                const backwards = method === "Previous"
+                                ctx.save()
+                                if (backwards) { ctx.translate(18, 0); ctx.scale(-1, 1) }
+                                ctx.beginPath(); ctx.moveTo(4, 3); ctx.lineTo(14, 9); ctx.lineTo(4, 15); ctx.closePath(); ctx.fill()
+                                if (method !== "PlayPause") ctx.fillRect(14, 3, 2, 12)
+                                ctx.restore()
+                            }
+                        }
+                    }
+                    HoverHandler { id: mediaHover }
+                    TapHandler { onTapped: root.control(parent.modelData) }
+                }
+            }
+        }
+
         Text {
             id: currentText
             objectName: "lockCurrentLyric"
             anchors { left: parent.left; right: parent.right; top: parent.top }
             anchors.leftMargin: 24
             anchors.rightMargin: 24
-            anchors.topMargin: root.nextLine.length > 0 ? 13 : 15
+            anchors.topMargin: 68
+            visible: text.length > 0
             text: root.currentLine
+            textFormat: Text.PlainText
             color: Qt.rgba(1, 1, 1, 0.96)
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight
@@ -104,6 +214,7 @@ Item {
             anchors.topMargin: 6
             visible: text.length > 0
             text: root.nextLine
+            textFormat: Text.PlainText
             color: Qt.rgba(1, 1, 1, 0.58)
             horizontalAlignment: Text.AlignHCenter
             elide: Text.ElideRight

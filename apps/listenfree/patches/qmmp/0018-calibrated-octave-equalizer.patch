@@ -1,0 +1,122 @@
+--- a/src/qmmp/outputwriter.cpp
++++ b/src/qmmp/outputwriter.cpp
+@@ -19,6 +19,8 @@
+  ***************************************************************************/
+ 
+ #include <string.h>
++#include <cmath>
++#include <QSettings>
+ #include "statehandler.h"
+ #include "soundcore.h"
+ #include "visual.h"
+@@ -405,19 +407,25 @@
+     {
+         double preamp = m_settings->eqSettings().preamp();
+         int bands =  m_settings->eqSettings().bands();
+-
++        const bool unityGain = QSettings().value(QStringLiteral("Equalizer/unityGain"), false).toBool();
++
++        eq_set_option(EQ_ISO_BANDS, unityGain);
+         eq_init_iir(m_frequency, bands);
+         eq_set_option(EQ_TWO_PASSES, m_settings->eqSettings().twoPasses());
+         eq_set_option(EQ_CLIP, 1);
+ 
+         for(int ch = 0; ch < m_channels; ++ch)
+         {
+-            eq_set_preamp(ch, 1.0 + 0.0932471 *preamp + 0.00279033 * preamp * preamp);
++            // The legacy clipped IIR has a 0.25 dry path. Opt-in calibration
++            // restores unity at 0 dB and maps displayed dB to amplitude.
++            eq_set_preamp(ch, unityGain ? 4.0 * std::pow(10.0, preamp / 20.0)
++                                       : 1.0 + 0.0932471 *preamp + 0.00279033 * preamp * preamp);
+ 
+             for(int i = 0; i < bands; ++i)
+             {
+                 double value =  m_settings->eqSettings().gain(i);
+-                eq_set_gain(i, ch, 0.03 * value + 0.000999999 * value * value);
++                eq_set_gain(i, ch, unityGain ? (std::pow(10.0, value / 20.0) - 1.0) * 0.25
++                                           : 0.03 * value + 0.000999999 * value * value);
+             }
+         }
+     }
+--- a/src/qmmp/equ/iir.c
++++ b/src/qmmp/equ/iir.c
+@@ -68,18 +68,24 @@
+ /* Init the filters */
+ void eq_init_iir(unsigned int srate, int band_num)
+ {
+-  calc_coeffs();
++  static int previous_iso = -1;
++  const int iso = band_num == 10 && (eq_options & EQ_ISO_BANDS);
+ #if 0
+   band_count = cfg.band_num;
+ #endif
+ 
+-  if(srate == rate && band_num == band_count)
++  if(srate == rate && band_num == band_count && iso == previous_iso)
+       return;
+ 
+   band_count = band_num;
+   rate = srate;
+-
+-  iir_cf = get_coeffs(&band_count, rate);
++  previous_iso = iso;
++  if(iso)
++    iir_cf = get_iso_coeffs(rate);
++  else {
++    calc_coeffs();
++    iir_cf = get_coeffs(&band_count, rate);
++  }
+   eq_clean_history();
+ }
+ 
+--- a/src/qmmp/equ/iir.h
++++ b/src/qmmp/equ/iir.h
+@@ -62,7 +62,8 @@
+  */
+ typedef enum {
+     EQ_TWO_PASSES = 0x01,
+-    EQ_CLIP = 0x02
++    EQ_CLIP = 0x02,
++    EQ_ISO_BANDS = 0x04 /* opt-in octave centers at the actual sample rate */
+ 
+ } eq_option_t;
+ 
+--- a/src/qmmp/equ/iir_cfs.c
++++ b/src/qmmp/equ/iir_cfs.c
+@@ -200,6 +200,27 @@
+   if (x1 < *x0)
+     *x0 = x1;
+   return 0;
++}
++
++/* The same upstream coefficient equations, with octave centers kept stable
++ * across sample rates. Frequencies at/above Nyquist contribute no output. */
++sIIRCoefficients* get_iso_coeffs(unsigned int sfreq)
++{
++  static sIIRCoefficients coeffs[10];
++  for(int i = 0; i < 10; ++i) {
++    coeffs[i].alpha = coeffs[i].beta = coeffs[i].gamma = 0;
++    if(!sfreq || band_f010[i] >= sfreq * 0.5) continue;
++    double f1, f2, x0;
++    find_f1_and_f2(band_f010[i], 1.0, &f1, &f2);
++    const double tf0 = 2.0 * M_PI * band_f010[i] / sfreq;
++    const double tf1 = 2.0 * M_PI * f1 / sfreq;
++    if(find_root(BETA2(tf0, tf1), BETA1(tf0, tf1), BETA0(tf0, tf1), &x0) == 0) {
++      coeffs[i].beta = 2.0 * x0;
++      coeffs[i].alpha = 2.0 * ALPHA(x0);
++      coeffs[i].gamma = 2.0 * GAMMA(x0, tf0);
++    }
++  }
++  return coeffs;
+ }
+ 
+ /* Calculate all the coefficients as specified in the bands[] array */
+--- a/src/qmmp/equ/iir_cfs.h
++++ b/src/qmmp/equ/iir_cfs.h
+@@ -43,5 +43,6 @@
+ 
+ sIIRCoefficients* get_coeffs(int *bands, unsigned int sfreq); //, bool use_xmms_original_freqs);
+ void calc_coeffs();
++sIIRCoefficients* get_iso_coeffs(unsigned int sfreq);
+ 
+ #endif

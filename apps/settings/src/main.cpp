@@ -21,6 +21,8 @@
 #include <QFileSystemWatcher>
 #include <QImage>
 #include <QImageWriter>
+#include <QBuffer>
+#include <QSaveFile>
 #include <QPainter>
 #include <QPainterPath>
 #include <QLinearGradient>
@@ -459,7 +461,32 @@ public:
         return images;
     }
 
-    // 复制单张图片进托管图集;重名自动加 " (n)"。返回目标路径,失败返回空串。
+    // 复制单张图片进托管图集;JPEG 统一转基线编码(见 transcodeJpegBaseline);
+    // 重名自动加 " (n)"。返回目标路径,失败返回空串。
+    // 解码并按基线(baseline)编码重存 JPEG,失败返回空。图库素材以库存图为
+    // 主,其中大量是 progressive 编码:libjpeg 解码 progressive 必须缓存全部
+    // 系数块,一张 7680x4320 的渐进图解码时临时占 20-30MB 解压工作区。导入时
+    // 统一转成基线,同一份像素数据、解码内存可控。EXIF 方向直接烘进像素,质量
+    // 95 的再编码折损肉眼不可见。已知取舍:非 sRGB 源(如 Display P3)写入时
+    // 不带色域标签,宽色域屏上可能有轻微饱和度偏移;Qt 6.11 的 QtGui 没有导出
+    // ICC 写入 API,无法在转码时保留。
+    static QByteArray transcodeJpegBaseline(const QString &path) {
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        const QImage image = reader.read();
+        if (image.isNull())
+            return {};
+        QByteArray bytes;
+        QBuffer buffer(&bytes);
+        if (!buffer.open(QIODevice::WriteOnly))
+            return {};
+        QImageWriter writer(&buffer, "jpeg");
+        writer.setQuality(95);
+        if (!writer.write(image))
+            return {};
+        return bytes;
+    }
+
     Q_INVOKABLE QString importGalleryImage(const QString &urlOrPath) {
         const QString path = urlOrPath.startsWith(QStringLiteral("file:"))
             ? QUrl(urlOrPath).toLocalFile() : urlOrPath;
@@ -474,16 +501,29 @@ public:
             QDir().mkpath(dir.absolutePath());
         // 内容去重(两级):同内容必同大小,所以先按文件大小筛出候选(通常
         // 0~1 个),只对候选算 MD5 比对——不必全目录扫哈希。命中即视为同一
-        // 张,跳过复制直接返回已有路径,重复导入幂等。
+        // 张,跳过复制直接返回已有路径,重复导入幂等。JPEG 转码会改变字节,
+        // 所以转码候选的输出 MD5 也参与比对:同一张源图无论以何种编码形态
+        // 已在库中,都能命中。
         const QByteArray sourceMd5 = galleryFileMd5(info.absoluteFilePath());
         if (sourceMd5.isEmpty()) {
             setLastError(QStringLiteral("无法读取图片内容"));
             return {};
         }
+        const bool isJpeg = info.suffix().compare(QLatin1String("jpg"), Qt::CaseInsensitive) == 0
+            || info.suffix().compare(QLatin1String("jpeg"), Qt::CaseInsensitive) == 0;
+        QByteArray payload;
+        if (isJpeg)
+            payload = transcodeJpegBaseline(info.absoluteFilePath());
+        // 转码失败不阻塞导入:回退为原始字节复制,行为与未转码时一致。
+        const QByteArray candidateMd5 = payload.isEmpty()
+            ? QByteArray{} : QCryptographicHash::hash(payload, QCryptographicHash::Md5);
         for (const QFileInfo &entry : dir.entryInfoList(QDir::Files)) {
-            if (entry.size() != info.size())
+            if (entry.size() != info.size()
+                    && (payload.isEmpty() || entry.size() != qsizetype(payload.size())))
                 continue;
-            if (galleryFileMd5(entry.absoluteFilePath()) == sourceMd5)
+            const QByteArray entryMd5 = galleryFileMd5(entry.absoluteFilePath());
+            if (entryMd5 == sourceMd5
+                    || (!candidateMd5.isEmpty() && entryMd5 == candidateMd5))
                 return entry.absoluteFilePath();
         }
         const QString base = info.completeBaseName();
@@ -492,7 +532,15 @@ public:
         for (int n = 1; QFileInfo::exists(target); ++n)
             target = dir.filePath(QStringLiteral("%1 (%2).%3")
                                       .arg(base, QString::number(n), suffix));
-        if (!QFile::copy(info.absoluteFilePath(), target)) {
+        if (!payload.isEmpty()) {
+            QSaveFile out(target);
+            if (!out.open(QIODevice::WriteOnly)
+                    || out.write(payload) != qsizetype(payload.size()) || !out.commit()) {
+                out.cancelWriting();
+                setLastError(QStringLiteral("复制图片失败:%1").arg(info.fileName()));
+                return {};
+            }
+        } else if (!QFile::copy(info.absoluteFilePath(), target)) {
             setLastError(QStringLiteral("复制图片失败:%1").arg(info.fileName()));
             return {};
         }

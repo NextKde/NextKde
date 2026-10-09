@@ -1,0 +1,135 @@
+{
+  "report": "@RESULTS@/background-final/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "basic",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "setup",
+      "action": "setup",
+      "ms": 5000
+    },
+    {
+      "name": "pause",
+      "action": "pause",
+      "ms": 2500
+    },
+    {
+      "name": "global-first",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "globalBackground",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_1.png"
+        }
+      ]
+    },
+    {
+      "name": "global-second",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "globalBackground",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_2.png"
+        }
+      ]
+    },
+    {
+      "name": "global-third",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "globalBackground",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_3.png"
+        }
+      ]
+    },
+    {
+      "name": "artist-open",
+      "action": "collection",
+      "kind": "Artist",
+      "value": "Taylor Swift",
+      "ms": 6000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "collectionPage",
+          "property": "artistArtworkReady",
+          "value": true
+        },
+        {
+          "name": "collectionPage",
+          "property": "artistImageAspect",
+          "value": 2
+        },
+        {
+          "name": "artistBackdrop",
+          "property": "heroHeight",
+          "value": 416.5
+        },
+        {
+          "name": "artistBackdrop",
+          "property": "scrollOffset",
+          "value": 0
+        },
+        {
+          "name": "artistBackdrop",
+          "property": "collapse",
+          "value": 0
+        }
+      ]
+    },
+    {
+      "name": "artist-first",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "artistBackdrop",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_4.png"
+        }
+      ]
+    },
+    {
+      "name": "artist-second",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "artistBackdrop",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_5.png"
+        }
+      ]
+    },
+    {
+      "name": "artist-third",
+      "action": "noop",
+      "ms": 4500,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "artistBackdrop",
+          "property": "artwork",
+          "value": "file:///@REPO@/music_player_desktop/assets/album_Cover_6.png"
+        }
+      ]
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "profile": "@PROFILE@"
+}

@@ -23,3 +23,4 @@ MaterialColorScheme 1.0 colorize/MaterialColorScheme.mjs
 TraditionalColorScheme 1.0 colorize/TraditionalColorScheme.mjs
 singleton WallpaperColorSource 1.0 colorize/WallpaperColorSource.qml
 SelectionHighlight 1.0 controls/SelectionHighlight.qml
+KosKineticScroll 1.0 foundation/KosKineticScroll.qml

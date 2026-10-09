@@ -11,7 +11,7 @@
 #include "blurconfig.h"
 #include "settings.h"
 #include "surfaceshapemanager.h"
-#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+#ifndef GLASS_X11
 #include "legacyblurregion.h"
 #endif
 
@@ -260,11 +260,9 @@ BlurEffect::BlurEffect()
             this, [this](SurfaceInterface *surface) {
         for (EffectWindow *window : effects->stackingOrder()) {
             if (window->surface() == surface) {
-#ifndef GLASS_KWIN_67
-                // The 6.6 fallback region follows shape creation, movement,
-                // disable and destruction, not just legacy blurChanged signals.
+                // Rebuild declared-shape fallback on output remapping too:
+                // the new surface may not have received a blur-region request.
                 updateBlurRegion(window);
-#endif
                 // A blur override appearing, disappearing or changing level
                 // changes how far the repaint region has to expand, not just
                 // what is drawn this frame.
@@ -277,6 +275,21 @@ BlurEffect::BlurEffect()
             }
         }
     });
+    connect(m_surfaceShapeManager.get(), &SurfaceShapeManager::revealFrameChanged,
+            this, [this](SurfaceInterface *surface, const QRectF &bounds) {
+        // The timeline changes shader uniforms, not capture geometry or blur
+        // strength. Repaint only the panel and sampling margin; do not rebuild
+        // the legacy region or invalidate the full-screen transparent window.
+        for (const auto &entry : m_windows) {
+            EffectWindow *window = entry.first;
+            if (window->surface() == surface) {
+                const int padding = blurExpandSize(window);
+                window->addRepaint(RectF(bounds.adjusted(-padding, -padding, padding, padding)));
+                break;
+            }
+        }
+    });
+
 #endif
 
     connect(effects, &EffectsHandler::windowAdded, this, &BlurEffect::slotWindowAdded);
@@ -593,7 +606,9 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
         }
     }
 
-#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+#ifndef GLASS_X11
+    // An enabled shell shape is an explicit backdrop request on both APIs.
+    // Recover when output remapping loses the separate blur-region request.
     if (!content.has_value() && isQuickshellWindow(w) && m_surfaceShapeManager && w->surface()) {
         const auto region = legacySurfaceBlurRegion(std::nullopt,
             m_surfaceShapeManager->shapesFor(w->surface()));
@@ -1093,12 +1108,25 @@ QRectF BlurEffect::dynamicCornerRect(EffectWindow *w) const
     return w->frameGeometry();
 }
 
+void BlurEffect::postPaintScreen()
+{
+    effects->postPaintScreen();
+#ifndef GLASS_X11
+    // Client focus, hover and model work must not begin before the endpoint
+    // frame's GPU commands have been submitted by the window draw chain.
+    if (m_surfaceShapeManager) m_surfaceShapeManager->completeAnimations();
+#endif
+}
+
 #ifdef GLASS_KWIN_67
 void BlurEffect::prePaintScreen(ScreenPrePaintData &data)
 #else
 void BlurEffect::prePaintScreen(ScreenPrePaintData &data, std::chrono::milliseconds presentTime)
 #endif
 {
+#ifndef GLASS_X11
+    if (m_surfaceShapeManager) m_surfaceShapeManager->advanceAnimations();
+#endif
     m_paintedDeviceArea = BlurRegion();
     m_currentDeviceBlur = BlurRegion();
 #ifdef GLASS_X11
@@ -1283,7 +1311,27 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
 {
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
 
-    // Draw the window over the blurred area
+    // Glass uses the original transform/capture. Only the already-composited
+    // client surface is transformed as one group, never its individual items.
+#ifndef GLASS_X11
+    if (m_surfaceShapeManager && w->surface()) {
+        if (const auto reveal = m_surfaceShapeManager->revealFor(w->surface())) {
+            if (reveal->progress <= 0)
+                return;
+            WindowPaintData contentData(data);
+            const qreal scale = reveal->scale();
+            const QPointF anchor = reveal->anchor();
+            contentData.setXTranslation(data.xTranslation() + anchor.x() * data.xScale() * (1 - scale));
+            contentData.setYTranslation(data.yTranslation() + anchor.y() * data.yScale() * (1 - scale));
+            contentData.setXScale(data.xScale() * scale);
+            contentData.setYScale(data.yScale() * scale);
+            contentData.multiplyOpacity(reveal->progress);
+            effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
+                                deviceRegion, contentData);
+            return;
+        }
+    }
+#endif
     effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
@@ -1342,6 +1390,14 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         declaredSurfaceShapes = m_surfaceShapeManager->shapesFor(w->surface());
     }
 #endif
+
+    // A completed close can outlive the client's blur-region commit. Keep
+    // its transparent declaration authoritative and skip all capture/blur work.
+    if (!declaredSurfaceShapes.isEmpty()
+        && std::all_of(declaredSurfaceShapes.cbegin(), declaredSurfaceShapes.cend(),
+                       [](const SurfaceShape &shape) { return shape.materialOpacity <= 0; })) {
+        return;
+    }
 
     auto transformShape = [&](BlurRegion shape) {
         shape.translate(w->pos().toPoint());
@@ -2112,6 +2168,10 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     };
 
     auto protocolShapeUniforms = [&](const SurfaceShapeDraw &draw) {
+        // Fade the complete premultiplied finish without changing capture bounds.
+        m_roundedOnscreenPass.shader->setUniform(
+            m_roundedOnscreenPass.opacityLocation,
+            modulation * static_cast<float>(draw.shape.materialOpacity));
         const QVector4D box(draw.nativeBox.x() + draw.nativeBox.width() * 0.5,
             draw.nativeBox.y() + draw.nativeBox.height() * 0.5,
             draw.nativeBox.width() * 0.5, draw.nativeBox.height() * 0.5);
@@ -2155,6 +2215,11 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         }
 
         if (GLTexture *noiseTexture = ensureNoiseTexture(noiseStrength)) {
+            const float shapeOpacity = protocolDraw
+                ? static_cast<float>(protocolDraw->shape.materialOpacity) : 1.0f;
+            // Additive noise must fade with the glass rather than remain visible.
+            glBlendColor(0.0f, 0.0f, 0.0f, modulation * shapeOpacity);
+            glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE);
             ShaderManager::instance()->pushShader(m_noisePass.shader.get());
 
             QMatrix4x4 noiseProjectionMatrix = viewport.projectionMatrix();
@@ -2282,6 +2347,8 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     }
 
     if (splitRenderRegions && frameVertexCount > 0) {
+        // Per-shape opacity applies only to content, not a window decoration.
+        m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.opacityLocation, modulation);
         GLTexture *frameBlurredTexture = splitBlurSettings ? runBlurPass(m_decorationBlurSettings) : contentBlurredTexture;
         drawBlurredRegion(frameBlurredTexture,
                           6 + contentVertexCount,
@@ -2299,11 +2366,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // artifacts, which often happens due to the smooth color transitions in the blurred image.
 
         glEnable(GL_BLEND);
-        if (opacity < 1.0) {
-            glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE);
-        } else {
-            glBlendFunc(GL_ONE, GL_ONE);
-        }
+        // drawNoiseRegion selects the additive blend factor for each shape.
 
         const int contentNoiseStrength = splitBlurSettings
             ? contentBlurSettings.noiseStrength

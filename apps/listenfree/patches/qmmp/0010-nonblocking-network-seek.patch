@@ -1,0 +1,66 @@
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -356,12 +356,26 @@
+         //seek
+         if (m_seekTime >= 0)
+         {
++            const qint64 seekTime = m_seekTime;
++            m_seekTime = -1;
+             m_output->recycler()->mutex()->lock ();
+             m_output->recycler()->clear();
+             m_output->recycler()->mutex()->unlock ();
+-            m_decoder->seek(m_seekTime);
+-            m_seekTime = -1;
++            // Network seeks may read packets through a proxy on the GUI
++            // thread. As with read(), never hold the control mutex while
++            // waiting for the decoder, or the next GUI seek can deadlock it.
++            mutex()->unlock();
++            m_decoder->seek(seekTime);
++            mutex()->lock();
+             m_output_at = 0;
++            if(m_user_stop || m_seekTime >= 0)
++            {
++                // A newer request replaces this one; do not emit old audio
++                // or clear a seek queued while the decoder was waiting.
++                m_done = m_user_stop.load();
++                mutex()->unlock();
++                continue;
++            }
+         }
+         //metadata
+         if(m_inputs[m_decoder]->hasMetaData())
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -235,6 +235,9 @@
+     m_resumeOffset = pos;
+     m_readOffset = pos;
+     m_repositioning = true;
++    // This source already has a decoder. A Range restart is not initial
++    // prebuffering and must not emit another ready() or close the live device.
++    m_ready = true;
+     m_stream.buf_fill = 0;
+     m_stream.completed = pos == m_stream.totalSize;
+     m_stream.aborted = m_cancelled.load();
+@@ -252,6 +255,11 @@
+ 
+ void HttpStreamReader::downloadFile()
+ {
++    {
++        const QMutexLocker locker(&m_mutex);
++        m_stream.aborted = m_cancelled.load();
++        m_stream.completed = false;
++    }
+     m_thread->start();
+ }
+ 
+@@ -410,8 +418,8 @@
+     m_stream.buf_fill = 0;
+     m_stream.buf_size = m_prebufferSize * 2;
+     m_stream.buf = (char *)malloc(m_stream.buf_size); //initial buffer
+-    m_stream.aborted = m_cancelled.load();
+-    m_stream.completed = false;
++    // downloadFile()/seek() initialize request state before start(). An abort
++    // can arrive before this worker runs; never overwrite that cancellation.
+     m_stream.header.clear();
+     if (!m_repositioning) m_ready = false;
+     qCDebug(plugin, "starting libcurl");

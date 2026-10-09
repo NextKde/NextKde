@@ -1,0 +1,146 @@
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.h
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.h
+@@ -50,11 +50,16 @@
+         PROCESSING,
+     };
+ 
+-    void mix(float *cur_buf, float *prev_buf, uint samples, double volume);
++    void mix(float *cur_buf, float *prev_buf, size_t samples);
+ 
+     float *m_buffer = nullptr;
+     size_t m_buffer_at = 0;
+     size_t m_buffer_size = 0;
++    size_t m_mix_total = 0;
++    quint64 m_decodedSamples = 0;
++    qint64 m_lastElapsed = 0;
++    QString m_path;
++    void prepareEnvelope();
+     qint64 m_overlap;
+     int m_state = WAITING;
+     SoundCore *m_core;
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -19,6 +19,8 @@
+  ***************************************************************************/
+ 
+ #include <QSettings>
++#include <cmath>
++#include <algorithm>
+ #include <qmmp/qmmp.h>
+ #include <qmmp/statehandler.h>
+ #include <qmmp/soundcore.h>
+@@ -40,11 +42,29 @@
+ 
+ void CrossfadePlugin::applyEffect(Buffer *b)
+ {
++    const qint64 elapsed = m_handler->elapsed();
++    const bool changedPath = b->trackInfo && b->trackInfo->path() != m_path;
++    if(changedPath || elapsed + 1000 < m_lastElapsed)
++    {
++        m_decodedSamples = 0;
++        if(b->trackInfo) m_path = b->trackInfo->path();
++        if(m_state == PREPARING && m_buffer_at)
++        {
++            prepareEnvelope();
++            m_state = PROCESSING;
++        }
++    }
++    m_lastElapsed = elapsed;
++    // The decoder runs ahead of the output recycler. Count decoded samples so
++    // the configured overlap does not shrink with output buffer latency.
++    const qint64 decodedMs = m_decodedSamples * 1000 / (sampleRate() * channels());
++    const qint64 remaining = m_core->duration() - std::max(decodedMs, elapsed);
++    m_decodedSamples += b->samples;
+     switch (m_state)
+     {
+     case WAITING:
+         if((m_core->duration() > m_overlap + 2000)
+-                && (m_core->duration() - m_handler->elapsed() < m_overlap + 2000))
++                && (remaining < m_overlap + 2000))
+         {
+             StateHandler::instance()->sendNextTrackRequest();
+             m_state = CHECKING;
+@@ -56,7 +76,7 @@
+             m_state = PREPARING;
+         break;
+     case PREPARING:
+-        if(m_core->duration() && (m_core->duration() - m_handler->elapsed() <  m_overlap))
++        if(m_core->duration() && (remaining < m_overlap))
+         {
+             if(m_buffer_at + b->samples > m_buffer_size)
+             {
+@@ -80,14 +100,20 @@
+             }
+         }
+         else if(m_buffer_at > 0)
++        {
++            prepareEnvelope();
+             m_state = PROCESSING;
++            const size_t samples = qMin(m_buffer_at, b->samples);
++            mix(b->data, m_buffer, samples);
++            m_buffer_at -= samples;
++            memmove(m_buffer, m_buffer + samples, m_buffer_at * sizeof(float));
++        }
+         break;
+     case PROCESSING:
+         if (m_buffer_at > 0)
+         {
+-            double volume = (double)m_buffer_at/m_buffer_size;
+             size_t samples = qMin(m_buffer_at, b->samples);
+-            mix(b->data, m_buffer, samples, volume);
++            mix(b->data, m_buffer, samples);
+             m_buffer_at -= samples;
+             memmove(m_buffer, m_buffer + samples, m_buffer_at * sizeof(float));
+         }
+@@ -105,11 +131,47 @@
+     Effect::configure(freq, map);
+ }
+ 
+-void CrossfadePlugin::mix(float *cur_buf, float *prev_buf, uint samples, double volume)
++// Adapted from LX's RMS tail analysis and equal-power crossfade. Only the
++// explicit Crossfade mode trims quiet tails; ordinary gapless is bit-preserving.
++void CrossfadePlugin::prepareEnvelope()
+ {
+-    for (uint i = 0; i < samples; i++)
++    const size_t window = std::max<size_t>(1, sampleRate() / 50) * channels();
++    double peakRms = 0;
++    for(size_t start = 0; start + window <= m_buffer_at; start += window)
+     {
+-        cur_buf[i] = cur_buf[i] * (1.0 - volume) + prev_buf[i]*volume;
+-        cur_buf[i] = qBound(-1.0f, cur_buf[i], 1.0f);
++        double energy = 0;
++        for(size_t i = start; i < start + window; ++i) energy += m_buffer[i] * m_buffer[i];
++        peakRms = std::max(peakRms, std::sqrt(energy / window));
++    }
++    const double threshold = std::clamp(peakRms * 0.12, 0.001, 0.012);
++    size_t keep = m_buffer_at;
++    const size_t minimum = size_t(sampleRate()) * channels() / 4;
++    while(keep > minimum + window)
++    {
++        double energy = 0;
++        for(size_t i = keep - window; i < keep; ++i) energy += m_buffer[i] * m_buffer[i];
++        if(std::sqrt(energy / window) > threshold) break;
++        keep -= window;
++    }
++    if(m_buffer_at - keep >= size_t(sampleRate()) * channels() * 3 / 10)
++        m_buffer_at = keep;
++    m_mix_total = m_buffer_at;
++}
++
++void CrossfadePlugin::mix(float *cur_buf, float *prev_buf, size_t samples)
++{
++    const size_t channelCount = std::max(1, channels());
++    const double frames = std::max<size_t>(1, m_mix_total / channelCount - 1);
++    const size_t consumed = m_mix_total - m_buffer_at;
++    for(size_t i = 0; i < samples; i += channelCount)
++    {
++        const double progress = std::min(1.0, double((consumed + i) / channelCount) / frames);
++        const double angle = progress * 1.5707963267948966;
++        const double incoming = std::sin(angle), outgoing = std::cos(angle);
++        for(size_t channel = 0; channel < channelCount && i + channel < samples; ++channel)
++        {
++            const auto at = i + channel;
++            cur_buf[at] = qBound(-1.0f, float(cur_buf[at] * incoming + prev_buf[at] * outgoing), 1.0f);
++        }
+     }
+ }

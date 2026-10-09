@@ -1,0 +1,74 @@
+--- a/src/plugins/Input/ffmpeg/decoder_ffmpeg.cpp
++++ b/src/plugins/Input/ffmpeg/decoder_ffmpeg.cpp
+@@ -20,6 +20,7 @@
+ 
+ #include "replaygainreader.h"
+ #include "decoder_ffmpeg.h"
++#include <QFile>
+ extern "C"{
+ #include <libavutil/channel_layout.h>
+ #include <libavutil/frame.h>
+@@ -120,29 +121,34 @@
+ 
+     m_formatContext = avformat_alloc_context();
+ 
+-    AVProbeData pd;
+-    memset(&pd, 0, sizeof(pd));
+-    uint8_t buf[PROBE_BUFFER_SIZE + AVPROBE_PADDING_SIZE];
+-    pd.filename = m_path.toLocal8Bit().constData();
+-    pd.buf_size = input()->peek((char*)buf, sizeof(buf) - AVPROBE_PADDING_SIZE);
+-    pd.buf = buf;
+-    if(pd.buf_size < PROBE_BUFFER_SIZE)
+-    {
+-        qCWarning(plugin, "too small buffer size: %d bytes", pd.buf_size);
+-        return false;
+-    }
+ #if LIBAVFORMAT_VERSION_INT >= AV_VERSION_INT(59, 0, 101)
+-    const AVInputFormat *fmt = av_probe_input_format(&pd, 1);
++    const AVInputFormat *fmt = nullptr;
+ #else
+-    AVInputFormat *fmt = av_probe_input_format(&pd, 1);
++    AVInputFormat *fmt = nullptr;
+ #endif
+-    if(!fmt)
+-    {
+-        qCWarning(plugin, "usupported format");
+-        return false;
+-    }
+-    qCDebug(plugin, "detected format: %s", fmt->long_name);
+-    qCDebug(plugin, "=%s=", fmt->name);
++    // A local file can begin with a large ID3 cover tag. A small peek then
++    // guesses from the extension, which may be wrong. Let libavformat probe
++    // through our AVIO callbacks instead of forcing that low-confidence guess.
++    if(!qobject_cast<QFile *>(input()))
++    {
++        AVProbeData pd = {};
++        uint8_t buf[PROBE_BUFFER_SIZE + AVPROBE_PADDING_SIZE] = {};
++        const QByteArray filename = m_path.toLocal8Bit();
++        pd.filename = filename.constData();
++        pd.buf_size = input()->peek((char*)buf, sizeof(buf) - AVPROBE_PADDING_SIZE);
++        pd.buf = buf;
++        if(pd.buf_size < PROBE_BUFFER_SIZE)
++        {
++            qCWarning(plugin, "too small buffer size: %d bytes", pd.buf_size);
++            return false;
++        }
++        fmt = av_probe_input_format(&pd, 1);
++        if(!fmt)
++        {
++            qCWarning(plugin, "unsupported format");
++            return false;
++        }
++    }
+ 
+ #if (LIBAVCODEC_VERSION_INT >= AV_VERSION_INT(58,10,100)) //ffmpeg-3.5
+     m_input_buf = (uchar*)av_malloc(INPUT_BUFFER_SIZE + AV_INPUT_BUFFER_PADDING_SIZE);
+@@ -173,6 +179,8 @@
+         qCDebug(plugin, "avformat_open_input() failed");
+         return false;
+     }
++    qCDebug(plugin, "detected format: %s", m_formatContext->iformat->long_name);
++    qCDebug(plugin, "=%s=", m_formatContext->iformat->name);
+     avformat_find_stream_info(m_formatContext, nullptr);
+     if(m_formatContext->pb)
+         m_formatContext->pb->eof_reached = 0;

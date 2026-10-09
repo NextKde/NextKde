@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Kos.Ui
 
-KosDialog {
+KosWorkspaceDialog {
     id: root
 
     property string editingId: ""
@@ -87,10 +87,13 @@ KosDialog {
     onAccepted: saveRequested(editingId, payload())
 
     contentItem: ScrollView {
+        id: editorScroll
+        contentWidth: availableWidth
+        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         clip: true
 
         ColumnLayout {
-            width: parent.width
+            width: editorScroll.availableWidth
             spacing: 12
 
             Rectangle {
@@ -119,7 +122,7 @@ KosDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Label { text: qsTr("Title"); color: AppTheme.mutedText }
-                    LiquidTextField {
+                    KosTextField {
                         id: titleField
                         Layout.fillWidth: true
                         placeholderText: qsTr("Task title")
@@ -127,7 +130,7 @@ KosDialog {
                     }
                 }
 
-                CheckBox {
+                KosCheckBox {
                     id: completedCheck
                     text: qsTr("Completed")
                     Layout.alignment: Qt.AlignBottom
@@ -140,7 +143,7 @@ KosDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Label { text: qsTr("List"); color: AppTheme.mutedText }
-                    ComboBox {
+                    KosComboBox {
                         id: listBox
                         Layout.fillWidth: true
                         model: root.availableLists
@@ -151,7 +154,7 @@ KosDialog {
                 ColumnLayout {
                     Layout.fillWidth: true
                     Label { text: qsTr("Priority"); color: AppTheme.mutedText }
-                    ComboBox {
+                    KosComboBox {
                         id: priorityBox
                         Layout.fillWidth: true
                         model: [qsTr("None"), qsTr("Low"), qsTr("Medium"), qsTr("High")]
@@ -163,14 +166,14 @@ KosDialog {
             RowLayout {
                 Layout.fillWidth: true
 
-                LiquidTextField {
+                KosTextField {
                     id: dueDateField
                     Layout.fillWidth: true
                     placeholderText: "YYYY-MM-DD"
                     Accessible.name: qsTr("Task due date")
                 }
 
-                LiquidTextField {
+                KosTextField {
                     id: dueTimeField
                     Layout.preferredWidth: 96
                     placeholderText: "HH:MM"
@@ -178,7 +181,7 @@ KosDialog {
                     Accessible.name: qsTr("Task due time")
                 }
 
-                CheckBox {
+                KosCheckBox {
                     id: allDayCheck
                     text: qsTr("All day")
                 }
@@ -199,16 +202,16 @@ KosDialog {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 130
 
-                TextArea {
+                KosTextArea {
                     id: notesField
                     placeholderText: qsTr("Optional notes")
                     wrapMode: TextEdit.Wrap
                 }
             }
 
-            Button {
+            KosButton {
                 text: qsTr("Delete task")
-                palette.buttonText: AppTheme.destructive
+                destructive: true
                 onClicked: {
                     root.deleteRequested(root.editingId)
                     root.close()

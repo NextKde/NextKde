@@ -292,7 +292,8 @@ TestCase {
         page.previewAvailable = true
         page.chooseCategory(3)
         compare(page.galleryCategory, "themes")
-        compare(page.galleryItems.length, 3)
+        compare(page.galleryItems.map(item => item.id).join(","),
+                "starfield,blackhole,weather,underwater,forest")
         const gallery = findChild(page, "wallpaperGallery")
         tryVerify(() => gallery.itemAtIndex(1) !== null && gallery.itemAtIndex(1).item !== null)
         gallery.itemAtIndex(1).item.activated()

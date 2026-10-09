@@ -422,6 +422,7 @@ Item {
     property var _previewInstance: null
     property Component _contextMenuComponent: Component {
         ContextMenu {
+            capsuleReveal: true
             property bool hasBeenVisible: false
             anchorItem: icon
             position: ConfigService.position

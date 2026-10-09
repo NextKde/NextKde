@@ -1,0 +1,65 @@
+--- a/src/qmmp/soundcore.h
++++ b/src/qmmp/soundcore.h
+@@ -174,6 +174,9 @@
+     bool finishCurrentAfter(qint64 milliseconds);
+     void cancelQueuedSource();
+     qint64 transitionRemaining() const;
++    // DSP publishes only a duration, never PCM. Read with the incoming playback clock.
++    qint64 crossfadeDuration() const;
++    void setCrossfadeDuration(qint64 milliseconds);
+     /*!
+      *  Stops playback
+      */
+--- a/src/qmmp/soundcore.cpp
++++ b/src/qmmp/soundcore.cpp
+@@ -18,6 +18,7 @@
+  *   51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.         *
+  ***************************************************************************/
+ 
++#include <atomic>
+ #include <QIODevice>
+ #include <QFile>
+ #include <QApplication>
+@@ -38,6 +39,7 @@
+     Q_DECLARE_PUBLIC(SoundCore)
+ public:
+     SoundCorePrivate(SoundCore *core) : q_ptr(core) {}
++    std::atomic<qint64> crossfadeDuration{0};
+ 
+ private:
+     enum NextEngineState
+@@ -438,3 +440,14 @@
+     auto *engine = QmmpAudioEngine::instance();
+     return engine ? engine->transitionRemaining() : -1;
+ }
++
++qint64 SoundCore::crossfadeDuration() const
++{
++    Q_D(const SoundCore);
++    return d->crossfadeDuration.load(std::memory_order_relaxed);
++}
++void SoundCore::setCrossfadeDuration(qint64 milliseconds)
++{
++    Q_D(SoundCore);
++    d->crossfadeDuration.store(milliseconds, std::memory_order_relaxed);
++}
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -130,7 +130,8 @@
+ void CrossfadePlugin::configure(quint32 freq, ChannelMap map)
+ {
+     Effect::configure(freq, map);
+-    m_overlap = std::clamp<qint64>(m_overlap, 20, 1800);
++    m_core->setCrossfadeDuration(0);
++    m_overlap = std::clamp<qint64>(m_overlap, 20, 4000);
+     const size_t capacity = (size_t(freq) * size_t(channels()) * size_t(m_overlap) / 1000)
+                     + 2 * QMMP_BLOCK_FRAMES * size_t(channels());
+     if (capacity != m_buffer_size || !m_buffer) {
+@@ -167,6 +168,7 @@
+         m_buffer_at = std::min(m_buffer_at, keep + 2 * window); // retain 40ms of decay margin
+     m_readOffset = 0;
+     m_mix_total = m_buffer_at;
++    m_core->setCrossfadeDuration(qint64(m_mix_total) * 1000 / (sampleRate() * channels()));
+ }
+ 
+ void CrossfadePlugin::mix(float *cur_buf, float *prev_buf, size_t samples)

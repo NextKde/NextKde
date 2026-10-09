@@ -1,0 +1,237 @@
+{
+  "report": "@RESULTS@/navigation-final/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "basic",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "setup",
+      "action": "setup",
+      "ms": 5000
+    },
+    {
+      "name": "layout",
+      "action": "setting",
+      "key": "appearance.albumLayout",
+      "value": "Flow",
+      "ms": 2000
+    },
+    {
+      "name": "pause",
+      "action": "pause",
+      "ms": 2000
+    },
+    {
+      "name": "songs-set",
+      "action": "route",
+      "value": "library/songs",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "songTable",
+          "method": "cycleSort",
+          "value": 2
+        },
+        {
+          "name": "",
+          "property": "contentY",
+          "value": 1500,
+          "within": "songTable",
+          "type": "QQuickListView"
+        }
+      ]
+    },
+    {
+      "name": "albums-set",
+      "action": "route",
+      "value": "library/albums",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "libraryPage",
+          "property": "selectedAlbumIndex",
+          "value": 7
+        }
+      ]
+    },
+    {
+      "name": "artists-set",
+      "action": "route",
+      "value": "library/artists",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "libraryArtistGrid",
+          "property": "contentY",
+          "value": 1000
+        }
+      ]
+    },
+    {
+      "name": "songs-return",
+      "action": "route",
+      "value": "library/songs",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "albums-return",
+      "action": "route",
+      "value": "library/albums",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "artists-return",
+      "action": "route",
+      "value": "library/artists",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "discover-open",
+      "action": "route",
+      "value": "discover",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "discoverPage",
+          "property": "allCharts",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "discover-set",
+      "action": "noop",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "discoverChartsGrid",
+          "property": "contentX",
+          "value": 400
+        },
+        {
+          "name": "discoverDailyTracks",
+          "property": "contentX",
+          "value": 250
+        },
+        {
+          "name": "discoverScroll",
+          "property": "contentY",
+          "value": 350
+        }
+      ]
+    },
+    {
+      "name": "playlists-set",
+      "action": "route",
+      "value": "playlists",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "playlistPage",
+          "property": "selectedCategory",
+          "value": 2
+        },
+        {
+          "name": "playlistPage",
+          "property": "selectedMode",
+          "value": 0
+        },
+        {
+          "name": "playlistPage",
+          "property": "selectedFilter",
+          "value": "测试筛选"
+        }
+      ]
+    },
+    {
+      "name": "favorites-set",
+      "action": "route",
+      "value": "my-lists",
+      "ms": 4000,
+      "capture": true,
+      "mutations": [
+        {
+          "name": "myListsPage",
+          "property": "collectionTab",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "discover-return",
+      "action": "route",
+      "value": "discover",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "playlists-return",
+      "action": "route",
+      "value": "playlists",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    },
+    {
+      "name": "favorites-return",
+      "action": "route",
+      "value": "my-lists",
+      "ms": 4000,
+      "capture": true,
+      "captureEarly": [
+        0,
+        16,
+        50,
+        100,
+        250
+      ]
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "profile": "@PROFILE@"
+}

@@ -4,7 +4,50 @@ import "."
 TestCase {
     name: "DesktopLyrics"
     MprisPlayer { id: player }
+    MprisPlayer { id: otherPlayer; dbusName: "org.mpris.MediaPlayer2.z" }
+    function test_selectionOrder() {
+        player.dbusName = "org.mpris.MediaPlayer2.a"
+        player.isPlaying = false
+        otherPlayer.isPlaying = true
+        player.playbackState = 2
+        otherPlayer.playbackState = 1
+        DockMprisService._playerRefs = [otherPlayer, player]
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, otherPlayer)
+        otherPlayer.isPlaying = false
+        otherPlayer.playbackState = 2
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, player)
+        player.playbackState = 0
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, otherPlayer)
+        otherPlayer.playbackState = 0
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, player)
+        DockMprisService._playerRefs = []
+        DockMprisService._updateActivePlayer()
+    }
     SignalSpy { id: positions; target: player; signalName: "positionChanged" }
+    function test_perPlayerDesktopSwitch() {
+        DockMprisService.activePlayer = player
+        player.position = 0
+        player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":false})
+        player.isPlaying = true
+        compare(DockMprisService.desktopLyricsAllowed, false)
+        compare(DockMprisService.currentLyric, "first")
+        positions.clear()
+        wait(550)
+        compare(positions.count, 0)
+        player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":true})
+        compare(DockMprisService.desktopLyricsAllowed, true)
+        tryVerify(() => positions.count > 0, 1000)
+        player.metadata = ({"kos:desktopLyricsEnabled": {value:false}})
+        compare(DockMprisService.desktopLyricsAllowed, false)
+        player.isPlaying = false
+        player.metadata = ({})
+        compare(DockMprisService.desktopLyricsAllowed, true)
+        DockMprisService.activePlayer = null
+    }
     function test_playback() {
         DockMprisService.activePlayer = player
         player.metadata = ({"xesam:asText":"[00:01]first\n[00:03]\n[00:05]last"})
