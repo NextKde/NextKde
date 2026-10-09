@@ -1056,6 +1056,7 @@ PanelWindow {
 
     ContextMenu {
         id: appContextMenu
+        capsuleReveal: true
         property var application: null
         baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor
