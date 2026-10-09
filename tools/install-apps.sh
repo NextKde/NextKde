@@ -7,20 +7,22 @@ prefix=${KOS_INSTALL_PREFIX:-"$HOME/.local"}
 build_dir=${KOS_APPS_BUILD_DIR:-"$project_dir/.build/apps-release"}
 unit_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user
 
-for command_name in busctl cmake ninja python3 readlink systemctl; do
-    if ! command -v "$command_name" >/dev/null 2>&1; then
-        echo "Missing install dependency: $command_name" >&2
-        exit 1
-    fi
-done
-
-# The released music app is ListenFree. Check its SDK before any deployment;
-# a failed replacement must leave an existing installation usable.
-if test -z "${KOS_LISTENFREE_SDK:-}" || test ! -d "$KOS_LISTENFREE_SDK"; then
-    echo "ListenFree SDK is required: set KOS_LISTENFREE_SDK to its directory." >&2
-    echo "See apps/listenfree/packaging/linux/README.md for the SDK layout." >&2
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Missing dependency: python3 (Arch: sudo pacman -S python; Ubuntu: sudo apt install python3)" >&2
     exit 1
 fi
+python3 "$script_dir/check-apps-dependencies.py"
+
+if test -n "${KOS_LISTENFREE_SDK:-}"; then
+    if test ! -d "$KOS_LISTENFREE_SDK"; then
+        echo "Configured ListenFree SDK directory does not exist: $KOS_LISTENFREE_SDK" >&2
+        exit 1
+    fi
+else
+    KOS_LISTENFREE_SDK="$project_dir/.build/listenfree-sdk"
+    "$script_dir/prepare-listenfree-sdk.sh" "$KOS_LISTENFREE_SDK"
+fi
+export KOS_LISTENFREE_SDK
 
 # An install must not build or run tests -- they have one owner,
 # tools/run-tests.sh (the same policy the core kosctl build follows).

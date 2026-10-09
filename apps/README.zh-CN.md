@@ -48,17 +48,20 @@ watch 运行是独立的开发实例：不与已运行的正式实例争单例�
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` 一次构建日历、待办、天气和 ListenFree 四个应用，而不只是当前要使用的应用。除仓库
-根目录 README 中的基础依赖外，Arch 还需要先安装：
+`./tools/kosctl install apps`（或 `install-apps.sh`）一次构建日历、待办、天气和 ListenFree。
+安装前检查系统依赖，缺少什么就提示什么，并给出对应的 Arch `pacman` 或 Ubuntu `apt`
+命令。执行提示的命令后重新安装即可；安装器不会自动执行 sudo。
 
-```sh
-sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
-```
+Arch 滚动版本和 Ubuntu 26.04+ 提供所需的 Qt 6.10+。Ubuntu 22.04/24.04/25.10
+自带 Qt 版本不足，需完整且兼容的 Qt/KF6 工具链。数据服务还要求 Go 1.26+。
+检查范围包括开发库、编译工具、QML 运行模块和 SQLite 驱动。
+只检查依赖可运行 `python3 tools/check-apps-dependencies.py`。
 
-其中 `kcalendarcore` 由日历和待办使用；GStreamer 与 TagLib 由音乐使用；天气所需
-的 Go 已包含在 KOS 核心构建依赖中。实际播放和转码所需的 GStreamer 编解码/输出
-插件需按使用场景另行安装。若仅使用对应的 CMake preset 构建单个应用，只需要该
-应用的直接依赖。
+安装器自动下载并校验 QuickJS-ng、Qmmp 源码，应用仓库内的音频补丁，并在
+`.build/listenfree-sdk` 构建私有 SDK。系统 TagLib 低于 2.3.1 时也会自动补建到私有目录。
+首次安装需要联网且编译较久，后续在构建指纹一致时复用缓存，无需手动准备 SDK。
+已有兼容 SDK 时仍可用 `KOS_LISTENFREE_SDK=/path/to/sdk` 指定。
+依赖和架构均在目标设备上检查，构建脚本不使用本机专属路径。
 
 脚本会完成 Release 构建，安装到 `~/.local`，注册桌面入口、hicolor
 图标和 AppStream 元数据，启用核心 `kos-data.service`、注册由 D-Bus 按需激活的
@@ -78,4 +81,4 @@ PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行�
 
 Todo、Calendar、Weather 在原目录和原 `kos-*` 桌面 ID 上更新界面，沿用原服务和用户数据。ListenFree 替换安装包中的旧 KOS Music；旧源码暂时保留在仓库中。桌面音乐组件优先唤起当前 MPRIS 播放器，没有播放器时启动 ListenFree。
 
-先按照 [Linux 构建说明](listenfree/packaging/linux/README.md) 准备 SDK，再执行 `KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh`。安装器在部署前检查 SDK；新播放器通过运行检查后，注册脚本备份并移除旧播放器的程序、桌面入口、图标和 AppStream 元数据。旧用户数据保留。其他播放器的默认关联及后续用户选择不会被覆盖。
+直接执行 `./tools/kosctl install apps` 即可；私有 SDK 布局和手动构建方式见 [Linux 构建说明](listenfree/packaging/linux/README.md)。安装器在部署前检查依赖并完成编译；新播放器通过运行检查后，注册脚本备份并移除旧播放器的程序、桌面入口、图标和 AppStream 元数据。旧用户数据保留。其他播放器的默认关联及后续用户选择不会被覆盖。

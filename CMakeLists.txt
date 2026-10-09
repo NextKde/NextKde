@@ -432,6 +432,9 @@ if(BUILD_TESTING)
         add_test(NAME kos-app.default-registration
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-registration/test_registration.py)
         set_tests_properties(kos-app.default-registration PROPERTIES LABELS data TIMEOUT 10)
+        add_test(NAME kos-app.install-dependencies
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-install/test_dependencies.py)
+        set_tests_properties(kos-app.install-dependencies PROPERTIES LABELS data TIMEOUT 10)
     endif()
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
