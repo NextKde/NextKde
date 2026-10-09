@@ -174,7 +174,9 @@ QtObject {
     // ── Select the best active player ──
     // Priority: playing > paused > any > none
     function _updateActivePlayer() {
-        const refs = svc._playerRefs
+        // Stable service-name ordering gives the lock screen the same tie-break.
+        const refs = svc._playerRefs.slice().sort((a, b) =>
+            String(a?.dbusName ?? "").localeCompare(String(b?.dbusName ?? "")))
         if (!refs || refs.length === 0) {
             activePlayer = null
             hasPlayingPlayer = false

@@ -1795,6 +1795,17 @@ PanelWindow {
                     onClicked: {
                         // Prefer the replacement; retain compatibility with
                         // installations that have not added ListenFree yet.
+                        const player = DockMprisService.activePlayer
+                        if (player) {
+                            if (player.canRaise) {
+                                player.raise()
+                                return
+                            }
+                            if (player.desktopEntry && AppActionService.launchById(player.desktopEntry, []))
+                                return
+                            // Do not start a different app for the displayed track.
+                            return
+                        }
                         if (!AppActionService.launchById("listenfree", []))
                             AppActionService.launchById("kos-music", [])
                     }
@@ -2041,18 +2052,21 @@ PanelWindow {
                                     checkable: index === 3
                                     checked: index === 3
                                         && DeskCenterConfigService.desktopLyricsEnabled
+                                        && DockMprisService.desktopLyricsAllowed
                                     iconName: index === 0 ? "media-previous"
                                         : index === 2 ? "media-next"
                                         : index === 3 ? "media-lyrics"
                                         : musicContent.player?.isPlaying ? "media-pause" : "media-play"
                                     text: index === 0 ? qsTr("上一首")
                                         : index === 2 ? qsTr("下一首")
-                                        : index === 3 ? qsTr("桌面歌词")
+                                        : index === 3 ? (DockMprisService.desktopLyricsAllowed
+                                            ? qsTr("桌面歌词") : qsTr("播放器已关闭桌面歌词"))
                                         : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
-                                    enabled: index === 3 || (musicContent.hasPlayer
+                                    enabled: index === 3 ? DockMprisService.desktopLyricsAllowed : (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
                                             : (musicContent.player?.canTogglePlaying ?? false)))
+                                    ToolTip.visible: hovered && (enabled || index === 3)
                                     glassInk: AppearanceTokens.content.onBackdrop
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)

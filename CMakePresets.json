@@ -39,7 +39,7 @@
         "KOS_BUILD_TODO": "ON",
         "KOS_BUILD_WEATHER": "ON",
         "KOS_BUILD_MUSIC": "ON",
-        "KOS_BUILD_LISTENFREE": "ON"
+        "KOS_BUILD_LISTENFREE": "OFF"
       }
     },
     {

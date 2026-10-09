@@ -668,6 +668,12 @@ if(BUILD_TESTING)
     # yet. Without this line the test carries no label and no layer runs it.
     set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
     if(KOS_INTERACTION_QMLTEST)
+        add_test(NAME kos-lockscreen.media-selection
+            COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/media)
+        set_tests_properties(kos-lockscreen.media-selection PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
+            LABELS ui TIMEOUT 15)
         add_test(NAME kos-lockscreen.wake-authentication
             COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/headless/tst_wake.qml)

@@ -18,13 +18,13 @@ Scope {
                 id: lyricWindow
 
                 required property var modelData
-                readonly property string currentLine: DockMprisService.currentLyric
-                readonly property string nextLine: DockMprisService.nextLyric
+                readonly property string currentLine: DockMprisService.desktopLyricsAllowed ? DockMprisService.currentLyric : ""
+                readonly property string nextLine: DockMprisService.desktopLyricsAllowed ? DockMprisService.nextLyric : ""
 
                 screen: modelData
                 visible: ScreenLifecycle.outputAvailable
                     && DeskCenterConfigService.desktopLyricsActive
-                    && DockMprisService.desktopLyricsAllowed
+                    && (DockMprisService.desktopLyricsAllowed || DeskCenterConfigService.desktopLyricsEditing)
                     && modelData?.name === ScreenLifecycle.activeScreen?.name
                     && (currentLine.length > 0 || DeskCenterConfigService.desktopLyricsEditing)
                 color: "transparent"

@@ -55,7 +55,7 @@ For a persistent per-user installation on Plasma, run:
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` builds all five applications, rather than only the app you
+`install-apps.sh` builds the four standard applications, rather than only the app you
 intend to open. In addition to the base requirements in the repository README,
 install these Arch build dependencies first:
 
@@ -90,4 +90,4 @@ until its source-path-dependent QML loader is migrated separately.
 
 ## Default applications
 
-Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. Preview entries are retired when registering the release. `apps/music` remains the legacy KOS Music implementation; `apps/listenfree` is the separate KOS ListenFree application used by the desktop music widget and audio file associations. Set `KOS_LISTENFREE_SDK` before building the complete app bundle; see the [Linux build instructions](listenfree/packaging/linux/README.md). The installer runs `tools/register-default-apps.py` to register defaults and independent window controls, with a backup of previous preferences. Legacy music and its data are retained.
+Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. Preview entries are retired when registering the release. `apps/music` remains the legacy KOS Music implementation; `apps/listenfree` is the separate KOS ListenFree application available to the desktop music widget and audio file associations. The widget raises the current MPRIS player when one is active. ListenFree is opt-in: run `KOS_BUILD_LISTENFREE=ON KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh` to include it; see the [Linux build instructions](listenfree/packaging/linux/README.md). When ListenFree is installed, the installer runs `tools/register-default-apps.py` once to migrate unset or legacy music defaults, preserving other chosen players and subsequent user changes. Window preferences are retained and previous settings are backed up. Legacy music and its data are retained.

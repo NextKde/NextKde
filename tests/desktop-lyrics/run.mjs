@@ -13,11 +13,13 @@ try {
         .replace("import qs.desktop.modules.deskcenter\n",""));
     copyFileSync(new URL('TimedLyrics.mjs',source),join(dir,'TimedLyrics.mjs'));
     copyFileSync(new URL('tst_lyrics.qml',import.meta.url),join(dir,'tst_lyrics.qml'));
-    writeFileSync(join(dir,'qmldir'),'singleton DockMprisService 1.0 DockMprisService.qml\nsingleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml\nsingleton Mpris 1.0 Mpris.qml\nMprisPlayer 1.0 MprisPlayer.qml\n');
+    writeFileSync(join(dir,'qmldir'),'singleton DockMprisService 1.0 DockMprisService.qml\nsingleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml\nsingleton Mpris 1.0 Mpris.qml\nsingleton MprisPlaybackState 1.0 MprisPlaybackState.qml\nMprisPlayer 1.0 MprisPlayer.qml\n');
     writeFileSync(join(dir,'DeskCenterConfigService.qml'),'pragma Singleton\nimport QtQuick\nQtObject { readonly property bool desktopLyricsActive: true }\n');
     writeFileSync(join(dir,'Mpris.qml'),'pragma Singleton\nimport QtQuick\nQtObject { property var players: [] }\n');
+    writeFileSync(join(dir,'MprisPlaybackState.qml'),'pragma Singleton\nimport QtQuick\nQtObject { readonly property int paused: 2; enum State { Stopped, Playing, Paused } }\n');
     writeFileSync(join(dir,'MprisPlayer.qml'),`import QtQuick
 QtObject {
+    property string dbusName: ""
     property var metadata: ({})
     property bool isPlaying: false
     property bool positionSupported: true

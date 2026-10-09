@@ -18,6 +18,7 @@ done
 # tools/run-tests.sh (the same policy the core kosctl build follows).
 cmake --preset apps-release -S "$project_dir" \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DKOS_BUILD_LISTENFREE="${KOS_BUILD_LISTENFREE:-OFF}" \
     -DBUILD_TESTING=OFF
 jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
 case "$jobs" in ''|*[!0-9]*) jobs=4 ;; esac

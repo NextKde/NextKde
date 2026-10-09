@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import org.kde.plasma.workspace.dbus as DBus
 
 // Reads NextKDE music players' MPRIS metadata directly from the session bus.
@@ -22,11 +23,36 @@ Item {
         return result
     }
 
-    // Select by playback state, then keep a paused session available. Both
-    // properties maps must stay alive so a newly playing app wins immediately.
-    readonly property var activeSource: listenfree.playing ? listenfree
-        : kosmusic.playing ? kosmusic
-        : listenfree.available && listenfree.hasTrack ? listenfree : kosmusic
+    // Discover all MPRIS services, including per-instance names. Both the
+    // Dock and lock screen use Playing > Paused > other, then service name.
+    property var serviceNames: []
+    property var playerSources: []
+    property int playerRevision: 0
+    property bool discoveryPending: false
+    function discoverPlayers() {
+        if (discoveryPending) return
+        discoveryPending = true
+        DBus.SessionBus.asyncCall({service: "org.freedesktop.DBus", path: "/org/freedesktop/DBus",
+            iface: "org.freedesktop.DBus", member: "ListNames", arguments: []}, function(reply) {
+                const names = Array.from(reply.value || [])
+                    .filter(name => String(name).indexOf("org.mpris.MediaPlayer2.") === 0).sort()
+                if (names.join("\n") !== root.serviceNames.join("\n")) root.serviceNames = names
+                root.discoveryPending = false
+            }, function() { root.discoveryPending = false })
+    }
+    Component.onCompleted: discoverPlayers()
+    Timer {
+        interval: 2000; repeat: true
+        running: root.Window.window ? root.Window.window.visible : false
+        onTriggered: root.discoverPlayers()
+    }
+    readonly property var activeSource: {
+        const revision = playerRevision
+        const sources = playerSources.filter(source => source && source.available)
+            .sort((a, b) => a.serviceName.localeCompare(b.serviceName))
+        return sources.find(source => source.playbackStatus === "Playing")
+            || sources.find(source => source.playbackStatus === "Paused") || sources[0] || null
+    }
     function metadataText(key) { return activeSource ? activeSource.metadataText(key) : "" }
     readonly property bool lyricsAllowed: metadataText("kos:lockscreenLyricsEnabled") !== "false"
     readonly property string currentLine: lyricsAllowed ? metadataText("kos:currentLyric") || metadataText("xesam:asText") : ""
@@ -54,10 +80,14 @@ Item {
         required property string serviceName
         property int revision: 0
         readonly property bool available: watcher.registered
-        readonly property bool playing: {
+        readonly property string playbackStatus: {
             const current = revision
-            return available && !!properties.properties && root.unwrap(properties.properties["PlaybackStatus"]) === "Playing"
+            return available && properties.properties ? String(root.unwrap(properties.properties["PlaybackStatus"]) || "") : ""
         }
+        readonly property bool playing: playbackStatus === "Playing"
+        onRevisionChanged: root.playerRevision++
+        Component.onCompleted: root.playerSources = root.playerSources.concat([source])
+        Component.onDestruction: root.playerSources = root.playerSources.filter(item => item !== source)
         readonly property bool hasTrack: metadataText("xesam:title").length > 0
         function metadataText(key) {
             const current = revision
@@ -87,8 +117,13 @@ Item {
         }
         Timer { id: refreshTimer; interval: 80; onTriggered: source.revision++ }
     }
-    LyricSource { id: listenfree; serviceName: "org.mpris.MediaPlayer2.listenfree" }
-    LyricSource { id: kosmusic; serviceName: "org.mpris.MediaPlayer2.kosmusic" }
+    Repeater {
+        model: root.serviceNames
+        delegate: LyricSource {
+            required property string modelData
+            serviceName: modelData
+        }
+    }
 
     Rectangle {
         anchors.fill: parent

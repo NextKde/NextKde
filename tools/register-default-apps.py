@@ -52,6 +52,11 @@ if args.dry_run:
     print('Audio MIME types:', ', '.join(mimes))
     raise SystemExit(0)
 
+registration_state = args.state_home / 'kos/application-registration'
+migration_marker = registration_state / 'listenfree-migrated.json'
+# Older releases already migrated defaults and left backup manifests.
+migrated = migration_marker.exists() or any(registration_state.glob('*/manifest.json'))
+
 stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f')
 backup = args.state_home / 'kos/application-registration' / stamp
 backup.mkdir(parents=True, mode=0o700)
@@ -64,12 +69,17 @@ for index, path in enumerate(paths):
 (backup / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
 from io import StringIO
-for path in mime_files:
+initial_defaults = {mime: [ini(candidate).get('Default Applications', mime, fallback='')
+                          for candidate in mime_files] for mime in mimes}
+for path in ([] if migrated else mime_files):
     preferences = ini(path)
     for section in ('Default Applications', 'Added Associations'):
         if not preferences.has_section(section): preferences.add_section(section)
     for mime in mimes:
-        preferences['Default Applications'][mime] = 'listenfree.desktop;'
+        existing = initial_defaults[mime]
+        # Only replace our legacy default, never another chosen player.
+        if all(value.strip(';') in ('', 'kos-music.desktop') for value in existing):
+            preferences['Default Applications'][mime] = 'listenfree.desktop;'
         previous = preferences['Added Associations'].get(mime, '').split(';')
         preferences['Added Associations'][mime] = ';'.join(dict.fromkeys(['listenfree.desktop', *filter(None, previous)])) + ';'
         if preferences.has_section('Removed Associations'):
@@ -82,7 +92,7 @@ for path in mime_files:
 
 button_data = json.loads(buttons.read_text()) if buttons.exists() else {}
 for name in ('listenfree', *(f'kos-{app}' for app in apps)):
-    button_data.setdefault('apps', {}).setdefault(name, {})['showButtons'] = False
+    button_data.setdefault('apps', {}).setdefault(name, {}).setdefault('showButtons', False)
 for app in apps: button_data['apps'].pop(f'kos-{app}-preview', None)
 managed_rules = [{'match': {'class': f'kos-{app}', 'titleRegex': 'Preview$'}, 'showButtons': False} for app in apps]
 button_data['rules'] = [rule for rule in button_data.get('rules', []) if rule not in managed_rules]
@@ -96,8 +106,9 @@ if preview_dir.exists():
     shutil.move(str(preview_dir), retired)
     manifest['retiredPreview'] = {'path': str(preview_dir), 'backup': str(retired)}
     (backup / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+atomic(migration_marker, json.dumps({'version': 1}) + '\n')
 if not args.no_cache:
     for command in (['update-desktop-database', str(prefix / 'share/applications')], ['kbuildsycoca6', '--noincremental']):
         if shutil.which(command[0]): subprocess.run(command, check=True)
-print('Registered KOS ListenFree as the default music player; legacy KOS Music retained.')
+print('Registered KOS ListenFree; existing music preferences and legacy KOS Music retained.')
 print('Registration backup:', backup)

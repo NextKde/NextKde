@@ -4,6 +4,29 @@ import "."
 TestCase {
     name: "DesktopLyrics"
     MprisPlayer { id: player }
+    MprisPlayer { id: otherPlayer; dbusName: "org.mpris.MediaPlayer2.z" }
+    function test_selectionOrder() {
+        player.dbusName = "org.mpris.MediaPlayer2.a"
+        player.isPlaying = false
+        otherPlayer.isPlaying = true
+        player.playbackState = 2
+        otherPlayer.playbackState = 1
+        DockMprisService._playerRefs = [otherPlayer, player]
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, otherPlayer)
+        otherPlayer.isPlaying = false
+        otherPlayer.playbackState = 2
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, player)
+        player.playbackState = 0
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, otherPlayer)
+        otherPlayer.playbackState = 0
+        DockMprisService._updateActivePlayer()
+        compare(DockMprisService.activePlayer, player)
+        DockMprisService._playerRefs = []
+        DockMprisService._updateActivePlayer()
+    }
     SignalSpy { id: positions; target: player; signalName: "positionChanged" }
     function test_perPlayerDesktopSwitch() {
         DockMprisService.activePlayer = player
