@@ -9,8 +9,7 @@ import "../../shared/qml/foundation/KosKineticScrollPhysics.mjs" as Physics
 //
 // These run headless and offscreen, so they assert the parts a compositor would
 // otherwise only show as "it feels off": that a notch travels the same distance
-// the platform's own wheel handling travels, that motion starts on the event
-// rather than a frame later, that it coasts after the last event, that it stops
+// the platform's own wheel handling travels, that motion starts on a rendered frame, that it coasts after the last event, that it stops
 // exactly on the bounds, and that none of the view's own input or content stops
 // working around it.
 Item {
@@ -166,8 +165,7 @@ Item {
             tryCompare(kinetic, "contentY", 228, 1000, 1.0)
         }
 
-        // Following the hand: the view is where the wheel asked for it on the
-        // frame the event arrived -- no animation in between that could lag.
+        // Following repeated input should not build an excessive visual lag.
         function test_follows_the_hand_closely() {
             // Real wheel events are ~30ms apart (KWin delivers a notch as a ramp
             // of them). The spring is stiff enough at that speed that the view
@@ -186,9 +184,7 @@ Item {
             tryCompare(kinetic, "contentY", kinetic.contentY, 1500, 2.0)
         }
 
-        // A burst arrives as a ramp of events: every one of them lands in the
-        // frame it arrives in, so the view tracks the hand one to one while the
-        // wheel is turning.
+        // One notch starts smoothly and settles on the requested distance.
         function test_a_single_notch_does_not_jump() {
             mouseWheel(kinetic, 150, 100, 0, -120)
             tryVerify(function() { return kinetic.contentY > 0 }, 300)
@@ -199,8 +195,7 @@ Item {
         }
 
         // The point of the exercise: when the hand stops, the speed the gesture
-        // was carrying becomes a glide -- the view keeps going after the last
-        // event, and further than the notches alone would take it.
+        // was carrying becomes a short glide, bounded to one extra notch.
         function test_the_glide_carries_past_the_hand() {
             for (let i = 0; i < 6; ++i) {
                 mouseWheel(kinetic, 150, 100, 0, -120)
@@ -210,10 +205,10 @@ Item {
             // view is past the sum, not on it.
             wait(400)
             const later = kinetic.contentY
-            verify(later > 6 * 72 + 150,
+            verify(later > 6 * 72 && later <= 6 * 72 + 72 + 1,
                 "the glide must carry past the hand's last notch, reached " + later)
             tryCompare(kinetic, "contentY", later, 1500, 2.0)
-            verify(kinetic.contentY > 6 * 72 + 150, "and then stop there")
+            verify(kinetic.contentY > 6 * 72 && kinetic.contentY <= 6 * 72 + 72 + 1, "and then stop there")
         }
 
         // Any new operation owns the view: a notch in the middle of a glide
@@ -257,8 +252,7 @@ Item {
             for (let i = 0; i < 20; ++i)
                 mouseWheel(kinetic, 150, 100, 0, -120)
             const limit = kinetic.contentHeight - kinetic.height
-            // A fast fling rebounds off the end (that is the point), so the
-            // assertion is where it comes to rest, not the peak.
+            // Fast input stops exactly at the boundary without a rebound.
             tryCompare(kinetic, "contentY", limit, 3000, 1.0)
             verify(kinetic.contentY <= limit + 0.5, "never settles past the end")
         }

@@ -10,7 +10,7 @@
 // Sign convention, the same one the QML component applies: a wheel turned away
 // from the user reports a negative angleDelta and moves the content *towards its
 // end* (contentY grows). NOTCH is that content-space step.
-import { CONFIG, axis, advance, bounds, clamp, frameDt, push, release, reset, wheelStep }
+import { CONFIG, axis, advance, bounds, clamp, push, release, reset, wheelStep }
     from "./KosKineticScrollPhysics.mjs";
 
 const NOTCH = -wheelStep(-120, 0).delta;    // 72px, towards the end of the content
@@ -119,9 +119,9 @@ const released = release(burst, OPEN);
 check(released === true && burst.released === true, "a fast gesture releases a glide");
 const trip = settle(burst, OPEN);
 const coast = trip.position - handStopped;
-check(coast > 250, "which carries " + Math.round(coast) + "px past where the hand stopped");
-check(coast < 1400, "without flinging the whole list (" + Math.round(coast) + "px)");
-check(trip.seconds > 0.3 && trip.seconds < 2.0,
+check(coast > 0, "which carries " + Math.round(coast) + "px past where the hand stopped");
+check(coast <= CONFIG.maxCoastDistance, "without flinging the whole list (" + Math.round(coast) + "px)");
+check(trip.seconds > 0.05 && trip.seconds < 0.6,
     "and takes " + Math.round(trip.seconds * 1000) + "ms to spend");
 
 // The glide only ever slows down.
@@ -169,7 +169,7 @@ check(resumed.released === false && resumed.target === resumedAt + 72,
     "a fresh notch during a glide takes over from where the view is, not from the "
     + "old glide's destination");
 
-// --- the soft end -----------------------------------------------------------
+// --- hard content boundaries -----------------------------------------------------------
 
 const bounded = bounds(500, 200, 0, 0);
 const intoTheEnd = axis(0);
@@ -177,8 +177,8 @@ for (let i = 0; i < 6; i++)
     wheel(intoTheEnd, NOTCH, bounded, i === 0 ? Infinity : 0.03);
 release(intoTheEnd, bounded);
 const ended = settle(intoTheEnd, bounded);
-check(ended.pastMax > 10, "a glide into an end rebounds " + Math.round(ended.pastMax) + "px past it");
-check(ended.pastMax <= CONFIG.bounceMax + 5, "by no more than the soft end allows");
+check(ended.pastMax === 0, "a glide stops at the end without rebound");
+check(ended.pastMax <= 0, "without moving beyond the end");
 check(ended.position === bounded.max, "and comes all the way back to it");
 
 const atTheStart = axis(0);
@@ -187,13 +187,13 @@ for (let i = 0; i < 4; i++)
     wheel(atTheStart, -NOTCH, bounded, i === 0 ? Infinity : 0.03);
 release(atTheStart, bounded);
 check(settle(atTheStart, bounded).position === bounded.min,
-    "and rebounds off the start when flung the other way");
+    "and stops at the start when flung the other way");
 
 const poking = axis(0);
 poking.position = 40; poking.target = 40;
 for (let i = 0; i < 4; i++)
     wheel(poking, -NOTCH, bounded, i === 0 ? Infinity : 0.03);
-check(settle(poking, bounded).pastMin < CONFIG.bounceMax + 5,
+check(settle(poking, bounded).pastMin === 0,
     "with the same bound on how far it may poke out");
 
 // --- content that shrinks ---------------------------------------------------
@@ -203,13 +203,6 @@ shrinking.position = 400; shrinking.target = 400;
 const newRange = bounds(300, 200, 0, 0);
 advance(shrinking, 1 / 60, newRange);
 check(shrinking.position === 100, "content that shrinks leaves the view inside the range");
-
-// --- tick timing ------------------------------------------------------------
-
-check(frameDt(1000, 0) === 1 / 60, "the first tick of a gesture stands in for one frame");
-check(Math.abs(frameDt(1016, 1000) - 0.016) < 1e-9, "an on-time tick measures 16ms");
-check(frameDt(2000, 1000) === CONFIG.maxFrameTime,
-    "a stalled ticker is capped, so the view cannot teleport");
 
 // The motion integrates over measured time (in fixed sub-steps), so its shape
 // does not depend on the tick rate.
@@ -240,6 +233,43 @@ check(aimed.target === 1800, "a target past the end clamps to the end");
 reset(aimed, 900);
 check(aimed.target === 900 && aimed.velocity === 0 && aimed.released === false,
     "reset re-anchors the axis and drops any glide");
+
+// Regression: dense/batched input must not amplify a short gesture into a
+// whole-page fling, at either standard or high refresh rates.
+for (const dt of [1 / 30, 1 / 60, 1 / 144]) {
+    for (const gap of [0, 0.008, 0.016, 0.03]) {
+        const ax = axis(200);
+        const range = { min: 0, max: 10000 };
+        for (let i = 0; i < 6; ++i) {
+            push(ax, NOTCH, range, i === 0 ? Infinity : gap);
+            advance(ax, gap, range);
+        }
+        const requested = ax.target;
+        release(ax, range);
+        const endpoint = ax.target;
+        let peak = ax.position;
+        for (let i = 0; i < 200; ++i) {
+            advance(ax, dt, range);
+            peak = Math.max(peak, ax.position);
+        }
+        check(endpoint - requested <= CONFIG.maxCoastDistance && peak <= endpoint,
+            "dense input stays within its short coast at " + Math.round(1 / dt) + "Hz, gap=" + gap);
+    }
+}
+const averaged = axis();
+push(averaged, NOTCH, OPEN);
+push(averaged, NOTCH, OPEN, 0.03);
+push(averaged, NOTCH, OPEN, 0.008);
+check(Math.abs(averaged.speed - 144 / 0.038) < 1,
+    "one unusually short event gap uses the recent average instead of a speed spike");
+const reversingFollow = axis(500);
+push(reversingFollow, 200, OPEN);
+advance(reversingFollow, 1 / 144, OPEN);
+const beforeReversal = reversingFollow.position;
+push(reversingFollow, -72, OPEN, 0.008);
+advance(reversingFollow, 1 / 144, OPEN);
+check(reversingFollow.position < beforeReversal,
+    "reversal cancels the queued forward distance before moving backward");
 
 console.log(errors ? "\n" + errors + " FAILED" : "\nAll kinetic scroll cases passed");
 process.exit(errors ? 1 : 0);

@@ -14,6 +14,11 @@ fallback.
 `KosKineticScroll` adds mouse-wheel inertia to selected long lists. It runs
 behind child controls and nested views, leaves Ctrl gestures and pixel-based
 trackpad scrolling to native handlers, and respects `AppTheme.reduceMotion`.
+Mouse-wheel tuning preserves 72px/notch, averages the recent 80ms of input,
+and adds at most 72px of coast (900px/s speed cap, 6000px/s² deceleration).
+A critically damped follow settles a lone notch in about 200ms. Content
+boundaries are hard limits without rebound. These are KOS defaults inspired
+by Kirigami’s bounded scrolling, not universal optimal values.
 Motion advances once per rendered frame through `FrameAnimation`; no timer
 continues integrating a hidden view. An empty range or a settled boundary
 passes the wheel onward.
