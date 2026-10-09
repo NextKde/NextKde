@@ -51,6 +51,15 @@ struct SurfaceReveal
 {
     QRectF geometry;
     qreal progress = 1.0;
+
+    qreal scale() const { return 0.8 + 0.2 * progress; }
+    QPointF anchor() const { return QPointF(geometry.center().x(), geometry.bottom()); }
+    QRectF visibleGeometry() const {
+        const qreal width = geometry.width() * scale();
+        const qreal height = geometry.height() * scale();
+        return QRectF(geometry.center().x() - width / 2,
+                      geometry.bottom() - height, width, height);
+    }
 };
 
 class SurfaceShapeManager : public QObject
@@ -67,6 +76,8 @@ public:
 
 Q_SIGNALS:
     void surfaceShapesChanged(KWin::SurfaceInterface *surface);
+    // Timeline-only updates do not invalidate the fixed capture/blur region.
+    void revealFrameChanged(KWin::SurfaceInterface *surface, const QRectF &captureBounds);
 
 private:
     struct ShapeResource;

@@ -277,6 +277,21 @@ BlurEffect::BlurEffect()
             }
         }
     });
+    connect(m_surfaceShapeManager.get(), &SurfaceShapeManager::revealFrameChanged,
+            this, [this](SurfaceInterface *surface, const QRectF &bounds) {
+        // The timeline changes shader uniforms, not capture geometry or blur
+        // strength. Repaint only the panel and sampling margin; do not rebuild
+        // the legacy region or invalidate the full-screen transparent window.
+        for (const auto &entry : m_windows) {
+            EffectWindow *window = entry.first;
+            if (window->surface() == surface) {
+                const int padding = blurExpandSize(window);
+                window->addRepaint(RectF(bounds.adjusted(-padding, -padding, padding, padding)));
+                break;
+            }
+        }
+    });
+
 #endif
 
     connect(effects, &EffectsHandler::windowAdded, this, &BlurEffect::slotWindowAdded);
@@ -1291,14 +1306,16 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
 #ifndef GLASS_X11
     if (m_surfaceShapeManager && w->surface()) {
         if (const auto reveal = m_surfaceShapeManager->revealFor(w->surface())) {
+            if (reveal->progress <= 0)
+                return;
             WindowPaintData contentData(data);
-            const qreal scale = 0.8 + 0.2 * reveal->progress;
-            const QPointF anchor = reveal->geometry.center();
+            const qreal scale = reveal->scale();
+            const QPointF anchor = reveal->anchor();
             contentData.setXTranslation(data.xTranslation() + anchor.x() * data.xScale() * (1 - scale));
             contentData.setYTranslation(data.yTranslation() + anchor.y() * data.yScale() * (1 - scale));
             contentData.setXScale(data.xScale() * scale);
             contentData.setYScale(data.yScale() * scale);
-            contentData.multiplyOpacity(std::min(1.0, reveal->progress / 0.6));
+            contentData.multiplyOpacity(reveal->progress);
             effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
                                 deviceRegion, contentData);
             return;

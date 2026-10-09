@@ -27,9 +27,9 @@ in-use plugin to run this test.
 
 The `codex/launcher-compositor-reveal` variant adds protocol v7: the client sends
 an enabled flag, an open/closed endpoint, duration and request serial. KWin
-advances the OutCubic progress on compositor frames, interpolates a bottom-center
-160 × 64 capsule to the final SDF outline, and composites the entire client
-surface at 0.8→1 scale with a fade. No per-icon entrance jobs or client-driven
+advances the OutCubic progress on compositor frames. The glass SDF and whole
+client surface share a bottom-center 0.8→1 transform and the same opacity.
+Closing stops at 80% size and fades out, rather than collapsing to a capsule. No per-icon entrance jobs or client-driven
 per-frame geometry updates are used on this path.
 
 Capture bounds remain at the final rectangle throughout the transition. The
@@ -45,6 +45,11 @@ ScaleAnimator/OpacityAnimator group and one material-opacity scalar; completion
 is tied to the animation jobs. The 50-tile prototype remains an independent
 reference fixture. The isolated test above exercises fixed capture, not the new
 v7 timeline or completion events.
+
+Timeline frames request only the fixed panel bounds plus the blur sampling
+margin, without rebuilding the blur region or invalidating the entire transparent
+window. The launcher uses a fixed scrim instead of the separate adaptive
+luminance pyramid. Fully transparent glass and client content skip rendering.
 
 Fixed capture avoids resizing the texture chain; it does not freeze background
 updates or remove per-frame blur work while the material is visible.

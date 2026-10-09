@@ -1223,6 +1223,8 @@ PanelWindow {
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
+                    // A stable tint avoids a separate per-frame luminance pyramid.
+                    scrimFixed: true
                     compositorRevealEnabled: !root.isFullscreenMode
                         && !AppearanceTokens.surface.paintInQml
                     compositorRevealOpened: popupMotion.requestedOpen

@@ -94,17 +94,12 @@ QVector<SurfaceShape> SurfaceShapeManager::shapesFor(const SurfaceInterface *sur
                 const QRectF finalRect = value.geometry;
                 // The allocation remains constant, including the fully closed pose.
                 value.captureGeometry = surfaceCaptureBounds(value);
-                const qreal p = shape->progress;
-                const qreal tail = std::min(1.0, p / 0.08);
-                const qreal width = std::max(0.01,
-                    (std::min(160.0, finalRect.width())
-                        + (finalRect.width() - std::min(160.0, finalRect.width())) * p) * tail);
-                const qreal height = std::max(0.01,
-                    (std::min(64.0, finalRect.height())
-                        + (finalRect.height() - std::min(64.0, finalRect.height())) * p) * tail);
-                value.geometry = QRectF(finalRect.center().x() - width / 2,
-                    finalRect.bottom() - height, width, height);
-                value.materialOpacity *= tail;
+                const SurfaceReveal reveal{finalRect, shape->progress};
+                // Glass and client content share the same bottom-center transform.
+                // Closed geometry is still 80% sized; opacity retires the panel.
+                value.geometry = reveal.visibleGeometry();
+                value.radius *= reveal.scale();
+                value.materialOpacity *= reveal.progress;
             }
             result.append(value);
         }
@@ -132,7 +127,7 @@ void SurfaceShapeManager::advanceAnimations()
             const qreal eased = 1 - (1 - t) * (1 - t) * (1 - t);
             shape->progress = shape->startProgress
                 + ((shape->revealOpened ? 1.0 : 0.0) - shape->startProgress) * eased;
-            changed(shape);
+            Q_EMIT revealFrameChanged(shape->surface, surfaceCaptureBounds(shape->value));
             if (t >= 1) {
                 shape->revealRunning = false;
                 kos_surface_shape_v1_send_reveal_finished(shape->resource,
