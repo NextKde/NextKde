@@ -1,3 +1,4 @@
+#include "KWinShortcutConflicts.h"
 #include "Shortcuts.h"
 
 #include <KGlobalAccel>
@@ -239,6 +240,26 @@ bool applyShortcutSet(const QJsonArray &shortcuts, QString *error)
     // Superseded layouts would keep dead service entries in the Shortcuts
     // KCM alongside the real component.
     cleanShortcutLayouts();
+
+    // KOS binds its own set through the same KGlobalAccel the compositor
+    // uses. Repair the KWin side first (see KWinShortcutConflicts.h): the
+    // workspace overview's Meta+Tab has to be released from "Walk Through
+    // Windows" while Alt+Tab keeps working, and a KWin action that lost its
+    // present state (a non-present shortcut stops firing while the registry
+    // still lists everything) is revived here. A failure is logged but must
+    // not stop the KOS shortcuts from applying.
+    QStringList comboList;
+    comboList.reserve(requests.size());
+    for (const Request &request : requests)
+        comboList.append(request.combo);
+    QString conflictError;
+    const QStringList repaired =
+        repairKWinKeyConflicts(comboList, &conflictError);
+    if (!conflictError.isEmpty())
+        qWarning().noquote() << "[kos-platform] KWin shortcut repair:"
+                             << conflictError;
+    for (const QString &line : repaired)
+        qInfo().noquote() << "[kos-platform] KWin shortcut repaired:" << line;
 
     KGlobalAccel *accel = KGlobalAccel::self();
     for (const Request &request : requests) {
