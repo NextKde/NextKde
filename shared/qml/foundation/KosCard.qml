@@ -9,7 +9,7 @@ Pane {
     background: KosSurface {
         radius: AppTheme.mediumRadius
         fillColor: AppTheme.cardSurface
-        strokeWidth: 1
+        strokeWidth: AppTheme.modernDesign ? 0 : 1
         strokeColor: AppTheme.border
         elevation: 0.38
     }

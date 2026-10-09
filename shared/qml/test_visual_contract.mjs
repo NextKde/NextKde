@@ -56,8 +56,8 @@ const uiModuleCmake = read("./CMakeLists.txt");
 assert.doesNotMatch(uiModuleCmake,
     /colorize\/(?:Artwork|Wallpaper)ColorSource\.qml/,
     "standalone Kos.Ui never packages Quickshell-only color samplers");
-assert.match(windowSource, /color:\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
-    "glass mode clears the native window exactly once");
+assert.match(windowSource, /color:\s*modernDesign\s*\|\|\s*AppTheme\.glassActive\s*\?\s*"transparent"/,
+    "glass and rounded windows clear the native window exactly once");
 assert.match(windowSource, /background:[\s\S]*color:\s*AppTheme\.windowSurface/,
     "window background uses the material surface selected by the shared theme");
 assert.match(windowSource, /color:\s*AppTheme\.windowTintSurface/,
@@ -147,10 +147,26 @@ assert.match(pageCacheSource, /_lastUsed[\s\S]*PageCachePolicy\.trim/,
 assert.match(pageCacheSource, /asynchronous:[\s\S]*index\s*!==\s*root\.currentIndex/,
     "inactive page construction cannot block the selected page");
 
+const collapsibleSidebar = read("./foundation/KosSidebar.qml");
+assert.match(collapsibleSidebar, /color:\s*AppTheme\.sidebarSurface/,
+    "collapsible sidebars retain the adaptive semantic material");
+assert.doesNotMatch(collapsibleSidebar, /withAlpha\(AppTheme\.sidebar/,
+    "collapsible sidebars do not expose desktop content");
+assert.match(collapsibleSidebar, /enabled:\s*expanded/,
+    "collapsed navigation cannot take keyboard focus");
 for (const app of ["calendar", "todo", "weather", "music"]) {
     const source = read(`../../apps/${app}/qml/Main.qml`);
-    assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
-        `${app} has an adaptive semantic sidebar material`);
+    if (app === "music") {
+        assert.match(source, /color:\s*AppTheme\.sidebarSurface/,
+            `${app} has an adaptive semantic sidebar material`);
+    } else {
+        assert.match(source, /KosSidebar\s*\{[\s\S]*expanded:\s*root\.sidebarExpanded/,
+            `${app} uses the adaptive collapsible sidebar`);
+        assert.match(source, /KosSidebarToggle\s*\{[\s\S]*targetWindow:\s*root/,
+            `${app} provides a way to restore collapsed navigation`);
+        assert.match(source, /KosWindowControls\s*\{\s*targetWindow:\s*root/,
+            `${app} exposes its frameless window controls`);
+    }
     assert.doesNotMatch(source, /withAlpha\(AppTheme\.sidebar/,
         `${app} sidebar does not expose desktop content`);
     assert.doesNotMatch(source, /\b(?:Button|ToolButton|RoundButton)\s*\{/,
