@@ -6,7 +6,7 @@ Every direct child is a standalone Qt Quick application and a separate
 process. Applications may import `shared/`, communicate with `services/`
 through documented contracts, and must never import `shell/desktop/`.
 
-The application workspace is configured from the repository root. Four build
+The application workspace is configured from the repository root. Five build
 options and matching CMake presets keep the new applications independently
 manageable:
 
@@ -15,9 +15,10 @@ manageable:
 | Calendar | `kos-calendar` | `calendar-dev` |
 | Todo | `kos-todo` | `todo-dev` |
 | Weather | `kos-weather` | `weather-dev` |
-| Music | `kos-music` | `music-dev` |
+| Music (legacy, retained) | `kos-music` | `music-dev` |
+| KOS ListenFree (default music player) | `listenfree` | `listenfree-dev` |
 
-Use `apps-dev` to build all four. Each application owns its executable, QML
+Use `apps-dev` to build all five. Each application owns its executable, QML
 module, desktop entry, tests, and bilingual documentation. `apps/common/` is a
 small application runtime rather than a feature layer; applications do not
 import one another. The Weather preset additionally builds and installs its Go
@@ -25,7 +26,7 @@ data service, which the application starts on demand.
 
 ## Development: QML hot reload
 
-Every application can load its QML from a source tree and hot reload it, so QML
+The four apps using `apps/common` can load their QML from a source tree and hot reload it, so QML
 edits need neither a rebuild nor a restart:
 
 ```bash
@@ -54,7 +55,7 @@ For a persistent per-user installation on Plasma, run:
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` builds all four applications, rather than only the app you
+`install-apps.sh` builds all five applications, rather than only the app you
 intend to open. In addition to the base requirements in the repository README,
 install these Arch build dependencies first:
 
@@ -69,7 +70,7 @@ install the ones needed for the audio formats and output backends you use.
 Building a single app with its corresponding CMake preset needs only that
 app's direct dependencies.
 
-This performs a Release build and test pass, installs the binaries under
+This performs a Release build, installs the binaries under
 `~/.local`, registers desktop entries, hicolor icons and AppStream metadata,
 enables the core `kos-data.service`, registers the D-Bus-activated PIM service,
 and refreshes Plasma's application cache. The desktop entries contain absolute executable paths, so
@@ -86,3 +87,7 @@ compositor advertises them, with a readable solid fallback everywhere else.
 
 `settings` predates this workspace and remains on its existing build path
 until its source-path-dependent QML loader is migrated separately.
+
+## Default applications
+
+Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. Preview entries are retired when registering the release. `apps/music` remains the legacy KOS Music implementation; `apps/listenfree` is the separate KOS ListenFree application used by the desktop music widget and audio file associations. Set `KOS_LISTENFREE_SDK` before building the complete app bundle; see the [Linux build instructions](listenfree/packaging/linux/README.md). The installer runs `tools/register-default-apps.py` to register defaults and independent window controls, with a backup of previous preferences. Legacy music and its data are retained.

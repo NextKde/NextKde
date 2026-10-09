@@ -5,7 +5,7 @@
 每个直接子目录都是独立的 Qt Quick 应用和进程。应用可以导入 `shared/`，
 通过已记录的契约与 `services/` 通信，但绝不能导入 `shell/desktop/`。
 
-应用工作区从仓库根目录配置。四个构建开关和对应 CMake preset 使各应用可
+应用工作区从仓库根目录配置。五个构建开关和对应 CMake preset 使各应用可
 独立管理：
 
 | 应用 | 目标 | 配置 preset |
@@ -13,16 +13,17 @@
 | 日历 | `kos-calendar` | `calendar-dev` |
 | 待办 | `kos-todo` | `todo-dev` |
 | 天气 | `kos-weather` | `weather-dev` |
-| 音乐 | `kos-music` | `music-dev` |
+| 音乐（旧版，保留） | `kos-music` | `music-dev` |
+| KOS ListenFree（默认音乐应用） | `listenfree` | `listenfree-dev` |
 
-使用 `apps-dev` 可一次构建四个应用。每个应用拥有自己的可执行文件、QML
+使用 `apps-dev` 可一次构建五个应用。每个应用拥有自己的可执行文件、QML
 模块、桌面入口、测试和中英文文档。`apps/common/` 只是很小的应用运行时，
 不是功能层；应用之间不会互相导入。天气 preset 还会构建并安装 Go 数据服务，
 应用会在需要时自动启动它。
 
 ## 开发调试：QML 热重载
 
-每个应用都支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
+基于 `apps/common` 的四款 KOS 应用支持直接从源码树加载 QML 并热重载，改 QML 不需要重编或重启：
 
 ```bash
 .build/music-dev/apps/music/kos-music --watch-qml apps/music/qml
@@ -47,7 +48,7 @@ watch 运行是独立的开发实例：不与已运行的正式实例争单例�
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` 会一次构建全部四个应用，而不只是当前要使用的应用。除仓库
+`install-apps.sh` 会一次构建全部五个应用，而不只是当前要使用的应用。除仓库
 根目录 README 中的基础依赖外，Arch 还需要先安装：
 
 ```sh
@@ -59,7 +60,7 @@ sudo pacman -S --needed kcalendarcore gstreamer gst-plugins-base-libs taglib
 插件需按使用场景另行安装。若仅使用对应的 CMake preset 构建单个应用，只需要该
 应用的直接依赖。
 
-脚本会完成 Release 构建和测试，安装到 `~/.local`，注册桌面入口、hicolor
+脚本会完成 Release 构建，安装到 `~/.local`，注册桌面入口、hicolor
 图标和 AppStream 元数据，启用核心 `kos-data.service`、注册由 D-Bus 按需激活的
 PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行路径，因此重新登录后无需回到源码目录构建。
 后续升级可重复运行同一个脚本。
@@ -72,3 +73,9 @@ PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行�
 
 `settings` 早于该工作区存在，在它依赖源码路径的 QML 加载方式单独迁移前，
 仍沿用现有构建路径。
+
+## 默认应用与升级
+
+Todo、Calendar、Weather 在原目录和原 `kos-*` 桌面 ID 上更新界面，沿用原服务和用户数据。测试版 `*-preview` 入口在正式注册时移除。音乐保留两个独立实现：`apps/music` 的旧 KOS Music 与 `apps/listenfree` 的 KOS ListenFree；桌面音乐组件和默认音频文件关联使用后者。
+
+KOS ListenFree 的额外构建依赖及 SDK 布局见 [Linux 构建说明](listenfree/packaging/linux/README.md)。构建全套前设置 `KOS_LISTENFREE_SDK`，其配置与播放引擎保持独立。`tools/install-apps.sh` 安装后执行 `tools/register-default-apps.py` 完成默认关联、窗口按钮配置和测试入口清理；注册前的偏好及测试安装归档到用户状态目录供恢复。旧 KOS Music 的程序及资料不会删除。
