@@ -135,7 +135,6 @@ PanelWindow {
     LauncherMotion {
         id: popupMotion
         target: launcherContent
-        surface: launcherSurface
         onSettledOpenChanged: {
             if (settledOpen) {
                 searchFocusTimer.restart();
@@ -1212,8 +1211,8 @@ PanelWindow {
             width: launcherRevealClip.width
             height: launcherRevealClip.height
             visible: root.panelVisible
-            // Compositor transforms do not move QML's hit-test coordinates.
-            // Enable interaction only after the surface reaches its final pose.
+            // Defer input until the tile jobs finish so clicks and hover
+            // cannot interrupt the entrance motion.
             enabled: popupMotion.interactive
             // Content layout and clipping stay independent of the backdrop.
             clip: false
@@ -1242,16 +1241,8 @@ PanelWindow {
                     scrimLevel: "balanced"
                     // A stable tint avoids a separate per-frame luminance pyramid.
                     scrimFixed: true
-                    compositorRevealEnabled: !root.isFullscreenMode
-                        && !AppearanceTokens.surface.paintInQml
-                    compositorRevealOpened: popupMotion.requestedOpen
-                    compositorRevealDuration: 320
-                    onCompositorRevealFinished: function(opened) {
-                        popupMotion.finishCompositorReveal(opened);
-                    }
-                    // Native reveal owns the final SDF and material fade. Older
-                    // compositors keep a fixed outline with one group fade.
-                    materialOpacity: popupMotion.compositorSupported ? 1 : popupMotion.glassOpacity
+                    // Keep the outline fixed and soften only the complete finish.
+                    materialOpacity: popupMotion.glassOpacity
                     // QML-painted themes have their own matching fade. The
                     // native effect fades separately through protocol metadata.
                     opacity: fallbackEnabled ? popupMotion.glassOpacity : 1
@@ -1264,9 +1255,9 @@ PanelWindow {
                     width: parent.width
                     height: parent.height
                     y: 0
-                    scale: popupMotion.compositorSupported ? 1 : 0.8
+                    scale: 1
                     focus: root.open && !root.externalDialogOpen
-                    opacity: popupMotion.compositorSupported ? 1 : 0
+                    opacity: 1
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
@@ -1693,6 +1684,19 @@ PanelWindow {
                                 }
                             }
 
+                            LauncherIconMotion {
+                                target: appEntrance
+                                controller: popupMotion
+                                opened: popupMotion.requestedOpen
+                                animateOnCompleted: !popupMotion.settledOpen
+                                offsetX: Math.max(-32, Math.min(32,
+                                    (appDelegate.x + appDelegate.width / 2
+                                        - appDelegate.GridView.view.width / 2) * 0.2))
+                                offsetY: Math.max(-24, Math.min(24,
+                                    (appDelegate.y + appDelegate.height / 2
+                                        - appDelegate.GridView.view.contentY
+                                        - appDelegate.GridView.view.height / 2) * 0.2))
+                            }
                             Item {
                                 id: appEntrance
                                 width: parent.width

@@ -57,3 +57,17 @@ luminance pyramid. Fully transparent glass and client content skip rendering.
 
 Fixed capture avoids resizing the texture chain; it does not freeze background
 updates or remove per-frame blur work while the material is visible.
+
+The `codex/launcher-icon-motion-soft-glass` variant restores the original tile
+spread: X/Y displacement contracts 20% toward the grid center (capped at 32/24
+pixels), scale is 0.8→1 over 300 ms, and opacity fades over 200 ms. Tile layouts
+and icon textures remain fixed. The glass outline stays at its final dimensions,
+fades in over 100 ms so tile motion remains visible, and fades out over 300 ms.
+The panel retires after both the glass fade and actual tile jobs finish, including
+interrupted animations and delegate destruction; there is no fixed settle timer.
+
+Opacity-only protocol updates request local repaint without rebuilding blur
+regions. Unchanged geometry, corners, enabled, scrim and blur requests are ignored.
+Zero-opacity declarations survive the hide commit to prevent fallback glass.
+This variant retains fixed capture allocation and local repaint optimizations;
+it does not yet cache the completed Blur result between frames.

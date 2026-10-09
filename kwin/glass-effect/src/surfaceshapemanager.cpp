@@ -87,9 +87,11 @@ QVector<SurfaceShape> SurfaceShapeManager::shapesFor(const SurfaceInterface *sur
         // Retain a zero-opacity declaration through the client's final hide
         // commit, so a stale blur region cannot fall back to a full glass slab.
         const bool closedReveal = shape->revealEnabled && shape->progress == 0;
-        if ((shape->value.enabled || closedReveal) && shape->value.geometry.width() > 0
+        const bool transparentMaterial = shape->value.materialOpacity <= 0;
+        if ((shape->value.enabled || closedReveal || transparentMaterial) && shape->value.geometry.width() > 0
             && shape->value.geometry.height() > 0) {
             SurfaceShape value = shape->value;
+            if (transparentMaterial) value.enabled = true;
             if (shape->revealEnabled) {
                 value.enabled = true;
                 const QRectF finalRect = value.geometry;
@@ -219,7 +221,9 @@ void SurfaceShapeManager::setGeometry(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.geometry = QRectF(x, y, std::max(width, 0), std::max(height, 0));
+    const QRectF geometry(x, y, std::max(width, 0), std::max(height, 0));
+    if (shape->value.geometry == geometry) return;
+    shape->value.geometry = geometry;
     shape->manager->changed(shape);
 }
 
@@ -230,8 +234,11 @@ void SurfaceShapeManager::setCorner(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
-    shape->value.radius = std::clamp(wl_fixed_to_double(radius), 0.0, 4096.0);
-    shape->value.exponent = std::clamp(wl_fixed_to_double(exponent), 2.0, 8.0);
+    const qreal r = std::clamp(wl_fixed_to_double(radius), 0.0, 4096.0);
+    const qreal e = std::clamp(wl_fixed_to_double(exponent), 2.0, 8.0);
+    if (shape->value.radius == r && shape->value.exponent == e) return;
+    shape->value.radius = r;
+    shape->value.exponent = e;
     shape->manager->changed(shape);
 }
 
@@ -253,7 +260,8 @@ void SurfaceShapeManager::setMaterialOpacity(wl_client *, wl_resource *resource,
     const qreal value = std::clamp(wl_fixed_to_double(opacity), 0.0, 1.0);
     if (shape->value.materialOpacity == value) return;
     shape->value.materialOpacity = value;
-    shape->manager->changed(shape);
+    // Only a uniform changed; keep capture geometry and blur bookkeeping intact.
+    Q_EMIT shape->manager->revealFrameChanged(shape->surface, surfaceCaptureBounds(shape->value));
 }
 
 void SurfaceShapeManager::setReveal(wl_client *, wl_resource *resource,
@@ -286,6 +294,7 @@ void SurfaceShapeManager::setEnabled(wl_client *, wl_resource *resource, uint32_
     if (!shape->manager) {
         return;
     }
+    if (shape->value.enabled == (enabled != 0)) return;
     shape->value.enabled = enabled != 0;
     shape->manager->changed(shape);
 }
@@ -304,10 +313,16 @@ void SurfaceShapeManager::setScrim(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
+    const int tintValue = (tint == 1) ? 1 : 0;
+    const qreal capValue = std::clamp(wl_fixed_to_double(cap), 0.0, 1.0);
+    const qreal decayValue = std::clamp(wl_fixed_to_double(decay), 0.0, 4.0);
+    if (shape->value.scrimEnabled == (enabled != 0)
+        && shape->value.scrimTint == tintValue && shape->value.scrimCap == capValue
+        && shape->value.scrimDecay == decayValue) return;
     shape->value.scrimEnabled = enabled != 0;
-    shape->value.scrimTint = (tint == 1) ? 1 : 0;
-    shape->value.scrimCap = std::clamp(wl_fixed_to_double(cap), 0.0, 1.0);
-    shape->value.scrimDecay = std::clamp(wl_fixed_to_double(decay), 0.0, 4.0);
+    shape->value.scrimTint = tintValue;
+    shape->value.scrimCap = capValue;
+    shape->value.scrimDecay = decayValue;
     shape->manager->changed(shape);
 }
 
@@ -318,11 +333,13 @@ void SurfaceShapeManager::setBlur(wl_client *, wl_resource *resource,
     if (!shape->manager) {
         return;
     }
+    const uint clampedLevel = std::clamp<uint>(level, 1, 15);
+    if (shape->value.blurEnabled == (enabled != 0) && shape->value.blurLevel == clampedLevel) return;
     shape->value.blurEnabled = enabled != 0;
     // The compositor blur table is 15 steps. The precise clamp against the
     // table length happens at consumption (blur.cpp); this only rejects
     // nonsense so a hostile value cannot reach far.
-    shape->value.blurLevel = std::clamp<uint>(level, 1, 15);
+    shape->value.blurLevel = clampedLevel;
     shape->manager->changed(shape);
 }
 
