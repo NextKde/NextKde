@@ -55,6 +55,7 @@ QtObject {
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
         "cardRadius":   { type: "int", min: 0, max: 24, def: 14 },
         "cardTint":     { type: "real", min: 0.2, max: 0.95, def: 0.55 },
+        "cardOpacity":  { type: "real", min: 0.2, max: 1.0, def: 1.0 },
         "cardTopLight": { type: "real", min: 0, max: 0.3, def: 0.07 },
         "cardBorder":   { type: "real", min: 0, max: 0.4, def: 0.13 },
         "cardGlow":     { type: "real", min: 0, max: 0.4, def: 0.13 },
@@ -130,6 +131,7 @@ QtObject {
     // 亮度 / 聚焦辉光强度 / 纵深压暗
     property int cardRadius: 14
     property real cardTint: 0.55
+    property real cardOpacity: 1.0
     property real cardTopLight: 0.07
     property real cardBorder: 0.13
     property real cardGlow: 0.13
