@@ -5,6 +5,26 @@ TestCase {
     name: "DesktopLyrics"
     MprisPlayer { id: player }
     SignalSpy { id: positions; target: player; signalName: "positionChanged" }
+    function test_perPlayerDesktopSwitch() {
+        DockMprisService.activePlayer = player
+        player.position = 0
+        player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":false})
+        player.isPlaying = true
+        compare(DockMprisService.desktopLyricsAllowed, false)
+        compare(DockMprisService.currentLyric, "first")
+        positions.clear()
+        wait(550)
+        compare(positions.count, 0)
+        player.metadata = ({"xesam:asText":"[00:00]first", "kos:desktopLyricsEnabled":true})
+        compare(DockMprisService.desktopLyricsAllowed, true)
+        tryVerify(() => positions.count > 0, 1000)
+        player.metadata = ({"kos:desktopLyricsEnabled": {value:false}})
+        compare(DockMprisService.desktopLyricsAllowed, false)
+        player.isPlaying = false
+        player.metadata = ({})
+        compare(DockMprisService.desktopLyricsAllowed, true)
+        DockMprisService.activePlayer = null
+    }
     function test_playback() {
         DockMprisService.activePlayer = player
         player.metadata = ({"xesam:asText":"[00:01]first\n[00:03]\n[00:05]last"})

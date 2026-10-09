@@ -392,7 +392,7 @@ for (const [widget, desktopId] of [
     ["Weather", "kos-weather"],
     ["Calendar", "kos-calendar"],
     ["Todo", "kos-todo"],
-    ["Music", "kos-music"]
+    ["Music", "listenfree"]
 ]) {
     assert.match(deskCenter, new RegExp(`launchById\\("${desktopId}"`),
         `${widget} widget launches its matching installed application`);

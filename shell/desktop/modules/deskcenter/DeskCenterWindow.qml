@@ -1792,7 +1792,12 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-music", [])
+                    onClicked: {
+                        // Prefer the replacement; retain compatibility with
+                        // installations that have not added ListenFree yet.
+                        if (!AppActionService.launchById("listenfree", []))
+                            AppActionService.launchById("kos-music", [])
+                    }
                 }
 
                 function artworkTint(color, alpha) {

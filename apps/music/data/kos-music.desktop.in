@@ -1,8 +1,8 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=KOS Music
-Name[zh_CN]=KOS 音乐
+Name=KOS Music (Legacy)
+Name[zh_CN]=KOS 音乐（旧版）
 GenericName=Music Player
 GenericName[zh_CN]=音乐播放器
 Comment=Browse, organize, and play your local music library

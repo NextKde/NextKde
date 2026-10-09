@@ -19,6 +19,16 @@ for app in calendar todo weather music; do
     QT_QPA_PLATFORM=offscreen "$binary" --version >/dev/null || failed=1
 done
 
+# KOS ListenFree is a separate application; legacy music remains available.
+if test -x "$prefix/bin/listenfree"; then
+    test -f "$prefix/share/applications/listenfree.desktop" || failed=1
+    test -f "$prefix/share/icons/hicolor/scalable/apps/listenfree.svg" || failed=1
+    if command -v desktop-file-validate >/dev/null 2>&1; then
+        desktop-file-validate "$prefix/share/applications/listenfree.desktop" || failed=1
+    fi
+    QT_QPA_PLATFORM=offscreen "$prefix/bin/listenfree" --version >/dev/null || failed=1
+fi
+
 # apps/settings/main.qml runs as its own process and resolves
 # `import "../../shared/qml/<dir>"` against its installed location
 # ($prefix/share/kos/settings), so every import target has to exist under
@@ -51,4 +61,4 @@ if test "$failed" -ne 0; then
     echo "KOS application registration verification failed." >&2
     exit 1
 fi
-echo "Verified four desktop entries, icons, metadata, binaries, and service registration."
+echo "Verified desktop entries, icons, metadata, binaries, and service registration."

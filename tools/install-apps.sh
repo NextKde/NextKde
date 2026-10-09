@@ -7,7 +7,7 @@ prefix=${KOS_INSTALL_PREFIX:-"$HOME/.local"}
 build_dir=${KOS_APPS_BUILD_DIR:-"$project_dir/.build/apps-release"}
 unit_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user
 
-for command_name in busctl cmake ninja readlink systemctl; do
+for command_name in busctl cmake ninja python3 readlink systemctl; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "Missing install dependency: $command_name" >&2
         exit 1
@@ -84,6 +84,10 @@ fi
 # 改了 apps/settings/main.qml 不生效的"部署黑洞"即此（2026-09-30 体检实锤）
 install -m 0644 "$project_dir/apps/settings/main.qml" \
     "$prefix/share/kos/settings/main.qml"
+
+if test -x "$prefix/bin/listenfree"; then
+    python3 "$script_dir/register-default-apps.py" --prefix "$prefix"
+fi
 
 "$script_dir/verify-apps-install.sh" "$prefix"
 echo "KOS applications are installed for this user and ready from the launcher."

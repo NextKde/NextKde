@@ -24,6 +24,7 @@ Scope {
                 screen: modelData
                 visible: ScreenLifecycle.outputAvailable
                     && DeskCenterConfigService.desktopLyricsActive
+                    && DockMprisService.desktopLyricsAllowed
                     && modelData?.name === ScreenLifecycle.activeScreen?.name
                     && (currentLine.length > 0 || DeskCenterConfigService.desktopLyricsEditing)
                 color: "transparent"
