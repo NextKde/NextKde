@@ -1293,7 +1293,7 @@ PopupWindow {
 
         GlassText {
             anchors { left: stageDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
-            text: "前台调度"
+            text: "台前调度"
             color: ThemeService.foregroundColor
             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
         }
