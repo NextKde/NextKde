@@ -10,7 +10,7 @@
 // Sign convention, the same one the QML component applies: a wheel turned away
 // from the user reports a negative angleDelta and moves the content *towards its
 // end* (contentY grows). NOTCH is that content-space step.
-import { CONFIG, axis, advance, bounds, clamp, push, release, reset, wheelStep, pixelGain, pushPixels }
+import { CONFIG, axis, advance, bounds, clamp, push, release, reset, wheelStep, continuousStep, continuousDuration }
     from "./KosKineticScrollPhysics.mjs";
 
 const NOTCH = -wheelStep(-120, 0).delta;    // 72px, towards the end of the content
@@ -271,22 +271,18 @@ advance(reversingFollow, 1 / 144, OPEN);
 check(reversingFollow.position < beforeReversal,
     "reversal cancels the queued forward distance before moving backward");
 
-// Pixel input: fine motion remains precise; speed gain is bounded and a gap
-// does not synthesize a second momentum tail.
-check(pixelGain(0) === 1 && pixelGain(250) === 1, "slow pixel input stays 1:1");
-check(pixelGain(100000) === CONFIG.pixelMaxGain, "fast pixel gain caps at 1.6x");
-check(pixelGain(-800) === pixelGain(800), "pixel gain is symmetric for natural scrolling");
-const pixels = axis(100);
-pushPixels(pixels, 2, OPEN);
-check(pixels.position === 102, "the first pixel event moves exactly with the fingers");
-pushPixels(pixels, 30, OPEN, 0.016);
-check(pixels.position > 132 && pixels.position <= 150 && !pixels.released,
-    "sustained fast input gets gain without a generated coast");
+// Continuous input follows KDE's angle fallback and short native-animation
+// duration policy; event gaps never multiply the requested distance.
+check(continuousStep(-120, -3) === -72, "continuous input prefers the angle channel when both exist");
+check(continuousStep(0, -7) === -7, "pixel-only input keeps its exact distance");
+check(continuousStep(0, 0) === 0, "empty continuous input moves nothing");
+check(continuousDuration(1) === 0, "subtle two-pixel movements need no added latency");
+check(continuousDuration(9) === 50, "visible fine input is smoothed over at least 50ms");
+check(continuousDuration(36) === 100, "native duration scales with remaining distance");
+check(continuousDuration(720) === 200, "large accumulated motion has a bounded 200ms tail");
 const offsetRange = bounds(2000, 200, 40, 30, 500);
 check(offsetRange.min === 460 && offsetRange.max === 2330,
     "dynamic ListView origins translate both scroll bounds");
-pushPixels(pixels, 10000, { min: 0, max: 300 }, 0.008);
-check(pixels.position === 300, "pixel acceleration stops exactly at content bounds");
 
 console.log(errors ? "\n" + errors + " FAILED" : "\nAll kinetic scroll cases passed");
 process.exit(errors ? 1 : 0);

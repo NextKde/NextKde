@@ -108,7 +108,7 @@ Item {
         function test_input_burst_does_not_integrate_extra_frames() {
             const before = outer.contentY;
             for (let i = 0; i < 30; i++)
-                catcher._onWheel(0, -1, 0, 0, false);
+                catcher._onWheel(0, -120, 0, 0, false);
             compare(outer.contentY, before);
             tryVerify(function() { return outer.contentY > before; }, 300);
         }
@@ -117,41 +117,54 @@ Item {
             compare(catcher._onWheel(0, -120, 0, 0, false), false);
             verify(!catcher._animating);
         }
-        function test_pixels_gain_speed_without_added_coast() {
+        function test_pixels_use_native_frames_without_extra_distance() {
             compare(catcher._onWheel(0, 0, 0, -2, false), true);
-            compare(outer.contentY, 2); // First/small movement stays precise.
-            wait(10);
-            compare(catcher._onWheel(0, 0, 0, -30, false), true);
-            verify(outer.contentY > 32 && outer.contentY <= 50);
-            const end = outer.contentY;
-            catcher._handStopped();
-            verify(!catcher._vertical.released);
+            compare(outer.contentY, 2);
+            const before = outer.contentY;
+            for (let i = 0; i < 10; ++i)
+                compare(catcher._onWheel(0, 0, 0, -10, false), true);
+            // A synchronous input burst updates the target, not layout ten times.
+            compare(outer.contentY, before);
+            compare(catcher._vertical.target, 102);
+            verify(catcher._pixelAnimating);
             verify(!catcher._animating);
+            tryCompare(outer, "contentY", 102, 500, 0.5);
             wait(100);
-            compare(outer.contentY, end);
+            compare(outer.contentY, 102);
         }
-        function test_pixel_channel_ignores_duplicate_angles() {
-            compare(catcher._onWheel(120, -120, 0, -5, false), true);
-            compare(outer.contentY, 5);
-            compare(outer.contentX, 0);
+        function test_continuous_input_prefers_kde_angle_channel() {
+            compare(catcher._onWheel(0, -120, 0, -5, false), true);
+            compare(catcher._vertical.target, 72);
+            tryCompare(outer, "contentY", 72, 500, 0.5);
         }
-        function test_pixel_aligned_views_keep_the_velocity_window() {
+        function test_zero_delta_markers_do_not_interrupt_native_tail() {
+            compare(catcher._onWheel(0, 0, 0, 0, false), true);
+            catcher._onWheel(0, 0, 0, -100, false);
+            wait(20);
+            compare(catcher._onWheel(0, 0, 0, 0, false), true);
+            verify(catcher._pixelAnimating);
+            tryCompare(outer, "contentY", 100, 500, 0.5);
+        }
+        function test_fine_angle_only_input_uses_native_smoothing() {
+            compare(catcher._onWheel(0, -15, 0, 0, false), true);
+            verify(catcher._pixelAnimating);
+            verify(!catcher._animating);
+            compare(catcher._vertical.target, 9);
+            tryCompare(outer, "contentY", 9, 500, 0.5);
+        }
+        function test_pixel_aligned_views_finish_native_motion() {
             outer.pixelAligned = true;
-            catcher._onWheel(0, 0, 0, -3, false);
-            wait(10);
-            catcher._onWheel(0, 0, 0, -20, false);
-            wait(10);
-            catcher._onWheel(0, 0, 0, -20, false);
-            compare(catcher._vertical.samples.length, 2);
+            catcher._onWheel(0, 0, 0, -30, false);
+            wait(20);
+            catcher._onWheel(0, 0, 0, -30, false);
+            tryCompare(outer, "contentY", 60, 500, 0.5);
+            tryVerify(function() { return !catcher._pixelAnimating; }, 300);
             compare(catcher._writtenY, outer.contentY);
-            verify(outer.contentY > 43);
         }
-        function test_scrollview_pixels_share_the_gain_policy() {
-            compare(wrappedPolicy._onWheel(0, 0, 0, -2, false), true);
-            compare(wrapped.contentItem.contentY, 2);
-            wait(10);
+        function test_scrollview_pixels_share_native_animation_policy() {
             compare(wrappedPolicy._onWheel(0, 0, 0, -30, false), true);
-            verify(wrapped.contentItem.contentY > 32);
+            verify(wrappedPolicy._pixelAnimating);
+            tryCompare(wrapped.contentItem, "contentY", 30, 500, 0.5);
             verify(!wrappedPolicy._animating);
         }
         function test_scrollview_preserves_ctrl_slider_and_nested_gallery() {
@@ -169,6 +182,24 @@ Item {
             mouseWheel(wrapped, 150, 175, 0, -120);
             tryVerify(function() { return wrapped.contentItem.contentY > 0; }, 500);
             verify(!wrappedPolicy._animating);
+        }
+        function test_pixel_reversal_cancels_pending_forward_motion() {
+            catcher._onWheel(0, 0, 0, -200, false);
+            wait(40);
+            const before = outer.contentY;
+            catcher._onWheel(0, 0, 0, 20, false);
+            verify(catcher._vertical.target < before);
+            tryCompare(outer, "contentY", before - 20, 500, 0.5);
+        }
+        function test_hiding_view_cancels_native_animation() {
+            catcher._onWheel(0, 0, 0, -200, false);
+            wait(20);
+            outer.visible = false;
+            verify(!catcher._pixelAnimating);
+            const stopped = outer.contentY;
+            wait(100);
+            compare(outer.contentY, stopped);
+            outer.visible = true;
         }
         function test_pixel_to_wheel_switch_has_no_stale_speed() {
             catcher._onWheel(0, 0, 0, -30, false);

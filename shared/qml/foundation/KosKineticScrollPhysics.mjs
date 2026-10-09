@@ -3,11 +3,8 @@
 // settles without overshooting; all motion stops at content boundaries.
 // Design reference: KDE Kirigami src/wheelhandler.cpp (windowed velocity and
 // bounded inertia endpoints). These conservative constants are KOS tuning,
-// not Kirigami defaults. Pixel streams use direct bounded speed gain.
+// not Kirigami defaults. Continuous streams use native Qt animation.
 export const CONFIG = {
-    pixelSlowSpeed: 250,
-    pixelFastSpeed: 1500,
-    pixelMaxGain: 1.6,
     angleStep: 0.6, // Preserve the existing 72px/notch distance.
     followStiffnessSlow: 2200, // About 200ms to settle a single notch.
     followStiffnessFast: 9000,
@@ -180,20 +177,17 @@ export function advance(ax, dt, range, config = CONFIG) {
     return true;
 }
 
-// Pixel input follows the fingers directly. Only fast sustained input gets a
-// bounded gain; unknown/system momentum never starts a second synthetic coast.
-export function pixelGain(speed, config = CONFIG) {
-    const t = clamp((Math.abs(speed) - config.pixelSlowSpeed)
-        / (config.pixelFastSpeed - config.pixelSlowSpeed), 0, 1);
-    return 1 + (config.pixelMaxGain - 1) * t * t * (3 - 2 * t);
+// Kirigami prefers angle deltas when available on Wayland: the pixel channel
+// can be much slower. Preserve KOS's 72px/notch convention for that channel.
+export function continuousStep(angleDelta, pixelDelta, config = CONFIG) {
+    return angleDelta !== 0 ? angleDelta * config.angleStep : pixelDelta;
 }
 
-export function pushPixels(ax, delta, range, dtSince = Infinity, config = CONFIG) {
-    push(ax, delta, range, dtSince, config);
-    // Velocity estimation uses raw device pixels, not the amplified result.
-    ax.target = clamp(ax.position + delta * pixelGain(ax.speed, config), range.min, range.max);
-    ax.position = ax.target;
-    ax.velocity = 0;
-    ax.released = false;
-    return ax.position;
+// Like Kirigami's OutCubic scroll animation: duration scales with remaining
+// distance, with a short floor for visible motion. Values are KOS defaults.
+export function continuousDuration(distance, config = CONFIG) {
+    const pixels = Math.abs(distance);
+    if (pixels <= 2)
+        return 0;
+    return Math.max(50, Math.min(200, Math.round(pixels * 200 / (120 * config.angleStep))));
 }

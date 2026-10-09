@@ -3,7 +3,7 @@ import "KosKineticScrollPhysics.mjs" as Physics
 
 // Shared mouse-wheel and pixel-input policy. Place inside a Flickable;
 // its content item hosts the low-priority catcher behind interactive children.
-// Pixel input tracks fingers directly with bounded speed gain and no added coast.
+// Continuous input uses short native Qt property animations, not per-event writes.
 // FrameAnimation integrates only rendered frames and sleeps when settled.
 Item {
     id: root
@@ -37,6 +37,7 @@ Item {
     property bool horizontal: true
     property bool reducedMotion: AppTheme.reduceMotion
     property bool _animating: false
+    readonly property bool _pixelAnimating: _pixelY.running || _pixelX.running
     onReducedMotionChanged: if (reducedMotion) _release()
     onVisibleChanged: if (!visible) _release()
     onEnabledChanged: if (!enabled) _release()
@@ -108,14 +109,16 @@ Item {
     // Give the view back, with no motion left in either axis.
     function _release() {
         _animating = false;
+        _pixelY.stop();
+        _pixelX.stop();
         _handTimer.stop();
         _lastWheel = 0;
         _inputMode = "";
         _adopt();
     }
 
-    // Angle events schedule frame-driven motion. Pixel events follow fingers
-    // directly, with shared velocity estimation and gain limits.
+    // Angle events schedule bounded inertia. Continuous events accumulate a
+    // target and retarget native animations, matching Kirigami smoothing.
     function _onWheel(angleX, angleY, pixelX, pixelY, shiftHeld) {
         if (!flickable || !enabled || !visible || (!flickable.interactive && !_scrollViewWrapped))
             return false;
@@ -123,13 +126,23 @@ Item {
             _release();
             return false;
         }
-        const mode = pixelX !== 0 || pixelY !== 0 ? "pixel" : "wheel";
+        // Phase-marker events can have no deltas. Do not switch device modes,
+        // stop a running animation, or let Flickable start a parallel gesture.
+        if (angleX === 0 && angleY === 0 && pixelX === 0 && pixelY === 0)
+            return true;
+        // Fine angle-only streams also come from touchpads/high-resolution
+        // wheels. KDE treats these as small animated moves, not coarse notches.
+        const fineAngle = angleX % 120 !== 0 || angleY % 120 !== 0;
+        const realPixels = (pixelX !== 0 || pixelY !== 0)
+            && !(pixelX === angleX && pixelY === angleY);
+        const mode = realPixels || fineAngle ? "pixel" : "wheel";
         if (_inputMode !== mode) {
             _release();
             _inputMode = mode;
         } else if (!_animating && mode === "wheel") {
             _adopt();
-        } else if (flickable.contentY !== _writtenY || flickable.contentX !== _writtenX) {
+        } else if (!_pixelY.running && !_pixelX.running
+                && (flickable.contentY !== _writtenY || flickable.contentX !== _writtenX)) {
             // A scrollbar/programmatic move cancels both gesture estimates.
             _release();
             _inputMode = mode;
@@ -137,9 +150,9 @@ Item {
 
         const canScrollVertically = verticalRange.max > verticalRange.min;
         const canScrollSideways = root.horizontal && horizontalRange.max > horizontalRange.min;
-        let vertical = mode === "pixel" ? { delta: pixelY, continuous: true }
+        let vertical = mode === "pixel" ? { delta: Physics.continuousStep(angleY, pixelY), continuous: true }
             : Physics.wheelStep(angleY, 0);
-        let horizontal = mode === "pixel" ? { delta: pixelX, continuous: true }
+        let horizontal = mode === "pixel" ? { delta: Physics.continuousStep(angleX, pixelX), continuous: true }
             : Physics.wheelStep(angleX, 0);
         if (shiftHeld && horizontal.delta === 0) {
             // Shift+wheel is how a mouse asks for the other axis.
@@ -158,10 +171,10 @@ Item {
         }
         const movesVertical = vertical.delta !== 0 && canScrollVertically
             && (Physics.clamp(_vertical.target - vertical.delta, verticalRange.min, verticalRange.max) !== _vertical.target
-                || (_animating && _vertical.position !== _vertical.target));
+                || ((_animating || _pixelY.running) && flickable.contentY !== _vertical.target));
         const movesHorizontal = horizontal.delta !== 0 && canScrollSideways
             && (Physics.clamp(_horizontal.target - horizontal.delta, horizontalRange.min, horizontalRange.max) !== _horizontal.target
-                || (_animating && _horizontal.position !== _horizontal.target));
+                || ((_animating || _pixelX.running) && flickable.contentX !== _horizontal.target));
         if (!movesVertical && !movesHorizontal)
             return false;
         // How fast this gesture is running: KWin and high-resolution wheels
@@ -170,20 +183,15 @@ Item {
         const now = Date.now();
         const dtSince = _lastWheel === 0 ? Infinity : (now - _lastWheel) / 1000;
         _lastWheel = now;
-        _handTimer.restart();
+        if (mode === "wheel")
+            _handTimer.restart();
         // Deltas already include the user's natural-scroll setting.
         if (mode === "pixel") {
-            if (movesVertical) {
-                flickable.contentY = Physics.pushPixels(_vertical,
-                    -vertical.delta, verticalRange, dtSince);
-                _vertical.position = _vertical.target = _writtenY = flickable.contentY;
-            }
-            if (movesHorizontal) {
-                flickable.contentX = Physics.pushPixels(_horizontal,
-                    -horizontal.delta, horizontalRange, dtSince);
-                _horizontal.position = _horizontal.target = _writtenX = flickable.contentX;
-            }
-            // Pixel input is direct: don't inject another momentum tail on gaps.
+            if (movesVertical)
+                _smoothPixels(_pixelY, _vertical, -vertical.delta, verticalRange, flickable.contentY);
+            if (movesHorizontal)
+                _smoothPixels(_pixelX, _horizontal, -horizontal.delta, horizontalRange, flickable.contentX);
+            // No event-frequency gain and no additional synthetic coast.
             _animating = false;
         } else {
             if (movesHorizontal)
@@ -195,13 +203,60 @@ Item {
         return true;
     }
 
+    function _smoothPixels(animation, axis, delta, range, current) {
+        // Accumulate on the requested endpoint, never on the intermediate
+        // animated position. Dense input therefore preserves total distance.
+        const pending = axis.target - current;
+        const reversing = delta !== 0 && pending !== 0 && Math.sign(delta) !== Math.sign(pending);
+        const endpoint = Physics.clamp((reversing ? current : axis.target) + delta,
+            range.min, range.max);
+        animation.stop();
+        axis.target = endpoint;
+        const duration = Physics.continuousDuration(endpoint - current);
+        if (duration === 0) {
+            flickable[animation.property] = endpoint;
+            _pixelFinished(axis, animation.property);
+        } else {
+            animation.from = current;
+            animation.to = endpoint;
+            animation.duration = duration;
+            animation.start();
+        }
+    }
+
+    function _pixelFinished(axis, propertyName) {
+        axis.position = axis.target = flickable[propertyName];
+        _writtenY = flickable.contentY;
+        _writtenX = flickable.contentX;
+    }
+
+    NumberAnimation {
+        id: _pixelY
+        target: root.flickable
+        property: "contentY"
+        easing.type: Easing.OutCubic
+        onFinished: root._pixelFinished(root._vertical, property)
+    }
+    NumberAnimation {
+        id: _pixelX
+        target: root.flickable
+        property: "contentX"
+        easing.type: Easing.OutCubic
+        onFinished: root._pixelFinished(root._horizontal, property)
+    }
+    Connections {
+        target: root.flickable
+        function onDraggingChanged() {
+            if (root.flickable.dragging)
+                root._release();
+        }
+    }
+
     // Angle input gets a short coast; pixel streams never get a second tail.
     function _handStopped() {
         _lastWheel = 0;
-        if (_inputMode === "pixel") {
-            _release();
+        if (_inputMode === "pixel")
             return;
-        }
         const vertical = Physics.release(_vertical, verticalRange);
         const horizontal = root.horizontal
             ? Physics.release(_horizontal, horizontalRange) : false;
