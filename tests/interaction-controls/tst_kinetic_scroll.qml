@@ -14,7 +14,7 @@ import "../../shared/qml/foundation/KosKineticScrollPhysics.mjs" as Physics
 // working around it.
 Item {
     id: page
-    width: 320
+    width: 640
     height: 1200
 
     component Scrollable: Flickable {
@@ -29,7 +29,7 @@ Item {
     // must land on the same pixel either way.
     Scrollable {
         id: kinetic
-        Foundation.KosKineticScroll { id: kineticContent; flickable: kinetic }
+        Foundation.KosKineticScroll { id: kineticContent }
     }
     Scrollable {
         id: reference
@@ -78,7 +78,7 @@ Item {
                 onClicked: page.clickedIndex = index
             }
         }
-        Foundation.KosKineticScroll { flickable: list }
+        Foundation.KosKineticScroll {}
     }
     // Declared *beside* the view rather than inside it. A ScrollView cannot take
     // an extra child at all (its contentItem is sized from the content it holds,
@@ -115,8 +115,7 @@ Item {
         // is 0x0 unless it is reparented to a plain ancestor.
         Foundation.KosKineticScroll {
             id: scrollViewCatcher
-            flickable: scrollView.contentItem
-            parent: page
+            target: scrollView
         }
     }
 
@@ -329,7 +328,8 @@ Item {
             verify(scrollViewCatcher.width > 0 && scrollViewCatcher.height > 0,
                 "the catcher was sized by the layout: " + scrollViewCatcher.width + "x" + scrollViewCatcher.height)
             mouseWheel(scrollView, 100, 100, 0, -120)
-            wait(200)
+            verify(scrollViewCatcher._animating, "ScrollView wheel must use the shared policy")
+            tryCompare(content, "contentY", 72, 500, 0.5)
             verify(content.contentY > 0,
                 "the wheel must reach the catcher beside a ScrollView, contentY " + content.contentY)
         }

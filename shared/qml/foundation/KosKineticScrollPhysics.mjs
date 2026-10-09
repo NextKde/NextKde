@@ -3,8 +3,11 @@
 // settles without overshooting; all motion stops at content boundaries.
 // Design reference: KDE Kirigami src/wheelhandler.cpp (windowed velocity and
 // bounded inertia endpoints). These conservative constants are KOS tuning,
-// not Kirigami defaults. Pixel/trackpad input remains native in the QML layer.
+// not Kirigami defaults. Pixel streams use direct bounded speed gain.
 export const CONFIG = {
+    pixelSlowSpeed: 250,
+    pixelFastSpeed: 1500,
+    pixelMaxGain: 1.6,
     angleStep: 0.6, // Preserve the existing 72px/notch distance.
     followStiffnessSlow: 2200, // About 200ms to settle a single notch.
     followStiffnessFast: 9000,
@@ -33,7 +36,7 @@ export function clamp(value, min, max) {
 // One scroll event, in pixels, plus which profile it belongs to.
 //
 // Pixel deltas identify continuous input even when an angle is also present.
-// The QML companion hands these events to native scrolling without a glide.
+// The QML companion gives pixel streams direct motion without an extra glide.
 export function wheelStep(angleDelta, pixelDelta, config = CONFIG) {
     const pixels = pixelDelta || 0;
     if (pixels !== 0)
@@ -47,9 +50,9 @@ export function wheelStep(angleDelta, pixelDelta, config = CONFIG) {
 // The scrollable range of a Flickable-shaped view. Mirrors what Qt itself
 // allows: contentY runs from the top margin to the content's end plus the
 // bottom margin.
-export function bounds(contentSize, viewportSize, topMargin, bottomMargin) {
-    const min = -(topMargin || 0);
-    return { min: min, max: Math.max(min, contentSize + (bottomMargin || 0) - viewportSize) };
+export function bounds(contentSize, viewportSize, topMargin, bottomMargin, origin = 0) {
+    const min = origin - (topMargin || 0);
+    return { min: min, max: Math.max(min, origin + contentSize + (bottomMargin || 0) - viewportSize) };
 }
 
 // One axis of motion. `position` is where the view is drawn, `target` the sum
@@ -175,4 +178,22 @@ export function advance(ax, dt, range, config = CONFIG) {
         return false;
     }
     return true;
+}
+
+// Pixel input follows the fingers directly. Only fast sustained input gets a
+// bounded gain; unknown/system momentum never starts a second synthetic coast.
+export function pixelGain(speed, config = CONFIG) {
+    const t = clamp((Math.abs(speed) - config.pixelSlowSpeed)
+        / (config.pixelFastSpeed - config.pixelSlowSpeed), 0, 1);
+    return 1 + (config.pixelMaxGain - 1) * t * t * (3 - 2 * t);
+}
+
+export function pushPixels(ax, delta, range, dtSince = Infinity, config = CONFIG) {
+    push(ax, delta, range, dtSince, config);
+    // Velocity estimation uses raw device pixels, not the amplified result.
+    ax.target = clamp(ax.position + delta * pixelGain(ax.speed, config), range.min, range.max);
+    ax.position = ax.target;
+    ax.velocity = 0;
+    ax.released = false;
+    return ax.position;
 }

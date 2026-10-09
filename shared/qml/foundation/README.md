@@ -11,28 +11,42 @@ dialog. KDE compositor integration remains in `apps/common`; when native blur
 is unavailable these portable QML surfaces automatically use a high-opacity
 fallback.
 
-`KosKineticScroll` adds mouse-wheel inertia to selected long lists. It runs
-behind child controls and nested views, leaves Ctrl gestures and pixel-based
-trackpad scrolling to native handlers, and respects `AppTheme.reduceMotion`.
-Mouse-wheel tuning preserves 72px/notch, averages the recent 80ms of input,
-and adds at most 72px of coast (900px/s speed cap, 6000px/s² deceleration).
-A critically damped follow settles a lone notch in about 200ms. Content
-boundaries are hard limits without rebound. These are KOS defaults inspired
-by Kirigami’s bounded scrolling, not universal optimal values.
-Motion advances once per rendered frame through `FrameAnimation`; no timer
-continues integrating a hidden view. An empty range or a settled boundary
-passes the wheel onward.
+`KosKineticScroll` centralizes scrolling policy for Flickable, ListView,
+GridView and ScrollView. Applications do not need device detection, motion
+constants or layout-parent workarounds. It preserves Ctrl gestures, nested
+views and `AppTheme.reduceMotion`.
 
 ```qml
 ListView {
-    id: results
-    KosKineticScroll { flickable: results }
+    KosKineticScroll {} // Automatically finds and attaches to this view.
 }
+// For a ScrollView, declare alongside it or as a separate object property:
+ScrollView { id: page; /* content */ }
+KosKineticScroll { target: page }
 ```
 
-The arithmetic lives in `KosKineticScrollPhysics.mjs` and has pure Node tests.
-QML regression tests cover motion, sliders, nested views, trackpad handoff and
-reduced motion. Menus, Dock previews, calendar ScrollView, wallpaper strip and
-legacy music remain native in this integration. ListenFree is not changed.
-A catcher declared beside a view must use a plain ancestor for its parent;
-placing extra children in a ScrollView can invalidate its content sizing.
+Attach one instance per view. Existing explicit `flickable: view` usage remains
+supported. The component owns placement, respects visibility/enabled state,
+includes originX/originY in bounds, and restores ScrollView's original wheel
+handling when disabled or destroyed. Dragging, scrollbar changes and
+programmatic positioning cancel synthetic motion.
+
+Angle input preserves 72px/notch, averages the recent 80ms of input and adds
+at most 72px of coast (900px/s cap, 6000px/s² deceleration). A critically
+damped follow settles a lone notch in about 200ms. Pixel input follows the
+fingers directly: slow movement stays 1:1, with a smooth gain from 250 to
+1500px/s capped at 1.6x. Raw pixels, not amplified movement, determine speed.
+Both paths stop at hard boundaries without rebound.
+
+Qt Quick's QML WheelEvent does not expose scroll phases. Pixel streams may
+already include system momentum, so this component never synthesizes another
+coast after them. Sources without pixel deltas use the angle-input fallback.
+These are KOS tuning defaults inspired by Kirigami's bounded scrolling,
+not universal optimal values. Wheel motion uses FrameAnimation and stops
+while hidden, disabled or settled. Pixel movement needs no animation loop.
+
+The arithmetic lives in `KosKineticScrollPhysics.mjs` with pure Node tests.
+QML regression tests cover both input paths, automatic placement, ScrollView,
+sliders, nested views, device switching and reduced motion. The current app
+integration still leaves menus, Dock previews, calendar, wallpaper strip and
+legacy music on their existing paths. ListenFree is not changed.

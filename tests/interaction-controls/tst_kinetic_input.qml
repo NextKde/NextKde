@@ -1,10 +1,11 @@
 import QtQuick
 import QtTest
+import QtQuick.Controls as QtControls
 import "../../shared/qml/foundation" as Foundation
 import "../../shared/qml/controls" as Controls
 
 Item {
-    width: 320
+    width: 700
     height: 240
     property real preview: 0.5
 
@@ -39,13 +40,47 @@ Item {
         Foundation.KosKineticScroll { id: catcher; flickable: outer }
     }
 
+    QtControls.ScrollView {
+        id: wrapped
+        x: 340
+        width: 300
+        height: 200
+        contentWidth: 300
+        contentHeight: 1000
+        Item {
+            width: 300
+            height: 1000
+            Controls.LiquidSlider {
+                id: wrappedSlider
+                x: 20; y: 10; width: 240; height: 44
+                value: preview
+                onPreviewChanged: function(value) { preview = value; }
+            }
+            Flickable {
+                id: wrappedInner
+                x: 20; y: 70; width: 240; height: 80
+                contentWidth: 1000
+                contentHeight: 80
+                Rectangle { width: 1000; height: 80; color: "gray" }
+                Foundation.KosKineticScroll {}
+            }
+        }
+    }
+    Foundation.KosKineticScroll { id: wrappedPolicy; target: wrapped }
+
     TestCase {
         name: "KineticInputOwnership"
         when: windowShown
 
         function init() {
+            wrappedPolicy._release();
+            wrappedPolicy.enabled = true;
+            wrappedPolicy.reducedMotion = false;
+            wrapped.contentItem.contentY = 0;
+            wrappedInner.contentX = 0;
             catcher._release();
             catcher.reducedMotion = false;
+            outer.pixelAligned = false;
             outer.contentHeight = 2000;
             outer.contentY = 0;
             inner.contentX = 0;
@@ -82,14 +117,74 @@ Item {
             compare(catcher._onWheel(0, -120, 0, 0, false), false);
             verify(!catcher._animating);
         }
-        function test_pixels_do_not_receive_added_inertia() {
-            for (let i = 0; i < 4; i++) {
-                compare(catcher._onWheel(0, 0, 0, -10, false), false);
-                wait(20);
-            }
+        function test_pixels_gain_speed_without_added_coast() {
+            compare(catcher._onWheel(0, 0, 0, -2, false), true);
+            compare(outer.contentY, 2); // First/small movement stays precise.
+            wait(10);
+            compare(catcher._onWheel(0, 0, 0, -30, false), true);
+            verify(outer.contentY > 32 && outer.contentY <= 50);
+            const end = outer.contentY;
             catcher._handStopped();
-            verify(!catcher._vertical.released, "Pixel input must not release an additional glide");
+            verify(!catcher._vertical.released);
             verify(!catcher._animating);
+            wait(100);
+            compare(outer.contentY, end);
+        }
+        function test_pixel_channel_ignores_duplicate_angles() {
+            compare(catcher._onWheel(120, -120, 0, -5, false), true);
+            compare(outer.contentY, 5);
+            compare(outer.contentX, 0);
+        }
+        function test_pixel_aligned_views_keep_the_velocity_window() {
+            outer.pixelAligned = true;
+            catcher._onWheel(0, 0, 0, -3, false);
+            wait(10);
+            catcher._onWheel(0, 0, 0, -20, false);
+            wait(10);
+            catcher._onWheel(0, 0, 0, -20, false);
+            compare(catcher._vertical.samples.length, 2);
+            compare(catcher._writtenY, outer.contentY);
+            verify(outer.contentY > 43);
+        }
+        function test_scrollview_pixels_share_the_gain_policy() {
+            compare(wrappedPolicy._onWheel(0, 0, 0, -2, false), true);
+            compare(wrapped.contentItem.contentY, 2);
+            wait(10);
+            compare(wrappedPolicy._onWheel(0, 0, 0, -30, false), true);
+            verify(wrapped.contentItem.contentY > 32);
+            verify(!wrappedPolicy._animating);
+        }
+        function test_scrollview_preserves_ctrl_slider_and_nested_gallery() {
+            mouseWheel(wrappedSlider, 120, 22, 0, 120, Qt.NoButton, Qt.ControlModifier);
+            fuzzyCompare(preview, 0.51, 0.00001);
+            compare(wrapped.contentItem.contentY, 0);
+            mouseWheel(wrappedInner, 120, 40, 0, -120);
+            tryVerify(function() { return wrappedInner.contentX > 50; }, 500);
+            compare(wrapped.contentItem.contentY, 0);
+        }
+        function test_scrollview_restores_native_handling_when_disabled() {
+            compare(wrapped.wheelEnabled, false);
+            wrappedPolicy.enabled = false;
+            compare(wrapped.wheelEnabled, true);
+            mouseWheel(wrapped, 150, 175, 0, -120);
+            tryVerify(function() { return wrapped.contentItem.contentY > 0; }, 500);
+            verify(!wrappedPolicy._animating);
+        }
+        function test_pixel_to_wheel_switch_has_no_stale_speed() {
+            catcher._onWheel(0, 0, 0, -30, false);
+            wait(10);
+            catcher._onWheel(0, 0, 0, -30, false);
+            const start = outer.contentY;
+            catcher._onWheel(0, -120, 0, 0, false);
+            tryCompare(outer, "contentY", start + 72, 500, 0.5);
+        }
+        function test_pixels_respect_hidden_and_disabled_views() {
+            outer.visible = false;
+            compare(catcher._onWheel(0, 0, 0, -30, false), false);
+            outer.visible = true;
+            outer.enabled = false;
+            compare(catcher._onWheel(0, 0, 0, -30, false), false);
+            outer.enabled = true;
         }
     }
 }
