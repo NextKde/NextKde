@@ -1238,9 +1238,8 @@ PanelWindow {
                     layer.enabled: fallbackEnabled && continuousCorners
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
-                    scrimLevel: "balanced"
-                    // A stable tint avoids a separate per-frame luminance pyramid.
-                    scrimFixed: true
+                    // Adaptive tint, one preset above the Dock's subtle level.
+                    scrimLevel: "transparent"
                     // Keep the outline fixed and soften only the complete finish.
                     materialOpacity: popupMotion.glassOpacity
                     // QML-painted themes have their own matching fade. The

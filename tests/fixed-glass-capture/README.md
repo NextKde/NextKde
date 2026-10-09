@@ -71,3 +71,6 @@ regions. Unchanged geometry, corners, enabled, scrim and blur requests are ignor
 Zero-opacity declarations survive the hide commit to prevent fallback glass.
 This variant retains fixed capture allocation and local repaint optimizations;
 it does not yet cache the completed Blur result between frames.
+
+The tile-motion variant now uses adaptive `transparent` scrim (cap 0.22),
+one preset above the Dock's `subtle` (cap 0.15), replacing its fixed scrim.
