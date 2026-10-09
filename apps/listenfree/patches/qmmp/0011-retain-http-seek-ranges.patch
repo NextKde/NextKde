@@ -1,0 +1,289 @@
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -42,7 +42,12 @@
+     HttpStreamReader *dl = static_cast<HttpStreamReader *>(pointer);
+     dl->mutex()->lock();
+ 
+-    if(dl->stream()->aborted || dl->stream()->buf_fill > MAX_BUFFER_SIZE)
++    if(dl->stream()->aborted)
++    {
++        dl->mutex()->unlock();
++        return 0;
++    }
++    if(dl->stream()->buf_fill > MAX_BUFFER_SIZE)
+     {
+         qCWarning(plugin, "buffer has reached the maximum size, disconnecting...");
+         dl->stream()->aborted = true;
+@@ -51,10 +56,20 @@
+     }
+ 
+     size_t data_size = size * nmemb;
+-    if(dl->stream()->buf_fill + data_size > dl->stream()->buf_size)
++    // Keep 1–2 MiB of consumed data for decoder frame-header lookbacks.
++    // Compact in chunks, not on every read. ICY streams retain no history.
++    if(dl->stream()->buf_offset > 2 * 1024 * 1024)
++    {
++        const size_t discard = dl->stream()->buf_offset - 1024 * 1024;
++        dl->stream()->buf_offset -= discard;
++        memmove(dl->stream()->buf, dl->stream()->buf + discard,
++                dl->stream()->buf_offset + dl->stream()->buf_fill);
++    }
++    const size_t required = dl->stream()->buf_offset + dl->stream()->buf_fill + data_size;
++    if(required > dl->stream()->buf_size)
+     {
+         char *prev = dl->stream()->buf;
+-        dl->stream()->buf = (char *)realloc(dl->stream()->buf, dl->stream()->buf_fill + data_size);
++        dl->stream()->buf = (char *)realloc(dl->stream()->buf, required);
+         if(!dl->stream()->buf)
+         {
+             qCWarning(plugin, "unable to allocate %zu bytes",  dl->stream()->buf_fill + data_size);
+@@ -67,9 +82,9 @@
+             dl->mutex()->unlock();
+             return 0;
+         }
+-        dl->stream()->buf_size = dl->stream()->buf_fill + data_size;
+-    }
+-    memcpy(dl->stream()->buf + dl->stream()->buf_fill, data, data_size);
++        dl->stream()->buf_size = required;
++    }
++    memcpy(dl->stream()->buf + dl->stream()->buf_offset + dl->stream()->buf_fill, data, data_size);
+     dl->stream()->buf_fill += data_size;
+     dl->wakeReader();
+     dl->mutex()->unlock();
+@@ -187,8 +202,11 @@
+ 
+ bool HttpStreamReader::atEnd() const
+ {
++    if (m_cachedCursor >= 0) return QIODevice::pos() >= size();
+     const auto available = QIODevice::bytesAvailable();
+     const QMutexLocker locker(&m_mutex);
++    // Receiving the final bytes can precede libcurl's completion callback.
++    if (m_stream.totalSize > 0 && !m_stream.icy_metaint && QIODevice::pos() >= m_stream.totalSize) return true;
+     return m_stream.completed && m_stream.buf_fill == 0 && (m_stream.totalSize > 0 && !m_stream.icy_metaint ? m_readOffset <= QIODevice::pos() : available == 0);
+ }
+ 
+@@ -225,25 +243,76 @@
+ bool HttpStreamReader::seek (qint64 pos)
+ {
+     if (isSequential() || pos < 0 || pos > size()) return false;
++    if (m_cancelled.load()) return false;
+     if (pos == QIODevice::pos()) return true;
+-    // Initial probing runs on the UI thread; do not turn it into a blocking
+-    // network operation. Runtime decoder seeks run on the audio worker.
++    {
++        QMutexLocker locker(&m_mutex);
++        const qint64 start = m_readOffset - static_cast<qint64>(m_stream.buf_offset);
++        const qint64 end = m_readOffset + static_cast<qint64>(m_stream.buf_fill);
++        if (!m_stream.aborted && pos >= start && pos <= end)
++        {
++            const qint64 delta = pos - m_readOffset;
++            m_stream.buf_offset = static_cast<size_t>(static_cast<qint64>(m_stream.buf_offset) + delta);
++            m_stream.buf_fill = static_cast<size_t>(static_cast<qint64>(m_stream.buf_fill) - delta);
++            m_readOffset = pos;
++            m_skipBytes = 0;
++            m_cachedCursor = -1;
++            locker.unlock(); // QIODevice::seek calls our locking isSequential().
++            // Discard QIODevice's separate read-ahead buffer; our cursor now
++            // points at the exact requested byte in the retained HTTP data.
++            QIODevice::open(QIODevice::ReadOnly);
++            return QIODevice::seek(pos);
++        }
++    }
++    for (const auto &range : m_ranges) {
++        if (pos >= range.start && pos < range.start + range.bytes.size()) {
++            m_cachedCursor = pos;
++            QIODevice::open(QIODevice::ReadOnly);
++            return QIODevice::seek(pos);
++        }
++    }
++    if (!restartAt(pos)) return false;
++    QIODevice::open(QIODevice::ReadOnly);
++    return QIODevice::seek(pos);
++}
++
++void HttpStreamReader::retainRange()
++{
++    // FFmpeg's cache protocol also retains disjoint received intervals.
++    // FLAC revisits its upper bound between distant midpoint probes.
++    constexpr qsizetype limit = 16 * 1024 * 1024;
++    const auto count = qMin<qsizetype>(limit, m_stream.buf_offset + m_stream.buf_fill);
++    if (count > 0) {
++        m_ranges.append({m_readOffset - qint64(m_stream.buf_offset), QByteArray(m_stream.buf, count)});
++        qsizetype total = 0;
++        for (const auto &range : m_ranges) total += range.bytes.size();
++        while (total > limit) total -= m_ranges.takeFirst().bytes.size();
++    }
++}
++
++bool HttpStreamReader::restartAt(qint64 pos)
++{
++    // Probing on the GUI thread must not start blocking network reads.
+     if (QThread::currentThread() == qApp->thread()) return false;
+-    abort();
++    abort(false);
+     if (m_cancelled.load()) return false;
+     m_mutex.lock();
+-    m_resumeOffset = pos;
+-    m_readOffset = pos;
++    retainRange();
++    m_cachedCursor = -1;
++    // FFmpeg avio_seek likewise reopens before a short backward target.
++    // A small preroll prevents -1/-40 byte frame probes reopening HTTP again.
++    m_resumeOffset = pos == m_stream.totalSize ? pos : qMax<qint64>(0, pos - 65536);
++    m_readOffset = m_resumeOffset;
++    m_skipBytes = pos - m_resumeOffset;
+     m_repositioning = true;
+     // This source already has a decoder. A Range restart is not initial
+     // prebuffering and must not emit another ready() or close the live device.
+     m_ready = true;
+     m_stream.buf_fill = 0;
++    m_stream.buf_offset = 0;
+     m_stream.completed = pos == m_stream.totalSize;
+     m_stream.aborted = m_cancelled.load();
+     m_mutex.unlock();
+-    QIODevice::open(QIODevice::ReadOnly);
+-    if (!QIODevice::seek(pos)) return false;
+     if (pos != size()) m_thread->start();
+     return true;
+ }
+@@ -265,11 +334,50 @@
+ 
+ qint64 HttpStreamReader::readData(char* data, qint64 maxlen)
+ {
++    if (m_cancelled.load()) return -1;
++    if (m_cachedCursor >= 0) {
++        const CachedRange *found = nullptr;
++        for (const auto &range : m_ranges) {
++            if (m_cachedCursor >= range.start && m_cachedCursor < range.start + range.bytes.size()
++                && (!found || range.start + range.bytes.size() > found->start + found->bytes.size())) found = &range;
++        }
++        if (found) {
++            const auto offset = m_cachedCursor - found->start;
++            const auto count = qMin(maxlen, found->bytes.size() - offset);
++            memcpy(data, found->bytes.constData() + offset, count);
++            m_cachedCursor += count;
++            return count;
++        }
++        if (m_cachedCursor >= size()) return 0;
++        QMutexLocker locker(&m_mutex);
++        const qint64 start = m_readOffset - qint64(m_stream.buf_offset);
++        const qint64 end = m_readOffset + qint64(m_stream.buf_fill);
++        if (!m_stream.aborted && m_cachedCursor >= start && m_cachedCursor <= end) {
++            const qint64 delta = m_cachedCursor - m_readOffset;
++            m_stream.buf_offset = size_t(qint64(m_stream.buf_offset) + delta);
++            m_stream.buf_fill = size_t(qint64(m_stream.buf_fill) - delta);
++            m_readOffset = m_cachedCursor;
++            m_skipBytes = 0;
++            m_cachedCursor = -1;
++        } else {
++            const auto target = m_cachedCursor;
++            locker.unlock();
++            if (!restartAt(target)) return -1;
++        }
++    }
+     qint64 len = 0;
+     m_mutex.lock();
+     const QDeadlineTimer deadline(15000);
+-    while (m_stream.totalSize > 0 && !m_stream.icy_metaint && !m_stream.buf_fill && !m_stream.completed && !m_stream.aborted && QThread::currentThread() != qApp->thread()) {
+-        if (!m_dataArrived.wait(&m_mutex, deadline)) { m_mutex.unlock(); return -1; }
++    for (;;) {
++        while (m_stream.totalSize > 0 && !m_stream.icy_metaint && !m_stream.buf_fill && !m_stream.completed && !m_stream.aborted && QThread::currentThread() != qApp->thread()) {
++            if (!m_dataArrived.wait(&m_mutex, deadline)) { m_mutex.unlock(); return -1; }
++        }
++        if (!m_skipBytes || !m_stream.buf_fill || m_stream.aborted) break;
++        const qint64 skip = qMin(m_skipBytes, static_cast<qint64>(m_stream.buf_fill));
++        m_stream.buf_offset += static_cast<size_t>(skip);
++        m_stream.buf_fill -= static_cast<size_t>(skip);
++        m_readOffset += skip;
++        m_skipBytes -= skip;
+     }
+     if(m_stream.buf_fill == 0)
+     {
+@@ -321,7 +429,7 @@
+     return QString();
+ }
+ 
+-void HttpStreamReader::abort()
++void HttpStreamReader::abort(bool closeDevice)
+ {
+     m_mutex.lock();
+     m_ready = false;
+@@ -336,14 +444,21 @@
+         curl_easy_cleanup(m_handle);
+         m_handle = nullptr;
+     }
+-    QIODevice::close();
++    if (closeDevice) QIODevice::close();
+ }
+ 
+ qint64 HttpStreamReader::bytesAvailable() const
+ {
+     const auto available = QIODevice::bytesAvailable();
++    if (m_cachedCursor >= 0) {
++        qint64 end = m_cachedCursor;
++        for (const auto &range : m_ranges)
++            if (m_cachedCursor >= range.start && m_cachedCursor <= range.start + range.bytes.size())
++                end = qMax(end, range.start + range.bytes.size());
++        return end - m_cachedCursor + qMax<qint64>(0, m_cachedCursor - QIODevice::pos());
++    }
+     const QMutexLocker locker(&m_mutex);
+-    return static_cast<qint64>(m_stream.buf_fill) + (m_stream.totalSize > 0 && !m_stream.icy_metaint ? qMax<qint64>(0,m_readOffset-QIODevice::pos()) : available);
++    return qMax<qint64>(0, static_cast<qint64>(m_stream.buf_fill) - m_skipBytes) + (m_stream.totalSize > 0 && !m_stream.icy_metaint ? qMax<qint64>(0,m_readOffset-QIODevice::pos()) : available);
+ }
+ 
+ void HttpStreamReader::run()
+@@ -416,6 +531,7 @@
+         m_stream.buf = nullptr;
+     }
+     m_stream.buf_fill = 0;
++    m_stream.buf_offset = 0;
+     m_stream.buf_size = m_prebufferSize * 2;
+     m_stream.buf = (char *)malloc(m_stream.buf_size); //initial buffer
+     // downloadFile()/seek() initialize request state before start(). An abort
+@@ -448,9 +564,12 @@
+     if (m_stream.buf_fill > 0 && !m_stream.aborted)
+     {
+         int len = qMin<qint64>(m_stream.buf_fill, maxlen);
+-        memcpy(data, m_stream.buf, len);
++        memcpy(data, m_stream.buf + m_stream.buf_offset, len);
+         m_stream.buf_fill -= len;
+-        memmove(m_stream.buf, m_stream.buf + len, m_stream.buf_fill);
++        if (m_stream.totalSize > 0 && !m_stream.icy_metaint)
++            m_stream.buf_offset += static_cast<size_t>(len);
++        else
++            memmove(m_stream.buf, m_stream.buf + len, m_stream.buf_fill);
+         return len;
+     }
+ 
+--- a/src/plugins/Transports/http/httpstreamreader.h
++++ b/src/plugins/Transports/http/httpstreamreader.h
+@@ -46,6 +46,7 @@
+ {
+     char *buf = nullptr;
+     size_t buf_fill = 0;
++    size_t buf_offset = 0; // retained bytes before the current read cursor
+     size_t buf_size = 0;
+     QString content_type;
+     bool aborted = true;
+@@ -100,7 +101,12 @@
+     qint64 writeData(const char*, qint64) override;
+ 
+ private:
+-    void abort();
++    void abort(bool closeDevice = true);
++    bool restartAt(qint64 pos);
++    void retainRange(); // called after the download thread has stopped
++    struct CachedRange { qint64 start; QByteArray bytes; };
++    QList<CachedRange> m_ranges;
++    qint64 m_cachedCursor = -1;
+     qint64 readBuffer(char* data, qint64 maxlen);
+     void readICYMetaData();
+     void parseICYMetaData(char *data, qint64 size);
+@@ -110,6 +116,7 @@
+     QWaitCondition m_dataArrived;
+     qint64 m_resumeOffset = 0;
+     qint64 m_readOffset = 0;
++    qint64 m_skipBytes = 0;
+     bool m_repositioning = false;
+     std::atomic<bool> m_cancelled{false};
+     HttpStreamData m_stream;

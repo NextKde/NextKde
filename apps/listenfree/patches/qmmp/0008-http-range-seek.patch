@@ -1,0 +1,243 @@
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -22,6 +22,7 @@
+ #include <QDir>
+ #include <QSettings>
+ #include <QMutexLocker>
++#include <QDeadlineTimer>
+ #include <stdint.h>
+ #include <stdlib.h>
+ #include <qmmp/qmmpsettings.h>
+@@ -41,7 +42,7 @@
+     HttpStreamReader *dl = static_cast<HttpStreamReader *>(pointer);
+     dl->mutex()->lock();
+ 
+-    if(dl->stream()->buf_fill > MAX_BUFFER_SIZE)
++    if(dl->stream()->aborted || dl->stream()->buf_fill > MAX_BUFFER_SIZE)
+     {
+         qCWarning(plugin, "buffer has reached the maximum size, disconnecting...");
+         dl->stream()->aborted = true;
+@@ -70,6 +71,7 @@
+     }
+     memcpy(dl->stream()->buf + dl->stream()->buf_fill, data, data_size);
+     dl->stream()->buf_fill += data_size;
++    dl->wakeReader();
+     dl->mutex()->unlock();
+     dl->checkBuffer();
+     return data_size;
+@@ -105,6 +107,7 @@
+         QString key = QString::fromLatin1(header.left(header.indexOf(":")).trimmed().toLower());
+         QByteArray value = header.right(header.size() - header.indexOf(":") - 1).trimmed();
+         dl->stream()->header.insert(key, value);
++        if (key == "content-length" && !dl->stream()->totalSize) dl->stream()->totalSize = value.toLongLong();
+         qCDebug(plugin, "key=%s, value=%s",qPrintable(key), value.constData());
+ 
+         if (key == "icy-metaint"_L1)
+@@ -184,8 +187,9 @@
+ 
+ bool HttpStreamReader::atEnd() const
+ {
++    const auto available = QIODevice::bytesAvailable();
+     const QMutexLocker locker(&m_mutex);
+-    return m_stream.completed && m_stream.buf_fill == 0;
++    return m_stream.completed && m_stream.buf_fill == 0 && (m_stream.totalSize > 0 && !m_stream.icy_metaint ? m_readOffset <= QIODevice::pos() : available == 0);
+ }
+ 
+ qint64 HttpStreamReader::bytesToWrite() const
+@@ -201,8 +205,11 @@
+ 
+ bool HttpStreamReader::isSequential() const
+ {
+-    return true;
+-}
++    const QMutexLocker locker(&m_mutex);
++    return m_stream.totalSize <= 0 || m_stream.icy_metaint > 0;
++}
++
++qint64 HttpStreamReader::size() const { const QMutexLocker locker(&m_mutex); return m_stream.totalSize; }
+ 
+ bool HttpStreamReader::open(OpenMode mode)
+ {
+@@ -217,8 +224,25 @@
+ 
+ bool HttpStreamReader::seek (qint64 pos)
+ {
+-    Q_UNUSED(pos);
+-    return false;
++    if (isSequential() || pos < 0 || pos > size()) return false;
++    if (pos == QIODevice::pos()) return true;
++    // Initial probing runs on the UI thread; do not turn it into a blocking
++    // network operation. Runtime decoder seeks run on the audio worker.
++    if (QThread::currentThread() == qApp->thread()) return false;
++    abort();
++    if (m_cancelled.load()) return false;
++    m_mutex.lock();
++    m_resumeOffset = pos;
++    m_readOffset = pos;
++    m_repositioning = true;
++    m_stream.buf_fill = 0;
++    m_stream.completed = pos == m_stream.totalSize;
++    m_stream.aborted = m_cancelled.load();
++    m_mutex.unlock();
++    QIODevice::open(QIODevice::ReadOnly);
++    if (!QIODevice::seek(pos)) return false;
++    if (pos != size()) m_thread->start();
++    return true;
+ }
+ 
+ qint64 HttpStreamReader::writeData(const char*, qint64)
+@@ -235,6 +259,10 @@
+ {
+     qint64 len = 0;
+     m_mutex.lock();
++    const QDeadlineTimer deadline(15000);
++    while (m_stream.totalSize > 0 && !m_stream.icy_metaint && !m_stream.buf_fill && !m_stream.completed && !m_stream.aborted && QThread::currentThread() != qApp->thread()) {
++        if (!m_dataArrived.wait(&m_mutex, deadline)) { m_mutex.unlock(); return -1; }
++    }
+     if(m_stream.buf_fill == 0)
+     {
+         m_mutex.unlock();
+@@ -263,6 +291,7 @@
+         len = nread;
+ 
+     }
++    m_readOffset += len;
+     m_mutex.unlock();
+     return len;
+ }
+@@ -289,11 +318,7 @@
+     m_mutex.lock();
+     m_ready = false;
+     m_stream.completed = true;
+-    if (m_stream.aborted)
+-    {
+-        m_mutex.unlock();
+-        return;
+-    }
++    m_dataArrived.wakeAll();
+     m_stream.aborted = true;
+     m_mutex.unlock();
+     if(m_thread->isRunning())
+@@ -308,8 +333,9 @@
+ 
+ qint64 HttpStreamReader::bytesAvailable() const
+ {
++    const auto available = QIODevice::bytesAvailable();
+     const QMutexLocker locker(&m_mutex);
+-    return QIODevice::bytesAvailable() + static_cast<qint64>(m_stream.buf_fill);
++    return static_cast<qint64>(m_stream.buf_fill) + (m_stream.totalSize > 0 && !m_stream.icy_metaint ? qMax<qint64>(0,m_readOffset-QIODevice::pos()) : available);
+ }
+ 
+ void HttpStreamReader::run()
+@@ -342,6 +368,7 @@
+ 
+     // Set url to download
+     curl_easy_setopt(m_handle, CURLOPT_URL, strdup(m_url.toLatin1().constData()));
++    curl_easy_setopt(m_handle, CURLOPT_RESUME_FROM_LARGE, static_cast<curl_off_t>(m_resumeOffset));
+     // callback for wrting
+     curl_easy_setopt(m_handle, CURLOPT_WRITEFUNCTION, curl_write_data);
+     // Set destination file
+@@ -383,10 +410,10 @@
+     m_stream.buf_fill = 0;
+     m_stream.buf_size = m_prebufferSize * 2;
+     m_stream.buf = (char *)malloc(m_stream.buf_size); //initial buffer
+-    m_stream.aborted = false;
++    m_stream.aborted = m_cancelled.load();
+     m_stream.completed = false;
+     m_stream.header.clear();
+-    m_ready = false;
++    if (!m_repositioning) m_ready = false;
+     qCDebug(plugin, "starting libcurl");
+     m_mutex.unlock();
+     if(!m_stream.buf)
+@@ -398,6 +425,7 @@
+     qCDebug(plugin, "curl thread finished with code %d (%s)", return_code, errorBuffer);
+     m_mutex.lock();
+     m_stream.completed = true;
++    m_dataArrived.wakeAll();
+     m_mutex.unlock();
+     if(!m_stream.aborted && !m_ready)
+     {
+@@ -563,3 +591,12 @@
+ {
+     m_parent->run();
+ }
++
++void HttpStreamReader::cancelRead()
++{
++    m_cancelled.store(true);
++    const QMutexLocker locker(&m_mutex);
++    m_stream.aborted = true;
++    m_stream.completed = true;
++    m_dataArrived.wakeAll();
++}
+--- a/src/plugins/Transports/http/httpstreamreader.h
++++ b/src/plugins/Transports/http/httpstreamreader.h
+@@ -27,6 +27,8 @@
+ #include <QString>
+ #include <QHash>
+ #include <QThread>
++#include <QWaitCondition>
++#include <atomic>
+ #include <curl/curl.h>
+ #ifdef WITH_ENCA
+ #include <enca.h>
+@@ -48,6 +50,7 @@
+     QString content_type;
+     bool aborted = true;
+     bool completed = false;
++    qint64 totalSize = 0;
+     QHash <QString, QByteArray> header;
+     bool icy_meta_data = false;
+     size_t icy_metaint = 0;
+@@ -75,6 +78,9 @@
+     bool isSequential () const override;
+     bool open (OpenMode mode) override;
+     bool seek (qint64 pos) override;
++    qint64 size() const override;
++    void wakeReader() { m_dataArrived.wakeAll(); }
++    void cancelRead();
+     /**
+      *  helper functions
+      */
+@@ -101,6 +107,11 @@
+     void sendStreamInfo(QmmpTextCodec *codec);
+     CURL *m_handle = nullptr;
+     mutable QMutex m_mutex;
++    QWaitCondition m_dataArrived;
++    qint64 m_resumeOffset = 0;
++    qint64 m_readOffset = 0;
++    bool m_repositioning = false;
++    std::atomic<bool> m_cancelled{false};
+     HttpStreamData m_stream;
+     QString m_url;
+     QString m_userAgent;
+--- a/src/plugins/Transports/http/httpinputsource.cpp
++++ b/src/plugins/Transports/http/httpinputsource.cpp
+@@ -53,3 +53,5 @@
+ {
+     return m_reader->contentType();
+ }
++
++void HTTPInputSource::stop() { m_reader->cancelRead(); }
+--- a/src/plugins/Transports/http/httpinputsource.h
++++ b/src/plugins/Transports/http/httpinputsource.h
+@@ -36,6 +36,7 @@
+ 
+     QIODevice *ioDevice() const override;
+     bool initialize() override;
++    void stop() override;
+     bool isReady() const override;
+     bool isWaiting() const override;
+     QString contentType() const override;
+--- a/src/plugins/Input/ffmpeg/decoder_ffmpeg.cpp
++++ b/src/plugins/Input/ffmpeg/decoder_ffmpeg.cpp
+@@ -64,7 +64,7 @@
+     }
+     if(absolute_pos < 0 || absolute_pos > d->input()->size())
+         return -1;
+-    return d->input()->seek(absolute_pos);
++    return d->input()->seek(absolute_pos) ? absolute_pos : -1;
+ }
+ 
+ //channel map

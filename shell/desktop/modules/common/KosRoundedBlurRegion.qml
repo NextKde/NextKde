@@ -18,6 +18,40 @@ RoundedBlurRegion {
     readonly property bool fixedCaptureSupported:
         ("fixedCaptureSupported" in surfaceShape) && surfaceShape.fixedCaptureSupported
 
+    property real materialOpacity: 1.0
+    readonly property bool materialOpacitySupported:
+        ("materialOpacitySupported" in surfaceShape) && surfaceShape.materialOpacitySupported
+
+    property bool revealEnabled: false
+    property bool revealOpened: false
+    property int revealDuration: 320
+    readonly property bool revealSupported:
+        ("revealSupported" in surfaceShape) && surfaceShape.revealSupported
+    signal revealFinished(bool opened)
+
+    property list<QtObject> revealBindings: [
+        Binding {
+            target: ("revealEnabled" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealEnabled"
+            value: root.revealEnabled
+        },
+        Binding {
+            target: ("revealOpened" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealOpened"
+            value: root.revealOpened
+        },
+        Binding {
+            target: ("revealDuration" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealDuration"
+            value: root.revealDuration
+        },
+        Connections {
+            target: root.surfaceShape
+            ignoreUnknownSignals: true
+            function onRevealFinished(opened) { root.revealFinished(opened) }
+        }
+    ]
+
     // Contrast scrim forwarded to the compositor alongside the shape. Tint
     // 0/1 is black/white. Decay 0..1 is adaptive; values above 1 select fixed
     // mode, where cap is the exact opacity.
@@ -46,6 +80,13 @@ RoundedBlurRegion {
         scrimDecay: root.scrimDecay
         blurEnabled: root.blurEnabled
         blurLevel: root.blurLevel
+    }
+
+    // Guard the optional property so an installed older native bridge still loads.
+    property var opacityBinding: Binding {
+        target: ("materialOpacity" in root.surfaceShape) ? root.surfaceShape : null
+        property: "materialOpacity"
+        value: Math.max(0, Math.min(1, root.materialOpacity))
     }
 
     property var captureBinding: Binding {

@@ -1,0 +1,115 @@
+--- a/src/qmmp/soundcore.h
++++ b/src/qmmp/soundcore.h
+@@ -169,6 +169,10 @@
+      * otherwise returns \b false. Useful for invalid files skipping.
+      */
+     bool play(const QString &source, bool queue = false, qint64 offset = -1);
++    // ListenFree: finish the current decoder after a bounded overlap, retaining
++    // the queued decoder/output and effect state for manual transitions.
++    bool finishCurrentAfter(qint64 milliseconds);
++    qint64 transitionRemaining() const;
+     /*!
+      *  Stops playback
+      */
+--- a/src/qmmp/soundcore.cpp
++++ b/src/qmmp/soundcore.cpp
+@@ -415,3 +415,14 @@
+ 
+     return QObject::event(e);
+ }
++
++bool SoundCore::finishCurrentAfter(qint64 milliseconds)
++{
++    auto *engine = QmmpAudioEngine::instance();
++    return engine && nextTrackAccepted() && engine->finishCurrentAfter(milliseconds);
++}
++qint64 SoundCore::transitionRemaining() const
++{
++    auto *engine = QmmpAudioEngine::instance();
++    return engine ? engine->transitionRemaining() : -1;
++}
+--- a/src/qmmp/qmmpaudioengine_p.h
++++ b/src/qmmp/qmmpaudioengine_p.h
+@@ -57,6 +57,8 @@
+     void seek(qint64 time) override;
+     void stop() override;
+     void pause() override;
++    bool finishCurrentAfter(qint64 milliseconds);
++    qint64 transitionRemaining() const;
+     void addEffect(EffectFactory *factory);
+     void removeEffect(EffectFactory *factory);
+ 
+@@ -88,6 +90,8 @@
+     uint m_bks = 0, m_sample_size = 0;
+     qint64 m_seekTime;
+     quint64 m_output_at, m_output_size = 0;
++    std::atomic<qint64> m_transitionFrames{-1};
++    std::atomic<quint32> m_transitionRate{44100};
+     int m_bitrate;
+     unsigned char *m_output_buf = nullptr;
+     Decoder *m_decoder = nullptr;
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -65,6 +65,7 @@
+     m_done = false;
+     m_finish = false;
+     m_seekTime = -1;
++    m_transitionFrames = -1;
+     m_output_at = 0;
+     m_user_stop = false;
+     m_bitrate = 0;
+@@ -403,7 +404,13 @@
+         delay = 0;
+         // decode
+         mutex()->unlock();
+-        len = m_decoder->read((m_output_buf + m_output_at), m_output_size - m_output_at);
++        len = m_transitionFrames.load() == 0 ? 0 : m_decoder->read((m_output_buf + m_output_at), m_output_size - m_output_at);
++        if (len > 0 && m_transitionFrames.load() > 0)
++        {
++            const auto frames = len / m_decoder->audioParameters().frameSize();
++            const auto remaining = m_transitionFrames.fetch_sub(frames) - frames;
++            if (remaining < 0) m_transitionFrames = 0;
++        }
+         mutex()->lock();
+ 
+         if (len > 0)
+@@ -414,6 +421,7 @@
+         }
+         else if (len == 0)
+         {
++            m_transitionFrames = -1;
+             if(m_next) //decoder can play next track without initialization
+             {
+                 m_next = false;
+@@ -716,3 +724,17 @@
+ {
+     return m_instance;
+ }
++
++bool QmmpAudioEngine::finishCurrentAfter(qint64 milliseconds)
++{
++    QMutexLocker lock(mutex());
++    if (!m_decoder || m_decoders.isEmpty()) return false;
++    m_transitionRate = m_decoder->audioParameters().sampleRate();
++    m_transitionFrames = qBound<qint64>(qint64(0), milliseconds, qint64(12000)) * m_transitionRate.load() / 1000;
++    return true;
++}
++qint64 QmmpAudioEngine::transitionRemaining() const
++{
++    const auto frames = m_transitionFrames.load();
++    return frames < 0 ? -1 : frames * 1000 / qMax(1U,m_transitionRate.load());
++}
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -58,7 +58,10 @@
+     // The decoder runs ahead of the output recycler. Count decoded samples so
+     // the configured overlap does not shrink with output buffer latency.
+     const qint64 decodedMs = m_decodedSamples * 1000 / (sampleRate() * channels());
+-    const qint64 remaining = m_core->duration() - std::max(decodedMs, elapsed);
++    const qint64 manualRemaining = m_core->transitionRemaining();
++    const qint64 remaining = manualRemaining >= 0 ? manualRemaining : m_core->duration() - std::max(decodedMs, elapsed);
++    if (manualRemaining >= 0 && (m_state == WAITING || m_state == CHECKING))
++        m_state = PREPARING;
+     m_decodedSamples += b->samples;
+     switch (m_state)
+     {

@@ -46,6 +46,9 @@ Scope {
 
     IpcHandler {
         target: "applauncher"
+        function inspectGlass(): string {
+            return launcherWindowLoader.item ? launcherWindowLoader.item.inspectGlass() : "{}"
+        }
         function show(): void { AppLauncherService.show() }
         function hide(): void { AppLauncherService.hide() }
         function toggle(): void { AppLauncherService.toggle() }

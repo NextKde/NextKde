@@ -1527,7 +1527,7 @@ PanelWindow {
                             text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
 	                            color: activityRings.hoveredMetric === 1
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1549,7 +1549,7 @@ PanelWindow {
                             text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
 	                            color: activityRings.hoveredMetric === 0
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1792,7 +1792,22 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: AppActionService.launchById("kos-music", [])
+                    onClicked: {
+                        // Raise the displayed player; ListenFree owns the
+                        // music entry when no MPRIS session is available.
+                        const player = DockMprisService.activePlayer
+                        if (player) {
+                            if (player.canRaise) {
+                                player.raise()
+                                return
+                            }
+                            if (player.desktopEntry && AppActionService.launchById(player.desktopEntry, []))
+                                return
+                            // Do not start a different app for the displayed track.
+                            return
+                        }
+                        AppActionService.launchById("listenfree", [])
+                    }
                 }
 
                 function artworkTint(color, alpha) {
@@ -2036,18 +2051,21 @@ PanelWindow {
                                     checkable: index === 3
                                     checked: index === 3
                                         && DeskCenterConfigService.desktopLyricsEnabled
+                                        && DockMprisService.desktopLyricsAllowed
                                     iconName: index === 0 ? "media-previous"
                                         : index === 2 ? "media-next"
                                         : index === 3 ? "media-lyrics"
                                         : musicContent.player?.isPlaying ? "media-pause" : "media-play"
                                     text: index === 0 ? qsTr("上一首")
                                         : index === 2 ? qsTr("下一首")
-                                        : index === 3 ? qsTr("桌面歌词")
+                                        : index === 3 ? (DockMprisService.desktopLyricsAllowed
+                                            ? qsTr("桌面歌词") : qsTr("播放器已关闭桌面歌词"))
                                         : musicContent.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
-                                    enabled: index === 3 || (musicContent.hasPlayer
+                                    enabled: index === 3 ? DockMprisService.desktopLyricsAllowed : (musicContent.hasPlayer
                                         && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
                                             : index === 2 ? (musicContent.player?.canGoNext ?? false)
                                             : (musicContent.player?.canTogglePlaying ?? false)))
+                                    ToolTip.visible: hovered && (enabled || index === 3)
                                     glassInk: AppearanceTokens.content.onBackdrop
                                         ? IconAppearanceService.glassContentColor(0.88)
                                         : Qt.rgba(1, 1, 1, 0.88)
@@ -4047,6 +4065,9 @@ PanelWindow {
 
         ContextMenu {
             id: desktopContextMenu
+            capsuleReveal: true
+            // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
+            capsuleSourceWidth: 137
             anchorItem: desktopContextAnchor
             position: "bottom"
             placeBelow: true

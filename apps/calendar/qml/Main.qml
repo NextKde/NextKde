@@ -10,6 +10,7 @@ import Kos.Ui
 KosApplicationWindow {
     id: root
 
+    modernDesign: true
     visible: true
     title: qsTr("Calendar")
     minimumWidth: 760
@@ -544,17 +545,14 @@ KosApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: 12
+        spacing: 8
 
-        Rectangle {
+        KosSidebar {
             id: sidebar
-
-            Layout.fillHeight: true
-            Layout.preferredWidth: root.compact
-                ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
-            color: AppTheme.sidebarSurface
-            border.width: 1
-            border.color: AppTheme.border
+            objectName: "applicationSidebar"
+            expanded: root.sidebarExpanded
+            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
 
             ColumnLayout {
                 anchors.fill: parent
@@ -940,6 +938,8 @@ KosApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 8
 
+                    KosSidebarToggle { targetWindow: root }
+
                     KosToolButton {
                         Layout.preferredWidth: 36
                         text: "‹"
@@ -953,7 +953,7 @@ KosApplicationWindow {
                         onClicked: root.shiftView(1)
                     }
                     KosButton {
-                        Layout.preferredWidth: 74
+                        Layout.minimumWidth: implicitWidth
                         text: qsTr("Today")
                         onClicked: root.showToday()
                     }
@@ -1006,13 +1006,14 @@ KosApplicationWindow {
                             }
                         }
                     }
+                    KosWindowControls { targetWindow: root }
                 }
 
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
 
-                    LiquidTextField {
+                    KosTextField {
                         id: searchField
                         Layout.fillWidth: true
                         Layout.minimumWidth: 120
@@ -1037,7 +1038,7 @@ KosApplicationWindow {
                     }
 
                     KosButton {
-                        Layout.preferredWidth: 96
+                        Layout.minimumWidth: implicitWidth
                         text: qsTr("New event")
                         highlighted: true
                         enabled: pim.connected && pim.writable
@@ -1090,7 +1091,7 @@ KosApplicationWindow {
 
                         KosCard {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 210
+                            Layout.preferredHeight: root.height < 680 ? 145 : 170
 
                             contentItem: ColumnLayout {
                                 spacing: 5
@@ -1136,7 +1137,7 @@ KosApplicationWindow {
                                 spacing: 2
                                 model: root.selectedItems
 
-                                delegate: ItemDelegate {
+                                delegate: KosItemDelegate {
                                     id: agendaItem
                                     required property var modelData
                                     width: dayAgenda.width

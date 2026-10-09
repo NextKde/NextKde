@@ -4,7 +4,7 @@
     SPDX-License-Identifier: MIT
   </copyright>
 
-  <interface name="kos_surface_shape_manager_v1" version="5">
+  <interface name="kos_surface_shape_manager_v1" version="7">
     <description summary="surface-local compositor shape metadata">
       Creates independent shape declarations for regions inside a wl_surface.
       Coordinates and radius use surface-local logical units.
@@ -28,7 +28,7 @@
     request (set_role is a no-op), and each new request is appended after
     destroy so the destructor opcode is unchanged.
   -->
-  <interface name="kos_surface_shape_v1" version="5">
+  <interface name="kos_surface_shape_v1" version="7">
     <request name="set_geometry">
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
@@ -97,5 +97,32 @@
       <arg name="width" type="int"/>
       <arg name="height" type="int"/>
     </request>
+    <request name="set_material_opacity" since="6">
+      <description summary="opacity of the complete compositor glass finish">
+        Opacity in the range 0..1, applied to the final premultiplied glass
+        composite, including blur, refraction, highlights, scrim and noise.
+        Geometry and capture allocation are unaffected. The default is 1.
+        Clients must check the negotiated version before sending this request.
+      </description>
+      <arg name="opacity" type="fixed"/>
+    </request>
+    <request name="set_reveal" since="7">
+      <description summary="compositor-driven bottom-center reveal">
+        enabled selects a persistent reveal controller. Geometry remains the
+        final rectangle and capture bounds remain fixed. opened selects the
+        target endpoint; duration is milliseconds (clamped to 1..2000).
+        The compositor interpolates the visible SDF outline and the whole
+        surface content. Disabling restores ordinary rendering. Serial is
+        echoed on completion so interrupted transitions can discard stale events.
+      </description>
+      <arg name="enabled" type="uint"/>
+      <arg name="opened" type="uint"/>
+      <arg name="duration" type="uint"/>
+      <arg name="serial" type="uint"/>
+    </request>
+    <event name="reveal_finished" since="7">
+      <arg name="opened" type="uint"/>
+      <arg name="serial" type="uint"/>
+    </event>
   </interface>
 </protocol>

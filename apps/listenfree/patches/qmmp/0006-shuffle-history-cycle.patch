@@ -1,0 +1,45 @@
+--- a/src/qmmpui/playstate.cpp
++++ b/src/qmmpui/playstate.cpp
+@@ -19,6 +19,7 @@
+  ***************************************************************************/
+ 
+ #include <QRandomGenerator>
++#include <QSettings>
+ #include "qmmpuisettings.h"
+ #include "playstate_p.h"
+ 
+@@ -42,7 +43,12 @@
+         if (!m_ui_settings->isRepeatableList())
+             return false;
+ 
+-        prepare();
++        if(QSettings().value(u"ListenFree/clearShuffleHistory"_s, true).toBool())
++        {
++            prepare();
++            if(m_shuffled_indexes.size() > 1) m_shuffled_current = 1;
++        }
++        else m_shuffled_current = 0;
+     }
+     else
+         m_shuffled_current = (m_shuffled_current + 1) % m_shuffled_indexes.count();
+@@ -61,7 +67,8 @@
+         if (!m_ui_settings->isRepeatableList())
+             return -1;
+ 
+-        prepare();
++        if(QSettings().value(u"ListenFree/clearShuffleHistory"_s, true).toBool()) prepare();
++        else return m_shuffled_indexes.first();
+     }
+     return m_shuffled_indexes.at((m_shuffled_current + 1) % m_shuffled_indexes.count());
+ }
+@@ -76,8 +83,8 @@
+         if (!m_ui_settings->isRepeatableList())
+             return false;
+ 
+-        prepare();
+-        m_shuffled_current = m_shuffled_indexes.count() - 1;
++        if(QSettings().value(u"ListenFree/clearShuffleHistory"_s, true).toBool()) prepare();
++        m_shuffled_current = m_shuffled_indexes.count();
+     }
+ 
+     if (m_model->trackCount() > 1)

@@ -1,0 +1,11 @@
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -131,7 +131,7 @@
+ {
+     Effect::configure(freq, map);
+     m_core->setCrossfadeDuration(0);
+-    m_overlap = std::clamp<qint64>(m_overlap, 20, 5000);
++    m_overlap = std::clamp<qint64>(m_overlap, 20, 6000);
+     const size_t capacity = (size_t(freq) * size_t(channels()) * size_t(m_overlap) / 1000)
+                     + 2 * QMMP_BLOCK_FRAMES * size_t(channels());
+     if (capacity != m_buffer_size || !m_buffer) {

@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=KOS ListenFree
+GenericName=Music Player
+GenericName[zh_CN]=音乐播放器
+Comment=NextKDE music player based on ListenFree
+Comment[zh_CN]=基于 ListenFree 的 NextKDE 音乐播放器
+Exec=@CMAKE_INSTALL_PREFIX@/bin/listenfree %U
+TryExec=@CMAKE_INSTALL_PREFIX@/bin/listenfree
+Icon=listenfree
+Terminal=false
+Categories=AudioVideo;Audio;Player;Qt;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-wav;audio/wav;audio/mp4;audio/aac;audio/x-aiff;
+Keywords=music;audio;player;ListenFree;
+StartupNotify=true
+StartupWMClass=listenfree
+X-GNOME-SingleWindow=true

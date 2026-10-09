@@ -11,6 +11,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QPainterPath>
 #include <QQmlApplicationEngine>
 #include <QQmlError>
 #include <QQuickStyle>
@@ -221,10 +222,23 @@ int run(int argc, char *argv[], const Metadata &metadata)
         const auto applyWindowEffects = [window, &preferences] {
             const bool blur = preferences.glassActive()
                 && preferences.nativeBlurAvailable();
-            KWindowEffects::enableBlurBehind(window, blur);
+            QRegion region;
+            if (window->property("modernDesign").toBool()) {
+                const bool restored = window->visibility() != QWindow::FullScreen
+                    && window->visibility() != QWindow::Maximized;
+                if (restored) {
+                    QPainterPath shape;
+                    shape.addRoundedRect(QRectF(0, 0, window->width(), window->height()), 32, 32);
+                    region = QRegion(shape.toFillPolygon().toPolygon());
+                }
+                // Match input and compositor effects to the transparent
+                // corners; retain the user's glass and opacity preferences.
+                window->setMask(region);
+            }
+            KWindowEffects::enableBlurBehind(window, blur, region);
             KWindowEffects::enableBackgroundContrast(
                 window, blur && preferences.nativeContrastAvailable(),
-                1.08, 1.0, 1.12);
+                1.08, 1.0, 1.12, region);
         };
         QObject::connect(&preferences, &ApplicationPreferences::preferencesChanged,
                          window, applyWindowEffects);
@@ -235,6 +249,9 @@ int run(int argc, char *argv[], const Metadata &metadata)
                              if (window->isVisible())
                                  applyWindowEffects();
                          });
+        QObject::connect(window, &QQuickWindow::widthChanged, window, applyWindowEffects);
+        QObject::connect(window, &QQuickWindow::heightChanged, window, applyWindowEffects);
+        QObject::connect(window, &QQuickWindow::visibilityChanged, window, applyWindowEffects);
         QTimer::singleShot(0, window, applyWindowEffects);
 #endif
     };
