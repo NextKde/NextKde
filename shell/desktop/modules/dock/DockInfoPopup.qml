@@ -151,7 +151,7 @@ AnimatedPopupWindow {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Text {
+                GlassText {
                     text: popup.title
                     color: ThemeService.foregroundColor
                     font {
@@ -160,7 +160,7 @@ AnimatedPopupWindow {
                         weight: Font.DemiBold
                     }
                 }
-                Text {
+                GlassText {
                     // Only the weather card has a scope worth naming.
                     visible: popup.page === 1
                     text: WeatherService.cityName
@@ -191,7 +191,7 @@ AnimatedPopupWindow {
                     Layout.preferredHeight: 20
                     spacing: 12
 
-                    Text {
+                    GlassText {
                         text: modelData.label
                         color: ThemeService.foregroundColor
                         opacity: 0.62
@@ -202,7 +202,7 @@ AnimatedPopupWindow {
                         }
                     }
                     Item { Layout.fillWidth: true; height: 1 }
-                    Text {
+                    GlassText {
                         text: modelData.value
                         color: ThemeService.foregroundColor
                         font {

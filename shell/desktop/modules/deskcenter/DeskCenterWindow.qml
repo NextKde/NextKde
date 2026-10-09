@@ -1527,7 +1527,7 @@ PanelWindow {
                             text: "内存  " + Math.round(activityRings.memoryValue * 100) + "%"
 	                            color: activityRings.hoveredMetric === 1
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {
@@ -1549,7 +1549,7 @@ PanelWindow {
                             text: "CPU  " + Math.round(activityRings.cpuValue * 100) + "%"
 	                            color: activityRings.hoveredMetric === 0
                                 ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
-                                : Qt.rgba(0.30, 0.29, 0.33, 0.78)
+                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
                             font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
                         }
                         UsageSparkline {

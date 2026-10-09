@@ -5,12 +5,15 @@
 #include <QEvent>
 #include <QGuiApplication>
 #include <QPlatformSurfaceEvent>
+#include <QLoggingCategory>
 #include <QtGui/qguiapplication_platform.h>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QtGui/qpa/qplatformwindow_p.h>
 #include <algorithm>
 #include <wayland-client-core.h>
+
+Q_LOGGING_CATEGORY(surfaceShapeLog, "kos.surfaceShape", QtWarningMsg)
 
 // Polish runs on the GUI thread after animations/layout and before the scene
 // graph is synchronized. A zero-timeout callback can run after that frame's
@@ -358,6 +361,8 @@ bool SurfaceShape::eventFilter(QObject *watched, QEvent *event)
             // QQuickWindow. Drop the old proxy before destruction: a new surface
             // may reuse the same address before the next polish, so comparing
             // native pointers in sync() alone cannot detect the replacement.
+            qCDebug(surfaceShapeLog) << "native surface retiring" << m_surface
+                                    << (m_target ? m_target->objectName() : QString());
             releaseShape();
         } else {
             scheduleSync();
@@ -397,6 +402,8 @@ void SurfaceShape::sync()
         releaseShape();
         m_surface = surface;
         m_shape = kos_surface_shape_manager_v1_get_shape(manager, surface);
+        qCDebug(surfaceShapeLog) << "shape created" << m_surface
+                                << m_target->objectName();
         static const kos_surface_shape_v1_listener listener{
             [](void *data, kos_surface_shape_v1 *, uint32_t opened, uint32_t serial) {
                 auto *self = static_cast<SurfaceShape *>(data);

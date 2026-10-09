@@ -7,8 +7,9 @@
 
 namespace KWin
 {
-// KWin 6.6 cannot receive Quickshell's ext-background-effect-v1 request.
-// An enabled KOS shape is an explicit glass opt-in; keep the spaces between
+// KWin 6.6 cannot receive ext-background-effect-v1; on newer APIs a remapped
+// surface can also lack that separate request. An enabled KOS shape is an
+// explicit glass opt-in; keep the spaces between
 // cards clear, and preserve an existing KDE blur request (including empty).
 inline std::optional<QRegion> legacySurfaceBlurRegion(
     const std::optional<QRegion> &requested, const QVector<SurfaceShape> &shapes)

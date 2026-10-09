@@ -11,7 +11,7 @@
 #include "blurconfig.h"
 #include "settings.h"
 #include "surfaceshapemanager.h"
-#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+#ifndef GLASS_X11
 #include "legacyblurregion.h"
 #endif
 
@@ -260,11 +260,9 @@ BlurEffect::BlurEffect()
             this, [this](SurfaceInterface *surface) {
         for (EffectWindow *window : effects->stackingOrder()) {
             if (window->surface() == surface) {
-#ifndef GLASS_KWIN_67
-                // The 6.6 fallback region follows shape creation, movement,
-                // disable and destruction, not just legacy blurChanged signals.
+                // Rebuild declared-shape fallback on output remapping too:
+                // the new surface may not have received a blur-region request.
                 updateBlurRegion(window);
-#endif
                 // A blur override appearing, disappearing or changing level
                 // changes how far the repaint region has to expand, not just
                 // what is drawn this frame.
@@ -608,7 +606,9 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
         }
     }
 
-#if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)
+#ifndef GLASS_X11
+    // An enabled shell shape is an explicit backdrop request on both APIs.
+    // Recover when output remapping loses the separate blur-region request.
     if (!content.has_value() && isQuickshellWindow(w) && m_surfaceShapeManager && w->surface()) {
         const auto region = legacySurfaceBlurRegion(std::nullopt,
             m_surfaceShapeManager->shapesFor(w->surface()));
