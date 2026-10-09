@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 class RegistrationTests(unittest.TestCase):
-    def test_promotes_new_apps_without_removing_legacy_or_unrelated_preferences(self):
+    def test_replaces_legacy_without_removing_data_or_unrelated_preferences(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); prefix = root / 'prefix'; config = root / 'config'; state = root / 'state'
             for path in (prefix / 'bin', prefix / 'share/applications', config / 'kos'): path.mkdir(parents=True)
@@ -16,6 +16,14 @@ class RegistrationTests(unittest.TestCase):
                 executable = prefix / 'bin' / name; executable.write_text('#!/bin/sh\nexit 0\n'); executable.chmod(0o755)
                 (prefix / 'share/applications' / (name + '.desktop')).write_text('[Desktop Entry]\nName=KOS Music\nMimeType=audio/mpeg;audio/flac;audio/wav;\n')
             legacy = (prefix / 'bin/kos-music').read_bytes()
+            extra_legacy = [prefix / path for path in ('bin/kos-music-lx-source-host',
+                'bin/kos-music-lx-source-host.js', 'share/icons/hicolor/scalable/apps/kos-music.svg',
+                'share/metainfo/org.nextkde.Kos.Music.metainfo.xml')]
+            for path in extra_legacy:
+                path.parent.mkdir(parents=True, exist_ok=True); path.write_text('old installed artifact')
+
+            data = config / 'kos-music/library.db'
+            data.parent.mkdir(); data.write_bytes(b'old library data')
             for app in ('todo', 'calendar', 'weather'):
                 (prefix / 'bin' / f'kos-{app}-preview').write_text('old preview')
                 (prefix / 'share/applications' / f'kos-{app}-preview.desktop').write_text('old preview')
@@ -33,11 +41,14 @@ class RegistrationTests(unittest.TestCase):
             self.assertEqual(prefs['Default Applications']['audio/mpeg'], 'listenfree.desktop;')
             self.assertEqual(prefs['Default Applications']['audio/wav'], 'vlc.desktop;')
             self.assertEqual(prefs['Default Applications']['text/plain'], 'editor.desktop;')
-            self.assertEqual(prefs['Added Associations']['audio/mpeg'], 'listenfree.desktop;kos-music.desktop;')
+            self.assertEqual(prefs['Added Associations']['audio/mpeg'], 'listenfree.desktop;')
             self.assertEqual(prefs['Removed Associations']['audio/flac'], 'other.desktop;')
             prefs.read(config / 'kde-mimeapps.list'); self.assertEqual(prefs['Default Applications']['audio/mpeg'], 'listenfree.desktop;')
-            self.assertEqual((prefix / 'bin/kos-music').read_bytes(), legacy)
-            self.assertTrue((prefix / 'share/applications/kos-music.desktop').exists())
+            self.assertFalse((prefix / 'bin/kos-music').exists())
+            self.assertFalse((prefix / 'share/applications/kos-music.desktop').exists())
+            for path in extra_legacy: self.assertFalse(path.exists())
+            self.assertEqual(data.read_bytes(), b'old library data')
+            self.assertTrue(any(path.read_bytes() == legacy for path in state.glob('kos/application-registration/*/[0-9]*')))
             self.assertFalse(preview.exists()); self.assertFalse(list((prefix / 'bin').glob('*-preview')))
             self.assertTrue(list(state.glob('kos/application-registration/*/retired-preview/marker')))
             buttons = json.loads((config / 'kos/window-buttons.json').read_text())
@@ -59,6 +70,24 @@ class RegistrationTests(unittest.TestCase):
             (state / 'kos/application-registration/listenfree-migrated.json').unlink()
             subprocess.run(command, check=True, stdout=subprocess.PIPE)
             for path, content in chosen.items(): self.assertEqual(path.read_bytes(), content)
+
+    def test_broken_replacement_keeps_legacy_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); prefix = root / 'prefix'
+            (prefix / 'bin').mkdir(parents=True)
+            (prefix / 'share/applications').mkdir(parents=True)
+            for name in ('listenfree', 'kos-todo', 'kos-calendar', 'kos-weather', 'kos-music'):
+                binary = prefix / 'bin' / name
+                binary.write_text('#!/bin/sh\nexit ' + ('1' if name == 'listenfree' else '0') + '\n')
+                binary.chmod(0o755)
+                (prefix / 'share/applications' / (name + '.desktop')).write_text('[Desktop Entry]\nMimeType=audio/mpeg;\n')
+            result = subprocess.run([sys.executable, str(ROOT / 'tools/register-default-apps.py'),
+                '--prefix', str(prefix), '--config-home', str(root / 'config'),
+                '--state-home', str(root / 'state'), '--no-cache'], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((prefix / 'bin/kos-music').exists())
+            self.assertTrue((prefix / 'share/applications/kos-music.desktop').exists())
+            self.assertFalse((root / 'state').exists())
 
     def test_missing_new_app_is_rejected_before_mutation(self):
         with tempfile.TemporaryDirectory() as directory:

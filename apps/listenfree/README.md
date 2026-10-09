@@ -1,6 +1,6 @@
 # KOS ListenFree for NextKDE
 
-此分支维护 NextKDE 原生 Linux 版本，与原 KOS Music 并存。桌面 ID 为 `listenfree`；应用和用户资料保持独立。原界面、播放逻辑与 Qmmp 引擎保留，更新由 NextKDE 提供。
+此分支维护 NextKDE 原生 Linux 版本，在正式安装中替换原 KOS Music。桌面 ID 为 `listenfree`；应用和用户资料保持独立。旧 KOS Music 源码及用户数据暂时保留。ListenFree 原界面、播放逻辑与 Qmmp 引擎保留，更新由 NextKDE 提供。
 
 构建、安装及依赖说明见 [Linux 构建说明](packaging/linux/README.md)。下方保留 ListenFree 上游说明及原有归属信息。
 

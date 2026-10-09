@@ -55,7 +55,7 @@ For a persistent per-user installation on Plasma, run:
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` builds the four standard applications, rather than only the app you
+`install-apps.sh` builds Calendar, Todo, Weather and ListenFree, rather than only the app you
 intend to open. In addition to the base requirements in the repository README,
 install these Arch build dependencies first:
 
@@ -90,4 +90,6 @@ until its source-path-dependent QML loader is migrated separately.
 
 ## Default applications
 
-Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. Preview entries are retired when registering the release. `apps/music` remains the legacy KOS Music implementation; `apps/listenfree` is the separate KOS ListenFree application available to the desktop music widget and audio file associations. The widget raises the current MPRIS player when one is active. ListenFree is opt-in: run `KOS_BUILD_LISTENFREE=ON KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh` to include it; see the [Linux build instructions](listenfree/packaging/linux/README.md). When ListenFree is installed, the installer runs `tools/register-default-apps.py` once to migrate unset or legacy music defaults, preserving other chosen players and subsequent user changes. Window preferences are retained and previous settings are backed up. Legacy music and its data are retained.
+Todo, Calendar and Weather update their existing directories and desktop IDs, retaining their services and data. ListenFree replaces legacy KOS Music in the installed bundle; the old source remains in the repository for now. The music widget raises the current MPRIS player, or opens ListenFree when no session exists.
+
+Prepare the SDK described in the [Linux build instructions](listenfree/packaging/linux/README.md), then run `KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh`. The installer checks this prerequisite before deployment. After the new player passes its runtime check, registration removes and backs up the legacy binaries, desktop entry, icon and AppStream metadata. User data is retained. Existing defaults for other music players and later user choices remain unchanged.

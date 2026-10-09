@@ -48,7 +48,7 @@ watch 运行是独立的开发实例：不与已运行的正式实例争单例�
 ./tools/install-apps.sh
 ```
 
-`install-apps.sh` 默认一次构建四个标准应用，而不只是当前要使用的应用。除仓库
+`install-apps.sh` 一次构建日历、待办、天气和 ListenFree 四个应用，而不只是当前要使用的应用。除仓库
 根目录 README 中的基础依赖外，Arch 还需要先安装：
 
 ```sh
@@ -76,6 +76,6 @@ PIM 服务，并刷新 Plasma 应用缓存。桌面入口使用绝对可执行�
 
 ## 默认应用与升级
 
-Todo、Calendar、Weather 在原目录和原 `kos-*` 桌面 ID 上更新界面，沿用原服务和用户数据。测试版 `*-preview` 入口在正式注册时移除。音乐保留两个独立实现：`apps/music` 的旧 KOS Music 与 `apps/listenfree` 的 KOS ListenFree；桌面音乐组件优先唤起当前 MPRIS 播放器，没有播放器时优先启动已安装的 ListenFree，否则回退到旧 KOS Music。
+Todo、Calendar、Weather 在原目录和原 `kos-*` 桌面 ID 上更新界面，沿用原服务和用户数据。ListenFree 替换安装包中的旧 KOS Music；旧源码暂时保留在仓库中。桌面音乐组件优先唤起当前 MPRIS 播放器，没有播放器时启动 ListenFree。
 
-KOS ListenFree 的额外构建依赖及 SDK 布局见 [Linux 构建说明](listenfree/packaging/linux/README.md)。ListenFree 默认不参与构建；准备 SDK 后使用 `KOS_BUILD_LISTENFREE=ON KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh` 显式安装，其配置与播放引擎保持独立。检测到已安装的 ListenFree 时，安装脚本执行 `tools/register-default-apps.py`：首次迁移空缺或旧 KOS Music 的默认关联，保留其他播放器及后续用户选择；窗口按钮配置保留用户设置，并清理测试入口。注册前的偏好及测试安装归档到用户状态目录供恢复。旧 KOS Music 的程序及资料不会删除。
+先按照 [Linux 构建说明](listenfree/packaging/linux/README.md) 准备 SDK，再执行 `KOS_LISTENFREE_SDK=/path/to/sdk ./tools/install-apps.sh`。安装器在部署前检查 SDK；新播放器通过运行检查后，注册脚本备份并移除旧播放器的程序、桌面入口、图标和 AppStream 元数据。旧用户数据保留。其他播放器的默认关联及后续用户选择不会被覆盖。

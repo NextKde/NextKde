@@ -1793,8 +1793,8 @@ PanelWindow {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
-                        // Prefer the replacement; retain compatibility with
-                        // installations that have not added ListenFree yet.
+                        // Raise the displayed player; ListenFree owns the
+                        // music entry when no MPRIS session is available.
                         const player = DockMprisService.activePlayer
                         if (player) {
                             if (player.canRaise) {
@@ -1806,8 +1806,7 @@ PanelWindow {
                             // Do not start a different app for the displayed track.
                             return
                         }
-                        if (!AppActionService.launchById("listenfree", []))
-                            AppActionService.launchById("kos-music", [])
+                        AppActionService.launchById("listenfree", [])
                     }
                 }
 

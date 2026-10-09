@@ -14,11 +14,21 @@ for command_name in busctl cmake ninja python3 readlink systemctl; do
     fi
 done
 
+# The released music app is ListenFree. Check its SDK before any deployment;
+# a failed replacement must leave an existing installation usable.
+if test -z "${KOS_LISTENFREE_SDK:-}" || test ! -d "$KOS_LISTENFREE_SDK"; then
+    echo "ListenFree SDK is required: set KOS_LISTENFREE_SDK to its directory." >&2
+    echo "See apps/listenfree/packaging/linux/README.md for the SDK layout." >&2
+    exit 1
+fi
+
 # An install must not build or run tests -- they have one owner,
 # tools/run-tests.sh (the same policy the core kosctl build follows).
-cmake --preset apps-release -S "$project_dir" \
+cmake --preset apps-release -S "$project_dir" -B "$build_dir" \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
-    -DKOS_BUILD_LISTENFREE="${KOS_BUILD_LISTENFREE:-OFF}" \
+    -DKOS_LISTENFREE_SDK="$KOS_LISTENFREE_SDK" \
+    -DKOS_BUILD_MUSIC=OFF \
+    -DKOS_BUILD_LISTENFREE=ON \
     -DBUILD_TESTING=OFF
 jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
 case "$jobs" in ''|*[!0-9]*) jobs=4 ;; esac
@@ -86,9 +96,7 @@ fi
 install -m 0644 "$project_dir/apps/settings/main.qml" \
     "$prefix/share/kos/settings/main.qml"
 
-if test -x "$prefix/bin/listenfree"; then
-    python3 "$script_dir/register-default-apps.py" --prefix "$prefix"
-fi
+python3 "$script_dir/register-default-apps.py" --prefix "$prefix"
 
 "$script_dir/verify-apps-install.sh" "$prefix"
 echo "KOS applications are installed for this user and ready from the launcher."

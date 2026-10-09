@@ -1,8 +1,8 @@
 # KOS ListenFree Linux build
 
 KOS ListenFree is the NextKDE adaptation of ListenFree. It is installed as
-`listenfree`, with desktop ID `listenfree.desktop`, and coexists with the legacy
-`kos-music` binary and its separate data. Keep the upstream component notices in
+`listenfree`, with desktop ID `listenfree.desktop`, and replaces the legacy
+`kos-music` installation. The old source and user data remain available. Keep the upstream component notices in
 `licenses/` when distributing a build. The existing ListenFree data directory
 and MPRIS name remain compatible across upgrades.
 
@@ -31,8 +31,7 @@ paths can be used instead of the SDK layout.
 The executable and private audio runtime install under `opt/listenfree` within
 the chosen prefix. The launcher sets the private library and plugin paths.
 After installation run `update-desktop-database PREFIX/share/applications`.
-NextKDE's `tools/register-default-apps.py` selects this desktop entry for supported
-audio MIME types and retires the temporary Todo/Calendar/Weather preview entries.
+NextKDE's `tools/register-default-apps.py` migrates legacy music associations, retains other chosen defaults, backs up and removes the old installed music files, and retires temporary Todo/Calendar/Weather preview entries.
 File-manager launches accept paths and file URLs, including multiple files;
 subsequent launches deliver those files to the resident instance.
 

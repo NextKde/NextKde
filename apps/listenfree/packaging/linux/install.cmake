@@ -1,4 +1,4 @@
-# Install alongside the retained kos-music application, with a distinct desktop ID.
+# ListenFree is the installed music application; legacy source stays in the repository.
 set(_listenfree_install_dir opt/listenfree)
 set_target_properties(listenfree listenfree-sourcehost PROPERTIES INSTALL_RPATH "$ORIGIN/lib")
 install(TARGETS listenfree listenfree-sourcehost RUNTIME DESTINATION ${_listenfree_install_dir})

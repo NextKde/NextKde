@@ -4,7 +4,7 @@ set -eu
 prefix=${1:-${KOS_INSTALL_PREFIX:-"$HOME/.local"}}
 failed=0
 
-for app in calendar todo weather music; do
+for app in calendar todo weather; do
     binary="$prefix/bin/kos-$app"
     desktop="$prefix/share/applications/kos-$app.desktop"
     icon="$prefix/share/icons/hicolor/scalable/apps/kos-$app.svg"
@@ -19,7 +19,7 @@ for app in calendar todo weather music; do
     QT_QPA_PLATFORM=offscreen "$binary" --version >/dev/null || failed=1
 done
 
-# KOS ListenFree is a separate application; legacy music remains available.
+# ListenFree replaces the legacy music application in the installed bundle.
 if test -x "$prefix/bin/listenfree"; then
     test -f "$prefix/share/applications/listenfree.desktop" || failed=1
     test -f "$prefix/share/icons/hicolor/scalable/apps/listenfree.svg" || failed=1
@@ -27,6 +27,13 @@ if test -x "$prefix/bin/listenfree"; then
         desktop-file-validate "$prefix/share/applications/listenfree.desktop" || failed=1
     fi
     QT_QPA_PLATFORM=offscreen "$prefix/bin/listenfree" --version >/dev/null || failed=1
+else
+    echo "Incomplete registration: listenfree" >&2
+    failed=1
+fi
+if test -e "$prefix/bin/kos-music" || test -e "$prefix/share/applications/kos-music.desktop"; then
+    echo "Legacy music application has not been retired." >&2
+    failed=1
 fi
 
 # apps/settings/main.qml runs as its own process and resolves

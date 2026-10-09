@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promote installed NextKDE applications and retain KOS Music as a legacy option."""
+"""Register NextKDE applications and retire legacy Music installation files."""
 from pathlib import Path
 import argparse
 import configparser
@@ -34,7 +34,15 @@ def atomic(path, text):
     temp.write_text(text, encoding='utf-8')
     temp.replace(path)
 
-music = prefix / 'share/applications/kos-music.desktop'
+# Validate the replacement before retiring any old files. No user data is
+# stored in these exact installation paths.
+subprocess.run([str(prefix / 'bin/listenfree'), '--version'], check=True,
+               env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'}, stdout=subprocess.DEVNULL)
+legacy_files = [prefix / path for path in (
+    'bin/kos-music', 'bin/kos-music-lx-source-host', 'bin/kos-music-lx-source-host.js',
+    'share/applications/kos-music.desktop', 'share/icons/hicolor/scalable/apps/kos-music.svg',
+    'share/metainfo/org.nextkde.Kos.Music.metainfo.xml')]
+
 new_entry = ini(prefix / 'share/applications/listenfree.desktop')
 mimes = [item for item in new_entry['Desktop Entry']['MimeType'].split(';') if item]
 mime_files = [config / 'mimeapps.list']
@@ -45,10 +53,10 @@ buttons = config / 'kos/window-buttons.json'
 previews = [prefix / location / f'kos-{app}-preview{suffix}'
             for app in apps for location, suffix in [('bin', ''), ('share/applications', '.desktop')]]
 preview_dir = prefix / 'opt/nextkde-ui-preview'
-paths = [*mime_files, buttons, music, *previews]
+paths = [*mime_files, buttons, *legacy_files, *previews]
 if args.dry_run:
     print('Promote: kos-todo, kos-calendar, kos-weather; default music: listenfree')
-    print('Retain: kos-music and its data; retire: the three preview registrations')
+    print('Retire: legacy music binaries and registrations, and the three preview registrations; retain user data')
     print('Audio MIME types:', ', '.join(mimes))
     raise SystemExit(0)
 
@@ -71,20 +79,32 @@ for index, path in enumerate(paths):
 from io import StringIO
 initial_defaults = {mime: [ini(candidate).get('Default Applications', mime, fallback='')
                           for candidate in mime_files] for mime in mimes}
-for path in ([] if migrated else mime_files):
+for path in mime_files:
     preferences = ini(path)
+    if migrated and not any('kos-music.desktop' in value
+                            for section in preferences.sections()
+                            for value in preferences[section].values()):
+        continue
     for section in ('Default Applications', 'Added Associations'):
         if not preferences.has_section(section): preferences.add_section(section)
     for mime in mimes:
         existing = initial_defaults[mime]
         # Only replace our legacy default, never another chosen player.
-        if all(value.strip(';') in ('', 'kos-music.desktop') for value in existing):
+        current = preferences['Default Applications'].get(mime, '')
+        if 'kos-music.desktop' in current.split(';'):
+            preferences['Default Applications'][mime] = ';'.join(dict.fromkeys(
+                'listenfree.desktop' if value == 'kos-music.desktop' else value
+                for value in current.split(';') if value)) + ';'
+        elif not migrated and all(value.strip(';') in ('', 'kos-music.desktop') for value in existing):
             preferences['Default Applications'][mime] = 'listenfree.desktop;'
         previous = preferences['Added Associations'].get(mime, '').split(';')
-        preferences['Added Associations'][mime] = ';'.join(dict.fromkeys(['listenfree.desktop', *filter(None, previous)])) + ';'
+        if not migrated or 'kos-music.desktop' in previous:
+            preferences['Added Associations'][mime] = ';'.join(dict.fromkeys(
+                ['listenfree.desktop', *[value for value in previous if value and value != 'kos-music.desktop']])) + ';'
         if preferences.has_section('Removed Associations'):
             removed = preferences['Removed Associations'].get(mime, '').split(';')
-            retained = [value for value in removed if value and value != 'listenfree.desktop']
+            retained = [value for value in removed if value and value != 'kos-music.desktop'
+                        and (migrated or value != 'listenfree.desktop')]
             if retained: preferences['Removed Associations'][mime] = ';'.join(retained) + ';'
             else: preferences.remove_option('Removed Associations', mime)
     stream = StringIO(); preferences.write(stream, space_around_delimiters=False)
@@ -97,9 +117,7 @@ for app in apps: button_data['apps'].pop(f'kos-{app}-preview', None)
 managed_rules = [{'match': {'class': f'kos-{app}', 'titleRegex': 'Preview$'}, 'showButtons': False} for app in apps]
 button_data['rules'] = [rule for rule in button_data.get('rules', []) if rule not in managed_rules]
 atomic(buttons, json.dumps(button_data, ensure_ascii=False, indent=4) + '\n')
-if music.exists():
-    text = music.read_text().replace('Name=KOS Music\n', 'Name=KOS Music (Legacy)\n').replace('Name[zh_CN]=KOS 音乐\n', 'Name[zh_CN]=KOS 音乐（旧版）\n')
-    atomic(music, text)
+for path in legacy_files: path.unlink(missing_ok=True)
 for path in previews: path.unlink(missing_ok=True)
 if preview_dir.exists():
     retired = backup / 'retired-preview'
@@ -110,5 +128,5 @@ atomic(migration_marker, json.dumps({'version': 1}) + '\n')
 if not args.no_cache:
     for command in (['update-desktop-database', str(prefix / 'share/applications')], ['kbuildsycoca6', '--noincremental']):
         if shutil.which(command[0]): subprocess.run(command, check=True)
-print('Registered KOS ListenFree; existing music preferences and legacy KOS Music retained.')
+print('Registered KOS ListenFree; legacy music installation retired, user data and music preferences retained.')
 print('Registration backup:', backup)
