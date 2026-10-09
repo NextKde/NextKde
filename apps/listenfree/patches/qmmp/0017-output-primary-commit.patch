@@ -1,0 +1,142 @@
+--- a/src/qmmp/buffer.h
++++ b/src/qmmp/buffer.h
+@@ -45,6 +45,7 @@
+     size_t size = 0;                     /*!< Buffer size in samples. */
+     unsigned int rate;                   /*!< Buffer bitrate. */
+     QSharedPointer<TrackInfo> trackInfo; /*!< Attached track information. */
++    quint64 playbackEpoch = 0;          /*!< Decoder request identity for output feedback. */
+ };
+ 
+ 
+--- a/src/qmmp/outputwriter.cpp
++++ b/src/qmmp/outputwriter.cpp
+@@ -20,6 +20,7 @@
+ 
+ #include <string.h>
+ #include "statehandler.h"
++#include "soundcore.h"
+ #include "visual.h"
+ #include "output.h"
+ #include "audioconverter.h"
+@@ -231,6 +232,11 @@
+     qint64 m = 0;
+     size_t output_at = 0;
+     unsigned char *tmp = nullptr;
++    QString feedbackPath;
++    quint64 feedbackEpoch = 0;
++    qint64 feedbackBytes = 0, lastFeedback = -50;
++    auto *feedbackCore = SoundCore::instance();
++
+ 
+     dispatch(Qmmp::Playing);
+     dispatch(m_output->audioParameters());
+@@ -273,6 +279,13 @@
+                 if(b->trackInfo)
+                 {
+                     m_output->setTrackInfo(*b->trackInfo);
++                    if(feedbackPath != b->trackInfo->path() || feedbackEpoch != b->playbackEpoch)
++                    {
++                        feedbackPath = b->trackInfo->path();
++                        feedbackEpoch = b->playbackEpoch;
++                        feedbackBytes = 0;
++                        lastFeedback = -50;
++                    }
+                     if(m_abr)
+                         m_kbps = b->trackInfo->value(Qmmp::BITRATE).toInt();
+                 }
+@@ -334,6 +347,15 @@
+                 {
+                     m_totalWritten += m;
+                     l += m;
++                    feedbackBytes += m;
++                    // Count exact output frames, not the decoder-side elapsed reset.
++                    const qint64 presented = feedbackBytes * 1000 /
++                        (qint64(m_frequency) * m_output->channels() * m_output->sampleSize()) - m_output->latency();
++                    if(feedbackEpoch && presented >= 0 && presented - lastFeedback >= 40)
++                    {
++                        lastFeedback = presented;
++                        emit feedbackCore->outputTrackProgress(feedbackEpoch, feedbackPath, presented);
++                    }
+                 }
+                 else
+                     break;
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -30,6 +30,7 @@
+ #include "effectfactory.h"
+ #include "inputsource.h"
+ #include "statehandler.h"
++#include "soundcore.h"
+ #include "audioconverter.h"
+ #include "qmmpaudioengine_p.h"
+ #include "channelconverter_p.h"
+@@ -282,6 +283,7 @@
+ {
+     Buffer *b = m_output->recycler()->get();
+     b->trackInfo = m_trackInfo;
++    b->playbackEpoch = SoundCore::instance()->outputFeedbackEpoch();
+     m_trackInfo.clear();
+     size_t sz = size < m_bks ? size : m_bks;
+     size_t samples = sz / m_sample_size;
+@@ -768,6 +770,7 @@
+     const auto frames = sourceEndMs >= 0 ? sourceEndMs * m_transitionRate.load() / 1000 - m_sourceFrames :
+         qBound<qint64>(qint64(0), milliseconds, qint64(12000)) * m_transitionRate.load() / 1000;
+     if(frames <= 0) return false;
++    SoundCore::instance()->setTransitionSourceEnd((m_sourceFrames + frames) * 1000 / m_transitionRate.load());
+     m_transitionFrames = frames;
+     return true;
+ }
+--- a/src/qmmp/soundcore.cpp
++++ b/src/qmmp/soundcore.cpp
+@@ -40,6 +40,8 @@
+ public:
+     SoundCorePrivate(SoundCore *core) : q_ptr(core) {}
+     std::atomic<qint64> crossfadeDuration{0};
++    std::atomic<quint64> outputFeedbackEpoch{0};
++    std::atomic<qint64> transitionSourceEnd{0};
+ 
+ private:
+     enum NextEngineState
+@@ -457,3 +459,25 @@
+     auto *engine = QmmpAudioEngine::instance();
+     return engine && nextTrackAccepted() && engine->finishCurrentAfter(overlapMs, sourceEndMs);
+ }
++
++quint64 SoundCore::beginOutputFeedback()
++{
++    Q_D(SoundCore);
++    return d->outputFeedbackEpoch.fetch_add(1, std::memory_order_relaxed) + 1;
++}
++quint64 SoundCore::outputFeedbackEpoch() const
++{
++    Q_D(const SoundCore);
++    return d->outputFeedbackEpoch.load(std::memory_order_relaxed);
++}
++
++qint64 SoundCore::transitionSourceEnd() const
++{
++    Q_D(const SoundCore);
++    return d->transitionSourceEnd.load(std::memory_order_relaxed);
++}
++void SoundCore::setTransitionSourceEnd(qint64 milliseconds)
++{
++    Q_D(SoundCore);
++    d->transitionSourceEnd.store(milliseconds, std::memory_order_relaxed);
++}
+--- a/src/qmmp/soundcore.h
++++ b/src/qmmp/soundcore.h
+@@ -196,7 +196,14 @@
+      */
+     void seekRelative(qint64 offset);
+ 
++    qint64 transitionSourceEnd() const;
++    void setTransitionSourceEnd(qint64 milliseconds);
++    quint64 beginOutputFeedback();
++    quint64 outputFeedbackEpoch() const;
+ signals:
++    // Low-rate source clock from submitted audio, corrected by device latency.
++    void outputTrackProgress(quint64 epoch, const QString &path, qint64 milliseconds);
++
+     /*!
+      * This signal is emitted when the stream reader fills it's buffer.
+      * The argument \b progress indicates the current percentage of buffering completed.

@@ -1,0 +1,53 @@
+ListenFree 0.3.8 第三方组件与修改说明
+
+Qt 6.11.2：Core、Gui、Widgets、Quick/QML、Network、Sql、Concurrent、Multimedia 和 ShaderTools。
+Qt Multimedia 的 Windows MMCSS 修复见 patches/qt/6.11.2。
+Qmmp 2.4.1：libqmmp、libqmmpui 及音频插件。应用使用的修改见 patches/qmmp；
+从原版依次应用 2.4.1/0001、2.4.1/0003，再按编号应用根目录 0004 至 0020。
+不应用已撤销的 2.4.1/0002。播放内核与修改后的插件必须成组构建部署。
+来源：https://sourceforge.net/projects/qmmp-dev/
+
+QuickJS-ng 0.16.2（MIT）：独立 JS 音源宿主。https://github.com/quickjs-ng/quickjs
+TagLib 2.3.1：音频标签读取与写入。https://taglib.org/
+zlib：歌词压缩与插件兼容。https://zlib.net/
+FFmpeg：Qmmp 解码、直播转封装、音频尾部探测及原生视频帧队列。https://ffmpeg.org/
+发布运行库包含 Qmmp 使用的 avcodec/avformat 63、avutil 61，以及 Qt 使用的 61/61/59。
+两套实际 FFmpeg 构建报告 LGPL version 2.1 or later；依赖 vcpkg、Qt 构建配置。
+libcurl：Qmmp HTTP 传输。https://curl.se/
+MinGW-w64 GCC 13.1 / winpthreads：Windows 编译器运行库。
+
+AMLL（AGPL-3.0）：歌词时序与视觉适配参考提交 50e4087cd75ad4d6af3d2061d7a86fdad238e783。
+Folia（AGPL-3.0）：歌词组合与布局的原生适配。
+LDDC（GPL-3.0）：歌词包装和 QRC/KRC 语义参考提交 84631e8cd011fcc3f71ca0ae017e2c9758958ffc。
+LyricDecoder（MIT）：QQ 变体 DES 的 C++ 适配，见 src/third_party/qqmusic_des。
+Kawarp（MIT）：封面动态流转算法适配。
+Sylvakru（Apache-2.0）：封面取色和外观参数适配，参考提交 92d5973b8e25a0adea43440c6eea4a74f2285991。
+VLC（GPL-2.0-or-later）：玻璃效果参数与算法适配参考。
+Verblib 0.5，Philip Bennefall（MIT-0）：取自 miniaudio 0.11.23 的独立混响头文件；未引入其设备层。
+来源：https://github.com/mackron/miniaudio/blob/0.11.23/extras/nodes/ma_reverb_node/verblib.h
+utf8cpp（Boost Software License）：TagLib 使用的 UTF-8 支持。
+
+各组件许可原文见本目录对应文件及源码头部。部署时另外收集实际运行库包的 copyright 文件。
+
+Qt Image Formats 6.11.2：未修改的官方 WebP 图片插件（Qt LGPL-3.0 等许可）。
+https://github.com/qt/qtimageformats/tree/v6.11.2
+该插件包含 libwebp 1.6.0（BSD-3-Clause），许可与专利授权见 libwebp-COPYING.txt、libwebp-PATENTS.txt。
+
+Microsoft C++/WinRT 2.0.250303.1
+来源：https://github.com/microsoft/cppwinrt / Microsoft.Windows.CppWinRT NuGet
+许可证：MIT，见 CppWinRT-MIT.txt。
+用途：构建期生成 Windows 媒体会话公开 API 的 C++ 头文件，不附加常驻进程或运行时。
+
+vlc-win10smtc，参考版本 7c369d682ca43c657783e6f071917dfc0a9122fc
+来源：https://github.com/spmn/vlc-win10smtc
+许可证：GPL-3.0，见 vlc-win10smtc-GPL-3.0.txt。
+修改范围：Windows SMTC 的窗口绑定、增量推送及 IStream 缩略图桥接方式适配到 Qt；不包含 VLC 播放引擎或插件运行环境。
+
+WinSparkle 0.9.4（官方 x64 二进制，无修改）
+来源：https://github.com/vslavik/winsparkle/releases/tag/v0.9.4
+许可证：MIT，见 WinSparkle-MIT.txt；内含 Expat 许可见 WinSparkle-expat.txt。WinSparkle 二进制同时包含 wxWidgets（wxWindows Library Licence）、OpenSSL 和 ed25519，见 WinSparkle-wxWidgets.txt、WinSparkle-wxWidgets-LGPL.txt、WinSparkle-OpenSSL.txt、WinSparkle-ed25519.txt。
+用途：用户发起的软件更新检查、下载、EdDSA 签名校验和安装提示。通过 QLibrary 延迟加载；ListenFree 只适配安装目录及退出回调。
+
+SourceHost 浏览器 API 兼容资源：core-js 3.45.1、buffer 6.0.3、base64-js 1.5.1、ieee754 1.2.1（MIT）。
+来源：https://github.com/zloirock/core-js 、https://github.com/feross/buffer
+构建期固定依赖生成 URL、URLSearchParams、Base64 与 Buffer 静态资源，运行时无需 Node。许可原文见 sourcehost-browser-MIT.txt。

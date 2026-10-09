@@ -1,0 +1,32 @@
+diff --git a/src/plugins/Input/ffmpeg/decoderffmpegfactory.cpp b/src/plugins/Input/ffmpeg/decoderffmpegfactory.cpp
+--- a/src/plugins/Input/ffmpeg/decoderffmpegfactory.cpp
++++ b/src/plugins/Input/ffmpeg/decoderffmpegfactory.cpp
+@@ -69,0 +70,7 @@ bool DecoderFFmpegFactory::canDecode(QIODevice *i) const
++    if(filters.contains(u"*.wav"_s) && formats.contains(u"wav"_s))
++        return true;
++    if(filters.contains(u"*.flac"_s) && formats.contains(u"flac"_s))
++        return true;
++    if((filters.contains(u"*.ogg"_s) || filters.contains(u"*.opus"_s)) &&
++       formats.contains(u"ogg"_s))
++        return true;
+@@ -106,0 +114 @@ DecoderProperties DecoderFFmpegFactory::properties() const
++        u"*.wav"_s, u"*.flac"_s, u"*.ogg"_s, u"*.opus"_s,
+@@ -110 +118 @@ DecoderProperties DecoderFFmpegFactory::properties() const
+-    const QStringList disabledFilters = settings.value(u"FFMPEG/disabled_filters"_s, { u"*.mp3"_s }).toStringList();
++    const QStringList disabledFilters = settings.value(u"FFMPEG/disabled_filters"_s).toStringList();
+@@ -116,0 +125,8 @@ DecoderProperties DecoderFFmpegFactory::properties() const
++    if(!avcodec_find_decoder(AV_CODEC_ID_PCM_S16LE))
++        filters.remove(u"*.wav"_s);
++    if(!avcodec_find_decoder(AV_CODEC_ID_FLAC))
++        filters.remove(u"*.flac"_s);
++    if(!avcodec_find_decoder(AV_CODEC_ID_VORBIS) && !avcodec_find_decoder(AV_CODEC_ID_OPUS))
++        filters.remove(u"*.ogg"_s);
++    if(!avcodec_find_decoder(AV_CODEC_ID_OPUS))
++        filters.remove(u"*.opus"_s);
+@@ -155,0 +172,6 @@ DecoderProperties DecoderFFmpegFactory::properties() const
++    if(filters.contains(u"*.wav"_s))
++        properties.contentTypes << u"audio/wav"_s << u"audio/x-wav"_s;
++    if(filters.contains(u"*.flac"_s))
++        properties.contentTypes << u"audio/flac"_s << u"audio/x-flac"_s;
++    if(filters.contains(u"*.ogg"_s) || filters.contains(u"*.opus"_s))
++        properties.contentTypes << u"audio/ogg"_s << u"audio/opus"_s;

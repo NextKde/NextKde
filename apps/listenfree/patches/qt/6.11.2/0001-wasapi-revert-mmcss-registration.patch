@@ -1,0 +1,47 @@
+diff --git a/src/multimedia/windows/qwindowsaudiosink.cpp b/src/multimedia/windows/qwindowsaudiosink.cpp
+index b453ee1..ad3ebdc 100644
+--- a/src/multimedia/windows/qwindowsaudiosink.cpp
++++ b/src/multimedia/windows/qwindowsaudiosink.cpp
+@@ -5,0 +6 @@
++#include <QtCore/qscopeguard.h>
+@@ -217 +218,2 @@ bool QWASAPIAudioSinkStream::startAudioClient(StreamType streamType)
+-        setMCSSForPeriodSize(m_periodSize);
++        const HANDLE mmcssTask = setMCSSForPeriodSize(m_periodSize);
++        const auto revertMmcss = qScopeGuard([mmcssTask] { revertMCSS(mmcssTask); });
+diff --git a/src/multimedia/windows/qwindowsaudiosource.cpp b/src/multimedia/windows/qwindowsaudiosource.cpp
+index 26d4c30..85ae6f0 100644
+--- a/src/multimedia/windows/qwindowsaudiosource.cpp
++++ b/src/multimedia/windows/qwindowsaudiosource.cpp
+@@ -5,0 +6 @@
++#include <QtCore/qscopeguard.h>
+@@ -209 +210,2 @@ bool QWASAPIAudioSourceStream::startAudioClient()
+-        setMCSSForPeriodSize(m_periodSize);
++        const HANDLE mmcssTask = setMCSSForPeriodSize(m_periodSize);
++        const auto revertMmcss = qScopeGuard([mmcssTask] { revertMCSS(mmcssTask); });
+diff --git a/src/multimedia/windows/qwindowsaudioutils.cpp b/src/multimedia/windows/qwindowsaudioutils.cpp
+index 6150a03..56859ce 100644
+--- a/src/multimedia/windows/qwindowsaudioutils.cpp
++++ b/src/multimedia/windows/qwindowsaudioutils.cpp
+@@ -485 +485 @@ bool audioClientSetRate(const ComPtr<IAudioClient3> &client, int rate)
+-void setMCSSForPeriodSize(reference_time periodSize)
++HANDLE setMCSSForPeriodSize(reference_time periodSize)
+@@ -495,0 +496 @@ void setMCSSForPeriodSize(reference_time periodSize)
++        return nullptr;
+@@ -502,0 +504,9 @@ void setMCSSForPeriodSize(reference_time periodSize)
++
++    return hTask;
++}
++
++void revertMCSS(HANDLE task)
++{
++    if (task != nullptr && !AvRevertMmThreadCharacteristics(task))
++        qWarning() << "AvRevertMmThreadCharacteristics failed to revert thread characteristics"
++                   << QSystemError::windowsString();
+diff --git a/src/multimedia/windows/qwindowsaudioutils_p.h b/src/multimedia/windows/qwindowsaudioutils_p.h
+index 6524307..8834dbb 100644
+--- a/src/multimedia/windows/qwindowsaudioutils_p.h
++++ b/src/multimedia/windows/qwindowsaudioutils_p.h
+@@ -84 +84,2 @@ std::optional<AudioClientDevicePeriod> getDevicePeriod(const ComPtr<IAudioClient
+-void setMCSSForPeriodSize(reference_time);
++HANDLE setMCSSForPeriodSize(reference_time);
++void revertMCSS(HANDLE);

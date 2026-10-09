@@ -1,0 +1,35 @@
+diff --git a/src/plugins/Transports/http/httpinputsource.cpp b/src/plugins/Transports/http/httpinputsource.cpp
+--- a/src/plugins/Transports/http/httpinputsource.cpp
++++ b/src/plugins/Transports/http/httpinputsource.cpp
+@@ -49 +49 @@ bool HTTPInputSource::isWaiting() const
+-    return (!m_reader->bytesAvailable() && m_reader->isOpen());
++    return (!m_reader->bytesAvailable() && m_reader->isOpen() && !m_reader->atEnd());
+diff --git a/src/plugins/Transports/http/httpstreamreader.cpp b/src/plugins/Transports/http/httpstreamreader.cpp
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -23,0 +24 @@
++#include <QMutexLocker>
+@@ -186 +187,2 @@ bool HttpStreamReader::atEnd() const
+-    return false;
++    const QMutexLocker locker(&m_mutex);
++    return m_stream.completed && m_stream.buf_fill == 0;
+@@ -288,0 +291 @@ void HttpStreamReader::abort()
++    m_stream.completed = true;
+@@ -308 +311,2 @@ qint64 HttpStreamReader::bytesAvailable() const
+-    return QIODevice::bytesAvailable() + m_stream.buf_fill;
++    const QMutexLocker locker(&m_mutex);
++    return QIODevice::bytesAvailable() + static_cast<qint64>(m_stream.buf_fill);
+@@ -382,0 +387 @@ void HttpStreamReader::run()
++    m_stream.completed = false;
+@@ -393,0 +399,3 @@ void HttpStreamReader::run()
++    m_mutex.lock();
++    m_stream.completed = true;
++    m_mutex.unlock();
+diff --git a/src/plugins/Transports/http/httpstreamreader.h b/src/plugins/Transports/http/httpstreamreader.h
+--- a/src/plugins/Transports/http/httpstreamreader.h
++++ b/src/plugins/Transports/http/httpstreamreader.h
+@@ -49,0 +50 @@ struct HttpStreamData
++    bool completed = false;
+@@ -102 +103 @@ private:
+-    QMutex m_mutex;
++    mutable QMutex m_mutex;

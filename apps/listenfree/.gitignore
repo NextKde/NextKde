@@ -1,0 +1,35 @@
+# Local build and test output
+/build/
+/out/
+/dist/
+/artifacts/
+__pycache__/
+/.vcpkg_installed/
+
+# Qt/CMake generated metadata
+.qt/
+*.user
+*.user.*
+
+# Local profiling and installer logs
+*.log
+*.trace
+
+# Local Codex planning and implementation notes (keep outside GitHub)
+/AGENTS.md
+/docs/design/
+/docs/implementation/
+
+# Private working documents and diagnostics
+/docs/
+/doc/
+/AGENT.md
+/agent.md
+/agents.md
+/CLAUDE.md
+/.agents/
+/.codex/
+/CMakeUserPresets.json
+/*.md
+!/README.md
+(Join-Path

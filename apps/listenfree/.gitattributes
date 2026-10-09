@@ -1,0 +1,6 @@
+# Unified patch context lines contain a required single-space prefix.
+patches/**/*.patch whitespace=-blank-at-eol
+
+# Preserve upstream license text and intentional translation spacing verbatim.
+licenses/** whitespace=-blank-at-eol,-blank-at-eof
+music_player_desktop/translations/*.tsv whitespace=-blank-at-eol
