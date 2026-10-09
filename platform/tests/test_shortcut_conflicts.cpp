@@ -101,6 +101,7 @@ struct HeldShortcut {
     QString componentFriendly;
     QList<int> keys;
     QList<int> defaults;
+    bool present = true;
 };
 
 class FakeKGlobalAccel : public QObject, protected QDBusContext
@@ -125,6 +126,7 @@ public:
     QList<HeldShortcut> held;
     int queries = 0;
     QList<Release> releases;
+    bool refuseChanges = false;
 
 public slots:
     QList<ShortcutInfo> allShortcutInfos()
@@ -148,7 +150,19 @@ public slots:
                            uint flags)
     {
         releases.append(Release{actionId, keys, flags});
-        return keys;
+        for (HeldShortcut &shortcut : held) {
+            if (shortcut.componentUnique != actionId.value(0)
+                || shortcut.actionUnique != actionId.value(1))
+                continue;
+            // Model existing actions in KDE: without NoAutoloading, the saved
+            // keys win. This is why SetPresent alone cannot release a conflict.
+            if ((flags & 0x4u) && !refuseChanges)
+                shortcut.keys = keys;
+            if (flags & 0x2u)
+                shortcut.present = true;
+            return shortcut.keys;
+        }
+        return {};
     }
 };
 
@@ -191,6 +205,7 @@ int main(int argc, char **argv)
              {metaTab, altTab}},
         };
         fake.releases.clear();
+        fake.held.first().present = false;
         QString error;
         QStringList repaired = KosPlatform::repairKWinKeyConflicts(
             {QStringLiteral("Meta+Tab")}, &error);
@@ -208,10 +223,11 @@ int main(int argc, char **argv)
                 "actionId must carry the registry's four fields");
         require(fake.releases.first().keys == QList<int>{altTab},
                 "Alt+Tab must survive the release");
-        // The wire value is the point: SetPresent (0x1/0x2 across daemon
-        // generations) with no-autoloading semantics; 0x4 alone does not
-        // revive a dead action (verified on Plasma 6.7.4).
-        require(fake.releases.first().flags == 0x3u, "SetPresent flags");
+        require(fake.releases.first().flags == 0x6u,
+                "SetPresent and NoAutoloading flags");
+        require(fake.held.first().keys == QList<int>{altTab},
+                "the stored conflict key must actually be removed");
+        require(fake.held.first().present, "the action must actually be active");
 
         // 2. The heal case: the conflict is already released (the action only
         //    holds Alt+Tab), but a lost present state stops it from firing
@@ -223,6 +239,7 @@ int main(int argc, char **argv)
              {altTab, metaTab}},
         };
         fake.releases.clear();
+        fake.held.first().present = false;
         repaired = KosPlatform::repairKWinKeyConflicts(
             {QStringLiteral("Meta+Tab")}, &error);
         require(error.isEmpty(), "heal must not error");
@@ -232,7 +249,8 @@ int main(int argc, char **argv)
         require(fake.releases.size() == 1, "exactly one setShortcut expected");
         require(fake.releases.first().keys == QList<int>{altTab},
                 "the active keys must not change");
-        require(fake.releases.first().flags == 0x3u, "SetPresent flags");
+        require(fake.releases.first().flags == 0x6u, "SetPresent and NoAutoloading flags");
+        require(fake.held.first().present, "the inactive action must be revived");
 
         // 3. A single-key action whose only key KOS takes is fully replaced;
         //    the repair stays out of it (standard conflict handling owns it).
@@ -277,6 +295,26 @@ int main(int argc, char **argv)
         require(error.isEmpty(), "empty registry is not an error");
         require(repaired.isEmpty() && fake.releases.isEmpty(),
                 "no holder, no repair");
+
+        // 6. D-Bus success with unchanged keys must not be reported as repaired.
+        fake.held = {
+            {QStringLiteral("Walk Through Windows"), QStringLiteral("遍历窗口"),
+             QStringLiteral("kwin"), QStringLiteral("KWin"), {metaTab, altTab},
+             {metaTab, altTab}},
+        };
+        fake.refuseChanges = true;
+        fake.releases.clear();
+        repaired = KosPlatform::repairKWinKeyConflicts(
+            {QStringLiteral("Meta+Tab")}, &error);
+        require(repaired.isEmpty(), "rejected keys must not be reported as repaired");
+        require(!error.isEmpty(), "rejected keys must be diagnosed");
+
+        // 7. A later successful repair clears the earlier error.
+        fake.refuseChanges = false;
+        repaired = KosPlatform::repairKWinKeyConflicts(
+            {QStringLiteral("Meta+Tab")}, &error);
+        require(error.isEmpty() && repaired.size() == 1,
+                "successful retry clears stale errors");
     } catch (const std::exception &e) {
         qCritical() << "FAILED:" << e.what();
         return 1;

@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QKeyCombination>
 #include <QKeySequence>
+#include <QSet>
 #include <QVariant>
 
 namespace KosPlatform {
@@ -19,15 +20,11 @@ const QString kAccelComponentInterface =
     QStringLiteral("org.kde.kglobalaccel.Component");
 const QString kAccelInterface = QStringLiteral("org.kde.KGlobalAccel");
 
-// kglobalacceld's `setShortcut` flags (the uint on the D-Bus call). SetPresent
-// brings a shortcut back from the non-present state — the daemon's
-// `setInactive` is `setIsPresent(false)`, and nothing else clears that flag.
-// 0x1/0x2 are the historical SetPresent/NoAutoloading numbering, 0x4 the
-// modern NoAutoloading. 0x3 covers SetPresent under both numberings and is
-// what re-recording the shortcut in System Settings effectively sends;
-// verified against Plasma 6.7.4, where 0x3 revives a dead action while 0x4
-// alone (keys updated, present flag untouched) does not.
-constexpr uint kSetPresentFlags = 0x1 | 0x2;
+// KDE's D-Bus flags: activate the action AND replace its saved keys.
+// Without NoAutoloading, an existing action ignores the supplied key list.
+constexpr uint kSetPresent = 0x2;
+constexpr uint kNoAutoloading = 0x4;
+constexpr uint kSetPresentFlags = kSetPresent | kNoAutoloading;
 
 constexpr int kCallTimeoutMs = 2000;
 
@@ -115,6 +112,8 @@ bool parseShortcutInfos(const QVariant &value, QList<KWinShortcut> *out)
 
 QStringList repairKWinKeyConflicts(const QStringList &combos, QString *error)
 {
+    if (error)
+        error->clear();
     QList<int> comboKeys;
     for (const QString &combo : combos) {
         const int key = combinedKey(combo);
@@ -148,6 +147,8 @@ QStringList repairKWinKeyConflicts(const QStringList &combos, QString *error)
         QList<int> releasedKeys;
         QList<int> remaining;
         for (const int key : shortcut.keys) {
+            if (key == 0)
+                continue;
             if (comboKeys.contains(key))
                 releasedKeys.append(key);
             else
@@ -181,6 +182,27 @@ QStringList repairKWinKeyConflicts(const QStringList &combos, QString *error)
             qWarning().noquote()
                 << "[kos-platform] repairing KWin shortcut failed for"
                 << shortcut.actionId.at(1) << ":" << setReply.errorMessage();
+            continue;
+        }
+
+        // setShortcut returns the keys actually accepted, not necessarily the
+        // requested keys. A successful D-Bus call alone proves no repair.
+        const QVariant acceptedValue = setReply.arguments().value(0);
+        const bool validKeys = setReply.arguments().size() == 1
+            && (acceptedValue.canConvert<QList<int>>()
+                || (acceptedValue.canConvert<QDBusArgument>()
+                    && acceptedValue.value<QDBusArgument>().currentSignature()
+                        == QLatin1String("ai")));
+        const QList<int> accepted = validKeys
+            ? qdbus_cast<QList<int>>(acceptedValue) : QList<int>{};
+        if (!validKeys || QSet<int>(accepted.begin(), accepted.end())
+                != QSet<int>(remaining.begin(), remaining.end())) {
+            const QString message = QStringLiteral("KWin shortcut %1 did not accept the requested keys (requested %2, returned %3)")
+                .arg(shortcut.actionId.at(1), keyListText(remaining),
+                     validKeys ? keyListText(accepted) : QStringLiteral("invalid reply"));
+            qWarning().noquote() << "[kos-platform]" << message;
+            if (error)
+                *error = message;
             continue;
         }
 
