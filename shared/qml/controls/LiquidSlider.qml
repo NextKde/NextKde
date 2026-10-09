@@ -87,7 +87,12 @@ Item {
     signal canceled()
 
     function cancelInteraction() {
-        if (!_pressed) return
+        const active = _pressed || _wheelPending
+        _wheelPending = false
+        wheelCommitTimer.stop()
+        _angleAccum = 0
+        _pixelAccum = 0
+        if (!active) return
         _pressed = false
         _expansion = 0
         _dragOffset = 0
@@ -95,6 +100,67 @@ Item {
     }
     onEnabledChanged: { if (!enabled) cancelInteraction() }
     onVisibleChanged: { if (!visible) cancelInteraction() }
+
+    // ── Ctrl+滚轮：精细步进 ────────────────────────────────────────────────
+    // 光滚轮不碰滑块：滑块大多住在可滚动的面板里，那一下滚轮属于面板。按住 Ctrl
+    // 才是"我要调这个滑块"：鼠标一格（±120）走一档，触控板的小增量先攒够一档再
+    // 走，否则触控板会刷出一串碎步。wheelStep 是一档走多少行程，默认 1%；设置页
+    // 按真实单位传（每档一格整数 / 1% 之类），窄区间才不至于每档都被舍入掉。
+    property real wheelStep: 0.01
+    // 一次滚轮事件有两种量级：鼠标是"一格 = angleDelta 的 ±120"；触控板在 Wayland 上
+    // pixelDelta 与 angleDelta 一起给，量级小一个数量级（实测 |angle| ≈ 12 × |px|，
+    // 所以鼠标那一格的量 ≈ 10px）。各按自己的量级累积，两种设备一档的手感才对得上：
+    // 用同一个阈值，触控板要么"转不动"，要么两格才走一档。
+    property real wheelPixelStep: 10
+    property real _angleAccum: 0
+    property real _pixelAccum: 0
+    property bool _wheelPending: false
+
+    // 收一档。基准取当前显示值（visualValue），与拖动同一条规矩：宿主把请求夹住
+    // 或量化过（如不透明度有 10% 下限）时，下一次步进从夹住后的位置继续，不会在
+    // 边界上攒一堆空档。preview 立刻生效，提交去抖合并——每转一格就写一次平台
+    // 服务太贵。
+    function stepByWheel(delta) {
+        if (!enabled || !visible || _pressed || delta === 0)
+            return
+        const next = Math.max(0, Math.min(1, visualValue + delta * wheelStep))
+        if (Math.abs(next - visualValue) < 1e-9)
+            return
+        _wheelPending = true
+        previewChanged(next)
+        wheelCommitTimer.restart()
+    }
+
+    // 喂进一次滚轮增量。pixelY 非 0 = 触控板（连续滚动），按像素攒；否则按鼠标的
+    // 一格（120）攒。攒够一档才走，余量留着给下一次。
+    function accumulateWheel(angleY, pixelY) {
+        if (!enabled || !visible || _pressed) return
+        if (pixelY !== 0) {
+            _pixelAccum += pixelY
+            while (Math.abs(_pixelAccum) >= wheelPixelStep) {
+                stepByWheel(_pixelAccum > 0 ? 1 : -1)
+                _pixelAccum -= (_pixelAccum > 0 ? wheelPixelStep : -wheelPixelStep)
+            }
+        } else if (angleY !== 0) {
+            _angleAccum += angleY
+            while (Math.abs(_angleAccum) >= 120) {
+                stepByWheel(_angleAccum > 0 ? 1 : -1)
+                _angleAccum -= (_angleAccum > 0 ? 120 : -120)
+            }
+        }
+    }
+
+    Timer {
+        id: wheelCommitTimer
+        interval: 180
+        onTriggered: {
+            if (!root._wheelPending)
+                return
+            root._wheelPending = false
+            // 与松手提交一致：提交当前显示值
+            root.commitRequested(root.value)
+        }
+    }
 
     opacity: enabled ? 1.0 : 0.45
 
@@ -420,6 +486,19 @@ Item {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
 
+        // 滚轮挂在 MouseArea 自己的 onWheel 上：MouseArea 盖满整个控件，独立的
+        // WheelHandler 拿不到滚轮（实测滚轮完全收不到，见其提交说明），在这一层才
+        // 收得到。只认 Ctrl（触控板两指滚动 + Ctrl 走的也是这条路）；不按 Ctrl 就
+        // 放行，让所在面板照旧滚动。
+        onWheel: function(wheel) {
+            if (!(wheel.modifiers & Qt.ControlModifier)) {
+                wheel.accepted = false
+                return
+            }
+            root.accumulateWheel(wheel.angleDelta.y, wheel.pixelDelta.y)
+            wheel.accepted = true
+        }
+
         property real startX: 0
         property real startValue: 0
 
@@ -440,6 +519,11 @@ Item {
             root._pressed = true
             root._expansion = 1.0
             root.triggerWobble()
+            // 拖动接管：取消还没落下的那次步进提交
+            root._wheelPending = false
+            wheelCommitTimer.stop()
+            root._angleAccum = 0
+            root._pixelAccum = 0
             startX = mouse.x
             startValue = root.value
             root.previewChanged(root.positionForPointer(mouse.x))

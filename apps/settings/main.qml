@@ -513,6 +513,16 @@ ApplicationWindow {
             Layout.fillWidth: true
             opacity: sliderRow.active ? 1.0 : 0.4
             enabled: sliderRow.active
+            // Ctrl+滚轮一档 = 一个能显示出来的单位（整数就 1，小数按 decimals），
+            // 换成归一化行程。倍率这类窄区间（0.9~1.1）才不会每档都被舍掉。
+            wheelStep: {
+                const span = sliderRow.maxV - sliderRow.minV
+                if (span <= 0)
+                    return 0.01
+                const unit = sliderRow.decimals > 0
+                    ? Math.pow(10, -sliderRow.decimals) : 1
+                return Math.min(1, unit / span)
+            }
             value: sliderRow.maxV > sliderRow.minV
                 ? (sliderRow._shown - sliderRow.minV)
                   / (sliderRow.maxV - sliderRow.minV) : 0
@@ -2474,6 +2484,8 @@ ApplicationWindow {
                             // default is the iPadOS blue this window was designed with.
                             accentColor: theme.accent
                             Layout.preferredWidth: 190
+                            // Ctrl+滚轮一档 = 1pt（下面的显示就是整数 pt）
+                            wheelStep: 1 / 60
                             value: (dockPage.dockHeight - 40) / 60
                             trackColor: theme.divider
                             onPreviewChanged: function(position) {
@@ -3552,6 +3564,11 @@ ApplicationWindow {
                                 visible: (modelData.type === "int" || modelData.type === "real")
                                     && modelData.key !== "TintMode"
                                     && modelData.readOnly !== true
+                                // Ctrl+滚轮一档 = 这个参数自己的 step（整数参数就是 1）
+                                wheelStep: (modelData.type === "int"
+                                    ? 1 : Number(modelData.step))
+                                    / Math.max(Number(modelData.max)
+                                               - Number(modelData.min), 0.001)
                                 value: (currentNumber - Number(modelData.min))
                                     / Math.max(Number(modelData.max) - Number(modelData.min), 0.001)
                                 trackColor: theme.divider

@@ -1,9 +1,10 @@
 import QtQuick
 import QtTest
 import "../../shared/qml/controls" as Controls
+import "../../shared/qml/foundation" as Foundation
 
 Item {
-    width: 500; height: 240
+    width: 560; height: 320
     property bool confirmed: false
     property int toggles: 0
     property bool requested: false
@@ -12,6 +13,19 @@ Item {
     property real confirmedValue: 0.4
     property real preview: confirmedValue
     property int commits: 0
+    property int ancestorWheel: 0
+    property real rampPreview: 0.5
+    property int rampCommits: 0
+    property real kosModel: 0.5
+    property int kosMoved: 0
+
+    // 不带 Ctrl 的滚轮该穿给滑块所在的面板，所以这里放一个祖先捕手：它收到
+    // 一次，就证明滑块没有把普通滚轮私吞。
+    WheelHandler {
+        acceptedModifiers: Qt.NoModifier
+        onWheel: function(wheel) { ancestorWheel++; wheel.accepted = true }
+    }
+
     Controls.LiquidGlassSwitch {
         id: sw; x: 30; y: 20
         checked: confirmed
@@ -30,16 +44,45 @@ Item {
             onCanceled: { dragging = false; preview = confirmedValue }
         }
     }
+    Item {
+        id: rampHost; x: 30; y: 170; width: 250; height: 26
+        Controls.ColorRampSlider {
+            id: ramp; anchors.fill: parent; value: rampPreview
+            onPreviewChanged: function(value) { rampPreview = value }
+            onCommitRequested: { rampCommits++ }
+        }
+    }
+    Item {
+        id: kosHost; x: 30; y: 220; width: 220; height: 40
+        Foundation.KosSlider {
+            id: kos; anchors.fill: parent
+            from: 0.0; to: 1.0; stepSize: 0.01; value: 0.5
+            onMoved: kosMoved++
+        }
+    }
     TestCase {
         name: "InteractionControls"; when: windowShown
         function init() {
             confirmed = false; toggles = 0; triggers = 0; commits = 0
+            ancestorWheel = 0; rampCommits = 0; kosMoved = 0
+            rampPreview = 0.5; kos.value = 0.5
+            // 清掉上一个用例可能还挂着的步进提交，免得它落进本用例的计数
+            slider._wheelPending = false
+            ramp._wheelPending = false
+            slider._pixelAccum = 0; slider._angleAccum = 0
+            ramp._pixelAccum = 0; ramp._angleAccum = 0
+            kos._pixelAccum = 0; kos._angleAccum = 0
             sliderHost.visible = true; slider.enabled = true
+            rampHost.visible = true; ramp.enabled = true
             preview = confirmedValue; dragging = false
             wait(250)
         }
-        function test_async_checked_binding() {
-            mouseClick(sw)
+        // 滚轮事件：按住 modifiers 才该生效的那个
+        function wheel(target, dy, modifiers) {
+            mouseWheel(target, target.width / 2, target.height / 2, 0, dy,
+                       Qt.NoButton, modifiers)
+        }
+        function test_async_checked_binding() {            mouseClick(sw)
             compare(toggles, 1); verify(requested)
             verify(!sw.checked, "wait for confirmed state")
             confirmed = true; verify(sw.checked)
@@ -83,6 +126,159 @@ Item {
             confirmedValue = 0.7
             if (!dragging) preview = confirmedValue
             compare(slider.value, 0.7)
+        }
+
+        // ── Ctrl+滚轮：精细步进 ──────────────────────────────────────────
+        // 普通滚轮不归滑块（面板还要滚），按住 Ctrl 才一档一档地调。
+        function test_plain_wheel_passes_through() {
+            preview = 0.5
+            wheel(slider, 120, Qt.NoModifier)
+            wait(80)
+            fuzzyCompare(preview, 0.5, 1e-9)
+            compare(commits, 0, "普通滚轮不该动值")
+            compare(ancestorWheel, 1, "普通滚轮要穿给所在的面板")
+        }
+        function test_ctrl_wheel_steps_one_notch() {
+            preview = 0.5
+            wheel(slider, 120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(preview, 0.51, 1e-6)
+            compare(ancestorWheel, 0, "Ctrl 滚轮归滑块，不再穿出去")
+            tryCompare(slider, "_wheelPending", false)
+            compare(commits, 1, "一次步进只提交一次")
+        }
+        function test_ctrl_wheel_down_clamps_at_end() {
+            preview = 0.005
+            wheel(slider, -120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(preview, 0.0, 1e-9)
+            wheel(slider, -120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(preview, 0.0, 1e-9, "到底就停住，不会翻负")
+        }
+        function test_ctrl_wheel_burst_coalesces_one_commit() {
+            preview = 0.5
+            for (let i = 0; i < 3; ++i)
+                wheel(slider, 120, Qt.ControlModifier)
+            wait(320)
+            fuzzyCompare(preview, 0.53, 1e-6)
+            compare(commits, 1, "连转合并成一次提交，别每格都写平台服务")
+        }
+        function test_disabled_slider_ignores_wheel() {
+            slider.enabled = false
+            preview = 0.5
+            wait(50)
+            wheel(slider, 120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(preview, 0.5, 1e-9)
+            compare(commits, 0)
+        }
+        function test_ctrl_wheel_steps_color_ramp() {
+            rampPreview = 0.5
+            wheel(ramp, 120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(rampPreview, 0.51, 1e-6)
+            tryCompare(ramp, "_wheelPending", false)
+            compare(rampCommits, 1)
+        }
+        function test_ctrl_wheel_steps_kos_slider() {
+            kos.value = 0.5
+            wheel(kos, 120, Qt.ControlModifier)
+            wait(60)
+            fuzzyCompare(kos.value, 0.51, 1e-6)
+            compare(kosMoved, 1, "照旧走宿主的 moved() 回写")
+        }
+
+        function test_ramp_cancel_pending_data() {
+            return [{tag: "disabled", hide: false}, {tag: "hidden", hide: true}]
+        }
+        function test_ramp_cancel_pending(data) {
+            wheel(ramp, 120, Qt.ControlModifier)
+            if (data.hide) rampHost.visible = false
+            else ramp.enabled = false
+            wait(240)
+            compare(rampCommits, 0)
+        }
+        function test_ramp_wheel_during_drag() {
+            mousePress(ramp, 120, 13)
+            rampCommits = 0
+            wheel(ramp, 120, Qt.ControlModifier)
+            wait(240)
+            const earlyCommits = rampCommits
+            mouseRelease(ramp, 120, 13)
+            compare(earlyCommits, 0)
+            compare(rampCommits, 1)
+        }
+        function test_kos_binding_survives_wheel() {
+            kosModel = 0.5
+            kos.value = Qt.binding(function() { return kosModel })
+            wheel(kos, 120, Qt.ControlModifier)
+            wait(30)
+            kosModel = 0.8
+            wait(30)
+            fuzzyCompare(kos.value, 0.8, 1e-6, "external setting update must still drive value")
+        }
+        function test_disable_pending_wheel() {
+            preview = 0.5
+            wheel(slider, 120, Qt.ControlModifier)
+            slider.enabled = false
+            wait(240)
+            compare(commits, 0, "disabled wheel interaction must cancel")
+            compare(dragging, false)
+        }
+        function test_hide_pending_wheel() {
+            preview = 0.5
+            wheel(slider, 120, Qt.ControlModifier)
+            sliderHost.visible = false
+            wait(240)
+            compare(commits, 0, "hidden wheel interaction must cancel")
+            compare(dragging, false)
+        }
+        function test_wheel_during_drag() {
+            mousePress(slider, 140, 22)
+            compare(slider._pressed, true)
+            commits = 0
+            wheel(slider, 120, Qt.ControlModifier)
+            wait(240)
+            const earlyCommits = commits
+            mouseRelease(slider, 140, 22)
+            compare(earlyCommits, 0, "drag must not commit until release")
+        }
+        // ── 触控板：Wayland 上 pixelDelta 与 angleDelta 一起给，量级小得多 ──
+        // 直接喂 accumulateWheel，免得依赖测试框架怎么造事件（它只给 angleDelta）。
+        function test_touchpad_pixels_accumulate_to_one_step() {
+            preview = 0.5
+            slider.accumulateWheel(0, 4)
+            slider.accumulateWheel(0, 4)
+            wait(30)
+            fuzzyCompare(preview, 0.5, 1e-9, "8px 还不够一档")
+            slider.accumulateWheel(0, 4)
+            wait(30)
+            fuzzyCompare(preview, 0.51, 1e-6, "攒够 10px（本机触控板一格的量）走一档")
+        }
+        function test_touchpad_swipe_steps_several_but_commits_once() {
+            preview = 0.5
+            slider.accumulateWheel(0, 120)      // 一次两指滑动 ≈ 120px ≈ 12 档
+            wait(320)
+            fuzzyCompare(preview, 0.62, 1e-6, "触控板一划要走好几档，不能像是转不动")
+            compare(commits, 1, "一整段滑动仍然只提交一次")
+        }
+        function test_mouse_notch_is_still_one_step() {
+            preview = 0.5
+            slider.accumulateWheel(120, 0)      // 鼠标一格 ≈ 触控板 10px 的滚动量
+            wait(60)
+            fuzzyCompare(preview, 0.51, 1e-6)
+        }
+        function test_touchpad_path_on_color_ramp_and_kos_slider() {
+            rampPreview = 0.5
+            ramp.accumulateWheel(0, 20)
+            wait(30)
+            fuzzyCompare(rampPreview, 0.52, 1e-6, "配色滑块也认像素增量")
+            kos.value = 0.5
+            kos.accumulateWheel(0, 40)
+            wait(30)
+            fuzzyCompare(kos.value, 0.54, 1e-6, "KosSlider 一档 = stepSize")
+            compare(kosMoved, 4)
         }
     }
 }
