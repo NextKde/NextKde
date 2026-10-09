@@ -44,6 +44,7 @@ KosDialog {
     }
 
     Overlay.modal: Rectangle {
+        radius: AppTheme.modernDesign && root.ApplicationWindow.window ? root.ApplicationWindow.window.windowCornerRadius || 0 : 0
         color: AppTheme.withAlpha(AppTheme.blackSeed, AppTheme.dark ? 0.42 : 0.24)
     }
 
@@ -158,9 +159,12 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Color scheme"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Follow KDE or choose a fixed appearance")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
@@ -190,16 +194,18 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Window material"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: root.settings && root.settings.nativeBlurAvailable
                                     ? qsTr("KWin native blur is available")
                                     : qsTr("Uses a readable solid fallback when blur is unavailable")
                                 color: root.settings && root.settings.nativeBlurAvailable
                                     ? AppTheme.positive : AppTheme.mutedText
                                 font.pixelSize: 11
-                                wrapMode: Text.WordWrap
                             }
                         }
 
@@ -226,9 +232,12 @@ KosDialog {
 
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Material opacity"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Higher values improve contrast over detailed wallpapers")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
@@ -355,9 +364,12 @@ KosDialog {
                         spacing: 16
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Reduce transparency"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Use fully opaque surfaces for maximum readability")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11
@@ -385,9 +397,12 @@ KosDialog {
                         spacing: 16
                         ColumnLayout {
                             Layout.fillWidth: true
+                            Layout.minimumWidth: 0
                             spacing: 2
                             Label { text: qsTr("Reduce motion"); color: AppTheme.text }
                             Label {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
                                 text: qsTr("Disable decorative color and movement transitions")
                                 color: AppTheme.mutedText
                                 font.pixelSize: 11

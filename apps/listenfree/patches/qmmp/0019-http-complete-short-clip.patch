@@ -1,0 +1,17 @@
+diff --git a/src/plugins/Transports/http/httpstreamreader.cpp b/src/plugins/Transports/http/httpstreamreader.cpp
+--- a/src/plugins/Transports/http/httpstreamreader.cpp
++++ b/src/plugins/Transports/http/httpstreamreader.cpp
+@@ -551,6 +551,13 @@
+     m_stream.completed = true;
+     m_dataArrived.wakeAll();
+     m_mutex.unlock();
++    // Short clips can finish before the configured prebuffer is filled.
++    // A complete, non-empty response is ready for decoding as it stands.
++    if(return_code == CURLE_OK && !m_stream.aborted && !m_ready && m_stream.buf_fill > 0)
++    {
++        m_prebufferSize = 0;
++        checkBuffer();
++    }
+     if(!m_stream.aborted && !m_ready)
+     {
+         setErrorString(QString::fromLocal8Bit(errorBuffer));

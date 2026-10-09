@@ -1,0 +1,60 @@
+{
+  "report": "@RESULTS@/acceptance-1/objects.json",
+  "width": 1066,
+  "height": 709,
+  "renderLoop": "threaded",
+  "track": "@TRACK@",
+  "steps": [
+    {
+      "name": "cold-30s",
+      "action": "resize",
+      "width": 1066,
+      "height": 709,
+      "ms": 30000
+    },
+    {
+      "name": "ordinary-playing",
+      "action": "setup",
+      "ms": 20000,
+      "seek": 50000
+    },
+    {
+      "name": "nowplaying",
+      "action": "nowplaying",
+      "ms": 10000,
+      "seek": 50000,
+      "expectedLyricLines": 89
+    },
+    {
+      "name": "fullscreen-transition",
+      "action": "fullscreen",
+      "ms": 3000
+    },
+    {
+      "name": "fullscreen-monet",
+      "action": "enter",
+      "style": "monet",
+      "ms": 20000,
+      "seek": 50000
+    },
+    {
+      "name": "leave",
+      "action": "leave",
+      "ms": 10000
+    },
+    {
+      "name": "mini",
+      "action": "mini",
+      "ms": 5000
+    },
+    {
+      "name": "cooldown",
+      "action": "noop",
+      "ms": 15000
+    }
+  ],
+  "renderReadbackMs": 0,
+  "foreground": true,
+  "profile": "@PROFILE@",
+  "requireUnlocked": true
+}

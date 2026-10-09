@@ -9,6 +9,7 @@ import Kos.Ui
 KosApplicationWindow {
     id: root
 
+    modernDesign: true
     visible: true
     title: qsTr("Todo")
 
@@ -190,7 +191,7 @@ KosApplicationWindow {
         onDeleteRequested: uid => pim.removeTodo(uid)
     }
 
-    KosDialog {
+    KosWorkspaceDialog {
         id: listDialog
 
         parent: root.contentItem
@@ -211,7 +212,7 @@ KosApplicationWindow {
             spacing: 8
 
             Label { text: qsTr("List name"); color: AppTheme.mutedText }
-            LiquidTextField {
+            KosTextField {
                 id: listNameField
                 Layout.fillWidth: true
                 placeholderText: qsTr("e.g. Work")
@@ -234,14 +235,14 @@ KosApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: 12
+        spacing: 8
 
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
-            color: AppTheme.sidebarSurface
-            border.width: 1
-            border.color: AppTheme.border
+        KosSidebar {
+            id: sidebar
+            objectName: "applicationSidebar"
+            expanded: root.sidebarExpanded
+            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
 
             ColumnLayout {
                 anchors.fill: parent
@@ -369,6 +370,8 @@ KosApplicationWindow {
             RowLayout {
                 Layout.fillWidth: true
 
+                KosSidebarToggle { targetWindow: root }
+
                 ColumnLayout {
                     spacing: 2
 
@@ -409,6 +412,7 @@ KosApplicationWindow {
                     enabled: pim.connected && pim.writable
                     onClicked: todoEditor.openNew()
                 }
+                KosWindowControls { targetWindow: root }
             }
 
             KosCard {
@@ -417,7 +421,7 @@ KosApplicationWindow {
                 contentItem: RowLayout {
                     spacing: 10
 
-                    LiquidTextField {
+                    KosTextField {
                         id: taskField
                         Layout.fillWidth: true
                         placeholderText: qsTr("Add a task to %1…").arg(
@@ -485,7 +489,7 @@ KosApplicationWindow {
                         model: root.visibleTodos
                         currentIndex: -1
 
-                        delegate: ItemDelegate {
+                        delegate: KosItemDelegate {
                             id: taskDelegate
 
                             required property var modelData
@@ -499,7 +503,7 @@ KosApplicationWindow {
                             contentItem: RowLayout {
                                 spacing: 10
 
-                                CheckBox {
+                                KosCheckBox {
                                     checked: Boolean(root.value(taskDelegate.modelData,
                                         "completed", false))
                                     Accessible.name: checked

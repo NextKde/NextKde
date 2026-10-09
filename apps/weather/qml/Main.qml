@@ -8,6 +8,7 @@ import Kos.Ui
 KosApplicationWindow {
     id: root
 
+    modernDesign: true
     visible: true
     title: qsTr("Weather")
 
@@ -228,14 +229,14 @@ KosApplicationWindow {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 0
+        anchors.margins: 12
+        spacing: 8
 
-        Rectangle {
-            Layout.fillHeight: true
-            Layout.preferredWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
-            color: AppTheme.sidebarSurface
-            border.width: 1
-            border.color: AppTheme.border
+        KosSidebar {
+            id: sidebar
+            objectName: "applicationSidebar"
+            expanded: root.sidebarExpanded
+            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
 
             ColumnLayout {
                 anchors.fill: parent
@@ -250,7 +251,7 @@ KosApplicationWindow {
                     Layout.bottomMargin: 8
                 }
 
-                LiquidTextField {
+                KosTextField {
                     id: locationField
                     Layout.fillWidth: true
                     placeholderText: qsTr("Search locations…")
@@ -283,7 +284,7 @@ KosApplicationWindow {
                     spacing: 3
                     model: backend.searchResults
 
-                    delegate: ItemDelegate {
+                    delegate: KosItemDelegate {
                         id: searchResult
 
                         required property var modelData
@@ -343,7 +344,7 @@ KosApplicationWindow {
                     spacing: 4
                     model: backend.locations
 
-                    delegate: ItemDelegate {
+                    delegate: KosItemDelegate {
                         id: savedLocation
 
                         required property var modelData
@@ -440,414 +441,421 @@ KosApplicationWindow {
             }
         }
 
-        Flickable {
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: width
-            contentHeight: content.implicitHeight + AppTheme.pageMargin * 2
-            clip: true
+            Layout.margins: AppTheme.pageMargin
+            spacing: 16
 
-            ScrollBar.vertical: ScrollBar {}
+            RowLayout {
+                Layout.fillWidth: true
 
-            ColumnLayout {
-                id: content
-                x: AppTheme.pageMargin
-                y: AppTheme.pageMargin
-                width: parent.width - AppTheme.pageMargin * 2
-                spacing: 16
+                KosSidebarToggle { targetWindow: root }
 
-                RowLayout {
+                ColumnLayout {
                     Layout.fillWidth: true
-
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 120
-                        spacing: 2
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.locationName(backend.location)
-                            color: AppTheme.text
-                            font.pixelSize: 28
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: root.locationDetail(backend.location)
-                            color: AppTheme.mutedText
-                            visible: text.length > 0
-                            elide: Text.ElideRight
-                        }
-                    }
+                    Layout.minimumWidth: 120
+                    spacing: 2
 
                     Label {
-                        Layout.maximumWidth: 180
-                        text: backend.stale ? qsTr("Cached") : root.updatedText()
-                        color: backend.stale ? AppTheme.warning : AppTheme.mutedText
+                        Layout.fillWidth: true
+                        text: root.locationName(backend.location)
+                        color: AppTheme.text
+                        font.pixelSize: 28
+                        font.weight: Font.DemiBold
                         elide: Text.ElideRight
                     }
 
-                    BusyIndicator {
-                        Layout.preferredWidth: 28
-                        Layout.preferredHeight: 28
-                        running: backend.loading
-                        visible: running
-                    }
-
-                    KosToolButton {
-                        text: "⚙"
-                        font.pixelSize: 16
-                        Accessible.name: qsTr("Weather settings")
-                        ToolTip.visible: hovered
-                        ToolTip.text: Accessible.name
-                        onClicked: settingsDialog.open()
-                    }
-
-                    KosToolButton {
-                        text: "↻"
-                        font.pixelSize: 18
-                        enabled: backend.connected && !backend.loading
-                        Accessible.name: qsTr("Refresh weather forecast")
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Refresh weather forecast")
-                        onClicked: backend.refresh()
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: errorLabel.implicitHeight + 22
-                    radius: AppTheme.smallRadius
-                    color: AppTheme.withAlpha(AppTheme.warning, AppTheme.dark ? 0.16 : 0.12)
-                    border.width: 1
-                    border.color: AppTheme.withAlpha(AppTheme.warning, 0.38)
-                    visible: backend.errorMessage.length > 0
-
                     Label {
-                        id: errorLabel
-                        anchors.fill: parent
-                        anchors.margins: 11
-                        text: qsTr("The latest update failed: %1").arg(backend.errorMessage)
-                        color: AppTheme.text
-                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                        text: root.locationDetail(backend.location)
+                        color: AppTheme.mutedText
+                        visible: text.length > 0
+                        elide: Text.ElideRight
                     }
                 }
 
-                KosCard {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: root.compact ? 292 : 250
+                Label {
+                    Layout.maximumWidth: 180
+                    text: backend.stale ? qsTr("Cached") : root.updatedText()
+                    color: backend.stale ? AppTheme.warning : AppTheme.mutedText
+                    elide: Text.ElideRight
+                }
 
-                    contentItem: ColumnLayout {
-                        spacing: 12
+                BusyIndicator {
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    running: backend.loading
+                    visible: running
+                }
 
-                        KosEmptyState {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            visible: !backend.ready
-                            symbol: backend.loading ? "↻" : "☁"
-                            title: backend.loading
-                                ? qsTr("Loading the forecast") : qsTr("No forecast available")
-                            description: backend.connected
-                                ? qsTr("Refresh or choose another saved location.")
-                                : qsTr("Start kos-data-service to fetch weather data.")
-                            actionText: backend.connected ? qsTr("Refresh") : ""
-                            actionEnabled: !backend.loading
-                            onActionTriggered: backend.refresh()
+                KosToolButton {
+                    text: "⚙"
+                    font.pixelSize: 16
+                    Accessible.name: qsTr("Weather settings")
+                    ToolTip.visible: hovered
+                    ToolTip.text: Accessible.name
+                    onClicked: settingsDialog.open()
+                }
+
+                KosToolButton {
+                    text: "↻"
+                    font.pixelSize: 18
+                    enabled: backend.connected && !backend.loading
+                    Accessible.name: qsTr("Refresh weather forecast")
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Refresh weather forecast")
+                    onClicked: backend.refresh()
+                }
+                KosWindowControls { targetWindow: root }
+            }
+
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                contentWidth: width
+                contentHeight: content.implicitHeight + AppTheme.pageMargin
+                clip: true
+
+                ScrollBar.vertical: ScrollBar {}
+
+                ColumnLayout {
+                    id: content
+                    width: parent.width
+                    spacing: 16
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: errorLabel.implicitHeight + 22
+                        radius: AppTheme.smallRadius
+                        color: AppTheme.withAlpha(AppTheme.warning, AppTheme.dark ? 0.16 : 0.12)
+                        border.width: 1
+                        border.color: AppTheme.withAlpha(AppTheme.warning, 0.38)
+                        visible: backend.errorMessage.length > 0
+
+                        Label {
+                            id: errorLabel
+                            anchors.fill: parent
+                            anchors.margins: 11
+                            text: qsTr("The latest update failed: %1").arg(backend.errorMessage)
+                            color: AppTheme.text
+                            wrapMode: Text.WordWrap
                         }
+                    }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            visible: backend.ready
+                    KosCard {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: root.compact ? 292 : 250
+
+                        contentItem: ColumnLayout {
                             spacing: 12
 
-                            RowLayout {
+                            KosEmptyState {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                spacing: 22
-
-                                ColumnLayout {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    Layout.preferredWidth: root.compact ? 145 : 180
-                                    spacing: 0
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: root.conditionSymbol(
-                                            root.number(backend.current, "weatherCode", -1),
-                                            Boolean(root.value(backend.current, "isDay", true)))
-                                        color: AppTheme.accent
-                                        font.pixelSize: root.compact ? 54 : 64
-                                        Accessible.name: root.conditionText(
-                                            root.number(backend.current, "weatherCode", -1))
-                                    }
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: root.conditionText(
-                                            root.number(backend.current, "weatherCode", -1))
-                                        color: AppTheme.text
-                                        font.pixelSize: 17
-                                        font.weight: Font.DemiBold
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.alignment: Qt.AlignVCenter
-                                    spacing: 2
-
-                                    Label {
-                                        text: Math.round(root.number(
-                                            backend.current, "temperature", 0)) + root.temperatureUnit
-                                        color: AppTheme.accent
-                                        font.pixelSize: root.compact ? 46 : 54
-                                        font.weight: Font.Light
-                                    }
-
-                                    Label {
-                                        text: "≈ " + Math.round(root.number(
-                                            backend.current, "apparentTemperature", 0))
-                                            + root.temperatureUnit
-                                        color: AppTheme.mutedText
-                                        Accessible.name: qsTr("Feels like %1%2").arg(
-                                            Math.round(root.number(backend.current,
-                                                                   "apparentTemperature", 0)))
-                                            .arg(root.temperatureUnit)
-                                    }
-                                }
-
-                                Item { Layout.fillWidth: true }
+                                visible: !backend.ready
+                                symbol: backend.loading ? "↻" : "☁"
+                                title: backend.loading
+                                    ? qsTr("Loading the forecast") : qsTr("No forecast available")
+                                description: backend.connected
+                                    ? qsTr("Refresh or choose another saved location.")
+                                    : qsTr("Start kos-data-service to fetch weather data.")
+                                actionText: backend.connected ? qsTr("Refresh") : ""
+                                actionEnabled: !backend.loading
+                                onActionTriggered: backend.refresh()
                             }
 
-                            GridLayout {
+                            ColumnLayout {
                                 Layout.fillWidth: true
-                                columns: root.compact ? 2 : 4
-                                columnSpacing: 8
-                                rowSpacing: 8
-
-                                WeatherMetric {
-                                    Layout.fillWidth: true
-                                    symbol: "%"
-                                    labelText: qsTr("Humidity")
-                                    valueText: Math.round(root.number(
-                                        backend.current, "relativeHumidity", 0)) + "%"
-                                }
-
-                                WeatherMetric {
-                                    Layout.fillWidth: true
-                                    symbol: "≋"
-                                    labelText: qsTr("Wind")
-                                    valueText: Math.round(root.number(
-                                        backend.current, "windSpeed", 0)) + " " + root.speedUnit
-                                }
-
-                                WeatherMetric {
-                                    Layout.fillWidth: true
-                                    symbol: "↗"
-                                    labelText: qsTr("Direction")
-                                    valueText: Math.round(root.number(
-                                        backend.current, "windDirection", 0)) + "°"
-                                }
-
-                                WeatherMetric {
-                                    Layout.fillWidth: true
-                                    symbol: "◷"
-                                    labelText: qsTr("Observed")
-                                    valueText: root.localTime(root.value(
-                                        backend.current, "time", ""))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Label {
-                    text: "◷  " + qsTr("Hourly")
-                    color: AppTheme.text
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                    Accessible.name: qsTr("Hourly forecast")
-                }
-
-                Flickable {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 142
-                    contentWidth: hourlyRow.implicitWidth
-                    contentHeight: height
-                    boundsBehavior: Flickable.StopAtBounds
-                    clip: true
-
-                    ScrollBar.horizontal: ScrollBar {}
-
-                    Row {
-                        id: hourlyRow
-                        height: parent.height - 12
-                        spacing: 10
-
-                        Repeater {
-                            model: root.upcomingHours
-
-                            delegate: KosCard {
-                                id: hourlyCard
-
-                                required property var modelData
-                                width: 108
-                                height: hourlyRow.height
-                                padding: 12
-
-                                contentItem: ColumnLayout {
-                                    spacing: 4
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: root.localTime(root.value(
-                                            hourlyCard.modelData, "time", ""))
-                                        color: AppTheme.mutedText
-                                    }
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: root.conditionSymbol(
-                                            root.number(hourlyCard.modelData, "weatherCode", -1),
-                                            Boolean(root.value(hourlyCard.modelData, "isDay", true)))
-                                        color: AppTheme.accent
-                                        font.pixelSize: 25
-                                        Accessible.ignored: true
-                                    }
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: Math.round(root.number(
-                                            hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
-                                        color: AppTheme.text
-                                        font.weight: Font.DemiBold
-                                    }
-
-                                    Label {
-                                        Layout.alignment: Qt.AlignHCenter
-                                        text: "☂︎  " + Math.round(root.number(
-                                            hourlyCard.modelData,
-                                            "precipitationProbability", 0)) + "%"
-                                        color: AppTheme.mutedText
-                                        font.pixelSize: 10
-                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                            Math.round(root.number(hourlyCard.modelData,
-                                                                   "precipitationProbability", 0)))
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Label {
-                    text: "▦  " + qsTr("7 days")
-                    color: AppTheme.text
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                    Accessible.name: qsTr("Seven-day forecast")
-                }
-
-                KosCard {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
-
-                    contentItem: ColumnLayout {
-                        id: dailyColumn
-                        spacing: 0
-
-                        KosEmptyState {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 130
-                            visible: backend.daily.length === 0
-                            symbol: "☂"
-                            title: qsTr("Daily forecast unavailable")
-                            description: qsTr("Cached current conditions can still be used.")
-                        }
-
-                        Repeater {
-                            model: backend.daily
-
-                            delegate: Item {
-                                id: dailyRow
-
-                                required property int index
-                                required property var modelData
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 54
+                                Layout.fillHeight: true
+                                visible: backend.ready
+                                spacing: 12
 
                                 RowLayout {
-                                    anchors.fill: parent
-                                    spacing: 12
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    spacing: 22
 
-                                    Label {
-                                        Layout.preferredWidth: 120
-                                        text: root.dayLabel(root.value(
-                                            dailyRow.modelData, "date", ""), dailyRow.index)
-                                        color: AppTheme.text
-                                        font.weight: Font.DemiBold
+                                    ColumnLayout {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        Layout.preferredWidth: root.compact ? 145 : 180
+                                        spacing: 0
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: root.conditionSymbol(
+                                                root.number(backend.current, "weatherCode", -1),
+                                                Boolean(root.value(backend.current, "isDay", true)))
+                                            color: AppTheme.accent
+                                            font.pixelSize: root.compact ? 54 : 64
+                                            Accessible.name: root.conditionText(
+                                                root.number(backend.current, "weatherCode", -1))
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: root.conditionText(
+                                                root.number(backend.current, "weatherCode", -1))
+                                            color: AppTheme.text
+                                            font.pixelSize: 17
+                                            font.weight: Font.DemiBold
+                                        }
                                     }
 
-                                    Label {
-                                        text: root.conditionSymbol(root.number(
-                                            dailyRow.modelData, "weatherCode", -1), true)
-                                        color: AppTheme.accent
-                                        font.pixelSize: 22
-                                        Accessible.ignored: true
+                                    ColumnLayout {
+                                        Layout.alignment: Qt.AlignVCenter
+                                        spacing: 2
+
+                                        Label {
+                                            text: Math.round(root.number(
+                                                backend.current, "temperature", 0)) + root.temperatureUnit
+                                            color: AppTheme.accent
+                                            font.pixelSize: root.compact ? 46 : 54
+                                            font.weight: Font.Light
+                                        }
+
+                                        Label {
+                                            text: "≈ " + Math.round(root.number(
+                                                backend.current, "apparentTemperature", 0))
+                                                + root.temperatureUnit
+                                            color: AppTheme.mutedText
+                                            Accessible.name: qsTr("Feels like %1%2").arg(
+                                                Math.round(root.number(backend.current,
+                                                                       "apparentTemperature", 0)))
+                                                .arg(root.temperatureUnit)
+                                        }
                                     }
 
-                                    Label {
-                                        Layout.fillWidth: true
-                                        text: root.conditionText(root.number(
-                                            dailyRow.modelData, "weatherCode", -1))
-                                        color: AppTheme.mutedText
-                                        elide: Text.ElideRight
-                                    }
-
-                                    Label {
-                                        text: "☂︎  " + Math.round(root.number(
-                                            dailyRow.modelData,
-                                            "precipitationProbability", 0)) + "%"
-                                        color: AppTheme.mutedText
-                                        Accessible.name: qsTr("%1% chance of precipitation").arg(
-                                            Math.round(root.number(dailyRow.modelData,
-                                                                   "precipitationProbability", 0)))
-                                    }
-
-                                    Label {
-                                        Layout.preferredWidth: 92
-                                        text: Math.round(root.number(
-                                            dailyRow.modelData, "temperatureMaximum", 0))
-                                            + "°  /  " + Math.round(root.number(
-                                                dailyRow.modelData, "temperatureMinimum", 0)) + "°"
-                                        color: AppTheme.text
-                                        horizontalAlignment: Text.AlignRight
-                                        font.weight: Font.DemiBold
-                                    }
+                                    Item { Layout.fillWidth: true }
                                 }
 
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.bottom: parent.bottom
-                                    height: 1
-                                    color: AppTheme.border
-                                    visible: dailyRow.index < backend.daily.length - 1
+                                GridLayout {
+                                    Layout.fillWidth: true
+                                    columns: root.compact ? 2 : 4
+                                    columnSpacing: 8
+                                    rowSpacing: 8
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "%"
+                                        labelText: qsTr("Humidity")
+                                        valueText: Math.round(root.number(
+                                            backend.current, "relativeHumidity", 0)) + "%"
+                                    }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "≋"
+                                        labelText: qsTr("Wind")
+                                        valueText: Math.round(root.number(
+                                            backend.current, "windSpeed", 0)) + " " + root.speedUnit
+                                    }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "↗"
+                                        labelText: qsTr("Direction")
+                                        valueText: Math.round(root.number(
+                                            backend.current, "windDirection", 0)) + "°"
+                                    }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "◷"
+                                        labelText: qsTr("Observed")
+                                        valueText: root.localTime(root.value(
+                                            backend.current, "time", ""))
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                Label {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: 6
-                    text: qsTr("Weather data by Open-Meteo. Forecast times use the selected location's timezone.")
-                    color: AppTheme.mutedText
-                    wrapMode: Text.WordWrap
-                    font.pixelSize: 11
+                    Label {
+                        text: "◷  " + qsTr("Hourly")
+                        color: AppTheme.text
+                        font.pixelSize: 18
+                        font.weight: Font.DemiBold
+                        Accessible.name: qsTr("Hourly forecast")
+                    }
+
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 142
+                        contentWidth: hourlyRow.implicitWidth
+                        contentHeight: height
+                        boundsBehavior: Flickable.StopAtBounds
+                        clip: true
+
+                        ScrollBar.horizontal: ScrollBar {}
+
+                        Row {
+                            id: hourlyRow
+                            height: parent.height - 12
+                            spacing: 10
+
+                            Repeater {
+                                model: root.upcomingHours
+
+                                delegate: KosCard {
+                                    id: hourlyCard
+
+                                    required property var modelData
+                                    width: 108
+                                    height: hourlyRow.height
+                                    padding: 12
+
+                                    contentItem: ColumnLayout {
+                                        spacing: 4
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: root.localTime(root.value(
+                                                hourlyCard.modelData, "time", ""))
+                                            color: AppTheme.mutedText
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: root.conditionSymbol(
+                                                root.number(hourlyCard.modelData, "weatherCode", -1),
+                                                Boolean(root.value(hourlyCard.modelData, "isDay", true)))
+                                            color: AppTheme.accent
+                                            font.pixelSize: 25
+                                            Accessible.ignored: true
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: Math.round(root.number(
+                                                hourlyCard.modelData, "temperature", 0)) + root.temperatureUnit
+                                            color: AppTheme.text
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Label {
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: "☂︎  " + Math.round(root.number(
+                                                hourlyCard.modelData,
+                                                "precipitationProbability", 0)) + "%"
+                                            color: AppTheme.mutedText
+                                            font.pixelSize: 10
+                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                Math.round(root.number(hourlyCard.modelData,
+                                                                       "precipitationProbability", 0)))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        text: "▦  " + qsTr("7 days")
+                        color: AppTheme.text
+                        font.pixelSize: 18
+                        font.weight: Font.DemiBold
+                        Accessible.name: qsTr("Seven-day forecast")
+                    }
+
+                    KosCard {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: dailyColumn.implicitHeight + padding * 2
+
+                        contentItem: ColumnLayout {
+                            id: dailyColumn
+                            spacing: 0
+
+                            KosEmptyState {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 130
+                                visible: backend.daily.length === 0
+                                symbol: "☂"
+                                title: qsTr("Daily forecast unavailable")
+                                description: qsTr("Cached current conditions can still be used.")
+                            }
+
+                            Repeater {
+                                model: backend.daily
+
+                                delegate: Item {
+                                    id: dailyRow
+
+                                    required property int index
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 54
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        spacing: 12
+
+                                        Label {
+                                            Layout.preferredWidth: 120
+                                            text: root.dayLabel(root.value(
+                                                dailyRow.modelData, "date", ""), dailyRow.index)
+                                            color: AppTheme.text
+                                            font.weight: Font.DemiBold
+                                        }
+
+                                        Label {
+                                            text: root.conditionSymbol(root.number(
+                                                dailyRow.modelData, "weatherCode", -1), true)
+                                            color: AppTheme.accent
+                                            font.pixelSize: 22
+                                            Accessible.ignored: true
+                                        }
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: root.conditionText(root.number(
+                                                dailyRow.modelData, "weatherCode", -1))
+                                            color: AppTheme.mutedText
+                                            elide: Text.ElideRight
+                                        }
+
+                                        Label {
+                                            text: "☂︎  " + Math.round(root.number(
+                                                dailyRow.modelData,
+                                                "precipitationProbability", 0)) + "%"
+                                            color: AppTheme.mutedText
+                                            Accessible.name: qsTr("%1% chance of precipitation").arg(
+                                                Math.round(root.number(dailyRow.modelData,
+                                                                       "precipitationProbability", 0)))
+                                        }
+
+                                        Label {
+                                            Layout.preferredWidth: 92
+                                            text: Math.round(root.number(
+                                                dailyRow.modelData, "temperatureMaximum", 0))
+                                                + "°  /  " + Math.round(root.number(
+                                                    dailyRow.modelData, "temperatureMinimum", 0)) + "°"
+                                            color: AppTheme.text
+                                            horizontalAlignment: Text.AlignRight
+                                            font.weight: Font.DemiBold
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.bottom: parent.bottom
+                                        height: 1
+                                        color: AppTheme.border
+                                        visible: dailyRow.index < backend.daily.length - 1
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.bottomMargin: 6
+                        text: qsTr("Weather data by Open-Meteo. Forecast times use the selected location's timezone.")
+                        color: AppTheme.mutedText
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 11
+                    }
                 }
             }
         }

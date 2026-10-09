@@ -35,6 +35,7 @@ class WeatherClient : public QObject {
 
 public:
     explicit WeatherClient(QObject *parent = nullptr);
+    ~WeatherClient() override;
 
     bool ready() const;
     bool connected() const;

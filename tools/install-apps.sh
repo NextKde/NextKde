@@ -7,17 +7,30 @@ prefix=${KOS_INSTALL_PREFIX:-"$HOME/.local"}
 build_dir=${KOS_APPS_BUILD_DIR:-"$project_dir/.build/apps-release"}
 unit_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/systemd/user
 
-for command_name in busctl cmake ninja readlink systemctl; do
-    if ! command -v "$command_name" >/dev/null 2>&1; then
-        echo "Missing install dependency: $command_name" >&2
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "Missing dependency: python3 (Arch: sudo pacman -S python; Ubuntu: sudo apt install python3)" >&2
+    exit 1
+fi
+python3 "$script_dir/check-apps-dependencies.py"
+
+if test -n "${KOS_LISTENFREE_SDK:-}"; then
+    if test ! -d "$KOS_LISTENFREE_SDK"; then
+        echo "Configured ListenFree SDK directory does not exist: $KOS_LISTENFREE_SDK" >&2
         exit 1
     fi
-done
+else
+    KOS_LISTENFREE_SDK="$project_dir/.build/listenfree-sdk"
+    "$script_dir/prepare-listenfree-sdk.sh" "$KOS_LISTENFREE_SDK"
+fi
+export KOS_LISTENFREE_SDK
 
 # An install must not build or run tests -- they have one owner,
 # tools/run-tests.sh (the same policy the core kosctl build follows).
-cmake --preset apps-release -S "$project_dir" \
+cmake --preset apps-release -S "$project_dir" -B "$build_dir" \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DKOS_LISTENFREE_SDK="$KOS_LISTENFREE_SDK" \
+    -DKOS_BUILD_MUSIC=OFF \
+    -DKOS_BUILD_LISTENFREE=ON \
     -DBUILD_TESTING=OFF
 jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc 2>/dev/null || echo 4)}
 case "$jobs" in ''|*[!0-9]*) jobs=4 ;; esac
@@ -84,6 +97,8 @@ fi
 # 改了 apps/settings/main.qml 不生效的"部署黑洞"即此（2026-09-30 体检实锤）
 install -m 0644 "$project_dir/apps/settings/main.qml" \
     "$prefix/share/kos/settings/main.qml"
+
+python3 "$script_dir/register-default-apps.py" --prefix "$prefix"
 
 "$script_dir/verify-apps-install.sh" "$prefix"
 echo "KOS applications are installed for this user and ready from the launcher."

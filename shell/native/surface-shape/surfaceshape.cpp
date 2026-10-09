@@ -4,12 +4,16 @@
 
 #include <QEvent>
 #include <QGuiApplication>
+#include <QPlatformSurfaceEvent>
+#include <QLoggingCategory>
 #include <QtGui/qguiapplication_platform.h>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QtGui/qpa/qplatformwindow_p.h>
 #include <algorithm>
 #include <wayland-client-core.h>
+
+Q_LOGGING_CATEGORY(surfaceShapeLog, "kos.surfaceShape", QtWarningMsg)
 
 // Polish runs on the GUI thread after animations/layout and before the scene
 // graph is synchronized. A zero-timeout callback can run after that frame's
@@ -102,7 +106,7 @@ private:
         if (qstrcmp(interface, kos_surface_shape_manager_v1_interface.name) == 0) {
             self->m_manager = static_cast<kos_surface_shape_manager_v1 *>(
                 wl_registry_bind(registry, name,
-                    &kos_surface_shape_manager_v1_interface, std::min(version, 5u)));
+                    &kos_surface_shape_manager_v1_interface, std::min(version, 7u)));
             self->m_globalName = name;
             Q_EMIT self->available();
         }
@@ -246,6 +250,49 @@ bool SurfaceShape::fixedCaptureSupported() const
         >= KOS_SURFACE_SHAPE_V1_SET_CAPTURE_GEOMETRY_SINCE_VERSION;
 }
 
+void SurfaceShape::setMaterialOpacity(qreal opacity)
+{
+    opacity = std::clamp(opacity, 0.0, 1.0);
+    if (m_materialOpacity == opacity) return;
+    m_materialOpacity = opacity;
+    Q_EMIT materialOpacityChanged();
+    scheduleSync();
+}
+
+bool SurfaceShape::materialOpacitySupported() const
+{
+    return m_shape && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_shape))
+        >= KOS_SURFACE_SHAPE_V1_SET_MATERIAL_OPACITY_SINCE_VERSION;
+}
+
+void SurfaceShape::setRevealEnabled(bool enabled)
+{
+    if (m_revealEnabled == enabled) return;
+    m_revealEnabled = enabled; m_revealDirty = true;
+    Q_EMIT revealChanged(); scheduleSync();
+}
+
+void SurfaceShape::setRevealOpened(bool opened)
+{
+    if (m_revealOpened == opened) return;
+    m_revealOpened = opened; m_revealDirty = true;
+    Q_EMIT revealChanged(); scheduleSync();
+}
+
+void SurfaceShape::setRevealDuration(int duration)
+{
+    duration = std::clamp(duration, 1, 2000);
+    if (m_revealDuration == duration) return;
+    m_revealDuration = duration; m_revealDirty = true;
+    Q_EMIT revealChanged(); scheduleSync();
+}
+
+bool SurfaceShape::revealSupported() const
+{
+    return m_shape && wl_proxy_get_version(reinterpret_cast<wl_proxy *>(m_shape))
+        >= KOS_SURFACE_SHAPE_V1_SET_REVEAL_SINCE_VERSION;
+}
+
 void SurfaceShape::setScrimEnabled(bool enabled)
 {
     if (m_scrimEnabled == enabled) return;
@@ -307,8 +354,20 @@ void SurfaceShape::handleWindowChanged(QQuickWindow *window)
 
 bool SurfaceShape::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_window && event->type() == QEvent::PlatformSurface)
-        scheduleSync();
+    if (watched == m_window && event->type() == QEvent::PlatformSurface) {
+        const auto *surfaceEvent = static_cast<QPlatformSurfaceEvent *>(event);
+        if (surfaceEvent->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+            // Output migration can replace the wl_surface while retaining the
+            // QQuickWindow. Drop the old proxy before destruction: a new surface
+            // may reuse the same address before the next polish, so comparing
+            // native pointers in sync() alone cannot detect the replacement.
+            qCDebug(surfaceShapeLog) << "native surface retiring" << m_surface
+                                    << (m_target ? m_target->objectName() : QString());
+            releaseShape();
+        } else {
+            scheduleSync();
+        }
+    }
     return QObject::eventFilter(watched, event);
 }
 
@@ -343,6 +402,17 @@ void SurfaceShape::sync()
         releaseShape();
         m_surface = surface;
         m_shape = kos_surface_shape_manager_v1_get_shape(manager, surface);
+        qCDebug(surfaceShapeLog) << "shape created" << m_surface
+                                << m_target->objectName();
+        static const kos_surface_shape_v1_listener listener{
+            [](void *data, kos_surface_shape_v1 *, uint32_t opened, uint32_t serial) {
+                auto *self = static_cast<SurfaceShape *>(data);
+                // A new request invalidates any completion still in flight.
+                if (serial == self->m_revealSerial && !self->m_revealDirty)
+                    Q_EMIT self->revealFinished(opened != 0);
+            }
+        };
+        kos_surface_shape_v1_add_listener(m_shape, &listener, this);
         Q_EMIT activeChanged();
     }
     const QRectF geometry = m_target->mapRectToScene(
@@ -355,10 +425,19 @@ void SurfaceShape::sync()
         kos_surface_shape_v1_set_capture_geometry(m_shape,
             capture.x(), capture.y(), std::max(0, capture.width()), std::max(0, capture.height()));
     }
+    if (materialOpacitySupported()) {
+        kos_surface_shape_v1_set_material_opacity(m_shape,
+            wl_fixed_from_double(m_materialOpacity));
+    }
     kos_surface_shape_v1_set_corner(m_shape,
         wl_fixed_from_double(m_radius), wl_fixed_from_double(m_exponent));
     kos_surface_shape_v1_set_enabled(m_shape,
         (m_enabled && effectivelyShown(m_target)) ? 1 : 0);
+    if (revealSupported() && m_revealDirty) {
+        m_revealDirty = false;
+        kos_surface_shape_v1_set_reveal(m_shape, m_revealEnabled, m_revealOpened,
+            m_revealDuration, ++m_revealSerial);
+    }
     // set_scrim is since=3, and libwayland-client does not range-check the
     // opcode: sending it on a proxy bound at an older version is a protocol
     // error that takes the whole Wayland connection down. Bind-time version is
@@ -394,6 +473,7 @@ void SurfaceShape::releaseShape()
     const bool wasActive = m_shape != nullptr;
     m_shape = nullptr;
     m_surface = nullptr;
+    m_revealDirty = true;
     if (wasActive) Q_EMIT activeChanged();
 }
 

@@ -1,0 +1,123 @@
+--- a/src/qmmp/soundcore.h
++++ b/src/qmmp/soundcore.h
+@@ -172,6 +172,7 @@
+     // ListenFree: finish the current decoder after a bounded overlap, retaining
+     // the queued decoder/output and effect state for manual transitions.
+     bool finishCurrentAfter(qint64 milliseconds);
++    bool finishCurrentAt(qint64 sourceEndMs, qint64 overlapMs);
+     void cancelQueuedSource();
+     qint64 transitionRemaining() const;
+     // DSP publishes only a duration, never PCM. Read with the incoming playback clock.
+--- a/src/qmmp/soundcore.cpp
++++ b/src/qmmp/soundcore.cpp
+@@ -451,3 +451,9 @@
+     Q_D(SoundCore);
+     d->crossfadeDuration.store(milliseconds, std::memory_order_relaxed);
+ }
++
++bool SoundCore::finishCurrentAt(qint64 sourceEndMs, qint64 overlapMs)
++{
++    auto *engine = QmmpAudioEngine::instance();
++    return engine && nextTrackAccepted() && engine->finishCurrentAfter(overlapMs, sourceEndMs);
++}
+--- a/src/qmmp/qmmpaudioengine_p.h
++++ b/src/qmmp/qmmpaudioengine_p.h
+@@ -57,7 +57,7 @@
+     void seek(qint64 time) override;
+     void stop() override;
+     void pause() override;
+-    bool finishCurrentAfter(qint64 milliseconds);
++    bool finishCurrentAfter(qint64 milliseconds, qint64 sourceEndMs = -1);
+     void cancelQueuedDecoders();
+     qint64 transitionRemaining() const;
+     void addEffect(EffectFactory *factory);
+@@ -92,6 +92,7 @@
+     qint64 m_seekTime;
+     quint64 m_output_at, m_output_size = 0;
+     std::atomic<qint64> m_transitionFrames{-1};
++    qint64 m_sourceFrames = 0; // decoder source clock, protected by control mutex
+     std::atomic<quint32> m_transitionRate{44100};
+     int m_bitrate;
+     unsigned char *m_output_buf = nullptr;
+--- a/src/qmmp/qmmpaudioengine.cpp
++++ b/src/qmmp/qmmpaudioengine.cpp
+@@ -353,6 +353,7 @@
+          return;
+     }
+     m_decoder = m_decoders.dequeue();
++    m_sourceFrames = 0;
+     addOffset(); //offset
+     mutex()->unlock();
+     m_output->start();
+@@ -378,6 +379,7 @@
+             m_decoder->seek(seekTime);
+             mutex()->lock();
+             m_output_at = 0;
++            m_sourceFrames = seekTime * m_decoder->audioParameters().sampleRate() / 1000;
+             if(m_user_stop || m_seekTime >= 0)
+             {
+                 // A newer request replaces this one; do not emit old audio
+@@ -429,13 +431,14 @@
+         // decode
+         mutex()->unlock();
+         len = m_transitionFrames.load() == 0 ? 0 : m_decoder->read((m_output_buf + m_output_at), m_output_size - m_output_at);
++        mutex()->lock();
++        if (len > 0) m_sourceFrames += len / m_decoder->audioParameters().frameSize();
+         if (len > 0 && m_transitionFrames.load() > 0)
+         {
+             const auto frames = len / m_decoder->audioParameters().frameSize();
+             const auto remaining = m_transitionFrames.fetch_sub(frames) - frames;
+             if (remaining < 0) m_transitionFrames = 0;
+         }
+-        mutex()->lock();
+ 
+         if (len > 0)
+         {
+@@ -455,6 +458,7 @@
+                 StateHandler::instance()->dispatch(Qmmp::Buffering);
+                 nextURL = m_decoder->nextURL();
+                 m_decoder->next();
++                m_sourceFrames = 0;
+                 StateHandler::instance()->dispatch(m_decoder->totalTime());
+                 m_replayGain->setReplayGainInfo(m_decoder->replayGainInfo());
+                 m_output->seek(0); //reset counter
+@@ -469,6 +473,7 @@
+                 m_inputs.take(m_decoder)->deleteLater ();
+                 delete m_decoder;
+                 m_decoder = m_decoders.dequeue();
++                m_sourceFrames = 0;
+                 //m_seekTime = m_inputs.value(m_decoder)->offset();
+                 flush(true);
+                 //use current output if possible
+@@ -749,7 +754,7 @@
+     return m_instance;
+ }
+ 
+-bool QmmpAudioEngine::finishCurrentAfter(qint64 milliseconds)
++bool QmmpAudioEngine::finishCurrentAfter(qint64 milliseconds, qint64 sourceEndMs)
+ {
+     QMutexLocker lock(mutex());
+     if (!m_decoder || m_decoders.isEmpty() || m_transitionFrames.load() >= 0) return false;
+@@ -760,7 +765,10 @@
+     if (current.sampleRate() != incoming.sampleRate() || current.channelMap() != incoming.channelMap() ||
+         m_decoders.head()->totalTime() < std::max<qint64>(3000, milliseconds * 2) || m_inputs.value(m_decoders.head())->isWaiting()) return false;
+     m_transitionRate = m_decoder->audioParameters().sampleRate();
+-    m_transitionFrames = qBound<qint64>(qint64(0), milliseconds, qint64(12000)) * m_transitionRate.load() / 1000;
++    const auto frames = sourceEndMs >= 0 ? sourceEndMs * m_transitionRate.load() / 1000 - m_sourceFrames :
++        qBound<qint64>(qint64(0), milliseconds, qint64(12000)) * m_transitionRate.load() / 1000;
++    if(frames <= 0) return false;
++    m_transitionFrames = frames;
+     return true;
+ }
+ qint64 QmmpAudioEngine::transitionRemaining() const
+--- a/src/plugins/Effect/crossfade/crossfadeplugin.cpp
++++ b/src/plugins/Effect/crossfade/crossfadeplugin.cpp
+@@ -131,7 +131,7 @@
+ {
+     Effect::configure(freq, map);
+     m_core->setCrossfadeDuration(0);
+-    m_overlap = std::clamp<qint64>(m_overlap, 20, 4000);
++    m_overlap = std::clamp<qint64>(m_overlap, 20, 5000);
+     const size_t capacity = (size_t(freq) * size_t(channels()) * size_t(m_overlap) / 1000)
+                     + 2 * QMMP_BLOCK_FRAMES * size_t(channels());
+     if (capacity != m_buffer_size || !m_buffer) {
