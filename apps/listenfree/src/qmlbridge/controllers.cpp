@@ -165,7 +165,7 @@ void LibraryController::beginScan(const QStringList& roots, bool recursive) {
     request.recursive = recursive;
     request.roots.reserve(static_cast<std::size_t>(roots.size()));
     for (const auto& root : roots) {
-        if (!root.isEmpty()) request.roots.emplace_back(root.toStdWString());
+        if (!root.isEmpty()) request.roots.emplace_back(root.toStdString());
     }
     QPointer<LibraryController> guard(this);
     application::ScanCallbacks callbacks;
@@ -206,7 +206,7 @@ bool LibraryController::addRoot(const QString& path) {
         for (const QString& root : roots_) {
             if (isWithin(root, candidate) || isWithin(candidate, root)) return false;
         }
-        if (!folderRepository_->add(std::filesystem::path(path.toStdWString()))) return false;
+        if (!folderRepository_->add(std::filesystem::path(path.toStdString()))) return false;
         refreshRoots();
         scan(roots_);
         return true;
@@ -220,11 +220,11 @@ bool LibraryController::removeRoot(const QString& path) {
     if(maintenance_)return false;
     if (!folderRepository_) return false;
     try {
-        const auto candidate = std::filesystem::path(path.toStdWString());
+        const auto candidate = std::filesystem::path(path.toStdString());
         const auto storedRoots = folderRepository_->roots();
         const auto stored = std::find_if(
             storedRoots.begin(), storedRoots.end(), [&](const application::LibraryFolder& root) {
-                return QString::compare(QString::fromStdWString(root.path.wstring()), path,
+                return QString::compare(QString::fromStdString(root.path.string()), path,
                                         Qt::CaseInsensitive) == 0;
             });
         if (stored == storedRoots.end()) return false;
@@ -578,7 +578,7 @@ void LibraryController::refreshRoots() {
         roots.reserve(static_cast<std::size_t>(stored.size()));
         std::transform(stored.begin(), stored.end(), std::back_inserter(roots),
                        [](const application::LibraryFolder& folder) {
-                           return QString::fromStdWString(folder.path.wstring());
+                           return QString::fromStdString(folder.path.string());
                        });
         roots_ = std::move(roots);
     } catch (const std::exception&) {

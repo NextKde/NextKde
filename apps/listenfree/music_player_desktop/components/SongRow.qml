@@ -9,7 +9,7 @@ Rectangle {
     property url artworkSource: track.artwork || resolvedArtwork
     property url fallbackArtwork: ""
     function requestArtwork() {
-        if (!track.artwork && (track.source === "kw" || track.source === "wy") && playerController)
+        if (track.originKind !== "lx" && !track.artwork && (track.source === "kw" || track.source === "wy") && playerController)
             playerController.requestTrackArtwork(track)
     }
     Component.onCompleted: requestArtwork()
@@ -19,7 +19,7 @@ Rectangle {
     Connections {
         target: row.playerController
         function onTrackArtworkResolved(source, rid, artwork) {
-            if (row.track.source === source && String(row.track.rid) === rid)
+            if (row.track.originKind !== "lx" && row.track.source === source && String(row.track.rid) === rid)
                 row.resolvedArtwork = artwork
         }
     }
@@ -48,6 +48,9 @@ Rectangle {
         return favorites.isTrackLiked(track)
     }
     readonly property bool local: String(track.localPath || "").length > 0 || String(track.source || "").toLowerCase() === "local"
+    readonly property string originLabel: track.originKind === "lx"
+        ? qsTr("洛雪 · ") + (track.originSourceName || qsTr("已移除音源"))
+        : ({kw: "酷我", kg: "酷狗", tx: "QQ 音乐", wy: "网易云", mg: "咪咕", bili: "哔哩哔哩"})[track.source] || ""
     readonly property bool hovered: hover.hovered
     readonly property real numberWidth: compact ? 28 : 38
     readonly property real coverSize: compact ? 34 : 40
@@ -105,7 +108,7 @@ Rectangle {
         objectName: "songRowTitle"
         x: row.titleX; width: row.titleWidth; anchors.verticalCenter: parent.verticalCenter; spacing: 4
         Text { width: parent.width; text: row.track.title || qsTr("未知歌曲"); color: row.primaryText; font.family: AppTheme.fontFamily; font.pixelSize: row.compact ? 12 : 14; font.weight: Font.Medium; elide: Text.ElideRight }
-        Text { width: parent.width; text: (row.track.artist || qsTr("未知艺术家")) + (row.compact && row.track.album ? " · " + row.track.album : ""); color: row.secondaryText; font.family: AppTheme.fontFamily; font.pixelSize: 11; elide: Text.ElideRight }
+        Text { width: parent.width; text: (row.track.artist || qsTr("未知艺术家")) + (row.originLabel ? " · " + row.originLabel : "") + (row.compact && row.track.album ? " · " + row.track.album : ""); color: row.secondaryText; font.family: AppTheme.fontFamily; font.pixelSize: 11; elide: Text.ElideRight }
     }
     Row {
         id: actions

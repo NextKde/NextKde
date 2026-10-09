@@ -9,19 +9,27 @@ namespace listenfree::qmlbridge {
 class AccountService final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantMap accounts READ accounts NOTIFY accountsChanged)
+    Q_PROPERTY(QVariantList providers READ providers CONSTANT)
 public:
     explicit AccountService(const QString& profile, QObject* parent = nullptr,
                             QNetworkAccessManager* network = nullptr);
     QVariantMap accounts() const { return accounts_; }
+    static QVariantList providers();
+    static QString providerName(const QString& provider);
+    static QUrl loginUrl(const QString& provider);
+    static bool cookieDomainAllowed(const QString& provider, const QString& domain);
+    static bool hasLoginCookie(const QString& provider, const QByteArray& cookie);
     // Native request code only; credentials never enter the QML account model.
     QByteArray cookieForRequest(const QString& provider) const;
     Q_INVOKABLE void login(const QString& provider, const QString& cookie);
     Q_INVOKABLE void logout(const QString& provider);
+    Q_INVOKABLE void cancelLogin(const QString& provider);
     void restore();
     static QVariantMap parseProfile(const QString& provider, const QByteArray& json);
 signals:
     void accountsChanged();
     void notice(const QString& message);
+    void loginFinished(const QString& provider, bool accepted);
 private:
     QString target(const QString& provider) const;
     void validate(const QString& provider, const QByteArray& cookie, bool persist);

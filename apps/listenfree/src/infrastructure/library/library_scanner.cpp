@@ -1,3 +1,4 @@
+#include "platform/file_paths.h"
 #include "infrastructure/library/library_scanner.h"
 
 #include <QDirIterator>
@@ -68,9 +69,9 @@ void LibraryScanner::start(const QStringList& roots,
     QHash<QString, application::LocalFileFingerprint> known;
     known.reserve(static_cast<qsizetype>(knownFiles.size()));
     for (const auto& file : knownFiles) {
-        const QString canonical = QDir::cleanPath(QString::fromStdWString(file.canonicalPath.wstring()));
+        const QString canonical = QDir::cleanPath(QString::fromStdString(file.canonicalPath.string()));
 #ifdef Q_OS_WIN
-        const QString key = canonical.toCaseFolded();
+        const QString key = platform::filePathKey(canonical);
 #else
         const QString key = canonical;
 #endif
@@ -115,7 +116,7 @@ void LibraryScanner::start(const QStringList& roots,
                     const QString canonical = QDir::cleanPath(file.canonicalFilePath());
                     if (canonical.isEmpty() || !file.isFile()) continue;
 #ifdef Q_OS_WIN
-                    const QString key = canonical.toCaseFolded();
+                    const QString key = platform::filePathKey(canonical);
 #else
                     const QString key = canonical;
 #endif
@@ -138,9 +139,9 @@ void LibraryScanner::start(const QStringList& roots,
                             return hash.result().toHex();
                         };
                         const auto expected=QByteArray::fromStdString(knownFile->duplicateHash);
-                        if(digest(canonical)==expected && digest(QString::fromStdWString(knownFile->keeperPath.wstring()))==expected)continue;
+                        if(digest(canonical)==expected && digest(QString::fromStdString(knownFile->keeperPath.string()))==expected)continue;
                     }
-                    const auto path = std::filesystem::path(canonical.toStdWString());
+                    const auto path = std::filesystem::path(canonical.toStdString());
                     if (auto track = reader->read(path)) {
                         const QFileInfo after(canonical);
                         if (after.exists() && after.size() == file.size() && after.lastModified() == file.lastModified())
@@ -261,7 +262,7 @@ application::ScanId LocalLibraryScannerAdapter::start(const application::ScanReq
     callbacks_ = std::move(callbacks);
     failure_.clear();
     QStringList roots;
-    for (const auto& root : request.roots) roots.push_back(QString::fromStdWString(root.wstring()));
+    for (const auto& root : request.roots) roots.push_back(QString::fromStdString(root.string()));
     scanner_.start(roots, metadataReader_, request.recursive, request.knownFiles);
     return id;
 }

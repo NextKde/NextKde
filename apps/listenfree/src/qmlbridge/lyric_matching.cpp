@@ -1,5 +1,6 @@
 #include "qmlbridge/portable_session.h"
 #include "online/platform_catalog.h"
+#include "online/track_origin.h"
 #include "online/lyric_matching.h"
 #include "online/lyric_sources.h"
 #include <QDateTime>
@@ -138,6 +139,7 @@ void PortableSession::fetchMetadataArtwork(const QUrl& url, quint64 generation) 
 }
 namespace {
 QString lyricKey(const QVariantMap& track) {
+    if (online::isScriptTrack(track)) return "lyrics.override." + QString::fromLatin1(online::scriptTrackKey(track).toUtf8().toBase64(QByteArray::Base64UrlEncoding));
     return "lyrics.override."+QString::fromLatin1((track.value("localPath").toString().isEmpty()
         ? track.value("source").toString()+":"+track.value("rid",track.value("trackId")).toString()
         : track.value("localPath").toString()).toUtf8().toBase64(QByteArray::Base64UrlEncoding));
@@ -167,6 +169,7 @@ QVariantMap PortableSession::lyricMatchSeed(const QVariantMap& track) const {
     return seed;
 }
 void PortableSession::searchLyricMatches(const QVariantMap& track,const QString& query,const QString& source) {
+    automaticLyrics_.cancel();
     const auto seed = query.trimmed().isEmpty() ? lyricMatchSeed(track) : track;
     const auto term = query.trimmed().isEmpty() ? seed.value("query").toString() : query;
     lyricSearch_.search(seed, term, source);
@@ -180,6 +183,10 @@ void PortableSession::previewLyricMatch(int index) {
     emit lyricPreviewChanged();
 }
 bool PortableSession::applyLyricMatch(const QVariantMap& track,const QString& lyrics) {
+    if (AutomaticLyrics::identity(track) == AutomaticLyrics::identity(currentTrack())) {
+        automaticLyrics_.cancel();
+        sources_.cancelResolution(scriptLyricId_); scriptLyricId_.clear();
+    }
     const auto path=track.value("localPath").toString();
     if(!path.isEmpty()) {
         const QFileInfo media(path);
@@ -218,7 +225,7 @@ void PortableSession::pumpEmbeddedLyrics() {
         embeddedLyricWritePath_=it.key();embeddedLyricWriteText_=it->toString();
         embeddedLyricWrite_.setFuture(QtConcurrent::run([path=embeddedLyricWritePath_,text=embeddedLyricWriteText_]() -> QString {
             // This path is released by the decoder; new playback waits for this job.
-            TagLib::FileRef file(path.toStdWString().c_str(),false);
+            TagLib::FileRef file(QFile::encodeName(path).constData(),false);
             if(file.isNull())return QStringLiteral("无法读取音频标签");
             auto properties=file.file()->properties();
             properties.replace("LYRICS",TagLib::StringList(TagLib::String(text.toStdString(),TagLib::String::UTF8)));

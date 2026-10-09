@@ -1,5 +1,7 @@
+#include "platform/file_paths.h"
 #include "collection_service.h"
 #include "online/platform_catalog.h"
+#include "online/track_origin.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -18,8 +20,9 @@ QString referenceKey(const QVariantMap& row) {
   return row.value("source","kw").toString()+":"+(row.value("kind")=="album" ? "album:" : "")+row.value("playlistId",row.value("id")).toString();
 }
 QString likedTrackKey(const QVariantMap& row) {
+  if (online::isScriptTrack(row)) return online::scriptTrackKey(row);
   const auto path = row.value("localPath").toString();
-  if (!path.isEmpty()) return "local:" + QDir::fromNativeSeparators(path).toCaseFolded();
+  if (!path.isEmpty()) return "local:" + platform::filePathKey(path);
   const auto source = row.value("source").toString().toLower();
   const auto rid = row.value("rid").toString();
   return !source.isEmpty() && !rid.isEmpty() ? source + ":" + rid : row.value("trackId").toString();
@@ -817,7 +820,7 @@ void CollectionService::updateTrackMetadata(const QVariantMap& track) {
         auto list=value.toMap();auto tracks=list.value("tracks").toList();
         for(auto& item:tracks) {
             auto row=item.toMap();
-            if(row.value("localPath").toString().compare(path,Qt::CaseInsensitive)!=0)continue;
+            if(row.value("localPath").toString().compare(path,platform::filePathSensitivity)!=0)continue;
             for(const auto& key:{"title","artist","album","year","track","genre","lyrics"})if(track.contains(key))row[key]=track.value(key);
             item=row;changed=true;
         }

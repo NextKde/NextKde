@@ -568,21 +568,20 @@ Item {
             id: nowPlayingTrafficCluster
             spacing: 10
             WindowTrafficButton {
-                action: "minimize"
+                objectName: "nowPlayingFullscreenButton"
+                action: "fullscreen"
                 fillColor: "#2fc866"
                 revealGlyph: nowPlayingTrafficHover.hovered || Qt.application.arguments.indexOf("nowplaying-traffic-hover") >= 0
                 reducedMotion: page.reducedMotion
-                onClicked: if (page.hostWindow) page.hostWindow.showMinimized()
+                onClicked: page.toggleFullScreen()
             }
             WindowTrafficButton {
-                action: "maximize"
+                objectName: "nowPlayingMinimizeButton"
+                action: "minimize"
                 fillColor: "#ffbf18"
                 revealGlyph: nowPlayingTrafficHover.hovered || Qt.application.arguments.indexOf("nowplaying-traffic-hover") >= 0
                 reducedMotion: page.reducedMotion
-                onClicked: if (page.hostWindow) {
-                    if (page.hostWindow.visibility === Window.Maximized) page.hostWindow.showNormal()
-                    else page.hostWindow.showMaximized()
-                }
+                onClicked: if (page.hostWindow) page.hostWindow.showMinimized()
             }
             WindowTrafficButton {
                 id: closeWindowControl

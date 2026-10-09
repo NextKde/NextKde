@@ -119,9 +119,13 @@ void QmmpAudioPlayerTests::reportsSelectedCapabilities() {
         listenfree::application::capabilityMask(
             listenfree::application::PlaybackCapability::Crossfade) |
         listenfree::application::capabilityMask(
-            listenfree::application::PlaybackCapability::ReplayGain) |
+            listenfree::application::PlaybackCapability::ReplayGain)
+#ifdef Q_OS_WIN
+        |
         listenfree::application::capabilityMask(
-            listenfree::application::PlaybackCapability::HighResolution);
+            listenfree::application::PlaybackCapability::HighResolution)
+#endif
+        ;
     QCOMPARE(player.capabilities() & required, required);
     QVERIFY(player.supported());
 }

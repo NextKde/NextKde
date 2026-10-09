@@ -4,6 +4,7 @@
 #include <QVariantList>
 #include <QMap>
 #include <zlib.h>
+#include "platform/text_encoding.h"
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -37,7 +38,7 @@ inline QString decodeKuwoLyrics(const QByteArray& response) {
     MultiByteToWideChar(54936,0,decoded.data(),int(decoded.size()),wide.data(),size);
     return QString::fromStdWString(wide);
 #else
-    return QString::fromUtf8(decoded);
+    return platform::decodeGb18030(decoded);
 #endif
 }
 inline QVariantList parseTimedLyrics(const QString& raw) {

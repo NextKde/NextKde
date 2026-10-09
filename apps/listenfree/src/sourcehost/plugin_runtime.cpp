@@ -1,4 +1,5 @@
 #include "sourcehost/plugin_runtime.h"
+#include "sourcehost/script_metadata.h"
 #include "platform/windows_crypto.h"
 
 #include <QFile>
@@ -56,10 +57,8 @@ constexpr qsizetype MaxNetworkRequestBytes = 8 * 1024 * 1024;
 constexpr qsizetype MaxNetworkResponseBytes = 8 * 1024 * 1024;
 constexpr qsizetype MaxProtocolFrameBytes = 1024 * 1024 + 4;
 
-#ifdef Q_OS_WIN
 using platform::aesEncryptBytes;
 using platform::rsaEncryptBytes;
-#endif
 
 class QuickJsEngine final {
 public:
@@ -412,25 +411,17 @@ private:
     static JSValue aesEncrypt(JSContext* context, JSValueConst, int argc, JSValueConst* argv) {
         QString values[4];
         if (!strings(context, argc, argv, 4, values)) return JS_EXCEPTION;
-#ifdef Q_OS_WIN
         const QByteArray encrypted = aesEncryptBytes(QByteArray::fromBase64(values[0].toLatin1()),
                                                      QByteArray::fromBase64(values[2].toLatin1()),
                                                      QByteArray::fromBase64(values[3].toLatin1()), values[1]);
         return fromQString(context, encrypted.isEmpty() ? QString() : QString::fromLatin1(encrypted.toBase64()));
-#else
-        return fromQString(context, {});
-#endif
     }
 
     static JSValue rsaEncrypt(JSContext* context, JSValueConst, int argc, JSValueConst* argv) {
         QString values[2];
         if (!strings(context, argc, argv, 2, values)) return JS_EXCEPTION;
-#ifdef Q_OS_WIN
         const QByteArray encrypted = rsaEncryptBytes(QByteArray::fromBase64(values[0].toLatin1()), values[1]);
         return fromQString(context, encrypted.isEmpty() ? QString() : QString::fromLatin1(encrypted.toBase64()));
-#else
-        return fromQString(context, {});
-#endif
     }
 
     static JSValue randomBytes(JSContext* context, JSValueConst, int argc, JSValueConst* argv) {
@@ -992,29 +983,7 @@ std::optional<QByteArray> decodePluginSource(const QByteArray& encoded, QString*
 
 QJsonObject parseScriptMetadata(const QByteArray& source) {
     const QString text = QString::fromUtf8(source);
-    const auto headerMatch = QRegularExpression(QStringLiteral(R"(^/\*[\s\S]*?\*/)"))
-                                 .match(text);
-    QJsonObject metadata;
-    const QRegularExpression entry(QStringLiteral(R"(^\s?\*\s?@(\w+)\s+(.+)$)"));
-    if (headerMatch.hasMatch()) {
-        const QStringList lines = headerMatch.captured(0).split(QRegularExpression(QStringLiteral("\\r?\\n")));
-        for (const auto& line : lines) {
-            const auto match = entry.match(line);
-            if (!match.hasMatch()) continue;
-            const QString key = match.captured(1);
-            const QString value = match.captured(2).trimmed();
-            if (key == QStringLiteral("name")) metadata.insert(key, value.left(24));
-            else if (key == QStringLiteral("description")) metadata.insert(key, value.left(36));
-            else if (key == QStringLiteral("author")) metadata.insert(key, value.left(56));
-            else if (key == QStringLiteral("homepage")) metadata.insert(key, value.left(1024));
-            else if (key == QStringLiteral("version")) metadata.insert(key, value.left(36));
-        }
-    }
-    for (const auto& key : {QStringLiteral("name"), QStringLiteral("description"),
-                            QStringLiteral("author"), QStringLiteral("homepage"),
-                            QStringLiteral("version")}) {
-        if (!metadata.contains(key)) metadata.insert(key, QString());
-    }
+    auto metadata = QJsonObject::fromVariantMap(scriptMetadata(source));
     metadata.insert(QStringLiteral("rawScript"), text);
     return metadata;
 }
@@ -1042,6 +1011,7 @@ public:
         case MessageType::ResolveMusicUrl: resolve(request); break;
         case MessageType::ResolveLyric: resolve(request); break;
         case MessageType::ResolvePic: resolve(request); break;
+        case MessageType::Search: resolve(request); break;
         case MessageType::Cancel: cancel(request); break;
         default: respondError(request.requestId, QStringLiteral("plugin.unsupported-message"),
                                QStringLiteral("The plugin runtime does not handle this message."));
@@ -1641,7 +1611,8 @@ private:
         }
         const QString source = request.payload.value(QStringLiteral("source")).toString();
         const QString type = request.payload.value(QStringLiteral("type")).toString();
-        const QString action = request.type == MessageType::ResolveLyric
+        const QString action = request.type == MessageType::Search ? QStringLiteral("search")
+                                   : request.type == MessageType::ResolveLyric
                                    ? QStringLiteral("lyric")
                                    : request.type == MessageType::ResolvePic ? QStringLiteral("pic")
                                                                               : QStringLiteral("musicUrl");
@@ -1666,6 +1637,12 @@ private:
         QJsonObject info;
         info.insert(QStringLiteral("type"), type);
         info.insert(QStringLiteral("musicInfo"), musicInfo);
+        if (action == "search") {
+            info.insert("keyword", musicInfo.value("keyword"));
+            info.insert("query", musicInfo.value("keyword"));
+            info.insert("page", musicInfo.value("page"));
+            info.insert("limit", musicInfo.value("limit"));
+        }
         QJsonObject event;
         event.insert(QStringLiteral("source"), source);
         event.insert(QStringLiteral("action"), action);
@@ -1730,6 +1707,15 @@ private:
         if (parseError.error != QJsonParseError::NoError) {
             respondError(requestId, QStringLiteral("plugin.invalid-response"),
                          QStringLiteral("Plugin returned invalid JSON."));
+            return;
+        }
+        if (pending.action == "search") {
+            if ((!value.isObject() && !value.isArray()) || json.size() > 1024 * 1024) {
+                respondError(requestId, "plugin.invalid-search", "Search must return an object or array (up to 1 MiB).");
+                return;
+            }
+            respond(requestId, MessageType::Result, {{"source", pending.source},
+                {"action", pending.action}, {"data", value.isArray() ? QJsonValue(QJsonObject{{"rows", value}}) : value}});
             return;
         }
         if (pending.action == QStringLiteral("lyric")) {

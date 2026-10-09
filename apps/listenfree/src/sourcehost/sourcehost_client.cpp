@@ -146,12 +146,14 @@ SourceHostClient::SourceHostClient(QString executablePath, QObject* parent)
             process_->kill();
             return;
         }
+#ifdef Q_OS_WIN
         if (!assignProcessToJob()) {
             stopping_ = true;
             transitionTo(HostState::Stopping);
             process_->kill();
             return;
         }
+#endif
         SourceMessage hello;
         hello.type = MessageType::Hello;
         hello.requestId = handshakeRequestId_;
@@ -308,7 +310,7 @@ bool SourceHostClient::loadPlugin(const std::filesystem::path& path) {
 #ifdef Q_OS_WIN
     // std::filesystem::path stores native UTF-16 on Windows; converting through
     // path::string() can lose non-ASCII plugin paths under the active code page.
-    message.payload.insert(QStringLiteral("path"), QString::fromStdWString(path.wstring()));
+    message.payload.insert(QStringLiteral("path"), QString::fromStdString(path.string()));
 #else
     message.payload.insert(QStringLiteral("path"), QString::fromStdString(path.string()));
 #endif

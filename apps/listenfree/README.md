@@ -1,3 +1,9 @@
+# KOS ListenFree for NextKDE
+
+此分支维护 NextKDE 原生 Linux 版本，与原 KOS Music 并存。桌面 ID 为 `listenfree`；应用和用户资料保持独立。原界面、播放逻辑与 Qmmp 引擎保留，更新由 NextKDE 提供。
+
+构建、安装及依赖说明见 [Linux 构建说明](packaging/linux/README.md)。下方保留 ListenFree 上游说明及原有归属信息。
+
 # ListenFree
 
 Windows 10/11 x64 原生音乐播放器，使用 Qt Quick、Qmmp、QuickJS-ng 和 TagLib。

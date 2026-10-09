@@ -111,6 +111,7 @@ int main(int argc, char* argv[]) {
             request.type == listenfree::sourcehost::MessageType::ResolveMusicUrl ||
             request.type == listenfree::sourcehost::MessageType::ResolveLyric ||
             request.type == listenfree::sourcehost::MessageType::ResolvePic ||
+            request.type == listenfree::sourcehost::MessageType::Search ||
             request.type == listenfree::sourcehost::MessageType::Cancel) {
             pluginRuntime.handle(request);
             return;

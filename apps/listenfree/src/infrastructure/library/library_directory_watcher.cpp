@@ -1,3 +1,4 @@
+#include "platform/file_paths.h"
 #include "library_directory_watcher.h"
 #include "library_scanner.h"
 
@@ -31,8 +32,8 @@ LibraryDirectoryWatcher::~LibraryDirectoryWatcher() {
 
 bool LibraryDirectoryWatcher::contains(const QString& path) const {
     for (const auto& root : roots_)
-        if (path.compare(root, Qt::CaseInsensitive) == 0 ||
-            path.startsWith(root.endsWith('/') ? root : root + '/', Qt::CaseInsensitive)) return true;
+        if (path.compare(root, platform::filePathSensitivity) == 0 ||
+            path.startsWith(root.endsWith('/') ? root : root + '/', platform::filePathSensitivity)) return true;
     return false;
 }
 

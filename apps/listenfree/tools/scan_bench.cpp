@@ -73,7 +73,11 @@ bool generateFiles(int count, const QString& dir) {
         file.write(minimalWav());
         file.close();
 
+#ifdef Q_OS_WIN
         TagLib::FileRef ref(QDir::toNativeSeparators(path).toStdWString().c_str());
+#else
+        TagLib::FileRef ref(QFile::encodeName(path).constData());
+#endif
         if (ref.isNull()) return false;
         ref.tag()->setTitle(title.toStdWString());
         ref.tag()->setArtist(artist.toStdWString());

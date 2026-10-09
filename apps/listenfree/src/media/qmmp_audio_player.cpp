@@ -135,7 +135,7 @@ void QmmpAudioPlayer::setLiveBuffering(bool enabled) {
 }
 
 void QmmpAudioPlayer::selectOutputFactory() {
-    const QString requested = qEnvironmentVariable("LISTENFREE_QMMP_OUTPUT", "wasapi");
+    const QString requested = qEnvironmentVariable("LISTENFREE_QMMP_OUTPUT", "pulse");
     for (auto* factory : Output::factories()) {
         if (factory && factory->properties().shortName == requested) {
             Output::setCurrentFactory(factory);
@@ -252,7 +252,7 @@ void QmmpAudioPlayer::connectCore() {
             // Keep A's lyrics/progress in its source range during the first part
             // of actual A+B output. A short fallback still commits inside its mix.
             position_=std::chrono::milliseconds(std::clamp<qint64>(
-                std::max(position_.count(),outgoingEnd_-overlap+value),0,outgoingDuration_.count()));
+                std::max<qint64>(position_.count(),outgoingEnd_-overlap+value),0,outgoingDuration_.count()));
             const auto commitAt=overlap>=1600 ? 800 : std::max<qint64>(0,overlap/2);
             if (value>=commitAt) commitPrimary();
         } else if (outputClock_) position_=std::chrono::milliseconds(incomingPosition_);
@@ -486,7 +486,7 @@ std::chrono::milliseconds QmmpAudioPlayer::duration() const noexcept {
 bool QmmpAudioPlayer::available() const noexcept {
     try {
         return hasPlugin(u"Input", u"ffmpeg") &&
-               (hasPlugin(u"Output", u"wasapi") || hasPlugin(u"Output", u"null")) &&
+               ((hasPlugin(u"Output", u"pulse") || hasPlugin(u"Output", u"wasapi")) || hasPlugin(u"Output", u"null")) &&
                hasPlugin(u"Transports", u"http");
     } catch (...) {
         return false;
@@ -497,7 +497,7 @@ std::uint32_t QmmpAudioPlayer::capabilities() const noexcept {
     try {
         const bool ffmpeg = hasPlugin(u"Input", u"ffmpeg");
         const bool http = hasPlugin(u"Transports", u"http");
-        const bool wasapi = hasPlugin(u"Output", u"wasapi");
+        const bool wasapi = (hasPlugin(u"Output", u"pulse") || hasPlugin(u"Output", u"wasapi"));
         const bool output = wasapi || hasPlugin(u"Output", u"null");
         if (!ffmpeg || !output) return 0;
 
@@ -668,7 +668,7 @@ bool QmmpAudioPlayer::startPreparedTransition(int milliseconds, qint64 sourceEnd
     feedbackEpoch_=core_->beginOutputFeedback();
     outgoingDuration_=duration();
     if (!(sourceEndMs>=0 ? core_->finishCurrentAt(sourceEndMs,milliseconds) : core_->finishCurrentAfter(milliseconds))) return false;
-    outgoingEnd_=std::min(outgoingDuration_.count(),core_->transitionSourceEnd());
+    outgoingEnd_=std::min<qint64>(outgoingDuration_.count(),core_->transitionSourceEnd());
     transitionRequested_=true;
     return true;
 }

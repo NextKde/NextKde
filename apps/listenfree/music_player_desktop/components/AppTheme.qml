@@ -57,7 +57,9 @@ QtObject {
     readonly property color albumShellTint: darkMode ? "#b147535d" : "#8a777f84"
     readonly property color albumWindowTint: darkMode ? "#bd303b45" : "#b24e5962"
     property bool darkArtworkCanvas: false
-    readonly property bool canvasDark: darkArtworkCanvas || (typeof backendBackgroundContrast !== "undefined" && backendBackgroundContrast ? backendBackgroundContrast.dark : darkMode)
+    // A hidden Wayland window may not render its first contrast sample yet.
+    // Keep readable system-theme colors until actual pixels are available.
+    readonly property bool canvasDark: darkArtworkCanvas || (typeof backendBackgroundContrast !== "undefined" && backendBackgroundContrast && backendBackgroundContrast.valid ? backendBackgroundContrast.dark : darkMode)
     readonly property color canvasText: canvasDark ? "#f9fbff" : "#20262b"
     readonly property color canvasSecondary: canvasDark ? "#d4dce5" : "#4e5864"
     readonly property color canvasSelected: canvasDark ? "#28ffffff" : "#50ffffff"

@@ -58,7 +58,7 @@ class CoverImageProvider final : public QQuickImageProvider {
     static QImage loadArtwork(const QString& id, const QSize& bounds) {
         const auto path = QUrl::fromPercentEncoding(id.section('?', 0, 0).toUtf8());
 #ifdef Q_OS_WIN
-        const auto fileName = path.toStdWString();
+        const auto fileName = path.toStdString();
 #else
         const auto fileName = path.toStdString();
 #endif

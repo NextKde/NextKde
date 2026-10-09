@@ -3,6 +3,7 @@
 // Extracted unchanged from sourcehost/plugin_runtime.cpp.
 #include <QByteArray>
 #include <QString>
+#include <QStringList>
 #include <QScopeGuard>
 #include <algorithm>
 #include <vector>
@@ -10,6 +11,10 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <wincrypt.h>
+#else
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/rsa.h>
 #endif
 namespace listenfree::platform {
 #ifdef Q_OS_WIN
@@ -107,6 +112,46 @@ inline QByteArray aesEncryptBytes(const QByteArray& input, const QByteArray& key
                       static_cast<ULONG>(mutableIv.size()), reinterpret_cast<PUCHAR>(output.data()), outputLength,
                       &outputLength, BCRYPT_BLOCK_PADDING) != 0) return {};
     output.resize(static_cast<qsizetype>(outputLength));
+    return output;
+}
+#else
+inline QByteArray rsaEncryptBytes(const QByteArray& input, const QString& publicKeyPem) {
+    if (input.size() > 128 || publicKeyPem.isEmpty()) return {};
+    const QByteArray pem = publicKeyPem.toUtf8();
+    BIO* bio = BIO_new_mem_buf(pem.constData(), int(pem.size()));
+    if (!bio) return {};
+    const auto freeBio = qScopeGuard([&] { BIO_free(bio); });
+    EVP_PKEY* key = PEM_read_bio_PUBKEY(bio, nullptr, nullptr, nullptr);
+    if (!key) return {};
+    const auto freeKey = qScopeGuard([&] { EVP_PKEY_free(key); });
+    if (EVP_PKEY_get_size(key) != 128) return {};
+    EVP_PKEY_CTX* context = EVP_PKEY_CTX_new(key, nullptr);
+    if (!context) return {};
+    const auto freeContext = qScopeGuard([&] { EVP_PKEY_CTX_free(context); });
+    if (EVP_PKEY_encrypt_init(context) <= 0 || EVP_PKEY_CTX_set_rsa_padding(context, RSA_NO_PADDING) <= 0) return {};
+    QByteArray padded(128, '\0'), output(128, Qt::Uninitialized);
+    std::copy(input.cbegin(), input.cend(), padded.end() - input.size());
+    size_t size = 128;
+    if (EVP_PKEY_encrypt(context, reinterpret_cast<unsigned char*>(output.data()), &size,
+                         reinterpret_cast<const unsigned char*>(padded.constData()), 128) <= 0 || size != 128) return {};
+    return output;
+}
+inline QByteArray aesEncryptBytes(const QByteArray& input, const QByteArray& key, const QByteArray& iv, const QString& mode) {
+    const bool ecb = mode.endsWith("-ecb");
+    if (!QStringList{"aes-128-cbc", "aes-192-cbc", "aes-256-cbc", "aes-128-ecb", "aes-192-ecb", "aes-256-ecb"}.contains(mode)) return {};
+    const EVP_CIPHER* cipher = EVP_get_cipherbyname(mode.toLatin1().constData());
+    if (!cipher || key.size() != EVP_CIPHER_get_key_length(cipher) || (!ecb && iv.size() != 16)) return {};
+    EVP_CIPHER_CTX* context = EVP_CIPHER_CTX_new();
+    if (!context) return {};
+    const auto freeContext = qScopeGuard([&] { EVP_CIPHER_CTX_free(context); });
+    QByteArray output(input.size() + 16, Qt::Uninitialized);
+    int size = 0, tail = 0;
+    if (EVP_EncryptInit_ex(context, cipher, nullptr, reinterpret_cast<const unsigned char*>(key.constData()),
+                           ecb ? nullptr : reinterpret_cast<const unsigned char*>(iv.constData())) != 1 ||
+        EVP_EncryptUpdate(context, reinterpret_cast<unsigned char*>(output.data()), &size,
+                          reinterpret_cast<const unsigned char*>(input.constData()), int(input.size())) != 1 ||
+        EVP_EncryptFinal_ex(context, reinterpret_cast<unsigned char*>(output.data()) + size, &tail) != 1) return {};
+    output.resize(size + tail);
     return output;
 }
 #endif

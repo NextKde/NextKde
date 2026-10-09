@@ -1,4 +1,5 @@
 #include "qmlbridge/collection_service.h"
+#include "qmlbridge/library_catalog.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTemporaryDir>
@@ -132,6 +133,39 @@ bool storeCollections(infrastructure::database::Database& db, const QVariantList
 class CollectionTests final : public QObject {
     Q_OBJECT
 private slots:
+    void libraryIncludesPersistedFavoritesAndKeepsSourceIdentity() {
+        QTemporaryDir dir; infrastructure::database::Database db;
+        QVERIFY(db.open(dir.filePath("library.sqlite"))); QVERIFY(db.migrate());
+        Network network; qmlbridge::CollectionService service(db,nullptr,&network);
+        qmlbridge::TrackListModel localModel;
+        qmlbridge::LibraryCatalog catalog(&localModel);
+        const auto refresh=[&]{catalog.setCollections(service.playlists());};
+        connect(&service,&qmlbridge::CollectionService::playlistsChanged,&catalog,refresh);
+        const QVariantMap local{{"trackId","local"},{"localPath",dir.filePath("file.flac")},{"title","Local song"}};
+        localModel.setRows({local}); catalog.setLocalCatalog({local},{},{});
+        QCOMPARE(catalog.tracksModel(),&localModel);
+        QVariantMap platform{{"trackId","tx:1"},{"source","tx"},{"rid","1"},{"title","Same title"}};
+        auto other=platform; other["source"]="wy"; other["trackId"]="wy:1";
+        auto script=platform; script["originKind"]="lx"; script["originSourceId"]="fixture-a";
+        auto otherScript=script; otherScript["originSourceId"]="fixture-b";
+        for (const auto& row : {local,platform,other,script,otherScript}) service.toggleTrackLiked(row);
+        QCOMPARE(catalog.songs().size(),5); QCOMPARE(catalog.tracksModel()->rowCount(),5);
+        QVERIFY(catalog.tracksModel()->snapshotRows().contains(script));
+        QVERIFY(catalog.tracksModel()->snapshotRows().contains(otherScript));
+        QVariantMap album{{"id","42"},{"source","tx"},{"kind","album"},{"title","Same album"}};
+        service.toggleSaved(album); album["source"]="wy"; service.toggleSaved(album);
+        QCOMPARE(catalog.albums().size(),2);
+        for(const auto& value:catalog.albums()) {
+            const auto row=value.toMap(); QVERIFY(row.value("reference").toBool());
+            QVERIFY(row.value("savedOnlineAlbum").toBool()); QCOMPARE(row.value("playlistId").toString(),QString("42"));
+        }
+        qmlbridge::CollectionService reopened(db,nullptr,&network);
+        catalog.setCollections(reopened.playlists()); QCOMPARE(catalog.songs().size(),5); QCOMPARE(catalog.albums().size(),2);
+        service.toggleTrackLiked(platform); QCOMPARE(catalog.songs().size(),4);
+        service.toggleSaved(album); QCOMPARE(catalog.albums().size(),1);
+        service.clear(); QCOMPARE(catalog.songs().size(),1); QCOMPARE(catalog.albums().size(),0);
+        QCOMPARE(catalog.tracksModel(),&localModel);
+    }
     void releaseDetailKeepsSavedSongsAndPlaybackSnapshot() {
         QTemporaryDir dir; infrastructure::database::Database db;
         QVERIFY(db.open(dir.filePath("detail.sqlite"))); QVERIFY(db.migrate());
@@ -169,12 +203,21 @@ private slots:
     void favoriteIdentityMatchesStoredSemantics() {
         QTemporaryDir dir; infrastructure::database::Database db;
         QVERIFY(db.open(dir.filePath("favorites.sqlite"))); QVERIFY(db.migrate());
+#ifdef Q_OS_WIN
         const QVariantMap local{{"localPath", "C:\\Music\\Album\\Track.FLAC"}, {"trackId", "old-local-id"}};
+#else
+        const QVariantMap local{{"localPath", "/music/Album/Track.FLAC"}, {"trackId", "old-local-id"}};
+#endif
         const QVariantMap remote{{"source", "WY"}, {"rid", "ABC"}, {"trackId", "old-remote-id"}};
         const QVariantList rows{local, local, remote, QVariantMap{{"trackId", "legacy-id"}}, QVariantMap{}};
         QVERIFY(storeCollections(db, favoriteSnapshot(rows)));
         Network network; qmlbridge::CollectionService service(db, nullptr, &network);
+#ifdef Q_OS_WIN
         QVERIFY(service.isTrackLiked({{"localPath", "c:/music/album/track.flac"}, {"trackId", "new-local-id"}}));
+#else
+        QVERIFY(service.isTrackLiked({{"localPath", "/music/Album/Track.FLAC"}, {"trackId", "new-local-id"}}));
+        QVERIFY(!service.isTrackLiked({{"localPath", "/music/album/track.flac"}, {"trackId", "new-local-id"}}));
+#endif
         QVERIFY(service.isTrackLiked({{"source", "wy"}, {"rid", "ABC"}, {"trackId", "new-remote-id"}}));
         QVERIFY(!service.isTrackLiked({{"source", "tx"}, {"rid", "ABC"}}));
         QVERIFY(!service.isTrackLiked({{"source", "wy"}, {"rid", "abc"}}));

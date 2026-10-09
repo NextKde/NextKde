@@ -6,12 +6,17 @@ Item {
     id: page
     objectName: "searchPage"
     property bool darkMode: AppTheme.darkMode
+    property var sourceController: null
+    property bool lxSearch: false
+    onLxSearchChanged: if (onlineController) onlineController.searchMode = lxSearch ? "lx" : "platform"
+    Component.onCompleted: if (onlineController) onlineController.searchMode = lxSearch ? "lx" : "platform"
+    signal manageSourcesRequested()
     property var catalog
     property var onlineController
     property Item backdrop: null
     property string query: ""
     property var platformNames: [qsTr("酷我"), qsTr("酷狗"), "QQ", qsTr("网易云"), qsTr("咪咕")]
-    readonly property bool bilibiliEnabled: !!onlineController && !!onlineController.bilibiliSourceEnabled
+    readonly property bool bilibiliEnabled: !lxSearch && !!onlineController && !!onlineController.bilibiliSourceEnabled
     readonly property bool bilibiliSelected: !!onlineController && onlineController.platform === "bili"
     readonly property var platformIds: ["kw", "kg", "tx", "wy", "mg"].concat(bilibiliEnabled ? ["bili"] : [])
     readonly property var searchPlatformNames: platformNames.concat(bilibiliEnabled ? [qsTr("哔哩哔哩")] : [])
@@ -22,7 +27,7 @@ Item {
     readonly property int currentPage: onlineController ? onlineController.searchPage : 1
     readonly property int pageCount: onlineController ? onlineController.searchPageCount : 1
     readonly property bool busy: !!onlineController && onlineController.busy
-    readonly property string datasetKey: query + ":" + (onlineController ? onlineController.platform : "kw") + ":" + category + ":" + currentPage
+    readonly property string datasetKey: query + ":" + (onlineController ? onlineController.platform : "kw") + ":" + (lxSearch ? onlineController.searchSourceId : "platform") + ":" + category + ":" + currentPage
     function saveNavigationState() { return { dataset: datasetKey,
         songs: category === "songs" ? resultTable.saveNavigationState() : null, y: gridPosition.saveNavigationState() } }
     function restoreNavigationState(state) {
@@ -56,10 +61,43 @@ Item {
         textColor: AppTheme.canvasText
         hoverBackground: "#18ffffff"
     }
+    Row {
+        x: 14; y: 8; spacing: 8
+        UiButton { label: qsTr("平台搜索"); height: 32; selected: !page.lxSearch; onClicked: page.lxSearch = false }
+        UiButton {
+            objectName: "lxSearchEntry"
+            label: qsTr("洛雪音乐"); height: 32; selected: page.lxSearch
+            onClicked: page.lxSearch = true
+        }
+    }
+    Row {
+        x: 14; y: 48; height: 32; spacing: 10; visible: page.lxSearch
+        SettingsSelect {
+            objectName: "lxSourceSelector"
+            width: Math.min(230, page.width * .35)
+            darkMode: page.darkMode
+            options: page.sourceController ? page.sourceController.sources.map(function(s) { return {label: s.name + (s.id === page.sourceController.defaultId ? qsTr(" · 默认") : ""), value:s.id} }) : []
+            currentIndex: page.sourceController ? Math.max(0, options.findIndex(function(s) {return s.value === page.onlineController.searchSourceId})) : 0
+            onValueSelected: (value, index) => page.onlineController.searchSourceId = value
+        }
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(80, page.width * .35)
+            elide: Text.ElideRight
+            text: {
+                const sources = page.sourceController ? page.sourceController.sources : []
+                const source = sources.find(s => s.id === (page.onlineController ? page.onlineController.searchSourceId : ""))
+                return source ? (source.capabilityText || qsTr("搜索时检测脚本能力")) : qsTr("请先导入洛雪音源")
+            }
+            color: AppTheme.canvasSecondary; font.pixelSize: 11
+        }
+        UiButton { label: qsTr("音源设置"); height: 30; onClicked: page.manageSourcesRequested() }
+    }
     Item {
         id: platforms
         objectName: "searchPlatformToolbar"
-        x: 14; y: 8; width: Math.min(page.bilibiliEnabled ? 462 : 383, page.width * (page.bilibiliEnabled ? .64 : .56)); height: 36
+        visible: !page.lxSearch
+        x: 14; y: 48; width: Math.min(page.bilibiliEnabled ? 462 : 383, page.width * (page.bilibiliEnabled ? .64 : .56)); height: 36
         ToolbarGlass { anchors.fill: parent }
         SearchTabs {
             anchors.fill: parent
@@ -71,6 +109,7 @@ Item {
     }
     Item {
         id: categories
+        visible: !page.lxSearch
         objectName: "searchCategoryToolbar"
         anchors.right: parent.right; anchors.rightMargin: 14
         y: platforms.y; width: Math.min(page.bilibiliSelected ? 152 : 224, page.width - platforms.width - 42); height: platforms.height
@@ -86,7 +125,7 @@ Item {
     SongTable {
         id: resultTable
         scrollKey: "search.songs"
-        x: 4; y: 56; width: parent.width - 8; height: Math.max(0, parent.height - y)
+        x: 4; y: platforms.y + 48; width: parent.width - 8; height: Math.max(0, parent.height - y)
         visible: page.category === "songs"
         rows: visible ? page.resultRows : []
         footer: visible && page.hasOnlineQuery ? paginationFooter : null
@@ -99,7 +138,7 @@ Item {
         id: collectionGrid
         ScrollPosition { id: gridPosition; view: collectionGrid; key: "search."+page.category }
         objectName: "searchCollectionGrid"
-        x: 8; y: 58; width: parent.width - 16; height: Math.max(0, parent.height - y)
+        x: 8; y: platforms.y + 50; width: parent.width - 16; height: Math.max(0, parent.height - y)
         visible: page.category !== "songs"
         model: visible ? page.resultRows : []
         footer: visible && page.hasOnlineQuery ? paginationFooter : null
@@ -183,16 +222,18 @@ Item {
       }
     }
     Column {
-        visible: page.hasOnlineQuery && page.resultRows.length === 0 && !page.busy
+        visible: (page.hasOnlineQuery || page.lxSearch) && page.resultRows.length === 0 && !page.busy
+        width: Math.max(100, page.width - 64)
         anchors.centerIn: parent; spacing: 8
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: page.onlineController && page.onlineController.searchError ? page.onlineController.searchError : qsTr("没有找到“") + page.query + "”"
+            width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+            text: page.onlineController && page.onlineController.searchError ? page.onlineController.searchError : !page.hasOnlineQuery ? qsTr("选择音源，输入关键词搜索") : qsTr("没有找到“") + page.query + "”"
             color: AppTheme.canvasText; font.family: AppTheme.fontFamily; font.pixelSize: 16
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: qsTr("换一个关键词，或切换平台和分类。")
+            text: page.lxSearch ? qsTr("使用所选脚本的搜索能力；仅解析音源请在平台搜索中使用。") : qsTr("换一个关键词，或切换平台和分类。")
             color: AppTheme.canvasSecondary; font.family: AppTheme.fontFamily; font.pixelSize: 12
         }
     }

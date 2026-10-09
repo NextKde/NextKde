@@ -10,6 +10,12 @@ Item {
     property bool revealGlyph: false
     property bool reducedMotion: false
     signal clicked
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: action === "fullscreen" ? qsTr("全屏 / 退出全屏")
+        : action === "minimize" ? qsTr("最小化") : qsTr("关闭")
+    Keys.onSpacePressed: clicked()
+    Keys.onReturnPressed: clicked()
 
     implicitWidth: 22
     implicitHeight: AppTheme.toolbarControlHeight
@@ -80,7 +86,7 @@ Item {
                 border.width: 1.2
                 border.color: "#000000"
                 antialiasing: true
-                visible: control.action === "maximize"
+                visible: control.action === "maximize" || control.action === "fullscreen"
             }
 
             Behavior on opacity {

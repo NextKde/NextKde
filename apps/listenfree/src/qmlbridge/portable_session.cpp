@@ -1,8 +1,12 @@
+#include "platform/file_paths.h"
+#include "platform/text_encoding.h"
 #include "qmlbridge/portable_session.h"
 #include "qmlbridge/cover_image_provider.h"
 #include "infrastructure/library/library_scanner.h"
 #include "online/kuwo_lyrics.h"
+#include "online/lyric_matching.h"
 #include "online/platform_catalog.h"
+#include "online/track_origin.h"
 #include "online/radio_catalog.h"
 #include <taglib/fileref.h>
 #include <taglib/tpropertymap.h>
@@ -130,9 +134,10 @@ struct CatalogAggregates {
     }
 };
 QString songKey(const QVariantMap& track) {
+    if (online::isScriptTrack(track)) return online::scriptTrackKey(track);
     if(!track.value("radioId").toString().isEmpty())return "radio:"+track.value("radioProvider").toString()+":"+track.value("radioId").toString();
     const auto path=track.value("localPath").toString();
-    if(!path.isEmpty()) return "file:"+QDir::cleanPath(QDir::fromNativeSeparators(QFileInfo(path).absoluteFilePath())).toCaseFolded();
+    if(!path.isEmpty()) return "file:"+platform::filePathKey(QDir::cleanPath(QFileInfo(path).absoluteFilePath()));
     const auto rid=track.value("rid").toString();
     if(!rid.isEmpty()) return track.value("source").toString().toLower()+":"+rid;
     const auto url=track.value("remoteUrl").toString();
@@ -199,7 +204,26 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
     connect(this, &PortableSession::changed, this, &PortableSession::progressChanged);
     connect(this, &PortableSession::currentTrackChanged, this, &PortableSession::progressChanged);
     connect(this, &PortableSession::lyricsChanged, this, &PortableSession::progressChanged);
+    connect(&sources_, &SourceController::defaultChanged, this, [this] {
+        if (!searchSourceId_.isEmpty()) return;
+        emit searchModeChanged();
+        if (searchMode_ == "lx") requestSearchPage();
+    });
+    connect(&sources_, &SourceController::sourcesChanged, this, [this] {
+        if (searchSourceId_.isEmpty()) return;
+        const auto rows = sources_.sources();
+        const bool exists = std::any_of(rows.cbegin(), rows.cend(), [this](const QVariant &row) {
+            return row.toMap().value("id").toString() == searchSourceId_;
+        });
+        if (!exists) setSearchSourceId({});
+    });
     connect(&lyricSearch_, &online::LyricSearch::changed, this, &PortableSession::lyricMatchChanged);
+    autoLyricMatchEnabled_ = database_.getSetting("lyrics.autoMatchEnabled").value_or("true") != "false";
+    connect(&automaticLyrics_, &AutomaticLyrics::resolved, this, [this](const QString& key, const QString& text) {
+        if (!autoLyricMatchEnabled_ || !lyrics_.isEmpty() || AutomaticLyrics::identity(currentTrack()) != key) return;
+        lyrics_ = online::parseTimedLyrics(text);
+        emit lyricsChanged();
+    });
     uiSettings_.setGroupsEnabled(false);
     QSettings().setValue("ListenFree/clearShuffleHistory",QString::fromStdString(database_.getSetting("playback.clearShuffleHistory").value_or("true"))=="true");
     application::PlaybackEvents events;
@@ -242,7 +266,7 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
         QTimer::singleShot(0,this,[this,generation]{
             if(generation!=generation_)return;
             if(restoreAvailableOutput())beginCurrent();
-            else fail(QStringLiteral("音频输出不可用，请检查 Windows 输出设备，或在设置中选择其他设备。"),false);
+            else fail(QStringLiteral("音频输出不可用，请检查系统输出设备，或在设置中选择其他设备。"),false);
         });
     };
     events.onFinished = [this] {
@@ -289,6 +313,19 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
     setSmartTransition(database_.getSetting("playback.transition.smart").value_or("false") == "true");
     connect(&sources_, &SourceController::resolutionFinished, this,
             [this](const QString& id, const QString&, const QString&, const QVariantMap& data, const QString& error) {
+        if (id == scriptSearchId_ && !id.isEmpty()) {
+            scriptSearchId_.clear(); searchBusy_ = false;
+            searchResults_ = data.value("rows").toList(); searchError_ = error.isEmpty() ? data.value("warning").toString() : error;
+            searchTotal_ = data.value("total", 0).toInt(); scriptSearchPages_ = qMax(1, data.value("pages", 1).toInt());
+            emit searchResultsChanged(); return;
+        }
+        if (id == scriptLyricId_ && !id.isEmpty()) {
+            scriptLyricId_.clear();
+            if (currentTrack().value("entryId").toString() == scriptLyricEntry_) {
+                acceptFetchedLyrics(error.isEmpty() ? data.value("lyric").toString() + "\n" + data.value("tlyric").toString() : QString{});
+            }
+            return;
+        }
         if (id == mixResolution_ && !id.isEmpty()) {
             mixResolution_.clear();
             const int manualTarget=mixManual_ ? mixTargetIndex() : -1;
@@ -316,7 +353,7 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
         }
         startResolved(data.value("url").toString(), data.value("headers").toMap());
     });
-    connect(&sources_, &SourceController::activeChanged, this, [this] { if (loading_) stop(); });
+    connect(&sources_, &SourceController::activeChanged, this, [this] { if (loading_ && !online::isScriptTrack(currentTrack())) stop(); });
     connect(&libraryLoad_, &QFutureWatcher<LibraryLoadResult>::finished, this, [this] {
         // Consume the completed snapshot: result() would retain a full prior
         // generation in the watcher until the next scan.
@@ -400,6 +437,7 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
     reload();
 }
 PortableSession::~PortableSession() {
+    sources_.cancelResolution(scriptSearchId_); scriptSearchId_.clear();
     sources_.bilibili().cancel(bilibiliSearchId_);
     shutdown();
     while(!embeddedLyricWritePath_.isEmpty()) { embeddedLyricWrite_.waitForFinished(); finishEmbeddedLyrics(); }
@@ -453,7 +491,7 @@ void PortableSession::scheduleReload(bool allowDelta) {
                 if (!track.localPath || (!track.artists.empty() && track.album)) continue;
                 const auto mediaPath = QString::fromStdString(*track.localPath);
                 if (!QFileInfo(mediaPath).isFile()) continue;
-                const auto tags = reader.read(std::filesystem::path(mediaPath.toStdWString()));
+                const auto tags = reader.read(std::filesystem::path(QFile::encodeName(mediaPath).constData()));
                 if (!tags) continue;
                 bool changed = false;
                 if (track.artists.empty() && !tags->artists.empty()) { track.artists = tags->artists; changed = true; }
@@ -602,6 +640,8 @@ QString PortableSession::state() const {
     }
 }
 void PortableSession::invalidate() {
+    automaticLyrics_.cancel();
+    sources_.cancelResolution(scriptLyricId_); scriptLyricId_.clear();
     resetMixAnalysis();
     cancelSmartMix();
     mixAttempted_=false; mixCooldown_=0;
@@ -986,11 +1026,11 @@ void PortableSession::redirectDuplicates(const QVariantList& redirects) {
     for(const auto& value:redirects) {
         const auto redirect=value.toMap(),from=redirect.value("from").toMap(),to=redirect.value("to").toMap();
         for(auto it=entries_.begin();it!=entries_.end();++it) {
-            if(QDir::fromNativeSeparators(it.value().value("localPath").toString()).compare(from.value("path").toString(),Qt::CaseInsensitive)!=0)continue;
+            if(QDir::fromNativeSeparators(it.value().value("localPath").toString()).compare(from.value("path").toString(),platform::filePathSensitivity)!=0)continue;
             it.value()["localPath"]=to.value("path");it.value()["trackId"]=to.value("id");
             it.value()["artwork"]=localArtworkUrl(to.value("path").toString());
             it.key()->setPath(to.value("path").toString());
-            currentChanged|=currentPath.compare(from.value("path").toString(),Qt::CaseInsensitive)==0;
+            currentChanged|=currentPath.compare(from.value("path").toString(),platform::filePathSensitivity)==0;
         }
     }
     syncQueue();reloadCatalogChanges();
@@ -1008,7 +1048,7 @@ void PortableSession::prepareDuplicateMerge(const QVariantList& groups) {
     if(state()!="Playing" && state()!="Paused")return;
     const auto track=currentTrack();
     for(const auto& value:groups)for(const auto& duplicate:value.toMap().value("duplicates").toList()) {
-        if(QDir::fromNativeSeparators(track.value("localPath").toString()).compare(duplicate.toMap().value("path").toString(),Qt::CaseInsensitive)!=0)continue;
+        if(QDir::fromNativeSeparators(track.value("localPath").toString()).compare(duplicate.toMap().value("path").toString(),platform::filePathSensitivity)!=0)continue;
         duplicateResumeEntry_=track.value("entryId").toString();duplicateResumeState_=state();duplicateResumePosition_=position();
         invalidate();emit changed();return;
     }
@@ -1047,6 +1087,19 @@ void PortableSession::sortTracks(const QString& column, const QString& order) {
     ++catalogRevision_;
     emit catalogChanged();
 }
+void PortableSession::setSearchMode(const QString &mode) {
+    if ((mode != "platform" && mode != "lx") || searchMode_ == mode) return;
+    searchMode_ = mode;
+    if (mode == "lx") searchCategory_ = "songs";
+    searchPage_ = 1; searchTotal_ = -1;
+    emit searchModeChanged(); requestSearchPage();
+}
+void PortableSession::setSearchSourceId(const QString &id) {
+    if (searchSourceId_ == id) return;
+    searchSourceId_ = id; searchPage_ = 1; searchTotal_ = -1;
+    emit searchModeChanged();
+    if (searchMode_ == "lx") requestSearchPage();
+}
 void PortableSession::search(const QString& searchText) {
     query_ = searchText.trimmed(); searchPage_ = 1; searchTotal_ = -1;
     if (!query_.isEmpty() && !query_.startsWith("http")) {
@@ -1069,12 +1122,20 @@ void PortableSession::goToSearchPage(int page) {
 }
 void PortableSession::requestSearchPage() {
     const auto generation=++searchGeneration_;
+    sources_.cancelResolution(scriptSearchId_); scriptSearchId_.clear();
     sources_.bilibili().cancel(bilibiliSearchId_); bilibiliSearchId_.clear();
     if (searchReply_) {
         auto* previous=searchReply_.data(); searchReply_.clear(); previous->abort();
     }
     searchResults_.clear(); searchError_.clear(); searchBusy_=false;
     if (query_.isEmpty()) { emit searchResultsChanged(); return; }
+    if (searchMode_ == "lx") {
+        scriptSearchPages_ = 1;
+        scriptSearchId_ = sources_.searchScript(searchSourceId(), query_, searchPage_);
+        searchBusy_ = !scriptSearchId_.isEmpty();
+        if (!searchBusy_) searchError_ = sources_.lastError();
+        emit searchResultsChanged(); return;
+    }
     if (platform_=="bili") {
         searchBusy_=true; emit searchResultsChanged();
         bilibiliSearchId_=sources_.bilibili().search(query_,searchPage_,searchCategory_,this,
@@ -1125,6 +1186,7 @@ void PortableSession::requestSearchPage() {
     });
 }
 void PortableSession::fetchOnlineArtwork(const QVariantMap& track) {
+    if (online::isScriptTrack(track)) return;
     const auto provider=track.value("source").toString();
     if(provider!="kw" && provider!="wy")return;
     const auto rid=track.value("rid").toString(), key=songKey(track);
@@ -1168,13 +1230,13 @@ void PortableSession::fetchOnlineArtwork(const QVariantMap& track) {
 }
 void PortableSession::loadLyrics(const QString& path) {
     const auto pending=pendingEmbeddedLyrics_.constFind(QFileInfo(path).absoluteFilePath());
-    if(pending!=pendingEmbeddedLyrics_.cend()) { lyrics_=online::parseTimedLyrics(pending->toString());emit lyricsChanged();return; }
+    if(pending!=pendingEmbeddedLyrics_.cend()) { acceptFetchedLyrics(pending->toString());return; }
     QString text;
     QFile file(QFileInfo(path).absolutePath() + '/' + QFileInfo(path).completeBaseName() + ".lrc");
     if (file.open(QIODevice::ReadOnly) && file.size() <= 1024*1024) text=QString::fromUtf8(file.readAll());
     if (text.isEmpty()) {
-        const auto native=path.toStdWString();
-        TagLib::FileRef audio(native.c_str(), false);
+        const auto native=QFile::encodeName(path);
+        TagLib::FileRef audio(native.constData(), false);
         if (!audio.isNull()) {
             const auto properties=audio.file()->properties();
             for (const auto* key : {"LYRICS", "UNSYNCEDLYRICS"}) {
@@ -1184,25 +1246,47 @@ void PortableSession::loadLyrics(const QString& path) {
             }
         }
     }
-    lyrics_=online::parseTimedLyrics(text); emit lyricsChanged();
+    acceptFetchedLyrics(text);
+}
+void PortableSession::setAutoLyricMatchEnabled(bool enabled) {
+    autoLyricMatchEnabled_ = enabled;
+    if (enabled) ensureAutomaticLyrics();
+    else automaticLyrics_.cancel();
+}
+void PortableSession::ensureAutomaticLyrics() {
+    if (!autoLyricMatchEnabled_ || !lyrics_.isEmpty() || lyricsReply_ || !scriptLyricId_.isEmpty() || live()) return;
+    const auto track = currentTrack();
+    if (!track.isEmpty()) automaticLyrics_.request(track, lyricMatchSeed(track));
+}
+void PortableSession::acceptFetchedLyrics(const QString& text) {
+    lyrics_ = online::hasUsableMatchedLyrics(text) ? online::parseTimedLyrics(text) : QVariantList{};
+    emit lyricsChanged();
+    ensureAutomaticLyrics();
 }
 void PortableSession::fetchLyrics(const QString& rid) {
     const auto track=currentTrack();
-    const auto key="lyrics.override."+QString::fromLatin1((track.value("source").toString()+":"+track.value("rid",track.value("trackId")).toString()).toUtf8().toBase64(QByteArray::Base64UrlEncoding));
-    if(const auto saved=database_.getSetting(key)){lyrics_=online::parseTimedLyrics(QString::fromStdString(*saved));emit lyricsChanged();return;}
+    const auto key="lyrics.override."+QString::fromLatin1((online::isScriptTrack(track) ? online::scriptTrackKey(track) : track.value("source").toString()+":"+track.value("rid",track.value("trackId")).toString()).toUtf8().toBase64(QByteArray::Base64UrlEncoding));
+    if(const auto saved=database_.getSetting(key)){acceptFetchedLyrics(QString::fromStdString(*saved));return;}
+    if (online::isScriptTrack(track)) {
+        sources_.cancelResolution(scriptLyricId_);
+        scriptLyricEntry_ = track.value("entryId").toString();
+        scriptLyricId_ = sources_.resolveLyric(track.value("originSourceId").toString(), online::sourceMusicInfo(track));
+        if (scriptLyricId_.isEmpty()) ensureAutomaticLyrics();
+        return;
+    }
     const auto provider=currentTrack().value("source").toString();
     if(provider!="kw") {
-        if(provider!="wy")return;
+        if(provider!="wy") { ensureAutomaticLyrics();return; }
         const auto entry=currentTrack().value("entryId");
-        auto* reply=online::platformRequest(network_,provider,"lyrics",rid);if(!reply)return;lyricsReply_=reply;
+        auto* reply=online::platformRequest(network_,provider,"lyrics",rid);if(!reply){ensureAutomaticLyrics();return;}lyricsReply_=reply;
         connect(reply,&QNetworkReply::finished,this,[this,reply,entry]{
             reply->deleteLater();if(lyricsReply_!=reply || currentTrack().value("entryId")!=entry)return;lyricsReply_=nullptr;
             const auto object=online::platformJson(reply->readAll());
-            lyrics_=online::parseTimedLyrics(object.value("lrc").toObject().value("lyric").toString()+"\n"+object.value("tlyric").toObject().value("lyric").toString());emit lyricsChanged();
+            acceptFetchedLyrics(reply->error() == QNetworkReply::NoError ? online::matchedLyricBundle(object) : QString{});
         });return;
     }
 
-    if (!QRegularExpression("^[0-9]+$").match(rid).hasMatch()) return;
+    if (!QRegularExpression("^[0-9]+$").match(rid).hasMatch()) { ensureAutomaticLyrics();return; }
     const auto query=online::kuwoXor("user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_"+rid.toLatin1()+"&lrcx=1").toBase64();
     QNetworkRequest request(QUrl("https://newlyric.kuwo.cn/newlyric.lrc?"+QString::fromLatin1(query)));
     request.setTransferTimeout(12000);
@@ -1213,12 +1297,12 @@ void PortableSession::fetchLyrics(const QString& rid) {
         const auto bytes=reply->readAll(); reply->deleteLater();
         if (lyricsReply_!=reply || currentTrack().value("entryId").toString()!=entry) return;
         lyricsReply_=nullptr;
-        if (reply->error()!=QNetworkReply::NoError) return;
-        lyrics_=online::parseTimedLyrics(online::decodeKuwoLyrics(bytes)); emit lyricsChanged();
+        acceptFetchedLyrics(reply->error() == QNetworkReply::NoError ? online::decodeKuwoLyrics(bytes) : QString{});
     });
 }
 void PortableSession::requestComments(const QString& mode, bool more) {
     const auto track=currentTrack(); const auto rid=track.value("rid").toString();
+    if (online::isScriptTrack(track)) { commentsBusy_=false; commentsError_=QStringLiteral("此洛雪音源未提供评论"); emit commentsChanged(); return; }
     if (commentsReply_) { auto* old=commentsReply_.data(); commentsReply_.clear(); old->abort(); }
     const auto sort=(mode=="hot" || mode=="popular")?QString("hot"):QString("latest");
     if (!more || commentsMode_!=sort) comments_.clear();
@@ -1372,12 +1456,7 @@ QVariantList PortableSession::lyrics() const {
     const auto mode=QString::fromStdString(database_.getSetting("lyrics.chineseConversion").value_or("Off"));
     if(mode=="Off")return lyrics_;
     const auto convert=[&](const QString& text) {
-        if(text.isEmpty())return text;
-        const auto flags=mode=="Traditional"?LCMAP_TRADITIONAL_CHINESE:LCMAP_SIMPLIFIED_CHINESE;
-        const int n=LCMapStringEx(L"zh-CN",flags,reinterpret_cast<const wchar_t*>(text.utf16()),int(text.size()),nullptr,0,nullptr,nullptr,0);
-        if(n<=0)return text;
-        QString result(n,Qt::Uninitialized);
-        LCMapStringEx(L"zh-CN",flags,reinterpret_cast<const wchar_t*>(text.utf16()),int(text.size()),reinterpret_cast<wchar_t*>(result.data()),n,nullptr,nullptr,0);return result;
+        return platform::convertChinese(text, mode == "Traditional");
     };
     QVariantList rows;
     for(const auto& value:lyrics_){auto row=value.toMap();row["text"]=convert(row.value("text").toString());row["translation"]=convert(row.value("translation").toString());QVariantList words;for(const auto& v:row.value("words").toList()){auto w=v.toMap();w["text"]=convert(w.value("text").toString());words.append(w);}row["words"]=words;rows.append(row);}return rows;
@@ -1402,6 +1481,7 @@ void PortableSession::setBilibiliSourceEnabled(bool enabled) {
     emit bilibiliSourceEnabledChanged();
 }
 void PortableSession::suggest(const QString& text) {
+    if (searchMode_ == "lx") { suggestions_.clear(); emit suggestionsChanged(); return; }
     if(suggestionReply_){suggestionReply_->disconnect(this);suggestionReply_->abort();suggestionReply_->deleteLater();suggestionReply_=nullptr;}
     suggestions_.clear();if(text.trimmed().isEmpty()){emit suggestionsChanged();return;}
     emit suggestionsChanged();auto* reply=online::platformRequest(network_,platform_,"suggest",text.trimmed());if(!reply)return;suggestionReply_=reply;const auto provider=platform_;
@@ -1430,7 +1510,7 @@ void PortableSession::clearSearchHistory() { searchHistory_.clear();database_.se
 namespace listenfree::qmlbridge {
 QString PortableSession::albumYear(const QString& path) const {
     if(path.isEmpty())return {};
-    TagLib::FileRef file(path.toStdWString().c_str(),false);
+    TagLib::FileRef file(QFile::encodeName(path).constData(),false);
     if(file.isNull() || !file.tag() || !file.tag()->year())return {};
     return QString::number(file.tag()->year());
 }
@@ -1440,7 +1520,7 @@ namespace listenfree::qmlbridge {
 bool PortableSession::showInExplorer(const QVariantMap& track) {
     const QFileInfo file(track.value("localPath").toString());
     if(!file.isFile()){emit notice(QStringLiteral("本地文件不存在"));return false;}
-    const bool ok=QProcess::startDetached("explorer.exe",{"/select,",QDir::toNativeSeparators(file.absoluteFilePath())});
+    const bool ok=QProcess::startDetached("xdg-open",{file.absolutePath()});
     if(!ok)emit notice(QStringLiteral("无法打开资源管理器"));
     return ok;
 }
@@ -1463,7 +1543,7 @@ QVariantMap PortableSession::readTrackTags(const QVariantMap& track) const {
         result["lyrics"]=pendingEmbeddedLyrics_.value(QFileInfo(path).absoluteFilePath());
         return result;
     }
-    TagLib::FileRef file(path.toStdWString().c_str(),true);
+    TagLib::FileRef file(QFile::encodeName(path).constData(),true);
     const QFileInfo info(path);
     result["fileSize"]=info.size();result["format"]=info.suffix().toUpper();
     result["modified"]=info.lastModified().toString(Qt::ISODate);
@@ -1509,7 +1589,7 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
         }
     }
     {
-        TagLib::FileRef file(path.toStdWString().c_str(),false);
+        TagLib::FileRef file(QFile::encodeName(path).constData(),false);
         if(file.isNull()){emit notice(QStringLiteral("无法读取音频标签"));return false;}
         if (!coverBytes.isEmpty()) {
             TagLib::List<TagLib::VariantMap> pictures;

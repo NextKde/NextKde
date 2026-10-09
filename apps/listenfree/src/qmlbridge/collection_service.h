@@ -39,6 +39,7 @@ public:
                              QObject *parent = nullptr,
                              QNetworkAccessManager *network = nullptr);
   void setBilibiliClient(online::BilibiliClient* client) { bilibili_=client; }
+  void setAccountCookie(const QString& platform, const QByteArray& cookie) { network_->setProperty(("listenfree.cookie." + platform).toUtf8().constData(), cookie); }
   QVariantList playlists() const { return lists_; }
   quint64 likedTracksRevision() const { return likedTracksRevision_; }
   QVariantList recommendations() const { return recommendations_; }

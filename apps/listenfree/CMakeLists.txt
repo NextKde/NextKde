@@ -9,12 +9,17 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-option(LISTENFREE_BUILD_TESTS "Build ListenFree tests" ON)
+set(_listenfree_test_default ON)
+if(DEFINED BUILD_TESTING)
+    set(_listenfree_test_default "${BUILD_TESTING}")
+endif()
+option(LISTENFREE_BUILD_TESTS "Build ListenFree tests" "${_listenfree_test_default}")
 option(LISTENFREE_SEGMENT_HEAP "Use Windows 10 2004+ Segment Heap" ON)
 option(LISTENFREE_BUILD_MPV_PROBE "Build the optional libmpv capability probe" OFF)
 option(LISTENFREE_BUILD_MPV_BACKEND "Build the optional libmpv playback backend" OFF)
 set(LISTENFREE_MPV_ROOT "" CACHE PATH "Root of an extracted libmpv development package")
 option(LISTENFREE_BUILD_QMMP_BACKEND "Build the Qmmp application audio backend" ON)
+include(packaging/linux/sdk.cmake)
 set(_listenfree_vendor "${CMAKE_CURRENT_SOURCE_DIR}/../_vendor")
 set(LISTENFREE_QMMP_SOURCE_ROOT "${_listenfree_vendor}/qmmp-2.4.1" CACHE PATH "Root of the Qmmp source tree")
 set(LISTENFREE_QMMP_LIBRARY "${_listenfree_vendor}/qmmp-stage-qt/libqmmp.dll.a" CACHE FILEPATH "Qmmp import library")
@@ -36,11 +41,11 @@ if(EXISTS "${_listenfree_vcpkg_prefix}")
     list(PREPEND CMAKE_PREFIX_PATH "${_listenfree_vcpkg_prefix}")
 endif()
 
-find_package(Qt6 6.11.2 REQUIRED COMPONENTS Core Gui Qml Quick QuickDialogs2 Sql Multimedia Network Concurrent Test Widgets ShaderTools)
+find_package(Qt6 6.10 REQUIRED COMPONENTS Core Gui Qml Quick QuickDialogs2 Sql Multimedia Network Concurrent Test Widgets ShaderTools)
 find_package(TagLib 2.3.1 CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(qjs CONFIG REQUIRED)
-qt_standard_project_setup(REQUIRES 6.11)
+qt_standard_project_setup(REQUIRES 6.10)
 
 add_library(listenfree_domain INTERFACE)
 target_include_directories(listenfree_domain INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -134,7 +139,7 @@ if(LISTENFREE_BUILD_QMMP_BACKEND)
     endif()
     add_library(listenfree_qmmp_import SHARED IMPORTED GLOBAL)
     set_target_properties(listenfree_qmmp_import PROPERTIES
-        IMPORTED_IMPLIB "${LISTENFREE_QMMP_LIBRARY}"
+        IMPORTED_LOCATION "${LISTENFREE_QMMP_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${LISTENFREE_QMMP_INCLUDE_ROOT}")
     if(EXISTS "${LISTENFREE_QMMP_RUNTIME}")
         set_target_properties(listenfree_qmmp_import PROPERTIES
@@ -258,6 +263,8 @@ target_include_directories(listenfree-apple-cover-probe PRIVATE ${CMAKE_CURRENT_
 add_library(listenfree_qmlbridge STATIC
     src/qmlbridge/list_models.h
     src/qmlbridge/list_models.cpp
+    src/qmlbridge/library_catalog.h
+    src/qmlbridge/library_catalog.cpp
     src/qmlbridge/controllers.h
     src/qmlbridge/controllers.cpp
     src/qmlbridge/wallpaper_library.h
@@ -275,7 +282,7 @@ endif()
 if(LISTENFREE_BUILD_QMMP_BACKEND)
     set(LISTENFREE_QMMP_UI_LIBRARY "" CACHE FILEPATH "Qmmp UI import library")
     add_library(listenfree_qmmp_ui SHARED IMPORTED)
-    set_target_properties(listenfree_qmmp_ui PROPERTIES IMPORTED_IMPLIB "${LISTENFREE_QMMP_UI_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${LISTENFREE_QMMP_SOURCE_ROOT}/src")
+    set_target_properties(listenfree_qmmp_ui PROPERTIES IMPORTED_LOCATION "${LISTENFREE_QMMP_UI_LIBRARY}" INTERFACE_INCLUDE_DIRECTORIES "${LISTENFREE_QMMP_SOURCE_ROOT}/src")
     add_library(listenfree_portable STATIC src/online/platform_catalog.cpp src/online/platform_catalog.h src/qmlbridge/download_service.h src/qmlbridge/download_service.cpp src/qmlbridge/collection_service.h src/qmlbridge/collection_service.cpp src/qmlbridge/portable_session.h src/qmlbridge/portable_session.cpp src/qmlbridge/lyric_matching.cpp src/qmlbridge/source_controller.h src/qmlbridge/source_controller.cpp src/media/media_stream_proxy.h src/media/media_stream_proxy.cpp)
     target_sources(listenfree_portable PRIVATE src/qmlbridge/audio_effects.cpp src/qmlbridge/equalizer_presets.h)
     target_sources(listenfree_portable PRIVATE src/online/bilibili_client.cpp src/online/bilibili_client.h)
@@ -292,6 +299,7 @@ if(LISTENFREE_BUILD_QMMP_BACKEND)
     target_sources(listenfree_portable PRIVATE src/media/artwork_video.h src/media/artwork_video.cpp)
     target_sources(listenfree_portable PRIVATE src/online/lyric_sources.cpp src/online/lyric_sources.h src/third_party/qqmusic_des/des.cpp)
     target_sources(listenfree_portable PRIVATE src/online/lyric_search.cpp src/online/lyric_search.h)
+    target_sources(listenfree_portable PRIVATE src/qmlbridge/automatic_lyrics.cpp src/qmlbridge/automatic_lyrics.h)
     target_sources(listenfree_portable PRIVATE src/online/radio_catalog.h src/online/radio_catalog.cpp src/qmlbridge/radio_service.h src/qmlbridge/radio_service.cpp src/media/live_stream_relay.h src/media/live_stream_relay.cpp)
     set(LISTENFREE_LIVE_FFMPEG_ROOT "${_listenfree_vendor}/qmmp-vcpkg-installed-qt/x64-mingw-dynamic" CACHE PATH "FFmpeg already shipped with the Qmmp decoder")
     find_path(LISTENFREE_LIVE_FFMPEG_INCLUDE libavformat/avformat.h HINTS "${LISTENFREE_LIVE_FFMPEG_ROOT}/include" REQUIRED)
@@ -333,7 +341,33 @@ if(LISTENFREE_BUILD_QMMP_BACKEND)
         add_dependencies(listenfree_portable_tests listenfree-sourcehost)
     endif()
 endif()
-qt_add_executable(listenfree WIN32 src/app/listenfree.rc src/app/main.cpp src/app/platform_settings.h src/app/platform_settings.cpp src/app/shortcut_service.h src/app/shortcut_service.cpp src/qmlbridge/spring_value.h src/qmlbridge/lyric_text_metrics.h src/qmlbridge/background_contrast.h src/qmlbridge/album_mosaic_model.h)
+qt_add_executable(listenfree WIN32 src/app/main.cpp src/app/platform_settings.h src/app/platform_settings_linux.cpp src/app/shortcut_service.h src/app/shortcut_service_linux.cpp src/qmlbridge/spring_value.h src/qmlbridge/lyric_text_metrics.h src/qmlbridge/background_contrast.h src/qmlbridge/album_mosaic_model.h)
+find_package(Qt6 6.10 REQUIRED COMPONENTS DBus)
+find_package(KF6WindowSystem REQUIRED)
+target_sources(listenfree PRIVATE src/app/single_instance.h src/app/single_instance.cpp)
+target_link_libraries(listenfree PRIVATE KF6::WindowSystem)
+if(LISTENFREE_BUILD_TESTS)
+    add_executable(listenfree_single_instance_tests tests/single_instance_tests.cpp src/app/single_instance.cpp src/app/single_instance.h)
+    target_include_directories(listenfree_single_instance_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(listenfree_single_instance_tests PRIVATE Qt6::Quick Qt6::Network Qt6::Test KF6::WindowSystem)
+    add_test(NAME listenfree_single_instance_tests COMMAND listenfree_single_instance_tests)
+    set_tests_properties(listenfree_single_instance_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
+find_package(Qt6 6.10 REQUIRED COMPONENTS WebEngineWidgets)
+add_library(listenfree_nextkde STATIC src/app/linux_media_session.h src/app/linux_media_session.cpp src/app/nextkde_theme.h src/app/nextkde_theme.cpp)
+target_link_libraries(listenfree_nextkde PUBLIC listenfree_portable Qt6::DBus)
+if(LISTENFREE_BUILD_TESTS)
+    add_executable(listenfree_nextkde_tests tests/nextkde_integration_tests.cpp)
+    target_link_libraries(listenfree_nextkde_tests PRIVATE listenfree_nextkde Qt6::Test)
+    add_dependencies(listenfree_nextkde_tests listenfree-sourcehost)
+    add_test(NAME listenfree_nextkde_tests COMMAND dbus-run-session -- $<TARGET_FILE:listenfree_nextkde_tests>)
+    set_tests_properties(listenfree_nextkde_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QMMP_PLUGINS=${LISTENFREE_QMMP_PLUGIN_ROOT}")
+endif()
+target_link_libraries(listenfree PRIVATE listenfree_nextkde)
+target_sources(listenfree PRIVATE src/app/account_browser.h src/app/account_browser.cpp)
+target_link_libraries(listenfree PRIVATE Qt6::WebEngineWidgets)
+add_executable(listenfree-account-browser-probe EXCLUDE_FROM_ALL tools/account_browser_probe.cpp src/app/account_browser.h src/app/account_browser.cpp)
+target_link_libraries(listenfree-account-browser-probe PRIVATE listenfree_portable Qt6::WebEngineWidgets)
 if(WIN32 AND LISTENFREE_BUILD_QMMP_BACKEND)
     include(cmake/WindowsMediaSession.cmake)
     include(cmake/WinSparkle.cmake)
@@ -351,13 +385,17 @@ if(WIN32 AND LISTENFREE_SEGMENT_HEAP)
     endforeach()
 endif()
 target_sources(listenfree_portable PRIVATE src/qmlbridge/account_service.h src/qmlbridge/account_service.cpp src/qmlbridge/duplicate_service.h src/qmlbridge/duplicate_service.cpp src/qmlbridge/settings_transfer.h src/qmlbridge/settings_transfer.cpp)
-target_link_libraries(listenfree_portable PRIVATE advapi32 crypt32 bcrypt)
+find_package(OpenSSL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SECRET REQUIRED IMPORTED_TARGET libsecret-1)
+target_link_libraries(listenfree_portable PRIVATE OpenSSL::Crypto PkgConfig::SECRET)
+target_link_libraries(listenfree_plugin_runtime PRIVATE OpenSSL::Crypto)
 if(LISTENFREE_BUILD_TESTS)
     add_executable(listenfree_integration_tests tests/integration_completion_tests.cpp)
-    target_link_libraries(listenfree_integration_tests PRIVATE listenfree_portable Qt6::Test)
+    target_link_libraries(listenfree_integration_tests PRIVATE listenfree_portable Qt6::Test PkgConfig::SECRET)
     add_test(NAME listenfree_integration_tests COMMAND listenfree_integration_tests)
 endif()
-target_link_libraries(listenfree PRIVATE dwmapi)
+
 qt_add_resources(listenfree listenfree_translations PREFIX "/translations" BASE "music_player_desktop/translations" FILES music_player_desktop/translations/en_US.json)
 # windres does not reliably track the ICON file referenced inside the .rc.
 # Recompile the native resource whenever the supplied application icon changes.
@@ -374,6 +412,7 @@ qt_add_qml_module(listenfree
         music_player_desktop/AppShell.qml
         music_player_desktop/components/WindowChrome.qml
         music_player_desktop/components/WindowTrafficButton.qml
+        music_player_desktop/components/WindowResizeHandles.qml
         music_player_desktop/components/AppTheme.qml
         music_player_desktop/components/GlassSurface.qml
         music_player_desktop/components/IconGlyph.qml
@@ -436,6 +475,7 @@ qt_add_qml_module(listenfree
         music_player_desktop/assets/background-pastel.svg
         music_player_desktop/assets/background-grain.svg
         music_player_desktop/assets/icons/app.svg
+        music_player_desktop/assets/icons/nextkde-music.svg
         music_player_desktop/assets/icons/app.png
         music_player_desktop/assets/icons/sidebar.svg
         music_player_desktop/assets/icons/playNext.svg
@@ -532,28 +572,23 @@ if(TARGET listenfree_resource_tests)
         FILES "${CMAKE_CURRENT_BINARY_DIR}/.qsb/cover-rounded.frag.qsb")
 endif()
 
-target_link_libraries(listenfree PRIVATE ole32 uuid Qt6::Multimedia listenfree_qmlbridge Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickDialogs2)
+target_link_libraries(listenfree PRIVATE Qt6::Multimedia listenfree_qmlbridge Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickDialogs2)
 if(LISTENFREE_BUILD_QMMP_BACKEND)
     target_link_libraries(listenfree PRIVATE listenfree_portable TagLib::tag)
     target_compile_definitions(listenfree PRIVATE LISTENFREE_PORTABLE=1)
-    get_filename_component(_qmmp_ui_binary_dir "${LISTENFREE_QMMP_UI_LIBRARY}" DIRECTORY)
-    foreach(_target listenfree listenfree_portable_tests)
-        if(TARGET ${_target})
-            add_custom_command(TARGET ${_target} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${LISTENFREE_QMMP_RUNTIME}" "${_qmmp_ui_binary_dir}/libqmmpui.dll"
-                    "$<TARGET_FILE_DIR:${_target}>")
-        endif()
-    endforeach()
+
 endif()
 listenfree_copy_mpv_runtime(listenfree)
 
 if(LISTENFREE_BUILD_TESTS)
     enable_testing()
-    add_executable(listenfree_shortcut_tests tests/shortcut_tests.cpp src/app/shortcut_service.cpp src/app/shortcut_service.h)
-    target_link_libraries(listenfree_shortcut_tests PRIVATE listenfree_qmlbridge Qt6::Widgets Qt6::Test)
-    target_include_directories(listenfree_shortcut_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    add_test(NAME listenfree_shortcut_tests COMMAND listenfree_shortcut_tests)
+    # These tests post WM_HOTKEY messages to a Win32 HWND.
+    if(WIN32)
+        add_executable(listenfree_shortcut_tests tests/shortcut_tests.cpp src/app/shortcut_service.cpp src/app/shortcut_service.h)
+        target_link_libraries(listenfree_shortcut_tests PRIVATE listenfree_qmlbridge Qt6::Widgets Qt6::Test)
+        target_include_directories(listenfree_shortcut_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+        add_test(NAME listenfree_shortcut_tests COMMAND listenfree_shortcut_tests)
+    endif()
     add_executable(listenfree_tests tests/backend_tests.cpp)
     target_link_libraries(listenfree_tests PRIVATE listenfree_qmlbridge listenfree_source_protocol listenfree_source_client TagLib::tag Qt6::Test Qt6::Sql Qt6::Network)
     target_include_directories(listenfree_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -606,3 +641,12 @@ if(LISTENFREE_BUILD_TESTS)
     add_library(listenfree_pcm_output MODULE tests/pcm_output/outputnull.h tests/pcm_output/outputnull.cpp tests/pcm_output/outputnullfactory.h tests/pcm_output/outputnullfactory.cpp)
     target_link_libraries(listenfree_pcm_output PRIVATE listenfree_qmmp_import Qt6::Widgets)
 endif()
+
+# Ubuntu installs OpenSSL configuration headers in its architecture include directory.
+target_include_directories(listenfree_plugin_runtime PRIVATE "${LISTENFREE_LIVE_FFMPEG_ROOT}/include/${CMAKE_LIBRARY_ARCHITECTURE}")
+target_include_directories(listenfree_portable PRIVATE "${LISTENFREE_LIVE_FFMPEG_ROOT}/include/${CMAKE_LIBRARY_ARCHITECTURE}")
+
+find_package(ICU REQUIRED COMPONENTS uc i18n)
+target_link_libraries(listenfree_portable PUBLIC ICU::uc ICU::i18n)
+
+include(packaging/linux/install.cmake)

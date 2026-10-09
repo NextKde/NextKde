@@ -1,3 +1,5 @@
+#include "platform/text_encoding.h"
+#include <cstdio>
 #include "online/platform_catalog.h"
 #include "download_service.h"
 #include "online/kuwo_lyrics.h"
@@ -192,7 +194,15 @@ QVariantList DownloadService::specifications(const QVariantList &tracks) const {
   bool first = true;
   for (const auto &v : tracks) {
     const auto info = online::sourceMusicInfo(v.toMap());
-    const auto capability = capabilities.value(info.value("source").toString()).toMap();
+    auto trackCapabilities = capabilities;
+    if (info.value("originKind") == "lx") {
+      trackCapabilities.clear();
+      for (const auto &entry : source_.sources()) {
+        const auto script = entry.toMap();
+        if (script.value("id") == info.value("originSourceId")) { trackCapabilities = script.value("capabilities").toMap(); break; }
+      }
+    }
+    const auto capability = trackCapabilities.value(info.value("source").toString()).toMap();
     QStringList available;
     for (const auto &q : capability.value("qualitys").toList()) available.append(q.toString());
     if (first) { common = available; first = false; }
@@ -287,7 +297,7 @@ void DownloadService::pump() {
 void DownloadService::resolutionFailed(const std::shared_ptr<Task> &t,
                                        const QString &reason) {
   detach(t);
-  if (t->data.value("track").toMap().value("source")=="bili" || !settings_.value("download.tryAlternateSource", true).toBool()) {
+  if (t->data.value("track").toMap().value("originKind")=="lx" || t->data.value("track").toMap().value("source")=="bili" || !settings_.value("download.tryAlternateSource", true).toBool()) {
     fail(t, reason);
     return;
   }
@@ -318,7 +328,7 @@ void DownloadService::resolutionFailed(const std::shared_ptr<Task> &t,
   t->alternativeSettings = snapshot;
   auto *alternative = new SourceController(
       snapshot.get(),
-      QCoreApplication::applicationDirPath() + "/listenfree-sourcehost.exe",
+      QCoreApplication::applicationDirPath() + "/listenfree-sourcehost",
       true, this);
   t->alternative = alternative;
   const auto attempt = t->attempt;
@@ -474,10 +484,7 @@ void DownloadService::start(const std::shared_ptr<Task> &t,
     const bool replacing = t->data.value("overwrite").toBool() &&
                            target.isFile() && !target.isSymLink();
     const bool saved =
-        replacing ? MoveFileExW(
-                        reinterpret_cast<const wchar_t *>(partial.utf16()),
-                        reinterpret_cast<const wchar_t *>(destination.utf16()),
-                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)
+        replacing ? std::rename(QFile::encodeName(partial).constData(), QFile::encodeName(destination).constData()) == 0
                   : QFile::rename(partial, destination);
     if (!saved) {
       fail(t, "无法保存成品文件，目标可能已存在");
@@ -634,8 +641,7 @@ void DownloadService::locate(const QString &id) {
   auto t = find(id);
   if (t)
     QProcess::startDetached(
-        "explorer.exe", {"/select,", QDir::toNativeSeparators(
-                                         t->data.value("path").toString())});
+        "xdg-open", {QFileInfo(t->data.value("path").toString()).absolutePath()});
 }
 void DownloadService::deleteFile(const QString &id) {
   auto t = find(id);
@@ -735,7 +741,7 @@ void DownloadService::finalize(const std::shared_ptr<Task> &t) {
       }
       // Keep original real word timing in an auxiliary lyrics tag, never invent
       // timings.
-      TagLib::FileRef file(reinterpret_cast<const wchar_t *>(path.utf16()));
+      TagLib::FileRef file(QFile::encodeName(path).constData());
       const auto text = [](const QString &s) {
         return TagLib::String(s.toUtf8().constData(), TagLib::String::UTF8);
       };
@@ -779,13 +785,9 @@ void DownloadService::finalize(const std::shared_ptr<Task> &t) {
       if (options.value("external").toBool() && !lrc.isEmpty()) {
         QByteArray bytes = lrc.toUtf8();
         if (options.value("encoding") == "Gbk") {
-          const int size = WideCharToMultiByte(
-              936, 0, reinterpret_cast<const wchar_t *>(lrc.utf16()),
-              int(lrc.size()), nullptr, 0, nullptr, nullptr);
-          bytes.resize(size);
-          WideCharToMultiByte(
-              936, 0, reinterpret_cast<const wchar_t *>(lrc.utf16()),
-              int(lrc.size()), bytes.data(), size, nullptr, nullptr);
+          const auto encoded = platform::encodeGbk(lrc);
+          if (!encoded.isEmpty()) bytes = encoded;
+          else { bytes.prepend(QByteArray::fromHex("efbbbf")); warning = "GBK 编码失败，歌词已保存为 UTF-8"; }
         } else
           bytes.prepend(QByteArray::fromHex("efbbbf"));
         QSaveFile lyric(QFileInfo(path).path() + "/" +
@@ -802,8 +804,7 @@ void DownloadService::finalize(const std::shared_ptr<Task> &t) {
     }));
   };
   const auto afterLyrics = [this, track, options,
-                            write](const QByteArray &bytes) {
-    const auto lyrics = online::decodeKuwoLyrics(bytes);
+                            write](const QString &lyrics) {
     const QUrl cover(track.value("artwork").toString());
     if (options.value("Artwork").toBool() &&
         (cover.scheme() == "http" || cover.scheme() == "https"))
@@ -813,7 +814,27 @@ void DownloadService::finalize(const std::shared_ptr<Task> &t) {
     else
       write(lyrics, {});
   };
-  if (track.value("source")!="bili" && (options.value("Lyrics").toBool() || options.value("external").toBool())) {
+  const bool wantsLyrics = options.value("Lyrics").toBool() || options.value("external").toBool();
+  if (track.value("originKind") == "lx" && wantsLyrics) {
+    const auto request = source_.resolveLyric(track.value("originSourceId").toString(),
+                                              online::sourceMusicInfo(track));
+    if (request.isEmpty()) {
+      afterLyrics({});
+      return;
+    }
+    // A script's identifier is meaningful only to that script. Never send it
+    // to a platform lyrics endpoint, even when its provider is called "kw".
+    auto *operation = new QObject(this);
+    connect(&source_, &SourceController::resolutionFinished, operation,
+            [operation, request, afterLyrics](const QString &id, const QString &,
+                                              const QString &, const QVariantMap &data,
+                                              const QString &error) {
+      if (id != request) return;
+      operation->deleteLater();
+      afterLyrics(error.isEmpty() ? data.value("lyric").toString() + "\n" +
+                                    data.value("tlyric").toString() : QString{});
+    });
+  } else if (track.value("originKind") != "lx" && track.value("source")!="bili" && wantsLyrics) {
     const auto query =
         online::kuwoXor(
             "user=12345,web,web,web&requester=localhost&req=1&rid=MUSIC_" +
@@ -821,7 +842,9 @@ void DownloadService::finalize(const std::shared_ptr<Task> &t) {
             .toBase64();
     fetchMetadata(QUrl("https://newlyric.kuwo.cn/newlyric.lrc?" +
                        QString::fromLatin1(query)),
-                  2 * 1024 * 1024, afterLyrics);
+                  2 * 1024 * 1024, [afterLyrics](const QByteArray &bytes) {
+                    afterLyrics(online::decodeKuwoLyrics(bytes));
+                  });
   } else
     afterLyrics({});
 }

@@ -20,7 +20,7 @@ Item {
     onArtworkChanged: visualReady = false
     property real flowTime: 0
     readonly property bool exposed: visible && (!Window.window || Window.window.visibility !== Window.Minimized)
-    readonly property color fallbackColor: AppTheme.darkMode ? "#333333" : "#474747"
+    readonly property color fallbackColor: AppTheme.darkMode ? "#333333" : AppTheme.pageBackground
     clip: true
     // Kawarp's four-tap pass, cached by Qt until its input/offset changes.
     component FlowBlurPass: ShaderEffectSource {

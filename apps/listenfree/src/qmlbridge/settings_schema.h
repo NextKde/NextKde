@@ -244,6 +244,10 @@ inline constexpr char settingsSchema[] = R"json({
       "Right"
     ]
   },
+  "lyrics.autoMatchEnabled": {
+    "category": "appearance",
+    "default": true
+  },
   "lyrics.chineseConversion": {
     "category": "appearance",
     "default": "Off",
@@ -302,6 +306,18 @@ inline constexpr char settingsSchema[] = R"json({
   },
   "lyrics.wordTimingEnabled": {
     "category": "appearance",
+    "default": true
+  },
+  "nextkde.desktopLyricsEnabled": {
+    "category": "nextkde",
+    "default": true
+  },
+  "nextkde.lyricsEnabled": {
+    "category": "nextkde",
+    "default": true
+  },
+  "nextkde.mediaEnabled": {
+    "category": "nextkde",
     "default": true
   },
   "nowPlaying.backgroundStyle": {

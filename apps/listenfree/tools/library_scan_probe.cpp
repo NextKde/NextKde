@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     bool repositoryFailure = false;
 
     listenfree::application::ScanRequest request;
-    request.roots.push_back(std::filesystem::path(root.toStdWString()));
+    request.roots.push_back(std::filesystem::path(root.toStdString()));
     request.recursive = true;
     scanner.start(request, {
         [&](std::vector<listenfree::domain::Track> tracks) {

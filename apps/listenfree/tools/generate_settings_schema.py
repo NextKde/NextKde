@@ -6,7 +6,7 @@ from pathlib import Path
 root = Path(__file__).resolve().parents[1]
 source = (root / 'music_player_desktop/pages/SettingsPage.qml').read_text(encoding='utf-8')
 keys = dict(re.findall(r'^\s+(\w+): "([\w.]+)",?$', source, re.M))
-categories = ['general', 'library', 'playback', 'appearance', 'download', 'source', 'accounts', 'shortcuts', 'backup', 'other', 'about']
+categories = ['general', 'library', 'playback', 'appearance', 'download', 'source', 'accounts', 'shortcuts', 'backup', 'other', 'about', 'nextkde']
 overrides = {'ui.fontFamily': 'SystemDefault', 'appearance.dynamicArtworkEnabled': True,
              'lyrics.showTranslation': True, 'lyrics.showRomanization': False, 'tray.enabled': True}
 rules = {}

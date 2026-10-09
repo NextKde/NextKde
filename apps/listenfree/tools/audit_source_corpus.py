@@ -30,7 +30,7 @@ class Host:
         bins = [executable.parent, Path('F:/QT/6.11.2/mingw_64/bin'),
                 Path('F:/QT/Tools/mingw1310_64/bin'), root/'.vcpkg_installed/x64-mingw-dynamic/bin']
         env['PATH'] = os.pathsep.join(map(str, bins)) + os.pathsep + env['PATH']
-        if standalone:
+        if standalone and os.name == 'nt':
             system = Path(os.environ['SystemRoot'])
             env['PATH'] = os.pathsep.join(map(str, [executable.parent, system/'System32', system]))
             for variable in ['QT_PLUGIN_PATH', 'QML2_IMPORT_PATH', 'QML_IMPORT_PATH',
@@ -38,7 +38,7 @@ class Host:
                 env.pop(variable, None)
         self.process = subprocess.Popen([str(executable)], stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
-            creationflags=subprocess.CREATE_NO_WINDOW)
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.messages = queue.Queue()
         def read():
             try:

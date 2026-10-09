@@ -31,6 +31,7 @@ Item {
     signal trackActivated(var track, var playbackContext)
     signal trackCommandRequested(string command, var track, int rowIndex, var playbackContext)
     signal playAllRequested(var tracks)
+    signal onlineCollectionRequested(var collection)
 
     onFilterTextChanged: { closeAlbum(); panX=0; panY=0 }
     function closeAlbum() {
@@ -59,6 +60,7 @@ Item {
         return Qt.rect(x,y,right-x-3,bottom-y-3)
     }
     function openAlbum(album, key, rect, tileItem) {
+        if (album.savedOnlineAlbum) { onlineCollectionRequested(album); return }
         if(selectedKey && selectedKey!==key && expansion>0){
             pendingAlbum={album:album,key:key,rect:rect,tile:tileItem}
             expandAnimation.stop();expandAnimation.to=0;expandAnimation.start();return

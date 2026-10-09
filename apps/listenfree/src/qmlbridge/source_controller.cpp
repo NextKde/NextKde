@@ -1,4 +1,6 @@
 #include "qmlbridge/source_controller.h"
+#include "sourcehost/script_metadata.h"
+#include "online/track_origin.h"
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
@@ -147,6 +149,8 @@ SourceController::SourceController(application::ISettingsRepository *settings,
 }
 
 SourceController::~SourceController() {
+  const auto requests = scriptRequests_; scriptRequests_.clear();
+  for (auto host : requests) if (host) { host->disconnect(this); host->stop(); }
   if (host_)
     host_->stop();
 }
@@ -180,16 +184,24 @@ void SourceController::load() {
           map.insert(QStringLiteral("status"),
                      map.value(QStringLiteral("status"), QStringLiteral("已导入")));
           map.insert(QStringLiteral("path"), QDir(sourceDirectory()).filePath(QFileInfo(path).fileName()));
+          QFile scriptFile(map.value("path").toString());
+          if (scriptFile.open(QIODevice::ReadOnly)) {
+            const auto metadata = sourcehost::scriptMetadata(scriptFile.read(kMaxPluginBytes));
+            for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
+          }
+          map.insert(QStringLiteral("availabilityStatus"), QStringLiteral("待检测"));
           map.insert(QStringLiteral("hostReady"), false);
           sources_.append(map);
         }
       }
     }
-    activeId_ = QString::fromStdString(
-        settings_->get("source.activeId").value_or(""));
+    defaultId_ = QString::fromStdString(settings_->get("source.defaultId")
+        .value_or(settings_->get("source.activeId").value_or("")));
   }
-  if (indexOf(activeId_) < 0)
-    activeId_ = sources_.isEmpty() ? QString{} : sources_.first().toMap().value("id").toString();
+  if (indexOf(defaultId_) < 0)
+    defaultId_ = sources_.isEmpty() ? QString{} : sources_.first().toMap().value("id").toString();
+  activeId_ = defaultId_;
+  emit defaultChanged();
   emit sourcesChanged();
   emit activeChanged();
 }
@@ -206,7 +218,8 @@ void SourceController::persist() {
   }
   settings_->set("source.custom",
                  QJsonDocument(custom).toJson(QJsonDocument::Compact).toStdString());
-  settings_->set("source.activeId", activeId_.toStdString());
+  settings_->set("source.defaultId", defaultId_.toStdString());
+  settings_->set("source.activeId", defaultId_.toStdString()); // Legacy readers keep the startup preference.
 }
 
 int SourceController::indexOf(const QString &id) const {
@@ -244,7 +257,6 @@ bool SourceController::selectSource(const QString &id) {
   if (activeId_ != normalized) {
     hostSourceInfo_.clear();
     activeId_ = normalized;
-    persist();
     emit activeChanged();
   }
   setError({});
@@ -259,6 +271,19 @@ bool SourceController::selectSource(const QString &id) {
   return true;
 }
 
+bool SourceController::setDefaultSource(const QString &id) {
+  const auto normalized = id.trimmed();
+  if (indexOf(normalized) < 0) return false;
+  if (defaultId_ != normalized) {
+    defaultId_ = normalized;
+    persist();
+    emit defaultChanged();
+  }
+  return true;
+}
+
+bool SourceController::useDefaultSource() { return selectSource(defaultId_); }
+
 bool SourceController::removeSource(const QString &id) {
   const int index = indexOf(id.trimmed());
   if (index < 0 ||
@@ -268,11 +293,15 @@ bool SourceController::removeSource(const QString &id) {
   const auto removedId = map.value(QStringLiteral("id")).toString();
   const auto path = QFileInfo(map.value(QStringLiteral("path")).toString());
   sources_.removeAt(index);
+  if (defaultId_ == removedId) {
+    defaultId_ = sources_.isEmpty() ? QString{} : sources_.first().toMap().value("id").toString();
+    emit defaultChanged();
+  }
   if (path.isFile() &&
       QDir::cleanPath(path.absolutePath()) == QDir::cleanPath(sourceDirectory()))
     QFile::remove(path.absoluteFilePath());
   if (activeId_ == removedId) {
-    activeId_ = sources_.isEmpty() ? QString{} : sources_.first().toMap().value("id").toString();
+    activeId_ = defaultId_;
     emit activeChanged();
   }
   persist();
@@ -343,11 +372,15 @@ bool SourceController::importLocalFile(const QString &path) {
                   {QStringLiteral("removable"), true},
                   {QStringLiteral("updatePrompt"), true},
                   {QStringLiteral("status"), QStringLiteral("已导入")}};
+  const auto metadata = sourcehost::scriptMetadata(script);
+  for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
+  map["availabilityStatus"] = "待检测";
   const int old = indexOf(id);
   if (old >= 0)
     sources_.removeAt(old);
   sources_.append(map);
   activeId_ = id;
+  if (defaultId_.isEmpty()) { defaultId_ = id; emit defaultChanged(); }
   persist();
   emit sourcesChanged();
   emit activeChanged();
@@ -425,11 +458,15 @@ void SourceController::finishUrlImport() {
                   {QStringLiteral("removable"), true},
                   {QStringLiteral("updatePrompt"), true},
                   {QStringLiteral("status"), QStringLiteral("已导入")}};
+  const auto metadata = sourcehost::scriptMetadata(data);
+  for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
+  map["availabilityStatus"] = "待检测";
   const int old = indexOf(id);
   if (old >= 0)
     sources_.removeAt(old);
   sources_.append(map);
   activeId_ = id;
+  if (defaultId_.isEmpty()) { defaultId_ = id; emit defaultChanged(); }
   persist();
   emit sourcesChanged();
   emit activeChanged();
@@ -458,8 +495,8 @@ void SourceController::initializeHost() {
     hostExecutablePath_ = QDir(QCoreApplication::applicationDirPath())
                               .filePath(fileName);
   }
-  hostAvailable_ = QFileInfo::exists(hostExecutablePath_) &&
-                   QFileInfo(hostExecutablePath_).isFile();
+  hostAvailable_ = QFileInfo(hostExecutablePath_).isFile() &&
+                   QFileInfo(hostExecutablePath_).isExecutable();
   emit hostChanged();
   updateCustomStatuses();
   if (!hostAvailable_) {
@@ -602,6 +639,7 @@ void SourceController::handleHostMessage(
     }
 
     hostSourceInfo_.clear();
+    recordCapabilities(sourceId, message.payload.value("sources").toObject());
     const auto sourceObject =
         message.payload.value(QStringLiteral("sources")).toObject();
     QVariantList providerIds;
@@ -757,7 +795,7 @@ void SourceController::updateCustomStatuses() {
       status = QStringLiteral("已加载");
       ready = true;
     } else {
-      status = QStringLiteral("已导入");
+      status = map.value("availabilityStatus", QStringLiteral("待检测")).toString();
     }
     if (map.value(QStringLiteral("status")).toString() != status) {
       map.insert(QStringLiteral("status"), status);
@@ -884,9 +922,199 @@ QString SourceController::resolve(const QString &sourceId,
   return request.requestId;
 }
 
+void SourceController::recordCapabilities(const QString &id, const QJsonObject &providers) {
+  QStringList actions, names;
+  for (auto it = providers.begin(); it != providers.end(); ++it) {
+    const auto provider = it.value().toObject();
+    names.append(provider.value("name").toString(it.key()));
+    for (const auto &action : provider.value("actions").toArray()) actions.append(action.toString());
+  }
+  actions.removeDuplicates();
+  const bool useful = actions.contains("musicUrl") || actions.contains("search");
+  updateSource(id, {{"capabilities", providers.toVariantMap()},
+      {"providerNames", names.join(" / ")}, {"searchSupported", actions.contains("search")},
+      {"capabilityText", actions.contains("search") ? (actions.contains("musicUrl") ? QStringLiteral("脚本搜索 · 播放解析") : QStringLiteral("仅脚本搜索"))
+                            : actions.contains("musicUrl") ? QStringLiteral("仅播放解析") : QStringLiteral("无可用动作")},
+      {"availabilityStatus", useful ? QStringLiteral("初始化通过") : QStringLiteral("无可用能力")},
+      {"lastCheck", QDateTime::currentDateTime().toString(Qt::ISODate)}, {"checkError", QString{}}});
+}
+
+QString SourceController::checkSource(const QString &id) { return requestScript(id, "check"); }
+
+QString SourceController::searchScript(const QString &id, const QString &keyword, int page) {
+  return requestScript(id, "search", {{"keyword", keyword.trimmed().left(1024)},
+                                    {"page", qMax(1, page)}, {"limit", 30}});
+}
+
+QString SourceController::requestScript(const QString &id, const QString &action,
+                                        const QVariantMap &info, const QString &quality) {
+  const auto index = indexOf(id);
+  if (index < 0 || !hostAvailable_ || scriptRequests_.size() >= 8) {
+    setError(index < 0 ? QStringLiteral("该曲目的洛雪音源已移除，请重新导入")
+        : !hostAvailable_ ? QStringLiteral("音源宿主不可用") : QStringLiteral("音源请求过多，请稍后重试"));
+    return {};
+  }
+  const auto source = sources_.at(index).toMap();
+  const auto operationId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+  auto *client = new sourcehost::SourceHostClient(hostExecutablePath_, this);
+  client->setAutoRestart(false);
+  scriptRequests_.insert(operationId, client);
+  // Each pinned operation has a bounded isolated host. Loading/searching a
+  // different source never unloads the source serving the current player.
+  struct State {
+    QHash<QString, QString> providers;
+    QVariantList rows;
+    QStringList errors;
+    int total = 0;
+    int pages = 1;
+  };
+  auto state = std::make_shared<State>();
+  const auto loadId = operationId + ".load";
+  auto finish = [this, client, operationId, id, action](QVariantMap data, const QString &error) {
+    if (!scriptRequests_.remove(operationId)) return;
+    if (action == "check") updateSource(id, {{"status", error.isEmpty() ? QStringLiteral("初始化通过") : QStringLiteral("检测失败")},
+        {"availabilityStatus", error.isEmpty() ? QStringLiteral("初始化通过") : QStringLiteral("检测失败")},
+        {"checkError", error}, {"lastCheck", QDateTime::currentDateTime().toString(Qt::ISODate)}});
+    if (action != "check") updateSource(id, {{"lastRequestStatus", error.isEmpty() ? QStringLiteral("最近请求成功") : QStringLiteral("最近请求失败")},
+        {"checkError", error}});
+    client->disconnect(this);
+    client->stop();
+    client->deleteLater();
+    emit resolutionFinished(operationId, id, action, data, error);
+  };
+  if (action == "check") updateSource(id, {{"status", QStringLiteral("检测中…")}, {"checkError", QString{}}});
+  connect(client, &sourcehost::SourceHostClient::ready, this, [client, source, loadId, finish] {
+    sourcehost::SourceMessage request;
+    request.type = sourcehost::MessageType::LoadPlugin;
+    request.requestId = loadId;
+    request.payload = {{"path", source.value("path").toString()}};
+    if (!client->request(request, sourcehost::PluginClientTimeoutMs)) finish({}, QStringLiteral("无法加载音源"));
+  });
+  connect(client, &sourcehost::SourceHostClient::requestFinished, this,
+      [finish](const QString &, sourcehost::SourceHostClient::RequestTerminal terminal) {
+    using Terminal = sourcehost::SourceHostClient::RequestTerminal;
+    if (terminal != Terminal::Succeeded && terminal != Terminal::RemoteError)
+      finish({}, terminalName(terminal));
+  });
+  connect(client, &sourcehost::SourceHostClient::crashed, this,
+      [finish] { finish({}, QStringLiteral("音源宿主异常退出")); });
+  connect(client, &sourcehost::SourceHostClient::protocolError, this,
+      [finish](const QString &error) { finish({}, error); });
+  connect(client, &sourcehost::SourceHostClient::messageReceived, this,
+      [this, client, operationId, id, source, action, info, quality, state, loadId, finish]
+      (const sourcehost::SourceMessage &message) {
+    using Type = sourcehost::MessageType;
+    if (message.type != Type::Result && message.type != Type::Error) return;
+    if (message.requestId == loadId) {
+      if (message.type == Type::Error || !message.payload.value("ok").toBool()) {
+        const auto error = errorMessage(message.payload);
+        updateSource(id, {{"availabilityStatus", QStringLiteral("初始化失败")}, {"checkError", error}});
+        finish({}, error); return;
+      }
+      const auto providers = message.payload.value("sources").toObject();
+      recordCapabilities(id, providers);
+      if (action == "check") {
+        if (providers.isEmpty()) finish({}, QStringLiteral("脚本未声明可用能力"));
+        else finish({{"capabilities", providers.toVariantMap()}}, {});
+        return;
+      }
+      QStringList selected;
+      for (auto it = providers.begin(); it != providers.end(); ++it) {
+        if (!hasString(it.value().toObject().value("actions").toVariant(), action)) continue;
+        if (action == "search" || it.key() == info.value("source").toString()) selected.append(it.key());
+      }
+      if (selected.isEmpty()) {
+        finish({}, action == "search" ? QStringLiteral("该脚本仅支持播放解析，未提供搜索。请使用平台搜索。")
+                                      : QStringLiteral("该脚本不支持此曲目的请求")); return;
+      }
+      // Register all IDs before sending: a failed write can complete inline.
+      for (const auto &provider : selected) state->providers.insert(operationId + "." + provider, provider);
+      for (const auto &provider : selected) {
+        QString requestedQuality = quality;
+        const auto qualities = providers.value(provider).toObject().value("qualitys").toArray();
+        if (action == "musicUrl" && !hasString(qualities.toVariantList(), requestedQuality)) {
+          if (qualities.isEmpty()) { finish({}, QStringLiteral("音源未声明可用音质")); return; }
+          requestedQuality = hasString(qualities.toVariantList(), "320k") ? QStringLiteral("320k") : qualities.first().toString();
+        }
+        sourcehost::SourceMessage request;
+        request.requestId = operationId + "." + provider;
+        request.type = action == "search" ? Type::Search : action == "lyric" ? Type::ResolveLyric
+                     : action == "pic" ? Type::ResolvePic : Type::ResolveMusicUrl;
+        request.payload = {{"source", provider}, {"type", action == "musicUrl" ? requestedQuality : action},
+                           {"musicInfo", QJsonObject::fromVariantMap(info)}};
+        if (!client->request(request, sourcehost::PluginClientTimeoutMs)) { finish({}, QStringLiteral("无法发送音源请求")); return; }
+      }
+      return;
+    }
+    if (!state->providers.contains(message.requestId)) return;
+    const auto provider = state->providers.take(message.requestId);
+    const auto error = message.type == Type::Error ? errorMessage(message.payload) : QString{};
+    auto data = message.payload.value("data").toObject().toVariantMap();
+    if (action != "search") {
+      if (message.payload.value("data").isString()) data["url"] = message.payload.value("data").toString();
+      data["source"] = provider;
+      finish(data, error); return;
+    }
+    if (!error.isEmpty()) state->errors.append(error);
+    else {
+      const auto rows = data.value("rows", data.value("list", data.value("songs"))).toList();
+      for (const auto &value : rows.mid(0, 100)) {
+        auto row = value.toMap();
+        const auto rid = row.value("rid", row.value("songmid", row.value("id", row.value("hash")))).toString();
+        const auto title = row.value("title", row.value("name")).toString();
+        if (rid.isEmpty() || title.isEmpty()) continue;
+        // Keep the script's native metadata intact for later resolution.
+        row["scriptMusicInfo"] = row;
+        row["rid"] = rid; row["title"] = title;
+        row["artist"] = row.value("artist", row.value("singer"));
+        row["album"] = row.value("album", row.value("albumName"));
+        row["artwork"] = row.value("artwork", row.value("img", row.value("pic")));
+        qint64 durationMs = row.value("durationMs").toLongLong();
+        if (durationMs <= 0) {
+          const auto duration = row.value("duration", row.value("interval")).toString();
+          const auto parts = duration.split(':');
+          double seconds = 0;
+          bool valid = parts.size() <= 3;
+          for (const auto &part : parts) {
+            bool numeric = false;
+            const auto number = part.toDouble(&numeric);
+            valid = valid && numeric && number >= 0 && number <= 31536000;
+            seconds = seconds * 60 + number;
+          }
+          if (valid && seconds <= 31536000) durationMs = qint64(seconds * 1000);
+        }
+        row["durationMs"] = qMax<qint64>(0, durationMs);
+        row["duration"] = QStringLiteral("%1:%2").arg(qMax<qint64>(0, durationMs) / 60000)
+            .arg(qMax<qint64>(0, durationMs) / 1000 % 60, 2, 10, QChar('0'));
+        row["source"] = provider; row["originKind"] = "lx";
+        row["originSourceId"] = id; row["originSourceName"] = source.value("name");
+        row["trackId"] = online::scriptTrackKey(row);
+        // A result cannot inject a local file or bypass its script resolver.
+        row.remove("localPath"); row.remove("remoteUrl"); row.remove("radioId"); row.remove("radioProvider");
+        state->rows.append(row);
+      }
+      const int total = data.value("total", rows.size()).toInt();
+      state->total += qMax(0, total);
+      state->pages = qMax(state->pages, data.value("pages", qMax(1, (total + 29) / 30)).toInt());
+    }
+    if (state->providers.isEmpty()) finish({{"rows", state->rows}, {"total", state->total},
+        {"pages", state->pages}, {"warning", state->errors.join("；")}},
+        state->rows.isEmpty() ? state->errors.join("；") : QString{});
+  });
+  // Defer so the caller can store its request ID before even an immediate
+  // launch failure emits the completion signal.
+  QTimer::singleShot(0, client, [this, client, operationId, finish] {
+    if (!scriptRequests_.contains(operationId)) return;
+    if (!client->start()) finish({}, QStringLiteral("无法启动音源宿主"));
+  });
+  return operationId;
+}
+
 QString SourceController::resolveMusicUrl(const QString &sourceId,
                                            const QString &quality,
                                            const QVariantMap &musicInfo) {
+  if (online::isScriptTrack(musicInfo))
+    return requestScript(musicInfo.value("originSourceId").toString(), "musicUrl", musicInfo, quality);
   if (musicInfo.value("source") == "bili") {
     auto requestId = std::make_shared<QString>();
     *requestId = bilibili_.audio(musicInfo, quality, this,
@@ -900,18 +1128,26 @@ QString SourceController::resolveMusicUrl(const QString &sourceId,
 
 QString SourceController::resolveLyric(const QString &sourceId,
                                        const QVariantMap &musicInfo) {
+  if (online::isScriptTrack(musicInfo))
+    return requestScript(musicInfo.value("originSourceId").toString(), "lyric", musicInfo);
   return resolve(sourceId, QStringLiteral("lyric"), QStringLiteral("lyric"),
                  musicInfo);
 }
 
 QString SourceController::resolvePic(const QString &sourceId,
                                      const QVariantMap &musicInfo) {
+  if (online::isScriptTrack(musicInfo))
+    return requestScript(musicInfo.value("originSourceId").toString(), "pic", musicInfo);
   return resolve(sourceId, QStringLiteral("pic"), QStringLiteral("pic"),
                  musicInfo);
 }
 
 bool SourceController::cancelResolution(const QString &requestId) {
   const auto normalized = requestId.trimmed();
+  if (auto requestHost = scriptRequests_.take(normalized)) {
+    requestHost->disconnect(this); requestHost->stop(); requestHost->deleteLater();
+    return true;
+  }
   if (bilibili_.cancel(normalized)) return true;
   if (normalized.isEmpty() || !pendingResolutions_.contains(normalized) ||
       !host_)

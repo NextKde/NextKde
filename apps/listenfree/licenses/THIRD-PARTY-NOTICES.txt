@@ -51,3 +51,8 @@ WinSparkle 0.9.4（官方 x64 二进制，无修改）
 SourceHost 浏览器 API 兼容资源：core-js 3.45.1、buffer 6.0.3、base64-js 1.5.1、ieee754 1.2.1（MIT）。
 来源：https://github.com/zloirock/core-js 、https://github.com/feross/buffer
 构建期固定依赖生成 URL、URLSearchParams、Base64 与 Buffer 静态资源，运行时无需 Node。许可原文见 sourcehost-browser-MIT.txt。
+
+NextKDE 原生适配版：Qt 6.10.2（增加 DBus、WebEngineWidgets/Core），系统 Chromium/Qt WebEngine 运行库由发行版提供。
+KOS Music 图标来自 SuceV587/NextKde apps/music/data/kos-music.svg，GPL-3.0，见 NextKDE-GPL-3.0.txt。
+来源：https://github.com/SuceV587/NextKde/tree/5cfb6a3/apps/music/data
+Linux 原生平台密码算法使用 OpenSSL 3，凭据保管使用 libsecret，字符转换使用 ICU。

@@ -8,8 +8,15 @@
 #include <QMap>
 #include <QRandomGenerator>
 #include <QRegularExpression>
+#include <QUrlQuery>
+#ifdef Q_OS_WIN
 #include <windows.h>
 #include <wincred.h>
+#else
+#undef signals
+#include <libsecret/secret.h>
+#define signals Q_SIGNALS
+#endif
 
 namespace listenfree::qmlbridge {
 namespace {
@@ -18,7 +25,7 @@ constexpr qsizetype MaxCookieBytes = 16 * 1024;
 constexpr qsizetype CredentialBlobBytes = 2560;
 constexpr qsizetype CredentialAttributeBytes = 256;
 constexpr qsizetype MaxCredentialAttributes = 64;
-bool supported(const QString& provider) { return provider=="netease" || provider=="bilibili"; }
+bool supported(const QString& provider) { return QStringList{"netease", "qqmusic", "kugou", "kuwo", "bilibili"}.contains(provider); }
 
 QMap<QByteArray, QByteArray> cookieFields(QString text) {
     QMap<QByteArray, QByteArray> fields;
@@ -71,6 +78,7 @@ QByteArray neteaseAccountBody(const QByteArray& cookie) {
     return "params=" + QUrl::toPercentEncoding(QString::fromLatin1(encrypted.toBase64()))
         + "&encSecKey=" + wrappedKey.toHex();
 }
+#ifdef Q_OS_WIN
 bool writeCredential(const QString& target, const QByteArray& cookie) {
     CREDENTIALW credential{};
     credential.Type=CRED_TYPE_GENERIC;
@@ -134,9 +142,75 @@ QByteArray readCredential(const QString& target) {
     LocalFree(output.pbData);
     return cookie;
 }
+#else
+const SecretSchema* credentialSchema() {
+    static const SecretSchema schema = {"org.listenfree.Credentials", SECRET_SCHEMA_NONE,
+                                       {{"target", SECRET_SCHEMA_ATTRIBUTE_STRING}, {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING}}};
+    return &schema;
+}
+bool writeCredential(const QString& target, const QByteArray& cookie) {
+    GError* error = nullptr;
+    const bool ok = secret_password_store_sync(credentialSchema(), SECRET_COLLECTION_DEFAULT,
+        "ListenFree account", cookie.constData(), nullptr, &error, "target", target.toUtf8().constData(), nullptr);
+    if (error) g_error_free(error);
+    return ok;
+}
+QByteArray readCredential(const QString& target) {
+    GError* error = nullptr;
+    gchar* value = secret_password_lookup_sync(credentialSchema(), nullptr, &error, "target", target.toUtf8().constData(), nullptr);
+    const QByteArray result = value ? QByteArray(value) : QByteArray();
+    if (value) secret_password_free(value);
+    if (error) g_error_free(error);
+    return result;
+}
+bool deleteCredential(const QString& target) {
+    GError* error = nullptr;
+    secret_password_clear_sync(credentialSchema(), nullptr, &error, "target", target.toUtf8().constData(), nullptr);
+    const bool ok = error == nullptr;
+    if (error) g_error_free(error);
+    return ok;
+}
+#endif
+
 }
 AccountService::AccountService(const QString& profile,QObject* parent,QNetworkAccessManager* network)
     :QObject(parent),profile_(profile),networkAccess_(network ? network : &network_) {}
+QVariantList AccountService::providers() {
+    QVariantList result;
+    for (const QString& id : {QString("netease"), QString("qqmusic"), QString("kugou"), QString("kuwo"), QString("bilibili")})
+        result.append(QVariantMap{{"id", id}, {"name", providerName(id)},
+            {"verification", id == "kuwo" || id == "kugou" ? "cookie" : "profile"}});
+    return result;
+}
+QString AccountService::providerName(const QString& provider) {
+    return QMap<QString,QString>{{"netease",tr("网易云音乐")}, {"qqmusic",tr("QQ 音乐")},
+        {"kugou",tr("酷狗音乐")}, {"kuwo",tr("酷我音乐")}, {"bilibili",tr("哔哩哔哩")}}.value(provider);
+}
+QUrl AccountService::loginUrl(const QString& provider) {
+    return QUrl(QMap<QString,QString>{{"netease","https://music.163.com/#/login"},
+        {"qqmusic","https://y.qq.com/portal/profile.html"}, {"kugou","https://www.kugou.com/"},
+        {"kuwo","https://www.kuwo.cn/"}, {"bilibili","https://passport.bilibili.com/login"}}.value(provider));
+}
+bool AccountService::cookieDomainAllowed(const QString& provider, const QString& domain) {
+    const auto base = QMap<QString,QString>{{"netease","music.163.com"}, {"qqmusic","qq.com"},
+        {"kugou","kugou.com"}, {"kuwo","kuwo.cn"}, {"bilibili","bilibili.com"}}.value(provider);
+    QString host = domain.toLower(); if (host.startsWith('.')) host.remove(0,1);
+    return !base.isEmpty() && (host == base || host.endsWith('.' + base));
+}
+bool AccountService::hasLoginCookie(const QString& provider, const QByteArray& cookie) {
+    const auto fields = cookieFields(QString::fromUtf8(cookie));
+    const auto nonempty = [&](const QByteArray& name) { return !fields.value(name).isEmpty(); };
+    if (provider == "netease") return nonempty("MUSIC_U");
+    if (provider == "bilibili") return nonempty("SESSDATA");
+    if (provider == "qqmusic") return (nonempty("uin") || nonempty("wxuin")) && (nonempty("qm_keyst") || nonempty("qqmusic_key"));
+    if (provider == "kuwo") return nonempty("userid") && (nonempty("sid") || nonempty("websid"));
+    if (provider == "kugou") {
+        const QUrlQuery nested(QString::fromUtf8(fields.value("KuGoo")));
+        return (nonempty("KugooID") && (nonempty("t") || nonempty("token"))) ||
+            (!nested.queryItemValue("KugooID").isEmpty() && !nested.queryItemValue("t").isEmpty());
+    }
+    return false;
+}
 QString AccountService::target(const QString& provider) const {
     // Multiple portable profiles must not share login state unintentionally.
     return "ListenFree/"+QString::fromLatin1(QCryptographicHash::hash(profile_.toUtf8(),QCryptographicHash::Sha256).toHex().left(24))+"/"+provider;
@@ -154,10 +228,18 @@ QVariantMap AccountService::parseProfile(const QString& provider,const QByteArra
         if (!profile.value("isLogin").toBool() || profile.value("mid").toVariant().toLongLong()<=0 || profile.value("uname").toString().isEmpty()) return {};
         return {{"name",profile.value("uname").toString()}, {"id",profile.value("mid").toVariant().toString()}, {"avatar",profile.value("face").toString()}};
     }
+    if (provider == "qqmusic" && root.value("code").toInt(-1) == 0) {
+        profile = root.value("data").toObject().value("creator").toObject();
+        const auto id = profile.value("uin").toVariant().toString();
+        const auto name = profile.value("nick").toString();
+        if (id.toULongLong() == 0 || name.isEmpty()) return {};
+        return {{"id",id}, {"name",name}, {"avatar",profile.value("headpic").toString()}};
+    }
     return {};
 }
 void AccountService::restore() {
-    for (const auto& provider:{QString("netease"),QString("bilibili")}) {
+    for (const auto& entry : providers()) {
+        const auto provider = entry.toMap().value("id").toString();
         auto cookie = readCredential(target(provider));
         if (cookie.isEmpty()) continue;
         validate(provider,cookie,false); cookie.fill(0);
@@ -170,40 +252,64 @@ QByteArray AccountService::cookieForRequest(const QString& provider) const {
 void AccountService::login(const QString& provider,const QString& cookie) {
     if (!supported(provider)) return;
     if (cookie.toUtf8().size() > MaxCookieBytes) {
-        emit notice(tr("Cookie 超过 16 KB，请只粘贴 Cookie 字段，不要包含其他请求头。")); return;
+        emit notice(tr("Cookie 超过 16 KB，请只粘贴 Cookie 字段，不要包含其他请求头。")); emit loginFinished(provider,false); return;
     }
     const auto fields = cookieFields(cookie);
     if (fields.isEmpty()) {
-        emit notice(tr("Cookie 格式无效，请粘贴 Cookie 请求头的内容（名称=值；多项用分号分隔）。")); return;
+        emit notice(tr("Cookie 格式无效，请粘贴 Cookie 请求头的内容（名称=值；多项用分号分隔）。")); emit loginFinished(provider,false); return;
     }
-    const QByteArray required = provider == "netease" ? "MUSIC_U" : "SESSDATA";
-    if (fields.value(required).isEmpty()) {
-        emit notice(tr("Cookie 缺少有效的 %1，请从已登录的平台页面复制完整 Cookie。").arg(QString::fromLatin1(required))); return;
+    if (!hasLoginCookie(provider, serializeCookie(fields))) {
+        emit notice(tr("Cookie 缺少 %1 的登录字段，请从已登录的平台网页复制完整 Cookie。").arg(providerName(provider))); emit loginFinished(provider,false); return;
     }
     const auto bytes = serializeCookie(fields);
     if (bytes.size() > MaxCookieBytes) {
-        emit notice(tr("Cookie 超过 16 KB，请只粘贴 Cookie 字段，不要包含其他请求头。")); return;
+        emit notice(tr("Cookie 超过 16 KB，请只粘贴 Cookie 字段，不要包含其他请求头。")); emit loginFinished(provider,false); return;
     }
     validate(provider,bytes,true);
 }
 void AccountService::validate(const QString& provider,const QByteArray& cookie,bool persist) {
+    // These two official web clients derive identity from their session cookies.
+    // Do not describe an imported cookie as server-validated account identity.
+    if (provider == "kuwo" || provider == "kugou") {
+        if (!hasLoginCookie(provider,cookie)) return;
+        if (persist && !writeCredential(target(provider),cookie)) {
+            emit notice(tr("无法保存系统钥匙环凭据，登录未完成。")); emit loginFinished(provider,false); return;
+        }
+        accounts_[provider] = QVariantMap{{"id",provider}, {"name",tr("已保存登录凭据")}, {"verified",false},
+            {"status",tr("登录有效期由平台决定，可重新扫码更新。")}, {"busy",false}};
+        emit accountsChanged(); emit loginFinished(provider,true);
+        if (persist) emit notice(tr("登录凭据已保存到系统钥匙环。"));
+        return;
+    }
     const bool netease = provider == "netease";
     const auto body = netease ? neteaseAccountBody(cookie) : QByteArray{};
-    if (netease && body.isEmpty()) { emit notice(tr("无法准备账号验证请求，请重试。")); return; }
+    if (netease && body.isEmpty()) { emit notice(tr("无法准备账号验证请求，请重试。")); emit loginFinished(provider,false); return; }
     const auto generation=++generations_[provider];
     if (replies_.value(provider)) replies_[provider]->abort();
     auto state=accounts_.value(provider).toMap(); state["busy"]=true; accounts_[provider]=state; emit accountsChanged();
-    QNetworkRequest request(QUrl(netease?"https://music.163.com/weapi/nuser/account/get":"https://api.bilibili.com/x/web-interface/nav"));
+    QUrl endpoint(netease ? "https://music.163.com/weapi/nuser/account/get" : "https://api.bilibili.com/x/web-interface/nav");
+    if (provider == "qqmusic") {
+        const auto fields = cookieFields(QString::fromUtf8(cookie));
+        auto id = QString::fromUtf8(fields.value("uin",fields.value("wxuin"))); id.remove(QRegularExpression("[^0-9]"));
+        quint32 hash = 5381;
+        for (const unsigned char ch : fields.value("qm_keyst",fields.value("qqmusic_key"))) hash += (hash << 5) + ch;
+        endpoint = QUrl("https://c.y.qq.com/rsc/fcgi-bin/fcg_get_profile_homepage.fcg");
+        QUrlQuery query; query.addQueryItem("format","json"); query.addQueryItem("cid","205360838");
+        query.addQueryItem("reqfrom","1"); query.addQueryItem("userid",id); query.addQueryItem("loginUin",id);
+        query.addQueryItem("g_tk",QString::number(hash & 0x7fffffff)); endpoint.setQuery(query);
+    }
+    QNetworkRequest request(endpoint);
     request.setTransferTimeout(15000);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);
     request.setAttribute(QNetworkRequest::CookieSaveControlAttribute,QNetworkRequest::Manual);
     request.setAttribute(QNetworkRequest::CookieLoadControlAttribute,QNetworkRequest::Manual);
     request.setRawHeader("Cookie",cookie);
-    request.setRawHeader("Referer",provider=="netease"?"https://music.163.com/":"https://www.bilibili.com/");
+    const auto origin = netease ? QByteArray("https://music.163.com") : provider == "qqmusic" ? QByteArray("https://y.qq.com") : QByteArray("https://www.bilibili.com");
+    request.setRawHeader("Referer",origin + '/');
     request.setRawHeader("User-Agent","Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36");
     request.setRawHeader("Accept", "application/json, text/plain, */*");
     request.setRawHeader("Accept-Language", "zh-CN,zh;q=0.9");
-    request.setRawHeader("Origin", netease ? "https://music.163.com" : "https://www.bilibili.com");
+    request.setRawHeader("Origin", origin);
     request.setRawHeader("Sec-Fetch-Site", netease ? "same-origin" : "same-site");
     request.setRawHeader("Sec-Fetch-Mode", "cors");
     request.setRawHeader("Sec-Fetch-Dest", "empty");
@@ -216,14 +322,22 @@ void AccountService::validate(const QString& provider,const QByteArray& cookie,b
         auto profile=networkOk?parseProfile(provider,reply->readAll()):QVariantMap{};
         bool accepted=!profile.isEmpty();
         if (!profile.isEmpty() && persist && !writeCredential(target(provider),cookie)) {
-            profile={};accepted=false; emit notice(tr("无法保存 Windows 凭据，登录未完成。"));
+            profile={};accepted=false; emit notice(tr("无法保存系统钥匙环凭据，登录未完成。"));
         } else if (profile.isEmpty()) emit notice(networkOk?tr("Cookie 已失效或无法获取账号资料，请重新登录。"):
             tr("账号验证请求失败，请检查网络后重试。"));
         // Keep an already validated account on a failed replacement attempt.
         if (profile.isEmpty() && persist) profile=accounts_.value(provider).toMap();
-        profile["busy"]=false; accounts_[provider]=profile; emit accountsChanged();
+        profile["busy"]=false; if (accepted) profile["verified"]=true; accounts_[provider]=profile; emit accountsChanged();
+        emit loginFinished(provider,accepted);
         if (accepted && persist) emit notice(tr("账号已登录。"));
     });
+}
+void AccountService::cancelLogin(const QString& provider) {
+    ++generations_[provider];
+    if (replies_.value(provider)) replies_[provider]->abort();
+    replies_.remove(provider);
+    auto state = accounts_.value(provider).toMap(); state["busy"] = false;
+    accounts_[provider] = state; emit accountsChanged();
 }
 void AccountService::logout(const QString& provider) {
     if (!supported(provider)) return;
@@ -231,7 +345,12 @@ void AccountService::logout(const QString& provider) {
     if (replies_.value(provider)) replies_[provider]->abort();
     replies_.remove(provider);
     const auto key=target(provider);
-    if (!CredDeleteW(reinterpret_cast<LPCWSTR>(key.utf16()),CRED_TYPE_GENERIC,0) && GetLastError()!=ERROR_NOT_FOUND) {
+#ifdef Q_OS_WIN
+    const bool deleted = CredDeleteW(reinterpret_cast<LPCWSTR>(key.utf16()),CRED_TYPE_GENERIC,0) || GetLastError()==ERROR_NOT_FOUND;
+#else
+    const bool deleted = deleteCredential(key);
+#endif
+    if (!deleted) {
         auto state=accounts_.value(provider).toMap();state["busy"]=false;accounts_[provider]=state;emit accountsChanged();
         emit notice(tr("无法删除本地凭据，请重试。")); return;
     }

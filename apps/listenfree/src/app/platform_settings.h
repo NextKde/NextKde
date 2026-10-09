@@ -12,6 +12,8 @@
 
 namespace listenfree {
 class WindowsMediaSession;
+class LinuxMediaSession;
+class NextKdeTheme;
 class PlatformSettings final : public QObject {
   Q_OBJECT
 public:
@@ -47,7 +49,11 @@ private:
   QSize shapedSize_;
   int shapedRadius_{-1};
   WindowsMediaSession* mediaSession_{};
+  LinuxMediaSession* linuxMediaSession_{};
+  NextKdeTheme* nextKdeTheme_{};
+#ifdef Q_OS_WIN
   std::unique_ptr<UpdateService> updater_;
+#endif
   bool transparencyActive_{false};
   bool quitting_{false};
   void *taskbar_{nullptr};

@@ -1,3 +1,4 @@
+#include "platform/file_paths.h"
 #include "duplicate_service.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -25,7 +26,7 @@ QString digest(const QString& path,const std::shared_ptr<std::atomic_bool>& canc
 }
 bool signature(const QVariantMap& item) {
     const auto path=item.value("path").toString();const QFileInfo file(path);
-    return file.isFile() && !file.isSymLink() && file.canonicalFilePath().compare(path,Qt::CaseInsensitive)==0 &&
+    return file.isFile() && !file.isSymLink() && file.canonicalFilePath().compare(path,platform::filePathSensitivity)==0 &&
         file.size()==item.value("size").toLongLong() && file.lastModified().toMSecsSinceEpoch()==item.value("modified").toLongLong();
 }
 }
@@ -103,12 +104,12 @@ void DuplicateService::analyze() {
         QVariantList files;
         for(const auto& track:db.loadTracks())if(track.localPath)files.append(QVariantMap{{"id",QString::fromStdString(track.id.value())},{"path",QString::fromStdString(*track.localPath)}});
         auto result=analyzeFiles(files,cancel);QSet<QString> paths;
-        for(const auto& group:result.value("groups").toList())for(const auto& item:group.toMap().value("duplicates").toList())paths.insert(item.toMap().value("path").toString().toCaseFolded());
+        for(const auto& group:result.value("groups").toList())for(const auto& item:group.toMap().value("duplicates").toList())paths.insert(platform::filePathKey(item.toMap().value("path").toString()));
         const auto count=[&](auto&& self,const QJsonValue& value)->int {
             int total=0;
             if(value.isArray())for(const auto& child:value.toArray())total+=self(self,child);
             else if(value.isObject()){
-                const auto object=value.toObject();if(paths.contains(QDir::fromNativeSeparators(object.value("localPath").toString()).toCaseFolded()))++total;
+                const auto object=value.toObject();if(paths.contains(platform::filePathKey(object.value("localPath").toString())))++total;
                 for(auto it=object.begin();it!=object.end();++it)if(it.value().isArray()||it.value().isObject())total+=self(self,it.value());
             }
             return total;

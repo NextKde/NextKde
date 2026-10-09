@@ -9,6 +9,19 @@ Item {
     id: page
     objectName: "settingsPage"
 
+    AlertDialog {
+        id: projectRelationshipDialog
+        objectName: "projectRelationshipDialog"
+        anchors.fill: parent
+        z: 100
+        title: qsTr("关于 KOS ListenFree")
+        message: qsTr("KOS ListenFree 是 NextKDE 基于开源项目 ListenFree 开发的桌面适配版本。\n\nListenFree 提供原有界面、播放逻辑和音乐引擎；NextKDE 在此基础上维护 Linux 兼容、系统媒体控制、桌面与锁屏歌词、主题、窗口及音源等集成。感谢 ListenFree 原作者与所有贡献者，原项目及依赖的版权和许可证均予以保留。\n\n本版本由 NextKDE 维护和分发。请从 NextKDE 获取更新，以保留桌面适配；ListenFree 上游发行包不包含这些适配。")
+        primaryLabel: qsTr("知道了")
+        secondaryLabel: ""
+        onAccepted: open = false
+        onRejected: open = false
+    }
+
     property int refreshRateLimit: 60
     property int selectedCategory: 0
     property string filterText: ""
@@ -64,6 +77,7 @@ Item {
     property bool sourceManagerOpen: false
     property bool accountCookieOpen: false
     property string accountCookieProvider: ""
+    property var accountService: typeof backendAccounts !== "undefined" ? backendAccounts : null
     property string neteaseAccountName: ""
     property string bilibiliAccountName: ""
     property string currentSourceId: sourceController ? sourceController.activeId : ""
@@ -71,7 +85,7 @@ Item {
 
     readonly property var categories: [
         qsTr("基本"), qsTr("资料库"), qsTr("播放"), qsTr("外观"), qsTr("下载"), qsTr("音源"),
-        qsTr("账号"), qsTr("快捷键"), qsTr("备份与恢复"), qsTr("其他"), qsTr("关于")
+        qsTr("账号"), qsTr("快捷键"), qsTr("备份与恢复"), qsTr("其他"), qsTr("关于"), qsTr("NextKDE")
     ]
     readonly property var categoryDescriptions: [
         qsTr("语言、字体、启动、应用动画和界面刷新率。"),
@@ -80,11 +94,12 @@ Item {
         qsTr("调整界面动效、播放详情和歌词显示。"),
         qsTr("管理下载文件、并发任务与歌词。"),
         qsTr("导入洛雪音源"),
-        qsTr("管理网易云音乐与哔哩哔哩的 Cookie 登录状态。"),
+        qsTr("管理网易云、QQ 音乐、酷狗、酷我与哔哩哔哩的扫码和 Cookie 登录。"),
         qsTr("管理应用内和全局快捷键。"),
         qsTr("导出、导入或恢复公开设置。"),
         qsTr("管理窗口、列表、缓存和危险操作。"),
-        qsTr("查看版本、诊断信息和开源许可。")
+        qsTr("查看版本、诊断信息和开源许可。"),
+        qsTr("连接桌面播放组件、媒体按键和歌词显示。")
     ]
 
     // Stable keys are independent of the active UI language.
@@ -125,6 +140,7 @@ Item {
         lyricChineseConversion: "lyrics.chineseConversion",
         lyricWordTiming: "lyrics.wordTimingEnabled",
         lyricKaraoke: "lyrics.karaokeEnabled",
+        lyricAutoMatch: "lyrics.autoMatchEnabled",
         shortcutPlayPause: "shortcuts.application.playPause",
         shortcutPrevious: "shortcuts.application.previous",
         shortcutNext: "shortcuts.application.next",
@@ -172,8 +188,7 @@ Item {
         clearLibraryIndex: "library.clearIndex",
         clearMyLists: "playlist.clearSavedLists",
         copyDiagnostics: "diagnostics.copy",
-        checkUpdates: "updates.checkManually",
-        openReleasePage: "updates.openReleasePage",
+        projectRelationship: "about.projectRelationship",
         openLicenses: "about.licenses"
     })
 
@@ -338,11 +353,16 @@ Item {
         onColorEdited: value => page.handleSettingChanged("background.color",String(value))
     }
     function handleAction(key) {
+        if (key === settingKeys.projectRelationship) {
+            projectRelationshipDialog.open = true
+            projectRelationshipDialog.forceActiveFocus()
+            return
+        }
         if(key === settingKeys.settingsExport || key === settingKeys.settingsImport || key === settingKeys.settingsReset) {
             transferDialog.begin(key === settingKeys.settingsExport ? "export" : key === settingKeys.settingsImport ? "import" : "reset")
             return
         }
-        if([settingKeys.copyDiagnostics,settingKeys.checkUpdates,settingKeys.openReleasePage,settingKeys.openLicenses].indexOf(key)>=0) { backendPlatform.action(key);return }
+        if([settingKeys.copyDiagnostics,settingKeys.openLicenses].indexOf(key)>=0) { backendPlatform.action(key);return }
         if (key === settingKeys.shortcutReset || key === settingKeys.globalShortcutReset) {
             if (shortcutService) shortcutService.cancelCapture()
             shortcutResetDialog.group = key === settingKeys.shortcutReset ? "application" : "global"
@@ -575,7 +595,7 @@ Item {
                 rows: [
                     { title: qsTr("语言"), detail: qsTr("立即切换界面文字，不改变技术键。"), key: page.settingKeys.language, type: "select", options: [{label: qsTr("简体中文"), value: "ZhCn"}, {label: "English", value: "EnUs"}], currentIndex: 0 },
                     { title: qsTr("字体"), detail: qsTr("选择本机安装的字体，立即应用。"), key: page.settingKeys.fontFamily, type: "select", options: page.fontOptions, currentIndex: page.selectedFontIndex() },
-                    { title: qsTr("登录时启动"), detail: qsTr("登录 Windows 后启动 ListenFree。"), key: page.settingKeys.launchAtLogin, type: "toggle", checked: false },
+                    { title: qsTr("登录时启动"), detail: qsTr("登录桌面后启动 KOS ListenFree。"), key: page.settingKeys.launchAtLogin, type: "toggle", checked: false },
                     { title: qsTr("启动时全屏"), detail: qsTr("仅影响下次启动。"), key: page.settingKeys.startInFullScreen, type: "toggle", checked: false }
                 ]
                 onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
@@ -883,7 +903,8 @@ Item {
                     { title: qsTr("辅助歌词顺序"), detail: qsTr("翻译和罗马音都开启时可选。"), key: page.settingKeys.lyricSecondaryOrder, type: "select", options: [{label:qsTr("翻译优先"),value:"TranslationFirst"},{label:qsTr("罗马音优先"),value:"RomanizationFirst"}], currentIndex: 0, enabled: page.translationEnabled && page.romanizationEnabled },
                     { title: qsTr("中文转换"), detail: qsTr("只转换显示文本，不改写标签。"), key: page.settingKeys.lyricChineseConversion, type: "select", options: [{label:qsTr("关闭"),value:"Off"},{label:qsTr("转简体"),value:"Simplified"},{label:qsTr("转繁体"),value:"Traditional"}], currentIndex: 0 },
                     { title: qsTr("逐字歌词"), detail: qsTr("无逐字数据时自动回退逐行显示。"), key: page.settingKeys.lyricWordTiming, type: "toggle", checked: true },
-                    { title: qsTr("卡拉 OK 高亮"), detail: qsTr("逐字时间存在时生效。"), key: page.settingKeys.lyricKaraoke, type: "toggle", checked: true }
+                    { title: qsTr("卡拉 OK 高亮"), detail: qsTr("逐字时间存在时生效。"), key: page.settingKeys.lyricKaraoke, type: "toggle", checked: true },
+                    { title: qsTr("自动匹配歌词"), detail: qsTr("原歌词缺失时自动查找歌名、歌手及版本相符的歌词，并缓存到应用；仍可手动匹配。"), key: page.settingKeys.lyricAutoMatch, type: "toggle", checked: true }
                 ]
                 onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
             }
@@ -998,7 +1019,7 @@ Item {
                         }
                         Text {
                             width: parent.width
-                            text: qsTr("同一时间最多选择一个音源，切换请进入音源管理。")
+                            text: qsTr("当前音源用于本次播放；默认音源在下次启动时自动选择。")
                             color: page.secondaryText
                             elide: Text.ElideRight
                             font.family: AppTheme.fontFamily
@@ -1049,51 +1070,49 @@ Item {
                 ]
                 onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
             }
-            SettingsGroup {
-                categoryIndex: 6
-                settingsStore: page.settingsStore
-                categoryTitle: page.categories[categoryIndex]
-                filterText: page.filterText
+            Column {
+                property int categoryIndex: 6
+                readonly property bool hasMatches: page.matches(qsTr("账号 扫码 Cookie 网易云 QQ 音乐 酷狗 酷我 哔哩哔哩 登录"), 6)
                 visible: page.selectedCategory === categoryIndex && hasMatches
-                width: parent.width
-                section: qsTr("网易云音乐")
-                darkMode: page.darkMode
-                panelColor: page.panelColor
-                sectionColor: AppTheme.canvasSecondary
-                primaryText: page.primaryText
-                secondaryText: page.secondaryText
-                rows: [
-                    { title: qsTr("当前账号：") + page.neteaseAccountName,
-                      detail: qsTr("Cookie 只交给后端凭据服务验证与保存。"),
-                      key: page.settingKeys.accountNeteaseCookie,
-                      type: "action", actionLabel: page.accountLoggedIn("netease") ? qsTr("登出") : qsTr("登录") }
-                ]
-                onActionTriggered: key => page.handleAction(key)
-            }
-            SettingsGroup {
-                categoryIndex: 6
-                settingsStore: page.settingsStore
-                categoryTitle: page.categories[categoryIndex]
-                filterText: page.filterText
-                visible: page.selectedCategory === categoryIndex && hasMatches
-                width: parent.width
-                section: qsTr("哔哩哔哩")
-                darkMode: page.darkMode
-                panelColor: page.panelColor
-                sectionColor: AppTheme.canvasSecondary
-                primaryText: page.primaryText
-                secondaryText: page.secondaryText
-                rows: [
-                    { title: qsTr("当前账号：") + page.bilibiliAccountName,
-                      detail: qsTr("Cookie 只交给后端凭据服务验证与保存。"),
-                      key: page.settingKeys.accountBilibiliCookie,
-                      type: "action", actionLabel: page.accountLoggedIn("bilibili") ? qsTr("登出") : qsTr("登录") },
-                    { title: qsTr("将哔哩哔哩纳入音源"),
-                      detail: qsTr("发现页可搜索 B 站歌曲与歌单，多 P 视频作为歌单，不提供专辑。"),
-                      key: page.settingKeys.accountBilibiliSource, type: "toggle", checked: false }
-                ]
-                onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
-                onActionTriggered: key => page.handleAction(key)
+                width: parent.width; spacing: 14
+                Repeater {
+                    model: page.accountService ? page.accountService.providers : []
+                    delegate: SettingsGroup {
+                        id: accountGroup
+                        required property var modelData
+                        readonly property var state: page.accountService ? page.accountService.accounts[modelData.id] || {} : {}
+                        width: parent.width
+                        section: modelData.name
+                        darkMode: page.darkMode
+                        panelColor: page.panelColor
+                        sectionColor: AppTheme.canvasSecondary
+                        primaryText: page.primaryText
+                        secondaryText: page.secondaryText
+                        rows: [
+                            { title: accountGroup.state.name || qsTr("未登录"), detail: accountGroup.state.busy ? qsTr("正在验证…") : accountGroup.state.verified ? qsTr("平台已确认账号状态；凭据保存在系统钥匙环。") : accountGroup.state.status || qsTr("登录仅用于对应平台，不会将 Cookie 交给音源脚本。"), type: "info", readOnlyValue: accountGroup.state.verified ? qsTr("已验证") : "" },
+                            { title: qsTr("扫码登录"), detail: qsTr("打开官方登录页面，选择扫码并用手机确认。"), key: "qr", type: "action", actionLabel: qsTr("扫码"), enabled: !accountGroup.state.busy },
+                            { title: qsTr("Cookie 登录"), detail: qsTr("粘贴已登录网页的 Cookie 请求头。"), key: "cookie", type: "action", actionLabel: qsTr("导入"), enabled: !accountGroup.state.busy },
+                            { title: qsTr("登出"), detail: qsTr("删除此应用保存的凭据。"), key: "logout", type: "action", actionLabel: qsTr("登出"), enabled: !!accountGroup.state.id }
+                        ]
+                        onActionTriggered: function(key) {
+                            if (key === "qr") backendAccountBrowser.open(modelData.id)
+                            else if (key === "cookie") page.openAccountCookie(modelData.id)
+                            else if (key === "logout") page.accountLogoutRequested(modelData.id)
+                        }
+                    }
+                }
+                SettingsGroup {
+                    width: parent.width
+                    settingsStore: page.settingsStore
+                    darkMode: page.darkMode
+                    panelColor: page.panelColor
+                    primaryText: page.primaryText
+                    secondaryText: page.secondaryText
+                    rows: [
+                        { title: qsTr("将哔哩哔哩纳入音源"), detail: qsTr("搜索 B 站歌曲与歌单；多 P 视频作为歌单。"), key: page.settingKeys.accountBilibiliSource, type: "toggle", checked: false }
+                    ]
+                    onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
+                }
             }
 
             SettingsGroup {
@@ -1110,7 +1129,7 @@ Item {
                 primaryText: page.primaryText
                 secondaryText: page.secondaryText
                 rows: [
-                    { title: qsTr("启用应用内快捷键"), detail: qsTr("仅 ListenFree 获得焦点时生效。"), key: "shortcuts.application.enabled", type: "toggle", checked: true },
+                    { title: qsTr("启用应用内快捷键"), detail: qsTr("仅 KOS ListenFree 获得焦点时生效。"), key: "shortcuts.application.enabled", type: "toggle", checked: true },
                     { title: qsTr("播放/暂停"), detail: qsTr("单击录入组合键，可清空。"), key: page.settingKeys.shortcutPlayPause, type: "shortcut", actionLabel: "Ctrl+F5" },
                     { title: qsTr("上一首"), detail: qsTr("单击录入组合键，可清空。"), key: page.settingKeys.shortcutPrevious, type: "shortcut", actionLabel: "Ctrl+Left" },
                     { title: qsTr("下一首"), detail: qsTr("单击录入组合键，可清空。"), key: page.settingKeys.shortcutNext, type: "shortcut", actionLabel: "Ctrl+Right" },
@@ -1185,7 +1204,7 @@ Item {
                 primaryText: page.primaryText
                 secondaryText: page.secondaryText
                 rows: [
-                    { title: qsTr("外观模式"), detail: qsTr("跟随系统、浅色或深色。"), key: page.settingKeys.appearanceMode, type: "select", options: [{label:qsTr("跟随系统"),value:"System"},{label:qsTr("浅色"),value:"Light"},{label:qsTr("深色"),value:"Dark"}], currentIndex: page.darkMode ? 2 : 0 },
+                    { title: qsTr("外观模式"), detail: qsTr("跟随系统、浅色或深色。"), key: page.settingKeys.appearanceMode, type: "select", options: [{label:qsTr("跟随系统"),value:"System"},{label:qsTr("浅色"),value:"Light"},{label:qsTr("深色"),value:"Dark"}], currentIndex: 0 },
                     { title: qsTr("窗口透明效果"), detail: qsTr("仅侧栏背景透出桌面，其余区域保持不透明。"), key: page.settingKeys.windowTransparency, type: "toggle", checked: true },
                     { title: qsTr("关闭按钮行为"), detail: qsTr("托盘关闭时只能退出应用。"), key: page.settingKeys.closeAction, type: "select", options: [{label:qsTr("退出应用"),value:"Quit"},{label:qsTr("最小化到托盘"),value:"MinimizeToTray"}], currentIndex: 0, enabled: page.systemTrayEnabled },
                     { title: qsTr("关闭时询问"), detail: qsTr("仅退出应用时生效。"), key: page.settingKeys.askBeforeClosing, type: "toggle", checked: true },
@@ -1249,16 +1268,35 @@ Item {
                 primaryText: page.primaryText
                 secondaryText: page.secondaryText
                 rows: [
-                    { title: "ListenFree", detail: qsTr("构建于 Qt 6.11.2。"), type: "info", readOnlyValue: "0.3.7" },
+                    { title: "KOS ListenFree", detail: qsTr("NextKDE 原生版 · Qt 6.10.2 · Qmmp 2.4.1。"), type: "info", readOnlyValue: "0.3.8-nextkde.5" },
+                    { title: qsTr("关于 KOS ListenFree"), detail: qsTr("了解 NextKDE 与 ListenFree 的关系及更新渠道。"), key: page.settingKeys.projectRelationship, type: "action", actionLabel: qsTr("查看") },
                     { title: qsTr("复制诊断信息"), detail: qsTr("不会包含账号凭据和完整日志。"), key: page.settingKeys.copyDiagnostics, type: "action", actionLabel: qsTr("复制") },
-                    { title: qsTr("检查软件更新"), detail: qsTr("检查 GitHub 新版本，可查看说明、下载并安装更新。"), key: page.settingKeys.checkUpdates, type: "action", actionLabel: qsTr("检查") },
-                    { title: qsTr("打开下载页面"), detail: qsTr("使用系统浏览器打开 GitHub Releases。"), key: page.settingKeys.openReleasePage, type: "action", actionLabel: qsTr("打开") },
                     { title: qsTr("开源许可"), detail: qsTr("查看项目与第三方依赖许可证。"), key: page.settingKeys.openLicenses, type: "action", actionLabel: qsTr("查看") }
                 ]
                 onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
                 onActionTriggered: key => page.handleAction(key)
             }
 
+            SettingsGroup {
+                categoryIndex: 11
+                settingsStore: page.settingsStore
+                categoryTitle: page.categories[categoryIndex]
+                filterText: page.filterText
+                visible: page.selectedCategory === categoryIndex && hasMatches
+                width: parent.width
+                section: qsTr("桌面与锁屏")
+                darkMode: page.darkMode
+                panelColor: page.panelColor
+                sectionColor: AppTheme.canvasSecondary
+                primaryText: page.primaryText
+                secondaryText: page.secondaryText
+                rows: [
+                    { title: qsTr("系统播放集成"), detail: qsTr("在桌面组件和锁屏显示歌曲、封面与播放控制，支持系统媒体按键。"), key: "nextkde.mediaEnabled", type: "toggle", checked: true },
+                    { title: qsTr("桌面歌词"), detail: qsTr("开启或关闭 KOS ListenFree 在桌面的歌词浮层。"), key: "nextkde.desktopLyricsEnabled", type: "toggle", checked: true },
+                    { title: qsTr("锁屏歌词"), detail: qsTr("在锁屏页面显示当前和下一行歌词。"), key: "nextkde.lyricsEnabled", type: "toggle", checked: true }
+                ]
+                onSettingChanged: (key, value) => page.handleSettingChanged(key, value)
+            }
             Item { width: 1; height: 78 }
         }
 
@@ -1287,8 +1325,8 @@ Item {
         z: 160
         open: page.accountCookieOpen
         title: qsTr("请输入 Cookie")
-        message: (page.accountCookieProvider === "netease" ? qsTr("登录网易云音乐。") : qsTr("登录哔哩哔哩。"))
-                 + qsTr("粘贴已登录网页请求头中的完整 Cookie，也支持带 Cookie: 前缀。验证成功后会安全保存。")
+        message: (page.accountService ? page.accountService.providers.filter(function(p) {return p.id === page.accountCookieProvider}).map(function(p) {return p.name}).join("") + "：" : "")
+                 + qsTr("粘贴已登录网页请求头中的完整 Cookie，也支持带 Cookie: 前缀。保存到系统钥匙环；支持的平台将自动验证账号状态。")
         primaryLabel: qsTr("保存")
         secondaryLabel: qsTr("取消")
         cancelable: true
@@ -1420,7 +1458,7 @@ Item {
                 anchors.leftMargin: 24
                 anchors.top: parent.top
                 anchors.topMargin: 53
-                text: qsTr("当前一次只能启用一个音源；导入、移除与更新检测由后端接口完成。")
+                text: qsTr("点击音源临时切换，点击“设为默认”保存启动偏好。")
                 color: page.secondaryText
                 font.family: AppTheme.fontFamily
                 font.pixelSize: 11
@@ -1479,7 +1517,7 @@ Item {
                         required property int index
                         required property var modelData
                         width: ListView.view.width
-                        height: 74
+                        height: 108
                         radius: 12
                         color: modelData.id === page.currentSourceId
                                ? AppTheme.selected
@@ -1493,14 +1531,15 @@ Item {
                         Column {
                             anchors.left: parent.left
                             anchors.leftMargin: 13
-                            anchors.right: removeSourceButton.left
+                            anchors.right: checkSourceButton.left
                             anchors.rightMargin: 12
                             anchors.top: parent.top
                             anchors.topMargin: 7
                             spacing: 1
                             Text {
                                 width: parent.width
-                                text: sourceDelegate.modelData.name
+                                textFormat: Text.PlainText
+                                text: sourceDelegate.modelData.name + (page.sourceController && page.sourceController.defaultId === sourceDelegate.modelData.id ? qsTr(" · 默认") : "")
                                 color: page.primaryText
                                 elide: Text.ElideRight
                                 font.family: AppTheme.fontFamily
@@ -1509,7 +1548,7 @@ Item {
                             }
                             Text {
                                 width: parent.width
-                                text: sourceDelegate.modelData.version + "  ·  " + sourceDelegate.modelData.status
+                                text: (sourceDelegate.modelData.version || "") + "  ·  " + (sourceDelegate.modelData.author || "") + "  ·  " + sourceDelegate.modelData.status
                                 color: page.secondaryText
                                 elide: Text.ElideRight
                                 font.family: AppTheme.fontFamily
@@ -1517,6 +1556,25 @@ Item {
                             }
                         }
 
+                        Text {
+                            x: 13; y: 45; width: checkSourceButton.x - 24
+                            text: (sourceDelegate.modelData.capabilityText || qsTr("待检测能力")) + " · " + (sourceDelegate.modelData.providerNames || "")
+                            color: page.secondaryText; font.pixelSize: 10; elide: Text.ElideRight
+                        }
+                        Text {
+                            x: 13; y: 61; width: checkSourceButton.x - 24
+                            text: sourceDelegate.modelData.checkError || sourceDelegate.modelData.lastRequestStatus || sourceDelegate.modelData.description || ""
+                            color: sourceDelegate.modelData.checkError ? "#e7776c" : page.secondaryText
+                            font.pixelSize: 10; elide: Text.ElideRight
+                        }
+                        UiButton {
+                            id: checkSourceButton
+                            anchors.right: defaultSourceButton.left; anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 60; height: 30; label: qsTr("检测")
+                            enabled: !!page.sourceController && sourceDelegate.modelData.status !== qsTr("检测中…")
+                            onClicked: page.sourceController.checkSource(sourceDelegate.modelData.id)
+                        }
                         SettingsCheckBox {
                             id: updatePromptCheck
                             anchors.left: parent.left
@@ -1537,6 +1595,16 @@ Item {
                             font.pixelSize: 10
                         }
 
+                        UiButton {
+                            id: defaultSourceButton
+                            anchors.right: removeSourceButton.left
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 88; height: 30
+                            label: qsTr("设为默认")
+                            enabled: !!page.sourceController && page.sourceController.defaultId !== sourceDelegate.modelData.id
+                            onClicked: page.sourceController.setDefaultSource(sourceDelegate.modelData.id)
+                        }
                         Rectangle {
                             id: removeSourceButton
                             anchors.right: parent.right
@@ -1677,7 +1745,7 @@ Item {
             const routeName = args[categoryArg + 1]
             const routeIndex = ({ general: 0, library: 1, playback: 2, appearance: 3,
                                   downloads: 4, sources: 5, accounts: 6, shortcuts: 7,
-                                  backup: 8, other: 9, about: 10 })[routeName]
+                                  backup: 8, other: 9, about: 10, nextkde: 11 })[routeName]
             if (routeIndex !== undefined)
                 page.selectedCategory = routeIndex
         }

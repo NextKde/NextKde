@@ -1,3 +1,4 @@
+#include "test_executable.h"
 #include "domain/domain.h"
 #include "infrastructure/database/database.h"
 #include "infrastructure/database/repositories.h"
@@ -915,7 +916,11 @@ void BackendTests::tagLibMetadataReaderMapsWavTags() {
     file.close();
 
     {
+#ifdef Q_OS_WIN
         TagLib::RIFF::WAV::File taggedFile(path.toStdWString().c_str());
+#else
+        TagLib::RIFF::WAV::File taggedFile(QFile::encodeName(path).constData());
+#endif
         QVERIFY(taggedFile.isValid());
         QVERIFY(taggedFile.tag() != nullptr);
         taggedFile.tag()->setTitle(TagLib::String("Tagged title", TagLib::String::UTF8));
@@ -1607,7 +1612,7 @@ void BackendTests::sourceHostBinaryTransport() {
         QCOMPARE(SourceProtocol::encode(expected).size() - 4, outputLength);
     }
     QProcess process;
-    process.start(QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe"));
+    process.start(testExecutable(QStringLiteral("listenfree-sourcehost")));
     QVERIFY(process.waitForStarted(3000));
     QByteArray actual;
     connect(&process, &QProcess::readyReadStandardOutput, &process, [&] { actual += process.readAllStandardOutput(); });
@@ -1625,7 +1630,7 @@ void BackendTests::sourceHostBinaryTransport() {
 }
 
 void BackendTests::sourceHostProcessLifecycle() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
@@ -1705,7 +1710,7 @@ lx.send(lx.EVENT_NAMES.inited, {
 }
 
 void BackendTests::sourceHostLoadsCompressedPlugin() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
@@ -1754,7 +1759,7 @@ lx.send(lx.EVENT_NAMES.inited, {
 }
 
 void BackendTests::sourceHostResolvesLyricAndPic() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
@@ -1818,7 +1823,7 @@ lx.send(lx.EVENT_NAMES.inited, {
 }
 
 void BackendTests::sourceHostProvidesAsyncRequestBridge() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
@@ -2003,7 +2008,7 @@ send(EVENT_NAMES.inited, {
 }
 
 void BackendTests::sourceHostRequestTimeout() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "hang");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy readySpy(&client, &listenfree::sourcehost::SourceHostClient::ready);
@@ -2027,7 +2032,7 @@ void BackendTests::sourceHostRequestTimeout() {
 }
 
 void BackendTests::sourceHostCancelIsTerminal() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "hang");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy readySpy(&client, &listenfree::sourcehost::SourceHostClient::ready);
@@ -2055,7 +2060,7 @@ void BackendTests::sourceHostCancelIsTerminal() {
 }
 
 void BackendTests::sourceHostStopCompletesPendingRequests() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "hang");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy readySpy(&client, &listenfree::sourcehost::SourceHostClient::ready);
@@ -2083,7 +2088,7 @@ void BackendTests::sourceHostStopCompletesPendingRequests() {
 }
 
 void BackendTests::sourceHostCrashRecovery() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "crash");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy crashedSpy(&client, &listenfree::sourcehost::SourceHostClient::crashed);
@@ -2104,7 +2109,7 @@ void BackendTests::sourceHostCrashRecovery() {
 }
 
 void BackendTests::sourceHostStopPreventsRestart() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "crash");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy crashedSpy(&client, &listenfree::sourcehost::SourceHostClient::crashed);
@@ -2127,7 +2132,7 @@ void BackendTests::sourceHostStopPreventsRestart() {
 }
 
 void BackendTests::sourceHostBoundsPendingRequests() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
     qputenv("LISTENFREE_FAULT_MODE", "hang");
     listenfree::sourcehost::SourceHostClient client(executable);
     QSignalSpy protocolSpy(&client, &listenfree::sourcehost::SourceHostClient::protocolError);
@@ -2183,7 +2188,7 @@ void BackendTests::listModels() {
 }
 
 void BackendTests::sourceHostSupportsBrowserTimers() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());
@@ -2232,7 +2237,7 @@ lx.send(lx.EVENT_NAMES.inited, {
 }
 
 void BackendTests::sourceHostKeepsSuccessfulInitAfterLateException() {
-    const QString executable = QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost.exe");
+    const QString executable = testExecutable(QStringLiteral("listenfree-sourcehost"));
     QVERIFY(QFileInfo::exists(executable));
     QTemporaryDir temp;
     QVERIFY(temp.isValid());

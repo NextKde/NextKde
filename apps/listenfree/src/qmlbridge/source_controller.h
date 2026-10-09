@@ -9,6 +9,7 @@
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QUrl>
+#include <QPointer>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -20,6 +21,7 @@ class SourceController final : public QObject {
   Q_OBJECT
   Q_PROPERTY(QVariantList sources READ sources NOTIFY sourcesChanged)
   Q_PROPERTY(QString activeId READ activeId NOTIFY activeChanged)
+  Q_PROPERTY(QString defaultId READ defaultId NOTIFY defaultChanged)
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(QString status READ status NOTIFY statusChanged)
   Q_PROPERTY(QString lastError READ lastError NOTIFY errorChanged)
@@ -42,6 +44,7 @@ public:
   QVariantList sources() const { return sources_; }
   online::BilibiliClient& bilibili() { return bilibili_; }
   QString activeId() const { return activeId_; }
+  QString defaultId() const { return defaultId_; }
   bool busy() const noexcept { return busy_; }
   QString status() const { return status_; }
   QString lastError() const { return error_; }
@@ -50,10 +53,18 @@ public:
   QString hostState() const;
 
   Q_INVOKABLE bool selectSource(const QString &id);
+  Q_INVOKABLE bool setDefaultSource(const QString &id);
+  Q_INVOKABLE bool useDefaultSource();
   Q_INVOKABLE bool removeSource(const QString &id);
   Q_INVOKABLE bool setUpdatePrompt(const QString &id, bool enabled);
   Q_INVOKABLE bool importLocalFile(const QString &path);
   Q_INVOKABLE bool importUrl(const QUrl &url);
+  Q_INVOKABLE QString checkSource(const QString &id);
+  Q_INVOKABLE QString searchScript(const QString &id, const QString &keyword, int page = 1);
+  // Pinned requests use the script recorded on a track, independently of the
+  // current default/temporary selection and other outstanding playback work.
+  QString requestScript(const QString &id, const QString &action,
+                        const QVariantMap &info = {}, const QString &quality = {});
 
   // Resolve requests are asynchronous because a source may perform network
   // I/O inside SourceHost.  The returned id is emitted with the resulting
@@ -73,6 +84,7 @@ signals:
   void updateAvailable(const QString &sourceName, const QString &log, const QUrl &url);
   void sourcesChanged();
   void activeChanged();
+  void defaultChanged();
   void busyChanged();
   void statusChanged();
   void errorChanged();
@@ -104,6 +116,7 @@ private:
   void handleHostFailure(const QString &message);
   void updateCustomStatuses();
   void updateSource(const QString &id, const QVariantMap &updates);
+  void recordCapabilities(const QString &id, const QJsonObject &sources);
   QString hostProviderFor(const QString &sourceId, const QString &action,
                           QString *quality) const;
   QString resolve(const QString &sourceId, const QString &action,
@@ -114,6 +127,7 @@ private:
   application::ISettingsRepository *settings_{nullptr};
   QVariantList sources_;
   QString activeId_;
+  QString defaultId_;
   QString status_;
   QString error_;
   bool busy_{false};
@@ -129,6 +143,7 @@ private:
   QHash<QString, PendingResolution> pendingResolutions_;
   QHash<QString, QVariantMap> hostSourceInfo_;
   std::unique_ptr<sourcehost::SourceHostClient> host_;
+  QHash<QString, QPointer<sourcehost::SourceHostClient>> scriptRequests_;
 };
 
 } // namespace listenfree::qmlbridge

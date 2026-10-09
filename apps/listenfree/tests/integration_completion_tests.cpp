@@ -12,8 +12,25 @@
 #include <QCryptographicHash>
 #include <QScopeGuard>
 #include <QUrlQuery>
+#include <QStandardPaths>
+#ifdef Q_OS_WIN
 #include <windows.h>
 #include <wincred.h>
+#else
+#undef signals
+#include <libsecret/secret.h>
+#define signals Q_SIGNALS
+static QByteArray nativeCredential(const QString& key) {
+    static const SecretSchema schema = {"org.listenfree.Credentials", SECRET_SCHEMA_NONE,
+        {{"target", SECRET_SCHEMA_ATTRIBUTE_STRING}, {nullptr, SECRET_SCHEMA_ATTRIBUTE_STRING}}};
+    GError* error = nullptr;
+    auto* secret = secret_password_lookup_sync(&schema, nullptr, &error, "target", key.toUtf8().constData(), nullptr);
+    const QByteArray result = secret ? QByteArray(secret) : QByteArray{};
+    if (secret) secret_password_free(secret);
+    if (error) g_error_free(error);
+    return result;
+}
+#endif
 
 using namespace listenfree;
 using namespace listenfree::qmlbridge;
@@ -60,7 +77,11 @@ class IntegrationCompletionTests final:public QObject {
     static void write(const QString& path,const QByteArray& bytes) {QFile file(path);QVERIFY(file.open(QIODevice::WriteOnly));QCOMPARE(file.write(bytes),bytes.size());}
 private slots:
     void asynchronousMergeAndRecycle() {
-        QTemporaryDir dir;const auto a=dir.filePath("a.mp3"),b=dir.filePath("long-name.mp3"),dbPath=dir.filePath("library.sqlite");
+        // /tmp may be a separate filesystem without a writable trash location.
+        const auto dataRoot=QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        QVERIFY(QDir().mkpath(dataRoot));
+        QTemporaryDir dir(dataRoot+"/listenfree-recycle-XXXXXX");QVERIFY(dir.isValid());
+        const auto a=dir.filePath("a.mp3"),b=dir.filePath("long-name.mp3"),dbPath=dir.filePath("library.sqlite");
         write(a,"test-music-content");write(b,"test-music-content");
         infrastructure::database::Database db;QVERIFY(db.open(dbPath));infrastructure::library::BasicMetadataReader reader;
         for(const auto& file:{a,b})QVERIFY(db.upsertTrack(*reader.read(std::filesystem::path(file.toStdWString()))));
@@ -229,6 +250,7 @@ private slots:
         QVERIFY(network.reply); network.reply->finish(response);
         QCOMPARE(service.accounts().value(provider).toMap().value("name").toString(), QString("Test"));
         const auto key = "ListenFree/" + QString::fromLatin1(QCryptographicHash::hash(dir.path().toUtf8(), QCryptographicHash::Sha256).toHex().left(24)) + '/' + provider;
+#ifdef Q_OS_WIN
         PCREDENTIALW saved = nullptr;
         QVERIFY(CredReadW(reinterpret_cast<LPCWSTR>(key.utf16()), CRED_TYPE_GENERIC, 0, &saved));
         const auto release = qScopeGuard([&] { CredFree(saved); });
@@ -240,6 +262,9 @@ private slots:
             QVERIFY(!stored.contains(cookie));
             QVERIFY(!stored.contains(QByteArray(64, 'x')));
         }
+#else
+        QVERIFY(nativeCredential(key) == cookie);
+#endif
         // A rejected replacement keeps both the verified UI identity and stored cookie.
         service.login(provider, QString::fromLatin1(prefix + "expired")); network.reply->finish(R"({"code":401})");
         QCOMPARE(service.accounts().value(provider).toMap().value("name").toString(), QString("Test"));
@@ -252,15 +277,23 @@ private slots:
         // Replacing an extended credential with a short one removes all old fragments.
         const auto replacement = prefix + "replacement";
         restored.login(provider, QString::fromLatin1(replacement)); restoreNetwork.reply->finish(response);
+#ifdef Q_OS_WIN
         PCREDENTIALW replaced = nullptr;
         QVERIFY(CredReadW(reinterpret_cast<LPCWSTR>(key.utf16()), CRED_TYPE_GENERIC, 0, &replaced));
         const bool replacedExactly = replaced->AttributeCount == 0
             && QByteArray(reinterpret_cast<char*>(replaced->CredentialBlob), replaced->CredentialBlobSize) == replacement;
         CredFree(replaced); QVERIFY(replacedExactly);
+#else
+        QVERIFY(nativeCredential(key) == replacement);
+#endif
         restored.logout(provider); QVERIFY(restored.accounts().isEmpty());
+#ifdef Q_OS_WIN
         PCREDENTIALW removed = nullptr;
         QVERIFY(!CredReadW(reinterpret_cast<LPCWSTR>(key.utf16()), CRED_TYPE_GENERIC, 0, &removed));
         QCOMPARE(GetLastError(), DWORD(ERROR_NOT_FOUND));
+#else
+        QVERIFY(nativeCredential(key).isEmpty());
+#endif
         // Cancelling a pending login cannot recreate credentials or the logged-in UI.
         service.login(provider, QString::fromLatin1(cookie));
         const auto pending = network.reply; service.logout(provider); pending->finish(response);

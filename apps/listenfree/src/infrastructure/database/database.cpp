@@ -1,3 +1,4 @@
+#include "platform/file_paths.h"
 #include "infrastructure/database/database.h"
 
 #include <QCryptographicHash>
@@ -224,7 +225,7 @@ struct CatalogJournal {
         if (resetMode) return true;
         if (id.isEmpty() || !ensureRevision()) return false;
         record.bindValue(0, id);
-        record.bindValue(1, revision);
+        record.bindValue(1, qlonglong(revision));
         const bool ok = record.exec();
         record.finish();
         return ok;
@@ -242,7 +243,7 @@ struct CatalogJournal {
                 "SELECT track_id FROM catalog_changes WHERE revision=? "
                 "UNION SELECT track_id FROM track_albums WHERE album_id=? LIMIT ?)");
         if (!count.prepare(sql)) return false;
-        count.addBindValue(revision);
+        count.addBindValue(qlonglong(revision));
         count.addBindValue(id);
         count.addBindValue(static_cast<qlonglong>(sparseCatalogChangeLimit + 1));
         if (!count.exec() || !count.next()) return false;
@@ -256,7 +257,7 @@ struct CatalogJournal {
         bool exceeds = false;
         if (!peerFanoutExceedsLimit(id, true, exceeds)) return false;
         if (exceeds) return reset();
-        artistPeers.bindValue(0, revision);
+        artistPeers.bindValue(0, qlonglong(revision));
         artistPeers.bindValue(1, id);
         const bool ok = artistPeers.exec();
         artistPeers.finish();
@@ -269,7 +270,7 @@ struct CatalogJournal {
         bool exceeds = false;
         if (!peerFanoutExceedsLimit(id, false, exceeds)) return false;
         if (exceeds) return reset();
-        albumPeers.bindValue(0, revision);
+        albumPeers.bindValue(0, qlonglong(revision));
         albumPeers.bindValue(1, id);
         const bool ok = albumPeers.exec();
         albumPeers.finish();
@@ -334,7 +335,7 @@ bool Database::mergeDuplicate(const QVariantMap& duplicate,const QVariantMap& ke
         if(value.isArray()){QJsonArray result;for(const auto& child:value.toArray())result.append(self(self,child));return result;}
         if(!value.isObject())return value;
         auto object=value.toObject();
-        if(QDir::fromNativeSeparators(object.value("localPath").toString()).compare(oldPath,Qt::CaseInsensitive)==0){
+        if(QDir::fromNativeSeparators(object.value("localPath").toString()).compare(oldPath,platform::filePathSensitivity)==0){
             object["localPath"]=newPath;object["trackId"]=newId;
             object.remove("artwork");
         }
@@ -580,7 +581,7 @@ bool Database::upsertTrackRows(const domain::Track& track, UpsertStatements& sta
     QSqlQuery& query = statements.track;
     query.addBindValue(trackId);
     query.addBindValue(QString::fromStdString(track.title));
-    query.addBindValue(track.duration.count());
+    query.addBindValue(qlonglong(track.duration.count()));
     query.addBindValue(track.localPath ? QString::fromStdString(*track.localPath) : QVariant{});
     query.addBindValue(track.remoteUrl ? QString::fromStdString(*track.remoteUrl) : QVariant{});
     if (!query.exec()) {
@@ -808,7 +809,7 @@ bool Database::readCatalogDelta(std::int64_t afterRevision, std::size_t maxChang
         changes.prepare(QStringLiteral(
             "SELECT track_id FROM catalog_changes WHERE revision>? "
             "ORDER BY revision,track_id LIMIT ?"));
-        changes.addBindValue(afterRevision);
+        changes.addBindValue( qlonglong(afterRevision));
         changes.addBindValue(static_cast<qlonglong>(boundedMax + 1));
         if (!changes.exec()) {
             rollback(db_);
@@ -853,19 +854,19 @@ std::vector<application::LocalFileFingerprint> Database::loadLocalFiles() const 
         return result;
     }
     while (query.next()) {
-        result.push_back({std::filesystem::path(query.value(0).toString().toStdWString()),
+        result.push_back({std::filesystem::path(query.value(0).toString().toStdString()),
                           static_cast<std::uintmax_t>(query.value(1).toULongLong()),
                           query.value(2).toLongLong()});
     }
     QSqlQuery aliases(db_);
     if(aliases.exec("SELECT path,size_bytes,modified_ms,hash,keeper_path FROM duplicate_aliases"))while(aliases.next()) {
-        result.push_back({std::filesystem::path(aliases.value(0).toString().toStdWString()),
+        result.push_back({std::filesystem::path(aliases.value(0).toString().toStdString()),
             static_cast<std::uintmax_t>(aliases.value(1).toULongLong()),aliases.value(2).toLongLong(),
-            aliases.value(3).toString().toStdString(),std::filesystem::path(aliases.value(4).toString().toStdWString())});
+            aliases.value(3).toString().toStdString(),std::filesystem::path(aliases.value(4).toString().toStdString())});
     }
     QSqlQuery exclusions(db_);
     if(exclusions.exec("SELECT path FROM library_exclusions"))while(exclusions.next())
-        result.push_back({std::filesystem::path(exclusions.value(0).toString().toStdWString()),0,0,{}, {},true});
+        result.push_back({std::filesystem::path(exclusions.value(0).toString().toStdString()),0,0,{}, {},true});
     return result;
 }
 
@@ -911,13 +912,13 @@ bool Database::removeLibraryFolder(std::int64_t id, const QString& path) {
 
     QSqlQuery lookup(db_);
     lookup.prepare(QStringLiteral("SELECT folder_id,path FROM library_folders WHERE folder_id = ?"));
-    lookup.addBindValue(id);
+    lookup.addBindValue( qlonglong(id));
     if (!lookup.exec() || !lookup.next()) {
         rollback(db_);
         return false;
     }
     const QString storedPath = lookup.value(1).toString();
-    if (QString::compare(storedPath, normalized, Qt::CaseInsensitive) != 0) {
+    if (QString::compare(storedPath, normalized, platform::filePathSensitivity) != 0) {
         rollback(db_);
         return false;
     }
@@ -944,7 +945,7 @@ bool Database::removeLibraryFolder(std::int64_t id, const QString& path) {
 
     QSqlQuery remove(db_);
     remove.prepare(QStringLiteral("DELETE FROM library_folders WHERE folder_id = ?"));
-    remove.addBindValue(id);
+    remove.addBindValue( qlonglong(id));
     if (!remove.exec()) {
         rollback(db_);
         return false;
@@ -1049,7 +1050,7 @@ bool Database::recordPlayHistory(const domain::TrackId& id,
     query.prepare(QStringLiteral(
         "INSERT INTO play_history(track_id,played_at_ms) VALUES(?,?)"));
     query.addBindValue(QString::fromStdString(id.value()));
-    query.addBindValue(milliseconds);
+    query.addBindValue( qlonglong(milliseconds));
     return query.exec();
 }
 
@@ -1250,10 +1251,10 @@ bool Database::pruneMissingLocalFiles(const QStringList& roots, bool recursive) 
         // A removed subdirectory is safe to reconcile while its registered
         // root is online. A missing drive/root is not evidence of deletion.
         for(const auto& prefix:onlineParents)
-            if(root.startsWith(prefix,Qt::CaseInsensitive))accessible=true;
+            if(root.startsWith(prefix,platform::filePathSensitivity))accessible=true;
         if(!accessible)continue;
         if(recursive || !exists)subtreePrefixes.append(root.endsWith('/') ? root : root+'/');
-        else directDirectories.insert(root.toCaseFolded());
+        else directDirectories.insert(platform::filePathKey(root));
     }
     if(subtreePrefixes.isEmpty() && directDirectories.isEmpty())return true;
     QSqlQuery files(db_);
@@ -1262,7 +1263,7 @@ bool Database::pruneMissingLocalFiles(const QStringList& roots, bool recursive) 
     QList<QPair<QString,QString>> missing;
     const auto absent=[](const QString& path) {
         std::error_code error;
-        const auto status=std::filesystem::symlink_status(std::filesystem::path(path.toStdWString()),error);
+        const auto status=std::filesystem::symlink_status(std::filesystem::path(path.toStdString()),error);
         return status.type()==std::filesystem::file_type::not_found
             && (!error || error==std::errc::no_such_file_or_directory || error==std::errc::not_a_directory);
     };
@@ -1270,16 +1271,16 @@ bool Database::pruneMissingLocalFiles(const QStringList& roots, bool recursive) 
     while(files.next()) {
         const auto path=QDir::fromNativeSeparators(files.value(1).toString());
         const auto parent=QFileInfo(path).absolutePath();
-        bool within=directDirectories.contains(parent.toCaseFolded());
+        bool within=directDirectories.contains(platform::filePathKey(parent));
         for(const auto& prefix:subtreePrefixes) {
-            if(path.startsWith(prefix,Qt::CaseInsensitive)) { within=true;break; }
+            if(path.startsWith(prefix,platform::filePathSensitivity)) { within=true;break; }
         }
         // At startup a deleted subtree has no watch left to report it. An
         // existing ancestor's scan also removes records under missing folders.
         if(!within && !directDirectories.isEmpty()) {
             auto ancestor=QFileInfo(parent).absolutePath();
             while(ancestor!=parent) {
-                if(directDirectories.contains(ancestor.toCaseFolded())) {
+                if(directDirectories.contains(platform::filePathKey(ancestor))) {
                     if(!missingParents.contains(parent))missingParents.insert(parent,absent(parent));
                     within=missingParents.value(parent);break;
                 }

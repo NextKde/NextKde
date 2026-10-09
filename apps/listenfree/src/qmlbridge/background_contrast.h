@@ -8,9 +8,11 @@
 class BackgroundContrast : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool dark READ dark NOTIFY changed)
+    Q_PROPERTY(bool valid READ valid NOTIFY changed)
 public:
     using QObject::QObject;
     bool dark() const { return dark_; }
+    bool valid() const { return valid_; }
     Q_INVOKABLE void sample(QQuickItem* source) {
         const auto generation=++generation_;
         if(!source)return;
@@ -24,12 +26,13 @@ public:
                 luminance+=.2126*std::pow(c.redF(),2.2)+.7152*std::pow(c.greenF(),2.2)+.0722*std::pow(c.blueF(),2.2);
             }
             const bool value=luminance/(image.width()*image.height())<.28;
-            if(dark_!=value){dark_=value;emit changed();}
+            if(!valid_ || dark_!=value){valid_=true;dark_=value;emit changed();}
         },Qt::SingleShotConnection);
     }
 signals:
     void changed();
 private:
     bool dark_=false;
+    bool valid_=false;
     unsigned generation_=0;
 };

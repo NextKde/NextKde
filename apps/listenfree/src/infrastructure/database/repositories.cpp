@@ -34,17 +34,17 @@ std::vector<application::LibraryFolder> LibraryFolderRepository::roots() {
     std::transform(folders.begin(), folders.end(), std::back_inserter(result), [](const QVariant& folder) {
         const auto values = folder.toList();
         return application::LibraryFolder{values.value(0).toLongLong(),
-                                         std::filesystem::path(values.value(1).toString().toStdWString())};
+                                         std::filesystem::path(values.value(1).toString().toStdString())};
     });
     return result;
 }
 
 bool LibraryFolderRepository::add(const std::filesystem::path& path) {
-    return database_.addLibraryFolder(QString::fromStdWString(path.wstring()));
+    return database_.addLibraryFolder(QString::fromStdString(path.string()));
 }
 
 bool LibraryFolderRepository::remove(std::int64_t id, const std::filesystem::path& path) {
-    return database_.removeLibraryFolder(id, QString::fromStdWString(path.wstring()));
+    return database_.removeLibraryFolder(id, QString::fromStdString(path.string()));
 }
 
 std::optional<std::string> SettingsRepository::get(const std::string& key) {

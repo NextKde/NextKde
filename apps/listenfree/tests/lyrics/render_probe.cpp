@@ -65,7 +65,11 @@ QJsonObject processStats() {
 int main(int argc, char** argv) {
     if (qEnvironmentVariableIsSet("LISTENFREE_LYRIC_QML_PROFILE")) QQmlDebuggingEnabler::enableDebugging(false);
     QGuiApplication app(argc, argv);
+#ifdef Q_OS_WIN
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+#else
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+#endif
     qmlRegisterType<listenfree::qmlbridge::SpringValue>("ListenFree.Native",1,0,"SpringValue");
     qmlRegisterType<listenfree::qmlbridge::LyricTextMetrics>("ListenFree.Native",1,0,"LyricTextMetrics");
     QQuickRenderControl control;
@@ -147,12 +151,36 @@ int main(int argc, char** argv) {
             rhi->finish();
             QImage pixels(reinterpret_cast<const uchar*>(readback.data.constData()),
                 readback.pixelSize.width(), readback.pixelSize.height(), QImage::Format_RGBA8888);
+            if (rhi->isYUpInFramebuffer()) pixels = pixels.flipped(Qt::Vertical);
             if (pixels.isNull() || !pixels.save(file,"PNG",captureMotion ? 80 : -1)) qFatal("GPU readback failed");
             int brightPixels = 0;
             for (int y=0; y<pixels.height(); y+=4)
                 for (int x=0; x<pixels.width(); x+=4)
                     if (qGray(pixels.pixel(x,y))>150) ++brightPixels;
             if (brightPixels<6) qFatal("GPU readback contains no visible lyrics");
+            // Check the active words, not just whether any lyric is visible.
+            // A shader compile failure can leave every inactive row intact
+            // while removing exactly the words that are currently being sung.
+            QVariant state;
+            QMetaObject::invokeMethod(scene, "captureState", Q_RETURN_ARG(QVariant, state));
+            const auto snapshot = QJsonDocument::fromJson(state.toString().toUtf8()).object();
+            int checked = 0;
+            for (const auto& value : snapshot.value("words").toArray()) {
+                const auto word = value.toObject();
+                if (!word.value("effect").toBool() || word.value("focus").toDouble() < .95) continue;
+                const auto rect = word.value("rect").toArray();
+                const QRect bounds = QRectF(rect[0].toDouble(), rect[1].toDouble(),
+                    rect[2].toDouble(), rect[3].toDouble()).toAlignedRect().intersected(pixels.rect());
+                if (bounds.isEmpty()) continue;
+                int ink = 0;
+                for (int y=bounds.top();y<=bounds.bottom();++y)
+                    for (int x=bounds.left();x<=bounds.right();++x)
+                        if (qGray(pixels.pixel(x,y)) > 90) ++ink;
+                if (ink < 3) qFatal("Active lyric word disappeared: %s", qPrintable(word.value("id").toString()));
+                ++checked;
+            }
+            if (!captureMotion && (file == "short-word.png" || file == "long-word.png") && checked == 0)
+                qFatal("Lyric fixture did not exercise an active word");
         }
     };
     QTimer timer;
@@ -212,7 +240,7 @@ int main(int argc, char** argv) {
             sample("returned");
             std::sort(renderTimes.begin(), renderTimes.end());
             std::sort(gpuTimes.begin(), gpuTimes.end());
-            QJsonObject report{{"mode","QQuickRenderControl / Direct3D11 / 960x760 / 16ms pump"},
+            QJsonObject report{{"mode","QQuickRenderControl / 960x760 / 16ms pump"},
                 {"platform",QGuiApplication::platformName()}, {"samples",samples},
                 {"device",QString::fromUtf8(rhi->driverInfo().deviceName)},
                 {"renderP50Ms",renderTimes[renderTimes.size()/2]}, {"renderP95Ms",renderTimes[renderTimes.size()*95/100]},

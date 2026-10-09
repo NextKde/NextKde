@@ -1,6 +1,7 @@
 #include "online/lyric_search.h"
 #include "online/lyric_sources.h"
 #include "online/lyric_matching.h"
+#include "qmlbridge/automatic_lyrics.h"
 #include <QtTest>
 #include <QUrlQuery>
 #include <cstring>
@@ -53,6 +54,67 @@ const QVariantMap track{{"title","Song"},{"artist","Artist"},{"durationMs",18000
 class LyricSearchTests final : public QObject {
     Q_OBJECT
 private slots:
+    void automaticMatchCachesWithoutModifyingMedia() {
+        QTemporaryDir directory; listenfree::infrastructure::database::Database db;
+        QVERIFY(db.open(directory.filePath("library.sqlite"))); QVERIFY(db.migrate());
+        Network network;
+        network.respond=[](const auto& request) { return Response{request.url().host()=="lrclib.net" ? lrcResult() : QByteArray("{}"),1}; };
+        const QVariantMap local{{"localPath",directory.filePath("song.flac")}};
+        QFile media(local.value("localPath").toString()); QVERIFY(media.open(QIODevice::WriteOnly)); media.write("untouched fixture"); media.close();
+        listenfree::qmlbridge::AutomaticLyrics automatic(db,network,nullptr,300);
+        QSignalSpy resolved(&automatic,&listenfree::qmlbridge::AutomaticLyrics::resolved);
+        automatic.request(local,track);
+        QTRY_COMPARE_WITH_TIMEOUT(resolved.size(),1,1000);
+        QVERIFY(resolved.first()[1].toString().contains("Synthetic test words"));
+        const auto requests=network.urls.size();
+        listenfree::qmlbridge::AutomaticLyrics reopened(db,network,nullptr,300);
+        QSignalSpy cached(&reopened,&listenfree::qmlbridge::AutomaticLyrics::resolved);
+        reopened.request(local,track);
+        QCOMPARE(cached.size(),1); QCOMPARE(network.urls.size(),requests);
+        QVERIFY(media.open(QIODevice::ReadOnly)); QCOMPARE(media.readAll(),QByteArray("untouched fixture"));
+        QVERIFY(!QFile::exists(directory.filePath("song.lrc")));
+    }
+    void automaticMatchRejectsWrongArtistAndVersion_data() {
+        QTest::addColumn<QString>("title"); QTest::addColumn<QString>("artist");
+        QTest::newRow("wrong-artist") << QString("Song") << QString("Someone Else");
+        QTest::newRow("wrong-version") << QString("Song (Live)") << QString("Artist");
+    }
+    void automaticMatchRejectsWrongArtistAndVersion() {
+        QFETCH(QString,title); QFETCH(QString,artist);
+        QTemporaryDir directory; listenfree::infrastructure::database::Database db;
+        QVERIFY(db.open(directory.filePath("library.sqlite"))); QVERIFY(db.migrate());
+        Network network;
+        network.respond=[&](const auto& request) {
+            auto bytes=lrcResult(title); bytes.replace("\"Artist\"",('"'+artist+'"').toUtf8());
+            return Response{request.url().host()=="lrclib.net" ? bytes : QByteArray("{}"),1};
+        };
+        listenfree::qmlbridge::AutomaticLyrics automatic(db,network,nullptr,100);
+        QSignalSpy resolved(&automatic,&listenfree::qmlbridge::AutomaticLyrics::resolved);
+        automatic.request({{"source","tx"},{"rid","1"}},track);
+        QTest::qWait(180); QCOMPARE(resolved.size(),0);
+        const auto requests=network.urls.size();
+        automatic.request({{"source","tx"},{"rid","1"}},track);
+        QCOMPARE(network.urls.size(),requests); // Failed attempts have a bounded retry delay.
+    }
+    void automaticMatchCancellationAndOriginIsolation() {
+        QTemporaryDir directory; listenfree::infrastructure::database::Database db;
+        QVERIFY(db.open(directory.filePath("library.sqlite"))); QVERIFY(db.migrate());
+        Network network;
+        network.respond=[](const auto& request) { return Response{request.url().host()=="lrclib.net" ? lrcResult() : QByteArray("{}"),30}; };
+        listenfree::qmlbridge::AutomaticLyrics automatic(db,network,nullptr,150);
+        QSignalSpy resolved(&automatic,&listenfree::qmlbridge::AutomaticLyrics::resolved);
+        QVariantMap first{{"source","tx"},{"rid","1"}}, second{{"source","wy"},{"rid","1"}};
+        auto script=first; script["originKind"]="lx"; script["originSourceId"]="fixture-a";
+        auto otherScript=script; otherScript["originSourceId"]="fixture-b";
+        using A=listenfree::qmlbridge::AutomaticLyrics;
+        QVERIFY(A::identity(first)!=A::identity(second)); QVERIFY(A::identity(script)!=A::identity(first));
+        QVERIFY(A::identity(script)!=A::identity(otherScript));
+        automatic.request(first,track); automatic.cancel();
+        automatic.request(second,track);
+        QTRY_COMPARE_WITH_TIMEOUT(resolved.size(),1,700);
+        QCOMPARE(resolved.first()[0].toString(),A::identity(second));
+        QTest::qWait(180); QCOMPARE(resolved.size(),1);
+    }
     void progressiveResultsSurviveWholeDeadline() {
         Network network; network.respond=[](const auto& request) { return request.url().host()=="lrclib.net" ? Response{lrcResult(),1} : Response{{},-1}; };
         LyricSearch search(network,nullptr,1000,120);

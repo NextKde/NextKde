@@ -16,6 +16,9 @@
 #include <windows.h>
 #include <io.h>
 #include <fcntl.h>
+#else
+#include <unistd.h>
+#include <csignal>
 #endif
 
 using listenfree::sourcehost::MessageType;
@@ -140,12 +143,21 @@ int main(int argc, char* argv[]) {
             if (faultMode == QStringLiteral("writefail")) {
 #ifdef Q_OS_WIN
                 _close(_fileno(stdin));
+#else
+                close(STDIN_FILENO);
 #endif
             }
             return;
         }
 
-        if (faultMode == QStringLiteral("crash")) std::abort();
+        if (faultMode == QStringLiteral("crash")) {
+#ifdef Q_OS_WIN
+            std::abort();
+#else
+            // An immediate crash, without waiting for a desktop core-dump handler.
+            raise(SIGKILL);
+#endif
+        }
         if (faultMode == QStringLiteral("hang") || faultMode == QStringLiteral("ignore-stop")) {
             if (request.payload.value(QStringLiteral("spawnTree")).toBool() && spawned == nullptr) {
                 spawned = new QProcess(&app);

@@ -86,6 +86,7 @@ Item {
     property color transitionCollectionTint: AppTheme.accent
 
     signal openCollection(string kind, string title, color tint)
+    signal onlineCollectionRequested(var collection)
     signal trackActivated(var track, var playbackContext)
     signal trackCommandRequested(string command, var track, int rowIndex, var playbackContext)
     signal trackSortRequested(string column, string order)
@@ -136,7 +137,11 @@ Item {
                        Math.abs(bottomRight.x - topLeft.x), Math.abs(bottomRight.y - topLeft.y))
     }
 
-    function prepareCollectionTransition(kind, title, tint, frameItem, artworkItem, artworkSource) {
+    function prepareCollectionTransition(kind, title, tint, frameItem, artworkItem, artworkSource, collection) {
+        if (collection && collection.savedOnlineAlbum) {
+            onlineCollectionRequested(collection)
+            return
+        }
         transitionCollectionKind = kind
         transitionCollectionTitle = title
         transitionCollectionTint = tint
@@ -366,7 +371,7 @@ Item {
                                                                  albumCard.album.title,
                                                                  albumCard.album.color || "#efb52c",
                                                                  cardVisual, albumCover,
-                                                                 albumCard.artworkSource)
+                                                                 albumCard.artworkSource, albumCard.album)
                             }
                         }
                     }
@@ -482,7 +487,7 @@ Item {
                 subtitle: artistCard.modelData.subtitle || ""
                 artworkSource: artistCard.modelData.artwork || ""
                 onActivated: page.prepareCollectionTransition(page.section === "artists" ? "Artist" : "Album",title,
-                    AppTheme.accent,artistPortrait,artistPortrait.artworkItem,artistPortrait.artworkSource)
+                    AppTheme.accent,artistPortrait,artistPortrait.artworkItem,artistPortrait.artworkSource,artistCard.modelData)
             }
         }
     }

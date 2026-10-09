@@ -20,6 +20,7 @@ Item {
     }
 
     property var catalog: null
+    property var libraryCatalog: typeof backendLibraryCatalog !== "undefined" ? backendLibraryCatalog : catalog
     property var facade: null
     property var hostWindow: null
     property var appController: null
@@ -299,7 +300,7 @@ Item {
     Connections {
         target: shell.playerController
         function onCurrentTrackChanged() { if (shell.nowPlayingOpen) shell.playerController.requestArtwork() }
-        function onNotice(message) { shell.globalAlertTitle = "ListenFree"; shell.globalAlertMessage = message; shell.globalAlertOptions = []; shell.globalAlertCommand = ""; shell.globalAlertOpen = true }
+        function onNotice(message) { shell.globalAlertTitle = "KOS ListenFree"; shell.globalAlertMessage = message; shell.globalAlertOptions = []; shell.globalAlertCommand = ""; shell.globalAlertOpen = true }
     }
     Connections {
         target: shell.facade
@@ -391,9 +392,9 @@ Item {
     }
 
     function localSearchRows() {
-        if (currentRoute === "library/albums") return catalog ? catalog.albums : []
-        if (currentRoute === "library/artists") return catalog ? catalog.artists : []
-        if (currentRoute === "library/songs") return catalog ? catalog.songs : []
+        if (currentRoute === "library/albums") return libraryCatalog ? libraryCatalog.albums : []
+        if (currentRoute === "library/artists") return libraryCatalog ? libraryCatalog.artists : []
+        if (currentRoute === "library/songs") return libraryCatalog ? libraryCatalog.songs : []
         if (currentRoute === "my-lists") return (playlistController ? playlistController.playlists : []).concat(radioController ? radioController.favorites : [])
         if (currentRoute === "playlists") return playlistController ? playlistController.onlinePlaylists : []
         if (currentRoute.indexOf("detail/") === 0) return selectedCollectionRows
@@ -809,7 +810,7 @@ Item {
             anchors.fill: parent
             active: shell.mosaicCanvasActive
             sourceComponent: AlbumMosaicPage {
-                catalog: shell.catalog
+                catalog: shell.libraryCatalog
                 sidebarWidth: shell.sidebarWidth
                 darkMode: shell.darkMode
                 filterText: shell.filterForRoute("library/albums")
@@ -820,6 +821,7 @@ Item {
                 onTrackActivated: (track, playbackContext) => shell.playTrack(track, playbackContext)
                 onTrackCommandRequested: (command,track,rowIndex,playbackContext) => shell.handleTrackCommand(command,track,rowIndex,playbackContext)
                 onPlayAllRequested: tracks => { if (shell.playerController) shell.playerController.playAll(tracks) }
+                onOnlineCollectionRequested: collection => shell.openOnlineCollection(collection)
             }
         }
 
@@ -870,18 +872,21 @@ Item {
                     kind: "sidebar"
                     glyphColor: AppTheme.sidebarText
                 }
-                Image {
+                Text {
                     x: 47 + shell.sidebarContentOffset
                     anchors.verticalCenter: parent.verticalCenter
-                    source: Qt.resolvedUrl(AppTheme.canvasDark
-                                           ? "assets/freeListen_wordmark.svg"
-                                           : "assets/freeListen_wordmark_dark.svg")
-                    width: 126
+                    text: "KOS ListenFree"
+                    font.family: AppTheme.fontFamily
+                    font.pixelSize: 18
+                    font.weight: Font.DemiBold
+                    color: AppTheme.sidebarText
+                    width: parent.width - x - 10
                     height: AppTheme.toolbarControlHeight
+                    verticalAlignment: Text.AlignVCenter
+                    fontSizeMode: Text.Fit
+                    minimumPixelSize: 14
                     opacity: shell.sidebarCollapsed ? 0 : 1
                     visible: !shell.sidebarCollapsed
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
                     Behavior on opacity { NumberAnimation { duration: AppTheme.duration(150); easing.type: Easing.OutCubic } }
                 }
                 HoverHandler { id: brandHover }
@@ -1092,8 +1097,19 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 10
                     WindowTrafficButton {
-                        action: "minimize"
+                        objectName: "windowFullscreenButton"
+                        action: "fullscreen"
                         fillColor: "#2fc866"
+                        revealGlyph: topTrafficHover.hovered
+                                     || shell.captureView === "traffic-hover"
+                                     || Qt.application.arguments.indexOf("traffic-hover") >= 0
+                        reducedMotion: !shell.animationsEnabled
+                        onClicked: if (shell.hostWindow) shell.hostWindow.toggleFullScreen()
+                    }
+                    WindowTrafficButton {
+                        objectName: "windowMinimizeButton"
+                        action: "minimize"
+                        fillColor: "#ffbf18"
                         revealGlyph: topTrafficHover.hovered
                                      || shell.captureView === "traffic-hover"
                                      || Qt.application.arguments.indexOf("traffic-hover") >= 0
@@ -1101,19 +1117,8 @@ Item {
                         onClicked: if (shell.hostWindow) shell.hostWindow.showMinimized()
                     }
                     WindowTrafficButton {
-                        action: "maximize"
-                        fillColor: "#ffbf18"
-                        revealGlyph: topTrafficHover.hovered
-                                     || shell.captureView === "traffic-hover"
-                                     || Qt.application.arguments.indexOf("traffic-hover") >= 0
-                        reducedMotion: !shell.animationsEnabled
-                        onClicked: if (shell.hostWindow) {
-                            if (shell.hostWindow.visibility === Window.Maximized) shell.hostWindow.showNormal()
-                            else shell.hostWindow.showMaximized()
-                        }
-                    }
-                    WindowTrafficButton {
                         id: closeWindowControl
+                        objectName: "windowCloseButton"
                         action: "close"
                         fillColor: "#ff5f57"
                         revealGlyph: topTrafficHover.hovered
@@ -1134,7 +1139,7 @@ Item {
                 height: searchCapsule.height; z: 21
                 property int suggestionIndex: -1
                 readonly property var suggestions: shell.settingsOpen ? [] : shell.onlineSearchScope
-                    ? (shell.onlineController ? shell.onlineController.suggestions || [] : [])
+                    ? (shell.onlineController && shell.onlineController.searchMode !== "lx" ? shell.onlineController.suggestions || [] : [])
                     : shell.localSuggestions(searchInput.text)
                 readonly property bool expanded: searchInput.activeFocus && !shell.settingsOpen && searchInput.text.trim().length > 0 && suggestions.length > 0
                 function submit() {
@@ -1269,6 +1274,7 @@ Item {
             }
             Loader {
                 anchors.fill: parent; z: 3
+                id: settingsPageLoader
                 active: shell.settingsOpen
                 sourceComponent: settingsComponent
             }
@@ -1727,9 +1733,9 @@ Item {
             readonly property string routeKey: parent.routeKey || "library/albums"
             filterText: shell.filterForRoute(routeKey)
             id: libraryPage
-            catalog: routeKey === "library/albums" && shell.albumMosaicLayout ? null : shell.catalog
+            catalog: routeKey === "library/albums" && shell.albumMosaicLayout ? null : shell.libraryCatalog
             albumGridLayout: shell.albumGridLayout
-            tracksModel: shell.useBackendModels && shell.appController ? shell.appController.tracksModel : null
+            tracksModel: shell.useBackendModels && shell.libraryCatalog ? shell.libraryCatalog.tracksModel : null
             section: routeKey === "library/songs" ? "songs" : routeKey === "library/artists" ? "artists" : "albums"
             darkMode: shell.darkMode
             deferCollectionOpen: true
@@ -1738,6 +1744,7 @@ Item {
                 libraryPage.commitPreparedCollection()
             }
             onOpenCollection: function(kind, title, tint) { shell.openCollection(kind, title, tint) }
+            onOnlineCollectionRequested: collection => shell.openOnlineCollection(collection)
             onTrackActivated: function(track, playbackContext) { shell.playTrack(track, playbackContext) }
             onTrackCommandRequested: function(command, track, rowIndex, playbackContext) {
                 shell.handleTrackCommand(command, track, rowIndex, playbackContext)
@@ -1939,6 +1946,12 @@ Item {
     Component {
         id: searchComponent
         SearchPage {
+            lxSearch: shell.captureView === "search-lx"
+            sourceController: shell.sourceController
+            onManageSourcesRequested: {
+                shell.settingsOpen = true
+                if (settingsPageLoader.item) settingsPageLoader.item.selectedCategory = 5
+            }
             backdrop: globalBackground
             platformNames: shell.platformNames
             catalog: shell.catalog

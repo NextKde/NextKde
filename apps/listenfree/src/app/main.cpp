@@ -1,5 +1,7 @@
 #include "platform_settings.h"
 #include "shortcut_service.h"
+#include "single_instance.h"
+#include "qmlbridge/library_catalog.h"
 #include "qmlbridge/download_service.h"
 #include "qmlbridge/collection_service.h"
 #include "qmlbridge/radio_service.h"
@@ -24,18 +26,12 @@
 #include "qmlbridge/settings_transfer.h"
 #include "qmlbridge/wallpaper_library.h"
 #include "interface_translator.h"
-#include "../../tools/integration_completion_regression.h"
-#include "../../tools/window_corner_regression.h"
-#include "../../tools/portable_acceptance.h"
-#include "../../tools/interaction_regression.h"
-#include "../../tools/new_todo_regression.h"
-#include "../../tools/appearance_regression.h"
-#include "../../tools/immersive_regression.h"
-#include "../../tools/disc_queue_regression.h"
-#include "../../tools/playlist_transition_regression.h"
-#include "../../tools/artist_blend_regression.h"
-#include "../../tools/radio_regression.h"
 #include <QApplication>
+#include <QQuickItem>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QFile>
+#include <QJSValue>
 #include <QIcon>
 #include <QSettings>
 #include <qmmp/qmmp.h>
@@ -50,25 +46,37 @@
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QTextStream>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include "account_browser.h"
+#include "media_arguments.h"
 
 int main(int argc, char* argv[]) {
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     qputenv("QSG_USE_SIMPLE_ANIMATION_DRIVER", "1");
     // Smaller packing pages retain each image's pixels and filtering. Images
     // that do not fit use Qt's normal independent texture path.
     if(!qEnvironmentVariableIsSet("QSG_ATLAS_WIDTH"))qputenv("QSG_ATLAS_WIDTH","1024");
     if(!qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT"))qputenv("QSG_ATLAS_HEIGHT","1024");
     QApplication app(argc, argv);
-    app.setWindowIcon(QIcon(":/qt/qml/ListenFree/Bootstrap/music_player_desktop/assets/icons/app.png"));
+    QQuickWindow::setDefaultAlphaBuffer(true);
+    app.setWindowIcon(QIcon(":/qt/qml/ListenFree/Bootstrap/music_player_desktop/assets/icons/nextkde-music.svg"));
     app.setApplicationName("ListenFree");
     app.setOrganizationName("ListenFree");
-    app.setApplicationVersion("0.3.8");
+    // Keep the existing storage/application IDs so upgrades retain the library.
+    app.setApplicationDisplayName("KOS ListenFree");
+    app.setApplicationVersion("0.3.8-nextkde.5");
+    app.setDesktopFileName("listenfree");
 #ifdef Q_OS_WIN
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     listenfree::WindowsMediaSession::registerApplicationIdentity("ListenFree.Desktop", "ListenFree");
 #endif
     const QStringList arguments = app.arguments();
+    if (arguments.contains("--version")) {
+        QTextStream(stdout) << app.applicationDisplayName() << ' ' << app.applicationVersion() << Qt::endl;
+        return 0;
+    }
     const bool portableSmokeMode = arguments.contains(QStringLiteral("--portable-smoke"));
     const bool smokeMode = arguments.contains(QStringLiteral("--smoke")) || portableSmokeMode;
     const auto captureIndex = arguments.indexOf(QStringLiteral("--capture"));
@@ -89,6 +97,13 @@ int main(int argc, char* argv[]) {
     const auto dataIndex = arguments.indexOf("--data-dir");
     if (dataIndex >= 0 && dataIndex + 1 < arguments.size()) dataDirectory = QFileInfo(arguments[dataIndex+1]).absoluteFilePath();
     if (!QDir().mkpath(dataDirectory)) return 2;
+    listenfree::SingleInstance instance(dataDirectory);
+    const auto instanceResult = instance.acquire(listenfree::mediaFilesFromArguments(arguments.mid(1)));
+    if (instanceResult == listenfree::SingleInstance::Result::Forwarded) return 0;
+    if (instanceResult == listenfree::SingleInstance::Result::Error) {
+        qCritical().noquote() << instance.errorString();
+        return 2;
+    }
     app.setProperty("listenfreeDataDir", dataDirectory);
     const QString databasePath = QDir(dataDirectory).filePath("library.sqlite");
     QSettings::setDefaultFormat(QSettings::IniFormat);
@@ -102,8 +117,21 @@ int main(int argc, char* argv[]) {
     listenfree::infrastructure::database::LibraryFolderRepository libraryFolderRepository(database);
     listenfree::infrastructure::database::SettingsRepository settingsRepository(database);
     listenfree::infrastructure::library::LocalLibraryScannerAdapter libraryScanner;
-    listenfree::qmlbridge::SourceController sourceController(&settingsRepository, QDir(app.applicationDirPath()).filePath("listenfree-sourcehost.exe"), true);
+    listenfree::qmlbridge::SourceController sourceController(&settingsRepository, QString{}, true);
     listenfree::qmlbridge::PortableSession controller(database, databasePath, sourceController);
+    QObject::connect(&instance, &listenfree::SingleInstance::filesRequested, &controller,
+                     [&controller](const QStringList& files) {
+        if (files.size() == 1) { controller.openLocal(files.first()); return; }
+        QVariantList tracks;
+        for (const auto& path : files) {
+            QVariantMap track{{"trackId", path}, {"title", QFileInfo(path).completeBaseName()}, {"localPath", path}};
+            for (const auto& value : controller.songs()) {
+                if (value.toMap().value("localPath").toString() == path) { track = value.toMap(); break; }
+            }
+            tracks.append(track);
+        }
+        if (!tracks.isEmpty()) controller.playAll(tracks);
+    });
     listenfree::qmlbridge::ImmersiveController immersive;
     const auto syncImmersive = [&] { immersive.setPlayback(controller.position(), controller.state() == "Playing", controller.currentTrack().value("entryId").toString() + ":" + controller.currentTrackId()); };
     QObject::connect(&controller, &listenfree::qmlbridge::PortableSession::progressChanged, &immersive, syncImmersive);
@@ -111,6 +139,12 @@ int main(int argc, char* argv[]) {
                                                                &libraryFolderRepository, databasePath);
 
     listenfree::qmlbridge::CollectionService playlistController(database);
+    listenfree::qmlbridge::LibraryCatalog libraryCatalog(controller.tracksModel());
+    const auto updateLocalCatalog = [&] { libraryCatalog.setLocalCatalog(controller.songs(), controller.albums(), controller.artists()); };
+    const auto updateSavedCatalog = [&] { libraryCatalog.setCollections(playlistController.playlists()); };
+    QObject::connect(&controller, &listenfree::qmlbridge::PortableSession::catalogChanged, &libraryCatalog, updateLocalCatalog);
+    QObject::connect(&playlistController, &listenfree::qmlbridge::CollectionService::playlistsChanged, &libraryCatalog, updateSavedCatalog);
+    updateLocalCatalog(); updateSavedCatalog();
     playlistController.setBilibiliClient(&sourceController.bilibili());
     listenfree::qmlbridge::RadioService radioController(database);
     QObject::connect(&controller, &listenfree::qmlbridge::PortableSession::trackMetadataChanged,
@@ -118,10 +152,18 @@ int main(int argc, char* argv[]) {
 
     listenfree::qmlbridge::SettingsController settingsController(settingsRepository);
     listenfree::qmlbridge::AccountService accounts(dataDirectory);
+    listenfree::AccountBrowser accountBrowser(accounts);
     QObject::connect(&accounts,&listenfree::qmlbridge::AccountService::accountsChanged,&sourceController,[&] {
         auto cookie=accounts.cookieForRequest("bilibili");
         sourceController.bilibili().setCookie(cookie);
         immersive.setBilibiliCookie(cookie); cookie.fill(0);
+        const QMap<QString,QString> providers{{"netease","wy"},{"qqmusic","tx"},{"kugou","kg"},{"kuwo","kw"}};
+        for (auto it = providers.cbegin(); it != providers.cend(); ++it) {
+            auto credential = accounts.cookieForRequest(it.key());
+            controller.setAccountCookie(it.value(),credential);
+            playlistController.setAccountCookie(it.value(),credential);
+            credential.fill(0);
+        }
     });
     listenfree::qmlbridge::SettingsTransfer transfer(database,settingsController,libraryController);
     listenfree::qmlbridge::DuplicateService duplicates(databasePath,libraryController);
@@ -147,6 +189,7 @@ int main(int argc, char* argv[]) {
     controller.setBilibiliSourceEnabled(settingsController.value("account.bilibili.sourceEnabled", false).toBool());
     QObject::connect(&settingsController, &listenfree::qmlbridge::SettingsController::valueChanged, &controller, [&](const QString& key, const QVariant& value) {
         if (key == "lyrics.chineseConversion") emit controller.lyricsChanged();
+        if (key == "lyrics.autoMatchEnabled") controller.setAutoLyricMatchEnabled(value.toBool());
         if (key == "list.rememberScrollPosition" && !value.toBool()) {database.clearScrollPositions();settingsController.forgetScrollPositions();}
         if (key == "library.autoWatch") libraryController.setAutoWatchEnabled(value.toBool());
         if (key == "appearance.dynamicArtworkEnabled") controller.setDynamicArtworkEnabled(value.toBool());
@@ -162,6 +205,7 @@ int main(int argc, char* argv[]) {
     qmlRegisterType<AlbumMosaicModel>("ListenFree.Native", 1, 0, "AlbumMosaicModel");
     qmlRegisterType<listenfree::qmlbridge::FilteredTrackModel>("ListenFree.Native", 1, 0, "FilteredTrackModel");
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty("backendAccountBrowser", &accountBrowser);
     UiTranslator translator;
     const auto applyLanguage=[&] {
         app.removeTranslator(&translator);
@@ -186,6 +230,7 @@ int main(int argc, char* argv[]) {
     BackgroundContrast backgroundContrast;
     engine.rootContext()->setContextProperty("backendBackgroundContrast", &backgroundContrast);
     engine.rootContext()->setContextProperty("backendCatalog", &controller);
+    engine.rootContext()->setContextProperty("backendLibraryCatalog", &libraryCatalog);
     engine.rootContext()->setContextProperty("backendDownloads", &downloads);
     engine.rootContext()->setContextProperty("backendSourceController", &sourceController);
     // Use names that cannot be shadowed by AppShell's controller properties.
@@ -213,52 +258,14 @@ int main(int argc, char* argv[]) {
         else if (action == "back" && mainShell) QMetaObject::invokeMethod(mainShell, "navigateBack");
     });
     if (mainShell) {
-        mainShell->setProperty("darkMode", settingsController.value("ui.appearance", "light").toString() == "dark");
         mainShell->setProperty("uiFontFamily", settingsController.value("ui.fontFamily", "SystemDefault"));
         mainShell->setProperty("animationsEnabled", settingsController.value("ui.motionEnabled", true));
     }
     listenfree::PlatformSettings platform(mainWindow, mainShell, settingsController, controller, playlistController, database, libraryController);
     engine.rootContext()->setContextProperty("backendPlatform", &platform);
+    instance.setWindow(mainWindow);
     if(!smokeMode && !captureMode && !arguments.contains("--data-dir")) QTimer::singleShot(0,&accounts,&listenfree::qmlbridge::AccountService::restore);
-    const auto validationIndex = arguments.indexOf("--validation-report");
-    const auto integrationIndex=arguments.indexOf("--integration-regression");
-    const auto artistBlendIndex=arguments.indexOf("--artist-blend-regression");
-    const auto uiRegressionIndex = arguments.indexOf("--ui-regression");
-    const auto todoRegressionIndex = arguments.indexOf("--todo-regression");
-    const auto appearanceIndex = arguments.indexOf("--appearance-regression");
-    const auto playlistTransitionIndex = arguments.indexOf("--playlist-transition-report");
-    const auto radioIndex=arguments.indexOf("--radio-regression");
-    const auto radioFavoritesIndex=arguments.indexOf("--radio-favorites-regression");
-    const auto immersiveIndex=arguments.indexOf("--immersive-regression");
-    const auto discQueueIndex=arguments.indexOf("--disc-queue-regression");
-    const auto cornerIndex=arguments.indexOf("--window-corner-regression");
-    if(cornerIndex>=0 && cornerIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runWindowCornerRegression(app,mainWindow,mainShell,settingsController,arguments[cornerIndex+1]);
-    } else if(discQueueIndex>=0 && discQueueIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runDiscQueueRegression(app,mainWindow,mainShell,settingsController,arguments[discQueueIndex+1]);
-    } else if(immersiveIndex>=0 && immersiveIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runImmersiveRegression(app,mainWindow,mainShell,immersive,settingsController,arguments[immersiveIndex+1]);
-    } else if(radioFavoritesIndex>=0 && radioFavoritesIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runRadioFavoritesRegression(app,mainWindow,mainShell,controller,settingsController,radioController,playlistController,arguments[radioFavoritesIndex+1]);
-    } else if(radioIndex>=0 && radioIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runRadioRegression(app,mainWindow,mainShell,controller,settingsController,radioController,arguments[radioIndex+1]);
-    } else if(artistBlendIndex>=0 && artistBlendIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runArtistBlendRegression(app,mainWindow,mainShell,controller,settingsController,arguments[artistBlendIndex+1]);
-    } else if(integrationIndex>=0 && integrationIndex+1<arguments.size() && arguments.contains("--data-dir")) {
-        runIntegrationCompletionRegression(app,mainWindow,mainShell,settingsController,platform,arguments[integrationIndex+1]);
-    } else if (playlistTransitionIndex >= 0 && playlistTransitionIndex + 1 < arguments.size()) {
-        runPlaylistTransitionRegression(app,mainWindow,mainShell,controller,settingsController,arguments[playlistTransitionIndex+1]);
-    } else if (appearanceIndex >= 0 && appearanceIndex + 1 < arguments.size()) {
-        runAppearanceRegression(app,mainWindow,mainShell,controller,settingsController,arguments[appearanceIndex+1]);
-    } else if (todoRegressionIndex >= 0 && todoRegressionIndex + 1 < arguments.size()) {
-        runNewTodoRegression(app,mainWindow,mainShell,controller,settingsController,arguments[todoRegressionIndex+1]);
-    } else if (uiRegressionIndex >= 0 && uiRegressionIndex + 1 < arguments.size()) {
-        runUiRegression(app, mainWindow, mainShell, controller, settingsController, playlistController, sourceController, arguments[uiRegressionIndex+1]);
-    } else if (validationIndex >= 0 && validationIndex + 1 < arguments.size()) {
-        const auto argument = [&](const QString& key) { const auto i = arguments.indexOf(key); return i >= 0 && i+1 < arguments.size() ? arguments[i+1] : QString{}; };
-        runPortableAcceptance(app, controller, libraryController, sourceController, mainWindow, mainShell,
-                              argument("--validation-root"), argument("--validation-script"), argument("--validation-report"), arguments.contains("--validate-restore"));
-    } else if (captureMode) {
+    if (captureMode) {
         auto* window = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
         auto* shell = window ? window->findChild<QObject*>(QStringLiteral("appShell")) : nullptr;
         if (shell) {
@@ -283,6 +290,8 @@ int main(int argc, char* argv[]) {
                     shell->setProperty("queueFromNowPlaying", true);
                     shell->setProperty("queueOpen", true);
                 }
+            } else if (captureView == QStringLiteral("search-lx")) {
+                shell->setProperty("currentRoute", QStringLiteral("search"));
             } else if (captureView == QStringLiteral("search-input")) {
                 shell->setProperty("currentRoute", QStringLiteral("library/songs"));
             } else if (captureView == QStringLiteral("queue")) {

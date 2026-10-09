@@ -151,6 +151,7 @@ QVariantMap song(const QString &platform, QJsonObject o) {
     return {};
   extra.insert("trackId", platform + ":" + id);
   extra.insert("source", platform);
+  extra.insert("originKind", "platform");
   extra.insert("songmid", id);
   extra.insert("rid", id);
   extra.insert("title", title);
@@ -344,6 +345,17 @@ QNetworkReply *platformRequest(QNetworkAccessManager &network, const QString &p,
   request.setRawHeader("User-Agent", "Mozilla/5.0");
   for (auto it = headers.cbegin(); it != headers.cend(); ++it)
     request.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
+  const auto cookie = network.property(("listenfree.cookie." + p).toUtf8().constData()).toByteArray();
+  const auto domain = QMap<QString,QString>{{"wy","music.163.com"}, {"tx","y.qq.com"}, {"kg","kugou.com"}, {"kw","kuwo.cn"}}.value(p);
+  const auto host = request.url().host().toLower();
+  if (!cookie.isEmpty() && !domain.isEmpty() && request.url().scheme() == "https" &&
+      (host == domain || host.endsWith('.' + domain))) {
+    request.setRawHeader("Cookie", cookie);
+    // A platform credential must never follow a cross-origin redirect.
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CookieLoadControlAttribute,QNetworkRequest::Manual);
+    request.setAttribute(QNetworkRequest::CookieSaveControlAttribute,QNetworkRequest::Manual);
+  }
   QNetworkReply *reply;
   if (body.isEmpty())
     reply = network.get(request);
@@ -542,6 +554,13 @@ QStringList platformSuggestions(const QString &p, const QJsonObject &o) {
   return rows.mid(0, 8);
 }
 QVariantMap sourceMusicInfo(const QVariantMap &track) {
+  if (track.value("originKind") == "lx") {
+    auto info = track.value("scriptMusicInfo").toMap();
+    info["source"] = track.value("source");
+    info["originKind"] = "lx";
+    info["originSourceId"] = track.value("originSourceId");
+    return info;
+  }
   auto info = track;
   info["songmid"] = track.value("songmid", track.value("rid"));
   info["name"] = track.value("title", track.value("name"));

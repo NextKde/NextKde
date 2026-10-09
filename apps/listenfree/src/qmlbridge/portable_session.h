@@ -8,6 +8,7 @@
 #include "media/audio_tail_probe.h"
 #include "online/apple_dynamic_artwork_provider.h"
 #include "online/lyric_search.h"
+#include "qmlbridge/automatic_lyrics.h"
 #include <QFutureWatcher>
 #include <QCache>
 #include <QElapsedTimer>
@@ -67,6 +68,8 @@ class PortableSession final : public QObject {
     Q_PROPERTY(int searchPageCount READ searchPageCount NOTIFY searchResultsChanged)
     Q_PROPERTY(QString searchError READ searchError NOTIFY searchResultsChanged)
     Q_PROPERTY(QString platform READ platform WRITE setPlatform NOTIFY platformChanged)
+    Q_PROPERTY(QString searchMode READ searchMode WRITE setSearchMode NOTIFY searchModeChanged)
+    Q_PROPERTY(QString searchSourceId READ searchSourceId WRITE setSearchSourceId NOTIFY searchModeChanged)
     Q_PROPERTY(bool bilibiliSourceEnabled READ bilibiliSourceEnabled NOTIFY bilibiliSourceEnabledChanged)
     Q_PROPERTY(QStringList suggestions READ suggestions NOTIFY suggestionsChanged)
     Q_PROPERTY(QStringList searchHistory READ searchHistory NOTIFY searchHistoryChanged)
@@ -94,6 +97,7 @@ class PortableSession final : public QObject {
     Q_PROPERTY(QString metadataMatchError READ metadataMatchError NOTIFY metadataMatchChanged)
     Q_PROPERTY(QVariantMap metadataArtwork READ metadataArtwork NOTIFY metadataArtworkChanged)
 public:
+    void setAutoLyricMatchEnabled(bool enabled);
     QVariantMap metadataArtwork() const { return metadataArtwork_; }
     Q_INVOKABLE void previewMetadataArtwork(int index);
     QVariantList metadataCandidates() const { return metadataCandidates_; }
@@ -190,10 +194,14 @@ public:
     void setSearchCategory(const QString& category);
     int searchPage() const { return searchPage_; }
     int searchTotal() const { return searchTotal_; }
-    int searchPageCount() const { return platform_ == "bili" ? bilibiliSearchPages_ : searchTotal_ >= 0 ? qMax(1,(searchTotal_+29)/30) : searchPage_+(searchResults_.size()==30 ? 1 : 0); }
+    int searchPageCount() const { return searchMode_ == "lx" ? scriptSearchPages_ : platform_ == "bili" ? bilibiliSearchPages_ : searchTotal_ >= 0 ? qMax(1,(searchTotal_+29)/30) : searchPage_+(searchResults_.size()==30 ? 1 : 0); }
     QString searchError() const { return searchError_; }
     Q_INVOKABLE void goToSearchPage(int page);
     QString platform() const { return platform_; }
+    QString searchMode() const { return searchMode_; }
+    QString searchSourceId() const { return searchSourceId_.isEmpty() ? sources_.defaultId() : searchSourceId_; }
+    void setSearchMode(const QString &mode);
+    void setSearchSourceId(const QString &id);
     bool bilibiliSourceEnabled() const { return bilibiliSourceEnabled_; }
     void setBilibiliSourceEnabled(bool enabled);
     void setPlatform(const QString& platform);
@@ -204,6 +212,7 @@ public:
     QString outputDevice() const;
     Q_INVOKABLE bool selectOutput(const QString& id);
     Q_INVOKABLE void refreshDevices();
+    void setAccountCookie(const QString& platform, const QByteArray& cookie) { network_.setProperty(("listenfree.cookie." + platform).toUtf8().constData(), cookie); }
     Q_INVOKABLE void clearShuffleHistory();
     // Explicit refresh also checks filesystem-derived local artwork versions.
     Q_INVOKABLE void reload();
@@ -265,6 +274,7 @@ signals:
     void lyricsChanged();
     void commentsChanged();
     void searchResultsChanged();
+    void searchModeChanged();
     void notice(const QString& message);
     void artworkChanged();
 private:
@@ -327,6 +337,8 @@ private:
     bool motionEnabled_{true};
     TrackListModel tracks_;
     QueueModel queueModel_;
+    QString searchMode_ = "platform", searchSourceId_, scriptSearchId_, scriptLyricId_, scriptLyricEntry_;
+    int scriptSearchPages_ = 1;
     QVariantList songs_, albums_, artists_, queueView_, lyrics_, searchResults_;
     QSet<QString> indexedCoverIdentities_;
     struct LibraryLoadResult {
@@ -354,6 +366,10 @@ private:
     QSet<QString> pendingRepairedTrackIds_;
     QNetworkAccessManager network_;
     online::LyricSearch lyricSearch_{network_};
+    AutomaticLyrics automaticLyrics_{database_, network_};
+    bool autoLyricMatchEnabled_{true};
+    void acceptFetchedLyrics(const QString& text);
+    void ensureAutomaticLyrics();
     QString platform_{"kw"};
     QString searchCategory_{"songs"}, searchError_;
     int searchPage_{1}, searchTotal_{-1};

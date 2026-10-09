@@ -37,9 +37,11 @@ void main() {
         // distinct sample positions instead of five widely spaced bands.
         float r=max(0.5,glowRadius)*0.5;
         for (int y=-2;y<=2;++y) {
-            float wy=y==0?6.0:(abs(y)==1?4.0:1.0);
+            // GLSL ES 1.00 has no integer abs overload. NVIDIA rejects
+            // the generated shader if an integer is implicitly cast here.
+            float wy=y==0?6.0:((y==-1 || y==1)?4.0:1.0);
             for (int x=-2;x<=2;++x) {
-                float wx=x==0?6.0:(abs(x)==1?4.0:1.0);
+                float wx=x==0?6.0:((x==-1 || x==1)?4.0:1.0);
                 vec2 offset=vec2(float(x-y),float(x+y))*(r*0.70710678);
                 halo+=glyph(p+offset).a*wx*wy/256.0;
             }

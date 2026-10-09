@@ -11,7 +11,18 @@ Window {
     minimumHeight: 709
     visible: true
     color: "transparent"
-    title: "ListenFree"
+    title: "KOS ListenFree"
+    property int beforeFullScreen: Window.Windowed
+    function toggleFullScreen() {
+        if (visibility === Window.FullScreen) {
+            if (beforeFullScreen === Window.Maximized) showMaximized()
+            else showNormal()
+        } else {
+            beforeFullScreen = visibility
+            showFullScreen()
+        }
+    }
+    Shortcut { sequence: "F11"; onActivated: window.toggleFullScreen() }
     readonly property real cornerRadius: visibility === Window.Maximized || visibility === Window.FullScreen ? 0 : AppTheme.normalWindowCornerRadius
     Rectangle {
         id: windowMask
@@ -45,4 +56,5 @@ Window {
         settingsController: backendSettingsController
         downloadController: backendDownloads
     }
+    WindowResizeHandles { targetWindow: window }
 }

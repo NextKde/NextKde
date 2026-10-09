@@ -1,9 +1,11 @@
+#include "test_executable.h"
 #include "sourcehost/source_protocol.h"
 #include "sourcehost/sourcehost_client.h"
 
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
+#include <QDir>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -25,7 +27,7 @@ using listenfree::sourcehost::SourceMessage;
 namespace {
 
 QString faultHostPath() {
-    return QCoreApplication::applicationDirPath() + QStringLiteral("/listenfree-sourcehost-fault-host.exe");
+    return testExecutable(QStringLiteral("listenfree-sourcehost-fault-host"));
 }
 
 SourceMessage request(QString id, bool spawnTree = false) {
@@ -77,7 +79,7 @@ quint64 currentHandleCount() {
     DWORD count = 0;
     return GetProcessHandleCount(GetCurrentProcess(), &count) ? count : 0;
 #else
-    return 0;
+    return QDir("/proc/self/fd").entryList(QDir::AllEntries | QDir::NoDotAndDotDot).size();
 #endif
 }
 
@@ -97,7 +99,7 @@ quint64 currentThreadCount() {
     CloseHandle(snapshot);
     return count;
 #else
-    return 0;
+    return QDir("/proc/self/task").entryList(QDir::Dirs | QDir::NoDotAndDotDot).size();
 #endif
 }
 
@@ -167,7 +169,7 @@ void SourceHostFaultTests::startupHandshakeRequest() {
 
 void SourceHostFaultTests::failedAndMalformedStartup() {
     {
-        SourceHostClient client(QCoreApplication::applicationDirPath() + QStringLiteral("/missing-sourcehost.exe"));
+        SourceHostClient client(testExecutable(QStringLiteral("missing-sourcehost")));
         QSignalSpy errors(&client, &SourceHostClient::protocolError);
         QVERIFY(client.start());
         QTRY_VERIFY_WITH_TIMEOUT(!client.running(), 2000);
@@ -425,6 +427,9 @@ void SourceHostFaultTests::repeatedLifecycleIsStable() {
 }
 
 void SourceHostFaultTests::gracefulStopCleansProcessTree() {
+#ifndef Q_OS_WIN
+    QSKIP("Windows Job Object process-tree contract; native host shutdown is tested separately");
+#endif
     setFaultMode(QStringLiteral("hang"));
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -448,6 +453,9 @@ void SourceHostFaultTests::gracefulStopCleansProcessTree() {
 }
 
 void SourceHostFaultTests::forcedTerminationCleansProcessTree() {
+#ifndef Q_OS_WIN
+    QSKIP("Windows Job Object process-tree contract; native host shutdown is tested separately");
+#endif
     setFaultMode(QStringLiteral("ignore-stop"));
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -471,6 +479,9 @@ void SourceHostFaultTests::forcedTerminationCleansProcessTree() {
 }
 
 void SourceHostFaultTests::parentCrashCleansProcessTree() {
+#ifndef Q_OS_WIN
+    QSKIP("Windows Job Object process-tree contract; native host shutdown is tested separately");
+#endif
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString pidPath = dir.filePath(QStringLiteral("parent-crash-tree.pid"));
@@ -490,6 +501,9 @@ void SourceHostFaultTests::parentCrashCleansProcessTree() {
 }
 
 void SourceHostFaultTests::destructorCleansProcessTree() {
+#ifndef Q_OS_WIN
+    QSKIP("Windows Job Object process-tree contract; native host shutdown is tested separately");
+#endif
     setFaultMode(QStringLiteral("hang"));
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
