@@ -35,8 +35,17 @@ Item {
     property real _pixelAccum: 0
     property bool _wheelPending: false
 
+    function cancelWheelInteraction() {
+        _wheelPending = false
+        wheelCommitTimer.stop()
+        _angleAccum = 0
+        _pixelAccum = 0
+    }
+    onEnabledChanged: if (!enabled) cancelWheelInteraction()
+    onVisibleChanged: if (!visible) cancelWheelInteraction()
+
     function stepByWheel(delta) {
-        if (!enabled || delta === 0)
+        if (!enabled || !visible || pointerArea.pressed || delta === 0)
             return
         const next = Math.max(0, Math.min(1, clampedValue + delta * wheelStep))
         if (Math.abs(next - clampedValue) < 1e-9)
@@ -47,6 +56,7 @@ Item {
     }
 
     function accumulateWheel(angleY, pixelY) {
+        if (!enabled || !visible || pointerArea.pressed) return
         if (pixelY !== 0) {
             _pixelAccum += pixelY
             while (Math.abs(_pixelAccum) >= wheelPixelStep) {
@@ -147,8 +157,7 @@ Item {
 
         onPressed: function(mouse) {
             // 拖动接管：取消还没落下的那次步进提交
-            root._wheelPending = false
-            wheelCommitTimer.stop()
+            root.cancelWheelInteraction()
             root.previewChanged(root.valueAt(mouse.x))
         }
         onPositionChanged: function(mouse) {

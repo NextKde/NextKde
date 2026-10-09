@@ -16,6 +16,7 @@ Item {
     property int ancestorWheel: 0
     property real rampPreview: 0.5
     property int rampCommits: 0
+    property real kosModel: 0.5
     property int kosMoved: 0
 
     // 不带 Ctrl 的滚轮该穿给滑块所在的面板，所以这里放一个祖先捕手：它收到
@@ -72,6 +73,7 @@ Item {
             ramp._pixelAccum = 0; ramp._angleAccum = 0
             kos._pixelAccum = 0; kos._angleAccum = 0
             sliderHost.visible = true; slider.enabled = true
+            rampHost.visible = true; ramp.enabled = true
             preview = confirmedValue; dragging = false
             wait(250)
         }
@@ -187,6 +189,61 @@ Item {
             compare(kosMoved, 1, "照旧走宿主的 moved() 回写")
         }
 
+        function test_ramp_cancel_pending_data() {
+            return [{tag: "disabled", hide: false}, {tag: "hidden", hide: true}]
+        }
+        function test_ramp_cancel_pending(data) {
+            wheel(ramp, 120, Qt.ControlModifier)
+            if (data.hide) rampHost.visible = false
+            else ramp.enabled = false
+            wait(240)
+            compare(rampCommits, 0)
+        }
+        function test_ramp_wheel_during_drag() {
+            mousePress(ramp, 120, 13)
+            rampCommits = 0
+            wheel(ramp, 120, Qt.ControlModifier)
+            wait(240)
+            const earlyCommits = rampCommits
+            mouseRelease(ramp, 120, 13)
+            compare(earlyCommits, 0)
+            compare(rampCommits, 1)
+        }
+        function test_kos_binding_survives_wheel() {
+            kosModel = 0.5
+            kos.value = Qt.binding(function() { return kosModel })
+            wheel(kos, 120, Qt.ControlModifier)
+            wait(30)
+            kosModel = 0.8
+            wait(30)
+            fuzzyCompare(kos.value, 0.8, 1e-6, "external setting update must still drive value")
+        }
+        function test_disable_pending_wheel() {
+            preview = 0.5
+            wheel(slider, 120, Qt.ControlModifier)
+            slider.enabled = false
+            wait(240)
+            compare(commits, 0, "disabled wheel interaction must cancel")
+            compare(dragging, false)
+        }
+        function test_hide_pending_wheel() {
+            preview = 0.5
+            wheel(slider, 120, Qt.ControlModifier)
+            sliderHost.visible = false
+            wait(240)
+            compare(commits, 0, "hidden wheel interaction must cancel")
+            compare(dragging, false)
+        }
+        function test_wheel_during_drag() {
+            mousePress(slider, 140, 22)
+            compare(slider._pressed, true)
+            commits = 0
+            wheel(slider, 120, Qt.ControlModifier)
+            wait(240)
+            const earlyCommits = commits
+            mouseRelease(slider, 140, 22)
+            compare(earlyCommits, 0, "drag must not commit until release")
+        }
         // ── 触控板：Wayland 上 pixelDelta 与 angleDelta 一起给，量级小得多 ──
         // 直接喂 accumulateWheel，免得依赖测试框架怎么造事件（它只给 angleDelta）。
         function test_touchpad_pixels_accumulate_to_one_step() {

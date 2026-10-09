@@ -87,7 +87,12 @@ Item {
     signal canceled()
 
     function cancelInteraction() {
-        if (!_pressed) return
+        const active = _pressed || _wheelPending
+        _wheelPending = false
+        wheelCommitTimer.stop()
+        _angleAccum = 0
+        _pixelAccum = 0
+        if (!active) return
         _pressed = false
         _expansion = 0
         _dragOffset = 0
@@ -116,7 +121,7 @@ Item {
     // 边界上攒一堆空档。preview 立刻生效，提交去抖合并——每转一格就写一次平台
     // 服务太贵。
     function stepByWheel(delta) {
-        if (!enabled || delta === 0)
+        if (!enabled || !visible || _pressed || delta === 0)
             return
         const next = Math.max(0, Math.min(1, visualValue + delta * wheelStep))
         if (Math.abs(next - visualValue) < 1e-9)
@@ -129,6 +134,7 @@ Item {
     // 喂进一次滚轮增量。pixelY 非 0 = 触控板（连续滚动），按像素攒；否则按鼠标的
     // 一格（120）攒。攒够一档才走，余量留着给下一次。
     function accumulateWheel(angleY, pixelY) {
+        if (!enabled || !visible || _pressed) return
         if (pixelY !== 0) {
             _pixelAccum += pixelY
             while (Math.abs(_pixelAccum) >= wheelPixelStep) {
@@ -516,6 +522,8 @@ Item {
             // 拖动接管：取消还没落下的那次步进提交
             root._wheelPending = false
             wheelCommitTimer.stop()
+            root._angleAccum = 0
+            root._pixelAccum = 0
             startX = mouse.x
             startValue = root.value
             root.previewChanged(root.positionForPointer(mouse.x))
