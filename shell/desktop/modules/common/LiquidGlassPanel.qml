@@ -58,6 +58,12 @@ Item {
     property real materialOpacity: 1.0
     readonly property bool materialOpacitySupported: surfaceRegion.materialOpacitySupported
 
+    property bool compositorRevealEnabled: false
+    property bool compositorRevealOpened: false
+    property int compositorRevealDuration: 320
+    readonly property bool compositorRevealSupported: surfaceRegion.revealSupported
+    signal compositorRevealFinished(bool opened)
+
     // ---- KWin vs QML rendering ------------------------------------------
 
     // True: KWin Glass owns blur, refraction and highlights; this panel
@@ -205,6 +211,10 @@ Item {
         radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius
         shapeRadius: root.radius
         materialOpacity: root.materialOpacity
+        revealEnabled: root.compositorRevealEnabled && root.useKwinEffect && !root.tonal
+        revealOpened: root.compositorRevealOpened
+        revealDuration: root.compositorRevealDuration
+        onRevealFinished: function(opened) { root.compositorRevealFinished(opened) }
         exponent: root.cornerExponent
         // A tonal form publishes no SurfaceShape. The declaration can only
         // describe a rectangle with rounded corners, and KWin paints a surface's

@@ -23,6 +23,10 @@ class SurfaceShape : public QObject
     Q_PROPERTY(bool fixedCaptureSupported READ fixedCaptureSupported NOTIFY activeChanged)
     Q_PROPERTY(qreal materialOpacity READ materialOpacity WRITE setMaterialOpacity NOTIFY materialOpacityChanged)
     Q_PROPERTY(bool materialOpacitySupported READ materialOpacitySupported NOTIFY activeChanged)
+    Q_PROPERTY(bool revealEnabled READ revealEnabled WRITE setRevealEnabled NOTIFY revealChanged)
+    Q_PROPERTY(bool revealOpened READ revealOpened WRITE setRevealOpened NOTIFY revealChanged)
+    Q_PROPERTY(int revealDuration READ revealDuration WRITE setRevealDuration NOTIFY revealChanged)
+    Q_PROPERTY(bool revealSupported READ revealSupported NOTIFY activeChanged)
     // Contrast scrim sent over protocol v3. scrimTint 0/1 = black/white;
     // scrimDecay > 1 selects fixed mode.
     Q_PROPERTY(bool scrimEnabled READ scrimEnabled WRITE setScrimEnabled NOTIFY scrimEnabledChanged)
@@ -54,6 +58,13 @@ public:
     qreal materialOpacity() const { return m_materialOpacity; }
     void setMaterialOpacity(qreal opacity);
     bool materialOpacitySupported() const;
+    bool revealEnabled() const { return m_revealEnabled; }
+    bool revealOpened() const { return m_revealOpened; }
+    int revealDuration() const { return m_revealDuration; }
+    void setRevealEnabled(bool enabled);
+    void setRevealOpened(bool opened);
+    void setRevealDuration(int duration);
+    bool revealSupported() const;
     bool scrimEnabled() const { return m_scrimEnabled; }
     void setScrimEnabled(bool enabled);
     int scrimTint() const { return m_scrimTint; }
@@ -75,6 +86,8 @@ Q_SIGNALS:
     void activeChanged();
     void captureGeometryChanged();
     void materialOpacityChanged();
+    void revealChanged();
+    void revealFinished(bool opened);
     void scrimEnabledChanged();
     void scrimTintChanged();
     void scrimCapChanged();
@@ -103,6 +116,11 @@ private:
     qreal m_radius = 0.0;
     QRectF m_captureGeometry;
     qreal m_materialOpacity = 1.0;
+    bool m_revealEnabled = false;
+    bool m_revealOpened = false;
+    int m_revealDuration = 320;
+    bool m_revealDirty = true;
+    uint32_t m_revealSerial = 0;
     qreal m_exponent = 2.0;
     bool m_enabled = true;
     bool m_scrimEnabled = false;

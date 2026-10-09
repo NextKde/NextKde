@@ -131,6 +131,11 @@ PanelWindow {
     LauncherMotion {
         id: popupMotion
         target: launcherContent
+        surface: launcherSurface
+        onSettledOpenChanged: {
+            if (settledOpen)
+                searchFocusTimer.restart();
+        }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
     readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
@@ -1190,7 +1195,9 @@ PanelWindow {
             width: launcherRevealClip.width
             height: launcherRevealClip.height
             visible: root.panelVisible
-            enabled: root.open
+            // Compositor transforms do not move QML's hit-test coordinates.
+            // Enable interaction only after the surface reaches its final pose.
+            enabled: popupMotion.interactive
             // Content layout and clipping stay independent of the backdrop.
             clip: false
 
@@ -1216,8 +1223,16 @@ PanelWindow {
                     cornerExponent: 2.35
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     scrimLevel: "balanced"
-                    // Fade the complete KWin finish; never resize its outline.
-                    materialOpacity: popupMotion.glassOpacity
+                    compositorRevealEnabled: !root.isFullscreenMode
+                        && !AppearanceTokens.surface.paintInQml
+                    compositorRevealOpened: popupMotion.requestedOpen
+                    compositorRevealDuration: 320
+                    onCompositorRevealFinished: function(opened) {
+                        popupMotion.finishCompositorReveal(opened);
+                    }
+                    // Native reveal owns the final SDF and material fade. Older
+                    // compositors keep a fixed outline with one group fade.
+                    materialOpacity: popupMotion.compositorSupported ? 1 : popupMotion.glassOpacity
                     // QML-painted themes have their own matching fade. The
                     // native effect fades separately through protocol metadata.
                     opacity: fallbackEnabled ? popupMotion.glassOpacity : 1
@@ -1230,9 +1245,9 @@ PanelWindow {
                     width: parent.width
                     height: parent.height
                     y: 0
-                    scale: 1
+                    scale: popupMotion.compositorSupported ? 1 : 0.8
                     focus: root.open && !root.externalDialogOpen
-                    opacity: 1
+                    opacity: popupMotion.compositorSupported ? 1 : 0
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
@@ -1659,20 +1674,6 @@ PanelWindow {
                                 }
                             }
 
-                            LauncherIconMotion {
-                                target: appEntrance
-                                opened: popupMotion.requestedOpen
-                                // Search/page delegates born after opening appear
-                                // directly, rather than replaying the entrance.
-                                animateOnCompleted: !popupMotion.settledOpen
-                                offsetX: Math.max(-32, Math.min(32,
-                                    (appDelegate.x + appDelegate.width / 2
-                                        - appDelegate.GridView.view.width / 2) * 0.2))
-                                offsetY: Math.max(-24, Math.min(24,
-                                    (appDelegate.y + appDelegate.height / 2
-                                        - appDelegate.GridView.view.contentY
-                                        - appDelegate.GridView.view.height / 2) * 0.2))
-                            }
                             Item {
                                 id: appEntrance
                                 width: parent.width

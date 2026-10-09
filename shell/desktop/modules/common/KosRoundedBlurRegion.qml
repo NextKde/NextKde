@@ -22,6 +22,36 @@ RoundedBlurRegion {
     readonly property bool materialOpacitySupported:
         ("materialOpacitySupported" in surfaceShape) && surfaceShape.materialOpacitySupported
 
+    property bool revealEnabled: false
+    property bool revealOpened: false
+    property int revealDuration: 320
+    readonly property bool revealSupported:
+        ("revealSupported" in surfaceShape) && surfaceShape.revealSupported
+    signal revealFinished(bool opened)
+
+    property list<QtObject> revealBindings: [
+        Binding {
+            target: ("revealEnabled" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealEnabled"
+            value: root.revealEnabled
+        },
+        Binding {
+            target: ("revealOpened" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealOpened"
+            value: root.revealOpened
+        },
+        Binding {
+            target: ("revealDuration" in root.surfaceShape) ? root.surfaceShape : null
+            property: "revealDuration"
+            value: root.revealDuration
+        },
+        Connections {
+            target: root.surfaceShape
+            ignoreUnknownSignals: true
+            function onRevealFinished(opened) { root.revealFinished(opened) }
+        }
+    ]
+
     // Contrast scrim forwarded to the compositor alongside the shape. Tint
     // 0/1 is black/white. Decay 0..1 is adaptive; values above 1 select fixed
     // mode, where cap is the exact opacity.

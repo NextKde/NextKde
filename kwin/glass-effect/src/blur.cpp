@@ -1099,6 +1099,9 @@ void BlurEffect::prePaintScreen(ScreenPrePaintData &data)
 void BlurEffect::prePaintScreen(ScreenPrePaintData &data, std::chrono::milliseconds presentTime)
 #endif
 {
+#ifndef GLASS_X11
+    if (m_surfaceShapeManager) m_surfaceShapeManager->advanceAnimations();
+#endif
     m_paintedDeviceArea = BlurRegion();
     m_currentDeviceBlur = BlurRegion();
 #ifdef GLASS_X11
@@ -1283,7 +1286,25 @@ void BlurEffect::drawWindow(const RenderTarget &renderTarget, const RenderViewpo
 {
     blur(renderTarget, viewport, w, mask, deviceRegion, data);
 
-    // Draw the window over the blurred area
+    // Glass uses the original transform/capture. Only the already-composited
+    // client surface is transformed as one group, never its individual items.
+#ifndef GLASS_X11
+    if (m_surfaceShapeManager && w->surface()) {
+        if (const auto reveal = m_surfaceShapeManager->revealFor(w->surface())) {
+            WindowPaintData contentData(data);
+            const qreal scale = 0.8 + 0.2 * reveal->progress;
+            const QPointF anchor = reveal->geometry.center();
+            contentData.setXTranslation(data.xTranslation() + anchor.x() * data.xScale() * (1 - scale));
+            contentData.setYTranslation(data.yTranslation() + anchor.y() * data.yScale() * (1 - scale));
+            contentData.setXScale(data.xScale() * scale);
+            contentData.setYScale(data.yScale() * scale);
+            contentData.multiplyOpacity(std::min(1.0, reveal->progress / 0.6));
+            effects->drawWindow(renderTarget, viewport, w, mask | PAINT_WINDOW_TRANSFORMED,
+                                deviceRegion, contentData);
+            return;
+        }
+    }
+#endif
     effects->drawWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
@@ -1342,6 +1363,14 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         declaredSurfaceShapes = m_surfaceShapeManager->shapesFor(w->surface());
     }
 #endif
+
+    // A completed close can outlive the client's blur-region commit. Keep
+    // its transparent declaration authoritative and skip all capture/blur work.
+    if (!declaredSurfaceShapes.isEmpty()
+        && std::all_of(declaredSurfaceShapes.cbegin(), declaredSurfaceShapes.cend(),
+                       [](const SurfaceShape &shape) { return shape.materialOpacity <= 0; })) {
+        return;
+    }
 
     auto transformShape = [&](BlurRegion shape) {
         shape.translate(w->pos().toPoint());

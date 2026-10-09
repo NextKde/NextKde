@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QHash>
+#include <QElapsedTimer>
+#include <optional>
 #include <QObject>
 #include <QRectF>
 #include <QVector>
@@ -45,6 +47,12 @@ inline QRectF surfaceCaptureBounds(const SurfaceShape &shape)
         : shape.captureGeometry.united(shape.geometry);
 }
 
+struct SurfaceReveal
+{
+    QRectF geometry;
+    qreal progress = 1.0;
+};
+
 class SurfaceShapeManager : public QObject
 {
     Q_OBJECT
@@ -54,6 +62,8 @@ public:
     ~SurfaceShapeManager() override;
 
     QVector<SurfaceShape> shapesFor(const SurfaceInterface *surface) const;
+    std::optional<SurfaceReveal> revealFor(const SurfaceInterface *surface) const;
+    void advanceAnimations();
 
 Q_SIGNALS:
     void surfaceShapesChanged(KWin::SurfaceInterface *surface);
@@ -81,12 +91,15 @@ public: // Wayland C dispatch table callbacks.
     static void setCaptureGeometry(wl_client *client, wl_resource *resource,
                                   int32_t x, int32_t y, int32_t width, int32_t height);
     static void setMaterialOpacity(wl_client *client, wl_resource *resource, wl_fixed_t opacity);
+    static void setReveal(wl_client *client, wl_resource *resource,
+                          uint32_t enabled, uint32_t opened, uint32_t duration, uint32_t serial);
     static void destroyShape(wl_client *client, wl_resource *resource);
 
 private:
     void changed(ShapeResource *shape);
     void remove(ShapeResource *shape);
 
+    QElapsedTimer m_clock;
     wl_global *m_global = nullptr;
     quint64 m_nextId = 1;
     QHash<const SurfaceInterface *, QVector<ShapeResource *>> m_shapes;
