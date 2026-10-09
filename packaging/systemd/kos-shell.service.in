@@ -32,8 +32,7 @@ Environment=QS_DISABLE_FILE_WATCHER=1
 # 52 threads let glibc open many malloc arenas; each keeps its own freed
 # memory instead of returning it, inflating RSS by ~200MB. Cap the arenas.
 Environment=MALLOC_ARENA_MAX=2
-# Wallpaper UniformAnimator jobs must keep moving independently of QML work.
-Environment=QSG_RENDER_LOOP=threaded
+# Let Qt choose its render loop for the active platform and graphics backend.
 Environment=QML2_IMPORT_PATH=%h/.config/quickshell/kos:%h/.local/lib/qt6/qml
 ExecStart=@QS_EXEC@ --no-duplicate -c kos
 Restart=on-failure
