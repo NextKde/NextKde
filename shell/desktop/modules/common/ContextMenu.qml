@@ -18,6 +18,7 @@ PopupWindow {
     property bool macosPopupMotion: true
     // Opt-in source-capsule morph, matching Control Center's Wi-Fi list.
     property bool capsuleReveal: false
+    property real capsuleSourceWidth: 0
     property bool centerBelowAnchor: false
     property real centerBelowOffset: 0
     property var customAnchorEdges: null
@@ -270,7 +271,8 @@ PopupWindow {
         readonly property bool morphing: root.capsuleReveal && root.macosPopupMotion
         readonly property real progress: morphing ? popupMotion.progress : 1
         readonly property real sourceWidth: Math.min(root.width,
-            Math.max(48, root.anchorItem ? root.anchorItem.width : 96))
+            Math.max(48, root.capsuleSourceWidth > 0 ? root.capsuleSourceWidth
+                : (root.anchorItem ? root.anchorItem.width : 96)))
         readonly property real sourceHeight: Math.min(root.height, 59)
         // Keep the source inside this popup's allocation, at the edge nearest
         // its anchor. The final menu geometry and row layout remain fixed.

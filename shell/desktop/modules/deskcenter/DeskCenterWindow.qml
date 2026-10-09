@@ -4047,6 +4047,9 @@ PanelWindow {
 
         ContextMenu {
             id: desktopContextMenu
+            capsuleReveal: true
+            // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
+            capsuleSourceWidth: 137
             anchorItem: desktopContextAnchor
             position: "bottom"
             placeBelow: true
