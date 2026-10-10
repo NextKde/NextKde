@@ -68,6 +68,24 @@ libepoxy 的开发文件，但这些已是 Arch `kwin` 包的硬依赖，无需�
 `kosctl` 的自动依赖安装同时支持 Debian 系（通过 `apt-get`）：`./tools/kosctl doctor`
 会逐项检查，`./tools/kosctl install` 会补齐缺失项。
 
+从零装到可用桌面（**含 clone 仓库**）可以只跑一个脚本，它会依次完成环境预检、
+sudo 准备、代理探测、Quickshell 与全部依赖安装、clone、构建安装、结果校验：
+
+```sh
+bash tools/install-debian13.sh --check         # 只预检，不改动系统（不触发 sudo）
+bash tools/install-debian13.sh                 # 正式安装
+bash tools/install-debian13.sh --all --start   # 连独立应用与锁屏一起装，并立即生效
+```
+
+必须以**桌面登录用户**身份运行，不要加 `sudo`：shell 配置写在
+`~/.config/quickshell/kos`、systemd 服务是*用户*单元、桌面接管要改
+`~/.config/plasma-*-appletsrc`，它们都属于你自己的 `HOME`。因此 `KOS_PREFIX`
+默认是 `$HOME/.local`，脚本会拒绝指向 HOME 之外的前缀。
+
+构建期 `kosctl` 会用 curl 从 GitHub 拉取 pin 死的 ONNX Runtime SDK
+（`KOS_BUILD_SPATIAL=off` 时跳过）。国内网络下脚本会自动探测本地代理，
+并且只把它传给 git 与构建过程 —— apt 保持直连，走国内镜像更快。
+
 与 Arch 的主要差异，也是 Debian 上最容易卡住的地方：
 
 - Debian 的 `kwin-dev` **不**像 Arch 的 `kwin` 那样自带 libdrm / libgbm 的开发文件，

@@ -52,6 +52,26 @@ package and do not need to be repeated here.
 `apt-get`: `./tools/kosctl doctor` reports every gap and
 `./tools/kosctl install` fills it in.
 
+Going from a clean machine to a running desktop — **including the clone** — takes a single
+script, which walks through the environment check, sudo setup, proxy detection, Quickshell
+and dependency installation, cloning, building, installing and verification:
+
+```sh
+bash tools/install-debian13.sh --check         # check only, changes nothing (no sudo)
+bash tools/install-debian13.sh                 # install
+bash tools/install-debian13.sh --all --start   # also install the standalone apps and lock screen, then apply
+```
+
+Run it as your **logged-in desktop user**, never through `sudo`: the shell configuration
+lands in `~/.config/quickshell/kos`, the services are systemd *user* units, and the desktop
+takeover edits `~/.config/plasma-*-appletsrc` — all of them belong to your own `HOME`. So
+`KOS_PREFIX` defaults to `$HOME/.local`, and the script refuses a prefix outside `HOME`.
+
+During the build `kosctl` fetches a pinned ONNX Runtime SDK from GitHub with curl (skipped
+when `KOS_BUILD_SPATIAL=off`). On networks that cannot reach GitHub directly, the script
+detects a local proxy and hands it to git and the build only — apt stays direct, which is
+faster against a domestic mirror.
+
 Where Debian differs from Arch — and where a Debian build usually gets stuck:
 
 - Debian's `kwin-dev` does **not** bring the libdrm and libgbm development
