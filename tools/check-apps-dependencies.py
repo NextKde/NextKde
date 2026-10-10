@@ -50,13 +50,17 @@ for module, package in (
     ('QtQuick_Templates', 'qtquick-templates'), ('QtQuick_Dialogs', 'qtquick-dialogs')):
     CMAKE_PACKAGES['Qml_' + module] = ('qt6-multimedia' if module == 'QtMultimedia' else 'qt6-declarative', 'qml6-module-' + package)
 
-def distribution(path=Path('/etc/os-release')):
+def os_release(path=Path('/etc/os-release')):
     values = {}
     if path.exists():
         for line in path.read_text().splitlines():
             if '=' in line:
                 key, value = line.split('=', 1)
                 values[key] = value.strip('"\'')
+    return values
+
+def distribution(path=Path('/etc/os-release')):
+    values = os_release(path)
     ids = [values.get('ID', ''), *values.get('ID_LIKE', '').split()]
     if 'arch' in ids: return 'arch'
     if any(value in ids for value in ('ubuntu', 'debian')): return 'ubuntu'
@@ -120,8 +124,20 @@ def main():
         if any(label.startswith(('Go >=', 'CMake >=')) for label, _, _ in missing):
             print('If the distro package is too old, install a supported newer toolchain; reinstalling the old version is insufficient.')
         if old_qt:
+            release = os_release()
+            distro_id = release.get('ID', '')
+            pretty = release.get('PRETTY_NAME', distro_id or 'this distribution')
             print('\nInstalled Qt is ' + qt_version + '; ListenFree requires Qt >= 6.10.')
-            print('Ubuntu 22.04/24.04/25.10 stock Qt is too old; use Ubuntu 26.04+ or a complete compatible Qt/KF6 toolchain.')
+            if distro_id == 'debian':
+                # Debian stable is still on Qt 6.8: trixie (13, current stable)
+                # and bookworm (12) both ship 6.8.x, and only unstable/experimental
+                # carry 6.10+. Report the detected release so this stays accurate
+                # as Debian moves on, instead of hard-coding a version that ages out.
+                print(pretty + ' stock Qt is too old; Debian stable has not shipped Qt 6.10 yet.')
+                print('Use Debian unstable/experimental, or a complete compatible Qt/KF6 toolchain')
+                print('(e.g. aqtinstall or a distro with Qt >= 6.10) instead of ' + pretty + '.')
+            else:
+                print('Ubuntu 22.04/24.04/25.10 stock Qt is too old; use Ubuntu 26.04+ or a complete compatible Qt/KF6 toolchain.')
             print('Installing the same older Qt package again will not satisfy this requirement.')
         return 1
     print('Application system dependencies are ready (' + family + ', Qt ' + qt_version + ').')

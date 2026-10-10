@@ -1274,9 +1274,23 @@ install_kwin_plugins() {
         [[ "$(getenforce)" != Disabled ]]; then
         selinux_context=(-Z)
     fi
-    find "$stage_dir$kwin_system_prefix" -exec chmod go-w {} +
+    # Normalise the staged tree's modes before the copy. `cp -a` carries the
+    # *source* directory's permissions onto the destination -- including the
+    # staged root, which becomes the system prefix itself. A permissive umask
+    # is therefore not enough: running the installer under a restrictive one
+    # (e.g. `umask 077`, the usual habit while a secret is on disk) stages 0700
+    # directories, `chmod go-w` leaves them 0700, and /usr ends up 0700 --
+    # every non-root process then loses access to the whole prefix, and a
+    # reboot has no graphical session at all. Grant group/other read and
+    # directory traverse explicitly instead of only removing write.
+    find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
+    find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+rX {} +
     sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
+    # Belt: the prefix itself is what a bad umask breaks first, and restoring
+    # its 0755 here is exactly the manual recovery -- cheap, and it makes the
+    # system-wide lockout impossible even if a future staging step slips.
+    sudo chmod 755 "$kwin_system_prefix"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then

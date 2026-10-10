@@ -982,7 +982,7 @@ public:
         callAppearance({QStringLiteral("resetGlassPreset"), style});
     }
 
-    // ── 前台调度（fg-sched）页 ──
+    // ── 台前调度（fg-sched）页 ──
     // 配置就是 ~/.config/fg-sched/config.json：直接读写，root 守护对 mtime
     // 轮询自动应用（≤5s），无需任何信号/特权通道。knownApps 来自守护维护的
     // known-apps.json（出现过的 resourceClass）。

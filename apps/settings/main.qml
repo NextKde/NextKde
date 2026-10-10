@@ -228,7 +228,7 @@ ApplicationWindow {
             groups: []
         },
         {
-            subtitle: "前台调度",
+            subtitle: "台前调度",
             groups: []
         },
         { subtitle: "窗口和动画", groups: [] }
@@ -545,7 +545,7 @@ ApplicationWindow {
         }
     }
 
-    // ── 前台调度（fg-sched）页 ──────────────────────────────────────
+    // ── 台前调度（fg-sched）页 ──────────────────────────────────────
     // 冻结默认全面停用：后台只做资源限制（nice/效率核/IO，异构才限核）。本页管理：
     // ① 冻结开关（重开时最小化窗口 180s 后 SIGSTOP）
     // ② "后台全资源运行"名单（never_demote_apps——名单内应用切后台后
@@ -679,7 +679,7 @@ ApplicationWindow {
                 spacing: 4
 
                 Text {
-                    text: "前台调度"
+                    text: "台前调度"
                     color: theme.primaryText
                     font { pixelSize: 15; weight: Font.DemiBold }
                 }
@@ -5780,7 +5780,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 10
-                            label: "前台调度"
+                            label: "台前调度"
                             navSymbol: "⏵"
                             navTint: "#ff9f0a"
                         }

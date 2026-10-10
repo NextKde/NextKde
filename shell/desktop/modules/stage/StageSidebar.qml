@@ -7,11 +7,11 @@ import qs.desktop.modules.dock
 // 消费 WindowService（KWin 桥：窗口列表/实时缩略图/激活），卡片区排除
 // 当前活动窗口（它就是"主窗"），其余窗口全部以缩略卡片常驻侧栏
 //（side 可配左/右），点击卡片激活置顶。
-// 显隐由 StageModeService.enabled 驱动（前台调度总开关，控制中心/Meta+Y 可切）。
+// 显隐由 StageModeService.enabled 驱动（台前调度总开关，控制中心/Meta+Y 可切）。
 Scope {
     id: root
 
-    // 前台调度设置页的数据源：当前运行的窗口应用（去重，人类可读名+类名）。
+    // 台前调度设置页的数据源：当前运行的窗口应用（去重，人类可读名+类名）。
     IpcHandler {
         target: "fg-sched"
         function runningApps(): string {
@@ -87,7 +87,7 @@ Scope {
         }
     }
 
-    // 台前调度可调参数（设置应用 → 前台调度页走这里实时改）
+    // 台前调度可调参数（设置应用 → 台前调度页走这里实时改）
     IpcHandler {
         target: "stage-config"
         function snapshot(): string { return StageConfigService.snapshotJson() }
