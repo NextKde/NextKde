@@ -351,7 +351,8 @@ ApplicationWindow {
                 "↔":"arrows", "◉":"circle", "◌":"circle", "●":"circle",
                 "◐":"contrast", "◔":"contrast", "◒":"contrast", "≈":"waves",
                 "≋":"waves", "⧉":"copy", "⌂":"home", "⌕":"search",
-                "⇲":"resize", "↺":"undo", "B":"bold"})[parent.symbol] || "settings"
+                "⇲":"resize", "↺":"undo", "B":"bold",
+                "▢":"corners", "◧":"shadow", "↓":"minimize", "×":"close"})[parent.symbol] || "settings"
             color: parent.flat
                 ? (parent.highlighted ? theme.selectedForeground : theme.iconMuted)
                 : theme.iconForeground
@@ -3951,6 +3952,171 @@ ApplicationWindow {
         }
     }
 
+    component WindowAnimationSettingsPage: ColumnLayout {
+        id: windowPage
+        objectName: "windowAppearancePage"
+        spacing: 10
+        property var backend: typeof windowSettings !== "undefined" ? windowSettings : null
+        readonly property var snapshot: backend ? backend.state : ({})
+        readonly property var radiusStops: [0, 8, 12, 20, 28, 36]
+        readonly property var radiusLabels: ["直角", "微圆", "小", "标准", "大", "更大"]
+        property int previewRadius: -1
+        readonly property int radiusIndex: {
+            let best = 0
+            for (let i = 1; i < radiusStops.length; ++i)
+                if (Math.abs(radiusStops[i] - Number(snapshot.radius ?? 20))
+                    < Math.abs(radiusStops[best] - Number(snapshot.radius ?? 20))) best = i
+            return best
+        }
+        Component.onCompleted: { if (backend) backend.refresh() }
+
+        Text {
+            text: "窗口外观"
+            color: theme.secondaryText; font.pixelSize: 12; font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: windowRows.implicitHeight
+            radius: 18; color: theme.card
+            Column {
+                id: windowRows
+                anchors.left: parent.left; anchors.right: parent.right
+                Item {
+                    width: parent.width; height: 54
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "▣"; tint: "#5856d6" }
+                        Text { text: "KOS 窗口外观"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            width: 64; height: 25
+                            enabled: windowPage.backend !== null
+                            objectName: "windowTakeoverSwitch"
+                            checked: windowPage.snapshot.enabled !== false
+                            accentColor: theme.accent; trackColor: theme.divider
+                            onToggled: function(checked) { windowPage.backend.setTakeover(checked) }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width - 53; x: 53; height: 1; color: theme.separator }
+                Item {
+                    width: parent.width; height: 64
+                    enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                    opacity: enabled ? 1 : 0.4
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "▢"; tint: "#5ac8fa" }
+                        Text { text: "圆角幅度"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: windowPage.radiusLabels[windowPage.previewRadius >= 0 ? windowPage.previewRadius : windowPage.radiusIndex]
+                                + " · " + (windowPage.previewRadius >= 0 ? windowPage.radiusStops[windowPage.previewRadius] : Number(windowPage.snapshot.radius ?? 20)) + " px"
+                            color: theme.secondaryText; font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            objectName: "windowRadiusSlider"
+                            enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                            Layout.preferredWidth: 190
+                            accentColor: theme.accent; trackColor: theme.divider
+                            wheelStep: 0.2
+                            value: (windowPage.previewRadius >= 0 ? windowPage.previewRadius : windowPage.radiusIndex) / 5
+                            onPreviewChanged: function(position) { windowPage.previewRadius = Math.round(position * 5) }
+                            onCanceled: windowPage.previewRadius = -1
+                            onCommitRequested: function(position) {
+                                windowPage.backend.setRadius(windowPage.radiusStops[Math.round(position * 5)])
+                                windowPage.previewRadius = -1
+                            }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width - 53; x: 53; height: 1; color: theme.separator }
+                Item {
+                    width: parent.width; height: 54
+                    enabled: windowPage.backend !== null && windowPage.snapshot.enabled !== false
+                    opacity: enabled ? 1 : 0.4
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "◧"; tint: "#8e8e93" }
+                        Text { text: "窗口阴影"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        LiquidControls.LiquidGlassSwitch {
+                            width: 64; height: 25
+                            objectName: "windowShadowSwitch"
+                            checked: windowPage.snapshot.shadow !== false
+                            accentColor: theme.accent; trackColor: theme.divider
+                            onToggled: function(checked) { windowPage.backend.setShadow(checked) }
+                        }
+                    }
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
+            text: "关闭 KOS 窗口外观会恢复原装饰器。圆角与阴影即时生效，装饰器切换在下次登录生效。"
+            color: theme.secondaryText; font.pixelSize: 11; wrapMode: Text.Wrap
+        }
+        Text {
+            text: "窗口动画"
+            color: theme.secondaryText; font.pixelSize: 12; font.weight: Font.DemiBold
+            Layout.leftMargin: 13; Layout.topMargin: 10
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: animationRows.implicitHeight
+            radius: 18; color: theme.card
+            Column {
+                id: animationRows
+                anchors.left: parent.left; anchors.right: parent.right
+                Item {
+                    width: parent.width; height: 54
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "↓"; tint: "#ff9500" }
+                        Text { text: "隐藏与恢复"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            objectName: "windowHideAnimation"
+                            disabled: windowPage.backend === null
+                            model: [{ id: "none", label: "无" }, { id: "scale", label: "缩放" }, { id: "genie", label: "水滴" }]
+                            currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
+                            onSelectionChanged: function(index) { windowPage.backend.setAnimation("hide", model[index].id) }
+                        }
+                    }
+                }
+                Rectangle { width: parent.width - 53; x: 53; height: 1; color: theme.separator }
+                Item {
+                    width: parent.width; height: 54
+                    RowLayout {
+                        anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
+                        SettingIcon { symbol: "×"; tint: "#ff3b30" }
+                        Text { text: "关闭窗口"; color: theme.primaryText; font.pixelSize: 14 }
+                        Item { Layout.fillWidth: true }
+                        SettingsNavBar {
+                            objectName: "windowCloseAnimation"
+                            disabled: windowPage.backend === null
+                            itemWidthOverride: 80
+                            model: [{ id: "none", label: "无" }, { id: "fade", label: "淡出" }, { id: "scale", label: "缩小淡出" }]
+                            currentIndex: ["none", "fade", "scale"].indexOf(windowPage.snapshot.closeAnimation ?? "scale")
+                            onSelectionChanged: function(index) { windowPage.backend.setAnimation("close", model[index].id) }
+                        }
+                    }
+                }
+            }
+        }
+        Text {
+            Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
+            text: "隐藏指最小化到 Dock。选择“无”会让 KOS 放弃该动画，由其他已启用的 KWin 效果处理。"
+            color: theme.secondaryText; font.pixelSize: 11; wrapMode: Text.Wrap
+        }
+        Text {
+            Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
+            visible: !windowPage.backend || windowPage.backend.error.length > 0
+            text: windowPage.backend ? windowPage.backend.error : "窗口设置后端不可用"
+            color: "#ff453a"; font.pixelSize: 12; wrapMode: Text.Wrap
+        }
+    }
+
     component ThemeSettingsPage: ColumnLayout {
         id: themePage
 
@@ -5729,9 +5895,10 @@ ApplicationWindow {
                     // page actually being shown.
                     Loader {
                         Layout.fillWidth: true
+                        objectName: "windowPageLoader"
                         active: window.displayedPage === 11
                         visible: active
-                        sourceComponent: WindowAnimationSettingsPage { colors: theme }
+                        sourceComponent: WindowAnimationSettingsPage {}
                     }
 
                     Loader {

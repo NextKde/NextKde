@@ -31,11 +31,12 @@ mkdir -p "$TMPDIR" "$GOTMPDIR"
 # value exported here is overridden before it is ever read. CI caches the real
 # one -- .build/tests/services/data-service/go-test-cache -- instead.
 
+run_all=false
 layers=()
 build_jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-}
 while (( $# > 0 )); do
     case "$1" in
-        --all) layers=(data logic platform ui) ;;
+        --all) run_all=true; layers=(data logic platform ui) ;;
         --layer)
             shift
             [[ -n "${1:-}" ]] || { echo "--layer needs a value" >&2; exit 2; }
@@ -93,4 +94,9 @@ cmake --build "$build_dir" --parallel "$build_jobs"
 
 printf '==> testing label%s: %s\n' \
     "$([[ ${#layers[@]} -gt 1 ]] && echo s)" "$(IFS=', '; echo "${layers[*]}")"
-ctest --test-dir "$build_dir" --output-on-failure -L "$label_regex"
+if [[ "$run_all" == true ]]; then
+    # Include unlabelled and package-provided tests as well.
+    ctest --test-dir "$build_dir" --output-on-failure
+else
+    ctest --test-dir "$build_dir" --output-on-failure -L "$label_regex"
+fi

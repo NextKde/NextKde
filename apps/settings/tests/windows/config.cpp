@@ -8,8 +8,18 @@
 #include <KSharedConfig>
 #include <KConfigGroup>
 #include <cstdlib>
+#include <QProcess>
+#include <QTextStream>
+#include <QLockFile>
 #define CHECK(x) do { if (!(x)) { qFatal("Failed line %d: %s", __LINE__, #x); } } while (false)
 int main(int argc, char **argv) {
+    if (argc == 2) {
+        QCoreApplication app(argc, argv);
+        WindowSettings settings;
+        if (app.arguments()[1] == "--install-defaults") CHECK(settings.installDefaults());
+        QTextStream(stdout) << QJsonDocument(QJsonObject::fromVariantMap(settings.state())).toJson(QJsonDocument::Compact);
+        return 0;
+    }
     QTemporaryDir temporary;
     CHECK(temporary.isValid());
     qputenv("XDG_CONFIG_HOME", temporary.path().toUtf8());
@@ -47,6 +57,16 @@ int main(int argc, char **argv) {
     CHECK(settings.setAnimation("hide", "none"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     CHECK(settings.state()["hideAnimation"]=="none");
+    QProcess reopened;
+    reopened.start(QCoreApplication::applicationFilePath(), {"--install-defaults"});
+    CHECK(reopened.waitForFinished(5000)); CHECK(reopened.exitCode()==0);
+    const auto persisted=QJsonDocument::fromJson(reopened.readAllStandardOutput()).object();
+    CHECK(persisted["hideAnimation"]=="none"); CHECK(persisted["closeAnimation"]=="fade");
+    CHECK(persisted["radius"].toInt()==28); CHECK(!persisted["shadow"].toBool());
+    CHECK(!persisted["enabled"].toBool()); CHECK(persisted["decoration"]=="changed_externally");
+    const auto saved=get();
+    CHECK(!settings.setRadius(-1)); CHECK(!settings.setRadius(201)); CHECK(get()==saved);
+    { QLockFile lock(filename+".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setShadow(true)); CHECK(get()==saved); }
     CHECK(!settings.setAnimation("close", "genie"));
     CHECK(settings.state()["closeAnimation"]=="fade");
     put("malformed"); CHECK(!settings.setRadius(12)); CHECK(get()=="malformed");

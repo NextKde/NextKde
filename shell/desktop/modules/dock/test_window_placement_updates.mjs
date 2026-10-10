@@ -41,7 +41,7 @@ const windowModel = {
     setProperty: (i, key, value) => { writes++; rows[i][key] = value; },
 };
 const svc = { records: [], _kwinWindows: [], _nextWindowNumber: 1,
-    revision: 0, placementRevision: 0, _recordsById: {},
+    revision: 0, placementRevision: 0, _recordsById: {}, _lastActivatedAt: {},
     // Process probes are QML runtime objects; placement tests provide the
     // caches but never spawn a real probe while rebuilding synthetic records.
     _processHintsByPid: {}, _processProbeByPid: {}, _ensureProcessHints() {},
@@ -64,6 +64,7 @@ svc._kwinWindows = [window("one"), window("two")];
 svc._rebuild();
 assert.equal(svc.revision, 1);
 assert.equal(svc.placementRevision, 1);
+assert.deepEqual(Object.keys(svc._lastActivatedAt), [], "inactive windows have no MRU stamp");
 const records = svc.records;
 const record = records[0];
 const byId = svc._recordsById;

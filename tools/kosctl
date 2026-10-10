@@ -688,8 +688,6 @@ deploy_artifacts() {
     fi
 
     # --- Settings QML & shared controls ---
-    install -m 0644 "$project_dir/apps/settings/WindowAnimationSettingsPage.qml" \
-        "$prefix/share/kos/settings/WindowAnimationSettingsPage.qml"
     if [[ "$nix_artifact" == true ]]; then
         install -m 0644 "$artifact_root/share/kos/settings/main.qml" \
             "$prefix/share/kos/settings/main.qml"

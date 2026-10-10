@@ -351,19 +351,23 @@ AnimatedPopupWindow {
                 }
                 Canvas {
                     id: rowWifiGlyph
+                    property int signalStrength: modelData.signalStrength
+                    property color ink: panelSurface.foregroundColor
+                    onSignalStrengthChanged: requestPaint()
+                    onInkChanged: requestPaint()
                     width: 24
                     height: 24
                     anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.reset()
-                        ctx.strokeStyle = panelSurface.foregroundColor
-                        ctx.fillStyle = panelSurface.foregroundColor
+                        ctx.strokeStyle = ink
+                        ctx.fillStyle = ink
                         ctx.globalAlpha = 0.92
                         ctx.lineWidth = 1.9
                         ctx.lineCap = "round"
-                        const rings = modelData.signalStrength < 25 ? 1
-                            : (modelData.signalStrength < 50 ? 2 : 3)
+                        const rings = signalStrength < 25 ? 1
+                            : (signalStrength < 50 ? 2 : 3)
                         for (let ring = 0; ring < rings; ring++) {
                             const ringRadius = 3.3 + ring * 2.7
                             ctx.beginPath()

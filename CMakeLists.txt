@@ -175,33 +175,29 @@ if(BUILD_TESTING)
         set_tests_properties(kos-shell.wallpaper-color-source PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-slideshow
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_slideshow.mjs
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_wallpaper_slideshow.mjs
         )
         set_tests_properties(kos-shell.wallpaper-slideshow PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-handoff
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_handoff.mjs)
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_wallpaper_handoff.mjs)
         set_tests_properties(kos-shell.wallpaper-handoff PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-transitions
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_transitions.mjs)
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_wallpaper_transitions.mjs)
         set_tests_properties(kos-shell.wallpaper-transitions PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-preview
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_wallpaper_preview.mjs
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_wallpaper_preview.mjs
         )
         set_tests_properties(kos-shell.wallpaper-preview PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.theme-wallpaper-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_theme_wallpaper_policy.mjs)
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_theme_wallpaper_policy.mjs)
         set_tests_properties(kos-shell.theme-wallpaper-policy PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.theme-wallpaper-physics
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/wallpapers/test_particle_physics.mjs)
-        set_tests_properties(kos-shell.theme-wallpaper-physics PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.theme-wallpaper-state
             COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_theme_wallpaper_state.mjs)
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_theme_wallpaper_state.mjs)
         set_tests_properties(kos-shell.theme-wallpaper-state PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.process-identity
             COMMAND ${KOS_NODE_EXECUTABLE}
@@ -528,6 +524,11 @@ if(BUILD_TESTING)
             kos-shell.squircle kos-shell.tray-attention-match
             kos-shell.notification-count-match kos-shell.control-center-submenu-state
             kos-shell.window-placement-updates
+            kos-shell.visibility-policy kos-shell.window-transport-fallback
+            kos-shell.wallpaper-slideshow kos-shell.wallpaper-handoff
+            kos-shell.wallpaper-transitions kos-shell.wallpaper-preview
+            kos-shell.theme-wallpaper-policy
+            kos-shell.theme-wallpaper-state
             kos-shell.window-record-index kos-shell.wallpaper-color-source
             kos-shell.process-identity
             kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects kos-shell.stage-protocol

@@ -38,7 +38,7 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
-install(FILES main.qml WindowAnimationSettingsPage.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
+install(FILES main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
     WallpaperGalleryTile.qml WallpaperValueMenu.qml WallpaperOptionsDialog.qml
     WallpaperTextButton.qml WallpaperThumbnail.qml WallpaperColorPicker.qml
     DESTINATION share/kos/settings)
@@ -49,6 +49,7 @@ if(BUILD_TESTING)
     target_include_directories(kos-window-settings-test PRIVATE src)
     target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
     add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
+    set_tests_properties(kos-settings.window-config PROPERTIES LABELS logic TIMEOUT 15)
     add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
     set_tests_properties(kos-settings.window-page PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
@@ -69,6 +70,12 @@ if(BUILD_TESTING)
     find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
         HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.window-interactions
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/tst_windows.qml)
+        set_tests_properties(kos-settings.window-interactions PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
         add_test(NAME kos-settings.wallpaper-page
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/tst_wallpaper.qml)
@@ -98,6 +105,10 @@ if(BUILD_TESTING)
     endif()
 
     if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-settings.window-install
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
+                $<TARGET_FILE:kos-settings>)
+        set_tests_properties(kos-settings.window-install PROPERTIES LABELS ui TIMEOUT 25)
         add_test(NAME kos-settings.wallpaper-colors
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/bridge.mjs

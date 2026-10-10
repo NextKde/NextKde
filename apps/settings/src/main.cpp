@@ -2634,7 +2634,18 @@ int main(int argc, char *argv[]) {
         engine.rootObjects().constFirst()->setProperty("currentPage", 11);
     if (application.arguments().contains(QStringLiteral("--smoke-test-windows"))) {
         engine.rootObjects().constFirst()->setProperty("currentPage", 11);
-        QTimer::singleShot(1000, &application, &QCoreApplication::quit);
+        QTimer::singleShot(1000, &application, [&engine, &application]() {
+            auto *loader = engine.rootObjects().constFirst()->findChild<QObject *>(
+                QStringLiteral("windowPageLoader"));
+            if (!loader || loader->property("status").toInt() != 1
+                || !engine.rootObjects().constFirst()->findChild<QObject *>(
+                    QStringLiteral("windowAppearancePage"))) {
+                qWarning() << "Window settings page did not instantiate";
+                application.exit(1);
+                return;
+            }
+            application.quit();
+        });
     }
 
     // Inert unless the QML came from a checkout, which is the only case where
