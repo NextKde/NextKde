@@ -307,6 +307,17 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.glass-ink PROPERTIES TIMEOUT 15)
+            # Reads the resolved plate and ink of the Bar's mac style in the
+            # states its slider can put it in. The ink follows the wallpaper
+            # blended with the plate at the chosen tint, and an ink that read
+            # the plate alone still renders plausibly -- it only fails on a
+            # bright wallpaper at a low tint, which is what this walks.
+            add_test(NAME kos-shell.bar-mac-style
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/bar-mac-style/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.bar-mac-style PROPERTIES TIMEOUT 15)
             # Drives the shipping DockIcon's magnificationPointer by hand to
             # check where the Dock decides an icon is hovered. The hover test
             # must not read geometry that the hover lift itself moves, which is
@@ -548,6 +559,7 @@ if(BUILD_TESTING)
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
             kos-shell.liquid-glass-panel kos-shell.glass-ink
+            kos-shell.bar-mac-style
             kos-shell.traditional-color-runtime
             kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
             PROPERTIES LABELS ui)

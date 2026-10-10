@@ -4772,6 +4772,17 @@ ApplicationWindow {
         readonly property var barVisibilityModes: ["always", "smart", "persistent"]
         property int barLayoutModeIndex: 2
         readonly property var barLayoutModes: ["full", "floating", "transparent"]
+        // The mac style is a style choice with one intensity knob: the
+        // selector turns it on and off, and the tint slider only applies while
+        // it is on. Off is the default Bar, outlines and all.
+        property bool barMacStyle: false
+        // The tint opacity. The shell clamps it to 0..1 (AppearanceConfigService);
+        // the slider only ever produces values inside this narrower range, which
+        // runs from "barely there" to "nearly opaque plate".
+        property real barMacTint: 0.30
+        readonly property real minBarMacTint: 0.05
+        readonly property real maxBarMacTint: 0.85
+        property bool tintDirty: false
         property string errorText: ""
 
         function barVisibilityModeIndexFromString(mode) {
@@ -4789,6 +4800,12 @@ ApplicationWindow {
             barIntegratedWithDock = Boolean(state.barIntegratedWithDock)
             barVisibilityModeIndex = barVisibilityModeIndexFromString(state.barVisibilityMode)
             barLayoutModeIndex = barLayoutModeIndexFromString(state.barLayoutMode)
+            barMacStyle = state.barMacStyle === true
+            const macTint = Number(state.barMacTint)
+            barMacTint = Number.isFinite(macTint)
+                ? Math.max(minBarMacTint, Math.min(maxBarMacTint, macTint))
+                : 0.30
+            tintDirty = false
             errorText = ""
         }
 
@@ -4798,6 +4815,35 @@ ApplicationWindow {
                 return
             }
             bridge.appearanceSnapshot()
+        }
+
+        function setBarMacStyle(enabled) {
+            if (!bridge) {
+                errorText = "尚未构建 Settings 桥接程序"
+                return
+            }
+            bridge.updateBarMacStyle(enabled)
+        }
+
+        // The tint slider previews while dragging and commits on release, like
+        // the Dock curvature slider: the shell writes the config once, and the
+        // snapshot that comes back is authoritative. It is gated by the style
+        // selector, so it only ever runs while the mac style is on.
+        function previewBarMacTint(position) {
+            const next = Math.round((minBarMacTint
+                + position * (maxBarMacTint - minBarMacTint)) * 100) / 100
+            if (Math.abs(next - barMacTint) <= 0.001)
+                return
+            barMacTint = next
+            tintDirty = true
+        }
+
+        function commitBarMacTint() {
+            if (!tintDirty)
+                return
+            tintDirty = false
+            if (bridge)
+                bridge.updateBarMacTint(barMacTint)
         }
 
         function setBarIntegratedWithDock(enabled) {
@@ -4963,6 +5009,143 @@ ApplicationWindow {
                             onToggled: function(checked) {
                                 barPage.setBarIntegratedWithDock(checked)
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "顶栏风格".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 8
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: macStyleCol.implicitHeight
+            radius: 18
+            color: theme.card
+
+            Column {
+                id: macStyleCol
+                anchors.left: parent.left
+                anchors.right: parent.right
+
+                Item {
+                    width: parent.width
+                    height: 64
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◍"; tint: "#64d2ff" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "mac 风格"
+                                color: theme.primaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                // The style and the ink are one decision: the
+                                // selector is where the user learns that the
+                                // outlines go away with the style.
+                                text: barPage.barMacStyle
+                                    ? "磨砂着色层 + 去描边 + 墨色随背景"
+                                    : "关闭时保持默认风格（描边、投影不变）"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                                wrapMode: Text.Wrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                        SettingsNavBar {
+                            id: barMacStyleNavBar
+                            model: [
+                                { id: "default", label: "默认" },
+                                { id: "mac", label: "mac 风格" }
+                            ]
+                            itemWidthOverride: 76
+                            currentIndex: barPage.barMacStyle ? 1 : 0
+                            onSelectionChanged: function(index) {
+                                barPage.setBarMacStyle(index === 1)
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 53
+                    height: 1
+                    color: theme.separator
+                }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◐"; tint: "#5e5ce6" }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "着色强度"
+                                color: barPage.barMacStyle
+                                    ? theme.primaryText : theme.secondaryText
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                // The tint only draws while the style is on, so
+                                // the row says so instead of silently doing
+                                // nothing.
+                                text: barPage.barMacStyle
+                                    ? "亮壁纸铺深灰、暗壁纸铺浅灰；越高越不透明"
+                                    : "仅在「mac 风格」开启后生效"
+                                color: barPage.barMacStyle
+                                    ? theme.secondaryText : theme.tertiaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            // Fixed width so the slider does not jog as the
+                            // readout grows 9% -> 10% mid-drag.
+                            Layout.preferredWidth: 34
+                            horizontalAlignment: Text.AlignRight
+                            text: Math.round(barPage.barMacTint * 100) + "%"
+                            color: barPage.barMacStyle
+                                ? theme.secondaryText : theme.tertiaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            id: barMacTintSlider
+                            accentColor: theme.accent
+                            trackColor: theme.divider
+                            Layout.preferredWidth: 156
+                            // The slider dims itself to 45% while disabled, so
+                            // the gate is one binding and no extra styling.
+                            enabled: barPage.barMacStyle
+                            value: (barPage.barMacTint - barPage.minBarMacTint)
+                                / (barPage.maxBarMacTint - barPage.minBarMacTint)
+                            onPreviewChanged: function(position) {
+                                barPage.previewBarMacTint(position)
+                            }
+                            onCanceled: { barPage.tintDirty = false; barPage.refresh() }
+                            onCommitRequested: barPage.commitBarMacTint()
                         }
                     }
                 }

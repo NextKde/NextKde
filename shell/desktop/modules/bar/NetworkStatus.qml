@@ -36,15 +36,19 @@ Item {
     readonly property bool connected: NetworkService.deviceState === "connected"
     readonly property color statusIconColor: IconAppearanceService.mode === "tint"
         ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.foregroundColor
+        : ThemeService.barInk
     readonly property real statusIconOpacity: IconAppearanceService.mode !== "color"
         ? IconAppearanceService.opacity : 1.0
+    // The readability edge both glyphs carry is dropped while the mac-style
+    // ground paints a plate under them.
+    readonly property bool outlined: AppearanceTokens.isDarkTheme
+        && !AppearanceTokens.bar.macStyle
 
     BundledIcon {
 
         // Same readability edge the bar text carries (Text.Outline).
 
-        outlined: AppearanceTokens.isDarkTheme
+        outlined: root.outlined
 
         outlineColor: Qt.rgba(0, 0, 0, 0.40)
         id: networkGlyph
@@ -71,8 +75,9 @@ Item {
         opacity: root.statusIconOpacity * (root.connected ? 0.96 : 0.68)
         layer.enabled: true
         layer.effect: MultiEffect {
-            shadowEnabled: IconAppearanceService.mode !== "color"
-                || ThemeService.isDark
+            shadowEnabled: !AppearanceTokens.bar.macStyle
+                && (IconAppearanceService.mode !== "color"
+                    || ThemeService.isDark)
             shadowColor: Qt.rgba(0, 0, 0, 0.82)
             shadowOpacity: 0.62
             shadowBlur: 0.32
