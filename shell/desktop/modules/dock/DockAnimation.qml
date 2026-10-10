@@ -27,8 +27,10 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     // Hover is an explicit pointer affordance: the icon lifts and grows while
     // its layout slot remains unchanged, so adaptive Dock geometry is stable.
+    // The peak scale is the user's dock setting when set, else the style token
+    // (DockIcon reads the same effective value for its per-frame curve).
     readonly property int   iconHoverDuration:  AppearanceTokens.motion.fastDuration
-    readonly property real  iconHoverScale:     AppearanceTokens.dock.hoverScale
+    readonly property real  iconHoverScale:     ConfigService.effectiveHoverScale
     readonly property var   iconHoverEasing:    AppearanceTokens.motion.standardEasing
     readonly property int   iconHighlightDuration: 140
     readonly property int   iconPressHighlightDuration: 80

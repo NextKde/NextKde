@@ -14,6 +14,17 @@ Item {
     id: carousel
     signal editRequested()
 
+    // Slide with the magnified row so the information slot keeps its place
+    // between the spreading icons (see DockContainer's hover spread).
+    transform: Translate {
+        x: {
+            let p = carousel.parent
+            while (p && typeof p.spreadFor !== "function")
+                p = p.parent
+            return p ? p.spreadFor(carousel) : 0
+        }
+    }
+
     readonly property int musicPage: 0
     readonly property int weatherPage: 1
     readonly property int clockPage: 2

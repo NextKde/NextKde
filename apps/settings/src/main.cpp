@@ -915,6 +915,19 @@ public:
         callDock({QStringLiteral("updateDockStyle"), style});
     }
 
+    // Hover magnification: the hovered icon's peak scale and its lift as a
+    // fraction of the icon size. The page works in percents; the shell takes
+    // the ratios and clamps them into its own slider range.
+    Q_INVOKABLE void updateDockHoverScale(double scale) {
+        callDock({QStringLiteral("updateHoverScale"),
+                  QString::number(scale, 'f', 4)});
+    }
+
+    Q_INVOKABLE void updateDockHoverLift(double lift) {
+        callDock({QStringLiteral("updateHoverLift"),
+                  QString::number(lift, 'f', 4)});
+    }
+
     Q_INVOKABLE void updateDockIconMode(const QString &mode) {
         callDock({QStringLiteral("updateIconMode"), mode});
     }
@@ -1488,6 +1501,13 @@ private:
             // every snapshot refresh.
             {QStringLiteral("contentStyle"), object.value(QStringLiteral("contentStyle")).toString()},
             {QStringLiteral("dockStyle"), object.value(QStringLiteral("dockStyle")).toString()},
+            // Hover magnification. The shell sends the effective values, so an
+            // untouched profile opens on exactly what the Dock is drawing; the
+            // fallbacks match the macOS defaults the page starts with.
+            {QStringLiteral("hoverScale"),
+             object.value(QStringLiteral("hoverScale")).toDouble(1.19)},
+            {QStringLiteral("hoverLift"),
+             object.value(QStringLiteral("hoverLift")).toDouble(0.04)},
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},

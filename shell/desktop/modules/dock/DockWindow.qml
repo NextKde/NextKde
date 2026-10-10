@@ -89,12 +89,28 @@ PanelWindow {
     })
     margins { left: 0; top: 0; right: 0; bottom: 0 }
 
+    // Room inside the surface for a magnified icon. The icon grows over its
+    // fixed slot and lifts; whichever part of that overflows the container's
+    // top edge (inner edge for side Docks) would be cut off by the surface, so
+    // it has to live inside the window. The glass, the wrapper and the input
+    // mask keep their own size and position — this area is transparent and
+    // click-through, it only stops the compositor from clipping the artwork.
+    readonly property real hoverHeadroom: {
+        const slot = dockContainer.iconSize
+            + dockContainer.activeBackgroundGap * 2
+        const grow = slot * (ConfigService.effectiveHoverScale - 1) / 2
+        const lift = slot * ConfigService.effectiveHoverLift
+        const slack = Math.max(0, (dockContainer.height - slot) / 2)
+        return Math.max(0, Math.ceil(grow + lift - slack)) + 4
+    }
     // Cross-edge thickness = glass + float. Length is forced by the anchors
     // (full screen along the anchored edge); these set the other dimension.
     implicitHeight: root.vertical ? 0
         : dockContainer.height + root.edgeMargin + root.workspaceMargin
+            + root.hoverHeadroom
     implicitWidth: root.vertical
-        ? dockContainer.width + root.edgeMargin + root.workspaceMargin : 0
+        ? dockContainer.width + root.edgeMargin + root.workspaceMargin
+            + root.hoverHeadroom : 0
 
     // ── Auto-hide controller ──
     // One controller per surface; inputs come from the singleton services and
@@ -181,10 +197,19 @@ PanelWindow {
     function publishWorkspaceLayout() {
         if (!root.screen || dockContainer.width <= 0 || dockContainer.height <= 0)
             return
+        // Publish the RESTING extent: a hover widens the glass, but the space
+        // windows keep clear must not breathe with the pointer (and the
+        // framework would otherwise re-place every window per hover frame).
+        const restingWidth = dockContainer.restingComputedWidth
         WorkspaceLayoutService.updateDock(root.screen, root.position, {
-            x: root.surfaceGlobalX + root.restX,
+            x: root.surfaceGlobalX + (root.vertical
+                ? (root.position === "right"
+                    ? root.width - root.edgeMargin - restingWidth
+                    : root.edgeMargin)
+                : (root.stretched ? root.stretchInset
+                    : (root.width - restingWidth) / 2)),
             y: root.surfaceGlobalY + root.restY,
-            width: dockContainer.width,
+            width: restingWidth,
             height: dockContainer.height
         // Hide modes deliberately publish no gap: otherwise a new window
         // would avoid an invisible Dock after it has slid away.
@@ -200,14 +225,24 @@ PanelWindow {
 
     onScreenChanged: layoutPublishTimer.restart()
     onPositionChanged: layoutPublishTimer.restart()
-    onRestXChanged: layoutPublishTimer.restart()
+    // restX follows the hover spread every frame (the glass widening); the
+    // published resting extent must not.
+    onRestXChanged: {
+        if (dockContainer.hoverSpreadTotal < 0.5)
+            layoutPublishTimer.restart()
+    }
     onRestYChanged: layoutPublishTimer.restart()
     onSurfaceGlobalXChanged: layoutPublishTimer.restart()
     onSurfaceGlobalYChanged: layoutPublishTimer.restart()
 
     Connections {
         target: dockContainer
-        function onWidthChanged() { layoutPublishTimer.restart() }
+        // The hover spread retargets the container width every frame; the
+        // published resting extent only changes when the true layout does.
+        function onWidthChanged() {
+            if (dockContainer.hoverSpreadTotal < 0.5)
+                layoutPublishTimer.restart()
+        }
         function onHeightChanged() { layoutPublishTimer.restart() }
     }
 

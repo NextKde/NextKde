@@ -2272,6 +2272,16 @@ ApplicationWindow {
         readonly property var dockContentStyles: ["compact", "relaxed"]
         property int dockStyleIndex: 0
         readonly property var dockStyles: ["floating", "taskbar", "transparent"]
+        // Hover magnification. The page works in percents so both rows read
+        // naturally; the shell takes the ratios (percent / 100) and clamps them
+        // into its own range. 100% scale = flat, so the slider doubles as the
+        // off switch, and an explicit value turns the effect on in every shell
+        // style (the untouched default follows the style).
+        property real dockHoverScalePct: 119
+        readonly property real minHoverScalePct: 100
+        readonly property real maxHoverScalePct: 160
+        property real dockHoverLiftPct: 4
+        readonly property real maxHoverLiftPct: 25
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0
@@ -2286,6 +2296,8 @@ ApplicationWindow {
         property bool builtinUpdatePending: false
         property string errorText: ""
         property bool layoutDirty: false
+        property bool hoverScaleDirty: false
+        property bool hoverLiftDirty: false
 
         function positionIndexFromString(position) {
             const idx = dockPositions.indexOf(position)
@@ -2319,6 +2331,20 @@ ApplicationWindow {
             dockPositionIndex = positionIndexFromString(state.position)
             dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
+            // The snapshot always carries the effective values, so an untouched
+            // profile opens on exactly what the Dock is drawing right now.
+            const hoverScale = Number(state.hoverScale)
+            dockHoverScalePct = Number.isFinite(hoverScale)
+                ? Math.max(minHoverScalePct, Math.min(maxHoverScalePct,
+                    Math.round(hoverScale * 100)))
+                : 119
+            const hoverLift = Number(state.hoverLift)
+            dockHoverLiftPct = Number.isFinite(hoverLift)
+                ? Math.max(0, Math.min(maxHoverLiftPct,
+                    Math.round(hoverLift * 100)))
+                : 4
+            hoverScaleDirty = false
+            hoverLiftDirty = false
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
@@ -2349,6 +2375,42 @@ ApplicationWindow {
             if (!bridge)
                 return
             bridge.updateDockStyle(dockStyles[index])
+        }
+
+        // Hover magnification: preview while dragging, commit on release. The
+        // two rows keep separate dirty flags so releasing one never commits the
+        // other's in-flight value.
+        function previewHoverScale(position) {
+            const next = Math.round(minHoverScalePct
+                + position * (maxHoverScalePct - minHoverScalePct))
+            if (next === dockHoverScalePct)
+                return
+            dockHoverScalePct = next
+            hoverScaleDirty = true
+        }
+
+        function commitHoverScale() {
+            if (!hoverScaleDirty)
+                return
+            hoverScaleDirty = false
+            if (bridge)
+                bridge.updateDockHoverScale(dockHoverScalePct / 100)
+        }
+
+        function previewHoverLift(position) {
+            const next = Math.round(position * maxHoverLiftPct)
+            if (next === dockHoverLiftPct)
+                return
+            dockHoverLiftPct = next
+            hoverLiftDirty = true
+        }
+
+        function commitHoverLift() {
+            if (!hoverLiftDirty)
+                return
+            hoverLiftDirty = false
+            if (bridge)
+                bridge.updateDockHoverLift(dockHoverLiftPct / 100)
         }
 
         function saveVisibilityMode(index) {
@@ -2495,6 +2557,116 @@ ApplicationWindow {
                             }
                             onCanceled: { dockPage.layoutDirty = false; dockPage.refresh() }
                             onCommitRequested: dockPage.commitLayout()
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "悬停效果".toUpperCase()
+            color: theme.secondaryText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+            Layout.leftMargin: 13
+            Layout.topMargin: 14
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            color: theme.card
+            radius: 18
+            implicitHeight: hoverColumn.implicitHeight
+
+            Column {
+                id: hoverColumn
+                anchors.fill: parent
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "◍"; tint: "#0a84ff" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "悬停放大"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: "指针停靠时图标放大的峰值；100% 等于关闭，任意风格可用"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(dockPage.dockHoverScalePct) + "%"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            id: hoverScaleSlider
+                            accentColor: theme.accent
+                            Layout.preferredWidth: 156
+                            trackColor: theme.divider
+                            // Ctrl+滚轮一档 = 1%（显示就是整数百分比）
+                            wheelStep: 1 / (dockPage.maxHoverScalePct
+                                            - dockPage.minHoverScalePct)
+                            value: (dockPage.dockHoverScalePct
+                                - dockPage.minHoverScalePct)
+                                / (dockPage.maxHoverScalePct
+                                    - dockPage.minHoverScalePct)
+                            onPreviewChanged: function(position) {
+                                dockPage.previewHoverScale(position)
+                            }
+                            onCanceled: { dockPage.hoverScaleDirty = false; dockPage.refresh() }
+                            onCommitRequested: dockPage.commitHoverScale()
+                        }
+                    }
+                }
+
+                Rectangle { width: parent.width; height: 1; color: theme.separator }
+
+                Item {
+                    width: parent.width
+                    height: 62
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
+                        spacing: 12
+                        SettingIcon { symbol: "↥"; tint: "#5ac8fa" }
+                        ColumnLayout {
+                            spacing: 1
+                            Text { text: "悬停上移"; color: theme.primaryText; font.pixelSize: 14 }
+                            Text {
+                                text: "放大时同步上抬（图标尺寸的比例），做出上浮的灵动感"
+                                color: theme.secondaryText
+                                font.pixelSize: 11
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: Math.round(dockPage.dockHoverLiftPct) + "%"
+                            color: theme.secondaryText
+                            font.pixelSize: 12
+                        }
+                        LiquidControls.LiquidSlider {
+                            id: hoverLiftSlider
+                            accentColor: theme.accent
+                            Layout.preferredWidth: 156
+                            trackColor: theme.divider
+                            // Ctrl+滚轮一档 = 1%（显示就是整数百分比）
+                            wheelStep: 1 / dockPage.maxHoverLiftPct
+                            value: dockPage.dockHoverLiftPct
+                                / dockPage.maxHoverLiftPct
+                            onPreviewChanged: function(position) {
+                                dockPage.previewHoverLift(position)
+                            }
+                            onCanceled: { dockPage.hoverLiftDirty = false; dockPage.refresh() }
+                            onCommitRequested: dockPage.commitHoverLift()
                         }
                     }
                 }

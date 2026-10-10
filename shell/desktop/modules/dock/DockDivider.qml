@@ -24,6 +24,19 @@ Rectangle {
     color: "transparent"
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
+    // Slide with the magnified row so section breaks keep their place between
+    // the spreading icons (see DockContainer's hover spread). The container is
+    // found by walking up; the walk re-runs with every spread evaluation, so
+    // it never depends on a stale layout.
+    transform: Translate {
+        x: {
+            let p = divider.parent
+            while (p && typeof p.spreadFor !== "function")
+                p = p.parent
+            return p ? p.spreadFor(divider) : 0
+        }
+    }
+
     // The visible line (centered in the slot)
     Rectangle {
         width:  divider.dividerWidth
