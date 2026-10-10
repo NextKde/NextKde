@@ -125,14 +125,50 @@ debian_optional_runtime_packages=(
 # unquoted so a multi-name element expands into its alternatives.
 debian_resolve_package() {
     local candidate
-    for candidate in $1; do
+    local -a candidates
+    # `read -ra` splits on whitespace without performing pathname expansion, so
+    # an element that happens to contain a glob character can never be replaced
+    # by a matching file in the current directory the way an unquoted `$1` would.
+    read -ra candidates <<< "$1"
+    for candidate in "${candidates[@]}"; do
         if apt-cache show "$candidate" >/dev/null 2>&1; then
             printf '%s' "$candidate"
             return 0
         fi
     done
-    printf '%s' "${1%% *}"
+    printf '%s' "${candidates[0]:-}"
     return 1
+}
+
+# `apt-cache show` can only answer for packages the local lists already know, so
+# on a freshly installed system that has never run `apt-get update` every single
+# lookup fails and the whole dependency list is reported as missing. Detecting
+# that up front turns 60+ bogus `miss` lines into one actionable warning.
+debian_apt_lists_ready() {
+    compgen -G '/var/lib/apt/lists/*_Packages*' >/dev/null 2>&1
+}
+
+# Quickshell 0.3.x is in neither the Debian stable archives nor Ubuntu main, so
+# the build cannot rely on apt alone. The advice has to be per-distribution:
+# Debian ships it in trixie-backports, which needs no third-party source, while
+# an Ubuntu user must use a PPA (or build it) — telling them to add a Debian
+# backports suite would push them onto a foreign archive by mistake.
+debian_quickshell_hint() {
+    local id='' codename=''
+    if [[ -r /etc/os-release ]]; then
+        id=$(. /etc/os-release 2>/dev/null && printf '%s' "${ID:-}")
+        codename=$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_CODENAME:-}")
+    fi
+    printf 'info %-12s Quickshell 0.3.x is not in the %s archive\n' \
+        quickshell "${codename:-${id:-Debian}}"
+    if [[ "${id:-debian}" == ubuntu ]]; then
+        printf '     %-12s options: the PPA named in README.md, or build it from source\n' ''
+    elif [[ -n "$codename" ]]; then
+        printf '     %-12s options: enable %s-backports (no third-party source), or build it from source\n' '' "$codename"
+    else
+        printf '     %-12s options: the backports suite, or build it from source\n' ''
+    fi
+    printf '     %-12s see README.md for the exact commands\n' ''
 }
 
 kwin_plugins_enabled() {
@@ -282,7 +318,9 @@ doctor() {
             printf 'warn %-12s effects will load after the next KWin restart\n' qdbus
         fi
     fi
-    if command -v pacman >/dev/null 2>&1; then
+    if is_nixos; then
+        printf 'info %-12s NixOS packages are handled by `install` through nix-env\n' packages
+    elif command -v pacman >/dev/null 2>&1; then
         local package
         local -a required_packages=("${arch_core_build_packages[@]}")
         if kwin_plugins_enabled; then
@@ -313,31 +351,40 @@ doctor() {
         if spatial_requested; then
             required_packages+=("${debian_spatial_build_packages[@]}")
         fi
-        local quickshell_unavailable=0
-        for package in "${required_packages[@]}"; do
-            if ! resolved=$(debian_resolve_package "$package"); then
-                printf 'miss pkg:%-8s not in the configured apt repositories\n' "$package"
-                if [[ "$package" == quickshell ]]; then
-                    quickshell_unavailable=1
+        if ! debian_apt_lists_ready; then
+            printf 'warn %-12s apt package lists are empty, dependency check skipped\n' packages
+            printf '     %-12s run: sudo apt-get update, then re-run ./tools/kosctl doctor\n' ''
+            failed=1
+        else
+            local quickshell_unavailable=0
+            for package in "${required_packages[@]}"; do
+                if ! resolved=$(debian_resolve_package "$package"); then
+                    printf 'miss pkg:%-8s not in the configured apt repositories\n' "$package"
+                    if [[ "$package" == quickshell ]]; then
+                        quickshell_unavailable=1
+                    fi
+                    failed=1
+                    continue
                 fi
-                failed=1
-                continue
+                if dpkg -s "$resolved" >/dev/null 2>&1; then
+                    printf 'ok   pkg:%-8s installed\n' "$resolved"
+                else
+                    printf 'miss pkg:%-8s required to build the default configuration\n' "$resolved"
+                    failed=1
+                fi
+            done
+            for package in "${debian_optional_runtime_packages[@]}"; do
+                if ! resolved=$(debian_resolve_package "$package"); then
+                    printf 'warn pkg:%-8s optional runtime integration not offered by this release\n' "$package"
+                    continue
+                fi
+                if ! dpkg -s "$resolved" >/dev/null 2>&1; then
+                    printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$resolved"
+                fi
+            done
+            if (( quickshell_unavailable )); then
+                debian_quickshell_hint
             fi
-            if dpkg -s "$resolved" >/dev/null 2>&1; then
-                printf 'ok   pkg:%-8s installed\n' "$resolved"
-            else
-                printf 'miss pkg:%-8s required to build the default configuration\n' "$resolved"
-                failed=1
-            fi
-        done
-        for package in "${debian_optional_runtime_packages[@]}"; do
-            resolved=$(debian_resolve_package "$package") || continue
-            if ! dpkg -s "$resolved" >/dev/null 2>&1; then
-                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$resolved"
-            fi
-        done
-        if (( quickshell_unavailable )); then
-            printf 'info %-12s Debian 13 (trixie) does not ship Quickshell 0.3.x; build it from source or add a PPA (see README.md)\n' quickshell
         fi
     else
         printf 'info %-12s library/package checks are currently available on Arch, Debian and NixOS only\n' packages
@@ -585,22 +632,34 @@ ensure_build_dependencies() {
         if spatial_requested; then
             required_packages+=("${debian_spatial_build_packages[@]}")
         fi
-        for package in "${required_packages[@]}"; do
-            if ! resolved=$(debian_resolve_package "$package"); then
-                unavailable_packages+=("$package")
-            elif ! dpkg -s "$resolved" >/dev/null 2>&1; then
-                missing_packages+=("$resolved")
+        if ! debian_apt_lists_ready; then
+            printf 'The apt package lists are empty, so build dependencies cannot be resolved.\n'
+            printf 'Run: sudo apt-get update, then re-run ./tools/kosctl install\n'
+            return 1
+        else
+            local quickshell_unavailable=0
+            for package in "${required_packages[@]}"; do
+                if ! resolved=$(debian_resolve_package "$package"); then
+                    unavailable_packages+=("$package")
+                    [[ "$package" == quickshell ]] && quickshell_unavailable=1
+                elif ! dpkg -s "$resolved" >/dev/null 2>&1; then
+                    missing_packages+=("$resolved")
+                fi
+            done
+            if (( ${#unavailable_packages[@]} > 0 )); then
+                printf 'Not in the configured apt repositories:\n'
+                printf '  %s\n' "${unavailable_packages[*]}"
+                printf 'If the package lists are stale, try: sudo apt-get update\n'
             fi
-        done
-        if (( ${#unavailable_packages[@]} > 0 )); then
-            printf 'Not in the configured apt repositories:\n'
-            printf '  %s\n' "${unavailable_packages[*]}"
-            printf 'The package lists may be stale; try: sudo apt-get update\n'
-        fi
-        if (( ${#missing_packages[@]} > 0 )); then
-            printf 'KOS build dependencies require administrator permission:\n'
-            printf '  %s\n' "${missing_packages[*]}"
-            sudo apt-get install -y "${missing_packages[@]}"
+            if (( quickshell_unavailable )); then
+                debian_quickshell_hint
+                printf 'warn %-12s the shell cannot start until quickshell is installed\n' quickshell
+            fi
+            if (( ${#missing_packages[@]} > 0 )); then
+                printf 'KOS build dependencies require administrator permission:\n'
+                printf '  %s\n' "${missing_packages[*]}"
+                sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+            fi
         fi
     fi
 }
