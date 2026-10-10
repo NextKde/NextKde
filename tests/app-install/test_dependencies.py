@@ -15,7 +15,7 @@ deps = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deps)
 
 class DependencyTests(unittest.TestCase):
-    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=()):
+    def check(self, family, missing=(), qt='6.10.2', markers='', go='1.26.0', sdk=False, absent=(), release=None):
         calls = []
         def command(args):
             calls.append(args)
@@ -27,7 +27,12 @@ class DependencyTests(unittest.TestCase):
             else: output = markers
             return SimpleNamespace(returncode=0, stdout=output)
         output = io.StringIO()
-        with patch.object(deps, 'distribution', return_value=family), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else [])), contextlib.redirect_stdout(output):
+        # The old-Qt hint names the release it detected by reading /etc/os-release
+        # directly, so the assertion has to inject that file as well; otherwise the
+        # test passes on an Arch CI container and fails on any Debian-family host,
+        # which is exactly where the Debian branch is meant to be exercised.
+        release = release or {'ID': family, 'PRETTY_NAME': family.capitalize() + ' Linux'}
+        with patch.object(deps, 'distribution', return_value=family), patch.object(deps, 'os_release', return_value=release), patch.object(deps.shutil, 'which', side_effect=lambda name: None if name in absent else '/usr/bin/tool'), patch.object(deps, 'run', side_effect=command), patch('sys.argv', ['check'] + (['--sdk-only'] if sdk else [])), contextlib.redirect_stdout(output):
             result = deps.main()
         return result, output.getvalue(), calls
 
@@ -48,10 +53,20 @@ class DependencyTests(unittest.TestCase):
         self.assertIn('sudo apt update && sudo apt install libavcodec-dev qt6-webengine-dev', output)
 
     def test_ubuntu_old_qt_explicit_version(self):
-        result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2')
+        result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2',
+                                       release={'ID': 'ubuntu', 'PRETTY_NAME': 'Ubuntu 25.10'})
         self.assertEqual(result, 1)
         self.assertIn('ListenFree requires Qt >= 6.10', output)
         self.assertIn('Ubuntu 26.04+', output)
+
+    def test_debian_old_qt_names_detected_release(self):
+        # The hint has to report whichever release it actually found, not a
+        # hard-coded one, so a Debian host gets Debian-specific advice.
+        result, output, _ = self.check('ubuntu', missing=['Qt6Core >= 6.10'], qt='6.4.2',
+                                       release={'ID': 'debian', 'PRETTY_NAME': 'Debian GNU/Linux 13 (trixie)'})
+        self.assertEqual(result, 1)
+        self.assertIn('Debian GNU/Linux 13 (trixie) stock Qt is too old', output)
+        self.assertNotIn('Ubuntu 26.04+', output)
 
     def test_split_runtime_and_framework_packages(self):
         result, output, _ = self.check('ubuntu', markers='KOS_MISSING:Qml_QtQuick_Effects\nKOS_MISSING:KF6CalendarCore\nKOS_MISSING:SQLiteDriver')
