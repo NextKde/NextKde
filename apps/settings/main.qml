@@ -4061,7 +4061,7 @@ ApplicationWindow {
         property var backend: typeof windowSettings !== "undefined" ? windowSettings : null
         readonly property var snapshot: backend ? backend.state : ({})
         readonly property var radiusStops: [0, 8, 12, 20, 28, 36]
-        readonly property var radiusLabels: ["直角", "微圆", "小", "标准", "大", "更大"]
+        readonly property var radiusLabels: [I18n.tr("Square corner"), I18n.tr("Slight round"), I18n.tr("Small"), I18n.tr("Standard"), I18n.tr("Large"), I18n.tr("Larger")]
         property int previewRadius: -1
         readonly property int radiusIndex: {
             let best = 0
@@ -4073,7 +4073,7 @@ ApplicationWindow {
         Component.onCompleted: { if (backend) backend.refresh() }
 
         Text {
-            text: "窗口外观"
+            text: I18n.tr("Window appearance")
             color: theme.secondaryText; font.pixelSize: 12; font.weight: Font.DemiBold
             Layout.leftMargin: 13
         }
@@ -4089,7 +4089,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "▣"; tint: "#5856d6" }
-                        Text { text: "KOS 窗口外观"; color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Text { text: I18n.tr("KOS window appearance"); color: theme.primaryText; font.pixelSize: 15; font.weight: Font.DemiBold }
                         Item { Layout.fillWidth: true }
                         LiquidControls.LiquidGlassSwitch {
                             width: 64; height: 25
@@ -4109,7 +4109,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "▢"; tint: "#5ac8fa" }
-                        Text { text: "圆角幅度"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Corner radius"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         Text {
                             text: windowPage.radiusLabels[windowPage.previewRadius >= 0 ? windowPage.previewRadius : windowPage.radiusIndex]
@@ -4140,7 +4140,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "◧"; tint: "#8e8e93" }
-                        Text { text: "窗口阴影"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Window shadow"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         LiquidControls.LiquidGlassSwitch {
                             width: 64; height: 25
@@ -4155,11 +4155,11 @@ ApplicationWindow {
         }
         Text {
             Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
-            text: "关闭 KOS 窗口外观会恢复原装饰器。圆角与阴影即时生效，装饰器切换在下次登录生效。"
+            text: I18n.tr("Turning off KOS window appearance restores the original decorator. Radius and shadow apply immediately; decorator switches take effect on next login.")
             color: theme.secondaryText; font.pixelSize: 11; wrapMode: Text.Wrap
         }
         Text {
-            text: "窗口动画"
+            text: I18n.tr("Window animations")
             color: theme.secondaryText; font.pixelSize: 12; font.weight: Font.DemiBold
             Layout.leftMargin: 13; Layout.topMargin: 10
         }
@@ -4175,12 +4175,12 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "↓"; tint: "#ff9500" }
-                        Text { text: "隐藏与恢复"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Hide and restore"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             objectName: "windowHideAnimation"
                             disabled: windowPage.backend === null
-                            model: [{ id: "none", label: "无" }, { id: "scale", label: "缩放" }, { id: "genie", label: "水滴" }]
+                            model: [{ id: "none", label: I18n.tr("None") }, { id: "scale", label: I18n.tr("Scale") }, { id: "genie", label: I18n.tr("Genie") }]
                             currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
                             onSelectionChanged: function(index) { windowPage.backend.setAnimation("hide", model[index].id) }
                         }
@@ -4192,13 +4192,13 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 12
                         SettingIcon { symbol: "×"; tint: "#ff3b30" }
-                        Text { text: "关闭窗口"; color: theme.primaryText; font.pixelSize: 14 }
+                        Text { text: I18n.tr("Close window"); color: theme.primaryText; font.pixelSize: 14 }
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             objectName: "windowCloseAnimation"
                             disabled: windowPage.backend === null
                             itemWidthOverride: 80
-                            model: [{ id: "none", label: "无" }, { id: "fade", label: "淡出" }, { id: "scale", label: "缩小淡出" }]
+                            model: [{ id: "none", label: I18n.tr("None") }, { id: "fade", label: I18n.tr("Fade out") }, { id: "scale", label: I18n.tr("Shrink and fade") }]
                             currentIndex: ["none", "fade", "scale"].indexOf(windowPage.snapshot.closeAnimation ?? "scale")
                             onSelectionChanged: function(index) { windowPage.backend.setAnimation("close", model[index].id) }
                         }
@@ -4208,13 +4208,13 @@ ApplicationWindow {
         }
         Text {
             Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
-            text: "隐藏指最小化到 Dock。选择“无”会让 KOS 放弃该动画，由其他已启用的 KWin 效果处理。"
+            text: I18n.tr("Hide means minimizing to the Dock. Choosing “None” makes KOS drop the animation and leave it to other enabled KWin effects.")
             color: theme.secondaryText; font.pixelSize: 11; wrapMode: Text.Wrap
         }
         Text {
             Layout.fillWidth: true; Layout.leftMargin: 13; Layout.rightMargin: 13
             visible: !windowPage.backend || windowPage.backend.error.length > 0
-            text: windowPage.backend ? windowPage.backend.error : "窗口设置后端不可用"
+            text: windowPage.backend ? I18n.tr(windowPage.backend.error) : I18n.tr("Window settings backend unavailable")
             color: "#ff453a"; font.pixelSize: 12; wrapMode: Text.Wrap
         }
     }
@@ -6055,7 +6055,7 @@ ApplicationWindow {
                         SidebarEntry {
                             Layout.fillWidth: true
                             pageIndex: 11
-                            label: "窗口和动画"
+                            label: I18n.tr("Windows and animations")
                             navSymbol: "▣"
                             navTint: "#af52de"
                         }

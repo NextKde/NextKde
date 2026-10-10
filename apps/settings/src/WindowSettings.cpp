@@ -26,7 +26,7 @@ QJsonObject read(const QString &filename, QString *error = nullptr) {
     QJsonParseError parse;
     const auto doc = QJsonDocument::fromJson(file.readAll(), &parse);
     if (parse.error != QJsonParseError::NoError || !doc.isObject()) {
-        if (error) *error = QStringLiteral("配置文件损坏，未覆盖原文件：") + filename;
+        if (error) *error = QStringLiteral("The configuration file is corrupted; original left untouched: ") + filename;
         return {};
     }
     return doc.object();
@@ -72,15 +72,15 @@ bool WindowSettings::patchAppearance(const QString &section, const QString &key,
     const QString filename = path(QStringLiteral("window-appearance.json"));
     QDir().mkpath(QFileInfo(filename).absolutePath());
     QLockFile lock(filename + QStringLiteral(".lock"));
-    if (!lock.tryLock(0)) { m_error = QStringLiteral("配置正在更新，请重试"); emit changed(); return false; }
+    if (!lock.tryLock(0)) { m_error = QStringLiteral("The configuration is being updated; please retry"); emit changed(); return false; }
     auto doc = read(filename, &m_error);
     if (!m_error.isEmpty()) { emit changed(); return false; }
     if (!doc.isEmpty() && doc.value("version").toInt() != 1 && doc.value("version").toInt() != 2) {
-        m_error = QStringLiteral("不支持的窗口配置版本"); emit changed(); return false;
+        m_error = QStringLiteral("Unsupported window configuration version"); emit changed(); return false;
     }
     if (doc.isEmpty()) doc.insert("version", 2);
     if (doc.contains("defaults") && !doc.value("defaults").isObject()) {
-        m_error = QStringLiteral("defaults 必须是配置对象"); emit changed(); return false;
+        m_error = QStringLiteral("defaults must be a configuration object"); emit changed(); return false;
     }
     if (section.isEmpty()) doc.insert(key, value);
     else {
@@ -107,7 +107,7 @@ bool WindowSettings::setTakeover(bool enabled) {
     const QString filename = path(QStringLiteral("window-integration.json"));
     QDir().mkpath(QFileInfo(filename).absolutePath());
     QLockFile lock(filename + QStringLiteral(".lock"));
-    if (!lock.tryLock(0)) { m_error = QStringLiteral("窗口接管设置正在更新，请重试"); emit changed(); return false; }
+    if (!lock.tryLock(0)) { m_error = QStringLiteral("Window takeover settings are being updated; please retry"); emit changed(); return false; }
     auto integration = read(filename, &m_error);
     if (!m_error.isEmpty()) { emit changed(); return false; }
     auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
@@ -132,7 +132,7 @@ bool WindowSettings::setTakeover(bool enabled) {
     // Keep Bridge resident: its buttons are required until KWin switches away
     // from KOS decoration on the next login. JSON disables only its appearance.
     plugins.writeEntry("kos_bridgeEnabled", true);
-    if (!config->sync()) { m_error = QStringLiteral("无法保存 KWin 配置"); emit changed(); return false; }
+    if (!config->sync()) { m_error = QStringLiteral("Could not save the KWin configuration"); emit changed(); return false; }
     emit changed();
     return true;
 }
@@ -147,7 +147,7 @@ bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
     KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     animation.writeEntry(close ? "CloseAnimation" : "HideAnimation", style);
     const bool saved = config->sync();
-    if (!saved) m_error = QStringLiteral("无法保存动画配置");
+    if (!saved) m_error = QStringLiteral("Could not save the animation configuration");
     else reconfigure(QStringLiteral("kos_dock_window_animation"));
     emit changed();
     return saved;
