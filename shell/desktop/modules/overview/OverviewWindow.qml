@@ -404,6 +404,13 @@ PanelWindow {
                                             sourceSize: Qt.size(600, 400)
                                             fillMode: Image.PreserveAspectCrop
                                             smooth: true
+                                            // 失效自愈（同 StageCard）：URL
+                                            // 被新一轮拍摄替换删除后 Image
+                                            // 不会重读盘——上报清账并补拍
+                                            onStatusChanged: if (status === Image.Error)
+                                                WindowService.thumbnailLoadFailed(
+                                                    modelData.windowId,
+                                                    String(previewImg.source))
                                         }
 
                                         // Placeholder when no live thumbnail is available yet
@@ -531,7 +538,7 @@ PanelWindow {
                 if (seen[id] || record.provider !== "kwin")
                     continue
                 seen[id] = true
-                if (WindowService.thumbnailUrl(id) === "")
+                if (WindowService.thumbnailNeedsRefresh(id))
                     queue.push(id)
             }
             if (queue.length === 0)

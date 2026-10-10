@@ -164,6 +164,12 @@ Item {
     property bool effectOwnedChrome: false
     // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
     readonly property bool closeHot: closeHit.containsMouse
+    // 无头读数（stage-sidebar debugGeom 消费）：当前预览图 URL 与 Image
+    // 状态（-1 = 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）——
+    // "卡没图"类排障一眼区分"没拍"还是"拍了读不出来"
+    readonly property string thumbPreviewUrl: thumbCard.thumbUrl
+    readonly property int thumbPreviewStatus: thumbCard.thumbUrl === ""
+        ? -1 : preview.status
     // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
     // 卡面矩形 + 透视参数。**发布动画中的实时值**（card.scale / tiltCur
     // 都带 Behavior，悬停/入场期间逐帧变化）——旧版发终态值，特效按自己的
@@ -676,15 +682,22 @@ Item {
                 // 活体流就绪时让位（避免双绘）；流断开自动回来兜底。
                 // 优先显示占空比断开前定格的活体帧（最小化窗口无人交互，
                 // 内容不再变化，定格帧即最新），否则收编快照
-                visible: !liveStream.visible
-                    && !!(thumbCard.liveGrabUrl !== ""
-                        ? thumbCard.liveGrabUrl : parent.thumbUrl)
+                //
+                // ⚠️ 顺序即正确性：URL 判定排在 liveStream.visible 之前。
+                // QML 的 && 短路不会为未求值的操作数建立依赖，而
+                // PipeWireSourceItem.visible 在卡刚创建那一拍可能还没走到
+                // 自己的绑定、读到 QQuickItem 默认的 visible=true——旧写法
+                // `!liveStream.visible && !!url` 一旦在这一拍短路，URL 依赖
+                // 就永远不会建立（绑定冻结在 false）；先判 URL 则 URL 变化
+                // 必然触发重算，liveStream.visible 在其后才被读取。
+                readonly property string displayUrl: thumbCard.liveGrabUrl !== ""
+                    ? thumbCard.liveGrabUrl : parent.thumbUrl
+                visible: displayUrl !== "" && !liveStream.visible
                 // 合成器活体卡直绘时让出卡面（opacity：plane 内 visible
                 // 改动被吞，opacity 链有效——快照退路在任何让位失败时
                 // 自动恢复，特效不在=livePainted=false=快照照常画）
                 opacity: card.livePainted ? 0.0 : 1.0
-                source: thumbCard.liveGrabUrl !== ""
-                    ? thumbCard.liveGrabUrl : parent.thumbUrl
+                source: displayUrl
                 // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
                 asynchronous: false
                 cache: false
@@ -692,6 +705,13 @@ Item {
                     Math.round(StageConfigService.thumbSize * 0.7))
                 fillMode: Image.PreserveAspectCrop
                 smooth: true
+                // 失效自愈：URL 指向的 PNG 被新一轮拍摄替换/删除后，Image
+                // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
+                // 重赋值都无效）——上报给 WindowService 清账并补拍，见
+                // thumbnailLoadFailed 注释
+                onStatusChanged: if (status === Image.Error)
+                    WindowService.thumbnailLoadFailed(card.targetId,
+                        String(preview.source))
             }
 
             // 缩略图未就绪时的占位：只留标题文本居中——应用图标改由左下

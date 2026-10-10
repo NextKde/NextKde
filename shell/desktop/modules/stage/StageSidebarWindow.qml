@@ -630,6 +630,10 @@ PanelWindow {
     //   ② 失败封顶 + 时间窗衰减——同一窗 30s 内连续失败 4 次后暂停重试
     //      （授权持续失效等"永远拍不出"的情形不做无限重试），窗口重新
     //      出图（thumbnailReady）或时间窗过期后自动恢复重试。
+    // ⚠️ 「有图」的正确含义是"URL 存在且没被 Image 判死"：URL 指向的 PNG
+    // 被平台替换删除后读盘失败的卡会被 WindowService 清账（thumbnailLoadFailed
+    // → 立刻补拍），这里再对"读盘失败封顶"的窗口跳过补拍（防文件在而不
+    // 可解码时的补拍风暴；同样 30s 窗口衰减后自愈）。
     property var _thumbFailures: ({})       // handleId -> { count, at }
     readonly property int _thumbRetryCap: 4
     readonly property int _thumbFailureWindowMs: 30000
@@ -638,6 +642,15 @@ PanelWindow {
         if (!e)
             return 0
         return (Date.now() - e.at < root._thumbFailureWindowMs) ? e.count : 0
+    }
+    // 补拍是否被安全网封顶（两路计数任一超 cap：截图失败走 _thumbFailures，
+    // 图读不出来走 WindowService 的读盘失败计数）。_queueAllThumbnails 与
+    // _thumbRetryTimer 两条补拍路径必须同门——否则「清 URL → syncCards →
+    // 再入队」会绕过封顶形成补拍风暴
+    function _thumbRetryBlocked(handleId) {
+        return root._thumbFailureCount(handleId) >= root._thumbRetryCap
+            || WindowService.thumbnailLoadFailureCount(handleId)
+                >= WindowService.thumbnailLoadFailureCap
     }
     property Connections _thumbReceipts: Connections {
         target: WindowService
@@ -669,12 +682,10 @@ PanelWindow {
                 const g = groups[i]
                 if (!g.targetId)
                     continue
-                if (WindowService.thumbnailUrl(g.targetId))
-                    continue    // 成功即停：有图（含黑图）不重拍
+                if (!WindowService.thumbnailNeedsRefresh(g.targetId))
+                    continue    // 成功即停：URL 在位且没被 Image 判死就不重拍
                 const rep = WindowService.windowById(g.targetId)
-                if (!rep?.handleId
-                        || root._thumbFailureCount(rep.handleId)
-                            >= root._thumbRetryCap)
+                if (!rep?.handleId || root._thumbRetryBlocked(rep.handleId))
                     continue    // 失败封顶：暂停无谓重试
                 WindowService.requestThumbnail(g.targetId)
             }
@@ -2768,7 +2779,11 @@ PanelWindow {
                 cardScale: s.cardItem
                     ? Math.round(s.cardItem.scale * 100) / 100 : -1,
                 live: root._liveActiveIds[s.appKey] === true,
-                painted: s.cardItem ? s.cardItem.livePainted : false })
+                painted: s.cardItem ? s.cardItem.livePainted : false,
+                // 预览图读数：URL 尾段（含平台 serial）+ Image 状态
+                // （-1 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）
+                thumb: s.cardItem ? s.cardItem.thumbPreviewUrl : "",
+                thumbStatus: s.cardItem ? s.cardItem.thumbPreviewStatus : -2 })
         }
         // 可见窗记录探针：让位检测吃的正是这份数据，卡住时先看
         // 目标窗到底进没进 records（bridge includeWindow 过滤与否）
@@ -3039,15 +3054,13 @@ PanelWindow {
         const groups = root.sideGroups
         for (let i = 0; i < groups.length; i++) {
             const rep = WindowService.windowById(groups[i].targetId)
-            if (rep?.handleId
-                    && root._thumbFailureCount(rep.handleId)
-                        >= root._thumbRetryCap)
+            if (rep?.handleId && root._thumbRetryBlocked(rep.handleId))
                 continue    // 失败封顶：暂停无谓重试
             const id = groups[i].targetId
             // 已有快照的不再请求：本函数每次 syncCards 都跑（任何 revision
             // 变化），无图过滤＝重拍风暴（注释承诺的"只在出现/换主角时拍"
             // 由此成立）；无图/失败重试由 _thumbRetryTimer 专职
-            if (!seen[id] && !WindowService.thumbnailUrl(id)) {
+            if (!seen[id] && WindowService.thumbnailNeedsRefresh(id)) {
                 seen[id] = true
                 queue.push(id)
             }

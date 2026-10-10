@@ -85,9 +85,10 @@ PopupWindow {
         const list = preview.effectiveWindows
         for (let i = 0; i < list.length; i++) {
             // 已有图的不再重拍：effectiveWindows 现在每次 revision 重建
-            //（新数组身份），本函数会被频繁触发——重拍守卫把它变 no-op
+            //（新数组身份），本函数会被频繁触发——重拍守卫把它变 no-op。
+            // 「已有图」以 Image 没判死为准（读盘失败的图会被清章重拍）
             if (list[i]?.windowId
-                    && !WindowService.thumbnailUrl(list[i].windowId))
+                    && WindowService.thumbnailNeedsRefresh(list[i].windowId))
                 WindowService.requestThumbnail(list[i].windowId)
         }
     }
@@ -416,6 +417,14 @@ PopupWindow {
                                     sourceSize.height: Math.max(1,
                                         Math.round(thumbnailBox.height * 2))
                                     opacity: 0
+                                    // 失效自愈（同 StageCard）：URL 指向的
+                                    // PNG 被新一轮拍摄替换删除后 Image 不会
+                                    // 重读盘——上报给 WindowService 清账并
+                                    // 补拍，否则预览永远停在"正在获取预览…"
+                                    onStatusChanged: if (status === Image.Error)
+                                        WindowService.thumbnailLoadFailed(
+                                            cardDelegate.winId,
+                                            String(thumbMetrics.source))
                                 }
 
                                 Rectangle {
