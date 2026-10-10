@@ -164,6 +164,25 @@ Item {
     property bool effectOwnedChrome: false
     // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
     readonly property bool closeHot: closeHit.containsMouse
+
+    // ── 卡面"空脸先渲"自愈（2026-10-11 实测）──
+    // Qt 的 QQuickItemLayer 在这条路径上会把卡面纹理做死在"空"的状态：卡面
+    // 在**没有缩略图**的时候被曝光渲染过一次，之后缩略图到位（Image Ready、
+    // paintedWidth 正常、数据链全绿）层纹理也不会再刷新——卡面整块空白，
+    // 直到 delegate 重建（点卡换主/重开侧栏/收编新建）才恢复。隔离会话确定性
+    // 复现：卡列展开时重启壳（截图 + cardItem.grabToImage 双存证）。
+    // 自愈：无图期间被曝光过 → 缩略图首次就绪时请宿主把这张卡重建一次
+    // （真实 sync 路径移除+重建，层纹理首渲即带内容，实测恢复）。收起状态
+    // 下卡面被剔除渲染、不会中招，故不重建（避免无谓的 delegate churn）。
+    signal faceRecreateRequested()
+    // 宿主注入：卡面此刻会不会被渲染（抽屉展开且侧栏开着）
+    property bool faceExposed: false
+    property bool _faceEmptyExposed: false
+    function _noteFaceExposure() {
+        if (faceExposed && thumbCard.thumbUrl === "")
+            _faceEmptyExposed = true
+    }
+    onFaceExposedChanged: _noteFaceExposure()
     // 无头读数（stage-sidebar debugGeom 消费）：当前预览图 URL 与 Image
     // 状态（-1 = 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）——
     // "卡没图"类排障一眼区分"没拍"还是"拍了读不出来"
@@ -273,7 +292,10 @@ Item {
     // 右/下生长——绕中心缩放会让四边同缩，压在边条上的指针被"缩出去"→
     // 悬停丢失（kill 循环的一环）。外扩区域内的指针不可能被挤出。
     transformOrigin: Item.TopLeft
-    Component.onCompleted: shown = true
+    Component.onCompleted: {
+        shown = true
+        _noteFaceExposure()
+    }
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
@@ -709,9 +731,18 @@ Item {
                 // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
                 // 重赋值都无效）——上报给 WindowService 清账并补拍，见
                 // thumbnailLoadFailed 注释
-                onStatusChanged: if (status === Image.Error)
-                    WindowService.thumbnailLoadFailed(card.targetId,
-                        String(preview.source))
+                onStatusChanged: {
+                    if (status === Image.Error) {
+                        card._faceEmptyExposed = true   // 图被删等于回到"无图"态
+                        WindowService.thumbnailLoadFailed(card.targetId,
+                            String(preview.source))
+                    } else if (status === Image.Ready
+                            && card._faceEmptyExposed) {
+                        // 首次出图：空脸先渲过的卡面需要重建才画得出来
+                        card._faceEmptyExposed = false
+                        card.faceRecreateRequested()
+                    }
+                }
             }
 
             // 缩略图未就绪时的占位：只留标题文本居中——应用图标改由左下

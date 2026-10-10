@@ -2392,6 +2392,8 @@ PanelWindow {
                     perspectiveYOff: slot.planeYOff
                     // 活体流判定源：窗口侧聚焦键（与布局同源，无头调试可触达）
                     focusKey: root.hoveredKey
+                    // 卡面自愈：卡面此刻是否会被渲染（决定"空脸先渲"是否会发生）
+                    faceExposed: root.open && !root.drawerRetracted
                     onHovered: function(over) { root._cardHover(slot.appKey, over) }
                     // 对账就地换主（行移动/字段更新不重建 delegate）时，
                     // containsMouse 不变 → 没有 enter/leave 事件——悬停追踪
@@ -2401,6 +2403,7 @@ PanelWindow {
                             root._cardHover(slot.appKey, true)
                     }
                     onEngageClicked: root.engageCard(slot)
+                    onFaceRecreateRequested: root.resetCardFace(slot.appKey)
                     onDragStarted: function(sceneX, sceneY) {
                         root._beginCardDrag(slot, slot.index, sceneX, sceneY)
                     }
@@ -3027,6 +3030,51 @@ PanelWindow {
     // 窗高变化必然带动 cards 高度 → cards.onHeightChanged 已覆盖，同帧
     // 两轮 layoutCards + 两轮 geometryRepublish 是纯浪费
 
+    // ── 卡面重置（"空脸先渲"自愈的宿主侧）──
+    // 命中 appKey 的卡这一趟从模型移除，120ms 后按现成缩略图重建：新 delegate
+    // 的层纹理首次渲染就带着图（隔离会话实测恢复；旧 delegate 的层纹理此后
+    // 不会刷新）。防重入：同键在途忽略；重建后卡创建时 URL 已在表里 → 不再触发。
+    property var _faceResetKeys: ({})
+    property var _faceResetDeferred: ({})   // 拖拽/交棒中被推迟的重置
+    property Timer _faceResetTimer: Timer {
+        interval: 120
+        onTriggered: {
+            root._faceResetKeys = ({})
+            root.syncCards()
+        }
+    }
+    function resetCardFace(appKey) {
+        if (appKey === "")
+            return
+        // 拖拽/交棒中的卡不能重建（delegate 销毁＝拖拽中断/交棒动画炸）——
+        // 推迟到拖拽结束（onDragKeyChanged）再补
+        if (root.dragKey === appKey || root._mergeAnimPending
+                && String(root._mergeAnimPending.to || "") === appKey) {
+            const d = Object.assign({}, root._faceResetDeferred)
+            d[appKey] = true
+            root._faceResetDeferred = d
+            return
+        }
+        if (root._faceResetKeys[appKey])
+            return
+        const next = Object.assign({}, root._faceResetKeys)
+        next[appKey] = true
+        root._faceResetKeys = next
+        root.syncCards()               // 这一趟移除该卡
+        root._faceResetTimer.restart() // 下一趟重建（enterInstant 落位，无入场动画）
+        console.info("[StageSidebar] face reset (empty-face exposure) " + appKey)
+    }
+    onDragKeyChanged: {
+        if (root.dragKey !== "")
+            return
+        const pending = Object.keys(root._faceResetDeferred)
+        if (pending.length === 0)
+            return
+        root._faceResetDeferred = ({})
+        for (const key of pending)
+            root.resetCardFace(key)
+    }
+
     // ── 缩略图请求节奏（照抄 Overview：80ms 一拍、每拍 ≤3 张） ──
     property var _thumbRequestQueue: []
 
@@ -3278,8 +3326,11 @@ PanelWindow {
         // desired 按顺序表排序——点击换位（applySwapOrder）由此落到可见
         // 模型上（历史 bug：排序只在发布路径，卡片从未真换过位，窗口飞向
         // 被点槽位而卡片留在 records 顺序位 = 用户看到的"飞错位置再滑动"）
-        const desired = StageGroups.buildModelRows(
+        const desiredRaw = StageGroups.buildModelRows(
             StageGroups.sortByOrder(root._groupOrder, root.sideGroups))
+        // 卡面重置：命中键这一趟不进 desired（delegate 被真实 plan 路径移除），
+        // 下一趟（_faceResetTimer）恢复 = 重建，层纹理首渲即带内容
+        const desired = desiredRaw.filter(row => !root._faceResetKeys[row.appKey])
         // 组顺序表对账：剪除已消失 + 补全新组（只 prune 会退化成空表，
         // 见 stage-groups.mjs 的 mergeOrder 注释）
         const liveKeys = desired.map(d => d.appKey)
