@@ -401,6 +401,15 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_adaptive.mjs
         )
         set_tests_properties(kos-shell.dock-adaptive PROPERTIES TIMEOUT 10)
+        # Payload arrays cross the QML signal boundary as QV4 sequences on
+        # Qt 6.12: indexable with a length, but Array.isArray() false. Guards
+        # that trusted Array.isArray silently emptied the Dock's window and
+        # virtual-desktop models; this covers the coercion they now use.
+        add_test(NAME kos-shell.payload-array
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_payload_array.mjs
+        )
+        set_tests_properties(kos-shell.payload-array PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.dock-autohide
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_autohide.mjs
@@ -534,6 +543,7 @@ if(BUILD_TESTING)
             kos-shell.appearance-config kos-shell.dock-adaptive
             kos-shell.dock-autohide kos-deskcenter.desktop-outputs
             kos-shell.screen-selection
+            kos-shell.payload-array
             kos-ui.visual-contract kos-ui.color-scheme
             kos-ui.page-cache-policy kos-ui.settings-material
             kos-ui.traditional-color
