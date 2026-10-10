@@ -79,8 +79,10 @@ libepoxy 的开发文件，但这些已是 Arch `kwin` 包的硬依赖，无需�
   `kosctl` 会自动挑选仓库里真实存在的那个名字，手动安装时请用 `t64` 版本。
 - glass 特效以 `-DGLASS_X11=OFF` 构建，且 X11 是 `QUIET` 可选查找，
   因此 X11 的 Xlib 头文件不是必需依赖。
-- **Quickshell 0.3.x 不在 trixie 官方仓库中**（`quickshell` 目前只在
-  testing / sid）。三种选择：自行编译（见
+- **Quickshell 0.3.x 不在 trixie 主仓库中**，但 **`trixie-backports` 提供 0.3.0**，
+  是唯一无需引入第三方软件源的途径：
+  `sudo apt install -t trixie-backports quickshell`。
+  若不想启用 backports，也可自行编译（见
   [Quickshell 官方文档](https://quickshell.org/docs/)）、临时启用 sid 源安装、
   或使用 Ubuntu 的 PPA（见下节）。`doctor` 会在缺它时给出提示。
 
@@ -165,8 +167,8 @@ sudo apt install \
 
 与 Arch 包名的主要差异：`kdecoration` 对应 `libkdecorations3-dev`，
 `vulkan-headers` 对应 `libvulkan-dev`，`spectacle` 对应 `kde-spectacle`，
-`glib2` 对应 `libglib2.0-0t64`（24.04 起 time_t 过渡后的名字，
-旧的 `libglib2.0-0` 已不存在）。
+`glib2` 对应 `libglib2.0-0t64`（time_t 过渡后的正式名字；`libglib2.0-0` 在部分发行版
+仍作为过渡包存在，但新装请用 `t64` 版）。
 另外需要注意：`libplasma-dev` 提供 glass 特效引用的 `Plasma/plasma_version.h`；
 `libkf6kio-dev`、`libkf6calendarcore-dev` 是平台服务与设置应用 CMake 的直接
 依赖（Arch 上由依赖链自动带入）；KWin 导出所需的 xcb 扩展开发头文件

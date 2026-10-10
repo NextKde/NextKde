@@ -64,8 +64,10 @@ Where Debian differs from Arch — and where a Debian build usually gets stuck:
   install the `t64` name by hand.
 - The glass effect builds with `-DGLASS_X11=OFF` and looks for X11 with
   `QUIET`, so the X11 Xlib headers are not a build requirement.
-- **Quickshell 0.3.x is not in trixie** (`quickshell` is in testing/sid only).
-  Build it from source following the
+- **Quickshell 0.3.x is not in the trixie main archive**, but
+  `trixie-backports` ships 0.3.0 — the only route that needs no third-party
+  source: `sudo apt install -t trixie-backports quickshell`. Otherwise build it
+  from source following the
   [Quickshell documentation](https://quickshell.org/docs/), temporarily enable
   a sid source, or use the Ubuntu PPA shown below. `doctor` prints a hint when
   it is missing.
@@ -92,6 +94,15 @@ sudo apt install \
   libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
   libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
   libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
+```
+
+Optional runtime integrations:
+
+```sh
+sudo apt install \
+  network-manager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils kde-spectacle \
+  libglib2.0-0t64 qml6-module-qtquick-dialogs libqt6sql6-sqlite
 ```
 
 ### Ubuntu 26.04 (resolute)
@@ -140,8 +151,9 @@ sudo apt install \
 
 Key naming differences versus Arch: `kdecoration` is `libkdecorations3-dev`,
 `vulkan-headers` is `libvulkan-dev`, `spectacle` is `kde-spectacle`, and
-`glib2` is `libglib2.0-0t64` (the name the time_t transition left behind;
-the old `libglib2.0-0` no longer exists).
+`glib2` is `libglib2.0-0t64` (the canonical name after the time_t transition;
+`libglib2.0-0` may still exist in some releases as a transitional package,
+but install the `t64` name).
 Also note: `libplasma-dev` provides `Plasma/plasma_version.h` used by the
 glass effect; `libkf6kio-dev` and `libkf6calendarcore-dev` are direct CMake
 dependencies of the platform service and Settings (on Arch they arrive
