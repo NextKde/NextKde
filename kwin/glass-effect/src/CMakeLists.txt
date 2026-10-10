@@ -28,6 +28,10 @@ string(REPLACE "#include \"snells-glass.glsl\"" "${SNELLS_GLASS_SHADER}" GLASS_S
 # Generate a core shader variant from a single .glsl source.
 # Output goes into generated/ to keep source shaders/ clean.
 function(generate_shader_variants input_glsl output_base)
+    # Re-run shader generation when its source changes, including incremental
+    # builds; an old generated fragment would silently miss appearance masks.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/${input_glsl}")
     file(READ "${input_glsl}" SHADER_SRC)
 
     # Expand helper-shader includes
@@ -61,8 +65,11 @@ set(glass_SOURCES
 )
 
 find_package(WaylandScanner REQUIRED)
+set(KOS_SURFACE_SHAPE_PROTOCOL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../shell/native/surface-shape/kos-surface-shape-v1.xml"
+    CACHE FILEPATH "KOS surface shape protocol used by the Glass effect")
 ecm_add_wayland_server_protocol(glass_SOURCES
-    PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/../../../shell/native/surface-shape/kos-surface-shape-v1.xml"
+    PROTOCOL "${KOS_SURFACE_SHAPE_PROTOCOL}"
     BASENAME kos-surface-shape-v1)
 
 kconfig_add_kcfg_files(glass_SOURCES

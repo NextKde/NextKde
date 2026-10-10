@@ -41,9 +41,9 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
   a lower window's panel can never be drawn over an upper window.
 - Draws a single **opaque rounded panel**. Being opaque is what lets it
   *cover* the application's own controls rather than float above them.
-- Picks the tint from the title bar's own pixels, rather than from a colour
-  scheme. KWin's window palette follows `kdeglobals`, which a GTK or
-  self-drawn title bar has nothing to do with.
+- Client-side decorated windows take their tint from the title bar's own
+  pixels. KOS server-side decorations use the window palette that paints their
+  frame, without reading pixels back from the GPU.
 - **Fails closed, on the tint only.** If the title bar cannot be read yet —
   the window has not painted, or it is covered — no panel is drawn on that
   frame and the read is retried. The panel never appears with a guessed tint.
@@ -56,28 +56,10 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
   tile editor. They have no client process behind them — no application whose
   title bar could be underneath — but they otherwise look exactly like an
   undecorated normal window, so nothing above would have rejected them.
-- Draws a single **opaque rounded panel**. Being opaque is what lets it
-  *cover* the application's own controls rather than float above them.
-- Picks the tint from the title bar's own pixels, rather than from a colour
-  scheme. KWin's window palette follows `kdeglobals`, which a GTK or
-  self-drawn title bar has nothing to do with.
-- **Fails closed, on the tint only.** If the title bar cannot be read yet —
-  the window has not painted, or it is covered — no panel is drawn on that
-  frame and the read is retried. The panel never appears with a guessed tint.
-- Skips frames where the window is being animated
-  (`PAINT_WINDOW_TRANSFORMED`), and only touches normal windows / dialogs
-  using client-side decorations. Popups, context menus, tooltips, OSDs,
-  notifications, docks, the Quickshell bar, the Plasma desktop and
-  input-method surfaces are ignored.
-- **Skips internal windows**, which is every window KWin makes for itself: its
-  OSD (the desktop-change pill, for one), the outline, the tab switcher, the
-  tile editor. They have no client process behind them — no application whose
-  title bar could be underneath — but they otherwise look exactly like an
-  undecorated normal window, so nothing above would have rejected them.
 
 ## The tint
 
-The only thing read from the window. `windowbuttons/titlebarmetrics.cpp` takes
+For client-side decorated windows, `windowbuttons/titlebarmetrics.cpp` takes
 a band of the composited frame at the panel's own rows, across the window's
 whole width, and takes the **median luma**:
 
@@ -425,3 +407,71 @@ the panel is.
   and `windowrules` keep KWin headers out on purpose — so they run under
   `ctest`. `windowbuttons/panelgeometry.h` is the one definition of where a
   panel is; the renderer, the adjust session and the test all go through it.
+
+## Unified window appearance
+
+Window chrome is resolved by `windowappearance/`: an inner physical-pixel
+outline, a narrow contact shadow and a broad ambient shadow. Continuous corners
+are the default, with a longer tangent transition and zero curvature at the
+straight-edge joins. One compositor shader clips SSD/CSD content and draws all
+three layers against the same contour. Arc mode retains native scene outlines,
+shared decoration shadows and the CSD eight-tile fallback.
+
+Continuous mode uses a damage-driven offscreen window-content cache, with
+a 256 MiB texture budget and GPU size checks; unsupported/excess windows fall
+back to native arcs. It adds GPU rendering work for changing content and resize.
+It does not capture the background. Fullscreen keeps rounded corners by default.
+Glass honors the unified geometry property to avoid applying a cached arc again.
+
+The draw chain is Glass (20), Dock/Stage animations (50), then Bridge (100).
+Dock consumes Bridge's shared source through a synchronous in-process interface:
+one texture contains client content, native decoration and the KOS button panel.
+Dock deforms its mesh while Bridge applies the contour in source UV coordinates,
+so buttons and continuous corners follow the same animation without a second
+Dock texture. Stage retains its outer capture of the already-rounded source.
+Bridge must not cache the animation output: doing so skips downstream animation
+draw calls on undamaged frames. Continuous shadow bounds reserve the larger of
+the active and inactive extents, so a focus change does not resize the source FBO.
+Bridge and Dock build and link against KWin 6.7.5. Their 18 translation units
+also pass compiler syntax checks against upstream 6.6.0 and 6.6.5 headers.
+Alternate-header checks use installed Qt/KF and generated KWin SDK headers;
+they do not establish linking or runtime behavior on a 6.6 installation.
+Compositor behavior remains unverified.
+
+Dock allocates its legacy cache only when the provider is unavailable or declines
+the window. That capture includes the KOS controls in arc mode too. Allocation
+failures restore native arcs and are retried after geometry/scale/configuration
+or budget changes. Animated button/menu hit regions are cleared; the final normal
+paint restores them. Source damage, panel hover/focus changes and configuration
+updates invalidate the shared content; unchanged content reuses the texture.
+
+Hidden scene items release the continuous content texture after animation
+visibility references end. Configuration notifications are coalesced and
+unchanged/invalid files keep existing textures. Stacking updates share a single
+snapshot per notification burst; resolved app settings retain only configured
+rules. Native shadow atlases still held by windows survive LRU eviction through
+a weak lookup, avoiding repeated generation. See the
+[resource and performance review](../../docs/WindowAppearancePerformanceReview.md)
+for remaining costs and manual acceptance steps.
+
+Configuration: `~/.config/kos/window-appearance.json`. See
+[the version 2 example](windowappearance/window-appearance.example.json) and
+[implementation limits and user verification steps](../../docs/WindowAppearanceVerification.md).
+Version 1 is accepted; explicitly configured widths without a unit remain logical
+pixels. Version 2 defaults to one physical pixel. No plugins were installed or
+loaded during these checks; bridge, decoration and Glass require matching builds
+for the KWin installation that will load them.
+
+For repeatable API checks against another KWin source checkout:
+
+```sh
+python3 tools/check-kwin-api.py --build-dir .build/kosctl --kwin-headers /path/to/kwin/src
+```
+
+Bridge detects the installed paint-hook signature rather than assuming a version
+number, retaining `presentTime` on 6.6.x. Shader validation uses the `link()` result
+available on both APIs; drawing keeps a local copy of non-assignable paint data.
+On 6.6.x, which lacks the base shader resources, Bridge supplies the equivalent
+texture/saturation/modulation stages and uses KWin's own color-management GLSL.
+The continuous-contour stages pass offline GLSL linking for desktop GL and GLES
+against both tested 6.6 versions; GPU execution remains unverified.

@@ -5,6 +5,7 @@
 #include "wayland/surface.h"
 
 #include <algorithm>
+#include <utility>
 #include <wayland-server-core.h>
 
 namespace KWin
@@ -53,8 +54,10 @@ SurfaceShapeManager::SurfaceShapeManager(Display *display, QObject *parent)
     // conformant client binds at 1 and can never send the since=3 set_scrim
     // or the since=4/5/6/7 material and reveal requests. Shape resource versions follow
     // the actual negotiated manager version below.
-    m_global = wl_global_create(*display, &kos_surface_shape_manager_v1_interface,
-                                7, this, bindManager);
+    if (display) {
+        m_global = wl_global_create(*display, &kos_surface_shape_manager_v1_interface,
+                                    7, this, bindManager);
+    }
 }
 
 SurfaceShapeManager::~SurfaceShapeManager()
@@ -62,6 +65,11 @@ SurfaceShapeManager::~SurfaceShapeManager()
     if (m_global) {
         wl_global_destroy(m_global);
     }
+    // Existing manager bindings also outlive the global. Detach their user
+    // data so a late get_shape/destroy cannot dereference this deleted manager.
+    for (wl_resource *resource : std::as_const(m_managerResources))
+        wl_resource_set_user_data(resource, nullptr);
+    m_managerResources.clear();
     // Client-owned shape resources OUTLIVE us. Destroying them here would drop
     // their ids from the client's object map, and the `destroy` the client is
     // about to send for the vanished global would come back as "invalid object"
@@ -157,7 +165,13 @@ void SurfaceShapeManager::bindManager(wl_client *client, void *data,
 {
     wl_resource *resource = wl_resource_create(client,
         &kos_surface_shape_manager_v1_interface, std::min(version, 7u), id);
-    wl_resource_set_implementation(resource, &s_managerImplementation, data, nullptr);
+    if (!resource) {
+        wl_client_post_no_memory(client);
+        return;
+    }
+    auto *manager = static_cast<SurfaceShapeManager *>(data);
+    manager->m_managerResources.insert(resource);
+    wl_resource_set_implementation(resource, &s_managerImplementation, data, destroyManagerBinding);
 }
 
 void SurfaceShapeManager::destroyManagerResource(wl_client *, wl_resource *resource)
@@ -165,10 +179,22 @@ void SurfaceShapeManager::destroyManagerResource(wl_client *, wl_resource *resou
     wl_resource_destroy(resource);
 }
 
+void SurfaceShapeManager::destroyManagerBinding(wl_resource *resource)
+{
+    auto *manager = static_cast<SurfaceShapeManager *>(wl_resource_get_user_data(resource));
+    if (manager) manager->m_managerResources.remove(resource);
+}
+
 void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
                                    uint32_t id, wl_resource *surfaceResource)
 {
     auto *manager = static_cast<SurfaceShapeManager *>(wl_resource_get_user_data(resource));
+    if (!manager) {
+        // The effect was unloaded after this client bound the old global.
+        // A new object cannot be created on a retired manager binding.
+        wl_resource_post_error(resource, 0, "surface shape manager is no longer available");
+        return;
+    }
     SurfaceInterface *surface = SurfaceInterface::get(surfaceResource);
     if (!surface) {
         wl_resource_post_error(resource, 0, "invalid wl_surface");
@@ -182,6 +208,11 @@ void SurfaceShapeManager::getShape(wl_client *client, wl_resource *resource,
     // ——写死 4 会让 v1 客户端拿到标成 v4 的资源，将来按版本门控全失真
     shape->resource = wl_resource_create(client, &kos_surface_shape_v1_interface,
                                           wl_resource_get_version(resource), id);
+    if (!shape->resource) {
+        delete shape;
+        wl_client_post_no_memory(client);
+        return;
+    }
     wl_resource_set_implementation(shape->resource, &s_shapeImplementation, shape,
                                    destroyShapeResource);
     shape->surfaceDestroyed = connect(surface, &QObject::destroyed, manager,

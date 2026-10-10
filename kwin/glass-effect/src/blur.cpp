@@ -69,7 +69,7 @@ Q_LOGGING_CATEGORY(KWIN_BLUR, "kwin_effect_blur", QtWarningMsg)
 
 static void ensureResources()
 {
-    // Must initialize resources manually because the effect is a static lib.
+    // Initialize the embedded shader resources when the effect is loaded.
     Q_INIT_RESOURCE(blur);
 }
 
@@ -80,7 +80,7 @@ static const QByteArray s_blurAtomName = QByteArrayLiteral("_KDE_NET_WM_BLUR_BEH
 
 static bool isQuickshellWindow(const EffectWindow *window)
 {
-    if (!window) {
+    if (!window || !window->window()) {
         return false;
     }
     return window->window()->resourceClass().contains(
@@ -180,6 +180,7 @@ BlurEffect::BlurEffect()
         m_roundedOnscreenPass.viewportScaleLocation = m_roundedOnscreenPass.shader->uniformLocation("viewportScale");
         m_roundedOnscreenPass.boxLocation = m_roundedOnscreenPass.shader->uniformLocation("box");
         m_roundedOnscreenPass.cornerRadiusLocation = m_roundedOnscreenPass.shader->uniformLocation("cornerRadius");
+        m_roundedOnscreenPass.appearanceMaskEnabledLocation = m_roundedOnscreenPass.shader->uniformLocation("appearanceMaskEnabled");
         m_roundedOnscreenPass.cornerExponentLocation = m_roundedOnscreenPass.shader->uniformLocation("cornerExponent");
         m_roundedOnscreenPass.glassEnabledLocation = m_roundedOnscreenPass.shader->uniformLocation("glassEnabled");
         m_roundedOnscreenPass.opacityLocation = m_roundedOnscreenPass.shader->uniformLocation("opacity");
@@ -490,8 +491,25 @@ void BlurEffect::reconfigure(ReconfigureFlags flags)
 
 void BlurEffect::repaintDynamicCorners()
 {
-    if (m_settings.roundedCorners.dynamicCorners) {
-        effects->addRepaintFull();
+    if (!m_settings.roundedCorners.dynamicCorners
+        || m_settings.roundedCorners.useDeclaredCornerRadius) {
+        return;
+    }
+    // Only these roles receive Glass's adjacency-dependent radii. Moving an
+    // ordinary application must not repaint every output merely to update
+    // the few Dock/menu corners; BackgroundEffectItem expands their damage.
+    for (const auto &[window, data] : m_windows) {
+        Q_UNUSED(data)
+        if (!window->isVisible()
+            || (!window->isDock() && !window->isMenu() && !window->isDropdownMenu()
+                && !window->isPopupMenu() && !window->isPopupWindow())) {
+            continue;
+        }
+        if (window->window()
+            && window->window()->property("_kos_window_appearance_native_radii").canConvert<QVector4D>()) {
+            continue;
+        }
+        window->addRepaintFull();
     }
 }
 
@@ -546,8 +564,6 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
 {
     std::optional<BlurRegion> content;
     std::optional<BlurRegion> frame;
-    std::optional<qreal> saturation;
-    std::optional<qreal> contrast;
     bool hasExplicitBlurRequest = false;
 
 #ifdef GLASS_X11
@@ -590,10 +606,6 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
         if (surface->blur()) {
             content = surface->blur()->region();
             hasExplicitBlurRequest = true;
-        }
-        if (surface->contrast()) {
-            saturation = surface->contrast()->saturation();
-            contrast = surface->contrast()->contrast();
         }
 #endif
     }
@@ -704,7 +716,6 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
         data.hasExplicitBlurRequest = hasExplicitBlurRequest;
         data.content = content;
         data.frame = frame;
-        data.colorMatrix = colorTransformMatrix(saturation.value_or(1.0), contrast.value_or(1.0), 1.0);
 #if PLASMA_VERSION < 0x060404 || defined(GLASS_X11)
         data.windowEffect = ItemEffect(w->windowItem());
 #else
@@ -724,6 +735,9 @@ void BlurEffect::updateBlurRegion(EffectWindow *w)
 
 void BlurEffect::slotWindowAdded(EffectWindow *w)
 {
+    if (!w || windowFrameGeometryChangedConnections.contains(w)) {
+        return;
+    }
     SurfaceInterface *surf = w->surface();
 
     if (surf) {
@@ -753,7 +767,7 @@ void BlurEffect::slotWindowAdded(EffectWindow *w)
     }
 
     setupDecorationConnections(w);
-    connect(w, &EffectWindow::windowDecorationChanged, this, [this, w]() {
+    windowDecorationChangedConnections[w] = connect(w, &EffectWindow::windowDecorationChanged, this, [this, w]() {
         setupDecorationConnections(w);
         updateBlurRegion(w);
     });
@@ -782,6 +796,8 @@ void BlurEffect::slotWindowDeleted(EffectWindow *w)
         disconnect(*it);
         windowFrameGeometryChangedConnections.erase(it);
     }
+    disconnect(windowDecorationChangedConnections.take(w));
+    disconnect(decorationBlurChangedConnections.take(w));
     repaintDynamicCorners();
 }
 
@@ -806,11 +822,12 @@ void BlurEffect::slotPropertyNotify(EffectWindow *w, long atom)
 
 void BlurEffect::setupDecorationConnections(EffectWindow *w)
 {
+    disconnect(decorationBlurChangedConnections.take(w));
     if (!w->decoration()) {
         return;
     }
 
-    connect(w->decoration(), &KDecoration3::Decoration::blurRegionChanged, this, [this, w]() {
+    decorationBlurChangedConnections[w] = connect(w->decoration(), &KDecoration3::Decoration::blurRegionChanged, this, [this, w]() {
         updateBlurRegion(w);
     });
 }
@@ -870,6 +887,19 @@ BorderRadius BlurEffect::effectiveWindowCornerRadius(EffectWindow *w, const Bord
         return BorderRadius(0.0, 0.0, 0.0, 0.0);
     }
 
+    // The unified appearance owns application-window geometry. In
+    // continuous mode it deliberately requests an unrounded input texture;
+    // restoring Glass's cached circular radius here cuts that texture twice.
+    if (w->window()) {
+        // Mirror the lightweight property ABI in kos-bridge geometryprotocol.h.
+        // Keep Glass independently buildable from its own source directory.
+        const QVariant appearance = w->window()->property("_kos_window_appearance_native_radii");
+        if (appearance.canConvert<QVector4D>()) {
+            const QVector4D radius = appearance.value<QVector4D>();
+            return BorderRadius(radius.x(), radius.y(), radius.z(), radius.w());
+        }
+    }
+
     // Quickshell sends the exact blur area for cards inside a transparent
     // layer-shell surface.  The region has already been chosen by the client;
     // applying this effect's window-sized corner mask on top would use a
@@ -879,6 +909,14 @@ BorderRadius BlurEffect::effectiveWindowCornerRadius(EffectWindow *w, const Bord
             && it->second.content.has_value() && !it->second.content->isEmpty()) {
             return declaredCornerRadius;
         }
+    }
+
+    // Ordinary windows are not owned by Glass. Consult their live radius
+    // so enabling/disabling the appearance effect cannot resurrect a value
+    // Glass happened to cache before the policy changed.
+    if (!w->isDock() && !w->isMenu() && !w->isDropdownMenu()
+        && !w->isPopupMenu() && !w->isPopupWindow()) {
+        return w->window() ? w->window()->borderRadius() : declaredCornerRadius;
     }
 
     if (m_settings.roundedCorners.useDeclaredCornerRadius) {
@@ -893,13 +931,6 @@ BorderRadius BlurEffect::effectiveWindowCornerRadius(EffectWindow *w, const Bord
     } else if (w->isMenu() || w->isDropdownMenu() || w->isPopupMenu() || w->isPopupWindow()) {
         topCornerRadius = m_settings.roundedCorners.menuRadius;
         bottomCornerRadius = m_settings.roundedCorners.menuRadius;
-    }
-
-    // Normal application windows retain the radius declared by their client
-    // or decoration. Glass only configures shell-owned Dock and menu surfaces.
-    if (!w->isDock() && !w->isMenu() && !w->isDropdownMenu()
-        && !w->isPopupMenu() && !w->isPopupWindow()) {
-        return declaredCornerRadius;
     }
 
     if (topCornerRadius <= 0.0f && bottomCornerRadius <= 0.0f) {
@@ -1297,7 +1328,7 @@ bool BlurEffect::shouldBlur(const EffectWindow *w, int mask, const WindowPaintDa
         }
     }
 
-    bool scaled = !qFuzzyCompare(data.xScale(), 1.0) && !qFuzzyCompare(data.yScale(), 1.0);
+    bool scaled = !qFuzzyCompare(data.xScale(), 1.0) || !qFuzzyCompare(data.yScale(), 1.0);
     bool translated = data.xTranslation() || data.yTranslation();
 
     if ((scaled || (translated || (mask & PAINT_WINDOW_TRANSFORMED))) && !w->data(WindowForceBlurRole).toBool()) {
@@ -1341,7 +1372,8 @@ GLTexture *BlurEffect::ensureNoiseTexture(int noiseStrength)
         return nullptr;
     }
 
-    const qreal scale = std::max(1.0, QGuiApplication::primaryScreen()->logicalDotsPerInch() / 96.0);
+    const QScreen *screen = QGuiApplication::primaryScreen();
+    const qreal scale = screen ? std::max(1.0, screen->logicalDotsPerInch() / 96.0) : 1.0;
     if (!m_noisePass.noiseTexture || m_noisePass.noiseTextureScale != scale || m_noisePass.noiseTextureStength != noiseStrength) {
         // Init randomness based on time
         std::srand((uint)QTime::currentTime().msec());
@@ -1892,6 +1924,12 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         [](const SurfaceShape &shape) {
             return shape.scrimEnabled && shape.scrimDecay <= 1.0;
         });
+    if (!windowScrim) {
+        renderInfo.scrimLumaFramebuffers.clear();
+        renderInfo.scrimLumaTextures.clear();
+        renderInfo.scrimLumaLevels = 0;
+        renderInfo.scrimLumaSize = QSize();
+    }
     GLTexture *scrimLuma = nullptr;
     if (windowScrim && renderInfo.framebuffers[0]
             && !backgroundRect.isEmpty()) {
@@ -2068,7 +2106,21 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     const QRectF nativeBox = snapToPixelGridF(scaledTransformedRect)
                                  .translated(-scaledBackgroundRect.topLeft());
 #endif
-    const BorderRadius nativeCornerRadius = cornerRadius.scaled(viewport.scale()).rounded();
+    const QVariant visualRadii = w->window()->property("_kos_window_appearance_visual_radii");
+    const bool appearanceMask = visualRadii.canConvert<QVector4D>();
+    const QVector4D appearanceRadius = appearanceMask ? visualRadii.value<QVector4D>() : QVector4D();
+    const BorderRadius visualCornerRadius = appearanceMask
+        ? BorderRadius(appearanceRadius.x(), appearanceRadius.y(), appearanceRadius.z(), appearanceRadius.w())
+        : cornerRadius;
+    // Keep the sharp native input for the final compositor mask; only blur
+    // and noise use the visual contour. Continuous extents are not rounded
+    // again, or their joins would disagree with the window-content shader.
+    const BorderRadius nativeCornerRadius = appearanceMask
+        ? visualCornerRadius.scaled(viewport.scale())
+        : visualCornerRadius.scaled(viewport.scale()).rounded();
+    const float visualExponent = appearanceMask
+        ? static_cast<float>(w->window()->property("_kos_window_appearance_curve_exponent").toDouble())
+        : m_settings.roundedCorners.cornerExponent;
     const QVector4D shaderBox = QVector4D(nativeBox.x() + nativeBox.width() * 0.5,
                     nativeBox.y() + nativeBox.height() * 0.5,
                     nativeBox.width() * 0.5,
@@ -2087,8 +2139,9 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.offsetLocation, combinedBlurSettings.offset * m_upsampleOffset);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.boxLocation, shaderBox);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.cornerRadiusLocation, nativeCornerRadius.toVector());
+    m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.appearanceMaskEnabledLocation, appearanceMask ? 1 : 0);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.cornerExponentLocation,
-        m_settings.roundedCorners.cornerExponent);
+        visualExponent);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.glassEnabledLocation,
         usesGlobalQuickshellMaterial ? 1 : 0);
     m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.opacityLocation, modulation);
@@ -2246,7 +2299,7 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                 m_noisePass.shader->setUniform(m_noisePass.cornerRadiusLocation,
                     nativeCornerRadius.toVector());
                 m_noisePass.shader->setUniform(m_noisePass.cornerExponentLocation,
-                    m_settings.roundedCorners.cornerExponent);
+                    visualExponent);
             }
 
             glActiveTexture(GL_TEXTURE0);
@@ -2281,15 +2334,24 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
                 overrideLevels.append(draw.blurLevel);
             }
         }
+        // Levels that no current shape uses should not retain capture-sized
+        // GPU scratch textures until this window is closed.
+        std::erase_if(renderInfo.blurOverrideScratch, [&overrideLevels](const auto &entry) {
+            return !overrideLevels.contains(int(entry.first));
+        });
         for (int level : overrideLevels) {
             const BlurPipelineSettings overrideSettings =
                 pipelineSettingsForStrength(level - 1, contentNoiseStrength);
             runBlurPass(overrideSettings);
             auto &scratch = renderInfo.blurOverrideScratch[uint(level)];
             const QSize size = renderInfo.framebuffers[1]->colorAttachment()->size();
-            if (!scratch.framebuffer || scratch.size != size) {
-                auto texture = GLTexture::allocate(
-                    renderInfo.framebuffers[1]->colorAttachment()->internalFormat(), size);
+            const GLenum overrideFormat = renderInfo.framebuffers[1]->colorAttachment()->internalFormat();
+            if (!scratch.framebuffer || scratch.size != size
+                || scratch.texture->internalFormat() != overrideFormat) {
+                scratch.framebuffer.reset();
+                scratch.texture.reset();
+                scratch.size = QSize();
+                auto texture = GLTexture::allocate(overrideFormat, size);
                 if (texture) {
                     texture->setFilter(GL_LINEAR);
                     texture->setWrapMode(GL_CLAMP_TO_EDGE);
@@ -2312,9 +2374,24 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
             overridePasses.append({level, scratch.framebuffer->colorAttachment(),
                                    overrideSettings.offset});
         }
+    } else {
+        renderInfo.blurOverrideScratch.clear();
     }
 
-    GLTexture *contentBlurredTexture = runBlurPass(splitBlurSettings ? contentBlurSettings : combinedBlurSettings);
+    // A default pass is only consumed by shapes without a successful override.
+    // Keep the fallback when scratch allocation fails, but avoid computing an
+    // extra whole-capture chain when all draws already have their own texture.
+    const bool needsDefaultPass = surfaceShapeDraws.isEmpty()
+        || std::any_of(surfaceShapeDraws.cbegin(), surfaceShapeDraws.cend(),
+                       [&overridePasses](const SurfaceShapeDraw &draw) {
+            return std::none_of(overridePasses.cbegin(), overridePasses.cend(),
+                                [&draw](const BlurOverridePass &pass) {
+                return pass.level == draw.blurLevel;
+            });
+        });
+    GLTexture *contentBlurredTexture = needsDefaultPass
+        ? runBlurPass(splitBlurSettings ? contentBlurSettings : combinedBlurSettings)
+        : nullptr;
     const float contentOffset = splitBlurSettings
         ? contentBlurSettings.offset : combinedBlurSettings.offset;
     if (surfaceShapeDraws.isEmpty()) {

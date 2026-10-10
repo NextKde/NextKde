@@ -42,7 +42,11 @@ QtObject {
     }
 
     function parsedSizes() {
-        try { return JSON.parse(_settings.sizesJson) } catch (_) { return {} }
+        try {
+            const value = JSON.parse(_settings.sizesJson)
+            return value && typeof value === "object" && !Array.isArray(value)
+                ? value : {}
+        } catch (_) { return {} }
     }
 
     function orderedIds() {

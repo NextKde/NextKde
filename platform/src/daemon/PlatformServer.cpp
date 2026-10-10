@@ -12,6 +12,7 @@
 #include <QDBusArgument>
 #include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusMetaType>
 #include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusReply>
@@ -47,6 +48,7 @@
 #include <atomic>
 #include <cmath>
 #include <functional>
+#include <filesystem>
 #include <memory>
 
 namespace KosPlatform {
@@ -859,12 +861,11 @@ NetworkWorkerResult networkRefreshWorker()
         if (type == 2 && wifiDeviceName.isEmpty())
             wifiDeviceName = device.value(QStringLiteral("Interface")).toString();
         const uint state = device.value(QStringLiteral("State")).toUInt();
-        if (selected.isEmpty() || state == 100) {
+        if (selected.isEmpty()
+            || (state == 100 && selected.value(QStringLiteral("State")).toUInt() != 100)) {
             selected = device;
             selectedPath = devicePath.path();
         }
-        if (state == 100)
-            break;
     }
 
     const uint type = selected.value(QStringLiteral("DeviceType")).toUInt();
@@ -1014,9 +1015,6 @@ constexpr auto kNmActiveConnectionInterface =
 
 // NMDeviceState: 30 = disconnected, 100 = activated, 120 = failed, 40-110 =
 // the transition states in between.
-constexpr uint kNmDeviceActivated = 100;
-constexpr uint kNmDeviceDisconnected = 30;
-constexpr uint kNmDeviceFailed = 120;
 
 QString nmDevicePathByInterface(const QDBusConnection &bus, const QString &device)
 {
@@ -1043,45 +1041,38 @@ QDBusMessage nmCallBounded(const QDBusConnection &bus, const QString &path,
     return iface.callWithArgumentList(QDBus::BlockWithGui, method, arguments);
 }
 
-// a{sa{sv}}: the wire format AddConnection expects. Nested dict members are
-// wrapped in QDBusVariant so QtDBus marshals each as a variant, matching the
-// same convention nmcli's own libnm calls use.
-QVariantMap nmConnectionSettings(const QString &id, const QString &type,
+// The outer map must carry maps as values, not variants: AddConnection
+// expects a{sa{sv}}. QVariantMap supplies the variants in each inner map.
+NmSettings nmConnectionSettings(const QString &id, const QString &type,
                                  const QVariantMap &section)
 {
     QVariantMap connection{{QStringLiteral("id"), id},
                            {QStringLiteral("type"), type},
                            {QStringLiteral("uuid"),
                             QUuid::createUuid().toString(QUuid::WithoutBraces)}};
-    QVariantMap settings{{QStringLiteral("connection"), connection}};
+    NmSettings settings{{QStringLiteral("connection"), connection}};
     for (auto it = section.constBegin(); it != section.constEnd(); ++it) {
-        QVariantMap inner;
-        const QVariantMap entries = it.value().toMap();
-        for (auto entry = entries.constBegin(); entry != entries.constEnd(); ++entry)
-            inner.insert(entry.key(), QVariant::fromValue(QDBusVariant(entry.value())));
-        settings.insert(it.key(), QVariant::fromValue(QDBusVariant(inner)));
+        settings.insert(it.key(), it.value().toMap());
     }
     return settings;
 }
 
-// Poll Device.State until it settles: activated is the success terminal, a
-// drop back to disconnected/failed means the activation attempt ended. The
-// bounded GetAll rounds keep the loop from running unbounded on a wedged NM.
-bool nmWaitDeviceActivated(const QDBusConnection &bus, const QString &devicePath,
+// Poll the specific activation returned by ActivateConnection. Device.State
+// can still describe the previous connection while switching networks.
+bool nmWaitConnectionActivated(const QDBusConnection &bus, const QString &activePath,
                            int timeoutMs)
 {
     const qint64 deadline = QDateTime::currentMSecsSinceEpoch() + timeoutMs;
-    uint lastState = 0;
     while (QDateTime::currentMSecsSinceEpoch() < deadline) {
-        const QVariantMap props = nmGetAll(bus, devicePath,
-                                           QString::fromLatin1(kNmDeviceInterface));
-        const uint state = props.value(QStringLiteral("State")).toUInt();
-        if (state == kNmDeviceActivated)
-            return true;
-        if (lastState != 0
-            && (state <= kNmDeviceDisconnected || state >= kNmDeviceFailed))
+        const QVariantMap props = nmGetAll(bus, activePath,
+            QStringLiteral("org.freedesktop.NetworkManager.Connection.Active"));
+        if (props.isEmpty())
             return false;
-        lastState = state;
+        const uint state = props.value(QStringLiteral("State")).toUInt();
+        if (state == 2)
+            return true;
+        if (state >= 3)
+            return false;
         QThread::msleep(250);
     }
     return false;
@@ -1099,6 +1090,14 @@ struct NmConnectionTarget {
 NmConnectionTarget nmFindConnection(const QDBusConnection &bus,
                                     const QString &uuid, const QString &id)
 {
+    if (!uuid.isEmpty()) {
+        const QDBusMessage reply = nmCallBounded(bus, QString::fromLatin1(kNmSettingsPath),
+            QString::fromLatin1(kNmSettingsInterface), QStringLiteral("GetConnectionByUuid"),
+            {uuid}, kDbusCallTimeoutMs);
+        if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+            return {{}, {}, QStringLiteral("lookup")};
+        return {qvariant_cast<QDBusObjectPath>(reply.arguments().first()).path(), uuid, {}};
+    }
     const QDBusMessage reply = nmCallBounded(bus, QString::fromLatin1(kNmSettingsPath),
         QString::fromLatin1(kNmSettingsInterface), QStringLiteral("ListConnections"),
         {}, kDbusCallTimeoutMs);
@@ -1107,13 +1106,16 @@ NmConnectionTarget nmFindConnection(const QDBusConnection &bus,
     const QList<QDBusObjectPath> paths =
         qdbus_cast<QList<QDBusObjectPath>>(reply.arguments().constFirst());
     for (const QDBusObjectPath &path : paths) {
-        const QVariantMap props = nmGetAll(bus, path.path(),
-                                           QString::fromLatin1(kNmConnectionInterface));
-        const QString foundUuid = props.value(QStringLiteral("Uuid")).toString();
-        const QString foundId = props.value(QStringLiteral("Id")).toString();
-        if (!uuid.isEmpty() && foundUuid == uuid)
-            return {path.path(), foundUuid, {}};
-        if (uuid.isEmpty() && !id.isEmpty() && foundId == id)
+        const QDBusMessage settings = nmCallBounded(bus, path.path(),
+            QString::fromLatin1(kNmConnectionInterface), QStringLiteral("GetSettings"),
+            {}, kDbusCallTimeoutMs);
+        if (settings.type() != QDBusMessage::ReplyMessage || settings.arguments().isEmpty())
+            return {{}, {}, QStringLiteral("settings")};
+        const QVariantMap connection = qdbus_cast<NmSettings>(settings.arguments().first())
+            .value(QStringLiteral("connection"));
+        const QString foundUuid = connection.value(QStringLiteral("uuid")).toString();
+        const QString foundId = connection.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty() && foundId == id)
             return {path.path(), foundUuid, {}};
     }
     return {};
@@ -1129,7 +1131,7 @@ bool nmDeleteConnection(const QDBusConnection &bus, const QString &settingsPath)
 
 // The settings dict for a WPA-PSK / open join. `key-mgmt` is omitted for open
 // networks -- NM treats a missing wireless-security section as open.
-QVariantMap nmWifiSettings(const QString &ssid, const QString &password)
+NmSettings nmWifiSettings(const QString &ssid, const QString &password)
 {
     QVariantMap wireless{{QStringLiteral("ssid"), ssid.toUtf8()},
                          {QStringLiteral("mode"), QStringLiteral("infrastructure")}};
@@ -1147,8 +1149,8 @@ QVariantMap nmWifiSettings(const QString &ssid, const QString &password)
 }
 
 // The settings dict for a WPA-Enterprise join. `eap` is a string list (as), so
-// it stays a QVariantList; the anonymous identity is optional.
-QVariantMap nmEnterpriseSettings(const QString &profile, const QString &ssid,
+// it stays a QStringList; the anonymous identity is optional.
+NmSettings nmEnterpriseSettings(const QString &profile, const QString &ssid,
                                  const QString &identity, const QString &password,
                                  const QString &eapMethod, const QString &phase2,
                                  const QString &anonymous)
@@ -1177,7 +1179,7 @@ QVariantMap nmEnterpriseSettings(const QString &profile, const QString &ssid,
 // device to the settled state nmcli --wait used to report.
 NetworkWorkerResult networkConnectWorker(const QString &device,
                                          const QString &savedProfileUuid,
-                                         const QVariantMap &settings,
+                                         const NmSettings &settings,
                                          const QString &replaceProfileId)
 {
     const ScopedBusConnection guard(workerBusName(QStringLiteral("net")));
@@ -1217,14 +1219,14 @@ NetworkWorkerResult networkConnectWorker(const QString &device,
             const NmConnectionTarget stale = nmFindConnection(bus, {}, replaceProfileId);
             if (!stale.error.isEmpty())
                 return out; // the list call itself failed
-            if (!stale.settingsPath.isEmpty())
-                nmDeleteConnection(bus, stale.settingsPath);
+            if (!stale.settingsPath.isEmpty() && !nmDeleteConnection(bus, stale.settingsPath))
+                return out;
         }
         const QDBusMessage added = nmCallBounded(bus,
             QString::fromLatin1(kNmSettingsPath),
             QString::fromLatin1(kNmSettingsInterface),
             QStringLiteral("AddConnection"),
-            {QVariant::fromValue(QDBusVariant(settings))},
+            {QVariant::fromValue(settings)},
             kNetworkConnectWaitMs);
         if (added.type() != QDBusMessage::ReplyMessage || added.arguments().isEmpty())
             return out;
@@ -1241,12 +1243,13 @@ NetworkWorkerResult networkConnectWorker(const QString &device,
          QVariant::fromValue(QDBusObjectPath(devicePath)),
          QVariant::fromValue(QDBusObjectPath(QStringLiteral("/")))},
         kNetworkConnectWaitMs);
-    if (activated.type() != QDBusMessage::ReplyMessage)
+    if (activated.type() != QDBusMessage::ReplyMessage || activated.arguments().isEmpty())
         return out;
 
     // --wait parity: ActivateConnection only means NM accepted the request.
-    // Poll the device state so the answer matches the old nmcli semantics.
-    if (!nmWaitDeviceActivated(bus, devicePath, kNetworkConnectWaitMs))
+    const QString activePath = qvariant_cast<QDBusObjectPath>(activated.arguments().first()).path();
+    if (activePath.isEmpty() || activePath == QStringLiteral("/")
+        || !nmWaitConnectionActivated(bus, activePath, kNetworkConnectWaitMs))
         return out;
 
     out.ok = true;
@@ -1786,7 +1789,7 @@ QJsonObject parseDisplayOutputs(const QByteArray &output, int exitCode)
 QString uniquePath(const QString &destination, const QString &baseName)
 {
     QString candidate = QDir(destination).filePath(baseName);
-    if (!QFileInfo::exists(candidate))
+    if (!QFileInfo::exists(candidate) && !QFileInfo(candidate).isSymLink())
         return candidate;
     const QFileInfo sourceInfo(baseName);
     const QString suffix = sourceInfo.suffix();
@@ -1797,7 +1800,7 @@ QString uniquePath(const QString &destination, const QString &baseName)
             ? QStringLiteral("%1 (copy %2)").arg(stem).arg(index)
             : QStringLiteral("%1 (copy %2).%3").arg(stem).arg(index).arg(suffix);
         candidate = QDir(destination).filePath(copyName);
-        if (!QFileInfo::exists(candidate))
+        if (!QFileInfo::exists(candidate) && !QFileInfo(candidate).isSymLink())
             return candidate;
     }
     return {};
@@ -1806,10 +1809,25 @@ QString uniquePath(const QString &destination, const QString &baseName)
 bool copyRecursively(const QString &source, const QString &target)
 {
     const QFileInfo info(source);
-    if (info.isDir()) {
-        if (!QDir().mkpath(target))
+    // Preserve the link itself, including its relative target. Following a
+    // directory link can copy outside the source tree or recurse in a cycle.
+    if (info.isSymLink()) {
+        std::error_code error;
+        const auto link = std::filesystem::read_symlink(
+            std::filesystem::path(QFile::encodeName(source).constData()), error);
+        if (error)
             return false;
-        QDirIterator iterator(source, QDir::NoDotAndDotDot | QDir::AllEntries);
+        std::filesystem::create_symlink(link,
+            std::filesystem::path(QFile::encodeName(target).constData()), error);
+        return !error;
+    }
+    if (info.isDir()) {
+        // The parent already exists. An atomic mkdir rejects a target claimed
+        // by another transfer rather than merging two unrelated directories.
+        if (!QDir().mkdir(target))
+            return false;
+        QDirIterator iterator(source, QDir::NoDotAndDotDot | QDir::AllEntries
+                                         | QDir::Hidden | QDir::System);
         while (iterator.hasNext()) {
             iterator.next();
             const QString childTarget = QDir(target).filePath(iterator.fileName());
@@ -1818,7 +1836,9 @@ bool copyRecursively(const QString &source, const QString &target)
         }
         return true;
     }
-    return QFile::copy(source, target);
+    // Special files such as FIFOs are not ordinary copy inputs and may block
+    // indefinitely. Fail before a move can remove the source directory.
+    return info.isFile() && QFile::copy(source, target);
 }
 
 bool moveOrCopy(const QString &source, const QString &destination, bool move)
@@ -2001,6 +2021,7 @@ void clipboardPruneThumbs(const QByteArray &listOutput)
 PlatformServer::PlatformServer(QObject *parent)
     : QObject(parent), m_socketPath(runtimeSocketPath())
 {
+    qDBusRegisterMetaType<NmSettings>();
     // KDED starts the AppMenu registrar only while a menu view exists. Plasma's
     // applet normally owns this queueable marker service; own it here so the
     // Bar can receive menus without running a separate Plasma panel applet.
@@ -2106,14 +2127,22 @@ void PlatformServer::readClient()
         socket->disconnectFromServer();
         return;
     }
-    // Consume complete lines through a cursor and compact once at the end;
-    // removing per line would memmove the tail for every line in a batch.
+    // Detach complete lines before dispatch: a nested D-Bus event loop can
+    // accept/disconnect sockets and invalidate references into m_buffers.
+    const qsizetype lastNewline = buffer.lastIndexOf('\n');
+    if (lastNewline < 0)
+        return;
+    const QByteArray batch = buffer.left(lastNewline + 1);
+    buffer.remove(0, lastNewline + 1);
+    const QPointer<QLocalSocket> guardedSocket(socket);
     qsizetype offset = 0;
     while (true) {
-        const qsizetype newline = buffer.indexOf('\n', offset);
+        if (!guardedSocket || !m_buffers.contains(guardedSocket.data()))
+            return;
+        const qsizetype newline = batch.indexOf('\n', offset);
         if (newline < 0)
             break;
-        const QByteArray line = buffer.mid(offset, newline - offset).trimmed();
+        const QByteArray line = batch.mid(offset, newline - offset).trimmed();
         offset = newline + 1;
         if (line.isEmpty())
             continue;
@@ -2130,13 +2159,9 @@ void PlatformServer::readClient()
             continue;
         }
         handleRequest(socket, document.object());
-        if (socket->property("kosBackpressureClosing").toBool())
+        if (!guardedSocket || guardedSocket->property("kosBackpressureClosing").toBool())
             return;
     }
-    // Bytes after the last newline are a partial line; keep them for the
-    // next readyRead and drop only what was consumed.
-    if (offset > 0)
-        buffer.remove(0, offset);
 }
 
 void PlatformServer::clientDisconnected()
@@ -2147,6 +2172,13 @@ void PlatformServer::clientDisconnected()
     delete m_keepAwakeLeases.take(socket);
     m_windowSubscribers.remove(socket);
     m_buffers.remove(socket);
+    for (auto it = m_inFlightReplies.begin(); it != m_inFlightReplies.end(); ++it) {
+        auto &pending = it.value();
+        pending.removeIf([socket](const PendingReply &entry) {
+            return !entry.socket || entry.socket.data() == socket;
+        });
+        // Keep the key until its worker completes, even with no listeners.
+    }
     socket->deleteLater();
 }
 
@@ -2251,6 +2283,10 @@ void PlatformServer::runCommand(QLocalSocket *socket, const QJsonObject &request
     auto *process = new QProcess(this);
     process->setProgram(program);
     process->setArguments(arguments);
+    // Interactive GUI helpers can live for the whole session. No caller
+    // parses their output, so do not retain unbounded diagnostic buffers.
+    if (timeoutMs == 0)
+        process->setProcessChannelMode(QProcess::ForwardedChannels);
     const auto replied = std::make_shared<bool>(false);
     const auto timedOut = std::make_shared<bool>(false);
     // timeoutMs == 0 opts out (interactive tools whose lifetime is the user's
@@ -2337,13 +2373,31 @@ void PlatformServer::storeReply(const QString &key, int ttlMs, bool ok,
 {
     if (ttlMs <= 0)
         return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // Device/profile keys may never be requested again. Expiration must also
+    // reclaim those entries, rather than only running on a cache hit.
+    for (auto it = m_replyCache.begin(); it != m_replyCache.end();) {
+        if (it->expiresAt <= now)
+            it = m_replyCache.erase(it);
+        else
+            ++it;
+    }
+    constexpr qsizetype maxCachedReplies = 256;
+    if (!m_replyCache.contains(key) && m_replyCache.size() >= maxCachedReplies) {
+        auto oldest = m_replyCache.begin();
+        for (auto it = m_replyCache.begin(); it != m_replyCache.end(); ++it) {
+            if (it->expiresAt < oldest->expiresAt)
+                oldest = it;
+        }
+        m_replyCache.erase(oldest);
+    }
     CachedReply entry;
     entry.ok = ok;
     entry.result = result;
     entry.code = code;
     entry.message = message;
     entry.retryable = retryable;
-    entry.expiresAt = QDateTime::currentMSecsSinceEpoch()
+    entry.expiresAt = now
         + (ok ? ttlMs : qMin(ttlMs, static_cast<int>(kFailureCacheTtlMs)));
     m_replyCache.insert(key, entry);
 }
@@ -2361,8 +2415,23 @@ void PlatformServer::invalidateReplies(const QString &keyPrefix)
 bool PlatformServer::queueIfInFlight(const QString &key, QLocalSocket *socket,
                                      const QJsonObject &request)
 {
+    const bool alreadyRunning = m_inFlightReplies.contains(key);
+    qsizetype total = 0;
+    qsizetype peerTotal = 0;
+    for (auto it = m_inFlightReplies.cbegin(); it != m_inFlightReplies.cend(); ++it) {
+        total += it->size();
+        for (const PendingReply &entry : *it) {
+            if (entry.socket.data() == socket)
+                ++peerTotal;
+        }
+    }
+    if (peerTotal >= 32 || total >= 256
+        || (!alreadyRunning && m_inFlightReplies.size() >= 64)) {
+        respond(socket, request, false, {}, QStringLiteral("busy"),
+                QStringLiteral("平台请求队列已满"), true);
+        return true; // Answered; the caller must not start another worker.
+    }
     QList<PendingReply> &pending = m_inFlightReplies[key];
-    const bool alreadyRunning = !pending.isEmpty();
     pending.append({QPointer<QLocalSocket>(socket), request});
     return alreadyRunning;
 }
@@ -2559,6 +2628,8 @@ void PlatformServer::startAudioEventWatcher(const QString &pactl)
     m_audioEventWatcher = process;
     process->setProgram(pactl);
     process->setArguments({QStringLiteral("subscribe")});
+    // Resident watchers must not retain an unread stderr buffer indefinitely.
+    process->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     process->setProperty("startedAt", QDateTime::currentMSecsSinceEpoch());
     connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
         if (!process->readAllStandardOutput().isEmpty())
@@ -2690,12 +2761,14 @@ void PlatformServer::runNetworkConnect(QLocalSocket *socket,
                                        const QJsonObject &request,
                                        const NmConnectRequest &connectRequest)
 {
-    const QString key = QStringLiteral("network.connect:") + connectRequest.device
-        + QLatin1Char(':') + connectRequest.savedProfileUuid
-        + QLatin1Char(':') + connectRequest.replaceProfileId
-        + QLatin1Char(':')
-        + connectRequest.settings.value(QStringLiteral("connection"))
-              .toMap().value(QStringLiteral("id")).toString();
+    // A retry with a corrected password/identity is a different request. Hash
+    // the original payload so secrets never become plaintext cache keys and
+    // the newly generated settings UUID does not defeat identical retries.
+    const QByteArray payload = QJsonDocument(request.value(QStringLiteral("payload"))
+        .toObject()).toJson(QJsonDocument::Compact);
+    const QString key = QStringLiteral("network.connect:") + operation(request)
+        + QLatin1Char(':') + QString::fromLatin1(
+            QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
     if (serveCachedReply(socket, request, key)
         || queueIfInFlight(key, socket, request))
         return;
@@ -2843,6 +2916,7 @@ void PlatformServer::startClipboardHistoryWatcher(QProcess *&watcher,
     const QStringList args = arguments.mid(1);
     process->setProgram(program);
     process->setArguments(args);
+    process->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     connect(process, &QProcess::errorOccurred, this,
             [program](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart)
@@ -3631,8 +3705,8 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                     QStringLiteral("无法创建目标目录"), true);
             return true;
         }
-        // QSaveFile truncates destination on open, so copying a file onto
-        // itself would erase the source before the first read. Canonical
+        // Reject copying onto the same file rather than replacing it with an
+        // unnecessary temporary copy. Canonical
         // paths resolve symlinks; when one side has no canonical form (the
         // destination usually does not exist yet) fall back to absolutes.
         const QFileInfo sourceInfo(source);
@@ -3788,19 +3862,34 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
                     QStringLiteral("目标文件夹无效"), false);
             return true;
         }
-        QStringList transferred;
-        for (const QString &source : paths) {
-            const QString target = uniquePath(destination, QFileInfo(source).fileName());
-            if (target.isEmpty() || target == source || !moveOrCopy(source, target, move)) {
-                respond(socket, request, false, {}, QStringLiteral("transfer-failed"),
-                        QStringLiteral("文件传输未完成"), true);
-                return true;
+        // Directory traversal and cross-filesystem moves can take as long as
+        // file.copy; keep both off the socket/event loop.
+        using TransferResult = QPair<bool, QStringList>;
+        auto *watcher = new QFutureWatcher<TransferResult>(this);
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        connect(watcher, &QFutureWatcherBase::finished, this,
+                [this, watcher, guardedSocket, request, mode] {
+            const auto result = watcher->result();
+            watcher->deleteLater();
+            if (!result.first) {
+                respond(guardedSocket.data(), request, false, {},
+                        QStringLiteral("transfer-failed"), QStringLiteral("文件传输未完成"), true);
+                return;
             }
-            transferred.append(target);
-        }
-        respond(socket, request, true,
-                QJsonObject{{QStringLiteral("paths"), jsonPaths(transferred)},
-                            {QStringLiteral("mode"), mode}});
+            respond(guardedSocket.data(), request, true,
+                    QJsonObject{{QStringLiteral("paths"), jsonPaths(result.second)},
+                                {QStringLiteral("mode"), mode}});
+        });
+        watcher->setFuture(QtConcurrent::run(&m_copyPool, [paths, destination, move] {
+            QStringList transferred;
+            for (const QString &source : paths) {
+                const QString target = uniquePath(destination, QFileInfo(source).fileName());
+                if (target.isEmpty() || target == source || !moveOrCopy(source, target, move))
+                    return TransferResult(false, transferred);
+                transferred.append(target);
+            }
+            return TransferResult(true, transferred);
+        }));
         return true;
     }
     if (op == QStringLiteral("file.open-with")) {

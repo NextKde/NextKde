@@ -416,6 +416,13 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _normalizeDockItems(rawItems) {
         const normalized = []
+        const seen = new Set()
+        function appendApp(appId) {
+            if (seen.has(appId))
+                return
+            seen.add(appId)
+            normalized.push({ type: "app", appId: appId })
+        }
         const items = Array.isArray(rawItems) ? rawItems : []
 
         for (let i = 0; i < items.length; i++) {
@@ -425,7 +432,7 @@ QtObject {
 
             if (item.type === "app" && typeof item.appId === "string"
                     && item.appId.length > 0) {
-                normalized.push({ type: "app", appId: item.appId })
+                appendApp(item.appId)
                 continue
             }
 
@@ -437,7 +444,7 @@ QtObject {
                     ? item.appIds.filter(appId => typeof appId === "string" && appId.length > 0)
                     : []
                 for (let j = 0; j < appIds.length; j++)
-                    normalized.push({ type: "app", appId: appIds[j] })
+                    appendApp(appIds[j])
             }
         }
         return normalized
@@ -575,12 +582,18 @@ QtObject {
     }
 
     function _apply(obj) {
+        if (!obj || typeof obj !== "object" || Array.isArray(obj))
+            throw new Error("Dock configuration must be an object")
         // Older configurations and malformed values retain the visible default.
         svc.showLauncher = obj.showLauncher !== false
         svc.showTrash = obj.showTrash !== false
         svc.showNotificationBadges = obj.showNotificationBadges !== false
         svc.showRevealIndicator = obj.showRevealIndicator !== false
-        if (obj.baseHeight   !== undefined) svc.baseHeight   = obj.baseHeight
+        if (obj.baseHeight !== undefined) {
+            const height = Number(obj.baseHeight)
+            if (Number.isFinite(height))
+                svc.baseHeight = Math.max(40, Math.min(100, height))
+        }
         if (obj.position !== undefined) {
             if (isValidPosition(obj.position)) {
                 svc.position = obj.position
@@ -655,7 +668,7 @@ QtObject {
                 AppearanceConfigService.updateThemeMode(obj.theme)
             } else {
                 // Do not let a malformed legacy value leak into the IPC
-                // contract. The next ordinary save rewrites it as "dark".
+                // contract. The next ordinary save retains the current valid mode.
                 console.warn("[DockConfig] invalid theme ignored")
                 scheduleSave()
             }
@@ -672,7 +685,7 @@ QtObject {
             // after a later shell restart.
             if (requiresFolderMigration)
                 scheduleSave()
-        } else if (obj.pinnedAppIds !== undefined) {
+        } else if (Array.isArray(obj.pinnedAppIds)) {
             // Version 1 migration: retain the order of the old flat list,
             // then write version 2 after loading. This migration is safe to
             // repeat because dockItems wins once it exists on disk.
@@ -695,7 +708,11 @@ QtObject {
                 scheduleSave()
             }
         }
-        if (obj.iconOpacity !== undefined) svc.iconOpacity = obj.iconOpacity
+        if (obj.iconOpacity !== undefined) {
+            const opacity = Number(obj.iconOpacity)
+            if (Number.isFinite(opacity))
+                svc.iconOpacity = Math.max(0, Math.min(1, opacity))
+        }
 
         const migratedTintColor = obj.iconTintColor ?? obj.iconDuotoneShadowColor
         if (migratedTintColor !== undefined && isValidRgbColor(migratedTintColor))

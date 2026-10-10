@@ -199,15 +199,16 @@ void drawTilePictogram(QPainter &painter, const QRectF &cell, TilePreset preset,
 }
 }
 
-ButtonRenderer::ButtonRenderer() = default;
-ButtonRenderer::~ButtonRenderer() = default;
+ButtonRenderer *ButtonRenderer::s_instance = nullptr;
+ButtonRenderer::ButtonRenderer() { s_instance = this; }
+ButtonRenderer::~ButtonRenderer() { if (s_instance == this) s_instance = nullptr; }
 
 void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
                             const KWin::RenderViewport &viewport,
                             KWin::EffectWindow *window,
                             const AppConfig &config,
                             const KWin::Region &deviceRegion,
-                            const PaintTransform &transform)
+                            const PaintTransform &transform, bool sourceCapture)
 {
     if (!window) {
         return;
@@ -219,6 +220,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // panel is entirely covered -- leaves it with none, and a panel that is not
     // on screen never takes the pointer.
     m_hits.remove(window);
+    if (sourceCapture) m_sourceHits.remove(window);
 
     // The same rule for the tiling menu, whose rectangle is what the input filter
     // hit-tests: cleared here and published again at the end of this function, so
@@ -230,7 +232,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         m_menu.rect = QRectF();
     }
 
-    if (!window->isVisible()) {
+    if (!sourceCapture && !window->isVisible()) {
         return;
     }
 
@@ -392,6 +394,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // the same layout buildPanel() draws, so the two cannot drift apart.
     const QPointF panelOrigin = windowTopLeft + local.topLeft();
     HitRects hit;
+    hit.windowOrigin = windowTopLeft;
     hit.panelRect = QRectF(panelOrigin, panelSize);
     // The margin is part of the panel as far as the pointer is concerned --
     // see AppConfig::interceptMargin -- but it is not allowed outside the
@@ -442,6 +445,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         }
     }
     m_hits[window] = hit;
+    if (sourceCapture) m_sourceHits[window] = hit;
 
     // What this frame has to draw: the panel, and then the menu under it if one
     // is open. `deviceRegion` is this frame's damage, not a statement about
@@ -704,8 +708,7 @@ void ButtonRenderer::requestSample(KWin::EffectWindow *window, const QRectF &pan
     // whole width. addRepaint takes global logical coordinates.
     const QRectF band(frame.x(), frame.y() + panel.y(), frame.width(),
                       panel.height());
-    KWin::effects->addRepaint(
-        KWin::RectF(band.x(), band.y(), band.width(), band.height()));
+    repaintRect(band);
 }
 
 void ButtonRenderer::repaintRect(const QRectF &globalRect)
@@ -713,6 +716,7 @@ void ButtonRenderer::repaintRect(const QRectF &globalRect)
     if (!KWin::effects || globalRect.isEmpty()) {
         return;
     }
+    if (s_instance) Q_EMIT s_instance->sourceRepaint(globalRect);
     KWin::effects->addRepaint(KWin::RectF(globalRect.x(), globalRect.y(),
                                           globalRect.width(),
                                           globalRect.height()));
@@ -1277,14 +1281,38 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
     return Action::None;
 }
 
-void ButtonRenderer::clearHits(KWin::EffectWindow *window)
+void ButtonRenderer::syncHits(KWin::EffectWindow *window)
+{
+    if (!m_hits.contains(window)) {
+        const auto source = m_sourceHits.constFind(window);
+        if (source == m_sourceHits.cend()) return;
+        m_hits.insert(window, source.value());
+    }
+    auto it = m_hits.find(window);
+    if (it == m_hits.end()) return;
+    const QPointF origin = window->frameGeometry().topLeft();
+    const QPointF delta = origin - it->windowOrigin;
+    it->windowOrigin = origin;
+    it->panelRect.translate(delta);
+    it->interceptRect.translate(delta);
+    for (auto &dot : it->dots) dot.translate(delta);
+    if (m_menu.window == window) {
+        m_menu.rect = tileMenuRect(it->panelRect, window->frameGeometry(),
+            it->dots[zoomDotIndex()].center()).value_or(QRectF());
+    }
+}
+
+void ButtonRenderer::clearHits(KWin::EffectWindow *window, bool clearSource)
 {
     m_hits.remove(window);
+    if (clearSource) m_sourceHits.remove(window);
+    if (m_menu.window == window) m_menu.rect = QRectF();
 }
 
 void ButtonRenderer::forget(KWin::EffectWindow *window)
 {
     m_hits.remove(window);
+    m_sourceHits.remove(window);
     m_cache.remove(window);
     // A draft and an adjust ring belong to a window that has gone away. The
     // session that was holding them is told separately by AdjustSession, which
@@ -1311,6 +1339,7 @@ void ButtonRenderer::invalidateAll()
 {
     m_cache.clear();
     m_hits.clear();
+    m_sourceHits.clear();
     m_hoverWindow = nullptr;
     m_hovered = Action::None;
     // m_pending and m_adjusting are deliberately kept: they belong to a session

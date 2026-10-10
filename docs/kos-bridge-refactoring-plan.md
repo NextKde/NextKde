@@ -1,5 +1,11 @@
 # KOS Bridge 重构方案
 
+> 历史提案，尚未执行合并。当前上下文菜单、Dock 动画、Stage 动画、Glass
+> 和窗口按钮仍由独立效果实现；窗口装饰也保持独立。下文目录、D-Bus
+> 接口和待办描述是提案，不是现行运行契约。当前实现见
+> [PlatformArchitecture.md](PlatformArchitecture.md) 和
+> [kwin/kos-bridge/README.md](../kwin/kos-bridge/README.md)。
+
 ## 目标
 
 将所有 KWin Effect 功能合并到一个统一的 `kos-bridge` 插件中，除了窗口装饰（`kos-decoration`，KDecoration3 插件）保持独立。

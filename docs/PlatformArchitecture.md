@@ -81,16 +81,23 @@ kos_surface_shape_manager_v1.get_shape(wl_surface) ──► kos_surface_shape_v
     set_enabled(enabled)
     set_role(role)                      v2 compatibility no-op
     set_scrim(enabled, tint, cap, decay) protocol v3; tint 0=black, 1=white
+    set_blur(enabled, level)             v4; final blur level 1...15
+    set_capture_geometry(x, y, w, h)     v5; fixed capture bounds
+    set_material_opacity(opacity)        v6; whole material opacity
+    set_reveal(enabled, opened, duration, serial) v7; compositor reveal
+    reveal_finished(opened, serial)      v7 event
 ```
 
-The manager and shape interfaces are version 3. `set_role` remains solely to
+The manager and shape interfaces are version 7; each shape uses the negotiated
+manager version. `set_role` remains solely to
 keep the opcode layout compatible with v2 clients; KOS does not publish roles.
 `set_scrim` is sent only when the bound compositor advertises v3, so clients
 remain safe with an older effect. `cap` is the maximum scrim opacity, clamped
-to `0...1`. `decay` is clamped to `0...3` and picks the mode: at or below `1` it
+to `0...1`. `decay` is clamped to `0...4` and picks the mode: at or below `1` it
 scales the backdrop-derived ramp; above `1` it selects fixed mode, where `cap`
 is the exact opacity and the backdrop luminance is never sampled; above `2` it
-selects the fixed neutral graphite material instead of the black/white tint.
+selects the fixed neutral graphite material instead of the black/white tint;
+above `3` selects the fixed warm pearl material.
 Each above-`1` encoding lets a compositor that predates that mode clamp the
 request back to the one below it instead of failing.
 
@@ -103,7 +110,7 @@ case open. Three pieces implement it and all three build from this repository:
 | Client | `shell/native/surface-shape/` | QML native module `Kos.SurfaceShape`. Its `SurfaceShape` type attaches to any `QQuickItem`, publishes the item's `mapRectToScene()` rectangle, and walks the ancestor chain so a parent move is not missed. |
 | Server | `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}` | Creates the global inside the glass effect and keeps per-surface state. |
 
-`LiquidGlassPanel` owns the only declaration today; one is created per panel, so
+`LiquidGlassPanel` owns a declaration per panel, so
 each popup's shape objects are independent. Where a surface declares shapes the
 effect drops the region-derived content geometry and draws one shape per card
 instead, re-uploading `box`, `cornerRadius` and `cornerExponent` between draws --
@@ -149,8 +156,9 @@ Three properties of this arrangement are load-bearing:
   system. The install target uses the latter, which is why the source-tree run
   needs `QML2_IMPORT_PATH` (set by `kosctl dev`) and the installed run does not.
 - **The global is owned by the effect, so its teardown is a contract.** Disabling
-  the glass effect destroys the manager, and `wl_global_destroy` blanks the
-  server-side implementation of every bound manager resource. Therefore the
+  the glass effect destroys the manager. `wl_global_destroy` removes the global
+  but leaves existing bound resources alive, so their user data must be cleared
+  explicitly before the manager is freed. The
   server must *detach* client-owned shape resources rather than destroy them:
   destroying one drops its id from the client's object map, and the `destroy`
   the client is about to send for the vanished global returns as
@@ -158,18 +166,16 @@ Three properties of this arrangement are load-bearing:
   with it. Detached resources no-op every request and are reclaimed by the
   client's own destroy. On the client side the mirror rule is that
   `global_remove` must release the proxies locally (`wl_proxy_destroy`) and must
-  not marshal, because the implementation it would reach is already gone. Every
+  not marshal requests against the removed global. Every
   `SurfaceShape` re-attaches off the next `global` event, so a toggle costs one
   round trip and no explicit re-registration.
 
-> **Packaging status.** The module is currently built and installed through
-> `KOS_BUILD_KWIN_PLUGINS` / the `kwin_plugins` install component, even though it
-> has no KWin dependency. Consequences today: `packaging/nix/package.nix` copies `shell/`
-> and `shared/` only, so the NixOS package ships no module at all and
-> `import Kos.SurfaceShape 1.0` fails there; and a user-only install
-> (`KOS_BUILD_KWIN_PLUGINS=OFF`) skips it as well. Both break the whole `common`
-> module, not just the panel. Resolving this means shipping the module with the
-> shell payload and putting its directory on `QML2_IMPORT_PATH`.
+> **Packaging status.** SurfaceShape is built when either the platform or KWin
+> plugins are enabled, independently of the effects themselves. Nix builds it
+> as `kos-surface-shape` and exposes it under the aggregate package’s
+> `qml/Kos/SurfaceShape`; launchers add that directory to the QML import path.
+> A build that disables both platform and KWin plugins must provide the module
+> separately before launching the shell.
 
 > **Applying a rebuilt effect.** KWin keeps the effect library mapped for as long
 > as the compositor lives. The `Effects` D-Bus `unloadEffect` / `loadEffect` pair
@@ -208,8 +214,8 @@ operation list and examples live in
 - Operations are explicit allow-listed names; clients cannot provide a shell
   command. Paths must be absolute, canonicalized (including existing symlinks),
   and validated against an existing parent directory before use.
-- Wi-Fi credentials are positional process arguments and are never logged or
-  persisted by the platform service.
+- Wi-Fi credentials are passed in typed NetworkManager D-Bus settings and are
+  not logged or persisted by QML; NetworkManager owns saved profile credentials.
 - Destructive session operations are explicit (`session.reboot`,
   `session.poweroff`, etc.) and are not run by automated tests.
 - QML clients keep one connection, queue writes while a service restarts, and

@@ -4,6 +4,7 @@ import Kos.Spatial3D 1.0
 
 Item {
     id: root
+    property bool foregroundOnly: false
     property url wallpaperPath
     property url depthPath
     property url backgroundPath
@@ -78,7 +79,7 @@ Item {
         }
 
         Model {
-            visible: root.backgroundPath.toString().length > 0
+            visible: !root.foregroundOnly && root.backgroundPath.toString().length > 0
             position: Qt.vector3d(0, 0, -depthGeometry.backgroundDistance)
             source: "#Rectangle"
             scale: Qt.vector3d(
@@ -86,20 +87,25 @@ Item {
                     * Math.tan(Math.PI * 42 / 360) * root.outputAspect / 100,
                 root.imageZoom * 2 * depthGeometry.backgroundDistance
                     * Math.tan(Math.PI * 42 / 360) / 100, 1)
-            materials: DefaultMaterial {
-                lighting: DefaultMaterial.NoLighting
+            materials: CustomMaterial {
+                shadingMode: CustomMaterial.Unshaded
                 cullMode: Material.NoCulling
-                diffuseMap: Texture {
-                    source: root.backgroundPath
-                    minFilter: Texture.Linear
-                    magFilter: Texture.Linear
-                    tilingModeHorizontal: Texture.ClampToEdge
-                    tilingModeVertical: Texture.ClampToEdge
+                vertexShader: Qt.resolvedUrl("shaders/spatial_background.vert")
+                fragmentShader: Qt.resolvedUrl("shaders/spatial_background.frag")
+                property TextureInput backgroundTexture: TextureInput {
+                    texture: Texture {
+                        source: root.backgroundPath
+                        minFilter: Texture.Linear
+                        magFilter: Texture.Linear
+                        tilingModeHorizontal: Texture.ClampToEdge
+                        tilingModeVertical: Texture.ClampToEdge
+                    }
                 }
             }
         }
 
         Model {
+            visible: !root.foregroundOnly
             geometry: DepthMeshGeometry {
                 id: depthGeometry
                 depthPath: root.depthPath
@@ -108,15 +114,19 @@ Item {
                 outputAspect: root.outputAspect
                 sourceAspect: root.sourceAspect
             }
-            materials: DefaultMaterial {
-                lighting: DefaultMaterial.NoLighting
+            materials: CustomMaterial {
+                shadingMode: CustomMaterial.Unshaded
                 cullMode: Material.NoCulling
-                diffuseMap: Texture {
-                    source: root.backgroundPath
-                    minFilter: Texture.Linear
-                    magFilter: Texture.Linear
-                    tilingModeHorizontal: Texture.ClampToEdge
-                    tilingModeVertical: Texture.ClampToEdge
+                vertexShader: Qt.resolvedUrl("shaders/spatial_background.vert")
+                fragmentShader: Qt.resolvedUrl("shaders/spatial_background.frag")
+                property TextureInput backgroundTexture: TextureInput {
+                    texture: Texture {
+                        source: root.backgroundPath
+                        minFilter: Texture.Linear
+                        magFilter: Texture.Linear
+                        tilingModeHorizontal: Texture.ClampToEdge
+                        tilingModeVertical: Texture.ClampToEdge
+                    }
                 }
             }
         }

@@ -6,10 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+find_package(KF6Config REQUIRED)
 
 qt_add_executable(kos-settings
     src/main.cpp
     src/CacheMaintenance.cpp
+    src/WindowSettings.cpp
 )
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
@@ -20,6 +22,7 @@ target_link_libraries(kos-settings PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    KF6::ConfigCore
 )
 
 # Development host: released packages will embed or install this QML tree.
@@ -35,13 +38,21 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
-install(FILES main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
+install(FILES main.qml WindowAnimationSettingsPage.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
     WallpaperGalleryTile.qml WallpaperValueMenu.qml WallpaperOptionsDialog.qml
     WallpaperTextButton.qml WallpaperThumbnail.qml WallpaperColorPicker.qml
     DESTINATION share/kos/settings)
 install(DIRECTORY icons DESTINATION share/kos/settings)
 
 if(BUILD_TESTING)
+    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
+    target_include_directories(kos-window-settings-test PRIVATE src)
+    target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
+    add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
+    set_tests_properties(kos-settings.window-page PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        LABELS ui TIMEOUT 15)
     # The settings window ships in the core configuration, so it is not built
     # through kos_add_application and its smoke test lives here. --smoke-test
     # loads main.qml offscreen -- a real load, for one event loop turn -- and

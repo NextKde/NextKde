@@ -1,5 +1,4 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -97,7 +96,6 @@ PanelWindow {
     readonly property var clipboardResults: {
         ClipboardService.revision;
         ClipboardService.pinnedRevision;
-        ClipboardService.thumbnailRevision;
         const needle = query.trim().toLowerCase();
         const matches = [];
 
@@ -142,10 +140,7 @@ PanelWindow {
                     selectionRecord: entry.record,
                     pinId: pinId,
                     pinned: pinId !== "",
-                    // Rendered on demand by the platform and cached there, so a
-                    // re-open costs nothing.
-                    thumbnailSource: entry.isImage
-                        ? ClipboardService.thumbnailSourceFor(entry) : ""
+                    thumbnailSource: ""
                 });
             }
         }
@@ -177,97 +172,6 @@ PanelWindow {
         left: true
         right: true
         bottom: true
-    }
-
-    // iOS App-Library style liquid header band, mirroring the launcher's
-    // LiquidSearchBar. The whole top strip is one continuous frosted lens over
-    // the result view: it captures the region directly beneath the band and
-    // blurs whatever entries scroll under it, so the entire top flows with
-    // content. The capture rect tracks the view's contentY so the lens always
-    // shows the live content below. The search field floats centered on this
-    // band as a liquid-glass capsule, so there is no seam between the field
-    // and its flanks.
-    component LiquidSearchBand: Item {
-        id: searchBand
-        // The result view (ListView or GridView) whose scrolling content this
-        // lens frosts over. Both are Flickables, so a Flickable reference
-        // exposes contentY and lets the band follow whichever viewMode is
-        // active.
-        required property Flickable sourceView
-        // The band spans the header's full width; only its height is fixed.
-        height: 49
-
-        // Region of the result view directly beneath this band, in the view's
-        // own (viewport) coordinates. A Flickable is captured as its rendered
-        // viewport - the visible window already reflects contentY - so the
-        // source rect must NOT add contentY again.
-        //
-        // The band floats above the view's top edge, so mapping it into the
-        // view gives a negative y: the band sits over the view's empty top
-        // margin. That is exactly what we want to frost. Before any scrolling
-        // the slice over the view is empty, so the band rests on clean glass;
-        // as entries scroll up they slide into the band's slice and become its
-        // flowing background. Pixels outside the view's bounds capture as
-        // transparent, which simply shows the dialog's blurred backdrop.
-        readonly property rect _lensRect: {
-            if (!sourceView)
-                return Qt.rect(0, 0, 0, 0)
-            const topLeft = searchBand.mapToItem(sourceView, 0, 0)
-            return Qt.rect(topLeft.x, topLeft.y,
-                searchBand.width, searchBand.height)
-        }
-
-        ShaderEffectSource {
-            id: lensSource
-            visible: false
-            sourceItem: searchBand.sourceView
-            sourceRect: searchBand._lensRect
-            live: true
-            hideSource: false
-            smooth: true
-        }
-        FastBlur {
-            id: lensBlur
-            anchors.fill: parent
-            source: lensSource
-            radius: 16
-            transparentBorder: true
-            cached: true
-        }
-        // Clip the blur to the card's own top corners and let the bottom fade
-        // out, so the band reads as the card's top edge itself rather than a
-        // separate rounded pill floating over it. The mask is a vertical
-        // gradient: fully opaque at the top, transparent at the bottom.
-        OpacityMask {
-            anchors.fill: parent
-            source: lensBlur
-            maskSource: lensFade
-        }
-        Item {
-            id: lensFade
-            anchors.fill: parent
-            visible: false
-            layer.enabled: true
-            // Rounded only at the top corners (matching the card radius) so
-            // the band's upper edge merges with the card outline.
-            Rectangle {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                }
-                height: parent.height
-                radius: 20
-                // Extend below the band so only the top corners stay rounded;
-                // the bottom edge is handled by the fade, not a hard corner.
-                gradient: Gradient {
-                    orientation: Gradient.Vertical
-                    GradientStop { position: 0.0; color: "white" }
-                    GradientStop { position: 0.55; color: "white" }
-                    GradientStop { position: 1.0; color: "transparent" }
-                }
-            }
-        }
     }
 
     // QuickSearch result icon with the same appearance settings as Dock.
@@ -343,12 +247,22 @@ PanelWindow {
             ClipboardService.deleteEntry(item.selectionRecord);
     }
 
+    function thumbnailForResult(item) {
+        ClipboardService.thumbnailRevision;
+        if (!item?.isImage)
+            return "";
+        if (item.pinId && !item.selectionRecord)
+            return item.thumbnailSource ?? "";
+        return ClipboardService.thumbnailSourceFor({
+            isImage: true, record: item.selectionRecord
+        });
+    }
+
     function reset() {
         query = "";
         clipboardSettingsOpen = false;
         clipboardPinnedOnly = false;
-        // Window mode opens with the most recently used window selected (the
-        // first MRU result); Alt+Tab proposes the previous window immediately.
+        // Start at the first result in the current mode and ordering.
         selectedIndex = 0;
         focusTimer.restart();
         if (mode === "clipboard") {
@@ -419,7 +333,7 @@ PanelWindow {
         id: focusTimer
         interval: 1
         repeat: false
-        onTriggered: searchInput.forceActiveFocus()
+        onTriggered: { if (root.open) searchInput.forceActiveFocus(); }
     }
 
     // A copy can arrive while the palette is already open. Refreshing the
@@ -1045,11 +959,15 @@ PanelWindow {
                 ? Math.min(root.visibleResultCount * 52, Math.max(0, root.placementBounds.height - 90))
                 : root.visibleResultCount * 52
             clip: true
-            model: root.results
+            model: root.visible && visible ? root.results : null
             currentIndex: root.selectedIndex
 
             delegate: Item {
                 id: resultItem
+                readonly property string thumbnailSource: root.open && resultView.visible
+                    && y + height > resultView.contentY
+                    && y < resultView.contentY + resultView.height
+                    ? root.thumbnailForResult(modelData) : ""
                 required property var modelData
                 required property int index
                 width: resultView.width
@@ -1099,8 +1017,8 @@ PanelWindow {
                         anchors.centerIn: parent
                         width: 26
                         height: 26
-                        visible: (resultItem.modelData.thumbnailSource ?? "") !== ""
-                        source: resultItem.modelData.thumbnailSource ?? ""
+                        visible: resultItem.thumbnailSource !== ""
+                        source: resultItem.thumbnailSource
                         sourceSize.width: 52
                         sourceSize.height: 52
                         fillMode: Image.PreserveAspectCrop
@@ -1111,7 +1029,7 @@ PanelWindow {
                 }
 
                 ResultIcon {
-                    visible: (resultItem.modelData.thumbnailSource ?? "") === ""
+                    visible: resultItem.thumbnailSource === ""
                     width: resultItem.modelData.isImage ? 20 : 30
                     height: width
                     anchors {
@@ -1302,9 +1220,7 @@ PanelWindow {
                 }
             }
 
-            // The wheel scrolls the result list smoothly instead of in one jump per
-            // notch; the band above captures the viewport, so the frosted slice keeps
-            // following the content either way.
+            // Smooth wheel scrolling keeps the selected result in context.
             KosKineticScroll { flickable: resultView }
         }
 
@@ -1325,11 +1241,15 @@ PanelWindow {
             cellWidth: width / root.gridColumnCount
             cellHeight: 94
             clip: true
-            model: root.results
+            model: root.visible && visible ? root.results : null
             currentIndex: root.selectedIndex
 
             delegate: Item {
                 id: gridResultItem
+                readonly property string thumbnailSource: root.open && gridView.visible
+                    && y + height > gridView.contentY
+                    && y < gridView.contentY + gridView.height
+                    ? root.thumbnailForResult(modelData) : ""
                 required property var modelData
                 required property int index
                 width: gridView.cellWidth
@@ -1449,8 +1369,8 @@ PanelWindow {
                         anchors.centerIn: parent
                         width: 42
                         height: 42
-                        visible: (gridResultItem.modelData.thumbnailSource ?? "") !== ""
-                        source: gridResultItem.modelData.thumbnailSource ?? ""
+                        visible: gridResultItem.thumbnailSource !== ""
+                        source: gridResultItem.thumbnailSource
                         sourceSize.width: 84
                         sourceSize.height: 84
                         fillMode: Image.PreserveAspectCrop
@@ -1461,7 +1381,7 @@ PanelWindow {
                 }
 
                 ResultIcon {
-                    visible: (gridResultItem.modelData.thumbnailSource ?? "") === ""
+                    visible: gridResultItem.thumbnailSource === ""
                     width: gridResultItem.modelData.isImage ? 34 : 42
                     height: width
                     anchors {

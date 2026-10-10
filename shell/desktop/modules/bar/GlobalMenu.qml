@@ -25,6 +25,8 @@ Item {
     readonly property var shownItems: items.slice(0, visibleCount)
     readonly property var overflowItems: items.slice(visibleCount)
     property int activeOpeningId: 0
+    property int _openingSerial: 0
+    property bool _changingAnchor: false
     implicitHeight: 28
     implicitWidth: available && items.length > 0
         ? Math.min(maximumWidth, menuRow.implicitWidth + (overflowItems.length > 0 ? 34 : 0)) : 0
@@ -62,15 +64,25 @@ Item {
 
     // ContextMenu has a synchronous page stack. Hydrate children before it is
     // shown, with a small depth limit to keep malformed menus bounded.
-    function hydrate(itemsToHydrate, depth, done) {
+    function hydrate(itemsToHydrate, depth, done, serial) {
+        if (serial !== _openingSerial)
+            return
         if (depth >= 4 || !itemsToHydrate || itemsToHydrate.length === 0) {
             done(itemsToHydrate || [])
             return
         }
-        let pending = 0
+        // Count before dispatch: disconnected requests and populated children
+        // can complete synchronously, including from inside this loop.
+        let pending = itemsToHydrate.filter(item => item?.hasChildren).length
+        if (pending === 0) {
+            for (const item of itemsToHydrate)
+                item.children = []
+            done(itemsToHydrate)
+            return
+        }
         const finish = function() {
             pending--
-            if (pending === 0)
+            if (pending === 0 && serial === root._openingSerial)
                 done(itemsToHydrate)
         }
         for (let i = 0; i < itemsToHydrate.length; ++i) {
@@ -80,28 +92,26 @@ Item {
                 continue
             }
             if (item.children && item.children.length > 0) {
-                pending++
                 hydrate(item.children, depth + 1, function(result) {
                     item.children = result
                     finish()
-                })
+                }, serial)
                 continue
             }
-            pending++
             AppMenuService.requestLayout(item.id, function(children) {
                 hydrate(children, depth + 1, function(result) {
                     item.children = result
                     finish()
-                })
+                }, serial)
             }, 2)
         }
-        if (pending === 0)
-            done(itemsToHydrate)
     }
 
-    function presentMenu(rootId, anchorItem, result) {
+    function presentMenu(rootId, anchorItem, result, serial) {
         const anchorChanging = menuPopup.visible && root.popupAnchorItem !== anchorItem
         const openNew = function() {
+            if (serial !== root._openingSerial)
+                return
             popupRootId = rootId
             popupAnchorItem = anchorItem
             menuPopup.anchorItem = anchorItem
@@ -111,7 +121,9 @@ Item {
             Qt.callLater(function() { menuPopup.anchor.updateAnchor() })
         }
         if (anchorChanging) {
+            root._changingAnchor = true
             menuPopup.visible = false
+            root._changingAnchor = false
             Qt.callLater(openNew)
         } else {
             openNew()
@@ -121,6 +133,7 @@ Item {
     function openItem(item, clickedItem) {
         if (!item || !item.enabled)
             return
+        const serial = ++_openingSerial
         console.info("[GlobalMenu] click id=" + item.id + " children=" + item.hasChildren)
         if (!item.hasChildren) {
             PlatformClient.request("appmenu.trigger", { service, path, id: item.id })
@@ -130,30 +143,33 @@ Item {
         activeOpeningId = item.id
         PlatformClient.request("appmenu.open", { service, path, id: item.id })
         AppMenuService.requestLayout(item.id, function(children) {
-            if (activeOpeningId !== item.id)
+            if (serial !== root._openingSerial)
                 return
             hydrate(children, 0, function(result) {
-                if (activeOpeningId !== item.id)
+                if (serial !== root._openingSerial)
                     return
-                root.presentMenu(item.id, clickedItem, result)
-            })
+                root.presentMenu(item.id, clickedItem, result, serial)
+            }, serial)
         }, 2)
     }
 
     function openOverflow(anchor) {
+        const serial = ++_openingSerial
         popupRootId = 0
         activeOpeningId = 0
         hydrate(overflowItems, 0, function(result) {
-            root.presentMenu(0, anchor, result)
-        })
+            root.presentMenu(0, anchor, result, serial)
+        }, serial)
     }
 
     onMaximumWidthChanged: updateVisibleCount()
     onServiceChanged: {
+        _openingSerial++
         if (menuPopup.visible)
             menuPopup.hide()
     }
     onPathChanged: {
+        _openingSerial++
         if (menuPopup.visible)
             menuPopup.hide()
     }
@@ -300,6 +316,8 @@ Item {
             })
         }
         onAboutToHide: {
+            if (!root._changingAnchor)
+                root._openingSerial++
             PlatformClient.request("appmenu.close", {
                 service: root.service, path: root.path, id: root.popupRootId
             })

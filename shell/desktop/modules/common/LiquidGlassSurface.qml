@@ -136,7 +136,10 @@ Rectangle {
     }
 
     function _beginAmbientTransition() {
-        if (!_ambientInitialized) {
+        if (!_ambientInitialized || !visible || usesMaterialSurface) {
+            if (_ambientInitialized)
+                ambientColourFlow.stop()
+            _ambientProgress = 1.0
             _displayAmbientPrimary = ambientPrimary
             _displayAmbientSecondary = ambientSecondary
             return
@@ -149,6 +152,11 @@ Rectangle {
 
     onAmbientPrimaryChanged: _beginAmbientTransition()
     onAmbientSecondaryChanged: _beginAmbientTransition()
+    onVisibleChanged: {
+        if (!visible)
+            _beginAmbientTransition()
+    }
+    onUsesMaterialSurfaceChanged: _beginAmbientTransition()
     on_AmbientProgressChanged: {
         _displayAmbientPrimary = _mixColor(_ambientFromPrimary, ambientPrimary, _ambientProgress)
         _displayAmbientSecondary = _mixColor(_ambientFromSecondary, ambientSecondary, _ambientProgress)
@@ -188,15 +196,6 @@ Rectangle {
                 * surfaceOpacity * root.normalizedBlurStrength
         )
 
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        visible: false
-        color: "transparent"
-        border.width: 1
-        border.color: AppearanceTokens.colors.outline
-    }
-
     // Reinforce the side of the material opposite its foreground ink. A light
     // lift supports dark labels; a dark scrim supports white labels. This is
     // the static QML counterpart of Liquid Glass's dynamic-range adaptation.
@@ -207,9 +206,6 @@ Rectangle {
         color: root.estimatedMaterialLuminance >= 0.58
             ? Qt.rgba(1, 1, 1, root.adaptiveScrimOpacity * 0.72)
             : Qt.rgba(0.018, 0.028, 0.052, root.adaptiveScrimOpacity)
-        Behavior on color {
-            ColorAnimation { duration: root.ambientTransitionDuration; easing.type: Easing.InOutSine }
-        }
     }
 
     // A soft top reflection gives the surface depth without a hard border.

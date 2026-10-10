@@ -581,10 +581,10 @@ QtObject {
     }
 
     // The compositor plugin owns the real backdrop blur/refraction for Dock
-    // and other BackgroundEffect regions. Quickshell can publish the region,
-    // but Wayland exposes no per-surface strength field, so synchronize the
-    // two user-facing values with the custom Glass effect's own settings.
-    // This deliberately does not touch KDE's stock [Effect-blur] group.
+    // and other BackgroundEffect regions. Synchronize the global defaults
+    // with the custom Glass effect; Kos.SurfaceShape can additionally publish
+    // per-shape blur overrides without changing these defaults.
+    // The platform also mirrors blur strength to KDE's stock [Effect-blur].
     property Timer effectSyncTimer: Timer {
         interval: 80
         repeat: false

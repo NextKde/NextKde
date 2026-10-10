@@ -71,13 +71,15 @@ Item {
     }
 
     function cardVisible(candidate) {
+        if (pageOrder.indexOf(candidate) < 0)
+            return false
         if (candidate === musicPage)
             return hasMusic
         if (candidate === weatherPage)
             return hasWeather
         if (candidate === clockPage)
             return showClock
-        return showTemperature
+        return candidate === temperaturePage && showTemperature
     }
 
     function unitsFor(candidate) {
@@ -206,7 +208,7 @@ Item {
         id: carouselTimer
         interval: 30000
         // Nothing rotates once every card has its own place.
-        running: carousel.autoRotate && !carousel.expanded
+        running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
         onTriggered: carousel.switchPage(false, 1)
@@ -326,7 +328,7 @@ Item {
             ? carousel.unitsFor(carousel.musicPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.musicPage)
         enabled: carousel.isShown(carousel.musicPage)
-        pageActive: carousel.isShown(carousel.musicPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.musicPage)
         x: carousel.layoutX(carousel.musicPage)
         opacity: carousel.isShown(carousel.musicPage) ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -341,7 +343,7 @@ Item {
             ? carousel.unitsFor(carousel.weatherPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.weatherPage)
         enabled: carousel.isShown(carousel.weatherPage)
-        pageActive: carousel.isShown(carousel.weatherPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.weatherPage)
         x: carousel.layoutX(carousel.weatherPage)
         opacity: carousel.isShown(carousel.weatherPage) ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -356,7 +358,7 @@ Item {
             ? carousel.unitsFor(carousel.clockPage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.clockPage)
         enabled: carousel.isShown(carousel.clockPage)
-        pageActive: carousel.isShown(carousel.clockPage)
+        pageActive: carousel.visible && carousel.isShown(carousel.clockPage)
         x: carousel.layoutX(carousel.clockPage)
         opacity: carousel.isShown(carousel.clockPage) ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
@@ -371,7 +373,7 @@ Item {
             ? carousel.unitsFor(carousel.temperaturePage) : carousel.widthUnits
         visible: carousel.cardVisible(carousel.temperaturePage)
         enabled: carousel.isShown(carousel.temperaturePage)
-        pageActive: carousel.isShown(carousel.temperaturePage)
+        pageActive: carousel.visible && carousel.isShown(carousel.temperaturePage)
         x: carousel.layoutX(carousel.temperaturePage)
         opacity: carousel.isShown(carousel.temperaturePage) ? 1 : 0
         Behavior on x { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }

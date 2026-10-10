@@ -15,10 +15,13 @@ This repository is a KDE Plasma 6 Wayland desktop shell built with Quickshell
   `$XDG_RUNTIME_DIR/kos-data.sock`.
 - `kos-settings` (`apps/settings/`): independent Qt Quick settings process;
   it talks to Shell `IpcHandler` endpoints and never imports Shell modules.
-- `kos-calendar`, `kos-todo`, `kos-weather`, and `kos-music`: optional,
+- `kos-calendar`, `kos-todo`, `kos-weather`, and `listenfree`: optional,
   independently built Qt Quick applications. Calendar/Todo share the
-  D-Bus-activated PIM service; Weather uses `kos-data-service`.
-- `kwin/`: the two project-owned KWin plugin libraries.
+  D-Bus-activated PIM service; Weather uses `kos-data-service`. `listenfree`
+  is the default music application; `apps/music/` retains the optional legacy
+  `kos-music` target.
+- `kwin/`: project-owned Dock, context-menu and Stage effects, the KOS bridge,
+  and the window decoration.
 - `kwin/glass-effect/`: third-party glass effect source with its own
   license.
 

@@ -62,12 +62,14 @@ PanelWindow {
             point.position.x, point.position.y)
     }
 
+    property var spatialWidgetRects: []
+
     // Publish current visual positions, including drag transforms. Both
     // wallpaper surfaces use these coordinates for a visible crossing orbit.
     Timer {
         interval: 250
         repeat: true
-        running: ThemeWallpaperService.active && root.visible
+        running: (ThemeWallpaperService.active || SpatialWallpaperService.layeredReady) && root.visible
         triggeredOnStart: true
         onTriggered: {
             const rectangles = []
@@ -78,8 +80,21 @@ PanelWindow {
                 rectangles.push({x: Math.round(point.x), y: Math.round(point.y),
                     width: Math.round(card.width * card.scale), height: Math.round(card.height * card.scale)})
             }
+            if (JSON.stringify(root.spatialWidgetRects) !== JSON.stringify(rectangles))
+                root.spatialWidgetRects = rectangles
             ThemeWallpaperService.setWidgetRects(root.screen?.name, rectangles)
         }
+    }
+
+    SpatialWidgetForeground {
+        objectName: "spatial-widget-foreground"
+        anchors.fill: parent
+        z: 2
+        targetScreen: root.screen
+        pointerX: root.depthPointerX
+        pointerY: root.depthPointerY
+        widgetRects: root.spatialWidgetRects
+        suspended: root.editMode || WallpaperPreviewService.active
     }
 
     // Ten square units are derived exclusively from screen width. Every
@@ -2455,6 +2470,9 @@ PanelWindow {
     Item {
         id: desktopFileGrid
         objectName: "desktop-file-grid"
+        // Files and their labels always stay above wallpaper subjects, even
+        // while a widget or file is being rearranged near the shared boundary.
+        z: 3
         x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
         y: root.topInset
         width: root.width - x - root.rightInset

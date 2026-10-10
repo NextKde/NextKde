@@ -57,7 +57,7 @@ export function selectScreen(screens, outputs, currentScreen) {
         return null;
     }
 
-    // 1. 优先采用系统显式指定的主屏幕（KDE KScreen priority == 1 或 isPrimary 标志）
+    // 1. 按 KDE KScreen 的正 priority 升序选择当前可用输出（通常主屏为 1）
     const ranked = (outputs || []).filter(output => output && output.connected && output.enabled
         && Number(output.priority) > 0)
         .slice().sort((a, b) => Number(a.priority) - Number(b.priority));

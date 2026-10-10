@@ -232,7 +232,7 @@ void ContextMenuInputEffect::publish(const QJsonObject &eventData)
     const QString payload = QString::fromUtf8(QJsonDocument(eventData).toJson(
         QJsonDocument::Compact));
 
-    // WindowService already owns this local session-bus endpoint. send() is a
+    // The platform daemon owns this local session-bus endpoint. send() is a
     // no-reply, non-blocking D-Bus delivery and therefore cannot stall KWin's
     // input thread when Quickshell is restarting.
     QDBusMessage message = QDBusMessage::createMethodCall(

@@ -6,12 +6,12 @@ import Quickshell
 // 系统图标主题解析通道 —— **仅供明确要求跟随系统主题的图标使用**。
 //
 // 默认路径是 BundledIcons（shell 自带一套图案，任何机器上一致）。只有少数
-// 刻意要求"跟随用户图标主题"的地方才调本文件，当前调用点是 Dock 的回收站。
+// 刻意要求"跟随用户图标主题"的地方才调本文件，例如 Dock 回收站和通用操作图标。
 //
 // Consumers ask for a role instead of embedding a Font Awesome glyph, an SVG
 // path, or a theme-specific filename. Candidate names follow the freedesktop /
 // KDE naming conventions and are resolved by the active system icon theme.
-// IconThemeReloadService reloads the shell when that theme changes, so no
+// IconThemeReloadService publishes a revision when that theme changes, so no
 // component needs to watch kdeglobals independently.
 QtObject {
     id: resolver

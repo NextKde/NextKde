@@ -12,7 +12,8 @@ Packaging contains files that are copied or rendered by `tools/kosctl`:
   restricted ScreenShot2 interface so Dock window thumbnails are authorized.
 
 User services and shell files remain user-owned. The default installer stages
-the two KOS KWin effects and vendored Glass effect, then uses `sudo` to copy
+the KOS Bridge, Dock, Stage and Context Menu KWin effects, the KOS decoration,
+and the vendored Glass effect, then uses `sudo` to copy
 only the staged manifest into KWin's system plugin paths. The same manifest is
 used for exact removal by `kosctl uninstall`.
 

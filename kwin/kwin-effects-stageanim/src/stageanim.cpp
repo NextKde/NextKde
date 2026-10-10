@@ -192,6 +192,9 @@ StageAnimEffect::StageAnimEffect()
     // 有但窗口还没出现的 pending 重试（windowAdded 也触发）。
     m_livePath = stageLivePath();
     m_liveStatusPath = stageLiveStatusPath();
+    m_liveReloadTimer.setSingleShot(true);
+    m_liveReloadTimer.setInterval(4);
+    connect(&m_liveReloadTimer, &QTimer::timeout, this, &StageAnimEffect::reloadLiveCards);
     m_liveWatcher = new QFileSystemWatcher(this);
     const QString liveDir = QFileInfo(m_livePath).absolutePath();
     m_liveWatcher->addPath(liveDir);
@@ -199,7 +202,7 @@ StageAnimEffect::StageAnimEffect()
     connect(m_liveWatcher, &QFileSystemWatcher::fileChanged, this, [this]() {
         if (!m_liveWatcher->files().contains(m_livePath))
             m_liveWatcher->addPath(m_livePath);
-        QTimer::singleShot(4, this, &StageAnimEffect::reloadLiveCards);
+        m_liveReloadTimer.start();
     });
     connect(m_liveWatcher, &QFileSystemWatcher::directoryChanged, this, [this]() {
         if (!m_liveWatcher->files().contains(m_livePath))
@@ -209,7 +212,7 @@ StageAnimEffect::StageAnimEffect()
         // 全文件读+解析+缺席评估是纯浪费，v87 审查）
         if (QFileInfo(m_livePath).lastModified() == m_lastLiveReadMtime)
             return;
-        QTimer::singleShot(4, this, &StageAnimEffect::reloadLiveCards);
+        m_liveReloadTimer.start();
     });
     m_liveStaleTimer.setInterval(10000);
     connect(&m_liveStaleTimer, &QTimer::timeout, this, &StageAnimEffect::reloadLiveCards);
@@ -279,6 +282,7 @@ StageAnimEffect::StageAnimEffect()
 StageAnimEffect::~StageAnimEffect()
 {
     m_liveFrameTimer.stop();
+    m_liveReloadTimer.stop();
     m_liveStatusTimer.stop();
     m_liveStaleTimer.stop();
     effects->makeOpenGLContextCurrent();
@@ -1289,8 +1293,14 @@ void StageAnimEffect::reloadLiveCards()
     QSet<QString> wanted;
     QVector<std::tuple<QString, LiveCardPose, CardMeta>> entries;
     QFile f(m_livePath);
-    const bool fileMissing = !QFileInfo::exists(m_livePath);
-    if (f.open(QIODevice::ReadOnly)) {
+    const QFileInfo publisherInfo(m_livePath);
+    const bool fileMissing = !publisherInfo.exists();
+    const bool publisherStale = fileMissing
+        || QDateTime::currentMSecsSinceEpoch()
+            - publisherInfo.lastModified().toMSecsSinceEpoch() > 25000;
+    // A malformed/unreadable file only preserves cards while the publisher is
+    // fresh. Check the lease before parse failures can return and pin sources.
+    if (!publisherStale && f.open(QIODevice::ReadOnly)) {
         const auto doc = QJsonDocument::fromJson(f.readAll());
         // 撕裂/半写 → 保持现状直接返回（裸写无原子保证；掉卡只走空表/
         // mtime 陈旧/迟滞路径，绝不因 parse 失败而掉）——旧实现只是跳过
@@ -1318,11 +1328,15 @@ void StageAnimEffect::reloadLiveCards()
                 // 条目；<2px 的退化矩形也弃（isValid 只查 w,h>0，1.0×1.5
                 // 能过闸＝注册后 renderLiveTexture 永远走 tiny-content 早退，
                 // v87 审查）
-                static const qreal kMaxDim = 32768.0;
+                // Chrome uses two 2x RGBA images, in addition to the live FBO.
+                // Bound area as well as each dimension before any allocation.
+                static const qreal kMaxDim = 8192.0;
+                static const qreal kMaxArea = 4.0 * 1024.0 * 1024.0;
                 if (id.isEmpty() || !pose.rect.isValid()
                         || pose.rect.width() < 2 || pose.rect.height() < 2
                         || pose.rect.width() > kMaxDim
-                        || pose.rect.height() > kMaxDim)
+                        || pose.rect.height() > kMaxDim
+                        || pose.rect.width() * pose.rect.height() > kMaxArea)
                     continue;
                 if (pose.focal < 100.0)
                     pose.focal = 2200.0;
@@ -1394,7 +1408,7 @@ void StageAnimEffect::reloadLiveCards()
     // 文件在但 open 失败（权限抖动/EMFILE 等瞬时不可读）＝传输层毛病而
     // 非发布方意图，保持现状早退——落入空 wanted 会 600ms 后全体掉卡
     // 闪退一次（"绝不因读失败掉卡"契约，与 parse 失败同款语义）
-    if (!fileMissing && !f.isOpen()) {
+    if (!publisherStale && !f.isOpen()) {
         qCWarning(STAGEANIM_LOG) << "live reload: open failed, keep state"
                                  << m_livePath;
         return;
@@ -1564,10 +1578,8 @@ void StageAnimEffect::reloadLiveCards()
                 card.dirty = true;
             }
             if (card.engaging && !wasEngaging) {
-                // 展开交棒：卡面**不独立淡出**——alpha 由窗口飞行进度驱动
-                //（窗口长到哪卡隐到哪，同一条时间线＝"从卡里长出来"的整体
-                // 感；独立 180ms 淡出会在 420ms 飞行中段留空＝割裂）。
-                // 收缩对齐保留：缩回静止尺寸/倾角与飞行起点矩形对齐。
+                // 展开交棒：透明度由 prePaintScreen 的统一状态机按 animMs
+                // 淡出；这里仅将尺寸和倾角对齐到窗口飞行的起点。
                 card.scaleFrom = card.curScale;
                 card.scaleTo = 1.0;
                 card.tiltFrom = card.curTiltDeg;
@@ -1882,7 +1894,7 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
     card.dirty = false;
     return;
 #endif
-    if (card.renderCount % 2000 == 1) {
+    if (m_trace && card.renderCount % 2000 == 1) {
         GLubyte px[4] = {0, 0, 0, 0};
         GLubyte tl[4] = {0, 0, 0, 0};
         // 探针必须仍在 push 窗口内（pop 后读外层绑定 = incomplete
@@ -2253,7 +2265,7 @@ void StageAnimEffect::drawLiveCardBody(const RenderViewport &viewport,
     }
 
     // 落屏探针（节流）
-    if (card.paintCount % 300 == 1) {
+    if (m_trace && card.paintCount % 300 == 1) {
         GLubyte sp[4] = {255, 0, 255, 255};
         const qreal devH = viewport.renderRect().height(); // renderRect 已是设备像素，勿再乘 dpr（v82）
         glReadPixels(int(pose.rect.center().x() * dpr),

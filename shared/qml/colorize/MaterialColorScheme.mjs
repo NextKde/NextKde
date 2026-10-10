@@ -1,33 +1,10 @@
 // Material 3 colour scheme generation, pure JavaScript, no external process.
 //
-// This replaces the previous CIE-Lab approximation with a real CAM16/HCT
-// pipeline. Everything numeric that used to be a fitted table is now derived
-// from Material's published algorithm:
-//
-//   seed hex -> HCT -> {primary, secondary, tertiary, neutral, neutral_variant,
-//                       error} tonal palettes -> role colours by tone.
-//
-// ---------------------------------------------------------------------------
-// Why the old Lab version could not be patched
-// ---------------------------------------------------------------------------
-// It modelled each family as "one hue plus a (tone -> chroma) table" calibrated
-// against a single seed. Three properties of the real algorithm break that:
-//
-//   1. HCT hue is CAM16 hue, not Lab hue. Within one family the Lab hue drifts
-//      6-17 degrees across the tone range, so one hue cannot represent it.
-//   2. The chroma a family can reach is bounded by the sRGB gamut, and where
-//      that boundary sits depends on the hue. At tone 40 the primary family
-//      spans roughly 26 (cyan) to 123 (blue-violet) in Lab terms. A constant
-//      table encodes whichever hue it was calibrated at.
-//   3. Lab chroma and CAM16 chroma are different quantities; the same colour
-//      reads about 1.6x higher in Lab, so Material's published constants
-//      (primary 200, secondary 24, tertiary 32) are meaningless as Lab numbers.
-//
-// Working in HCT fixes all three at once, at the cost of one 3x3 matrix chain,
-// a few transfer functions and a bisection per out-of-gamut colour. Wallpaper
-// recolouring is a low-frequency event, so that is a fine trade.
-//
-// The CAM16/HCT primitives live in Cam16Hct.mjs.
+// CAM16/HCT primitives convert the seed and solve colours inside the sRGB
+// gamut. Calibrated chroma anchors and role-tone tables select each palette.
+// The inverse solver performs nested probes; full palette generation is
+// synchronous and its cost exceeds a single colour-space conversion.
+// The primitives live in Cam16Hct.mjs.
 
 import { hexToHct, hctToHex, hexToArgb, argbToHex } from "./Cam16Hct.mjs";
 
@@ -52,11 +29,11 @@ const VARIANTS = {
     // it can get at tone 40 — so these are recorded as the request, and the
     // chroma curve below supplies the tone-dependent correction.
     "tonal-spot": {
-        primary: { hueOffset: 0, chroma: 48, specChroma: 48 },
-        secondary: { hueOffset: 0, chroma: 4.05, specChroma: 16 },
-        tertiary: { hueOffset: 60, chroma: 6.12, specChroma: 24 },
-        neutral: { hueOffset: 0, chroma: 2.2, specChroma: 6 },
-        neutralVariant: { hueOffset: 0, chroma: 2.7, specChroma: 8 },
+        primary: { hueOffset: 0, chroma: 48 },
+        secondary: { hueOffset: 0, chroma: 4.05 },
+        tertiary: { hueOffset: 60, chroma: 6.12 },
+        neutral: { hueOffset: 0, chroma: 2.2 },
+        neutralVariant: { hueOffset: 0, chroma: 2.7 },
     },
     // Vibrant, as measured off matugen 4.2.0.
     //
@@ -68,19 +45,19 @@ const VARIANTS = {
     // an artefact of one hue. Matugen evidently clamps these families well
     // below what the gamut would allow.
     vibrant: {
-        primary: { hueOffset: 0, chroma: 200, specChroma: 200 },
+        primary: { hueOffset: 0, chroma: 200 },
         secondary: {
-            hueOffset: 0, chroma: 6.05, specChroma: 24,
+            hueOffset: 0, chroma: 6.05,
             hueBreakpoints: [0, 41, 61, 101, 131, 181, 251, 301, 360],
             hueRotations: [18, 15, 10, 12, 15, 18, 15, 12, 12],
         },
         tertiary: {
-            hueOffset: 60, chroma: 8.0, specChroma: 32,
+            hueOffset: 60, chroma: 8.0,
             hueBreakpoints: [0, 41, 61, 101, 131, 181, 251, 301, 360],
             hueRotations: [35, 30, 20, 25, 30, 35, 30, 25, 25],
         },
-        neutral: { hueOffset: 0, chroma: 2.2, specChroma: 10 },
-        neutralVariant: { hueOffset: 0, chroma: 2.7, specChroma: 8 },
+        neutral: { hueOffset: 0, chroma: 2.2 },
+        neutralVariant: { hueOffset: 0, chroma: 2.7 },
     },
 };
 
@@ -338,60 +315,8 @@ function rotatedHue(hue, family) {
     return ((hue + (family.hueOffset ?? 0)) % 360 + 360) % 360;
 }
 
-function familyChroma(family, dark, key) {
-    // Some variants vary chroma by mode; most do not.
-    if (family.chromaLight !== undefined && family.chromaDark !== undefined) {
-        return dark ? family.chromaDark : family.chromaLight;
-    }
-    return family.chroma ?? family.chromaLight ?? 0;
-}
-
-// MCU's spec getHct() is, verbatim:
-//
-//     const tone       = color.getTone(scheme);
-//     const chroma     = palette.chroma * multiplier;
-//     return Hct.from(palette.hue, chroma, tone);
-//
-// The chroma on the right is the PALETTE's nominal chroma, not a per-tone
-// value. That distinction is invisible for most roles because the family's
-// nominal chroma (24 for secondary, 32 for tertiary, 48 for primary under
-// vibrant) is far above what any tone can hold, so `Hct.from` gamut-clips to
-// the same numbers a tone table would give.
-//
-// It is NOT invisible for the on-container roles. There the tone is 10/90, and
-// the palette's nominal chroma is large enough that the solver lands on a
-// genuinely different representative than the tone table does. Concretely, for
-// secondary at hue 4: the tone table gives c=4.05 at tone 10 (a flat family
-// value), while Hct.from(hue, 24, 10) gives c=5.04 -- and 5.04 is what matugen
-// emits. The published face value of a container role is the palette chroma,
-// so that is what these roles must ask for.
-//
-// The roles below therefore read the nominal palette chroma.
-//
-// THIS IS DISABLED, AND THE REASON IS WORTH KEEPING.
-//
-// The reasoning above is sound as a description of MCU's spec, and it does
-// reproduce matugen's bytes for some roles. But it was measured and it is NOT
-// a net win: run over 18 cached seeds with a plain sRGB byte-step metric it
-// produces catastrophic misses (secondary_container/light came out #00fde7
-// where matugen says #bcece3 -- a 188-step error) that the HCT distance metric
-// had been hiding, because at pale container tones the hue coordinate is
-// numerically unstable and scores a wild byte difference as a small distance.
-//
-// The deeper finding from that experiment is that at the container tones the
-// requested chroma mostly does not matter at all: scoring spec(24) against
-// flat(6.05) gave identical hit counts in every single (role, mode) bucket,
-// because the gamut clips both to the same representative. What remains is
-// byte quantisation on a pale, near-neutral colour, which no chroma choice
-// fixes.
-//
-// So the tone-table model stays, and this set exists only to record what was
-// tried. Re-enabling it requires re-measuring with the byte-step metric, not
-// HCT distance.
-const NOMINAL_CHROMA_ROLES = new Set([]);
-
 // Build the six tonal palettes for a seed.
-function buildPalettes(seedHex, variant, dark) {
+function buildPalettes(seedHex, variant) {
     const [hue] = hexToHct(seedHex);
     const v = VARIANTS[variant] ?? VARIANTS[DEFAULT_VARIANT];
     const palettes = {};
@@ -400,47 +325,22 @@ function buildPalettes(seedHex, variant, dark) {
         const fam = v[key];
         palettes[key] = {
             hue: rotatedHue(hue, fam),
-            chroma: familyChroma(fam, dark, key),
+            chroma: fam.chroma,
         };
     }
-    // The neutral and neutralVariant families resolve chroma per tone, so they
-    // carry a function rather than a constant. The saturated families do too,
-    // but only in the variant whose curves were measured — tonal-spot is a
-    // spec transcription and keeps its flat values. The constant is kept
-    // filled in for any consumer that only reads `.chroma`.
-    //
-    // `nominal` records the chroma MCU's spec passes to Hct.from: the variant's
-    // `specChroma`, or the fitted value for families that have none. It is NOT
-    // consulted by paletteColor -- see NOMINAL_CHROMA_ROLES above for the
-    // measured reason. It is retained because it is the value a faithful port
-    // of the spec would use, and any future attempt to model the container
-    // tones needs it to hand.
-    for (const key of Object.keys(palettes)) {
-        const fam = v[key];
-        palettes[key].nominal = fam?.specChroma ?? palettes[key].chroma;
-        if (palettes[key].nominal === undefined) {
-            throw new Error(`palette ${key}: no chroma available for nominal`);
-        }
-    }
+    // Measured tone-dependent curves override the family constants.
     const toneTables = paletteChromaTables(variant);
     for (const key of Object.keys(toneTables)) {
         palettes[key].chromaAt = toneTables[key];
         palettes[key].chroma = toneTables[key](98);
     }
-    palettes.error = { hue: ERROR_HUE, chroma: ERROR_CHROMA, nominal: ERROR_CHROMA };
+    palettes.error = { hue: ERROR_HUE, chroma: ERROR_CHROMA };
     return palettes;
 }
 
-// Resolve the (hue, chroma) actually used for a role's tone.
-//
-// `role` selects between the two chroma sources described at
-// NOMINAL_CHROMA_ROLES: container-family roles take the palette's nominal
-// chroma, everything else takes the tone-table value.
-function paletteColor(palette, tone, role) {
-    const useNominal = role !== undefined && NOMINAL_CHROMA_ROLES.has(role);
-    const chroma = useNominal ? palette.nominal
-        : palette.chromaAt ? palette.chromaAt(tone)
-            : palette.chroma;
+// Resolve the family's measured chroma at this tone.
+function paletteColor(palette, tone) {
+    const chroma = palette.chromaAt ? palette.chromaAt(tone) : palette.chroma;
     return hctToHex(palette.hue, chroma, tone);
 }
 
@@ -476,20 +376,15 @@ export function buildScheme(seedHex, options = {}) {
     // one consumer mutating it.
     if (cached) return Object.assign({}, cached);
 
-    const palettes = buildPalettes(seedHex, variant, dark);
-    // Roles sharing a (family, tone) resolve to the same swatch — the fixed
-    // roles reuse their family's base tones — so each family+tone pair is
-    // solved once per build instead of once per role. `role` joins the key
-    // when the role is a nominal-chroma one, keeping the cache honest if that
-    // set is ever re-enabled (it is empty today).
+    const palettes = buildPalettes(seedHex, variant);
+    // Roles sharing a family and tone resolve to the same swatch.
     const resolved = ({});
     const out = { source_color: argbToHex(argb) };
     for (const [role, [family, lightTone, darkTone]] of Object.entries(ROLE_SPEC)) {
         const tone = dark ? darkTone : lightTone;
-        const rkey = family + "|" + tone
-            + (NOMINAL_CHROMA_ROLES.has(role) ? "|" + role : "");
+        const rkey = family + "|" + tone;
         if (resolved[rkey] === undefined)
-            resolved[rkey] = paletteColor(palettes[family], tone, role);
+            resolved[rkey] = paletteColor(palettes[family], tone);
         out[role] = resolved[rkey];
     }
     if (schemeCache.size >= SCHEME_CACHE_LIMIT)
@@ -519,8 +414,7 @@ export function buildSchemePair(seedHex, options = {}) {
 // callers that want a specific tone.
 export function tonalPalettes(seedHex, options = {}) {
     const variant = options.variant ?? DEFAULT_VARIANT;
-    const dark = options.dark ?? false;
-    const palettes = buildPalettes(seedHex, variant, dark);
+    const palettes = buildPalettes(seedHex, variant);
     const TONES = [0, 4, 6, 10, 12, 17, 20, 22, 24, 30, 40, 50, 60, 70, 80,
         87, 90, 92, 94, 95, 96, 98, 100];
     const out = {};

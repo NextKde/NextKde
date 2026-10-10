@@ -90,7 +90,7 @@ struct LiveCard
     qint64 lastRenderMs = 0; // 损伤重拍限频（30fps 上限）
     qint64 lastDamageMs = 0; // 最近损伤时刻（动静自适应喂帧判据）
     qint64 lastPoseChangeMs = 0; // 上次姿态变化（密集流 vs 孤立跳变判据）
-    qint64 absentSinceMs = 0; // 发布流缺席起点（掉卡迟滞 350ms）
+    qint64 absentSinceMs = 0; // 发布流缺席起点（掉卡迟滞 600ms）
     int feedPhase = 0; // 非优先卡的帧投喂轮询相位
     quint32 renderCount = 0;
     quint32 paintCount = 0;
@@ -98,7 +98,7 @@ struct LiveCard
     // ── 卡面本体（方案"卡进特效"：chrome 由特效同管线绘制）──
     // 元数据（QML 发布，v2 协议）
     QString title;        // 显示名（QML 拼好含 ×N 后缀）
-    int count = 1;        // 组内窗数（扇叠背板数 = min(count-1, 2)）
+    int count = 1;        // 组内窗数（扇叠背板数 = min(count-1, 4)）
     qreal z = 0;          // 叠序（QML slot.z）
     bool dragging = false; // 跟手模式：矩形逐帧由 QML 发布，特效免悬停
     bool engaging = false; // 展开中：整体淡出后让位给窗口动画
@@ -169,7 +169,7 @@ struct LiveCard
     // 铭牌（标题/关闭钮，QPainter 光栅 → 纹理；键变才重绘，Y 镜像匹配
     // stage-live 的 FBO 朝向采样）
     std::unique_ptr<GLTexture> chromeTex;
-    std::unique_ptr<GLTexture> overlayTex; // 正视覆盖层（图标排/拆分芯片）
+    std::unique_ptr<GLTexture> overlayTex; // 随卡投影覆盖层（图标排/拆分芯片）
     QString chromeKey;
     QString overlayKey;
 };
@@ -262,6 +262,7 @@ private:
     QString m_livePath;
     QString m_liveStatusPath;
     QFileSystemWatcher *m_liveWatcher = nullptr;
+    QTimer m_liveReloadTimer;   // Restarted by both watcher signals; one reload per burst.
     QTimer m_liveStatusTimer;   // 周期刷 status 文件（shell 据此让位快照）
     QTimer m_liveStaleTimer;    // 10s 周期 reload 兜底（真正的心跳超时判定在 reload 内按 mtime 25s）
     QTimer m_liveFrameTimer;    // 自驱帧回调投喂（30Hz framePainted）

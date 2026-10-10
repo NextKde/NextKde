@@ -8,10 +8,10 @@ import "../../../Kos/Ui"
 // DockMusicPlayer — Music player widget sized in icon-width units.
 //
 // Binds to DockMprisService.activePlayer reactively.  Two modes:
-//   - Compact (iconSize < 36):  album art only with a tiny play/pause overlay
+//   - Compact (iconSize < 36):  album art, title and a play/pause overlay
 //   - Full (iconSize ≥ 36):     art + track title/artist + prev/play/next buttons
 //
-// Expand/collapse animation when hasPlayer toggles.
+// Hover opens the detailed player in an independent popup.
 // ────────────────────────────────────────────────────────────────
 
 Item {
@@ -260,7 +260,7 @@ Item {
                         id: trackScroll
                         // Avoid continuous full-scene rendering while the
                         // Dock is idle. Long metadata scrolls on demand.
-                        running: widget.pageActive && widget.detailsHovered
+                        running: widget.visible && widget.pageActive && widget.detailsHovered
                             && trackMarquee.width > trackViewport.width
                         loops: Animation.Infinite
 
@@ -312,8 +312,7 @@ Item {
         // ── Compact mode: cover + track metadata ───────────────────
         // Keep the artwork's play/pause overlay as the direct control, while
         // using the remaining width for a deliberately small now-playing
-        // readout. A long title scrolls by itself because the compact card
-        // has no room for the full-mode hover interaction.
+        // readout. Hovering the compact card scrolls long metadata on demand.
         Item {
             id: compactTrackInfo
             visible: widget.isCompact
@@ -355,7 +354,8 @@ Item {
 
                 SequentialAnimation on scrollOffset {
                     id: compactTrackScroll
-                    running: widget.pageActive && widget.isCompact
+                    running: widget.visible && widget.pageActive && widget.isCompact
+                        && musicHover.hovered
                         && compactTrackTitle.width > compactTrackViewport.width
                     loops: Animation.Infinite
 

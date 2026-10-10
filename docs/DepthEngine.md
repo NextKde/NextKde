@@ -4,8 +4,8 @@
 OpenCV and ONNX Runtime, but has no dependency on Quickshell, Plasma, KDE or
 QML. The optional `kos-ai-worker` process owns `DepthGenerator` and its ONNX
 session. `kos-platform` starts it on the first request, sends bounded JSONL
-messages over stdin/stdout, serializes inference, and retires it after one idle
-minute. A worker crash, timeout or failed model download returns an error for
+messages over stdin/stdout, serializes inference, and retires it after 15 idle
+seconds. A worker crash, timeout or failed model download returns an error for
 that request without stopping the platform daemon. On Linux, the worker runs at
 lower CPU priority and is made a preferred OOM victim so core desktop controls
 retain priority under system memory pressure.

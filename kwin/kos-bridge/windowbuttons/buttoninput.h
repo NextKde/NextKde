@@ -75,10 +75,10 @@ private:
     ButtonConfig *m_config;
     std::unique_ptr<AdjustSession> m_session;
 
-    // The button whose press was swallowed, and whose release therefore has to
+    // The buttons whose presses were swallowed, and whose releases therefore have to
     // be swallowed too: an application that receives a button-up for a
     // button-down it never saw is left with a stuck button.
-    Qt::MouseButton m_consumedButton = Qt::NoButton;
+    Qt::MouseButtons m_consumedButtons = Qt::NoButton;
     // The keys whose press was consumed while adjusting, for the same reason.
     QSet<int> m_consumedKeys;
 

@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 
 // iOS-style liquid glass switch with pure QML rendering.

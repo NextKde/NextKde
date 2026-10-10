@@ -441,9 +441,16 @@ QtObject {
         // MRU 时间戳（v87 审查）：dock 多窗应用点击应激活"最近用过的窗"
         // 而不是 records 序首窗——历史行为与注释语义不符。copy-on-write
         //（var 属性原地变异不发通知，v82 P0 同款坑）
-        if (active) {
-            const stamps = Object.assign({}, svc._lastActivatedAt)
-            stamps[active.windowId] = Date.now()
+        {
+            // Window IDs are never reused. Retaining closed IDs here would
+            // grow this session-long MRU map on every application restart.
+            const stamps = {}
+            for (const record of nextRecords) {
+                if (svc._lastActivatedAt[record.windowId] !== undefined)
+                    stamps[record.windowId] = svc._lastActivatedAt[record.windowId]
+            }
+            if (active)
+                stamps[active.windowId] = Date.now()
             svc._lastActivatedAt = stamps
         }
         svc.revision++;
@@ -828,6 +835,12 @@ QtObject {
 
     function _consumeKwinEvent(event) {
             try {
+                // Qt 6.12 converts nested arrays carried by a `var` signal to
+                // QML sequences: Array.isArray() then rejects valid snapshots.
+                // Restore plain JSON arrays, including each window's desktops,
+                // at the signal boundary before validating or storing the data.
+                if (event.type === "snapshot" || event.type === "desktops")
+                    event = JSON.parse(JSON.stringify(event));
                 if (event.type !== "snapshot")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));

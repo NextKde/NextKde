@@ -230,7 +230,8 @@ ApplicationWindow {
         {
             subtitle: "前台调度",
             groups: []
-        }
+        },
+        { subtitle: "窗口和动画", groups: [] }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -3959,7 +3960,6 @@ ApplicationWindow {
         property var bridge: (typeof settingsBridge !== "undefined")
             ? settingsBridge : null
         property string shellStyle: "macos"
-        property string dockWindowAnimationStyle: "scale"
         // Material's colour source, mirrored from the Shell so the segmented
         // control reflects what is actually applied.
         property string materialColorScheme: "monet"
@@ -3993,10 +3993,6 @@ ApplicationWindow {
                 || style === "material"
         }
 
-        function isValidDockWindowAnimationStyle(style) {
-            return style === "scale" || style === "genie"
-        }
-
         function isValidMaterialColorScheme(scheme) {
             return scheme === "monet" || scheme === "chinese"
                 || scheme === "japanese"
@@ -4024,8 +4020,6 @@ ApplicationWindow {
             // DisplaySettingsPage instances re-apply the form from their own
             // fresh isMaterialDesign, and selectStyle() calls them right after.
             window.shellStyle = shellStyle
-            if (isValidDockWindowAnimationStyle(state.dockWindowAnimationStyle))
-                dockWindowAnimationStyle = state.dockWindowAnimationStyle
             if (isValidMaterialColorScheme(state.materialColorScheme))
                 materialColorScheme = state.materialColorScheme
             materialAccentName = String(state.materialAccentName ?? "")
@@ -4062,14 +4056,6 @@ ApplicationWindow {
                 return
             }
             bridge.updateShellStyle(style)
-        }
-
-        function setDockWindowAnimationStyle(style) {
-            if (!bridge || !isValidDockWindowAnimationStyle(style)) {
-                errorText = bridge ? "未知的窗口动画" : "尚未构建 Settings 桥接程序"
-                return
-            }
-            bridge.updateDockWindowAnimationStyle(style)
         }
 
         // Only the Material shell style reads the colour source; switching it
@@ -4593,73 +4579,6 @@ ApplicationWindow {
         WidgetAppearanceSection {
             Layout.topMargin: 12
             Layout.bottomMargin: 12
-        }
-
-        Text {
-            text: "窗口动画"
-            color: theme.secondaryText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Layout.leftMargin: 13
-            Layout.topMargin: 4
-        }
-
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 82
-            radius: 18
-            color: theme.card
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                spacing: 12
-                SettingIcon { symbol: "◒"; tint: "#af52de" }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-                    Text {
-                        text: "窗口显示/隐藏"
-                        color: theme.primaryText
-                        font.pixelSize: 14
-                        font.weight: Font.DemiBold
-                    }
-                    Text {
-                        text: themePage.dockWindowAnimationStyle === "genie"
-                            ? "水滴形变缩入图标；打开窗口仍使用常规展开"
-                            : "等比例缩放到图标；最小化与恢复均保持平直路径"
-                        color: theme.secondaryText
-                        font.pixelSize: 11
-                    }
-                }
-                SettingsNavBar {
-                    Layout.preferredWidth: 148
-                    Layout.preferredHeight: 30
-                    size: "tiny"
-                    barHeight: 30
-                    itemWidthOverride: 74
-                    model: [
-                        { id: "scale", label: "缩放" },
-                        { id: "genie", label: "水滴" }
-                    ]
-                    currentIndex: themePage.dockWindowAnimationStyle === "genie" ? 1 : 0
-                    onSelectionChanged: function(index) {
-                        themePage.setDockWindowAnimationStyle(
-                            index === 1 ? "genie" : "scale")
-                    }
-                }
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            Layout.leftMargin: 13
-            Layout.rightMargin: 13
-            text: "窗口动画会立即同步到 KWin；顶栏与 Dock 的布局在各自设置页中管理。"
-            color: theme.secondaryText
-            font.pixelSize: 12
-            wrapMode: Text.Wrap
         }
 
         Text {
@@ -5606,6 +5525,14 @@ ApplicationWindow {
 
                         SidebarEntry {
                             Layout.fillWidth: true
+                            pageIndex: 11
+                            label: "窗口和动画"
+                            navSymbol: "▣"
+                            navTint: "#af52de"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
                             pageIndex: 8
                             label: "壁纸"
                             navSymbol: "▧"
@@ -5800,6 +5727,13 @@ ApplicationWindow {
                     // items -- so without it a page the user has left keeps its
                     // whole height as a blank slab between the title and the
                     // page actually being shown.
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 11
+                        visible: active
+                        sourceComponent: WindowAnimationSettingsPage { colors: theme }
+                    }
+
                     Loader {
                         Layout.fillWidth: true
                         active: window.displayedPage === 4

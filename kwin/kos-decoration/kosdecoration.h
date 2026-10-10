@@ -18,11 +18,9 @@ namespace KOS
 // panel from something other than the window's own colour. The liquid material
 // the plugin used to paint has been dropped with it.
 //
-// The window's own shape is left alone as well -- no setBorderRadius(), no
-// setBorderOutline(), square corners painted here. See updateLayout() for why;
-// briefly, setBorderRadius() is how KWin clips the whole window, so calling it
-// would override the rounding and outline the user set on the decoration they
-// came from.
+// kos-bridge supplies the resolved corner radii and shared DecorationShadow.
+// This decoration paints its transparent titlebar corners and relays the
+// native shadow, without deciding another policy or reading another config.
 class KosDecoration final : public KDecoration3::Decoration
 {
     Q_OBJECT
@@ -35,6 +33,7 @@ public:
     void paint(QPainter *painter, const QRectF &repaintArea) override;
 
 private:
+    bool event(QEvent *event) override;
     // Borders are double-buffered through DecorationState: borderTop() still
     // reports the previous value right after setBorders(). So the buffered
     // properties are written here...
@@ -49,6 +48,8 @@ private:
 
     void paintTitleBar(QPainter *painter);
     void paintCaption(QPainter *painter);
+    bool m_bridgeShadowActive = false;
+    std::shared_ptr<KDecoration3::DecorationShadow> m_shadowBeforeBridge;
 };
 
 } // namespace KOS

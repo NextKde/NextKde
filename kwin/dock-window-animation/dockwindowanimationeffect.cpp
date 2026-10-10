@@ -1,4 +1,5 @@
 #include "dockwindowanimationeffect.h"
+#include "../kos-bridge/windowappearance/sharedwindowsource.h"
 
 #include <effect/effecthandler.h>
 #include <window.h>
@@ -102,6 +103,8 @@ DockWindowAnimationEffect::DockWindowAnimationEffect()
 
     connect(effects, &EffectsHandler::windowAdded,
             this, &DockWindowAnimationEffect::handleWindowAdded);
+    connect(effects, &EffectsHandler::windowClosed,
+            this, &DockWindowAnimationEffect::handleWindowClosed);
     connect(effects, &EffectsHandler::windowDeleted,
             this, &DockWindowAnimationEffect::handleWindowDeleted);
     for (EffectWindow *window : effects->stackingOrder())
@@ -169,6 +172,9 @@ void DockWindowAnimationEffect::reconfigure(ReconfigureFlags flags)
     m_restoreDuration = std::clamp(group.readEntry("RestoreDuration", 200), 80, 1200);
     m_morphStyle = group.readEntry("AnimationStyle", QStringLiteral("scale"))
         == QLatin1String("genie") ? MorphStyle::Genie : MorphStyle::Scale;
+    m_hideAnimation = group.readEntry("HideAnimation", group.readEntry("AnimationStyle", QStringLiteral("scale")));
+    m_closeAnimation = group.readEntry("CloseAnimation", QStringLiteral("scale"));
+    m_closeDuration = std::clamp(group.readEntry("CloseDuration", 180), 80, 1200);
 }
 
 QString DockWindowAnimationEffect::normalizedId(const QString &value) const
@@ -291,6 +297,9 @@ QString DockWindowAnimationEffect::status() const
         {QStringLiteral("deformation"), m_morphStyle == MorphStyle::Genie
             ? QStringLiteral("water-drop-mesh-and-fade")
             : QStringLiteral("direct-scale-and-fade")},
+        {QStringLiteral("hideAnimation"), m_hideAnimation},
+        {QStringLiteral("closeAnimation"), m_closeAnimation},
+        {QStringLiteral("closeAnimationCount"), static_cast<qint64>(m_closeAnimationCount)},
         {QStringLiteral("textureHandoff"), QStringLiteral("disabled")},
         {QStringLiteral("openAnimationCount"), static_cast<qint64>(m_openAnimationCount)},
         {QStringLiteral("minimizeAnimationCount"), static_cast<qint64>(m_minimizeAnimationCount)},
@@ -413,11 +422,15 @@ void DockWindowAnimationEffect::finishAnimation(EffectWindow *window)
     // The window is painted normally again, so the glass material is restored
     // for anything that reads the fade after this animation.
     window->setData(KosDockAnimationGlassFadeRole, 1.0);
+    window->setData(KOS::DockSourceAnimationRole, QVariant());
+    releaseClaim(window);
     if (const auto it = m_animations.find(window); it != m_animations.end()) {
         unredirect(window);
-        m_animations.erase(it);
+        // Remove the table entry before releasing the closed-window reference:
+        // unrefWindow may synchronously emit windowDeleted.
+        const auto finished = m_animations.take(window);
+        Q_UNUSED(finished)
     }
-    releaseClaim(window);
 }
 
 void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
@@ -436,6 +449,8 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
             return WindowMinimizedGrabRole;
         case Transition::Restore:
             return WindowUnminimizedGrabRole;
+        case Transition::Close:
+            return WindowClosedGrabRole;
         }
         return WindowAddedGrabRole;
     }();
@@ -444,20 +459,24 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
     // the old grab role before claiming the role for the opposite direction.
     if (m_animations.contains(window))
         releaseClaim(window);
-    if (!claim(window, role))
+    if (!claim(window, role)) {
+        finishAnimation(window);
         return;
+    }
 
-    const TimeLine::Direction direction = transition == Transition::Minimize
+    const TimeLine::Direction direction = transition == Transition::Minimize || transition == Transition::Close
         ? TimeLine::Forward : TimeLine::Backward;
     const int durationMs = transition == Transition::Minimize
         ? m_minimizeDuration
-        : (transition == Transition::Restore ? m_restoreDuration : m_openDuration);
+        : (transition == Transition::Restore ? m_restoreDuration
+            : transition == Transition::Close ? m_closeDuration : m_openDuration);
     const auto duration = std::chrono::milliseconds(durationMs);
 
     WindowAnimation &animation = m_animations[window];
     const bool reversesRedirectedAnimation = animation.timeLine.running()
         && animation.transition != Transition::Open
-        && transition != Transition::Open;
+        && animation.transition != Transition::Close
+        && transition != Transition::Open && transition != Transition::Close;
     if (reversesRedirectedAnimation) {
         // Reversing minimize/restore keeps the existing visibility reference
         // and redirected snapshot.
@@ -470,10 +489,15 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
         animation.visibleRef = transition == Transition::Open
             ? EffectWindowVisibleRef()
             : EffectWindowVisibleRef(
-                window, EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+                window, transition == Transition::Close ? EffectWindow::PAINT_DISABLED
+                                                       : EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+        if (transition == Transition::Close)
+            animation.deletedRef = std::make_shared<EffectWindowDeletedRef>(window);
     }
     animation.target = target;
     animation.transition = transition;
+    animation.closeScale = m_closeAnimation != QLatin1String("fade");
+    animation.useGenie = m_hideAnimation == QLatin1String("genie");
     // 固化记录 CSD 阴影缓冲区相对偏移量（用于 Wayland 客户端最小化几何补偿）
     if (m_csdOffsets.contains(window)) {
         animation.csdOffset = m_csdOffsets.value(window);
@@ -503,6 +527,10 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
         ++m_restoreAnimationCount;
         action = QStringLiteral("restoring");
         break;
+    case Transition::Close:
+        ++m_closeAnimationCount;
+        action = QStringLiteral("closing");
+        break;
     }
     m_lastAnimatedAppId = target.appId;
     QString transitionName;
@@ -516,6 +544,9 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
     case Transition::Restore:
         transitionName = QStringLiteral("restore");
         break;
+    case Transition::Close:
+        transitionName = QStringLiteral("close");
+        break;
     }
     Q_EMIT animationStarted(target.appId, target.windowId,
                             transitionName, durationMs);
@@ -525,7 +556,8 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
         << "from/to Dock rect" << target.geometry
         << "csdOffset" << animation.csdOffset;
 
-    redirect(window);
+    window->setData(KOS::DockSourceAnimationRole, true);
+    // Allocate the legacy source lazily, only if the shared provider declines.
     // Repaint only the motion envelope (frame + shadow margins united with the
     // dock-icon target rect) instead of the whole screen for the first
     // transformed frame. Both rects live in global logical coordinates.
@@ -553,9 +585,24 @@ void DockWindowAnimationEffect::drawWindow(
     WindowPaintData &data)
 {
     auto it = m_animations.find(window);
+    if (it != m_animations.end()) {
+        auto *providerObject = effects->property(KOS::SharedWindowSourceProperty).value<QObject *>();
+        if (auto *provider = qobject_cast<KOS::SharedWindowSource *>(providerObject)) {
+            if (provider->drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion,
+                data, [this, window, mask](auto &paintData, auto &quads) {
+                    apply(window, mask, paintData, quads);
+                })) {
+                // A fallback allocation from an earlier frame/configuration
+                // must not remain as a second texture beside the shared one.
+                unredirect(window);
+                return;
+            }
+        }
+        redirect(window);
+    }
 
     if (it != m_animations.end()
-        && it->transition != Transition::Open) {
+        && it->transition != Transition::Open && it->transition != Transition::Close) {
         // 对于存在 CSD 阴影缓冲区跳变的窗口，若其底层缓冲区在最小化瞬间已发生重置，
         // 绘制底层未重定向表面会透出向下偏移的未补偿画面；因此带有 CSD 偏移的窗口直接跳过底层绘制
         const bool hasCsdJump = (it->csdOffset.x() < -1.0 || it->csdOffset.y() < -1.0);
@@ -577,8 +624,11 @@ void DockWindowAnimationEffect::drawWindow(
         }
     }
 
+    const QVariant previousCapture = window->data(KOS::LegacyWindowSourceCaptureRole);
+    if (it != m_animations.end()) window->setData(KOS::LegacyWindowSourceCaptureRole, true);
     OffscreenEffect::drawWindow(renderTarget, viewport, window, mask,
                                 deviceRegion, data);
+    window->setData(KOS::LegacyWindowSourceCaptureRole, previousCapture);
 }
 
 void DockWindowAnimationEffect::applyDockMorph(
@@ -763,6 +813,20 @@ void DockWindowAnimationEffect::apply(EffectWindow *window, int mask,
     if (it == m_animations.end())
         return;
 
+    if (it->transition == Transition::Close) {
+        const qreal progress = smoothStep(it->timeLine.value());
+        data.multiplyOpacity(1.0 - progress);
+        if (it->closeScale) {
+            const qreal factor = 1.0 - 0.08 * progress;
+            data.setXScale(data.xScale() * factor);
+            data.setYScale(data.yScale() * factor);
+            data.setXTranslation(data.xTranslation() + window->width() * (1.0 - factor) * 0.5);
+            data.setYTranslation(data.yTranslation() + window->height() * (1.0 - factor) * 0.5);
+        }
+        window->setData(KosDockAnimationGlassFadeRole, 1.0 - progress);
+        return;
+    }
+
     // Compensate a CSD shadow offset only on axes whose complete quad bounds
     // have collapsed to the local origin. WindowQuad ordering is not a
     // geometry contract, so inspect the union rather than quads[0][0].
@@ -804,7 +868,7 @@ void DockWindowAnimationEffect::apply(EffectWindow *window, int mask,
         : smoothStep((arrived - (1.0 - kGlassFadeSpan)) / kGlassFadeSpan);
     window->setData(KosDockAnimationGlassFadeRole, glassFade);
 
-    if (m_morphStyle == MorphStyle::Genie
+    if (it->useGenie
             && it->transition != Transition::Open)
         applyBottomGenie(window, *it, quads);
     else
@@ -875,12 +939,16 @@ void DockWindowAnimationEffect::postPaintScreen()
         const QRectF targetGeometry = it->target.geometry;
         addAnimationRepaint(window, targetGeometry);
         if (it->timeLine.done()) {
+            const QRectF finalRepaint = QRectF(window->expandedGeometry())
+                .united(targetGeometry).adjusted(-2, -2, 2, 2);
             finishAnimation(window);
             // Repaint the envelope once more after the final frame so the
             // redirected texture cannot remain as a stale compositor image.
             // The target rect was captured above because finishAnimation
             // erases the entry from m_animations.
-            addAnimationRepaint(window, targetGeometry);
+            // A closing window can be destroyed by finishAnimation's last ref.
+            effects->addRepaint(qFloor(finalRepaint.x()), qFloor(finalRepaint.y()),
+                               qCeil(finalRepaint.width()), qCeil(finalRepaint.height()));
         }
     }
     effects->postPaintScreen();
@@ -895,6 +963,15 @@ void DockWindowAnimationEffect::handleWindowAdded(EffectWindow *window)
 {
     watchWindow(window);
     tryStartTicketedOpenAnimation(window, 8);
+}
+
+void DockWindowAnimationEffect::handleWindowClosed(EffectWindow *window)
+{
+    if (!eligibleWindow(window) || m_closeAnimation == QLatin1String("none")
+        || window->isMinimized() || !window->isVisible() || window->skipsCloseAnimation()) return;
+    Target target;
+    target.geometry = window->frameGeometry();
+    startAnimation(window, target, Transition::Close);
 }
 
 void DockWindowAnimationEffect::watchWindow(EffectWindow *window)
@@ -961,7 +1038,7 @@ void DockWindowAnimationEffect::tryStartTicketedOpenAnimation(
 
 void DockWindowAnimationEffect::handleMinimizedChanged(EffectWindow *window)
 {
-    if (!eligibleWindow(window))
+    if (!eligibleWindow(window) || m_hideAnimation == QLatin1String("none"))
         return;
     if (const auto target = targetForWindow(window)) {
         startAnimation(window, *target, window->isMinimized()

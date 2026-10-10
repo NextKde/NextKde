@@ -33,7 +33,8 @@ let
     installPhase = ''
       runHook preInstall
       mkdir -p $out/lib/systemd/user
-      sed 's|%h/.local/libexec/kos-platform|${kos-platform}/libexec/kos-platform|g' \
+      sed -e 's|%h/.local/libexec/kos-platform|${kos-platform}/libexec/kos-platform|g' \
+          -e 's|%h/.local/share/kos/platform/kwin/window-bridge.js|${kos-platform}/share/kos/platform/kwin/window-bridge.js|g' \
         ${src}/packaging/systemd/kos-platform.service \
         > $out/lib/systemd/user/kos-platform.service
       runHook postInstall

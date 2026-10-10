@@ -8,7 +8,7 @@ namespace KOS
 // A block of composited pixels, RGBA8, tightly packed or strided.
 //
 // This is deliberately a plain view over memory: the scan below is pure
-// geometry, with no KWin, GL or allocation in it, so it can be exercised
+// geometry, with no KWin or GL dependency, so it can be exercised
 // against captured screenshots outside the compositor.
 struct PixelBlock {
     const uchar *data = nullptr;

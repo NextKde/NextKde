@@ -69,6 +69,8 @@ Item {
     }
 
     function pageAvailable(candidate) {
+        if (pageOrder.indexOf(candidate) < 0)
+            return false
         if (candidate === musicPage)
             return hasMusic
         if (candidate === weatherPage)
@@ -222,7 +224,7 @@ Item {
 
     Timer {
         interval: 30000
-        running: carousel.autoRotate && !carousel.expanded
+        running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
         onTriggered: {

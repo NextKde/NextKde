@@ -95,6 +95,8 @@ PopupWindow {
     onVisibleChanged: {
         if (visible)
             requestAllThumbnails()
+        else
+            preview.windows = []
     }
 
     onEffectiveWindowsChanged: {
@@ -129,6 +131,9 @@ PopupWindow {
         }
         if (!preview.visible || closing)
             return
+        previewRevealStart.stop()
+        previewEntrance.stop()
+        previewHandoff.stop()
         closing = true
         previewExit.restart()
     }
@@ -333,7 +338,7 @@ PopupWindow {
                     height: parent.height
 
                 Repeater {
-                    model: preview.effectiveWindows
+                    model: preview.visible ? preview.effectiveWindows : []
                     delegate: Item {
                         id: cardDelegate
                         required property var modelData

@@ -75,7 +75,7 @@
             # Oneshot: copy shell QML to ~/.config/quickshell/kos/
             kos-shell-init = {
               description = "KOS shell config initializer";
-              wantedBy = [ "default.target" ];
+              wantedBy = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "oneshot";
                 ExecStart = pkgs.writeShellScript "kos-shell-init" ''
@@ -111,8 +111,8 @@
             # Platform daemon
             kos-platform = {
               description = "KOS platform integration service";
-              wantedBy = [ "default.target" ];
-              after = [ "graphical-session.target" ];
+              wantedBy = [ "graphical-session.target" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -129,8 +129,8 @@
             # Data service
             kos-data = {
               description = "KOS persistent data service";
-              wantedBy = [ "default.target" ];
-              after = [ "graphical-session.target" ];
+              wantedBy = [ "graphical-session.target" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -143,9 +143,11 @@
             # Quickshell desktop shell
             kos-shell = {
               description = "KOS Quickshell desktop shell";
-              wantedBy = [ "default.target" ];
-              requires = [ "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
-              after = [ "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
+              wantedBy = [ "graphical-session.target" ];
+              requires = [ "kos-platform.service" "kos-shell-init.service" ];
+              wants = [ "kos-data.service" ];
+              after = [ "graphical-session.target" "plasma-kwin_wayland.service" "plasma-plasmashell.service"
+                "kos-platform.service" "kos-data.service" "kos-shell-init.service" ];
               partOf = [ "graphical-session.target" ];
               serviceConfig = {
                 Type = "simple";
@@ -153,7 +155,7 @@
                 ExecStart = "${qs_bin} --no-duplicate -c kos";
                 Environment = [
                   "QS_DISABLE_FILE_WATCHER=1"
-                  "QSG_RENDER_LOOP=threaded"
+                  "MALLOC_ARENA_MAX=2"
                   "QML2_IMPORT_PATH=%h/.config/quickshell/kos:${kos.passthru.kos-spatial3d}/lib/qt6/qml:${pkgs.kdePackages.qtquick3d}/lib/qt-6/qml:${pkgs.kdePackages.qt5compat}/lib/qt-6/qml"
                   "QT_PLUGIN_PATH=${pkgs.kdePackages.qtsvg}/lib/qt-6/plugins:${pkgs.kdePackages.qtimageformats}/lib/qt-6/plugins"
                   "PATH=/run/current-system/sw/bin:${pkgs.bash}/bin:${pkgs.coreutils}/bin:${pkgs.findutils}/bin:${pkgs.gnugrep}/bin:${pkgs.gnused}/bin"

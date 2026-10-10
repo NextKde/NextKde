@@ -9,6 +9,7 @@
 #include <QUrl>
 #include <QDBusObjectPath>
 #include <QHash>
+#include <QMap>
 #include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
@@ -23,6 +24,7 @@
 namespace KosPlatform {
 
 class KeepAwakeLease;
+using NmSettings = QMap<QString, QVariantMap>;
 
 // One connect request: the settings dict already carries every secret, so the
 // runner treats this as opaque data. The map never lands in a log or an argv
@@ -30,7 +32,7 @@ class KeepAwakeLease;
 struct NmConnectRequest {
     QString device;
     QString savedProfileUuid;
-    QVariantMap settings;
+    NmSettings settings;
     QString replaceProfileId;
 };
 
@@ -123,9 +125,9 @@ private:
                     const QJsonObject &result = {}, const QString &code = {},
                     const QString &message = {}, bool retryable = false);
     void invalidateReplies(const QString &keyPrefix);
-    // Returns true when a fetch for `key` is already running and this request
-    // was queued onto it; false means the caller must start the fetch itself
-    // and finish it with completeInFlight().
+    // Returns true when a fetch already runs and this request was queued, or
+    // when the bounded queue rejected it with a reply. False means the caller
+    // must start the fetch and finish it with completeInFlight().
     bool queueIfInFlight(const QString &key, QLocalSocket *socket,
                          const QJsonObject &request);
     void completeInFlight(const QString &key, bool ok,
@@ -217,7 +219,7 @@ private:
     bool m_bluezManagerWatched = false;
     bool m_nightLightWatched = false;
     QProcess *m_audioEventWatcher = nullptr;
-    // file.copy work runs here so a multi-GB copy cannot stall the socket
+    // file.copy/transfer work runs here so large copies cannot stall the socket
     // event loop. Declared last so it is destroyed first: ~QThreadPool waits
     // for in-flight copies (bounded file IO) before members go away.
     QThreadPool m_copyPool;

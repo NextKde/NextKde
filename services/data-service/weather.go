@@ -516,7 +516,8 @@ func (s *Service) setWeatherUnits(units string) error {
 func (s *Service) startWeatherRefresh(force bool) bool {
 	now := time.Now()
 	s.mu.Lock()
-	normalizeWeatherState(&s.state.Weather)
+	// Normalize persisted state once at startup. Doing it here clears a live
+	// loading marker and allows every tick to supersede the in-flight request.
 	weather := &s.state.Weather
 	if weather.Status == weatherStatusLoading {
 		s.mu.Unlock()

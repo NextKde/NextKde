@@ -16,6 +16,7 @@ layout(std140, binding = 0) uniform buf {
     float qt_Opacity;
     vec2 pointer;
     vec2 cropScale;
+    float foregroundOnly;
 } ubuf;
 
 void main()
@@ -57,8 +58,21 @@ void main()
         * (1.0 - 2.0 * margin) * 0.005,
         vec2(0.001), vec2(0.999));
     float opacity = texture(matte, foregroundUv).r;
-    vec3 backgroundColor = texture(background, backgroundUv).rgb;
     vec3 foregroundColor = texture(source, foregroundUv).rgb;
+    if (ubuf.foregroundOnly > 0.5) {
+        fragColor = vec4(foregroundColor * opacity, opacity) * ubuf.qt_Opacity;
+        return;
+    }
+    vec2 texel = 1.5 / vec2(textureSize(background, 0));
+    vec3 backgroundColor = texture(background, backgroundUv).rgb * 0.25;
+    backgroundColor += texture(background, backgroundUv + vec2(texel.x, 0)).rgb * 0.125;
+    backgroundColor += texture(background, backgroundUv - vec2(texel.x, 0)).rgb * 0.125;
+    backgroundColor += texture(background, backgroundUv + vec2(0, texel.y)).rgb * 0.125;
+    backgroundColor += texture(background, backgroundUv - vec2(0, texel.y)).rgb * 0.125;
+    backgroundColor += texture(background, backgroundUv + texel).rgb * 0.0625;
+    backgroundColor += texture(background, backgroundUv - texel).rgb * 0.0625;
+    backgroundColor += texture(background, backgroundUv + vec2(texel.x, -texel.y)).rgb * 0.0625;
+    backgroundColor += texture(background, backgroundUv + vec2(-texel.x, texel.y)).rgb * 0.0625;
     fragColor = vec4(mix(backgroundColor, foregroundColor, opacity), 1.0)
         * ubuf.qt_Opacity;
 }

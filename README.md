@@ -143,12 +143,12 @@ cd NextKde
 
 `doctor` 会检查命令、Arch 软件包及可选运行时集成。`install` 在 Arch 上会提示并
 安装缺少的必需构建包，然后编译安装 KOS；首次安装 KWin 插件时
-可能要求输入 sudo 密码。`install` 会连同 KWin 插件一起安装 KOS 窗口装饰器，但不会替你
-选中它——它只把文件装好、打开 KWin 特效，装饰器仍由你在「系统设置 ▸ 窗口装饰」里选择。
-窗口上的三个圆点属于这个装饰器：选中它，圆点才会出现；换成别的装饰器，所有窗口都会
-恢复原样，客户端自绘标题栏的程序也一样。`start` 立即重启 KOS 服务，桌面界面会短暂刷新，
-不会改动窗口装饰器的选择。
-NixOS 模块同样随插件一起安装装饰器（没有单独的开关），选择仍由你在 KDE 设置里做。
+可能要求输入 sudo 密码。`install` 会连同 KWin 插件一起安装 KOS 窗口装饰器，首次安装默认
+选中 KOS，并保存之前的装饰器。可以在「KOS 设置 ▸ 窗口和动画」关闭 KOS 窗口外观，
+恢复原装饰器；装饰器切换在下次登录生效，圆角和阴影设置即时更新。重复安装会保留已保存的选择。
+这里还提供六档圆角、阴影开关，以及隐藏／恢复和关闭动画选项；动画选「无」时由其他已启用的
+KWin 效果处理。`start` 会重启 KOS 服务，桌面界面会短暂刷新。
+NixOS 模块随插件一起安装装饰器；通过 `kosctl install` 应用首次安装默认值。
 
 安装完成后，KOS 会在之后登录时自动启动。
 
@@ -297,7 +297,7 @@ KOS 前的值（plasmashell 在下次登录时重新加载原来的 shell）；�
 ```Nix
 nextkde = {
          # github 源：KOS Desktop Shell
-         url = "git+https://github.com/SuceV587/NextKde.git"
+         url = "git+https://github.com/SuceV587/NextKde.git";
          inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -321,7 +321,7 @@ sudo nixos-rebuild switch --flake .#hosts
         enable = true;
         # 如需禁用直接改为 `enable = false;` 即可
         weather.enable = true;
-        # kos 内置的天气服务
+        # 可选的独立天气应用；Shell 天气服务始终随核心提供
     };
 
 ```
@@ -340,9 +340,10 @@ sudo nixos-rebuild switch --flake .#hosts
 
 ### 可选独立应用
 
-仓库还提供日历、待办、天气和本地音乐四个独立 Qt Quick 应用。它们默认不随 Shell
+仓库还提供日历、待办、天气和 ListenFree 独立 Qt Quick 应用。它们默认不随 Shell
 构建；使用 `apps-dev` / `apps-release` 预设可统一构建，也可使用
-`calendar-dev`、`todo-dev`、`weather-dev` 或 `music-dev` 单独构建：
+`calendar-dev`、`todo-dev`、`weather-dev` 或 `listenfree-dev` 单独构建。
+旧版本地 Music 仅由 `music-dev` 单独构建：
 
 ```sh
 cmake --preset apps-dev
@@ -378,7 +379,7 @@ Quickshell Shell ──► kos-platform ──► KWin / 网络 / 音频 / 蓝�
 ## 下一步计划
 
 - 更完善的多显示器布局与每屏独立设置。
-- 让 DeskCenter 完整接入主题系统。
+- 完善 DeskCenter 在不同主题和多屏下的一致性。
 - 扩展设置项、快捷键和独立应用。
 - 改善键盘操作、无障碍和高对比度支持。
 
@@ -431,7 +432,7 @@ QML 改动在 `kosctl dev` 下即时生效（见上文）。要发布到已安�
 ```sh
 ./tools/kosctl doctor       # 检查依赖
 ./tools/kosctl run          # 从当前源码预览
-./tools/kosctl dev          # 全栈源码调试
+./tools/kosctl dev          # 源码 QML 调试，复用已安装服务
 ./tools/kosctl shortcuts install
 ./tools/kosctl glass-settings
 ```

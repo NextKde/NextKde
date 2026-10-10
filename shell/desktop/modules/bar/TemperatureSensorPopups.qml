@@ -113,7 +113,7 @@ Item {
             Text {
                 id: tooltipText
                 anchors.centerIn: parent
-                text: "CPU 平均 " + root.currentC + "°C · 60 秒最高 "
+                text: "CPU 平均 " + root.currentC + "°C · 5 分钟最高 "
                     + root.maximum5MinuteC + "°C"
                 color: ThemeService.foregroundColor
                 font {
@@ -226,7 +226,7 @@ Item {
                     Repeater {
                         model: [
                             { label: "平均 CPU", value: root.currentC + "°C" },
-                            { label: "60 秒最高", value: root.maximum5MinuteC + "°C" }
+                            { label: "5 分钟最高", value: root.maximum5MinuteC + "°C" }
                         ]
                         delegate: Rectangle {
                             width: (parent.width - 8) / 2

@@ -5,8 +5,8 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 
 // Publishes the current compositor-global Dock icon rectangles to the private
-// KOS KWin effect. Geometry is sampled from the rendered AppIcon item, not its
-// larger layout slot, so windows land exactly on the visible icon.
+// KOS KWin effect. Geometry uses the layout slot centre and static iconSize,
+// so hover magnification does not move the window animation endpoint.
 QtObject {
     id: service
 

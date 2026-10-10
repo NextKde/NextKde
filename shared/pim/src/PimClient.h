@@ -96,6 +96,9 @@ private:
     QString m_rangeStart;
     QString m_rangeEnd;
     qulonglong m_revision = 0;
+    quint64 m_serviceGeneration = 0;
+    quint64 m_snapshotSerial = 0;
+    quint64 m_rangeSerial = 0;
     QVariantList m_lists;
     QVariantList m_events;
     QVariantList m_occurrences;

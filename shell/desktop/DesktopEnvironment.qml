@@ -218,7 +218,8 @@ Item {
     // ShortcutsService is a QML singleton, so it only instantiates on first
     // access — and nothing else touches it during startup. Touch it here so
     // the global shortcuts are registered on every Shell start (self-heal);
-    // the request queues until the platform daemon connects.
+    // An unavailable platform fails the write immediately; ShortcutsService
+    // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
         IconThemeReloadService.initialize()
         ShortcutsService.applyToPlatform()

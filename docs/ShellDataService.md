@@ -67,7 +67,7 @@ last complete forecast and expose the error alongside it.
 From the repository root:
 
 ```sh
-GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" go build ./services/data-service
+(cd services/data-service && GOPROXY="${GOPROXY:-https://goproxy.cn,direct}" go build -o kos-data-service .)
 ./tools/kosctl install
 systemctl --user status kos-data.service
 journalctl --user -u kos-data.service -f

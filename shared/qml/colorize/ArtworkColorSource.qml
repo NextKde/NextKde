@@ -49,12 +49,13 @@ Item {
             return
         }
 
-        primary = usable[0]
-        secondary = usable.find(color => _distance(color, primary) > 0.28)
+        const nextPrimary = usable[0]
+        primary = nextPrimary
+        secondary = usable.find(color => _distance(color, nextPrimary) > 0.28)
             || Qt.rgba(
-                Math.min(1, primary.r * 0.70 + 0.12),
-                Math.min(1, primary.g * 0.70 + 0.07),
-                Math.min(1, primary.b * 0.78 + 0.18),
+                Math.min(1, nextPrimary.r * 0.70 + 0.12),
+                Math.min(1, nextPrimary.g * 0.70 + 0.07),
+                Math.min(1, nextPrimary.b * 0.78 + 0.18),
                 1
             )
         ready = true

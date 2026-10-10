@@ -30,6 +30,7 @@ src = read("onscreen_rounded.glsl")
 expanded = src.replace('#include "oklab.glsl"', oklab)
 expanded = expanded.replace('#include "glass.glsl"', glass)
 
+GEN.mkdir(parents=True, exist_ok=True)
 out = GEN / "onscreen_rounded.frag"
 out.write_text(compat_core + "\n" + expanded)
 print(f"wrote {out} ({len(compat_core + expanded)} bytes)")

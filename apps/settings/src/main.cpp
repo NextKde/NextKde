@@ -1,4 +1,5 @@
 #include "CacheMaintenance.h"
+#include "WindowSettings.h"
 
 #include <LiquidAI/ModelManager.h>
 
@@ -2584,6 +2585,17 @@ private:
 } // namespace
 
 int main(int argc, char *argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray argument(argv[i]);
+        if (argument == "--install-window-defaults" || argument == "--restore-window-defaults") {
+            QCoreApplication application(argc, argv);
+            WindowSettings settings;
+            const bool accepted = argument == "--install-window-defaults"
+                ? settings.installDefaults() : settings.setTakeover(false);
+            if (!accepted) qWarning().noquote() << settings.error();
+            return accepted ? 0 : 1;
+        }
+    }
     QGuiApplication application(argc, argv);
     // Keep this window out of the Shell's KWin rules. This must match the
     // installed desktop entry basename: kos-settings.desktop.
@@ -2593,8 +2605,10 @@ int main(int argc, char *argv[]) {
     application.setOrganizationName(QStringLiteral("Quickshell"));
 
     SettingsBridge bridge;
+    WindowSettings windowSettings;
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("settingsBridge"), &bridge);
+    engine.rootContext()->setContextProperty(QStringLiteral("windowSettings"), &windowSettings);
 
     const SettingsEntry entry = chooseSettingsEntry(bridge.isDevelopmentSession(),
                                                     bridge.sessionShellDir());
@@ -2616,6 +2630,12 @@ int main(int argc, char *argv[]) {
     engine.load(entrypoint);
     if (engine.rootObjects().isEmpty())
         return 1;
+    if (application.arguments().contains(QStringLiteral("--page=windows")))
+        engine.rootObjects().constFirst()->setProperty("currentPage", 11);
+    if (application.arguments().contains(QStringLiteral("--smoke-test-windows"))) {
+        engine.rootObjects().constFirst()->setProperty("currentPage", 11);
+        QTimer::singleShot(1000, &application, &QCoreApplication::quit);
+    }
 
     // Inert unless the QML came from a checkout, which is the only case where
     // there is something to watch.

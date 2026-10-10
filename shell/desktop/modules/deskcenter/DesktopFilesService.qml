@@ -19,6 +19,7 @@ QtObject {
     property string lastError: ""
     property bool desktopSubscriptionEnabled: true
     property var openWith: ({ loading: false, mime: "", defaultId: "", handlers: [] })
+    property int _openWithSerial: 0
     property string clipboardMode: ""
     property var clipboardPaths: []
     property var availableOutputs: DesktopOutputs.outputNames(ScreenLifecycle.usableScreens)
@@ -176,19 +177,25 @@ QtObject {
     function queryOpenWith(entry, callback) {
         if (!entry?.path)
             return
+        const serial = ++service._openWithSerial
+        const path = String(entry.path)
         openWith = ({ loading: true, mime: "", defaultId: "", handlers: [] })
-        PlatformClient.request("file.open-with", { path: entry.path }, function(response) {
+        PlatformClient.request("file.open-with", { path: path }, function(response) {
+            let info = ({ loading: false, mime: "", defaultId: "", handlers: [] })
             if (response?.ok) {
                 const result = response.result || ({})
                 const mime = result.mime === "application/x-zerosize"
-                    ? emptyFileMimeFromSuffix(entry.path) : result.mime
-                openWith = ({ loading: false, mime: mime || result.mime || "",
-                    defaultId: result.defaultId || "", handlers: result.handlers || [] })
-            } else {
-                openWith = ({ loading: false, mime: "", defaultId: "", handlers: [] })
+                    ? emptyFileMimeFromSuffix(path) : result.mime
+                info = ({ loading: false, mime: mime || result.mime || "",
+                    defaultId: result.defaultId || "",
+                    handlers: Array.isArray(result.handlers) ? result.handlers : [] })
             }
+            // Keep the shared menu state on the latest right-click, while
+            // each caller receives the result for the file it requested.
+            if (serial === service._openWithSerial)
+                service.openWith = info
             if (callback)
-                callback(openWith)
+                callback(info)
         })
     }
 

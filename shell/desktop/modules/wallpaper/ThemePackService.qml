@@ -53,6 +53,8 @@ QtObject {
             const dir = record.slice(0, cut).replace(/\/$/, "")
             let manifest = null
             try { manifest = JSON.parse(record.slice(cut + 1)) } catch (_) { continue }
+            if (!manifest || typeof manifest !== "object" || Array.isArray(manifest))
+                continue
             // The id doubles as a directory name component elsewhere; keep it
             // strict and keep entry/preview inside the pack directory.
             const id = String(manifest.id || dir.split("/").pop()).trim()

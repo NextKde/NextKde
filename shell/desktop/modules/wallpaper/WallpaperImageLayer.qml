@@ -35,7 +35,7 @@ Item {
     // before letting the Plasma restyle run.
     function reportSettled() {
         if (root.previewTarget || !root.targetScreen) return
-        WallpaperService.reportTransitionSettled(root.targetScreen.name, root.source)
+        WallpaperService.reportTransitionSettled(root.targetScreen.name, root.currentImage.source)
     }
     readonly property real pixelRatio: Math.max(1,
         Number(targetScreen?.devicePixelRatio || 1))

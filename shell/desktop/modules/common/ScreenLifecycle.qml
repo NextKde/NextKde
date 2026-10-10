@@ -6,8 +6,8 @@ import "ScreenSelection.mjs" as ScreenSelection
 
 // Keeps output-bound windows away from Qt's synthetic placeholder screen.
 // During suspend/resume the compositor may briefly publish no real outputs;
-// retain the last real screen reference and hide surfaces until a valid output
-// is available again instead of rebinding every PanelWindow to the placeholder.
+// clear screen references and hide surfaces until the output list settles,
+// then bind windows to a usable output again.
 QtObject {
     id: service
 
@@ -57,6 +57,10 @@ QtObject {
     }
 
     function refresh() {
+        // Polls and older request callbacks must respect the same settle
+        // delay as screensChanged, rather than remapping surfaces early.
+        if (settleTimer.running)
+            return
         const screens = _usableScreens()
         // 通过 ScreenSelection 智能选择主屏幕（优先 Priority 1，保底居中外接屏）
         const nextScreen = ScreenSelection.selectScreen(screens, outputConfiguration, activeScreen)
@@ -73,6 +77,8 @@ QtObject {
         // Hide all output-bound surfaces before Qt tears down/recreates its
         // QScreen objects, then drop the wrapper before its QObject destructor
         // can notify bindings that still reach into a QQuickWindow item tree.
+        retryTimer.stop()
+        _settleRetryRemaining = 0
         outputAvailable = false
         activeScreen = null
         usableScreens = []

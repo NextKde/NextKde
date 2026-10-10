@@ -204,6 +204,11 @@ void PimClient::exportIcalendar(const QString &path)
 
 void PimClient::onServiceChanged(const QString &, const QString &, const QString &newOwner)
 {
+    ++m_serviceGeneration;
+    m_ready = false;
+    m_writable = false;
+    m_revision = 0;
+    emit snapshotChanged();
     setConnected(!newOwner.isEmpty());
     if (m_connected)
         refresh();
@@ -228,8 +233,20 @@ void PimClient::invoke(const QString &method, const QVariantList &arguments,
     auto *watcher = new QDBusPendingCallWatcher(
         QDBusConnection::sessionBus().asyncCall(message, 30000), this);
     changePending(1);
+    const quint64 generation = m_serviceGeneration;
+    const quint64 serial = kind == ReplyKind::Snapshot ? ++m_snapshotSerial
+        : kind == ReplyKind::Range ? ++m_rangeSerial : 0;
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, kind, operation, itemId](QDBusPendingCallWatcher *finished) {
+            [this, kind, operation, itemId, generation, serial](QDBusPendingCallWatcher *finished) {
+                if (generation != m_serviceGeneration
+                    || (kind == ReplyKind::Snapshot && serial != m_snapshotSerial)
+                    || (kind == ReplyKind::Range && serial != m_rangeSerial)) {
+                    changePending(-1);
+                    finished->deleteLater();
+                    if (kind == ReplyKind::Mutation)
+                        emit operationFailed(operation, tr("PIM service changed during the operation"));
+                    return;
+                }
                 handleReply(finished, kind, operation, itemId);
             });
 }

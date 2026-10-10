@@ -29,6 +29,8 @@ target_link_libraries(kos_dock_window_animation PRIVATE
     KF6::ConfigCore
     KWin::kwin
 )
+set_property(TARGET kos_dock_window_animation APPEND PROPERTY AUTOMOC_MACRO_NAMES
+    KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 
 # Since KWin 6.7 (master), presentTime was dropped from the prePaintScreen /
 # prePaintWindow hooks and TimeLine::advance(RenderView*) replaced

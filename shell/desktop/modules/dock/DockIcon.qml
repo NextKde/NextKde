@@ -598,7 +598,7 @@ Item {
     // as the object under direct manipulation rather than a background item.
     SequentialAnimation {
         id: editWiggle
-        running: icon.editMode && !icon.isDragging
+        running: icon.visible && icon.editMode && !icon.isDragging
         loops: Animation.Infinite
         NumberAnimation {
             target: icon; property: "rotation"

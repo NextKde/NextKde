@@ -24,9 +24,10 @@ KOS Calendar             KOS Todo
 `kos-pim-service` is the only writer. It owns events, todos, list metadata,
 recurrence expansion, iCalendar import/export, and reminder scheduling.
 Calendar and Todo use the `Kos.Pim` client module and never open the storage
-files directly. D-Bus activates the service on first use; an XDG autostart
-entry starts it proactively in a desktop session so reminders work before an
-application window is opened.
+files directly. D-Bus activates the service on first use. A user systemd unit
+is also installed, but installation does not enable proactive startup. Reminders
+are processed while the service is running; they do not independently activate
+it before a client first uses it.
 
 The session-bus name and object are both versioned:
 

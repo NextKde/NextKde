@@ -68,6 +68,7 @@ private:
         Open,
         Minimize,
         Restore,
+        Close,
     };
 
     enum class MorphStyle {
@@ -83,9 +84,12 @@ private:
 
     struct WindowAnimation {
         EffectWindowVisibleRef visibleRef;
+        std::shared_ptr<EffectWindowDeletedRef> deletedRef;
         TimeLine timeLine;
         Target target;
         Transition transition = Transition::Minimize;
+        bool closeScale = true;
+        bool useGenie = false;
         // CSD 客户端自绘阴影缓冲区相对于窗口 frameGeometry 的物理偏移量
         QPointF csdOffset = QPointF(0, 0);
 
@@ -121,6 +125,7 @@ private:
     };
 
     void handleWindowAdded(EffectWindow *window);
+    void handleWindowClosed(EffectWindow *window);
     void watchWindow(EffectWindow *window);
     void updateWindowGeometryTracking(EffectWindow *window);
     void tryStartTicketedOpenAnimation(EffectWindow *window,
@@ -156,9 +161,13 @@ private:
     int m_minimizeDuration = 300;
     int m_restoreDuration = 200;
     MorphStyle m_morphStyle = MorphStyle::Scale;
+    QString m_hideAnimation = QStringLiteral("scale");
+    QString m_closeAnimation = QStringLiteral("scale");
+    int m_closeDuration = 180;
     quint64 m_openAnimationCount = 0;
     quint64 m_minimizeAnimationCount = 0;
     quint64 m_restoreAnimationCount = 0;
+    quint64 m_closeAnimationCount = 0;
     quint64 m_launchTicketCount = 0;
     quint64 m_launchTicketConsumedCount = 0;
     QString m_lastAnimatedAppId;

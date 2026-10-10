@@ -8,14 +8,14 @@
 
 - **系统外观**：`kos-settings > 显示 > 色彩模式` 优先应用 KDE 的 `Breeze / BreezeDark` Look-and-Feel，失败时回退到 `BreezeLight / BreezeDark` 色彩方案。目前不写入本项目配置。
 - **Material 3 配色**：壁纸主色作为种子，在进程内生成全套 M3 角色色。默认算法是 matugen `scheme-vibrant` 的纯 JS 移植；另有两套传统色方案（`chinese` / `japanese`）把种子吸附到命名色卡，以便主色保留壁纸自身的明度而不是被 Monet 强制到固定色调——三者在 `material` 形态下由设置页切换。**都不需要安装 matugen、Python 或 ImageMagick**，配合 Quickshell 内置 `ColorQuantizer` 完成取色，全链路无外部进程。详见第 10 节。
-- **玻璃材质**：`liquid`、`soft`、`frosted` 三套预设各自保存模糊、液态强度与受限光学参数；当前样式的 `blurStrength` 与 `liquidStrength`（均为 `0.0...1.0`）同步给自定义 KWin `glass` effect，不会修改 KDE 自带的 `Effect-blur`。Quickshell 显式 Blur Region 结合全局 `CornerExponent` 与 per-surface shape/scrim；普通窗口只走同一模糊管线，不执行折射、染色、高光、噪点或圆角裁切。没有 Dock、Bar 或启动器的独立强度接口。
+- **玻璃材质**：`liquid`、`soft`、`frosted` 三套预设各自保存模糊、液态强度与受限光学参数；当前样式的 `blurStrength` 与 `liquidStrength`（均为 `0.0...1.0`）同步给自定义 KWin `glass` effect，平台同时把模糊强度写入 KDE 自带的 `Effect-blur`，并通知两种特效重新读取配置。Quickshell 显式 Blur Region 结合全局 `CornerExponent` 与 per-surface shape/scrim；普通窗口只走同一模糊管线，不执行折射、染色、高光、噪点或圆角裁切。没有 Dock、Bar 或启动器的独立强度接口。
 - **玻璃文字墨色**：墨色跟随**玻璃本身**的明暗，不跟随桌面主题。`glassFollowsAppearanceMode`（默认关闭）决定玻璃是否跟随解析后的外观：关闭时玻璃恒为深色，文字保持 iOS 式的固定白墨；开启后浅色外观得到浅色玻璃 + 黑色文字，深色外观仍是深色玻璃 + 白色文字。判定统一走 `AppearanceTokens.isDarkTheme`——它已经包含「玻璃不跟随时恒为深色」这一层，因此不得改用 `systemIsDark` / `resolvedAppearanceIsDark`，否则玻璃不跟随外观时会得到深色玻璃 + 黑色文字。墨色由 `AppearanceTokens.content.glassInk(alpha)` 经 `IconAppearanceService.glassContentColor` 解析：Material 与「跟随浅色外观的玻璃」取调色板自身的 on-surface 墨色，只有真正深色的玻璃取白墨；`GlassText` 的可读性描边随之只在白墨时启用。控制中心、快速搜索、`LiquidGlassSurface` 的墨色层级、Bar 的流量箭头与关闭态 Wi-Fi 字形改由该 token 取值（它们原先写死白墨）；Dock 磁贴字形与通知中心的墨色原本就按 `ThemeService.isDark`（即 `isDarkTheme`）取值，行为不变。Overview、DeskCenter、启动器与 Dock 小组件自带固定白墨（它们按设计不读取外观），不在该语义范围内。
 - **全局图标外观**：`IconAppearanceService` 持久化 `color | grayscale | tint`、不透明度和染色颜色。Dock、启动台、快速搜索、Bar/托盘和 DeskCenter 共同消费，不再由 Dock 配置单独拥有。
-- **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 已接入形态 Token，DeskCenter 尚未接入形态 Token。Bar 不随形态分叉。
+- **Shell 形态**：`shellStyle`，值为 `windows12 | macos | material`。设置页已可选择并持久化；Dock 与 DeskCenter 已接入形态 Token；DeskCenter 卡片后端由 `DeskWidgetCard` 选择。Bar 不随形态分叉。
 - **Bar 布局**：`barIntegratedWithDock` 是独立布尔配置，适用于底部与侧边 Dock；`barLayoutMode` 提供 `full | floating | transparent`，`barVisibilityMode` 提供 `always | smart | persistent`。融合后顶部 Bar 收起，底部 Dock 托管时间与系统状态，侧边 Dock 使用纵向状态与信息布局。
 - **Dock 窗口动画**：`dockWindowAnimationStyle`，值为 `scale | genie`，默认 `scale`。由 `DockWindowAnimationTargetService` 向 KWin dock-window-animation effect 发布图标矩形，设置页可选择并持久化。
 
-主题选择会立即更新 Dock 的几何、间距、状态背景、运行指示器和动效。Bar 始终保持统一视觉；是否融入 Dock 完全由独立开关决定。DeskCenter 已接入全局图标外观，但形态 Token 仍是后续工作。
+主题选择会立即更新 Dock 的几何、间距、状态背景、运行指示器和动效。Bar 始终保持统一视觉；是否融入 Dock 完全由独立开关决定。DeskCenter 已接入全局图标外观和卡片形态 Token；`widgetStyle` 独立控制组件使用彩色插画还是玻璃画面。
 
 ## 2. 所有权和依赖方向
 
@@ -116,7 +116,7 @@ Plasma 配置 ──► WallpaperColorSource ──► ArtworkColorSource ──
 | `shell/desktop/modules/dock/DockWindow.qml` | Token 驱动的贴边距离与玻璃环境系数 |
 | `shell/desktop/modules/dock/DockIcon.qml` | Token 驱动的状态背景、指示器、放大与位移 |
 | `shell/desktop/modules/dock/DockAnimation.qml` | 将 motion Token 投影到 Dock 动效语义 |
-| `shell/desktop/modules/dock/DockWindowAnimationTargetService.qml` | 向 KWin dock-window-animation effect 发布合成器全局坐标下的 Dock 图标矩形（采样自渲染后的 AppIcon），驱动 `dockWindowAnimationStyle` |
+| `shell/desktop/modules/dock/DockWindowAnimationTargetService.qml` | 向 KWin dock-window-animation effect 发布合成器全局坐标下的 Dock 图标矩形（按布局槽位中心和静态 `iconSize` 计算，避免悬停放大改变窗口落点），驱动 `dockWindowAnimationStyle` |
 
 ### 3.1 Shell 图标契约
 
@@ -136,11 +136,11 @@ Shell 自带图案由 `BundledIcons` 的稳定名称登记，消费者使用
 Quickshell.stateDir + "/appearance/config.json"
 ```
 
-schema 27：
+schema 29（代表字段）：
 
 ```json
 {
-  "version": 27,
+  "version": 29,
   "globalBlurStrength": 0.0,
   "globalLiquidStrength": 1.0,
   "materialPresetBlurStrength": 0.1,
@@ -156,22 +156,27 @@ schema 27：
   "blurStrength": 0.0,
   "liquidStrength": 1.0,
   "shellStyle": "macos",
+  "widgetStyle": "color",
   "themeMode": "system",
   "materialColorScheme": "monet",
   "glassFollowsAppearanceMode": false,
+  "spatialWallpaperEnabled": false,
+  "spatialServiceEnabled": false,
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
-  "dockWindowAnimationStyle": "scale"
+  "dockWindowAnimationStyle": "scale",
+  "hiddenDeskCenterWidgets": [],
+  "hiddenStatusCells": []
 }
 ```
 
 - 每个玻璃预设还持久化 `Refraction`、`EdgeSize`、`NormalPow`、`RGBFringing`、`OffsetStrength`、`Softness` 和 `Reflection`；示例只列出代表字段。预设参数均由范围表校验，不能以手改配置绕过设置页的有效范围。
 - 默认 `glassStyle` 为 `liquid`，`shellStyle` 为 `macos`，`barLayoutMode` 为 `transparent`，`themeMode` 为 `system`（合法值 `system` / `light` / `dark`）。切换玻璃样式会应用该样式的完整预设；Material 使用独立的模糊预设且禁用液态折射。
-- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0，v27 增加 Material 配色来源。读取旧文件后会写回 schema 27。
+- schema 1–10 完成早期全局强度、Shell/Bar/主题迁移；v16 起为每种玻璃样式保存独立预设，v17–v24 多次校准 soft/frosted 的默认光学值，v26 将液态预设的旧 body lens 默认值迁移为 0，v27 增加 Material 配色来源。当前版本还保存独立的 `widgetStyle`、空间壁纸/服务开关和组件隐藏列表，读取旧文件后会写回 schema 29。
 - 非法或缺失的 `shellStyle` 回退为 `macos` 并写回；非法或缺失的 `dockWindowAnimationStyle` 回退为 `scale`；非法或缺失的 `themeMode` 回退为 `system`；非法或缺失的 `materialColorScheme` 回退为 `monet`（v27 之前写出的文件因此保持原有莫奈配色，升级不会改变观感）；非法强度不会覆盖内存默认值。
 - 强度输入会裁剪到 `0...1`；未知形态输入被拒绝。
-- 保存采用 350ms 防抖，并通过临时文件后 `mv` 原子替换。
+- 保存采用 350ms 防抖，并经 `JsonConfigStore` 调用平台的 `state.write`，由 `QSaveFile` 原子替换。
 - `resetStrengths()` 只恢复 `0.42 / 1.0`，不重置主题形态或 Dock 数据。
 - `blurStrength` 与 `liquidStrength` 是随全局值写回的兼容字段。全局图标外观另存于同目录的 `icon-appearance.json`（schema 1），包含 `mode`、`opacity` 与 `tintColor`，并可从旧 Dock 配置迁移一次。
 
@@ -220,13 +225,18 @@ snapshot 示例：
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
   "shellStyle": "macos",
+  "widgetStyle": "color",
   "materialColorScheme": "monet",
   "materialAccentName": "",
   "glassFollowsAppearanceMode": false,
+  "spatialWallpaperEnabled": false,
+  "spatialServiceEnabled": false,
   "barIntegratedWithDock": false,
   "barVisibilityMode": "always",
   "barLayoutMode": "transparent",
   "dockWindowAnimationStyle": "scale",
+  "hiddenDeskCenterWidgets": [],
+  "hiddenStatusCells": [],
   "tokenVersion": 9
 }
 ```
@@ -350,13 +360,13 @@ radius: AppearanceConfigService.shellStyle === "macos" ? 24 : 12
 - 选择 Material 形态后，卡片下方出现“主题色系”：三张色卡并列（莫奈色 / 中国传统色 / 日系配色），每张用**该方案在当前壁纸下的真实颜色**画出（主色大块 + 伴随色与两种外观的表面色条），选中态用各自的强调色描边，并显示当前吸附到的传统色名。换成其它形态时这一块连同其高度一起消失，因为玻璃形态不消费这个设置；切换仍写入配置，所以在形态之间往返不会丢失选择。
 - 色卡的颜色由 Shell 计算并经 snapshot 的 `materialColorSwatches` 下发（`ColorScheme.previewSwatches()`）。设置页是独立进程，不评估配色，也不为了取预览而反复切换 `scheme`——那会让整个 shell 每个 snapshot 重绘三次。
 - 桌面 Shell 未运行、IPC 超时或响应不完整时，页面显示 `SettingsBridge.lastError`，不得伪造保存成功。
-- Dock、启动台、快速搜索、Bar 与 DeskCenter 已接入全局图标外观；DeskCenter 的形态 Token 仍待后续阶段接入。
+- Dock、启动台、快速搜索、Bar 与 DeskCenter 已接入全局图标外观；DeskCenter 的形态 Token 与卡片后端已接入。
 
 ## 9. 后续实施顺序
 
 1. **Dock（已完成第一轮）**：圆角、padding、spacing、indicator、状态背景和 motion 已接入；位置、尺寸、显示策略及模型保持用户所有。
-2. **Bar 融合（已实现）**：Bar 保持统一视觉；底部 Dock 将时间作为音乐/天气轮播的一页，并托管系统状态；侧边 Dock 自动回退顶部 Bar。
-3. **DeskCenter**：全局图标外观已接入；后续只替换形态相关的卡片容器、gap、surface/elevation，不触碰天气、文件、活动等数据逻辑。
+2. **Bar 融合（已实现）**：Bar 保持统一视觉；底部 Dock 将时间作为音乐/天气轮播的一页，并托管系统状态；侧边 Dock 也通过侧向信息轮播和状态区承载 Bar 内容。
+3. **DeskCenter**：全局图标外观、内容 Token 与 Material/玻璃卡片后端已接入；后续调整按现有后端与 Token 扩展。
 4. **Dock 收口**：完成三风格 × 独立/融合 Bar 的视觉回归。
 5. **全局收口**：搜索并移除已被 Token 取代的散落常量，增加三风格 × 明暗模式视觉回归。
 
@@ -378,11 +388,11 @@ Material 的 HCT 用 CAM16 承载色相与彩度通道，tone 则精确等于 CI
 错的**。实测下来，Lab 近似只在当初校准用的那一个种子上准确，换任何别的种子都会
 明显偏色；原因是 Lab 与 CAM16 的彩度通道在 M3 所使用的观看条件下并不可线性互换。
 
-现在的实现是 MCU 的 `hct/*.ts`、`viewing_conditions.ts`、`hct_solver.ts`、
-`utils/color_utils.ts` 的忠实移植。代价只是「一次 3×3 矩阵加几次非线性」，在
-QML/JS 里完全可以承受：单次生成整套 49×2 角色耗时在毫秒级。
+当前实现采用 CAM16/HCT 基础运算，并使用本地二分求逆、色度锚点与角色色调表。
+它不是 MCU `hct_solver.ts` 的逐行移植；色域求逆会嵌套多轮探测，完整配色在 QML 主线程同步生成。
+切换壁纸、配色来源和预览色卡时应人工观察交互延迟，不能以矩阵运算量推断整套配色的耗时。
 
-实测准确率（12 个种子 × 49 角色 × 2 模式）：
+此前记录的准确率（12 个种子 × 49 角色 × 2 模式；不代表本次审查重新测量）：
 
 | 指标 | 数值 |
 | --- | --- |
@@ -422,8 +432,8 @@ QML/JS 里完全可以承受：单次生成整套 49×2 角色耗时在毫秒级
 
 | 组成 | 作用 |
 | --- | --- |
-| `shell/Kos/Ui/qmldir` | 与编译模块完全相同的类型清单，条目写成相对路径 `colorize/ColorScheme.qml` |
-| `shell/Kos/Ui/{colorize,foundation,controls}` | 指向 `../../../shared/qml/*` 的符号链接 |
+| `shell/Kos/Ui/qmldir` | 源码运行所需的类型清单；编译模块由 CMake 另行列出，当前仅包含部分 foundation/controls 类型，条目写成相对路径 `colorize/ColorScheme.qml` |
+| `shell/Kos/Ui/{colorize,foundation,controls,wallpapers}` | 指向 `../../../shared/qml/*` 的符号链接 |
 | `shared/qml/{colorize,foundation}/qmldir` | 让目录内同族类型互相可见（如 `WallpaperColorSource.qml` 里的 `ArtworkColorSource`）|
 | shell 各文件 | `import "../../../Kos/Ui"` —— 相对导入，不需要任何环境变量 |
 

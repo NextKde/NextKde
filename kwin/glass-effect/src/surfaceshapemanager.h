@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QSet>
 #include <QElapsedTimer>
 #include <optional>
 #include <QObject>
@@ -86,6 +87,7 @@ private:
 public: // Wayland C dispatch table callbacks.
     static void bindManager(wl_client *client, void *data, uint32_t version, uint32_t id);
     static void destroyManagerResource(wl_client *client, wl_resource *resource);
+    static void destroyManagerBinding(wl_resource *resource);
     static void getShape(wl_client *client, wl_resource *resource, uint32_t id,
                          wl_resource *surfaceResource);
     static void destroyShapeResource(wl_resource *resource);
@@ -113,6 +115,7 @@ private:
 
     QElapsedTimer m_clock;
     wl_global *m_global = nullptr;
+    QSet<wl_resource *> m_managerResources;
     quint64 m_nextId = 1;
     QHash<const SurfaceInterface *, QVector<ShapeResource *>> m_shapes;
 };

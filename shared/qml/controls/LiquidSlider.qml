@@ -1,9 +1,7 @@
 import QtQuick
-import QtQuick.Effects
 
-// iOS-style liquid glass slider with true refraction.
-// Uses ShaderEffect to bend the track colors through the glass thumb,
-// with chromatic aberration and specular highlights.
+// iOS-style slider with a layered QML glass thumb.
+// Gradients, optional chromatic rims and specular highlights provide the finish.
 Item {
     id: root
 
@@ -500,7 +498,6 @@ Item {
         }
 
         property real startX: 0
-        property real startValue: 0
 
         // A light thumb lift on hover alone (before any press) matches
         // macOS's slider feel; press still drives the full lens expansion.
@@ -525,7 +522,6 @@ Item {
             root._angleAccum = 0
             root._pixelAccum = 0
             startX = mouse.x
-            startValue = root.value
             root.previewChanged(root.positionForPointer(mouse.x))
         }
 

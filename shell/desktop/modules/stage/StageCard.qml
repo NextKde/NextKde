@@ -162,6 +162,8 @@ Item {
     // 整体让位，只留根层输入热区（MouseArea 仍收点击/拖拽/悬停——特效
     // 画不出输入）；回执失效自动恢复 QML 自绘（快照时代观感兜底）
     property bool effectOwnedChrome: false
+    // The owner disables preview resources for hidden or offscreen cards.
+    property bool previewActive: true
     // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
     readonly property bool closeHot: closeHit.containsMouse
     // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
@@ -363,7 +365,7 @@ Item {
         y: -(22 + card.fanPad)
         width: parent.width + 32 + card.fanPad * 2
         height: parent.height + 44 + card.fanPad * 2
-        layer.enabled: true
+        layer.enabled: card.previewActive && !card.effectOwnedChrome
         layer.smooth: true
 
         // ── 扇叠背板（macOS Stage Manager 同语义）：同应用多窗 = 一前
@@ -556,7 +558,7 @@ Item {
             id: thumbCard
             anchors.fill: plate
             visible: false
-            layer.enabled: true
+            layer.enabled: card.previewActive && !card.effectOwnedChrome
             layer.smooth: true
 
             readonly property string thumbUrl: WindowService.thumbnailUrl(card.targetId)
@@ -575,17 +577,21 @@ Item {
             // KWin 停止离屏渲染，源节点挂起零成本）。平均负载 ≈ 占空比 ×
             // 单流全速，GPUTotalUsed（/proc/meminfo）可实测对账。
             readonly property bool liveWanted:
-                card.focusKey === card.appKey || card.engaging
+                card.previewActive && !card.effectOwnedChrome
+                    && (card.focusKey === card.appKey || card.engaging)
             // 合成启停门：liveWanted 与 thumbLiveStream 任一翻转都要重算
             //（原先只监听 liveWanted——悬停中途在设置页打开"活体流"开关
             // 不会启动消费，直到悬停离开再进）
             readonly property bool streamArmed:
                 thumbCard.liveWanted && StageConfigService.thumbLiveStream
             property bool streamOn: false     // 占空比相位：true=连接消费
-            property string liveGrabUrl: ""   // 断开前定格的最后一帧
+            property var liveGrabResult: null // Hold only the current frozen frame.
+            readonly property url liveGrabUrl: liveGrabResult ? liveGrabResult.url : ""
+            property int streamGeneration: 0
 
             function _syncStream() {
-                liveGrabUrl = ""
+                streamGeneration++
+                liveGrabResult = null
                 if (streamArmed) {
                     streamOn = true   // 首相位即连接（别先空等 off 周期）
                     streamCycle.restart()
@@ -622,10 +628,14 @@ Item {
                     if (thumbCard.streamOn) {
                         // 断开前把活体帧定格进 preview（异步 grab，回调
                         // 晚于一拍也无碍——preview 旧帧兜底）
-                        if (liveStream.ready)
+                        if (liveStream.ready) {
+                            const generation = thumbCard.streamGeneration
                             liveStream.grabToImage(function(result) {
-                                thumbCard.liveGrabUrl = result.url
+                                if (generation === thumbCard.streamGeneration
+                                        && thumbCard.streamArmed)
+                                    thumbCard.liveGrabResult = result
                             })
+                        }
                         thumbCard.streamOn = false
                     } else {
                         thumbCard.streamOn = true
@@ -634,7 +644,6 @@ Item {
                 }
             }
 
-            onLiveWantedChanged: _syncStream()
 
             PipeWireSourceItem {
                 id: liveStream
@@ -660,8 +669,9 @@ Item {
                 // 改动被吞，opacity 链有效——快照退路在任何让位失败时
                 // 自动恢复，特效不在=livePainted=false=快照照常画）
                 opacity: card.livePainted ? 0.0 : 1.0
-                source: thumbCard.liveGrabUrl !== ""
-                    ? thumbCard.liveGrabUrl : parent.thumbUrl
+                source: card.previewActive && !card.effectOwnedChrome
+                    ? (thumbCard.liveGrabUrl !== ""
+                        ? thumbCard.liveGrabUrl : parent.thumbUrl) : ""
                 // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
                 asynchronous: false
                 cache: false
@@ -734,7 +744,7 @@ Item {
         // 直渲染项，visible 正常生效——被吞的是 plane 不可见子树内部的
         // 改动）：彻底停掉对 plane 层纹理的采样与重渲染——opacity 0 时
         // 场景图仍逐帧重渲层（动画期掉帧的大头之一）。
-        visible: !card.effectOwnedChrome
+        visible: card.previewActive && !card.effectOwnedChrome
         // uniform 显式声明（ShaderEffect 不自动创建属性；source 约定名，
         // plane 的 layer 纹理由此进 sampler）
         property variant source: plane
@@ -880,7 +890,7 @@ Item {
             color: splitHit.containsMouse ? "#f59e0b" : "transparent"
             // 常显暗态：合并卡要让用户知道能拆（与特效芯片同语义）；
             // 活体模式特效覆盖层画右上同位芯片，QML 视觉隐藏防双绘
-            visible: !card.effectOwnedChrome
+            visible: card.previewActive && !card.effectOwnedChrome
             opacity: (splitHit.containsMouse || card.isHovered || card.mergeGlow)
                 ? 1.0 : 0.35
             Behavior on opacity { NumberAnimation { duration: 120 } }
@@ -916,7 +926,7 @@ Item {
         z: 2
         // chrome 让位：图标排已迁特效正视覆盖层（用户定稿"正视盖住左下
         // 角"），QML 侧隐藏防双绘
-        visible: !card.effectOwnedChrome
+        visible: card.previewActive && !card.effectOwnedChrome
         readonly property int iconSize: StageConfigService.stripIconSize
         readonly property int iconGap: Math.max(3, Math.round(iconSize * 0.2))
         // 卡宽钳制：图标排不裁切（Item 默认不 clip），maxIconSlots×最大

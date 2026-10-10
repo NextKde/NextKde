@@ -20,8 +20,15 @@ Item {
         target.y = opened ? 0 : -offsetY;
         target.scale = opened ? 1 : 0.8;
         target.opacity = opened ? 1 : 0;
+        release();
     }
     function animate() {
+        // Neighbor pages stay preloaded for paging, but their hidden tiles
+        // must not submit four Animator jobs or hold up the open controller.
+        if (!target.visible) {
+            snap();
+            return;
+        }
         const wasRunning = animation.running;
         animation.stop();
         // GridView can position a delegate after Component.onCompleted.
@@ -47,6 +54,13 @@ Item {
         animation.start();
     }
     onOpenedChanged: if (ready) animate()
+    Connections {
+        target: motion.target
+        function onVisibleChanged() {
+            if (motion.ready && !motion.target.visible)
+                motion.snap();
+        }
+    }
     Component.onCompleted: {
         ready = true;
         if (opened && animateOnCompleted) {
