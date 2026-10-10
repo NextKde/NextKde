@@ -114,3 +114,20 @@
 - [KWin 6.7.5 OutlinedBorderItem](https://github.com/KDE/kwin/blob/v6.7.5/src/scene/outlinedborderitem.cpp)：由内侧矩形向外扩张的原生边框；本实现将矩形与半径内缩，使描边留在窗口内部。
 - [KWin 6.7.5 ImageItem](https://github.com/KDE/kwin/blob/v6.7.5/src/scene/imageitem.cpp)：场景节点的图片缓存与纹理更新，用于没有装饰器阴影接口的 CSD。
 - [KWin 6.7.5 OffscreenEffect](https://github.com/KDE/kwin/blob/v6.7.5/src/effect/offscreeneffect.cpp)：窗口内容损伤驱动的离屏纹理缓存；本实现仅在 continuous 模式使用。
+
+
+## Fixed grey-white outline and dark shadow trial
+
+The adaptive-shadow experiment has been removed at the user's request. There is no background sampler, PBO/fence readback, luminance calculation, grey shadow atlas variants, adaptive-colour transition or Settings switch. Old experimental JSON keys have no effect. The existing geometry/content/shadow caches and ordinary focus-opacity transitions remain.
+
+The new product default is a one-device-pixel inside outline in fixed grey-white `#E0E0E0`, with active/inactive opacity 0.16/0.08, plus a fixed dark contact/ambient shadow. Default shadow strength remains slightly deeper at 0.37 (previously 0.32). Explicit user/app configuration still overrides product defaults. Turning off KOS window appearance restores the original appearance; the shadow switch continues to control only the shadow.
+
+Only compilation is performed locally for this trial. The guest receives the rebuilt plugin and Settings page; a fresh guest login is required to load the replaced plugin. No hardware GPU performance measurement has been made.
+
+Guest performance observation: KWin reports llvmpipe software rendering. Its Effects interface reports `kos_dock_window_animation` unsupported and not loaded despite the enabled configuration. The current guest therefore cannot validate the KOS cached-texture minimize/restore path. Cached window content avoids repeated capture when undamaged; it still requires per-frame mesh updates, texture sampling, contour/shadow shading, blending and composition. Client/window-button damage can also invalidate the source cache. No animation frame-time profile has been performed, so this observation does not prove the hardware path is free of stalls.
+
+## Workspace slide across adjacent outputs
+
+During KWin Slide, the continuous shared-source draw intersects the destination desktop clip with translated source outputs that intersect the actual window frame. Expanded shadow bounds do not admit an otherwise unrelated output. Windows spanning outputs retain both source pieces. Every draw also clips to the viewport device rectangle, and empty passes skip source capture. This applies to Slide's translation-only draws; ordinary placement, scaled/rotated effects and Dock mesh morphs retain their existing behavior.
+
+Visual regression still requires an animation-capable multi-output session: put a window against the left edge of the right output, slide desktops in both directions and wrap between first/last desktops. Repeat with negative output coordinates, unequal output sizes/scales and a window spanning both outputs. The shadow must not sweep across the neighboring desktop; the spanning window must retain both visible pieces. The current software-rendered guest cannot confirm that visual result.
