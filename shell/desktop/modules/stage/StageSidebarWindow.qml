@@ -2764,6 +2764,9 @@ PanelWindow {
             slots.push({ app: s.appKey, y: Math.round(s.y),
                 scale: Math.round(s.slotScale * 100) / 100, z: s.z,
                 x: Math.round(s.x),
+                hot: s.cardItem ? s.cardItem.isHovered : false,
+                cardScale: s.cardItem
+                    ? Math.round(s.cardItem.scale * 100) / 100 : -1,
                 live: root._liveActiveIds[s.appKey] === true,
                 painted: s.cardItem ? s.cardItem.livePainted : false })
         }
@@ -2782,6 +2785,10 @@ PanelWindow {
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
             chromeOwned: root.liveChromeOwned,
+            hoverPos: [Math.round(drawerEdgeHover.point.position.x),
+                Math.round(drawerEdgeHover.point.position.y)],
+            rootHovered: drawerEdgeHover.hovered,
+            edgeHot: root._drawerEdgeHot,
             drawer: root.drawerRetracted, retractPx: root._retractPx,
             cardsX: Math.round(cards.x), panelW: root.panelW,
             overlap: Math.round(root._stripOverlap * 100) / 100,
@@ -3368,27 +3375,40 @@ PanelWindow {
 
     // 抽屉边缘探出热区（收起态启用——全屏/侵占让位同权）：贴常驻侧屏缘
     // 12px 全高，悬停 120ms 拉出；离开 700ms 收回（mask 收起态正好只放
-    // 行这条）。peek 期间热区扩成整条卡列——指针从缘条移到卡上
-    // containsMouse 保持 true，不会在交互中途把抽屉收走（NoButton 不
-    // 挡卡片的点击/悬停，hover 事件本就并行分发不互斥）。
-    MouseArea {
-        id: drawerEdge
-        x: root.rightSide ? root.width - width : 0
-        y: 0
-        width: root._drawerPeek
+    // 行这条）。peek 期间热区扩成整条卡列——指针从缘条移到卡上热区保持
+    // 命中，不会在交互中途把抽屉收走。
+    // ⚠️ 检测必须挂根层 HoverHandler，不能做成置顶 MouseArea：Qt 悬停
+    // 只投给"最上层命中项+祖先"，NoButton MouseArea 置顶同样独占——旧
+    // 实现在 peek 期间把热区扩成整条卡列，恰好压住全部卡片热区＝让位/
+    // 全屏收起后贴缘拉出，卡上悬停动画全死（点击仍灵：NoButton 不吃按
+    // 键事件，按键落到卡片上——"卡能点但悬停没反应"）。根层是所有卡片
+    // 的祖先，与顶层卡片热区并行收悬停互不遮挡；命中改按热区几何手工
+    // 判定（offscreen 实测：置顶 NoButton MouseArea / Item+HoverHandler
+    // 均会抢走兄弟 containsMouse，祖先 HoverHandler + 顶层 MouseArea 则
+    // 两者同时为真；point.position 绑定随移动逐帧刷新，几何判定可用）。
+    HoverHandler {
+        id: drawerEdgeHover
+        blocking: false
+    }
+    function _drawerEdgeHotAt(px: real): bool {
+        const w = root._drawerPeek
             ? root.panelW + StageGeo.GLOW_PAD * 2 : 12
-        height: root.height
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        enabled: root.drawerRetracted || root._drawerPeek
-        onContainsMouseChanged: {
-            if (containsMouse) {
-                root._drawerUnpeekTimer.stop()
-                root._drawerPeekTimer.restart()
-            } else {
-                root._drawerPeekTimer.stop()
-                root._drawerUnpeekTimer.restart()
-            }
+        const x0 = root.rightSide ? root.width - w : 0
+        return px >= x0 && px <= x0 + w
+    }
+    // 武装条件与旧 MouseArea 的 enabled 一致（仅收起/peek 期间）；hovered
+    // 已隐含"指针在窗内"（mask 之外不投递），旧热区全高故 y 向无需判
+    readonly property bool _drawerEdgeHot:
+        (root.drawerRetracted || root._drawerPeek)
+        && drawerEdgeHover.hovered
+        && root._drawerEdgeHotAt(drawerEdgeHover.point.position.x)
+    on_DrawerEdgeHotChanged: {
+        if (root._drawerEdgeHot) {
+            root._drawerUnpeekTimer.stop()
+            root._drawerPeekTimer.restart()
+        } else {
+            root._drawerPeekTimer.stop()
+            root._drawerUnpeekTimer.restart()
         }
     }
     // mask 只罩卡条是给点击穿透用的；拖拽中几何扩成全窗（见
