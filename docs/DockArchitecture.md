@@ -542,9 +542,11 @@ collision.
 
 ### Context menus
 
-The current implementation is `DockContextMenu.qml`, backed by the native
-`Qt.labs.platform` `Menu` so the window system owns pointer grabs and outside
-clicks. Right-click is handled by `DockIcon`; left-click behavior is unchanged.
+`DockIcon.qml` lazily creates the shared `ContextMenu` for application and
+window actions. `DockContainer.qml` owns the launcher and trash menus. These
+menus join `DockModelService`'s popup coordinator so opening one closes the
+previous popup and holds the Dock visible. Right-click is handled by `DockIcon`;
+left-click behavior is unchanged.
 
 Current context menu actions call service methods:
 

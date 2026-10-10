@@ -7,9 +7,8 @@ import qs.desktop.modules.dock
 import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 
-// Network card shared by the future top control centre. Wi-Fi selection and
-// credential UI are implemented here first; the actual NetworkManager write
-// operation is intentionally deferred until this interaction is validated.
+// Wi-Fi picker and credentials dialog. NetworkService delegates connection
+// and saved-profile changes to the resident platform service.
 AnimatedPopupWindow {
     id: panel
 
@@ -205,26 +204,6 @@ AnimatedPopupWindow {
         passwordFocusTimer.restart()
     }
 
-    function activeSavedWifi() {
-        const networks = NetworkService.nearbyWifi
-        for (let i = 0; i < networks.length; i++) {
-            if (networks[i].active && networks[i].savedProfileUuid)
-                return networks[i]
-        }
-        return null
-    }
-
-    function showForgetActiveWifi() {
-        const network = activeSavedWifi()
-        if (!network)
-            return
-        showNetworkDialog(network)
-        // The current-connection button is already an intentional action;
-        // enter the in-card confirmation state immediately, but never delete
-        // until the user presses its explicit second “确认” action.
-        confirmForgetNetwork = true
-    }
-
     function closeNetworkDialog() {
         networkDialogOverlay.close()
         requestedPassword = ""
@@ -298,180 +277,6 @@ AnimatedPopupWindow {
             scrimLevel: "transparent"
     }
 
-    Column {
-        anchors.fill: parent
-        anchors.margins: 10
-        spacing: 0
-
-        Item {
-            visible: false
-            width: parent.width
-            height: 0
-            Text {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                text: "Wi‑Fi"
-                color: ThemeService.foregroundColor
-                style: Text.Outline
-                styleColor: Qt.rgba(0, 0, 0, 0.38)
-                font { pixelSize: 16; weight: Font.Bold }
-            }
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: 48
-                anchors.verticalCenter: parent.verticalCenter
-                text: NetworkService.wifiScanInProgress ? "正在扫描…" : "↻"
-                color: ThemeService.foregroundColor
-                opacity: NetworkService.wifiScanInProgress ? 0.55 : 0.82
-                font { pixelSize: 15; weight: Font.DemiBold }
-                MouseArea {
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    enabled: !NetworkService.wifiScanInProgress
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: NetworkService.refreshWifiNetworks()
-                }
-            }
-            Rectangle {
-                id: wifiSwitch
-                // Use the control-center radio treatment instead of a
-                // separate blue toggle track: white disc when enabled, blue
-                // Wi-Fi glyph, and neutral glass when it is off.
-                width: 32
-                height: 32
-                radius: width / 2
-                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                color: NetworkService.wifiEnabled
-                    ? (ThemeService.isDark ? "#f7fbff" : Qt.rgba(0, 0, 0, 0.08))
-                    : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
-                opacity: NetworkService.wifiToggleInProgress ? 0.55 : 1.0
-                Behavior on color { ColorAnimation { duration: 140 } }
-                border.width: 1
-                border.color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0, 0, 0, 0.10)
-                WifiSignalIcon {
-                    // Matches the readability edge the popup text already carries.
-                    outlined: AppearanceTokens.isDarkTheme
-                    outlineColor: Qt.rgba(0, 0, 0, 0.40)
-                    anchors.centerIn: parent
-                    width: 20
-                    height: 20
-                    wifiEnabled: NetworkService.wifiEnabled
-                    connected: NetworkService.deviceState === "connected"
-                        && NetworkService.connectionType === "wifi"
-                    signalStrength: NetworkService.signalStrength
-                    glyphColor: NetworkService.wifiEnabled
-                        ? "#0a84ff"
-                        : AppearanceTokens.content.glassInk()
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !NetworkService.wifiToggleInProgress
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: NetworkService.setWifiEnabled(!NetworkService.wifiEnabled)
-                }
-            }
-        }
-
-        LiquidGlassPanel {
-            id: connectionCard
-            visible: false
-            width: parent.width
-            height: 0
-            radius: 13
-            cornerExponent: AppearanceTokens.shape.cornerExponent
-            baseColor: ThemeService.backgroundColor
-            ambientPrimary: WallpaperColorSource.primary
-            ambientSecondary: WallpaperColorSource.secondary
-            ambientStrength: 0.72
-            surfaceOpacity: 0.94
-            // The bar popups all carry the control-center card's scrim
-            // posture. Without it these three were the only bar surfaces whose
-            // glass never darkened over a bright backdrop, so their white labels
-            // sat on raw glass while every neighbouring panel was scrimmed --
-            // the two tones were visibly different side by side.
-            scrimEnabled: AppearanceTokens.surface.usesBackdrop
-            scrimLevel: "transparent"
-            materialDepth: 1.8
-            Column {
-                anchors {
-                    left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter
-                    leftMargin: 11; rightMargin: 108
-                }
-                spacing: 3
-                Text {
-                    text: !NetworkService.wifiEnabled ? "Wi‑Fi 已关闭"
-                        : (NetworkService.connectionType === "wifi"
-                        ? (NetworkService.ssid || "未连接 Wi‑Fi") : "未连接 Wi‑Fi"
-                        )
-                    color: ThemeService.foregroundColor
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.38)
-                    font { pixelSize: 13; weight: Font.DemiBold }
-                }
-                GlassText {
-                    text: !NetworkService.wifiEnabled ? "打开开关以扫描附近网络"
-                        : (NetworkService.deviceState === "connected"
-                        ? (NetworkService.connectivity === "full" ? "已连接互联网"
-                            : (NetworkService.connectivity === "portal" ? "需要网页登录认证"
-                                : (NetworkService.connectivity === "limited"
-                                    ? "网络受限" : "已连接")))
-                        : "未连接")
-                    color: ThemeService.foregroundColor
-                    opacity: 0.64
-                    font.pixelSize: 10
-                }
-            }
-            Rectangle {
-                visible: panel.activeSavedWifi() !== null
-                    && NetworkService.connectionType === "wifi"
-                    && NetworkService.deviceState === "connected"
-                width: 42
-                height: 22
-                radius: 11
-                anchors { right: parent.right; rightMargin: 58; verticalCenter: parent.verticalCenter }
-                color: Qt.rgba(1, 1, 1, 0.11)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
-                GlassText {
-                    anchors.centerIn: parent
-                    text: "忘记"
-                    color: "#ff9b92"
-                    font { pixelSize: 10; weight: Font.DemiBold }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: panel.showForgetActiveWifi()
-                }
-            }
-            Rectangle {
-                visible: NetworkService.wifiEnabled
-                    && NetworkService.connectionType === "wifi"
-                    && NetworkService.deviceState === "connected"
-                width: 42
-                height: 22
-                radius: 11
-                anchors { right: parent.right; rightMargin: 10; verticalCenter: parent.verticalCenter }
-                color: Qt.rgba(1, 1, 1, 0.11)
-                border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
-                opacity: NetworkService.wifiDisconnectInProgress ? 0.5 : 1.0
-                GlassText {
-                    anchors.centerIn: parent
-                    text: NetworkService.wifiDisconnectInProgress ? "…" : "断开"
-                    color: panelSurface.foregroundColor
-                    font { pixelSize: 10; weight: Font.DemiBold }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: !NetworkService.wifiDisconnectInProgress
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: NetworkService.disconnectActiveWifi()
-                }
-            }
-        }
-
-    }
     Rectangle {
         id: networkListCard
         anchors.fill: parent
@@ -546,19 +351,23 @@ AnimatedPopupWindow {
                 }
                 Canvas {
                     id: rowWifiGlyph
+                    property int signalStrength: modelData.signalStrength
+                    property color ink: panelSurface.foregroundColor
+                    onSignalStrengthChanged: requestPaint()
+                    onInkChanged: requestPaint()
                     width: 24
                     height: 24
                     anchors { left: parent.left; leftMargin: 32; verticalCenter: parent.verticalCenter }
                     onPaint: {
                         const ctx = getContext("2d")
                         ctx.reset()
-                        ctx.strokeStyle = panelSurface.foregroundColor
-                        ctx.fillStyle = panelSurface.foregroundColor
+                        ctx.strokeStyle = ink
+                        ctx.fillStyle = ink
                         ctx.globalAlpha = 0.92
                         ctx.lineWidth = 1.9
                         ctx.lineCap = "round"
-                        const rings = modelData.signalStrength < 25 ? 1
-                            : (modelData.signalStrength < 50 ? 2 : 3)
+                        const rings = signalStrength < 25 ? 1
+                            : (signalStrength < 50 ? 2 : 3)
                         for (let ring = 0; ring < rings; ring++) {
                             const ringRadius = 3.3 + ring * 2.7
                             ctx.beginPath()

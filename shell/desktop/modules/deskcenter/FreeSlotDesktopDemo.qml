@@ -72,8 +72,8 @@ Item {
     property point groupDragOffset: Qt.point(0, 0)
     property point dragCenter: Qt.point(0, 0)
     // Real desktop entries are supplied by DesktopFilesService through the
-    // host window. This isolated surface deliberately does not add selection,
-    // context menus, open actions, or filesystem mutations.
+    // host window. Selection and drag layout stay local; context menus,
+    // opening, and filesystem mutations are requested through signals.
     property var entries: []
     property bool showExtensions: true
     property var folderCustomizations: ({})
@@ -779,6 +779,7 @@ Item {
         }
         onReleased: function(mouse) {
             if (root.selectionBoxActive) {
+                held = true // A completed box selection must not toggle the desktop.
                 root.selectionEnd = rootPoint(mouse)
                 root.updateBoxSelection()
             }
@@ -1173,7 +1174,8 @@ Item {
                         Image {
                             id: fileThumbnail
                             anchors.fill: parent
-                            source: delegateRoot.entry
+                            source: root.visible && delegateRoot.visible
+                                    && delegateRoot.entry
                                     && delegateRoot.entry.kind === "image"
                                 ? "file://" + delegateRoot.entry.path : ""
                             fillMode: Image.PreserveAspectCrop
@@ -1441,13 +1443,14 @@ Item {
                             })
                         } else {
                             const sourceId = delegateRoot.itemId
+                            const serial = root.outboundDragSerial
                             if (root.outboundDragStarted)
                                 dragVisual.Drag.active = false
                             // dragFinished normally owns system-DnD cleanup.
                             // The deferred fallback covers cancellation and a
                             // release before grabToImage has completed.
                             Qt.callLater(function() {
-                                if (!root.dragActive)
+                                if (!root.dragActive || root.outboundDragSerial !== serial)
                                     return
                                 if (root.outboundDragStarted) {
                                     root.clearOutboundDrag(dragVisual)

@@ -25,7 +25,6 @@ Item {
     // sits at "subtle". Widgets hosting white content can raise it further
     // (widgets use "readable") so text holds over a bright backdrop.
     property string cardScrimLevel: "transparent"
-    property color cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.outline, Qt.rgba(1, 1, 1, 0.20))
     property real cardOpacity: 1.0
     property real cardScale: 1.0
     property real contentOpacity: 1.0

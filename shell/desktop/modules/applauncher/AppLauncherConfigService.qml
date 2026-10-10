@@ -8,8 +8,8 @@ import qs.desktop.modules.platform
 // AppLauncherConfigService — persistent launcher-only layout data.
 //
 // This must stay separate from DockConfigService: Dock pins and launcher
-// folders have different lifecycles. The schema already understands folders,
-// although the first launcher UI consumes only root app ordering.
+// folders have different lifecycles. Root order and folder membership are
+// persisted together; search projects the same catalogue as a flat list.
 QtObject {
     id: service
 
@@ -176,8 +176,7 @@ QtObject {
                 normalized.push({ type: "app", appId: item.appId })
             } else if (item.type === "folder" && typeof item.id === "string"
                     && typeof item.name === "string" && Array.isArray(item.appIds)) {
-                // Folder validation exists before folder rendering is added.
-                // This prevents a future UI from accepting malformed disk data.
+                // Normalize folder members before projecting them into the grid.
                 const appIds = item.appIds.filter(function(appId) {
                     return typeof appId === "string" && appId.length > 0
                 })
@@ -199,7 +198,7 @@ QtObject {
 
     // Current grid projection. Persisted app items keep their chosen order;
     // newly installed apps follow alphabetically without silently modifying
-    // the user's layout. Folder rendering will replace this projection later.
+    // the user's layout. Search uses this flat projection across folders.
     function orderedApplications(catalog) {
         const apps = Array.isArray(catalog) ? catalog : []
         const byId = ({})
@@ -420,7 +419,8 @@ QtObject {
         return false
     }
 
-    // Per-app presentation is launcher-local. Keep the original desktop-entry
+    // Per-app presentation is persisted here and shared across shell surfaces.
+    // Keep the original desktop-entry
     // metadata untouched so users can always return to the system defaults.
     function updateAppOverride(appId, requestedName, requestedIcon,
                                defaultName, defaultIcon) {

@@ -16,3 +16,5 @@ SpatialPreparationWindow 1.0 SpatialPreparationWindow.qml
 ThemeWallpaperLayer 1.0 ThemeWallpaperLayer.qml
 ThemeForegroundWindow 1.0 ThemeForegroundWindow.qml
 WallpaperPreviewBar 1.0 WallpaperPreviewBar.qml
+
+SpatialWidgetForeground 1.0 SpatialWidgetForeground.qml

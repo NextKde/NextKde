@@ -60,6 +60,7 @@ PopupWindow {
     property real volumePreview: ControlCenterService.volumePercent
     property bool draggingVolume: false
     property real brightnessPreview: ControlCenterService.brightnessPercent
+    readonly property var player: DockMprisService.activePlayer
     property bool draggingBrightness: false
     property bool sessionModalVisible: false
     // Reveal progress of the auto-hiding Bar this panel hangs off (1 when the
@@ -243,9 +244,6 @@ PopupWindow {
         "session":    Qt.rect(336 - 142 - 52, 155 + mainControlsOffsetY, 52, 52)
     })
 
-    // 0 when the sub-page is at full size, 1 when it has fully collapsed onto
-    // its source capsule. Drives the submenu card's morphRect interpolation.
-    // Ease matches the crossfade so geometry and opacity stay in lockstep.
     // 0 when a page is at full size, 1 when it has fully collapsed onto its
     // source capsule. Drives a card's morphRect interpolation; the ease matches
     // the crossfade so geometry and opacity stay in lockstep. Works for every
@@ -415,8 +413,7 @@ PopupWindow {
         _triggerTransitionGuard()
         if (panel.sessionModalVisible) {
             // The menu is a card of this same surface, so the panel has to be
-            // mapped for it to have anywhere to sit -- but nothing else about the
-            // Control Center changes, and the primary cards stay mapped behind it.
+            // mapped before switching to the session page.
             if (!coordinator.open)
                 coordinator.openAll()
         }
@@ -498,9 +495,8 @@ PopupWindow {
         pendingConfirmAction = ""
     }
 
-    // The session list dispatches through here rather than each row carrying its
-    // own handler: the three destructive entries ask first (inside the same
-    // card), everything else acts immediately and closes the Control Center.
+    // The session list dispatches through here. The three destructive entries
+    // open the shared confirmation dialog; other entries act immediately.
     function runSessionAction(action) {
         if (action === "logout" || action === "reboot" || action === "poweroff") {
             panel.pendingConfirmAction = action
@@ -626,7 +622,6 @@ PopupWindow {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -770,7 +765,6 @@ PopupWindow {
         cardRadius: 29.5
         cardWidth: 137
         cardHeight: 59
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.74, 0.95, 1, 0.34) : Qt.rgba(0, 0, 0, 0.10)
         cardOpacity: ControlCenterService.bluetoothAvailable ? 1 : 0.48
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1261,7 +1255,6 @@ PopupWindow {
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 144
         cardHeight: 44
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1331,7 +1324,6 @@ PopupWindow {
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 144
         cardHeight: 44
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1417,7 +1409,6 @@ PopupWindow {
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
         cardHeight: 57
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1493,7 +1484,6 @@ PopupWindow {
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
         cardWidth: 296
         cardHeight: 57
-        cardBorderColor: ThemeService.isDark ? Qt.rgba(0.72, 0.93, 1, 0.27) : Qt.rgba(0, 0, 0, 0.10)
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1653,7 +1643,6 @@ PopupWindow {
         cardWidth: 296
         // Keep notification history below the main controls in the top-bar layout.
         cardHeight: 178
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(0, 0, 0, 0.10))
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
@@ -1796,7 +1785,7 @@ PopupWindow {
         }
     }
 
-    // open, so the two interfaces never stack on top of each other.
+    // The session sheet is another page of the same popup.
     ControlCenterCard {
         id: sessionCard
         coordinator: coordinator
@@ -1820,7 +1809,6 @@ PopupWindow {
         cardRadius: _baseRadius + (_sourceRadius - _baseRadius) * panel.sessionMorph
         cardWidth: 296
         cardHeight: 340
-        cardBorderColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(0, 0, 0, 0.10))
         pageTag: "session"
         // Stays mapped while the sheet is the outgoing side of a crossfade, so
         // it fades out instead of snapping away the frame the next page commits.
@@ -1845,7 +1833,7 @@ PopupWindow {
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
 
-        // ── VIEW 1: 6-action Grid ──
+        // Six session actions in a list.
         Item {
             anchors.fill: parent
 

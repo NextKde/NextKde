@@ -94,9 +94,8 @@ QtObject {
         return text.toLowerCase()
     }
 
-    // Rebuild the palette from a seed colour. Cheap and synchronous — the whole
-    // scheme is a few hundred transcendental calls plus one bisection per
-    // out-of-gamut tone.
+    // Rebuild synchronously. Cached palettes are cheap; a new seed performs
+    // nested chroma/lightness searches, so callers should coalesce seed changes.
     function setSeed(value) {
         const next = normalizeSeed(value)
         if (next === seed)

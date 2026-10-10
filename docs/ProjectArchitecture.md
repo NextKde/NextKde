@@ -2,8 +2,9 @@
 
 KOS is organized by runtime boundary and lifecycle, not by the command used
 to reach a feature. The core produces one Quickshell process, one C++ platform
-daemon, one Go data daemon, one settings app, and two KWin plugin libraries.
-Calendar, Todo, Weather, and Music are optional standalone applications.
+daemon, one Go data daemon, one settings app, and KWin effects and decoration.
+Calendar, Todo, Weather, and ListenFree are optional standalone applications.
+The legacy Music application remains available as a separate build target.
 
 ```text
 NextKde/
@@ -40,8 +41,10 @@ kos-platform ── bounded JSONL ──► kos-ai-worker ──► kos-ai ─�
 command output. It consumes `PlatformClient.qml` and `DataClient.qml`, which
 queue requests and correlate responses by `requestId`.
 
-`shared/qml` is portable Qt Quick code. It must not import Quickshell, KWin, or
-Wayland-only modules. `shared/contracts` is the source of truth for protocol
+`shared/qml` contains portable Qt Quick controls and shell-specific adapters.
+The `colorize` adapters use Quickshell image quantization and process APIs;
+standalone applications must avoid importing those adapters. Shared components
+must not import `shell/desktop` feature modules. `shared/contracts` is the source of truth for protocol
 versions, error codes, and default shortcut definitions.
 
 ## Runtime products
@@ -50,10 +53,11 @@ versions, error codes, and default shortcut definitions.
 | --- | --- | --- |
 | Quickshell (`qs -c kos`) | interactive | visual shell surfaces and presentation models |
 | `kos-platform` | systemd `--user` resident | live desktop integration, privileged adapters, and bounded AI worker supervision |
-| `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after one idle minute |
+| `kos-ai-worker` | lazily started child process | isolated local model download, CPU inference, and depth cache; exits after 15 idle seconds |
 | `kos-data-service` | systemd `--user` resident | telemetry, activity ledger, desktop snapshots, weather cache |
 | `kos-settings` | on demand | settings UI; communicates with Shell IPC only |
-| `kos-calendar`, `kos-todo`, `kos-weather`, `kos-music` | on demand | optional independent Qt Quick applications |
+| `kos-calendar`, `kos-todo`, `kos-weather`, `listenfree` | on demand | optional independent Qt Quick applications; ListenFree is the default music app |
+| `kos-music` | on demand | optional legacy music app, retained for separate builds |
 | `kos-pim-service` | D-Bus activated | shared Calendar/Todo storage and reminders |
 | KWin effect `.so` files | KWin managed | compositor effects, independent plugin IDs |
 
@@ -165,7 +169,7 @@ a green result means the same thing in both places.
 |---|---|---|---|
 | `data` | `services/*` and the code they own: the Go data service, the PIM store and its D-Bus client, app preference/weather/music cores | nothing beyond a compiler and Go | yes |
 | `platform` | `platform/tests/test_window_placement.mjs` (node) and `test_contract.py` (python): the platform daemon's contract | node, python | yes |
-| `logic` | pure computation across the shell and dock: date bucketing, window-record indexing, appearance config, dock adaptive/autohide | node | no |
+| `logic` | pure computation across the shell and dock: date bucketing, window-record indexing, appearance config, dock adaptive/autohide | node | Stage geometry/groups/effects/protocol run explicitly; other logic checks are local |
 | `ui` | anything that constructs a QML engine; the panel tests additionally want a compositor | a graphical session | no |
 
 ```sh
@@ -193,7 +197,7 @@ about a second warm. `services/data-service/CMakeLists.txt` passes an absolute
 `.build/tests/services/data-service/go-test-cache`, which is the directory the
 ctest entry point actually uses.
 
-The four KWin plugins under `kwin` and
+The five KWin components (four effects and one decoration) under `kwin` and
 `shell/native/surface-shape` are built by a **separate CI job** that
 only compiles them (`KOS_BUILD_KWIN_PLUGINS=ON`, `BUILD_TESTING=OFF`). That is
 deliberately narrower than "the plugins work": loading them needs a running

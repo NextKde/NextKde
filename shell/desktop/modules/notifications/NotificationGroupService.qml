@@ -6,8 +6,8 @@ import qs.desktop.modules.common
 // Groups tracked notifications by desktopEntry (fallback appName) into a
 // ListModel that the popup and history views consume. Quickshell's
 // trackedNotifications is a read-only UntypedObjectModel (no .get(), no sort,
-// no filter), so -- like WindowService for the Dock -- we bridge it with a
-// hidden Repeater that collects the live notification objects, debounce
+// no filter), so -- like WindowService for the Dock -- we bridge it with an
+// Instantiator that collects the live notification objects, debounce
 // changes, then diff into a ListModel of groups.
 //
 // IMPORTANT: ListModel rows can only hold primitive roles (strings, ints,
@@ -134,7 +134,7 @@ QtObject {
     // old object within ~2ms of the new one arriving -- the sidecar (refreshed
     // on a 10ms debounce) can still hold a reference to the destroyed object,
     // and calling dismiss()/expire() on it silently does nothing. Collecting
-    // fresh from the Repeater guarantees we only ever touch live objects.
+    // fresh from the Instantiator guarantees we only ever touch live objects.
     function _liveNotificationsForKey(key) {
         const all = svc._collectNotifications()
         const out = []
@@ -266,7 +266,13 @@ QtObject {
             }
 
             if (currentIdx === -1) {
-                model.insert(targetIdx, targetGroup)
+                // Keep live QObjects exclusively in the sidecar. Passing
+                // targetGroup also inserts its notifications array as a nested
+                // ListModel role, retaining a second collection of wrappers.
+                const row = {}
+                for (const prop of keys)
+                    row[prop] = targetGroup[prop]
+                model.insert(targetIdx, row)
             } else {
                 if (currentIdx !== targetIdx)
                     model.move(currentIdx, targetIdx, 1)

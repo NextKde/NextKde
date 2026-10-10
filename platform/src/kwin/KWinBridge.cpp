@@ -64,6 +64,7 @@ constexpr int kMaxThumbnailConcurrency = 2;
 constexpr qsizetype kMaxThumbnailQueue = 32;
 constexpr qint64 kThumbnailFreshMs = 5000;
 constexpr int kThumbnailWorkerThreads = 4;
+constexpr qint64 kMaxThumbnailFrameBytes = 256 * 1024 * 1024;
 
 // A raw screenshot frame is tens of MB of RGBA. After the first large block is
 // freed glibc raises its dynamic mmap threshold, so later captures of the same
@@ -346,6 +347,7 @@ private:
             m_thumbnailQueue = retained;
         }
         m_lastWindowIds = ids;
+        m_haveWindowSnapshot = true;
         publishEvent(event);
     }
 
@@ -406,7 +408,10 @@ private:
         // we wait for that reply before reading, KWin and this process can
         // deadlock. Start draining immediately in a worker thread.
         const auto expectedBytes = std::make_shared<std::atomic<qint64>>(-1);
-        const auto deadlineMs = std::make_shared<std::atomic<qint64>>(-1);
+        // This deadline also applies before metadata arrives, including during
+        // shutdown when the event loop can no longer deliver the D-Bus reply.
+        const auto deadlineMs = std::make_shared<std::atomic<qint64>>(
+            QDateTime::currentMSecsSinceEpoch() + 10000);
         auto pixelsFuture = QtConcurrent::run(&m_thumbnailPool,
                 [readFd = pipeFds[0], expectedBytes, deadlineMs] {
             // The drain loop leaves through four different branches. Hand-closing
@@ -426,8 +431,7 @@ private:
                     return bytes.left(expected);
                 }
                 const qint64 deadline = deadlineMs->load();
-                if (expected >= 0 && deadline > 0
-                        && QDateTime::currentMSecsSinceEpoch() >= deadline) {
+                if (QDateTime::currentMSecsSinceEpoch() >= deadline) {
                     return bytes;
                 }
 
@@ -436,6 +440,8 @@ private:
                     continue;
                 const ssize_t bytesRead = ::read(readFd, buffer.data(), buffer.size());
                 if (bytesRead > 0) {
+                    if (bytes.size() > kMaxThumbnailFrameBytes - bytesRead)
+                        return QByteArray{};
                     bytes.append(buffer.data(), bytesRead);
                     continue;
                 }
@@ -457,6 +463,7 @@ private:
         QDBusInterface screenshot(QStringLiteral("org.kde.KWin"),
                                   QStringLiteral("/org/kde/KWin/ScreenShot2"),
                                   QStringLiteral("org.kde.KWin.ScreenShot2"));
+        screenshot.setTimeout(8000);
         // Async so a slow or stuck KWin reply never blocks every other bridge
         // request; the pipe reader drains independently of the reply anyway.
         const QDBusPendingCall pending = screenshot.asyncCall(
@@ -506,7 +513,10 @@ private:
             publishThumbnailDebug(id, QStringLiteral("meta=%1x%2 stride=%3 format=%4 type=%5")
                 .arg(width).arg(height).arg(stride).arg(int(format))
                 .arg(result.value(QStringLiteral("type")).toString()));
-            expectedBytes->store(std::max<qint64>(0, expectedSize));
+            // Reject oversized metadata before constructing an image. The
+            // pipe reader independently enforces the same allocation bound.
+            expectedBytes->store(expectedSize > kMaxThumbnailFrameBytes
+                ? 0 : std::max<qint64>(0, expectedSize));
             deadlineMs->store(QDateTime::currentMSecsSinceEpoch() + 4000);
 
             // A 4K frame is tens of MB of pixels plus a PNG encode; decode,
@@ -541,6 +551,7 @@ private:
                 };
                 if (width <= 0 || height <= 0 || stride <= 0
                         || format == QImage::Format_Invalid
+                        || expectedSize > kMaxThumbnailFrameBytes
                         || bytes.size() < expectedSize) {
                     fail(QStringLiteral("KWin returned an invalid screenshot"));
                     return;
@@ -589,7 +600,7 @@ private:
     {
         // The window can close while a capture drains; drop the PNG instead of
         // handing the shell a file it would immediately discard.
-        if (!m_lastWindowIds.isEmpty() && !m_lastWindowIds.contains(id)) {
+        if (m_haveWindowSnapshot && !m_lastWindowIds.contains(id)) {
             QFile::remove(path);
             endThumbnailCapture(id);
             return;
@@ -726,6 +737,7 @@ private:
     QQueue<QString> m_thumbnailQueue;
     quint64 m_thumbnailSerial = 0;
     bool m_desktopIndexReady = false;
+    bool m_haveWindowSnapshot = false;
     std::atomic<quint64> m_iconTicket{0};
     // Both pools are declared last so their destructors wait for workers while
     // every cache they access above is still alive.

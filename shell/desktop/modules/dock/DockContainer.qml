@@ -543,8 +543,7 @@ Item {
             vertical: container.vertical
             iconSize: container.iconSize
             activeBackgroundGap: container.activeBackgroundGap
-            // 启动器 logo 是仓库里的位图原作（1024²），走文件而不是内联
-            // 降采样副本 —— 后者在 Dock 尺寸下明显发糊。
+            // 启动器使用仓库中的 SVG，避免系统图标主题改变这个固定入口。
             iconSource: Qt.resolvedUrl("../../assets/applauncher.svg")
             displayName: "应用程序"
             showContextMenu: false
@@ -617,7 +616,6 @@ Item {
                 id: pinnedItemLoader
                 required property var modelData
                 required property int index
-                property real lastDragX: 0
                 property var itemData: modelData
                 property int pinnedIndex: index
                 property bool dragged: false
@@ -893,7 +891,7 @@ Item {
         }
 
         // ── Stretch slack: push the information slot to the far end ──
-        // Only a stretched dock has slack. Spending it between the window
+        // Relaxed content spends available slack between the window
         // tasks and the information slot keeps launchers and running windows
         // against the starting edge while the clock, weather and the trailing
         // status area sit at the opposite one — a taskbar-style split. The

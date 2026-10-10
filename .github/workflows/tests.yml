@@ -45,7 +45,7 @@ jobs:
             cmake ninja gcc \
             qt6-base qt6-declarative qt6-wayland \
             extra-cmake-modules wayland \
-            kwindowsystem kiconthemes kglobalaccel kio \
+            kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu
 
       # Warm Go's build cache across runs. `kos-data-service.go` compiles the
@@ -76,10 +76,10 @@ jobs:
           KOS_BUILD_SPATIAL: ON
         run: ./tools/run-tests.sh --layer data --layer platform
 
-      - name: Check Stage logic and publishing protocol
+      - name: Run logic and headless Settings regressions
         run: |
-          ctest --test-dir .build/tests --output-on-failure \
-            -R '^kos-shell\.stage-(geometry|groups|effects|protocol)$'
+          ctest --test-dir .build/tests --output-on-failure -L '^logic$'
+          ctest --test-dir .build/tests --output-on-failure -R '^kos-settings\.'
 
       - name: Summarise which layers ran
         if: always()
@@ -91,8 +91,8 @@ jobs:
             echo "|---|---|"
             echo "| \`data\` | here, on every run |"
             echo "| \`platform\` | here, on every run |"
-            echo "| \`logic\` | locally, via \`./tools/run-tests.sh --all\` |"
-            echo "| \`ui\` | locally, on a machine with a compositor |"
+            echo "| \`logic\` | here, on every run |"
+            echo "| \`ui\` | Settings offscreen here; desktop flows locally with a compositor |"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   kwin-plugins:
@@ -119,7 +119,7 @@ jobs:
             cmake ninja gcc \
             qt6-base qt6-declarative qt6-wayland \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
-            kcoreaddons kdecoration gettext libxcb vulkan-headers wayland
+            kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
 
       # Compiling is all this job proves, and that is deliberate. Whether the
       # plugin then loads, and whether the install path relabels correctly, is
@@ -139,3 +139,12 @@ jobs:
 
       - name: Build the KWin plugins
         run: cmake --build .build/kwin --parallel "$(nproc)"
+
+      - name: Check KWin 6.6 API compatibility
+        run: |
+          for version in 6.6.0 6.6.5; do
+            git clone --quiet --depth 1 --branch "v${version}" \
+              https://invent.kde.org/plasma/kwin.git ".build/kwin-${version}"
+            python tools/check-kwin-api.py --build-dir .build/kwin \
+              --kwin-headers ".build/kwin-${version}/src"
+          done

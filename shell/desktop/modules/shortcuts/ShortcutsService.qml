@@ -112,7 +112,10 @@ QtObject {
         // development tree and must be addressed by its explicit path.
         if (Quickshell.shellDir === configRoot)
             return "qs -c kos " + args
-        return "qs --path " + Quickshell.shellDir + " " + args
+        // The daemon parses this with KShell::splitArgs. Preserve spaces and
+        // quotes in the selector as one argument; it never invokes a shell.
+        const path = "'" + String(Quickshell.shellDir).replace(/'/g, "'\\''") + "'"
+        return "qs --path " + path + " " + args
     }
 
     // Publish the effective set to kos-platform. Applies at startup and after

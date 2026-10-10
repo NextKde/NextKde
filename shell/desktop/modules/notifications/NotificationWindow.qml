@@ -595,8 +595,9 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    const resident = card.notification?.resident ?? false
                                     modelData.invoke()
-                                    if (!card.notification.resident)
+                                    if (!resident)
                                         card.close(false)
                                 }
                             }
@@ -631,9 +632,10 @@ PanelWindow {
                         }
                         onAccepted: {
                             if (text.length > 0 && card.notification) {
+                                const resident = card.notification.resident
                                 card.notification.sendInlineReply(text)
                                 text = ""
-                                if (!card.notification.resident)
+                                if (!resident)
                                     card.close(false)
                             }
                         }

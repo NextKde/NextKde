@@ -110,7 +110,6 @@ Item {
         radius: lens.radius
         visible: !root.materialForm
         color: Qt.rgba(0, 0, 0, AppTheme.dark ? 0.24 : 0.10)
-        Behavior on x { NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutQuint } }
     }
 
     Rectangle {

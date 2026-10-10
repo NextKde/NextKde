@@ -10,6 +10,7 @@ uniform vec4 box;
 uniform vec4 cornerRadius;
 uniform float opacity;
 uniform int glassEnabled;
+uniform int appearanceMaskEnabled;
 uniform int scrimMode;
 uniform float scrimCap;
 uniform float scrimDecay;
@@ -90,7 +91,7 @@ void main(void)
     // unrendered.
     bool needsDetail = glassEnabled != 1 || refractionStrength <= 0.0;
     vec4 sum = vec4(0);
-    if (dist <= 0.0 && needsDetail) {
+    if ((dist <= 0.0 || appearanceMaskEnabled == 1) && needsDetail) {
         sum = texture(texUnit, uv + vec2(-halfpixel.x * 2.0, 0.0) * offset);
         sum += texture(texUnit, uv + vec2(-halfpixel.x, halfpixel.y) * offset) * 2.0;
         sum += texture(texUnit, uv + vec2(0.0, halfpixel.y * 2.0) * offset);
@@ -116,7 +117,12 @@ void main(void)
             float lum = scrimLumaValid == 1 ? localScrimLuminance(uv) : 0.5;
             sum.rgb = adaptiveScrim(sum.rgb, lum, scrimMode == 2);
         }
-        float df = fwidth(dist);
+    }
+
+    // Unified application windows mask their plain blur as well as material
+    // passes, so a rectangular blurred patch cannot fill their cut corners.
+    if (glassEnabled == 1 || appearanceMaskEnabled == 1) {
+        float df = max(fwidth(dist), 0.0001);
         sum *= 1.0 - clamp(0.5 + dist / df, 0.0, 1.0);
     }
 

@@ -154,12 +154,14 @@ QtObject {
                 return
             }
             svc._failures = 0
+            _retryTimer.stop()
             const data = response.result?.names ?? {}
-            const next = Object.assign({}, svc.resolvedNames)
-            let changed = false
+            // The daemon returns the complete live snapshot. Merging into
+            // the previous map retains every generated ID after its app exits.
+            const next = Object.assign({}, data)
+            let changed = Object.keys(next).length !== Object.keys(svc.resolvedNames).length
             for (const k in data) {
-                if (next[k] !== data[k]) {
-                    next[k] = data[k]
+                if (svc.resolvedNames[k] !== data[k]) {
                     changed = true
                 }
             }

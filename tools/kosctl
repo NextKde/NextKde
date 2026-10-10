@@ -10,9 +10,8 @@ glass_build_dir="$build_dir/kwin-effects-glass"
 kwin_system_prefix=/usr
 kwin_manifest="$prefix/share/kos/kwin-system-files.manifest"
 kwin_effect_state="$prefix/share/kos/kwin-effect-state"
-# Where KWin records which decoration is selected. Nothing here writes it: the
-# decoration is installed, never chosen, and uninstall only reads the key to
-# tell the user when it is about to remove a plugin their kwinrc still names.
+# KOS is the first-install default. Settings saves the previous decoration
+# before selecting it and preserves later opt-outs across upgrades.
 # KWin reads it from this legacy config group even though KDecoration3 plugins
 # install into an `org.kde.kdecoration3` directory.
 kwin_decoration_group=org.kde.kdecoration2
@@ -62,8 +61,8 @@ arch_core_build_packages=(
     extra-cmake-modules wayland
     kwindowsystem kiconthemes kglobalaccel kio patchelf
 )
-# Only the depth engine and the 3D wallpaper plugin need these, and both follow
-# KOS_BUILD_SPATIAL. The default build installs neither.
+# The depth engine and 3D wallpaper plugin follow KOS_BUILD_SPATIAL.
+# AUTO enables them when their build dependencies are available.
 arch_spatial_build_packages=(
     opencv
 )
@@ -82,9 +81,6 @@ kwin_plugins_enabled() {
     esac
 }
 
-# The depth engine is optional: a default build leaves the ONNX Runtime and
-# OpenCV out entirely, and the Shell's spatial wallpaper UI stays hidden behind
-# the capability probe. Turn it on with KOS_BUILD_SPATIAL=ON.
 # The depth engine is optional. AUTO, the default, builds it when OpenCV and the
 # ONNX Runtime are already installed and quietly leaves it out otherwise; ON
 # requires them; OFF never looks for them. Turning it off is what a machine that
@@ -1128,9 +1124,8 @@ enable_kwin_effects() {
     kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled \
         false --type bool --notify false
     local effect
-    # kos_bridge draws the window button panel, and draws nothing at all until
-    # the KOS decoration is selected -- so enabling it costs a user who wants
-    # that decoration nothing, and there is no switch to forget afterwards.
+    # WindowSettings preserves the user's later choice and backs up decoration
+    # selection. No effect binary is loaded into the running compositor here.
     for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
         # --notify false: only write kwinrc. --notify true would send a D-Bus
         # signal asking the RUNNING compositor to re-read the config, which is
@@ -1138,13 +1133,16 @@ enable_kwin_effects() {
         kwriteconfig6 --file kwinrc --group Plugins --key "${effect}Enabled" \
             true --type bool --notify false
     done
+    if [[ -x "$prefix/bin/kos-settings" ]]; then
+        "$prefix/bin/kos-settings" --install-window-defaults
+    else
+        printf 'KOS decoration defaults require the installed kos-settings backend.\n' >&2
+        return 1
+    fi
     printf 'KWin effects enabled in kwinrc; they load on the next KWin/session start.\n'
 }
 
-# The decoration selection is the user's, not this script's: install never
-# writes it, so uninstall has nothing of its own to put back. Removing the
-# plugin while kwinrc still names it is worth saying out loud all the same --
-# KWin falls back to a decoration it can load, but the choice is now stale.
+# Warn if a failed restoration leaves the removed decoration selected.
 warn_kos_decoration_selected() {
     command -v kreadconfig6 >/dev/null 2>&1 || return 0
     [[ "$(kreadconfig6 --file kwinrc --group "$kwin_decoration_group" \
@@ -1164,26 +1162,6 @@ warn_replaced_decoration_selected() {
     printf 'Choose KOS or another one in System Settings > Window Decorations.\n'
 }
 
-# Applies the just-installed effect binaries to the RUNNING compositor.
-# Hot-loading freshly replaced plugin .so files is the operation that has
-# crashed KWin before (it takes every Wayland client down with it), so this
-# is deliberately not called by any command. Keep it available for manual,
-# well-understood use only.
-reload_kwin_effects() {
-    if [[ -z "$qdbus_bin" ]]; then
-        printf 'warn qdbus is unavailable; KWin effects will load after the next session restart\n' >&2
-        return 0
-    fi
-    "$qdbus_bin" org.kde.KWin /Effects \
-        org.kde.kwin.Effects.unloadEffect blur >/dev/null 2>&1 || true
-    local effect
-    for effect in kos_bridge kos_dock_window_animation kos_context_menu_input glass; do
-        "$qdbus_bin" org.kde.KWin /Effects \
-            org.kde.kwin.Effects.loadEffect "$effect" >/dev/null 2>&1 || true
-    done
-    printf 'KWin effects reloaded on the running compositor.\n'
-}
-
 install_kwin_plugins() {
     kwin_plugins_enabled || return 0
 
@@ -1193,8 +1171,7 @@ install_kwin_plugins() {
         printf '  imports = [ inputs.kos.nixosModules.kos ];\n'
         printf '  services.kos.enable = true;\n'
         printf 'Then run: sudo nixos-rebuild switch\n'
-        printf 'The KOS window decoration is installed with the plugins; select it in\n'
-        printf 'System Settings > Window Decorations.\n'
+        printf 'First install selects KOS decoration; later settings choices are preserved.\n'
         enable_kwin_effects
         return 0
     fi
@@ -1325,9 +1302,8 @@ install_kwin_plugins() {
     fi
     enable_kwin_effects
     printf 'Installed and enabled KOS Bridge, Dock Animation, Context Menu Input, and Glass.\n'
-    printf 'Installed the KOS window decoration without selecting it: pick it in\n'
-    printf 'System Settings > Window Decorations, which is also where the window\n'
-    printf 'buttons appear and disappear with it.\n'
+    printf 'KOS decoration is the first-install default; later choices are preserved.\n'
+    printf 'Manage window appearance and animations in kos-settings.\n'
     warn_replaced_decoration_selected
 }
 
@@ -1676,6 +1652,9 @@ uninstall_kwin_plugins() {
     if [[ ! -s "$kwin_manifest" && ! -e "$kwin_effect_state" ]]; then
         return 0
     fi
+    if [[ -x "$prefix/bin/kos-settings" ]]; then
+        "$prefix/bin/kos-settings" --restore-window-defaults
+    fi
 
     local effect
     if command -v kwriteconfig6 >/dev/null 2>&1; then
@@ -1719,7 +1698,7 @@ uninstall_kwin_plugins() {
     fi
     rm -f "$kwin_manifest" "$kwin_effect_state"
     # Last, and about the plugin file just removed rather than about anything
-    # this script wrote: it never wrote the decoration selection.
+    # this script wrote; the settings backend restores the saved decoration.
     warn_kos_decoration_selected
 }
 

@@ -34,7 +34,12 @@ stdenv.mkDerivation {
         onnxruntime
     ];
 
-    cmakeFlags = [ "-DCMAKE_BUILD_TYPE=Release" ];
+    cmakeFlags = [
+        "-DCMAKE_BUILD_TYPE=Release"
+        "-DKOS_SPATIAL_ENABLED=ON"
+        "-DKOS_PLATFORM_KWIN_SCRIPT_SOURCE=${src}/kwin/window-bridge.js"
+        "-DBUILD_TESTING=OFF"
+    ];
     dontWrapQtApps = true;
 
     meta = with lib; {

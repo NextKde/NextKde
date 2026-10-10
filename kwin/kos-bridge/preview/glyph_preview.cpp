@@ -6,7 +6,7 @@
 // /usr -> restart KWin, and a KWin restart takes every Wayland client with it.
 // Hot-loading a replaced plugin .so is not a way out either -- it is the
 // operation that has crashed KWin before, which is why kosctl's
-// reload_kwin_effects() is deliberately called by no command.
+// kosctl leaves effect loading to the next compositor/session start.
 //
 //   cmake -S kwin/kos-bridge -B build -DKOS_BRIDGE_BUILD_PREVIEW=ON
 //   cmake --build build --target glyph_preview

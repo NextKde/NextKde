@@ -33,7 +33,7 @@ void main(void)
     // Match the onscreen glass pass even when its geometry spans the full
     // rectangular card. Noise is additively blended, so mask RGB, not alpha.
     float f = squircleBoxDist(vertex, box.xy, box.zw, cornerRadius);
-    float df = fwidth(f);
+    float df = max(fwidth(f), 0.0001);
     float coverage = 1.0 - clamp(0.5 + f / df, 0.0, 1.0);
     fragColor = vec4(texture(texUnit, uvNoise).rrr * coverage, 0);
 }

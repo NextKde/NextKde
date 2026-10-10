@@ -856,6 +856,7 @@ PanelWindow {
             orderOverride || root._groupOrder,
             StageGroups.groupRecords(records,
                 { requirePid: true, overrides: root._mergeOverrides,
+                  desktopId: WindowService.currentDesktopId,
                   excludeKey: excludeKey,
                   excludeKeepMinimized: keepActiveMin,
                   requireMinimized: true,
@@ -888,6 +889,7 @@ PanelWindow {
         if (keepActiveMin) {
             const allGroups = StageGroups.groupRecords(records,
                 { requirePid: true, overrides: root._mergeOverrides,
+                  desktopId: WindowService.currentDesktopId,
                   requireMinimized: true,
                   minimizedWhitelist: pendingWhitelist })
             let ghostEntry = null
@@ -1208,9 +1210,28 @@ PanelWindow {
     }
     property Timer _liveStatusPoll: Timer {
         interval: 1500
-        running: true
+        running: root.open && StageConfigService.thumbLiveEffect
         repeat: true
         onTriggered: root._pollLiveStatus()
+    }
+
+    function _clearLiveOwnership() {
+        root._liveActiveIds = ({})
+        root._liveSeeded = ({})
+        root._liveSeedRejected = ({})
+        root.liveChromeOwned = false
+        root._applyLivePainted()
+    }
+
+    Connections {
+        target: StageConfigService
+        function onThumbLiveEffectChanged() {
+            if (!StageConfigService.thumbLiveEffect)
+                root._clearLiveOwnership()
+            else if (root.open)
+                root._pollLiveStatus()
+            root.scheduleLivePublish()
+        }
     }
 
     function _applyLivePainted() {
@@ -2357,6 +2378,7 @@ PanelWindow {
                     // 全局 chrome 旗标只证明"特效在画某些卡"，未发布进
                     // stage-live 的卡（rep 未最小化等）特效根本没画，跟着
                     // 全局旗标隐藏＝永久隐形只剩输入热区
+                    previewActive: root.visible && slot.edgeFade > 0
                     effectOwnedChrome: root.liveChromeOwned
                         && root._liveActiveIds[slot.appKey] === true
                 }
@@ -2985,11 +3007,14 @@ PanelWindow {
     onOpenChanged: {
         if (open) {
             _prevActiveId = WindowService.activeWindowId
+            if (StageConfigService.thumbLiveEffect)
+                root._pollLiveStatus()
             _queueAllThumbnails()
             publishSimulatedLayout("")
         } else {
             _thumbRequestPacer.stop()
             root._thumbRequestQueue = []
+            root._clearLiveOwnership()
             // 关闭时取消在途收编（v87 审查）：_dispatchNextEngage 有
             // enabled/open 守卫，唯独收编派发链裸奔——用户点桌面后 ~150ms
             // 内关台前（Meta+Y/控制中心），_captureThenMinTimer 照常触发、
@@ -3223,10 +3248,8 @@ PanelWindow {
                 cardModel.setProperty(upd.row, field, upd.fields[field])
         }
         for (let a = 0; a < plan.appends.length; a++) {
-            // 收集落卡即时现身：追加行直接落位（免入场滑入/淡入）——行
-            // 的窗口此刻多在收编飞行中（dock 点收回/标题栏收起后 ~50ms
-            // 快照落行），再叠 280ms 入场动画 = "卡片迟一步出现"
-            //（2026-10-01 用户实测；instant 使卡与飞行同拍起跑）
+            // New cards start at their final position and scale. StageCard
+            // fades them in over animDuration alongside the window flight.
             plan.appends[a].enterInstant = true
             cardModel.append(plan.appends[a])
         }

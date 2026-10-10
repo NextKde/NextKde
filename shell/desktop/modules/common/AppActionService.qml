@@ -83,19 +83,23 @@ QtObject {
             }
             return _executeDirect(entry, appId, "platform-unavailable")
         }
-        return _requestDaemonLaunch(appId, entry)
+        return _requestDaemonLaunch(appId)
     }
 
     // The daemon op accepts only {desktopId, urls}, so it still works when the
     // entry could not be resolved -- for example it was uninstalled between the
     // catalogue snapshot and the click. Only the direct argv fallback needs a
     // live entry.
-    function _requestDaemonLaunch(appId, entry) {
+    function _requestDaemonLaunch(appId) {
         PlatformClient.request("application.launch", {
             desktopId: appId,
             urls: []
         }, function(response) {
             if (!response.ok) {
+                // DesktopEntries may have rescanned while the daemon request
+                // was pending. Resolve at use time instead of capturing a
+                // DesktopEntry that the catalogue can destroy.
+                const entry = AppPresentationService.entryFor(appId)
                 if (!entry || entry.runInTerminal) {
                     // Spawning a terminal app without a TTY always dies; a
                     // silent dead process is worse than a logged refusal.

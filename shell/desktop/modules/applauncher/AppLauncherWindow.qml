@@ -495,6 +495,7 @@ PanelWindow {
     }
 
     function showFolder(folder, _originDelegate) {
+        folderCloseTimer.stop();
         displayedFolder = folder;
         openFolder = folder;
         // Opening a folder from root edit mode continues the same editing
@@ -511,6 +512,7 @@ PanelWindow {
     function closeFolder() {
         if (!displayedFolder)
             return;
+        folderOpenTimer.stop();
         folderEditMode = false;
         folderRenameActive = false;
         // The dialog fades+scales out via its Behaviors; the close timer
@@ -1775,7 +1777,9 @@ PanelWindow {
                                     rotation: 0
                                     SequentialAnimation {
                                         id: editWiggle
-                                        running: root.editMode && !appDelegate.manipulating
+                                        running: root.open && appDelegate.visible && root.editMode
+                                            && !root.displayedFolder && root.editingApplication === null
+                                            && !appDelegate.manipulating
                                         loops: Animation.Infinite
                                         NumberAnimation {
                                             target: appCard
@@ -2506,7 +2510,10 @@ PanelWindow {
                                         rotation: 0
                                         SequentialAnimation {
                                             id: folderWiggleAnimation
-                                            running: root.folderEditMode && !folderAppDelegate.manipulating
+                                            running: root.open && root.folderDialogOpen
+                                                && folderAppDelegate.visible && root.folderEditMode
+                                                && root.editingApplication === null
+                                                && !folderAppDelegate.manipulating
                                             loops: Animation.Infinite
                                             alwaysRunToEnd: false
                                             NumberAnimation {

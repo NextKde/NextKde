@@ -124,8 +124,12 @@ export function makeClientCore(config) {
             const previousId = state.queuedByKey.get(dedupKey);
             if (previousId !== undefined) {
                 const previous = state.pending.get(previousId);
-                if (previous)
+                if (previous) {
                     entry.callbacks = previous.callbacks.concat(entry.callbacks);
+                    // Repeated polls must not renew the oldest caller's
+                    // deadline forever while the daemon is unavailable.
+                    entry.enqueuedAt = previous.enqueuedAt;
+                }
                 state.pending.delete(previousId);
                 dropQueued(previousId);
             }

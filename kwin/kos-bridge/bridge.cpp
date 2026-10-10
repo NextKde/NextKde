@@ -3,21 +3,87 @@
 #include "windowbuttons/buttonconfig.h"
 #include "windowbuttons/buttoninput.h"
 #include "windowbuttons/windowquery.h"
+#include "windowappearance/windowappearance.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <core/renderviewport.h>
 #include <input.h>
+#include <window.h>
 
 namespace KOS
 {
+
+namespace
+{
+
+// The window types the unified appearance applies to. The same filter the
+// button panels use -- shell surfaces, docks, popups and notifications are
+// other systems' surfaces and keep their own look.
+bool appearanceEligible(const KWin::EffectWindow *window)
+{
+    if (!window || !window->isVisible() || !window->isManaged()) {
+        return false;
+    }
+    if (!window->isNormalWindow() && !window->isDialog()) {
+        return false;
+    }
+    if (window->isSkipSwitcher() || window->isSpecialWindow()) {
+        return false;
+    }
+    // Reject every popup-like role explicitly. Transient surfaces such as
+    // tooltips, menus and combo boxes can otherwise slip through as "normal"
+    // on some backends and end up with their own shadow and outline.
+    if (window->isPopupWindow() || window->isPopupMenu()
+        || window->isDropdownMenu() || window->isComboBox()
+        || window->isMenu() || window->isTooltip() || window->isAppletPopup()
+        || window->isOnScreenDisplay() || window->isNotification()
+        || window->isCriticalNotification() || window->isSplash()
+        || window->isUtility() || window->isDock() || window->isDesktop()
+        || window->isDNDIcon()) {
+        return false;
+    }
+    // KWin's own user interface is not an application window. The OSD the
+    // desktop-change script draws, the outline, the tab switcher: those are
+    // internal windows that report themselves as managed, undecorated normal
+    // windows -- without this they grow a shadow of their own.
+    if (const KWin::Window *native = window->window();
+        native && native->isInternal()) {
+        return false;
+    }
+    // Input-method candidate windows behave like popups without declaring it.
+    const QString appId = window->windowClass();
+    if (appId.contains(QStringLiteral("fcitx"), Qt::CaseInsensitive)
+        || appId.contains(QStringLiteral("ibus"), Qt::CaseInsensitive)
+        || appId.contains(QStringLiteral("inputmethod"), Qt::CaseInsensitive)) {
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 BridgeEffect::BridgeEffect()
     : Effect()
     , m_renderer(std::make_unique<ButtonRenderer>())
     , m_config(std::make_unique<ButtonConfig>())
     , m_input(std::make_unique<ButtonInput>(m_renderer.get(), m_config.get()))
+    , m_appearance(std::make_unique<WindowAppearanceManager>())
+    , m_continuousClip(std::make_unique<WindowAppearance::ContinuousClip>())
 {
+    KWin::effects->setProperty(SharedWindowSourceProperty,
+        QVariant::fromValue(static_cast<QObject *>(this)));
+    connect(m_renderer.get(), &ButtonRenderer::sourceRepaint, this,
+        [this](const QRectF &rect) { m_continuousClip->invalidateRegion(rect); });
+    connect(KWin::effects, &KWin::EffectsHandler::windowDataChanged, this,
+        [this](KWin::EffectWindow *window, int role) {
+            if (role == DockSourceAnimationRole) {
+                m_renderer->clearHits(window);
+                m_continuousClip->invalidate(window);
+            }
+        });
+    connect(m_appearance.get(), &WindowAppearanceManager::configurationChanged,
+            this, [this] { m_continuousClip->clear(); });
     if (KWin::input()) {
         KWin::input()->installInputEventFilter(m_input.get());
     }
@@ -34,6 +100,10 @@ BridgeEffect::BridgeEffect()
                 if (m_renderer) {
                     m_renderer->forget(window);
                 }
+                if (m_appearance) {
+                    m_continuousClip->forget(window);
+                    m_appearance->forget(window);
+                }
                 if (m_lastActive == window) {
                     m_lastActive = nullptr;
                 }
@@ -45,8 +115,14 @@ BridgeEffect::BridgeEffect()
     // that -- an application may redraw its own title bar and a decoration may
     // follow the state, but neither is promised, and an idle window repaints
     // for no reason at all. So the two panel rectangles are damaged here.
+    // The window appearance has the same dependency in the other direction:
+    // the shadow tier and outline opacity follow the focus, and both move
+    // animated, so the two windows are retargeted and damaged here as well.
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this,
             [this](KWin::EffectWindow *window) {
+                if (m_appearance) {
+                    m_appearance->focusChanged(window);
+                }
                 if (!m_renderer) {
                     return;
                 }
@@ -62,6 +138,7 @@ BridgeEffect::BridgeEffect()
     m_config->setOnDecorationChanged([this]() {
         if (m_renderer) {
             m_renderer->invalidateAll();
+            m_continuousClip->invalidateAll();
         }
         if (KWin::effects) {
             KWin::effects->addRepaintFull();
@@ -69,7 +146,11 @@ BridgeEffect::BridgeEffect()
     });
 }
 
-BridgeEffect::~BridgeEffect() = default;
+BridgeEffect::~BridgeEffect()
+{
+    if (KWin::effects->property(SharedWindowSourceProperty).value<QObject *>() == this)
+        KWin::effects->setProperty(SharedWindowSourceProperty, QVariant());
+}
 
 void BridgeEffect::reconfigure(ReconfigureFlags flags)
 {
@@ -81,6 +162,10 @@ void BridgeEffect::reconfigure(ReconfigureFlags flags)
     // override), so every cached measurement is stale now.
     if (m_renderer) {
         m_renderer->invalidateAll();
+        m_continuousClip->invalidateAll();
+    }
+    if (m_appearance) {
+        m_appearance->reconfigure();
     }
     // Repaint everything so a hot-reloaded config is visible immediately
     // instead of waiting for each window's next unrelated repaint.
@@ -94,36 +179,121 @@ bool BridgeEffect::isActive() const
     return true;
 }
 
+void BridgeEffect::prePaintWindow(KWin::RenderView *view,
+                                 KWin::EffectWindow *window,
+                                 KWin::WindowPrePaintData &data
+#ifdef KOS_KWIN_PAINT_TIME_API
+                                 , std::chrono::milliseconds presentTime
+#endif
+                                 )
+{
+    // Radius and appearance bounds must exist before the scene computes its
+    // opaque region and culls windows against the current damage.
+    if (m_appearance && appearanceEligible(window)) {
+        m_appearance->prepare(window, m_continuousClip->availableFor(window));
+        const auto style = m_appearance->continuousStyle(window);
+        if (m_continuousClip->configure(window, style)) {
+            // The mask opens the corners. The scene must paint the actual
+            // background under them before drawing this cached window.
+            data.setTranslucent();
+        } else if (style) {
+            m_appearance->prepare(window, false);
+        }
+    } else if (m_continuousClip) {
+        // Closing/minimizing animations can keep painting a window after
+        // isVisible becomes false. Keep its existing contour for that time.
+        if (m_continuousClip->configure(window, m_appearance->continuousStyle(window))) {
+            data.setTranslucent();
+        }
+    }
+    Effect::prePaintWindow(view, window, data
+#ifdef KOS_KWIN_PAINT_TIME_API
+                           , presentTime
+#endif
+                           );
+}
+
 void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
                                const KWin::RenderViewport &viewport,
                                KWin::EffectWindow *window, int mask,
                                const KWin::Region &deviceRegion,
                                KWin::WindowPaintData &data)
 {
-    // Let the window (and every effect after this one) paint itself first.
+    if (window->data(WindowSourceCaptureRole).toBool()) {
+        // A shared source capture started before us in the effect chain.
+        // The provider paints the button panel after this raw scene pass.
+        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+        return;
+    }
+    if (window->data(LegacyWindowSourceCaptureRole).toBool()) {
+        Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+        paintButtons(renderTarget, viewport, window, deviceRegion, data, true);
+        m_renderer->clearHits(window);
+        return;
+    }
+    if (drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
+        return;
+    }
     Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+    paintButtons(renderTarget, viewport, window, deviceRegion, data, false);
+}
 
+bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
+    const KWin::RenderViewport &viewport, KWin::EffectWindow *window, int mask,
+    const KWin::Region &region, KWin::WindowPaintData &data, const WindowSourceMorph &morph)
+{
+    const auto style = m_appearance->continuousStyle(window);
+    if (!style) return false;
+    if (!m_continuousClip->configure(window, style)) {
+        m_appearance->prepare(window, false);
+        return false;
+    }
+    const bool result = m_continuousClip->paint(target, viewport, window, mask, region, data,
+        *style, [this, window](const auto &sourceTarget, const auto &sourceViewport) {
+            const QVariant previous = window->data(WindowSourceCaptureRole);
+            window->setData(WindowSourceCaptureRole, true);
+            KWin::WindowPaintData sourceData;
+            sourceData.setOpacity(1.0);
+            KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
+                PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT,
+                KWin::Region::infinite(), sourceData);
+            paintButtons(sourceTarget, sourceViewport, window, KWin::Region::infinite(), sourceData, true);
+            window->setData(WindowSourceCaptureRole, previous);
+        }, morph);
+    if (!result) {
+        // The source could not be allocated/uploaded. Restore native rounding
+        // before the downstream scene (or legacy Dock capture) paints it.
+        m_appearance->prepare(window, false);
+    }
+    if (window->data(DockSourceAnimationRole).toBool() || (mask & PAINT_WINDOW_TRANSFORMED))
+        m_renderer->clearHits(window);
+    else if (result)
+        m_renderer->syncHits(window);
+    return result;
+}
+
+void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
+    const KWin::RenderViewport &viewport, KWin::EffectWindow *window,
+    const KWin::Region &deviceRegion, const KWin::WindowPaintData &data, bool sourceCapture)
+{
     if (!window || !m_config || !m_renderer) {
         return;
     }
 
-    // While the window is being animated (for example the KOS dock open/close
-    // morph) its geometry is transformed through quads, which this effect
-    // cannot follow. Hiding the panel during the animation is better than
-    // drawing it at the settled position before the window gets there -- and
-    // the hidden panel must not take the pointer either.
-    if (mask & PAINT_WINDOW_TRANSFORMED) {
-        m_renderer->clearHits(window);
+    // Animated controls belong to the source capture, never a stationary
+    // screen overlay. Only the capture may paint them during a Dock morph.
+    if (!sourceCapture && window->data(DockSourceAnimationRole).toBool()) {
+        m_renderer->clearHits(window, sourceCapture);
         return;
     }
 
     // These are already rejected by ButtonRenderer::paint. Skip the rule
     // lookup and stacking-order walk for them as well; shell and popup
     // surfaces can repaint frequently while never having a button panel.
-    if (!window->isVisible() || !window->isManaged()
+    if ((!sourceCapture && !window->isVisible()) || !window->isManaged()
         || (!window->isNormalWindow() && !window->isDialog())
         || window->isSkipSwitcher() || window->isSpecialWindow()) {
-        m_renderer->clearHits(window);
+        m_renderer->clearHits(window, sourceCapture);
         return;
     }
 
@@ -138,7 +308,7 @@ void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
     // to know what an effect window is.
     const AppConfig config = m_config->getAppConfig(windowQueryFor(window));
     if (!config.showButtons) {
-        m_renderer->clearHits(window);
+        m_renderer->clearHits(window, sourceCapture);
         return;
     }
 
@@ -146,11 +316,11 @@ void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
     // only culls on its optimised painting path; on the generic path (used
     // whenever any window is transformed) deviceRegion is the whole screen, so
     // relying on it alone lets a lower window's panel show through an upper one.
-    const KWin::Region clip = visibleRegionFor(window, viewport, deviceRegion);
+    const KWin::Region clip = sourceCapture ? deviceRegion : visibleRegionFor(window, viewport, deviceRegion);
     if (clip.isEmpty()) {
         // Nothing of this window is on screen, so nothing of its panel is
         // either.
-        m_renderer->clearHits(window);
+        m_renderer->clearHits(window, sourceCapture);
         return;
     }
 
@@ -161,7 +331,7 @@ void BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
                           .xTranslate = data.xTranslation(),
                           .yTranslate = data.yTranslation(),
                           .opacity = data.opacity(),
-                      });
+                      }, sourceCapture);
 }
 
 KWin::Region BridgeEffect::visibleRegionFor(KWin::EffectWindow *window,

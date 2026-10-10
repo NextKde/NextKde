@@ -471,13 +471,6 @@ public:
     {
     }
 
-    ~Private()
-    {
-        // A store destroyed inside the debounce window must not drop the
-        // last mutation; the flush stays atomic through QSaveFile.
-        flushSave();
-    }
-
     bool hasList(const QString &id) const
     {
         return std::any_of(lists.begin(), lists.end(), [&id](const QJsonValue &entry) {
@@ -497,15 +490,14 @@ public:
     // Mutations coalesce their writes through a short debounce: serializing
     // the whole calendar to iCalendar plus two QSaveFile commits per edit
     // made a burst of N edits cost N full write cycles. A flush still goes
-    // through writeAtomic(), so crash safety is unchanged, and ~Private
-    // plus the dirty flag bound what a crash inside the window can lose.
+    // through writeAtomic(), and PimStore's destructor flushes pending edits.
     static constexpr int saveDebounceMs = 150;
 
     void scheduleSave()
     {
         dirty = true;
         if (saveTimer) {
-            saveTimer->start();
+            saveTimer->start(saveDebounceMs);
         } else if (flushSave()) {
             // Match the timer path and flush(): a synchronous save is also
             // followed by a widget snapshot refresh.
@@ -521,9 +513,10 @@ public:
         const bool written = writeState(&message);
         if (!written)
             qWarning() << "Unable to persist PIM state:" << message;
-        // Even a failed flush clears the flag: the in-memory model stays
-        // authoritative and the next mutation retries the write.
-        dirty = false;
+        // Keep unsaved edits marked for a later retry and the final flush.
+        // Transient storage failure must not silently discard this obligation.
+        if (written)
+            dirty = false;
         return written;
     }
 
@@ -610,6 +603,8 @@ PimStore::PimStore(const QString &storageDirectory, QObject *parent)
         // actually committed to disk.
         if (d->flushSave())
             writeWidgetSnapshot();
+        else
+            d->saveTimer->start(5000);
     });
     d->reminderTimer = new QTimer(this);
     d->reminderTimer->setSingleShot(true);
@@ -724,6 +719,10 @@ void PimStore::deliverDueReminders()
 
 void PimStore::writeWidgetSnapshot()
 {
+    // Periodic refreshes must obey the same committed-state boundary as the
+    // save callback; a failed write or unreadable store cannot publish ahead.
+    if (d->dirty || !d->writable)
+        return;
     const QDate today = QDate::currentDate();
 
     // Build the widget payload straight from the in-memory model. Routing

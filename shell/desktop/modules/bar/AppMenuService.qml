@@ -20,6 +20,8 @@ QtObject {
     property string dbusPath: ""
     property var items: []
     property bool requestPending: false
+    property int _focusGeneration: 0
+    property int _requestSerial: 0
 
     readonly property bool available: dbusService.length > 0 && dbusPath.length > 0
 
@@ -38,8 +40,16 @@ QtObject {
         if (requestPending)
             return
         requestPending = true
+        const serial = ++_requestSerial
+        const generation = _focusGeneration
         PlatformClient.request("appmenu.active", {}, function(response) {
+            if (serial !== _requestSerial)
+                return
             requestPending = false
+            if (generation !== _focusGeneration) {
+                refresh()
+                return
+            }
             const address = response?.ok ? (response.result || {}) : ({})
             const newService = address.available ? (address.service || "") : ""
             const newPath = address.available ? (address.path || "") : ""
@@ -49,12 +59,16 @@ QtObject {
             }
             dbusService = newService
             dbusPath = newPath
+            items = []
             if (!available) {
                 items = []
                 _armRecheck()
                 return
             }
             requestLayout(0, function(result) {
+                if (serial !== _requestSerial || generation !== _focusGeneration
+                        || newService !== dbusService || newPath !== dbusPath)
+                    return
                 if (!available) {
                     _armRecheck()
                     return
@@ -102,6 +116,7 @@ QtObject {
     property Connections windowFocus: Connections {
         target: WindowService
         function onActiveWindowIdChanged() {
+            service._focusGeneration++
             service._recheckBudget = service._recheckMax
             service._settleTimer.restart()
             service.refresh()
@@ -114,7 +129,12 @@ QtObject {
             if (connected)
                 service.refresh()
             else {
+                service._focusGeneration++
+                service._requestSerial++
                 service.requestPending = false
+                service.dbusService = ""
+                service.dbusPath = ""
+                service.items = []
                 service._recheckTimer.stop()
                 service._settleTimer.stop()
             }

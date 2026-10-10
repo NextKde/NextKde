@@ -264,7 +264,16 @@ function schedulePlacementAttempt(window, attempt, delay) {
     const timer = new QTimer();
     timer.interval = delay;
     timer.singleShot = true;
-    timer.timeout.connect(function() { placeInitialWindow(window, attempt); });
+    const id = windowId(window);
+    timer.timeout.connect(function() {
+        if (initialPlacementState[id] !== "pending")
+            return;
+        const current = findWindow(id);
+        if (current)
+            placeInitialWindow(current, attempt);
+        else
+            delete initialPlacementState[id];
+    });
     keepPlacementTimer(timer);
     timer.start();
 }
@@ -387,24 +396,6 @@ function outputName(window) {
     } catch (error) {
         return "";
     }
-}
-
-function windowDebug(window) {
-    return {
-        id: windowId(window),
-        pid: Number(propertyValue(window, "pid", 0)),
-        resourceClass: String(propertyValue(window, "resourceClass", "")),
-        resourceName: String(propertyValue(window, "resourceName", "")),
-        desktopFileName: String(propertyValue(window, "desktopFileName", "")),
-        caption: String(propertyValue(window, "caption", "")),
-        normalWindow: !!propertyValue(window, "normalWindow", false),
-        skipTaskbar: !!propertyValue(window, "skipTaskbar", false),
-        skipSwitcher: !!propertyValue(window, "skipSwitcher", false),
-        hidden: !!propertyValue(window, "hidden", false),
-        inputMethod: !!propertyValue(window, "inputMethod", false),
-        windowType: String(propertyValue(window, "windowType", "")),
-        onAllDesktops: !!propertyValue(window, "onAllDesktops", false)
-    };
 }
 
 function includeWindow(window) {
@@ -691,6 +682,9 @@ function handleCommand(serialized) {
     // activated=false) and there is no later windowActivated event to correct
     // it if focus never changes again.
     if (command.action === "refresh-snapshot") {
+        // A restarted daemon has lost its replay cache even when KWin state
+        // is unchanged. This explicit request must bypass snapshot deduplication.
+        lastSnapshotJson = "";
         scheduleSnapshot();
         return;
     }
@@ -951,8 +945,10 @@ function watchWindow(window) {
     try { window.maximizeModeChanged.connect(scheduleSnapshot); } catch (error) {}
     try { window.desktopsChanged.connect(scheduleSnapshot); } catch (error) {}
     window.closed.connect(function() {
-        if (watchedId)
+        if (watchedId) {
             delete initialPlacementState[watchedId];
+            delete parkedGeometry[watchedId];
+        }
         scheduleSnapshot();
     });
 }
@@ -985,8 +981,8 @@ workspace.windowActivated.connect(scheduleSnapshot);
 // Virtual-desktop lifecycle signals. KWin's QtScript API does not expose every
 // signal name in every version, and one missing connect aborts the whole
 // script (which would also stop the window snapshots). Connect defensively;
-// snapshot() republishes the desktop list as a fallback, so the overview stays
-// fresh even when every signal is unavailable.
+// The initial desktop publish and explicit "desktops" requests remain
+// available when a lifecycle signal is missing.
 function connectDesktopSignals() {
     const hooks = {
         desktopAdded: publishDesktops,

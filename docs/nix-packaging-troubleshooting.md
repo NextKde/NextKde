@@ -1,5 +1,10 @@
 # KOS Desktop Shell Nix 打包问题排查记录
 
+> 历史排查记录。下文命令、路径和旧仓库配置不作为当前安装说明；
+> 当前入口见 [nixos-quickstart.md](nixos-quickstart.md)，实现以根目录
+> `flake.nix` 和 `packaging/nix/` 为准。`${src}/../../` 会离开被选为源码的
+> Nix store 目录，不能用于访问未提供给派生项的仓库文件；当前打包显式传入这些路径。
+
 ## 背景
 
 用户需要为 KOS Desktop Shell（基于 KDE Plasma 6 Quickshell 的桌面 shell）完成 Nix 打包，目标是 `nixos-rebuild switch` 后能正确安装所有组件，`kos-settings` 能正常启动。

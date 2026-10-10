@@ -81,7 +81,10 @@ else()
     )
 endif()
 
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../kwin/window-bridge.js
+set(KOS_PLATFORM_KWIN_SCRIPT_SOURCE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../kwin/window-bridge.js"
+    CACHE FILEPATH "KWin script installed with the platform daemon")
+install(FILES ${KOS_PLATFORM_KWIN_SCRIPT_SOURCE}
     DESTINATION share/kos/platform/kwin
 )
 

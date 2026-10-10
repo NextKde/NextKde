@@ -14,6 +14,7 @@ QtObject {
     property var dockRect: null
     property real workspaceGap: 0
     property string _lastPayload: ""
+    property bool _requestPending: false
 
     function _screenName(screen) {
         return String(screen?.name || "")
@@ -65,6 +66,8 @@ QtObject {
     }
 
     function _publish() {
+        if (_requestPending || !PlatformClient.connected)
+            return
         if (!service.outputName || !service.outputRect || !service.dockRect
                 || service.dockRect.width <= 0 || service.dockRect.height <= 0)
             return
@@ -79,16 +82,31 @@ QtObject {
         const serialized = JSON.stringify(payload)
         if (serialized === service._lastPayload)
             return
-        service._lastPayload = serialized
+        service._requestPending = true
         PlatformClient.request("kwin.layout.update", payload, function(response) {
-            if (!response?.ok)
+            service._requestPending = false
+            if (response?.ok) {
+                service._lastPayload = serialized
+                // Geometry can change during the request. Publish the latest
+                // state after acknowledgement, keeping replies ordered.
+                publishTimer.restart()
+            } else {
                 console.warn("[WorkspaceLayout] update failed: "
                     + (response?.error?.message || "platform unavailable"))
+                if (PlatformClient.connected)
+                    retryTimer.restart()
+            }
         })
     }
 
     property Timer publishTimer: Timer {
         interval: 24
+        repeat: false
+        onTriggered: service._publish()
+    }
+
+    property Timer retryTimer: Timer {
+        interval: 2000
         repeat: false
         onTriggered: service._publish()
     }

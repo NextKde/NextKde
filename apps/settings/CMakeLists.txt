@@ -6,10 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick)
+find_package(KF6Config REQUIRED)
 
 qt_add_executable(kos-settings
     src/main.cpp
     src/CacheMaintenance.cpp
+    src/WindowSettings.cpp
 )
 target_include_directories(kos-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
@@ -20,6 +22,7 @@ target_link_libraries(kos-settings PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    KF6::ConfigCore
 )
 
 # Development host: released packages will embed or install this QML tree.
@@ -42,6 +45,15 @@ install(FILES main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml Wallpaper
 install(DIRECTORY icons DESTINATION share/kos/settings)
 
 if(BUILD_TESTING)
+    add_executable(kos-window-settings-test tests/windows/config.cpp src/WindowSettings.cpp)
+    target_include_directories(kos-window-settings-test PRIVATE src)
+    target_link_libraries(kos-window-settings-test PRIVATE Qt6::Core Qt6::DBus KF6::ConfigCore)
+    add_test(NAME kos-settings.window-config COMMAND kos-window-settings-test)
+    set_tests_properties(kos-settings.window-config PROPERTIES LABELS logic TIMEOUT 15)
+    add_test(NAME kos-settings.window-page COMMAND kos-settings --smoke-test-windows)
+    set_tests_properties(kos-settings.window-page PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+        LABELS ui TIMEOUT 15)
     # The settings window ships in the core configuration, so it is not built
     # through kos_add_application and its smoke test lives here. --smoke-test
     # loads main.qml offscreen -- a real load, for one event loop turn -- and
@@ -58,6 +70,12 @@ if(BUILD_TESTING)
     find_program(KOS_QMLTESTRUNNER_EXECUTABLE NAMES qmltestrunner6 qmltestrunner
         HINTS "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}" /usr/lib/qt6/bin)
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.window-interactions
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/tst_windows.qml)
+        set_tests_properties(kos-settings.window-interactions PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+            LABELS ui TIMEOUT 20)
         add_test(NAME kos-settings.wallpaper-page
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/tst_wallpaper.qml)
@@ -87,6 +105,10 @@ if(BUILD_TESTING)
     endif()
 
     if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-settings.window-install
+            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
+                $<TARGET_FILE:kos-settings>)
+        set_tests_properties(kos-settings.window-install PROPERTIES LABELS ui TIMEOUT 25)
         add_test(NAME kos-settings.wallpaper-colors
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/wallpaper/bridge.mjs

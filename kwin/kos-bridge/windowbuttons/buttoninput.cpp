@@ -124,7 +124,7 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // A drag that began elsewhere -- a text selection, a slider -- has to keep
     // its motion even where it passes over a panel, or the application's drag
     // freezes for as long as the pointer is there.
-    if (event->buttons != Qt::NoButton && m_consumedButton == Qt::NoButton) {
+    if (event->buttons != Qt::NoButton && m_consumedButtons == Qt::NoButton) {
         return false;
     }
 
@@ -200,8 +200,8 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
         }
         // Swallow the release that belongs to a press we already swallowed so
         // the application does not see a stray button-up.
-        if (event->button == m_consumedButton) {
-            m_consumedButton = Qt::NoButton;
+        if (m_consumedButtons.testFlag(event->button)) {
+            m_consumedButtons &= ~Qt::MouseButtons(event->button);
             return true;
         }
         return false;
@@ -219,9 +219,12 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // opened the menu from closing the window on the way to putting the menu
     // away.
     if (KWin::EffectWindow *menuWindow = m_renderer->tileMenuWindow()) {
-        m_consumedButton = event->button;
+        m_consumedButtons |= event->button;
         const std::optional<TilePreset> preset =
-            m_renderer->tileMenuPresetAt(event->position);
+            event->button == Qt::LeftButton
+                && m_renderer->tileMenuRegionContains(event->position)
+            ? m_renderer->tileMenuPresetAt(event->position)
+            : std::nullopt;
         m_renderer->closeTileMenu();
         if (preset) {
             performTilePreset(menuWindow, *preset);
@@ -242,7 +245,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // whether or not a session begins, as every press on the panel is -- an
     // application's context menu must not open through the panel.
     if (event->button == Qt::RightButton && insidePanel && window) {
-        m_consumedButton = event->button;
+        m_consumedButtons |= event->button;
         startSession(window);
         return true;
     }
@@ -255,7 +258,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     // lands on the controls underneath; only the left button acts, so a
     // right-click meant to open the application's own context menu cannot
     // close the window instead.
-    m_consumedButton = event->button;
+    m_consumedButtons |= event->button;
     if (event->button == Qt::LeftButton) {
         performAction(window, action);
     }
@@ -276,7 +279,7 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
         // one that loses what was done in it.
         const bool elsewhere =
             insidePanel && window && window != m_session->window();
-        m_consumedButton = event->button;
+        m_consumedButtons |= event->button;
         finishSession();
         if (elsewhere) {
             startSession(window);
@@ -288,7 +291,7 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
         if (insidePanel && window == m_session->window()) {
             // Pressed on the panel: the edge under the pointer is dragged, or --
             // anywhere else on it -- the panel as a whole follows the pointer.
-            m_consumedButton = event->button;
+            m_consumedButtons |= event->button;
             const std::optional<PanelEdge> edge =
                 m_session->edgeAt(event->position);
             if (edge) {
@@ -307,7 +310,7 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
     // Every other button: swallowed, as it is when no session is running, and
     // the session goes on. A scroll-wheel click in the middle of positioning a
     // panel is not a decision about the panel.
-    m_consumedButton = event->button;
+    m_consumedButtons |= event->button;
     return true;
 }
 
@@ -386,8 +389,10 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
         return true;
     }
 
+    // A terminating key can repeat after closing the menu or session. Its
+    // repeats belong to the same consumed press until the matching release.
     if (!m_session->active()) {
-        return false;
+        return m_consumedKeys.contains(event->key);
     }
 
     switch (event->key) {

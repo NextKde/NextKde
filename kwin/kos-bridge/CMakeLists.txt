@@ -17,6 +17,7 @@ include(KDECompilerSettings NO_POLICY_SCOPE)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Widgets OpenGL Network Xml)
 find_package(KWin REQUIRED COMPONENTS kwineffects)
+find_package(KDecoration3 REQUIRED)
 # To read which decoration KWin is configured to use out of kwinrc. Nothing else
 # in the plugin uses KConfig.
 find_package(KF6 REQUIRED COMPONENTS Config)
@@ -33,6 +34,11 @@ add_library(kos_bridge MODULE
     windowbuttons/tilemenu.cpp
     windowbuttons/titlebarmetrics.cpp
     windowbuttons/windowrules.cpp
+    windowappearance/contour.cpp
+    windowappearance/appearanceconfig.cpp
+    windowappearance/sceneshadow.cpp
+    windowappearance/continuousclip.cpp
+    windowappearance/windowappearance.cpp
 )
 
 target_link_libraries(kos_bridge PRIVATE
@@ -40,7 +46,28 @@ target_link_libraries(kos_bridge PRIVATE
     Qt6::DBus
     KF6::ConfigCore
     KWin::kwin
+    KDecoration3::KDecoration
 )
+
+# Detect signatures from the installed headers, including distro backports.
+get_target_property(_kos_kwin_include_dirs KWin::kwin INTERFACE_INCLUDE_DIRECTORIES)
+foreach(_dir IN LISTS _kos_kwin_include_dirs)
+    if(EXISTS "${_dir}/effect/effect.h")
+        file(READ "${_dir}/effect/effect.h" _kos_kwin_effect_header)
+        break()
+    endif()
+endforeach()
+if(NOT _kos_kwin_effect_header)
+    message(FATAL_ERROR "Cannot locate KWin effect/effect.h to detect the paint API")
+endif()
+if(_kos_kwin_effect_header MATCHES "prePaintWindow\\([^;]*std::chrono::milliseconds")
+    target_compile_definitions(kos_bridge PRIVATE KOS_KWIN_PAINT_TIME_API)
+    message(STATUS "Bridge: KWin paint hooks with presentTime (6.6-style)")
+else()
+    message(STATUS "Bridge: KWin paint hooks without presentTime (6.7-style)")
+endif()
+set_property(TARGET kos_bridge APPEND PROPERTY AUTOMOC_MACRO_NAMES
+    KWIN_EFFECT_FACTORY_SUPPORTED_ENABLED)
 
 # Offline preview of the window-button panel. The lights are pure QPainter
 # geometry over a rectangle (see windowbuttons/buttonglyph.h), so the whole panel

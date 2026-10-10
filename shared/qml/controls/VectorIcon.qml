@@ -30,6 +30,9 @@ Item {
         resize: "M4 10V4h6M20 14v6h-6M4 4l6 6M20 20l-6-6",
         undo: "M8 4L3 9l5 5M3 9h11a6 6 0 0 1 0 12",
         bold: "M6 3h7a4.5 4.5 0 0 1 0 9H6zM6 12h8a4.5 4.5 0 0 1 0 9H6z",
+        corners: "M4 12V8a4 4 0 0 1 4-4h4M12 20h4a4 4 0 0 0 4-4v-4",
+        shadow: "M4 4h13v13H4zM8 20h12V8",
+        minimize: "M4 6h16v12H4zM9 12l3 3 3-3M12 9v6",
         plus: "M12 4v16M4 12h16"
     })
     Image {

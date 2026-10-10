@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 
 // iOS-style liquid glass button with pure QML rendering.
 // No external texture needed - uses mathematical gradients to simulate refraction.

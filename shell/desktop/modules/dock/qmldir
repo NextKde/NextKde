@@ -21,7 +21,6 @@ DockClockWidget 1.0 DockClockWidget.qml
 DockTemperatureWidget 1.0 DockTemperatureWidget.qml
 DockInfoPopup 1.0 DockInfoPopup.qml
 DockComponentEditor 1.0 DockComponentEditor.qml
-DockContextMenu 1.0 DockContextMenu.qml
 DockWindowPreview 1.0 DockWindowPreview.qml
 
 # ── Singletons (QML type name matches code usage) ──

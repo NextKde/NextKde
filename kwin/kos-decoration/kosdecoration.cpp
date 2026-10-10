@@ -1,4 +1,6 @@
 #include "kosdecoration.h"
+#include "../kos-bridge/windowappearance/appearanceprotocol.h"
+#include "../kos-bridge/windowappearance/contour.h"
 
 #include <KDecoration3/DecoratedWindow>
 #include <KDecoration3/DecorationSettings>
@@ -6,6 +8,8 @@
 
 #include <QFontMetricsF>
 #include <QPainter>
+#include <QDynamicPropertyChangeEvent>
+#include <QPainterPath>
 
 namespace KOS
 {
@@ -38,12 +42,39 @@ KosDecoration::KosDecoration(QObject *parent, const QVariantList &args)
 
 KosDecoration::~KosDecoration() = default;
 
+bool KosDecoration::event(QEvent *event)
+{
+    if (event->type() == QEvent::DynamicPropertyChange) {
+        const auto *change = static_cast<QDynamicPropertyChangeEvent *>(event);
+        if (change->propertyName() == WindowAppearance::DecorationRadiiProperty) {
+            update();
+        } else if (change->propertyName() == WindowAppearance::DecorationShadowProperty) {
+            const QVariant value = property(WindowAppearance::DecorationShadowProperty);
+            if (value.canConvert<std::shared_ptr<KDecoration3::DecorationShadow>>()) {
+                if (!m_bridgeShadowActive) {
+                    m_shadowBeforeBridge = shadow();
+                    m_bridgeShadowActive = true;
+                }
+                setShadow(value.value<std::shared_ptr<KDecoration3::DecorationShadow>>());
+            } else if (m_bridgeShadowActive) {
+                setShadow(m_shadowBeforeBridge);
+                m_shadowBeforeBridge.reset();
+                m_bridgeShadowActive = false;
+            }
+        }
+    }
+    return KDecoration3::Decoration::event(event);
+}
+
 bool KosDecoration::init()
 {
     auto *client = window();
     if (!client) {
         return false;
     }
+
+    setOpaque(false);
+    setProperty(WindowAppearance::DecorationAppearanceSupportedProperty, true);
 
     updateLayout();
 
@@ -112,20 +143,9 @@ void KosDecoration::updateLayout()
         ? QMarginsF(0, 0, 0, 0)
         : QMarginsF(snap(ResizeGrab), 0, snap(ResizeGrab), snap(ResizeGrab)));
 
-    // The window's shape is deliberately left alone: no setBorderRadius() and
-    // no setBorderOutline().
-    //
-    // setBorderRadius() is not a cosmetic request -- it is how KWin clips the
-    // whole window, the client's opaque content included, so calling it
-    // *replaces* whatever shape the window had before this decoration was
-    // selected. Breeze's own corner rounding and outline are user settings
-    // (breezerc [Common] RoundedCorners / OutlineEnabled), and a decoration
-    // that draws neither has no business overriding them. Whoever wants KOS
-    // corners can turn Breeze's on instead of getting ours silently.
-    //
-    // It is also what makes this decoration usable at every corner radius: the
-    // bar below is painted square, so nothing here can disagree with a radius
-    // KWin or another decoration applied.
+    // Geometry policy belongs to kos-bridge. The resolved corner property
+    // shapes the titlebar, and the shadow property relays DecorationShadow.
+    // Do not write another native radius or outline here.
 
     // Runs again on bordersChanged() when the new borders are actually
     // applied; calling it here as well covers the changes that move nothing
@@ -177,15 +197,25 @@ void KosDecoration::paintTitleBar(QPainter *painter)
         return;
     }
 
-    // Square, in every state and at every radius. The bar cannot know what
-    // shape the window ends up with -- that is the client's rounded rectangle,
-    // or the radius KWin clips the frame to -- and a corner painted here that
-    // disagrees with it leaves a sliver of nothing along the diagonal. Filling
-    // the whole strip leaves the top corners to whoever owns them.
+    // The bridge resolves one contour for content, decoration and shadow.
+    // Without the bridge property this decoration retains its square bar.
     painter->save();
     painter->setPen(Qt::NoPen);
     painter->setBrush(barColor());
-    painter->drawRect(bar);
+    const QVariant resolved = property(WindowAppearance::DecorationRadiiProperty);
+    if (resolved.canConvert<QVector4D>()) {
+        const QVector4D radius = resolved.value<QVector4D>();
+        const WindowAppearance::CornerRadii corners{
+            radius.x(), radius.y(), radius.z(), radius.w()};
+        QPainterPath strip;
+        strip.addRect(bar);
+        // Fill the intersection instead of applying an aliased painter
+        // clip: the atlas must retain antialiased, transparent top corners.
+        painter->drawPath(WindowAppearance::contourPath(
+            QRectF(QPointF(), size()), corners, 0.0).intersected(strip));
+    } else {
+        painter->drawRect(bar);
+    }
     painter->restore();
 
     // Neither edge of the title bar gets a hairline of its own: the bottom is
@@ -224,6 +254,13 @@ void KosDecoration::paintCaption(QPainter *painter)
     painter->save();
     painter->setFont(config->font());
     painter->setPen(captionColor());
+    const QVariant resolved = property(WindowAppearance::DecorationRadiiProperty);
+    if (resolved.canConvert<QVector4D>()) {
+        const QVector4D r = resolved.value<QVector4D>();
+        painter->setClipPath(WindowAppearance::contourPath(QRectF(QPointF(), size()),
+            WindowAppearance::CornerRadii{r.x(), r.y(), r.z(), r.w()}, 0.0),
+            Qt::IntersectClip);
+    }
     painter->drawText(bar, Qt::AlignCenter | Qt::TextSingleLine, elided);
     painter->restore();
 }

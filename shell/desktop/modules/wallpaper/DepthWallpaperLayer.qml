@@ -1,33 +1,39 @@
 import QtQuick
 import qs.desktop.modules.common
-import qs.desktop.modules.common
+import "SpatialPointer.mjs" as SpatialPointer
 
 // GPU-only wallpaper presentation. The worker prepares optional layered
 // assets; this item falls back to the depth shader when they are unavailable.
 Item {
     id: root
 
+    // Subject-only rendering is shared with the desktop widget foreground.
+    property bool foregroundOnly: false
+    property bool renderingEnabled: true
     property var targetScreen: null
     readonly property bool selectedOutput: targetScreen !== null
         && targetScreen !== undefined
         && ScreenLifecycle.activeScreen !== null
         && targetScreen.name === ScreenLifecycle.activeScreen.name
-    readonly property bool active: selectedOutput && SpatialWallpaperService.ready
+    readonly property bool active: renderingEnabled && selectedOutput && SpatialWallpaperService.ready
         && (!WallpaperPreviewService.active || WallpaperPreviewService.mode === "image")
     visible: selectedOutput
     opacity: visualReady && !SpatialWallpaperService.activationPending ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
     function finishPresentation() {
         Qt.callLater(() => {
-            if (root.visualReady && SpatialWallpaperService.activationPending)
+            if (!root.foregroundOnly && root.visualReady && SpatialWallpaperService.activationPending)
                 SpatialWallpaperService.presentationReady()
         })
     }
     onVisualReadyChanged: if (visualReady) finishPresentation()
     property real pointerX: 0
     property real pointerY: 0
-    property real renderedPointerX: pointerX
-    property real renderedPointerY: pointerY
+    // Sensitivity changes the input curve, not the renderer's camera limits.
+    // Apply it once here so background, subject and preview stay registered.
+    property real pointerSensitivity: 3
+    property real renderedPointerX: SpatialPointer.responsivePointer(pointerX, pointerSensitivity)
+    property real renderedPointerY: SpatialPointer.responsivePointer(pointerY, pointerSensitivity)
     Behavior on renderedPointerX { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
     Behavior on renderedPointerY { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
@@ -58,6 +64,7 @@ Item {
     function syncMeshRenderer() {
         if (!meshRenderer.item)
             return
+        meshRenderer.item.foregroundOnly = root.foregroundOnly
         meshRenderer.item.textureSize = root.textureSize
         meshRenderer.item.wallpaperPath = SpatialWallpaperService.wallpaperUrl
         meshRenderer.item.depthPath = SpatialWallpaperService.depthPath
@@ -168,7 +175,7 @@ Item {
 
     ShaderEffect {
         anchors.fill: parent
-        visible: !root.meshRendererAvailable && root.active && sourceImage.status === Image.Ready
+        visible: !root.foregroundOnly && !root.meshRendererAvailable && root.active && sourceImage.status === Image.Ready
             && depthImage.status === Image.Ready && !root.layeredTexturesReady
         property variant source: sourceImage
         property variant depthMap: depthImage
@@ -183,6 +190,7 @@ Item {
         visible: !root.meshRendererAvailable && root.active && sourceImage.status === Image.Ready
             && root.layeredTexturesReady
         property variant source: sourceImage
+        property real foregroundOnly: root.foregroundOnly ? 1 : 0
         property variant background: backgroundImage
         property variant matte: matteImage
         property variant influence: influenceImage
@@ -193,6 +201,7 @@ Item {
         fragmentShader: Qt.resolvedUrl("shaders/layered_wallpaper.frag.qsb")
     }
 
+    onForegroundOnlyChanged: syncMeshRenderer()
     onRenderedPointerXChanged: syncMeshRenderer()
     onRenderedPointerYChanged: syncMeshRenderer()
     onOutputAspectChanged: syncMeshRenderer()

@@ -98,10 +98,11 @@ QtObject {
     }
 
     function _refreshDetails() {
-        if (!deviceName)
+        const requestedDevice = deviceName
+        if (!requestedDevice)
             return
-        PlatformClient.request("network.details", { device: deviceName }, function(response) {
-            if (!response?.ok || deviceName === "")
+        PlatformClient.request("network.details", { device: requestedDevice }, function(response) {
+            if (!response?.ok || deviceName !== requestedDevice || deviceState !== "connected")
                 return
             const result = response.result || ({})
             if (result.connectionName)

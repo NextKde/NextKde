@@ -51,6 +51,7 @@ struct PaintTransform {
 // understood -- see titlebarmetrics.h.
 class ButtonRenderer : public QObject
 {
+    Q_OBJECT
 public:
     ButtonRenderer();
     ~ButtonRenderer() override;
@@ -60,7 +61,7 @@ public:
                KWin::EffectWindow *window,
                const AppConfig &config,
                const KWin::Region &deviceRegion,
-               const PaintTransform &transform);
+               const PaintTransform &transform, bool sourceCapture = false);
 
     enum class Action { None, Close, Minimize, Maximize };
 
@@ -160,13 +161,18 @@ public:
     // keeping its cached tint. A panel that is not drawn must not take the
     // pointer: the window is being animated, or it is not one this effect
     // draws a panel for at all.
-    void clearHits(KWin::EffectWindow *window);
+    void syncHits(KWin::EffectWindow *window);
+    void clearHits(KWin::EffectWindow *window, bool clearSource = false);
 
     // Drop every cached tint. Called when the configuration changes, since the
     // configuration decides which band is sampled.
     void invalidateAll();
 
+Q_SIGNALS:
+    void sourceRepaint(const QRectF &region);
+
 private:
+    static ButtonRenderer *s_instance;
     // The light drawn in each of the three positions, left to right. `Type` is
     // what a light *is* -- its colour, its glyph, the action it performs -- and
     // where it sits is a separate decision, so the order lives in this one
@@ -270,6 +276,7 @@ private:
     quint64 m_nextSampleToken = 0;
 
     struct HitRects {
+        QPointF windowOrigin;
         // The drawn panel, and the pointer area it claims: the panel expanded
         // by the intercept margin, never beyond the window's own edge.
         QRectF panelRect;
@@ -280,6 +287,8 @@ private:
         QRectF dots[TypeCount];
     };
     QHash<KWin::EffectWindow *, HitRects> m_hits;
+    // Source geometry survives temporary suppression during transformed paints.
+    QHash<KWin::EffectWindow *, HitRects> m_sourceHits;
 
     // The tiling menu, if one is open. Its rectangle is recomputed from the
     // current panel and window rectangles on every frame that draws the panel

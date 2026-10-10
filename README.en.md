@@ -128,14 +128,14 @@ Arch, `install` offers to install missing required build packages before it
 builds KOS; the
 first KWin-plugin installation may ask for your sudo password. `start` applies
 the new version immediately and briefly refreshes the desktop UI. `install`
-ships the KOS window decoration together with the KWin plugins but never
-selects it: it installs the files and enables the effects, and the decoration
-stays your choice in System Settings ▸ Window Decorations. The three window
-buttons belong to that decoration — select it and they appear, choose another
-one and every window gets its own controls back, client-side decorated windows
-included. `start` does not change the decoration selection.
-The NixOS module installs the decoration with the rest of the plugins (there is
-no separate switch); selecting it stays in KDE settings.
+installs the KOS decoration together with the KWin plugins and selects KOS on
+first installation, saving the previous decoration. In KOS Settings ▸ Window
+and animations, turn off KOS window appearance to restore it. Decoration changes
+apply at the next login; corner and shadow changes apply immediately. Reinstalling
+preserves saved choices. This page includes six corner-radius stops, a shadow
+switch, and minimize/restore and close animation choices. Select None to leave
+that animation to other enabled KWin effects.
+The NixOS module includes the decoration; `kosctl install` applies first-install defaults.
 
 KOS starts automatically after later logins.
 
@@ -296,7 +296,7 @@ above).
 ```Nix
 nextkde = {
          # GitHub source: KOS Desktop Shell
-         url = "git+https://github.com/SuceV587/NextKde.git"
+         url = "git+https://github.com/SuceV587/NextKde.git";
          inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -320,7 +320,7 @@ sudo nixos-rebuild switch --flake .#hosts
         enable = true;
         # set to `enable = false;` to disable
         weather.enable = true;
-        # KOS's built-in weather service
+        # Optional standalone Weather app; Shell weather remains part of core
     };
 ```
 
@@ -339,9 +339,10 @@ sudo nixos-rebuild switch --flake .#hosts
 ### Optional standalone applications
 
 The repository also includes independent Qt Quick applications for Calendar,
-Todo, Weather, and local Music. They are not built with the Shell by default.
-Use `apps-dev` or `apps-release` to build all four, or the `calendar-dev`,
-`todo-dev`, `weather-dev`, and `music-dev` presets for one application:
+Todo, Weather, and ListenFree. They are not built with the Shell by default.
+Use `apps-dev` or `apps-release` to build them together, or the `calendar-dev`,
+`todo-dev`, `weather-dev`, and `listenfree-dev` presets for one application.
+The legacy local Music application uses the separate `music-dev` preset:
 
 ```sh
 cmake --preset apps-dev
@@ -374,7 +375,7 @@ See [docs/ProjectArchitecture.md](docs/ProjectArchitecture.md) for details.
 ## Next steps
 
 - Better per-screen layouts and settings for multi-monitor setups.
-- Complete the DeskCenter theme integration.
+- Improve DeskCenter theme consistency across displays.
 - Expand settings, shortcuts, and standalone apps.
 - Improve keyboard navigation, accessibility, and high-contrast support.
 

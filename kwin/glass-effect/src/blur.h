@@ -93,11 +93,6 @@ struct BlurEffectData
     ItemEffect windowEffect;
 
     /**
-     * Color transformation matrix (contrast, and saturation).
-     */
-    std::optional<QMatrix4x4> colorMatrix;
-
-    /**
      * Corner radius reported by the window before this effect overrides it.
      */
     std::optional<BorderRadius> originalCornerRadius;
@@ -183,7 +178,6 @@ private:
     void repaintDynamicCorners();
     void blur(const RenderTarget &renderTarget, const RenderViewport &viewport, EffectWindow *w, int mask, const BlurRegion &deviceRegion, WindowPaintData &data);
     GLTexture *ensureNoiseTexture(int noiseStrength);
-    QMatrix4x4 colorMatrix(const float &brightness, const float &saturation, const float &contrast) const;
     BlurPipelineSettings pipelineSettingsForStrength(int blurStrength, int noiseStrength) const;
     /// The pixels that have to be repainted below opaque regions so a moving
     /// blur never exposes unblurred content: the global expand, raised to the
@@ -203,6 +197,7 @@ private:
         int viewportScaleLocation;
         int boxLocation;
         int cornerRadiusLocation;
+        int appearanceMaskEnabledLocation;
         int cornerExponentLocation;
         int glassEnabledLocation;
         int opacityLocation;
@@ -302,6 +297,8 @@ private:
     QMap<EffectWindow *, QMetaObject::Connection> windowContrastChangedConnections;
 #endif
     QMap<EffectWindow *, QMetaObject::Connection> windowFrameGeometryChangedConnections;
+    QMap<EffectWindow *, QMetaObject::Connection> windowDecorationChangedConnections;
+    QMap<EffectWindow *, QMetaObject::Connection> decorationBlurChangedConnections;
     std::unordered_map<EffectWindow *, BlurEffectData> m_windows;
 
 #if !defined(GLASS_X11) && !defined(GLASS_KWIN_67)

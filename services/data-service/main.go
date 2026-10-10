@@ -167,6 +167,7 @@ func (c *subscriberConn) writeLine(raw []byte, timeout time.Duration) error {
 
 type Service struct {
 	mu                      sync.Mutex
+	persistMu               sync.Mutex
 	desktopMu               sync.Mutex
 	desktopOutputs          []string
 	defaultDesktopOutput    string
@@ -246,6 +247,10 @@ func writeJSONBytes(path string, raw []byte) error {
 // or slices that concurrent writers mutate, then performs the actual disk
 // writes after releasing the lock so no blocking IO stalls state updates.
 func (s *Service) persist() {
+	// Serialize snapshot capture and both renames. Concurrent callers otherwise
+	// share the same .tmp paths and may overwrite newer state with an older copy.
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
 	s.settle(time.Now())
 	snapshot := Snapshot{
@@ -866,7 +871,8 @@ func (s *Service) seedJournalHistory() {
 	if seeded {
 		return
 	}
-	listRaw, err := exec.Command("journalctl", "--list-boots", "--no-pager").Output()
+	listRaw, err := exec.Command("journalctl", "--list-boots", "--reverse",
+		"--no-legend", "--no-pager").Output()
 	if err != nil {
 		return
 	}
@@ -1224,9 +1230,8 @@ func main() {
 		}
 	}()
 	tick := time.NewTicker(10 * time.Second)
-	// Uptime attribution settles every second so a crash or reload loses at
-	// most one second instead of up to a minute. Metrics stay on the slower
-	// tick; a 1s snapshot write every ten seconds is an atomic json write.
+	// Settle attribution every second; persistence still runs every ten seconds,
+	// so a crash can lose edits since the last successful disk write.
 	settleTick := time.NewTicker(1 * time.Second)
 	save := time.NewTicker(10 * time.Second)
 	desktopReconcile := time.NewTicker(5 * time.Second)

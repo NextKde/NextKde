@@ -267,7 +267,6 @@ assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
     ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
-    ["../../shell/desktop/modules/bar/NetworkPanel.qml", "network panel chrome"],
     ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
     ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
@@ -275,6 +274,16 @@ for (const [path, description] of [
     assert.match(read(path), /content\.glassInk\(/,
         `${description} takes the glass ink instead of a white literal`);
 }
+// NetworkPanel now delegates ink to the surface, which resolves the same
+// glass roles. Assert both ends of that delegation rather than requiring the
+// older direct AppearanceTokens call in every consumer.
+const networkInkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
+assert.match(networkInkPanel, /LiquidGlassPanel\s*\{\s*id:\s*panelSurface/);
+assert.match(networkInkPanel, /color:\s*panelSurface\.foregroundColor/);
+assert.match(networkInkPanel, /color:\s*panelSurface\.secondaryForegroundColor/);
+const glassPanel = read("../../shell/desktop/modules/common/LiquidGlassPanel.qml");
+assert.match(glassPanel, /readonly property color foregroundColor:\s*bodySurface\.foregroundColor/);
+assert.match(glassPanel, /readonly property color secondaryForegroundColor:\s*bodySurface\.secondaryForegroundColor/);
 // A second switch would split one decision in two and let the halves disagree,
 // and the rejected draft of this rule is exactly what that looked like.
 assert.doesNotMatch(read("../../shell/desktop/modules/common/AppearanceConfigService.qml"),
@@ -415,7 +424,7 @@ assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuratio
     "shared popup motion uses Launchpad's 150ms entrance timing");
 assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
     "shared popup motion uses Launchpad's 0.96 settle scale");
-assert.match(popupMotion, /Easing\.OutCubic\s*:\s*Easing\.InCubic/,
+assert.match(popupMotion, /openEasing:\s*Easing\.OutCubic[\s\S]*closeEasing:\s*Easing\.InCubic/,
     "popup open and close use cubic easing without overshoot");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
@@ -432,7 +441,7 @@ assert.match(appLauncherWindow,
     /LauncherMotion\s*\{[\s\S]*target:\s*launcherContent/,
     "the launcher coordinates tile motion while retaining its content container");
 const launcherMotion = read("../../shell/desktop/modules/applauncher/LauncherMotion.qml");
-assert.match(launcherMotion, /interval:\s*300[\s\S]*!motion\.requestedOpen[\s\S]*motion\.mapped = false/,
+assert.match(launcherMotion, /function finishIfSettled\(\)[\s\S]*changing \|\| !glassFinished \|\| pendingIcons !== 0[\s\S]*if \(!requestedOpen\) mapped = false/,
     "the launcher remains mapped until its closing tile animations finish");
 assert.match(appLauncherWindow,
     /property var applications:\s*\[\][\s\S]*applicationCatalogRefresh[\s\S]*model:\s*root\.contentAlive && !root\.isFullscreenMode/,
@@ -519,8 +528,8 @@ assert.match(networkStatus,
     /WifiSignalIcon\s*\{[\s\S]{0,420}signalStrength:\s*NetworkService\.signalStrength/,
     "the top-bar Wi-Fi icon renders NetworkManager signal quality");
 assert.match(networkPanel,
-    /WifiSignalIcon\s*\{[^{}]*signalStrength:\s*NetworkService\.signalStrength/,
-    "the network panel reuses the live Wi-Fi signal glyph");
+    /id:\s*rowWifiGlyph[\s\S]{0,300}signalStrength:\s*modelData\.signalStrength[\s\S]{0,160}onSignalStrengthChanged:\s*requestPaint\(\)/,
+    "each network row repaints its own signal strength rather than the connected network strength");
 for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
     const start = controlCenterPanel.indexOf(marker);
     const nextCard = controlCenterPanel.indexOf("// ── Card", start + marker.length);

@@ -19,7 +19,7 @@ stdenv.mkDerivation {
         kdePackages.wrapQtAppsHook
     ];
 
-    buildInputs = [ kdePackages.qtbase kdePackages.qtdeclarative
+    buildInputs = [ kdePackages.kconfig kdePackages.qtbase kdePackages.qtdeclarative
                     kdePackages.qtsvg kdePackages.qtimageformats kdePackages.qt5compat ];
 
     preFixup = ''

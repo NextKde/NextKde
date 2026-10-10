@@ -470,7 +470,7 @@ export function buildScheme(seedHex, options = {}) {
     if (!acceptMatch(seed, accentMatch)) {
         // Table cannot express this seed: hand the whole scheme to Monet.
         //
-        // The variant is forwarded explicitly. MaterialColorScheme defaults to
+        // Forward the variant because MaterialColorScheme defaults to tonal-spot.
         const fallback = buildMaterialScheme(seedHex, {
             variant: options.variant ?? MATERIAL_FALLBACK_VARIANT,
             dark: dark,
