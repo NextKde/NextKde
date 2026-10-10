@@ -63,10 +63,64 @@ KOS_BUILD_SPATIAL=OFF ./tools/kosctl install
 `vulkan-headers`，因此这里必须显式列出。KWin 同时需要 Wayland、libdrm 和
 libepoxy 的开发文件，但这些已是 Arch `kwin` 包的硬依赖，无需重复安装。
 
+### Debian 13 (trixie)
+
+`kosctl` 的自动依赖安装同时支持 Debian 系（通过 `apt-get`）：`./tools/kosctl doctor`
+会逐项检查，`./tools/kosctl install` 会补齐缺失项。
+
+与 Arch 的主要差异，也是 Debian 上最容易卡住的地方：
+
+- Debian 的 `kwin-dev` **不**像 Arch 的 `kwin` 那样自带 libdrm / libgbm 的开发文件，
+  必须显式安装 `libdrm-dev libgbm-dev`，否则 CMake 配置阶段直接停下并报
+  `Could NOT find Libdrm`。
+- KWin 导出的 xcb 扩展头文件（composite / randr / res / shm / sync 等）同样不由
+  `kwin-dev` 带入，需要显式安装。
+- glib 在 trixie 完成了 time_t 过渡改名（`libglib2.0-0` → `libglib2.0-0t64`）。
+  `kosctl` 会自动挑选仓库里真实存在的那个名字，手动安装时请用 `t64` 版本。
+- glass 特效以 `-DGLASS_X11=OFF` 构建，且 X11 是 `QUIET` 可选查找，
+  因此 X11 的 Xlib 头文件不是必需依赖。
+- **Quickshell 0.3.x 不在 trixie 官方仓库中**（`quickshell` 目前只在
+  testing / sid）。三种选择：自行编译（见
+  [Quickshell 官方文档](https://quickshell.org/docs/)）、临时启用 sid 源安装、
+  或使用 Ubuntu 的 PPA（见下节）。`doctor` 会在缺它时给出提示。
+
+手动安装（等价于脚本自动执行的内容）：
+
+```sh
+sudo apt install \
+  git cmake ninja-build g++ golang-go curl patchelf pkg-config \
+  extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev \
+  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev \
+  qt6-image-formats-plugins qt6-5compat-dev libqt6svg6 \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
+  qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+  qml6-module-qt5compat-graphicaleffects libopencv-dev \
+  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev \
+  kwin-dev libdrm-dev libgbm-dev libepoxy-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev \
+  libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxkbcommon-x11-dev \
+  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
+```
+
+运行时集成（可选）：
+
+```sh
+sudo apt install \
+  network-manager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils kde-spectacle \
+  libglib2.0-0t64 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+```
+
 ### Ubuntu 26.04 (resolute)
 
-`kosctl` 的自动依赖安装目前仅在 Arch 与 NixOS 上生效；Ubuntu 用户请手动安装
-对应软件包（以下清单已在 26.04 上完成全量构建验证）。
+`kosctl` 的自动依赖安装覆盖 Arch、Debian 系（含 Ubuntu）与 NixOS；下面的清单
+等同于脚本自动安装的内容，供手动核对（已在 26.04 上完成全量构建验证）。
 
 Quickshell 0.3.x 尚未进入 Ubuntu 官方仓库，可使用
 [Quickshell 官方文档](https://quickshell.org/docs/)推荐的 PPA（已提供
@@ -106,11 +160,13 @@ sudo apt install \
 sudo apt install \
   network-manager wireplumber bluez brightnessctl \
   wl-clipboard cliphist xdg-utils kde-spectacle \
-  libglib2.0-0 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+  libglib2.0-0t64 qml6-module-qtquick-dialogs libqt6sql6-sqlite
 ```
 
 与 Arch 包名的主要差异：`kdecoration` 对应 `libkdecorations3-dev`，
-`vulkan-headers` 对应 `libvulkan-dev`，`spectacle` 对应 `kde-spectacle`。
+`vulkan-headers` 对应 `libvulkan-dev`，`spectacle` 对应 `kde-spectacle`，
+`glib2` 对应 `libglib2.0-0t64`（24.04 起 time_t 过渡后的名字，
+旧的 `libglib2.0-0` 已不存在）。
 另外需要注意：`libplasma-dev` 提供 glass 特效引用的 `Plasma/plasma_version.h`；
 `libkf6kio-dev`、`libkf6calendarcore-dev` 是平台服务与设置应用 CMake 的直接
 依赖（Arch 上由依赖链自动带入）；KWin 导出所需的 xcb 扩展开发头文件

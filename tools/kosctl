@@ -74,6 +74,67 @@ arch_optional_runtime_packages=(
     networkmanager wireplumber bluez-utils brightnessctl
     wl-clipboard cliphist glib2 xdg-utils spectacle
 )
+# Debian and Ubuntu names for the same default build. The two families differ
+# most around KWin: Arch's `kwin` hard-depends on the Wayland, libdrm and libepoxy
+# development files, but Debian's `kwin-dev` only pulls libepoxy-dev. libdrm-dev
+# and libgbm-dev therefore have to be named explicitly or CMake stops with
+# "Could NOT find Libdrm". The xcb extension headers are the same story:
+# kwin-dev does not pull them and the KWinX11 export needs them.
+debian_core_build_packages=(
+    git cmake ninja-build g++ golang-go curl patchelf pkg-config
+    quickshell
+    extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
+    qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
+    qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
+    qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
+    qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects
+    qml6-module-qtqml-models qml6-module-qtqml-workerscript
+    qml6-module-qt5compat-graphicaleffects
+    libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev
+    libkf6kio-dev libkf6calendarcore-dev
+)
+debian_spatial_build_packages=(
+    libopencv-dev
+)
+debian_kwin_build_packages=(
+    kwin-dev libdrm-dev libgbm-dev libepoxy-dev
+    libxkbcommon-x11-dev
+    libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev
+    libkf6coreaddons-dev libkdecorations3-dev libplasma-dev
+    gettext libvulkan-dev zlib1g-dev
+    libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev
+    libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev
+    libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev libxcb-keysyms1-dev
+    libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
+)
+# The X11 Xlib headers are deliberately absent: the glass effect is configured
+# with -DGLASS_X11=OFF and looks for X11 with QUIET, so no Xlib-xcb bridge header
+# is ever compiled. Listing them would only make `doctor` report a false miss.
+# An element may list several names; the first one apt knows about wins. Debian
+# renames packages between releases — the time_t transition turned libglib2.0-0
+# into libglib2.0-0t64 in trixie — and a single hard-coded name would make the
+# whole `apt-get install` line fail on one side of that rename or the other.
+debian_optional_runtime_packages=(
+    network-manager wireplumber bluez brightnessctl
+    wl-clipboard cliphist xdg-utils kde-spectacle
+    "libglib2.0-0t64 libglib2.0-0"
+    libqt6sql6-sqlite
+)
+
+# Prints the first name apt actually knows about. Pass the array element
+# unquoted so a multi-name element expands into its alternatives.
+debian_resolve_package() {
+    local candidate
+    for candidate in $1; do
+        if apt-cache show "$candidate" >/dev/null 2>&1; then
+            printf '%s' "$candidate"
+            return 0
+        fi
+    done
+    printf '%s' "${1%% *}"
+    return 1
+}
+
 kwin_plugins_enabled() {
     case "${KOS_BUILD_KWIN_PLUGINS:-ON}" in
         0|OFF|off|FALSE|false|NO|no) return 1 ;;
@@ -243,8 +304,43 @@ doctor() {
                 printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$package"
             fi
         done
+    elif command -v apt-get >/dev/null 2>&1; then
+        local package resolved
+        local -a required_packages=("${debian_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${debian_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${debian_spatial_build_packages[@]}")
+        fi
+        local quickshell_unavailable=0
+        for package in "${required_packages[@]}"; do
+            if ! resolved=$(debian_resolve_package "$package"); then
+                printf 'miss pkg:%-8s not in the configured apt repositories\n' "$package"
+                if [[ "$package" == quickshell ]]; then
+                    quickshell_unavailable=1
+                fi
+                failed=1
+                continue
+            fi
+            if dpkg -s "$resolved" >/dev/null 2>&1; then
+                printf 'ok   pkg:%-8s installed\n' "$resolved"
+            else
+                printf 'miss pkg:%-8s required to build the default configuration\n' "$resolved"
+                failed=1
+            fi
+        done
+        for package in "${debian_optional_runtime_packages[@]}"; do
+            resolved=$(debian_resolve_package "$package") || continue
+            if ! dpkg -s "$resolved" >/dev/null 2>&1; then
+                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$resolved"
+            fi
+        done
+        if (( quickshell_unavailable )); then
+            printf 'info %-12s Debian 13 (trixie) does not ship Quickshell 0.3.x; build it from source or add a PPA (see README.md)\n' quickshell
+        fi
     else
-        printf 'info %-12s library/package checks are currently available on Arch only\n' packages
+        printf 'info %-12s library/package checks are currently available on Arch, Debian and NixOS only\n' packages
     fi
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
@@ -477,6 +573,34 @@ ensure_build_dependencies() {
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
             sudo pacman -S --needed -- "${missing_packages[@]}"
+        fi
+    elif command -v apt-get >/dev/null 2>&1; then
+        local package resolved
+        local -a missing_packages=()
+        local -a unavailable_packages=()
+        local -a required_packages=("${debian_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${debian_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${debian_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if ! resolved=$(debian_resolve_package "$package"); then
+                unavailable_packages+=("$package")
+            elif ! dpkg -s "$resolved" >/dev/null 2>&1; then
+                missing_packages+=("$resolved")
+            fi
+        done
+        if (( ${#unavailable_packages[@]} > 0 )); then
+            printf 'Not in the configured apt repositories:\n'
+            printf '  %s\n' "${unavailable_packages[*]}"
+            printf 'The package lists may be stale; try: sudo apt-get update\n'
+        fi
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KOS build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo apt-get install -y "${missing_packages[@]}"
         fi
     fi
 }
