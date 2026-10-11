@@ -2279,9 +2279,9 @@ ApplicationWindow {
         // style (the untouched default follows the style).
         property real dockHoverScalePct: 119
         readonly property real minHoverScalePct: 100
-        readonly property real maxHoverScalePct: 160
+        readonly property real maxHoverScalePct: 320
         property real dockHoverLiftPct: 4
-        readonly property real maxHoverLiftPct: 25
+        readonly property real maxHoverLiftPct: 50
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0

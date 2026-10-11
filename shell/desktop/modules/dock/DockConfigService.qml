@@ -54,8 +54,8 @@ QtObject {
     property var hoverScale: null
     property var hoverLift: null
     readonly property real minHoverScale: 1.0
-    readonly property real maxHoverScale: 1.6
-    readonly property real maxHoverLift: 0.25
+    readonly property real maxHoverScale: 3.2
+    readonly property real maxHoverLift: 0.5
     readonly property real effectiveHoverScale: svc.hoverScale !== null
         ? svc.hoverScale : AppearanceTokens.dock.magnificationMaxScale
     readonly property real effectiveHoverLift: svc.hoverLift !== null
