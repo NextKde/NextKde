@@ -5,6 +5,11 @@ import qs.desktop.modules.dock
 
 // Exercise the shipping delegate, including the side Dock's rotated parent.
 // Real frame updates drive the animation; the timer only samples its output.
+ShellRoot {
+FloatingWindow {
+    visible: true
+    implicitWidth: 640
+    implicitHeight: 640
 Item {
     id: root
     width: 640
@@ -157,56 +162,56 @@ Item {
         repeat: true
         running: true
         onTriggered: {
-            ticks++
-            if (phase === 0 && ticks === 15) {
-                target = rep.itemAt(1)
-                checkSelectionStates()
-                checkBoundary()
-                beginPhase(1)
-            } else if (phase === 1 && ticks === 35) {
-                maxPhaseError = 0
-                t90 = -1
-                previousScale = 1
-                ptr = pointAt(target, 0, 0)
-                beginPhase(2)
-            } else if (phase === 2) {
-                const progress = samplePhase()
-                if (progress >= 0.9 && t90 < 0)
-                    t90 = Date.now() - startedAt
-                check(target.scale >= previousScale - 0.00001, "entry overshot/reversed")
-                previousScale = target.scale
-                if (ticks === 35) {
-                    console.log("REPORT " + edge + " t90=" + t90
-                        + "ms maxScaleLiftPhaseError=" + maxPhaseError.toFixed(6))
-                    check(t90 >= 0 && t90 < 220, "entry is too slow")
-                    check(maxPhaseError < 0.00001, "scale and lift run out of phase")
-                    check(Math.abs(progress - 1) < 0.001, "entry did not settle")
-                    ptr = pointAt(target, 100, 0)
-                    beginPhase(3)
+            root.ticks++
+            if (root.phase === 0 && root.ticks === 15) {
+                root.target = rep.itemAt(1)
+                root.checkSelectionStates()
+                root.checkBoundary()
+                root.beginPhase(1)
+            } else if (root.phase === 1 && root.ticks === 35) {
+                root.maxPhaseError = 0
+                root.t90 = -1
+                root.previousScale = 1
+                root.ptr = root.pointAt(root.target, 0, 0)
+                root.beginPhase(2)
+            } else if (root.phase === 2) {
+                const progress = root.samplePhase()
+                if (progress >= 0.9 && root.t90 < 0)
+                    root.t90 = Date.now() - root.startedAt
+                root.check(root.target.scale >= root.previousScale - 0.00001, "entry overshot/reversed")
+                root.previousScale = root.target.scale
+                if (root.ticks === 35) {
+                    console.log("REPORT " + root.edge + " t90=" + root.t90
+                        + "ms maxScaleLiftPhaseError=" + root.maxPhaseError.toFixed(6))
+                    root.check(root.t90 >= 0 && root.t90 < 220, "entry is too slow")
+                    root.check(root.maxPhaseError < 0.00001, "scale and lift run out of phase")
+                    root.check(Math.abs(progress - 1) < 0.001, "entry did not settle")
+                    root.ptr = root.pointAt(root.target, 100, 0)
+                    root.beginPhase(3)
                 }
-            } else if (phase === 3) {
+            } else if (root.phase === 3) {
                 // Continuous motion, then an abrupt reversal. No queued easing
-                // or spring velocity should keep moving away from the target.
-                ptr = pointAt(target, ticks < 20 ? 100 - ticks * 4 : (ticks - 20) * 4, 0)
-                samplePhase()
-                if (ticks === 40) {
-                    check(maxPhaseError < 0.00001, "tracking lost scale/lift synchrony")
-                    ptr = Qt.point(-10000, -10000)
-                    beginPhase(4)
+                // or spring velocity should keep moving away from the root.target.
+                root.ptr = root.pointAt(root.target, root.ticks < 20 ? 100 - root.ticks * 4 : (root.ticks - 20) * 4, 0)
+                root.samplePhase()
+                if (root.ticks === 40) {
+                    root.check(root.maxPhaseError < 0.00001, "tracking lost scale/lift synchrony")
+                    root.ptr = Qt.point(-10000, -10000)
+                    root.beginPhase(4)
                 }
-            } else if (phase === 4) {
-                samplePhase()
-                if (ticks === 35) {
-                    check(Math.abs(target.scale - 1) < 0.00001, "exit did not settle")
-                    check(Math.abs(target.transform[0].y) < 0.00001, "exit left a lift")
-                    check(target._magnificationAnimating === false, "idle still schedules frames")
-                    edgeIndex++
-                    if (edgeIndex === 3) {
-                        if (!failures) console.log("DOCK_MAGNIFICATION_PASS")
+            } else if (root.phase === 4) {
+                root.samplePhase()
+                if (root.ticks === 35) {
+                    root.check(Math.abs(root.target.scale - 1) < 0.00001, "exit did not settle")
+                    root.check(Math.abs(root.target.transform[0].y) < 0.00001, "exit left a lift")
+                    root.check(root.target._magnificationAnimating === false, "idle still schedules frames")
+                    root.edgeIndex++
+                    if (root.edgeIndex === 3) {
+                        if (!root.failures) console.log("DOCK_MAGNIFICATION_PASS")
                         Qt.quit()
                     } else {
-                        edge = ["bottom", "left", "right"][edgeIndex]
-                        beginPhase(0)
+                        root.edge = ["bottom", "left", "right"][root.edgeIndex]
+                        root.beginPhase(0)
                     }
                 }
             }
@@ -217,4 +222,7 @@ Item {
         running: true
         onTriggered: { console.log("FAIL timeout"); Qt.quit() }
     }
+}
+
+}
 }

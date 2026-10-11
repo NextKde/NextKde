@@ -29,6 +29,11 @@ import qs.desktop.modules.dock
 // option included, because a developer's own state file must not decide what
 // this test measures. The fixture never calls an update* function, so no state
 // file is written.
+ShellRoot {
+FloatingWindow {
+    visible: true
+    implicitWidth: 240
+    implicitHeight: 80
 Item {
     id: root
 
@@ -175,4 +180,7 @@ Item {
             Qt.quit()
         }
     }
+}
+
+}
 }

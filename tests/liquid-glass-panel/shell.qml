@@ -18,6 +18,11 @@ import qs.desktop.modules.dock
 // and least forgiving consumer: a six-pixel capsule whose radius is half its
 // height, so the mask has no straight edge to hide behind. If the panel's
 // properties are renamed, this is where it shows up first.
+ShellRoot {
+FloatingWindow {
+    visible: true
+    implicitWidth: 480
+    implicitHeight: 220
 Item {
     id: root
 
@@ -214,4 +219,7 @@ Item {
             Qt.quit()
         }
     }
+}
+
+}
 }

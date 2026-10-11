@@ -15,7 +15,7 @@ import tempfile
 import threading
 
 REPO = Path(__file__).resolve().parents[2]
-WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music"]
+WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music", "notifications"]
 state = {
     "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos"}),
     "appearance/icon-appearance.json": json.dumps({"version": 1, "mode": "grayscale"}),

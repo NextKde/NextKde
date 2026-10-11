@@ -19,6 +19,11 @@ import qs.desktop.modules.dock
 //
 // QML re-evaluates bindings synchronously when a dependency changes, so each
 // sweep is one pass: assign `ptr`, read `_hovering`, compare.
+ShellRoot {
+FloatingWindow {
+    visible: true
+    implicitWidth: 420
+    implicitHeight: 240
 Item {
     id: root
 
@@ -141,10 +146,10 @@ Item {
         running: true
         onTriggered: {
             try {
-                sweep("h", "y")
-                sweep("h", "x")
-                sweep("v", "y")
-                sweep("v", "x")
+                root.sweep("h", "y")
+                root.sweep("h", "x")
+                root.sweep("v", "y")
+                root.sweep("v", "x")
                 console.log("DOCK_HOVER_HIT_PASS")
             } catch (e) {
                 console.log("FAIL exception: " + e)
@@ -161,4 +166,7 @@ Item {
             Qt.quit()
         }
     }
+}
+
+}
 }

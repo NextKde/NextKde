@@ -13,6 +13,7 @@ ShellRoot {
     id: test
     property int stage: 0
     property var field: null
+    property bool searchFocusPrepared: false
     property var sequence: []
     QtObject { id: screenGeometry; property real x: 0; property real y: 0; property real width: 1000; property real height: 800 }
     DockAutoHideController { id: boot; mode: "always"; configReady: false }
@@ -114,10 +115,19 @@ ShellRoot {
                     overview.open = true; search.open = true
                     break
                 case 8:
-                    test.field = find(search.contentItem, "quicksearch-input")
-                    check(!!test.field, "real search field loaded")
-                    test.field.text = "abc"; test.field.cursorPosition = 1; test.field.forceActiveFocus()
-                    events.keyClick(Qt.Key_Delete, Qt.NoModifier, 0)
+                    if (!test.searchFocusPrepared) {
+                        test.field = find(search.contentItem, "quicksearch-input")
+                        check(!!test.field, "real search field loaded")
+                        test.field.text = "abc"; test.field.cursorPosition = 1; test.field.forceActiveFocus()
+                        // Both mapped windows request keyboard focus. Let the
+                        // compositor deliver focus before synthesizing keys.
+                        test.searchFocusPrepared = true
+                        test.stage = 8
+                        interval = 80
+                        return
+                    }
+                    check(test.field.activeFocus, "search field owns keyboard focus")
+                    check(events.keyClick(Qt.Key_Delete, Qt.NoModifier, 0), "send Delete to search")
                     check(test.field.text === "ac", "Delete edits search text")
                     test.field.text = "hello world"; test.field.cursorPosition = 0
                     events.keyClick(Qt.Key_Delete, Qt.ControlModifier, 0)

@@ -41,6 +41,11 @@ ShellRoot {
                     ]
                     launcher.applicationsDirty = false
                 } else if (phase === 1) {
+                    // This fixture intentionally stays unmapped, so its tile
+                    // animations never receive compositor frame callbacks.
+                    // Enable the card only for the selection-policy checks;
+                    // popup-motion covers the real entrance input gate.
+                    namedItems(launcher.contentItem, "launcher-motion-frame")[0].enabled = true
                     appHighlights = namedItems(launcher.contentItem, "launcher-app-selection-highlight")
                     check(appHighlights.length === 2, "shipping launcher creates two selection plates")
                     check(appHighlights.every(h => !h.selected), "opening launcher must not preselect first app")
@@ -65,6 +70,10 @@ ShellRoot {
                     launcher.folderEditMode = true
                     check(folderHighlights.every(h => !h.enabled), "folder editing suppresses selection")
                     launcher.folderEditMode = false
+                    // Seed the keyboard state after folder/catalog setup;
+                    // test its preservation across these appearance switches.
+                    launcher.keyboardSelectionActive = true
+                    launcher.selectedIndex = 1
                     AppearanceConfigService.shellStyle = "material"
                     check(appHighlights.every(h => h.enabled), "Material uses default glass selection")
                     check(folderHighlights.every(h => h.enabled), "Material folder apps use default glass selection")

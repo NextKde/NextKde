@@ -13,6 +13,7 @@ ShellRoot {
     property real savedProgress: 0
     property int stableGlassChecks: 0
     property int launcherVariant: 0
+    property real launcherCloseStarted: 0
     property var launcherFrame: null
     property var launcherLayout: null
     property real stableLayoutWidth: 0
@@ -424,9 +425,19 @@ ShellRoot {
                     check(launcherFrame.width === stableLayoutWidth
                         && launcherFrame.height === stableLayoutHeight, "reopening restores full panel size")
                     launcher.open = false
+                    launcherCloseStarted = Date.now()
                     interval = 350
                     break
                 case 23:
+                    // Tile staggering and frame dispatch may outlast the
+                    // initial sample. Require retirement within a bounded
+                    // deadline instead of treating that sample as completion.
+                    if ((launcherFrame.visible || launcher.BackgroundEffect.blurRegion !== null)
+                            && Date.now() - launcherCloseStarted < 1200) {
+                        test.stage = 23
+                        interval = 40
+                        return
+                    }
                     check(!launcherFrame.visible && launcher.BackgroundEffect.blurRegion === null,
                         "panel and blur retire after the closing tile animations finish")
                     launcherVariant++
