@@ -274,9 +274,17 @@ Item {
         if (!_distanceMagnificationEnabled || !visible)
             return 0.0
         const center = icon._slotCentreInRoot()
-        const iconAxis = vertical ? center.y : center.x
-        const pointerAxis = vertical ? magnificationPointer.y
-                                     : magnificationPointer.x
+        // 影响核在「容器中心相对坐标」里比较指针与槽位中心。dock 加宽是
+        // 对称的：槽位的根坐标与容器宽度各平移 ΔW/2、互相抵消，指针的根
+        // 坐标同样抵消——于是影响与 dock 宽度无关。用根坐标直接
+        // 比较会形成「加宽→图标平移→影响重算→让位→再加宽」的反馈环：
+        // 放大峰值调到 2.0 后环路增益过 1，进入 ±2 设备像素的极限环振荡
+        //（玻璃边缘 809↔811 实测），这就是用户把量程翻倍后看到的抽搐。
+        const axis = vertical ? magnificationRoot.height / 2
+                              : magnificationRoot.width / 2
+        const iconAxis = (vertical ? center.y : center.x) - axis
+        const pointerAxis = (vertical ? magnificationPointer.y
+                                      : magnificationPointer.x) - axis
         const radius = Math.max(icon.iconSize * 2.0,
             AppearanceTokens.dock.magnificationRadius)
         if (!Number.isFinite(iconAxis) || !Number.isFinite(pointerAxis)

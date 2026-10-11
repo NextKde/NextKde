@@ -243,12 +243,23 @@ Item {
         ? _dockPointerHover.point.position
         : Qt.point(-10000, -10000)
     property point magnificationPointer: Qt.point(-10000, -10000)
+    // 滤波收敛判定：指针静止且滤波值已贴住目标时，动画必须**停机**。悬停期
+    // 每帧无条件重赋 Qt.point 会以对象身份变化触发全链信号（influence/
+    // follower/图标变换逐帧重算），浮点尾动让图标变换在 ±1e-6 抖动——
+    // 分数缩放下每帧重采样出 1-4/255 的整排微抖（实测：指针在 dock 上时
+    // 玻璃区域每帧 20-150 像素差异 + 周期性 ~1500 像素尖峰；指针移离后
+    // 同区域 15 对帧全零）。
+    readonly property bool _filterActive: {
+        if (_dockPointerHover.hovered)
+            return true
+        return magnificationPointer.x > -9999
+            && Math.abs(magnificationPointer.x - _rawPointer.x) > 0.05
+    }
     // 1€ state: previous raw position and the smoothed speed estimate.
     property point _filterPrevRaw: Qt.point(0, 0)
     property point _filterSpeed: Qt.point(0, 0)
     FrameAnimation {
-        running: container.magnificationPointer.x > -9999
-            || _dockPointerHover.hovered
+        running: container._filterActive
         onTriggered: {
             const raw = container._rawPointer
             if (raw.x < -9999) {
@@ -281,9 +292,11 @@ Item {
             const cutoff = Math.min(30.0, 1.2 + 0.03 * Math.hypot(vx, vy))
             const a = alphaOf(cutoff)
             const cur = container.magnificationPointer
-            container.magnificationPointer = Qt.point(
-                cur.x + (raw.x - cur.x) * a,
-                cur.y + (raw.y - cur.y) * a)
+            const nx = cur.x + (raw.x - cur.x) * a
+            const ny = cur.y + (raw.y - cur.y) * a
+            // 仅在值真正移动时赋值：静止帧不再以新对象身份触发下游。
+            if (nx !== cur.x || ny !== cur.y)
+                container.magnificationPointer = Qt.point(nx, ny)
         }
     }
 
