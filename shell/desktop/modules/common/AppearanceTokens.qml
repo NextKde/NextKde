@@ -238,6 +238,7 @@ QtObject {
         readonly property color outline: ColorScheme.color("outline", tokens.isDarkTheme)
         readonly property color outlineVariant: ColorScheme.color("outline_variant", tokens.isDarkTheme)
         readonly property color error: ColorScheme.color("error", tokens.isDarkTheme)
+        readonly property color errorForeground: ColorScheme.color("on_error", tokens.isDarkTheme)
         readonly property color scrim: Qt.rgba(0, 0, 0,
             tokens.isDarkTheme ? 0.42 : 0.24)
     }

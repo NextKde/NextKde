@@ -4,6 +4,7 @@ import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
@@ -150,8 +151,7 @@ PanelWindow {
                     card._lastBody = card.notification.body || ""
                     card._lastAppName = card.notification.appName || ""
                     card._lastUrgency = card.notification.urgency
-                    card._lastIconSource = AppIdentityService._iconPath(
-                        card.notification.image || card.notification.appIcon)
+                    card._lastIconSource = (card.notification.image || AppIdentityService._iconPath(card.notification.appIcon))
                     card.removing = false
                 }
                 // The delegate is reused when a group's newest notification is
@@ -172,7 +172,7 @@ PanelWindow {
             readonly property string displayAppName: card.notification
                 ? card.notification.appName : card._lastAppName
             readonly property string displayIconSource: card.notification
-                ? AppIdentityService._iconPath(card.notification.image || card.notification.appIcon)
+                ? (card.notification.image || AppIdentityService._iconPath(card.notification.appIcon))
                 : card._lastIconSource
             readonly property bool isCritical: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Critical
@@ -443,6 +443,21 @@ PanelWindow {
 
             // ---- content ----
 
+            MouseArea {
+                objectName: "notification-body"
+                anchors.fill: content
+                enabled: card.groupCount > 1 || !!(card.notification
+                    && card.notification.actions && card.notification.actions.length > 0)
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (card.groupCount > 1) {
+                        root.groupService.toggleCollapsed(card.index)
+                    } else if (card.notification) {
+                        ControlCenterService.openNotification(card.notification.id, card.notification.appName, card.notification.desktopEntry)
+                    }
+                }
+            }
+
             Column {
                 id: content
                 anchors {
@@ -452,6 +467,16 @@ PanelWindow {
                     bottom: parent.bottom; bottomMargin: 14
                 }
                 spacing: 4
+
+                Text {
+                    width: parent.width
+                    text: ControlCenterService.notificationCategory(card.displayAppName, card.notification ? card.notification.desktopEntry : "") === "其他"
+                        ? card.displayAppName : ControlCenterService.notificationCategory(card.displayAppName, card.notification ? card.notification.desktopEntry : "")
+                    color: card.foregroundColor
+                    opacity: 0.60
+                    font.pixelSize: 10
+                    elide: Text.ElideRight
+                }
 
                 Text {
                     width: parent.width
@@ -493,6 +518,13 @@ PanelWindow {
                         width: content.width
                         height: Math.max(notifRowText.implicitHeight, 20)
                         visible: card.expanded
+                        MouseArea {
+                            objectName: "notification-message-" + modelData.id
+                            anchors.fill: parent
+                            enabled: !!(modelData.actions && modelData.actions.length > 0)
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: ControlCenterService.openNotification(modelData.id, modelData.appName, modelData.desktopEntry)
+                        }
                         Text {
                             id: notifRowText
                             anchors {
@@ -567,24 +599,7 @@ PanelWindow {
                             Text {
                                 id: actionLabel
                                 anchors.centerIn: parent
-                                text: {
-                                    const raw = modelData.text || modelData.identifier || ""
-                                    // Some apps (e.g. QQ) send English action labels.
-                                    // Map common ones to Chinese for display.
-                                    const map = {
-                                        "view": "查看",
-                                        "View": "查看",
-                                        "reply": "回复",
-                                        "Reply": "回复",
-                                        "open": "打开",
-                                        "Open": "打开",
-                                        "close": "关闭",
-                                        "Close": "关闭",
-                                        "mark as read": "标为已读",
-                                        "Mark as read": "标为已读"
-                                    }
-                                    return map[raw] || raw
-                                }
+                                text: ControlCenterService.notificationActionLabel(modelData)
                                 color: card.foregroundColor
                                 font.pixelSize: 12
                                 elide: Text.ElideRight
@@ -595,10 +610,8 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    const resident = card.notification?.resident ?? false
-                                    modelData.invoke()
-                                    if (!resident)
-                                        card.close(false)
+                                    const n = card.notification
+                                    if (n) ControlCenterService.openNotification(n.id, n.appName, n.desktopEntry, modelData.identifier)
                                 }
                             }
                         }
@@ -632,11 +645,12 @@ PanelWindow {
                         }
                         onAccepted: {
                             if (text.length > 0 && card.notification) {
-                                const resident = card.notification.resident
-                                card.notification.sendInlineReply(text)
+                                const n = card.notification
+                                const reply = text
                                 text = ""
-                                if (!resident)
-                                    card.close(false)
+                                // Sending the reply may destroy n; Quickshell
+                                // handles closing just this notification.
+                                n.sendInlineReply(reply)
                             }
                         }
                     }

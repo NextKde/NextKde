@@ -10,7 +10,7 @@
 // settings page both read this list, so neither can drift from the surfaces
 // the shell actually builds.
 export const deskCenterWidgetIds = [
-    "clock", "weather", "calendar", "todo", "system", "activity", "music",
+    "clock", "weather", "calendar", "todo", "system", "activity", "music", "notifications",
 ];
 
 // The shell-owned StatusArea cells, in their declared trailing order.

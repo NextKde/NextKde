@@ -33,16 +33,13 @@ Scope {
                 body: notification.body || "",
                 hints: notification.hints || ({})
             })
-            // Do Not Disturb still accepts the notification at D-Bus level,
-            // but keeps it out of the visible banner stack. Untracked
-            // notifications never reach dismiss/expire, so snapshot them into
-            // the session history here or they would be lost entirely.
-            if (ControlCenterService.doNotDisturbEnabled) {
-                notification.tracked = false
-                notifGroupService.pushHistory(notification)
-            } else {
-                notification.tracked = true
-            }
+            // Keep message actions and image providers alive in history.
+            // Banner visibility is separate from Notification.tracked, whose
+            // false value closes the notification in the sending application.
+            notification.tracked = true
+            notifGroupService.showNotification(notification, ControlCenterService.doNotDisturbEnabled)
+            ControlCenterService.registerLiveNotification(notification)
+            notifGroupService.pushHistory(notification)
         }
     }
 

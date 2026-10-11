@@ -3,6 +3,9 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.desktop.modules.platform
+import qs.desktop.modules.common
+import qs.desktop.modules.dock
+import Quickshell.Services.SystemTray
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
 // BlueZ, brightness, session, screenshot and theme integration.
@@ -70,12 +73,35 @@ QtObject {
     }
     onAnyPanelOpenChanged: if (anyPanelOpen) refresh()
 
+    function notificationActionLabel(action) {
+        const label = String(action?.text || "").trim()
+        const identifier = String(action?.identifier || "").trim().toLowerCase()
+        const translations = {
+            "default": "查看", "view": "查看", "open": "打开",
+            "reply": "回复", "close": "关闭", "mark as read": "标为已读"
+        }
+        const translated = translations[label.toLowerCase()]
+        if (translated) return translated
+        if (identifier === "default" || identifier === "view") return "查看"
+        if (!label) return translations[identifier] || "查看"
+        return label
+    }
+
+    function notificationCategory(appName, desktopEntry) {
+        const key = String(appName || "") + " " + String(desktopEntry || "")
+        if (/(^|[^a-z])qq([^a-z]|$)/i.test(key)) return "QQ"
+        if (/wechat|weixin|微信/i.test(key)) return "微信"
+        if (/telegram/i.test(key)) return "Telegram"
+        return "其他"
+    }
+
     function rebuildHistoryGroups() {
         const groups = []
         const groupIndex = ({})
         for (let i = 0; i < notificationHistory.count; ++i) {
             const row = notificationHistory.get(i)
-            const key = row.appName || "其他"
+            const category = notificationCategory(row.appName, row.desktopEntry)
+            const key = category === "其他" ? (row.appName || "其他") : category
             let index = groupIndex[key]
             if (index === undefined) {
                 index = groups.length
@@ -83,19 +109,212 @@ QtObject {
                 groups.push({ appName: key, appIcon: row.appIcon, items: [] })
             }
             groups[index].items.push({ notifId: row.notifId, summary: row.summary,
-                body: row.body, timestamp: row.timestamp })
+                body: row.body, timestamp: row.timestamp, desktopEntry: row.desktopEntry || "" })
         }
         historyGroups = groups
         historyRevision++
     }
 
+    property var groupService: null
+    property var _liveNotifications: ({})
+
+    function registerLiveNotification(notification) {
+        if (!notification) return
+        if (notification.id !== undefined && notification.id !== null) {
+            _liveNotifications[notification.id] = notification
+            _liveNotifications[String(notification.id)] = notification
+        }
+    }
+
+    function unregisterLiveNotification(notifId) {
+        if (notifId !== undefined && notifId !== null) {
+            delete _liveNotifications[notifId]
+            delete _liveNotifications[String(notifId)]
+        }
+    }
+
+    function invokeNotificationAction(notifId, appName, desktopEntry, actionIdentifier) {
+        let live = null
+        if (notifId !== undefined && notifId !== null) {
+            live = _liveNotifications[notifId] || _liveNotifications[String(notifId)]
+        }
+        // A history row must invoke its own message, never another chat's
+        // latest notification. Closed/replaced notifications cannot be invoked.
+
+        if (live && live.tracked && live.actions && live.actions.length > 0) {
+            // A banner button supplies its exact action, including reply and
+            // custom actions. Never substitute another button for it.
+            const requested = actionIdentifier === undefined ? null : String(actionIdentifier)
+            let action = null
+            for (let i = 0; i < live.actions.length; i++) {
+                const act = live.actions[i]
+                if (!act) continue
+                if (requested !== null) {
+                    if (act.identifier === requested) { action = act; break }
+                    continue
+                }
+                const ident = String(act.identifier || "").trim().toLowerCase()
+                const text = String(act.text || "").trim().toLowerCase()
+                if (ident === "default" || ident === "view" || ident === "open"
+                    || text === "查看" || text === "打开" || text.indexOf("查看") >= 0) {
+                    action = act; break
+                }
+            }
+            if (!action && requested === null) action = live.actions[0]
+            if (action) {
+                // Quickshell closes non-resident notifications itself. Do not
+                // touch the destroyed object or dismiss its app's other chats.
+                try { action.invoke(); return true; } catch (e) {
+                    console.warn("[ControlCenterService] invoke failed: " + e)
+                }
+            }
+        }
+        return false
+    }
+
+    function matchesApp(value, target) {
+        const category = ControlCenterService.notificationCategory(target, target)
+        if (category !== "其他") return ControlCenterService.notificationCategory(value, value) === category
+        return AppIdentityService.normalize(value) === AppIdentityService.normalize(target)
+    }
+
+    function activateAppWindow(targetId) {
+        if (!targetId) return false
+        // 1. Check direct WindowService match
+        const windows = WindowService.windowsForApp(targetId)
+        if (windows && windows.length > 0) {
+            WindowService.activateWindow(windows[0].windowId)
+            return true
+        }
+
+        // 2. Exact match in open windows
+        const cleanTarget = targetId.toLowerCase().replace(/\.desktop$/i, "").trim()
+        if (!cleanTarget) return false
+        const records = WindowService.records || []
+        for (let i = 0; i < records.length; i++) {
+            const rec = records[i]
+            const identity = rec.identity || {}
+            const desktopId = (identity.desktopId || "").toLowerCase().replace(/\.desktop$/i, "")
+            const rawAppId = (identity.rawAppId || "").toLowerCase().replace(/\.desktop$/i, "")
+            const name = (identity.name || "").toLowerCase()
+            if ((desktopId && matchesApp(desktopId, cleanTarget)) ||
+                (rawAppId && matchesApp(rawAppId, cleanTarget)) ||
+                (name && matchesApp(name, cleanTarget))) {
+                WindowService.activateWindow(rec.windowId)
+                return true
+            }
+        }
+
+        // 3. Check SystemTray items (if window was hidden to tray)
+        const trayItems = SystemTray.items.values || []
+        for (let t = 0; t < trayItems.length; t++) {
+            const item = trayItems[t]
+            if (!item) continue
+            const friendly = (SysTrayIdentityService.friendlyName(item) || "").toLowerCase()
+            const itemId = (item.id || "").toLowerCase()
+            const itemTitle = (item.title || "").toLowerCase()
+            if ((friendly && matchesApp(friendly, cleanTarget)) ||
+                (itemId && matchesApp(itemId, cleanTarget)) ||
+                (itemTitle && matchesApp(itemTitle, cleanTarget))) {
+                try {
+                    item.activate()
+                    return true
+                } catch (e) {}
+            }
+        }
+        return false
+    }
+
+    function isAppRunning(targetId) {
+        if (!targetId) return false
+        const cleanTarget = targetId.toLowerCase().replace(/\.desktop$/i, "").trim()
+        if (!cleanTarget) return false
+        const records = WindowService.records || []
+        for (let i = 0; i < records.length; i++) {
+            const rec = records[i]
+            const identity = rec.identity || {}
+            const desktopId = (identity.desktopId || "").toLowerCase().replace(/\.desktop$/i, "")
+            const rawAppId = (identity.rawAppId || "").toLowerCase().replace(/\.desktop$/i, "")
+            const name = (identity.name || "").toLowerCase()
+            if (desktopId === cleanTarget || rawAppId === cleanTarget || name === cleanTarget) {
+                return true
+            }
+        }
+        // Also check if running in tray
+        const trayItems = SystemTray.items.values || []
+        for (let t = 0; t < trayItems.length; t++) {
+            const item = trayItems[t]
+            if (!item) continue
+            const friendly = (SysTrayIdentityService.friendlyName(item) || "").toLowerCase()
+            const itemId = (item.id || "").toLowerCase()
+            const itemTitle = (item.title || "").toLowerCase()
+            if ((friendly && matchesApp(friendly, cleanTarget)) ||
+                (itemId && matchesApp(itemId, cleanTarget)) ||
+                (itemTitle && matchesApp(itemTitle, cleanTarget))) {
+                return true
+            }
+        }
+        return false
+    }
+
+    function openNotification(notifId, appName, desktopEntry, actionIdentifier) {
+        const targetId = (desktopEntry || appName || "").trim()
+
+        // Deliver the original message/action ID before raising the existing
+        // client. Some clients handle ActionInvoked without raising their
+        // window under Wayland, so the callback alone is not enough to view it.
+        if (invokeNotificationAction(notifId, appName, desktopEntry, actionIdentifier)) {
+            activateAppWindow(targetId)
+            return true
+        }
+
+        // 2. Try to activate the window if the app is already running in KWin
+        if (targetId.length > 0) {
+            const windowActivated = activateAppWindow(targetId)
+            if (windowActivated) {
+                const live = _liveNotifications[notifId]
+                if (live && groupService) groupService.hideNotification(live)
+                return true
+            }
+
+            // 3. Fallback: ONLY launch if the app is NOT already running
+            // Never launch a new process for an already running app like QQ/WeChat
+            // Chat notifications never start a second client/login window.
+            if (ControlCenterService.notificationCategory(appName, desktopEntry) !== "其他") return false
+            if (!isAppRunning(targetId)) {
+                if (AppActionService.launchById(targetId, [])) return true
+                if (!targetId.endsWith(".desktop"))
+                    return AppActionService.launchById(targetId + ".desktop", [])
+            }
+        }
+        return false
+    }
+
     function removeHistoryById(notifId) {
+        const live = _liveNotifications[notifId] || _liveNotifications[String(notifId)]
+        if (live && typeof live.dismiss === "function") {
+            try { live.dismiss() } catch (e) {}
+        }
+        unregisterLiveNotification(notifId)
         for (let i = 0; i < notificationHistory.count; ++i) {
             if (notificationHistory.get(i).notifId === notifId) {
                 notificationHistory.remove(i)
                 return
             }
         }
+    }
+
+    function clearAllNotifications() {
+        for (let i = 0; i < notificationHistory.count; ++i) {
+            const notifId = notificationHistory.get(i).notifId
+            const live = _liveNotifications[notifId] || _liveNotifications[String(notifId)]
+            if (live && typeof live.dismiss === "function") {
+                try { live.dismiss() } catch (e) {}
+            }
+        }
+        _liveNotifications = ({})
+        notificationHistory.clear()
+        AppNotificationService.clearAll()
     }
 
     property Connections _historyConnections: Connections {

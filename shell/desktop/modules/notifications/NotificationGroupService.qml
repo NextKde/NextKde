@@ -56,6 +56,26 @@ QtObject {
     // instead -- bumping it forces those bindings to re-evaluate and pick up
     // the new sidecar state (e.g. a notification that was expired externally).
     property int sidecarRevision: 0
+    property var _hiddenIds: ({})
+
+    function showNotification(notification, silent) {
+        if (silent) _hiddenIds[notification.id] = true
+        else delete _hiddenIds[notification.id]
+        svc._scheduleUpdate()
+    }
+
+    function refreshNotification(notification) {
+        if (!svc._isAlive(notification)) return
+        ControlCenterService.registerLiveNotification(notification)
+        svc.showNotification(notification, ControlCenterService.doNotDisturbEnabled)
+        svc.pushHistory(notification)
+    }
+
+    function hideNotification(notification) {
+        if (!svc._isAlive(notification)) return
+        _hiddenIds[notification.id] = true
+        svc._scheduleUpdate()
+    }
 
     // ---- source bridge: hidden Instantiator over the read-only model -------
 
@@ -79,13 +99,18 @@ QtObject {
             property var _conn: Connections {
                 target: srcDelegate.notification
                 ignoreUnknownSignals: true
-                function onSummaryChanged() { svc._scheduleUpdate() }
-                function onBodyChanged() { svc._scheduleUpdate() }
-                function onAppNameChanged() { svc._scheduleUpdate() }
-                function onAppIconChanged() { svc._scheduleUpdate() }
-                function onImageChanged() { svc._scheduleUpdate() }
+                function onClosed(reason) {
+                    ControlCenterService.unregisterLiveNotification(srcDelegate.notification.id)
+                    delete svc._hiddenIds[srcDelegate.notification.id]
+                    svc._scheduleUpdate()
+                }
+                function onSummaryChanged() { svc.refreshNotification(srcDelegate.notification) }
+                function onBodyChanged() { svc.refreshNotification(srcDelegate.notification) }
+                function onAppNameChanged() { svc.refreshNotification(srcDelegate.notification) }
+                function onAppIconChanged() { svc.refreshNotification(srcDelegate.notification) }
+                function onImageChanged() { svc.refreshNotification(srcDelegate.notification) }
                 function onUrgencyChanged() { svc._scheduleUpdate() }
-                function onActionsChanged() { svc._scheduleUpdate() }
+                function onActionsChanged() { svc.refreshNotification(srcDelegate.notification) }
                 function onHasInlineReplyChanged() { svc._scheduleUpdate() }
                 function onInlineReplyPlaceholderChanged() { svc._scheduleUpdate() }
             }
@@ -163,6 +188,7 @@ QtObject {
         const order = []    // keys in arrival order
         for (let i = 0; i < notifications.length; i++) {
             const n = notifications[i]
+            if (svc._hiddenIds[n.id]) continue
             const key = svc._groupKey(n)
             let g = map[key]
             if (!g) {
@@ -361,16 +387,14 @@ QtObject {
         svc.sidecarRevision++
     }
 
-    // Expire every notification in a group (by key). Used by the auto-expire
-    // timer so a stacked group disappears all at once instead of one-by-one.
-    // Re-collects LIVE objects (see dismissGroupByKey for why).
+    // Hide timed-out banners without closing their message actions/images.
+    // The bounded history owns their lifetime until read, removed or cleared.
     function expireGroupByKey(key) {
         const arr = svc._liveNotificationsForKey(key)
-            .filter(n => n && typeof n.expire === "function")
-        for (let i = 0; i < arr.length; i++)
+        for (let i = 0; i < arr.length; i++) {
             svc._pushHistory(arr[i])
-        for (let j = arr.length - 1; j >= 0; j--)
-            arr[j].expire()
+            svc.hideNotification(arr[i])
+        }
 
         // Synchronous cleanup fallback: remove the group from groupsModel immediately.
         for (let idx = groupsModel.count - 1; idx >= 0; idx--) {
@@ -411,7 +435,7 @@ QtObject {
         if (!svc._isAlive(notification))
             return
         svc._pushHistory(notification)
-        notification.expire()
+        svc.hideNotification(notification)
     }
 
     // ---- history -----------------------------------------------------------
@@ -433,24 +457,52 @@ QtObject {
         if (!notification)
             return
         const history = ControlCenterService.notificationHistory
+        const hasAction = !!(notification.actions && notification.actions.length > 0)
+        let actionLabel = ""
+        if (hasAction) {
+            let preferred = notification.actions[0]
+            for (const action of notification.actions) {
+                const id = String(action.identifier || "").trim().toLowerCase()
+                if (id === "default" || id === "view" || id === "open") {
+                    preferred = action
+                    break
+                }
+            }
+            actionLabel = ControlCenterService.notificationActionLabel(preferred)
+        }
+        for (let i = 0; i < history.count; ++i) {
+            if (history.get(i).notifId === notification.id) {
+                const old = history.get(i)
+                if (old.summary === (notification.summary || "") && old.body === (notification.body || "") && old.image === (notification.image || "") && old.actionLabel === actionLabel && old.hasAction === hasAction) return
+                history.remove(i)
+                break
+            }
+        }
         const snapshot = {
             notifId: notification.id,
+            desktopEntry: notification.desktopEntry || "",
             appName: notification.appName || "",
             appIcon: notification.appIcon || "",
+            image: notification.image || "",
             summary: notification.summary || "",
             body: notification.body || "",
             urgency: notification.urgency,
+            actionLabel: actionLabel,
+            hasAction: hasAction,
             timestamp: Date.now()
         }
         history.insert(0, snapshot)
         while (history.count > ControlCenterService.notificationHistoryMax)
-            history.remove(history.count - 1)
+            ControlCenterService.removeHistoryById(history.get(history.count - 1).notifId)
     }
 
     function clearHistory() {
-        ControlCenterService.notificationHistory.clear()
+        ControlCenterService.clearAllNotifications()
     }
 
     // Build on first load.
-    Component.onCompleted: svc._scheduleUpdate()
+    Component.onCompleted: {
+        ControlCenterService.groupService = svc
+        svc._scheduleUpdate()
+    }
 }
