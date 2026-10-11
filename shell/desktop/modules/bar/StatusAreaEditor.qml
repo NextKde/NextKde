@@ -20,12 +20,12 @@ AnimatedPopupWindow {
         AppearanceTokens.isDarkTheme ? "#1c1c1e" : "#ffffff")
     readonly property color accentColor: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primary, "#0a84ff")
-    readonly property var ids: ["network", "battery", "settings", "controlcenter"]
+    readonly property var ids: ["network", "battery", "settings", "notifications", "controlcenter"]
     readonly property var labels: ({
-        network: "网络", battery: "电池", settings: "设置", controlcenter: "控制中心"
+        network: "网络", battery: "电池", settings: "设置", notifications: "通知历史", controlcenter: "控制中心"
     })
     readonly property var symbols: ({
-        network: "⌁", battery: "▱", settings: "⚙", controlcenter: "◉"
+        network: "⌁", battery: "▱", settings: "⚙", notifications: "♧", controlcenter: "◉"
     })
     readonly property var cellKeys: ids.map(id => "cell:" + id)
     readonly property var arrangedIds: {
