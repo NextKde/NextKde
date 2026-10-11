@@ -11,3 +11,6 @@ singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml
 singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml
+
+AnalogClock 1.0 AnalogClock.qml
+DigitalClock 1.0 DigitalClock.qml
