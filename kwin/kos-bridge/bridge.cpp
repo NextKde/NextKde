@@ -290,7 +290,8 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // These are already rejected by ButtonRenderer::paint. Skip the rule
     // lookup and stacking-order walk for them as well; shell and popup
     // surfaces can repaint frequently while never having a button panel.
-    if ((!sourceCapture && !window->isVisible()) || !window->isManaged()
+    if (window->isFullScreen()
+        || (!sourceCapture && !window->isVisible()) || !window->isManaged()
         || (!window->isNormalWindow() && !window->isDialog())
         || window->isSkipSwitcher() || window->isSpecialWindow()) {
         m_renderer->clearHits(window, sourceCapture);

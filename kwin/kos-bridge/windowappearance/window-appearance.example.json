@@ -30,7 +30,7 @@
       "contactOpacity": 0.22,
       "ambientOpacity": 0.28
     },
-    "states": { "fullscreen": "inherit", "maximized": "inherit", "tiled": "inherit" }
+    "states": { "fullscreen": "off", "maximized": "inherit", "tiled": "inherit" }
   },
   "apps": {
     "org.kde.kate": {
