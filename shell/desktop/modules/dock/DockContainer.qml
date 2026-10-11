@@ -227,17 +227,25 @@ Item {
     // Keep the pointer in DockContainer coordinates. Mapping each icon back to
     // this same Item is safe for both bottom and rotated side Docks.
     //
-    // The hover machinery is driven by a LIGHTLY FILTERED pointer (~80 ms): a
-    // hand on a mouse trembles by a pixel or two at tens of hertz, and feeding
-    // that raw made the whole row answer every micro-move with a small
-    // stretch/shrink. The filter averages the tremor out while deliberate
-    // movement stays responsive; clicks are untouched (their own handlers).
-    // The filter snaps to the raw position on entry and drops out on exit, so
-    // the enter/leave animations are unchanged.
+    // The hover machinery is driven by a filtered pointer: a hand on a mouse
+    // trembles by a pixel or two at tens of hertz, and feeding that raw made
+    // the whole row answer every micro-move with a small stretch/shrink. A
+    // fixed low-pass traded that tremor for lag: at slide speed the filtered
+    // pointer trailed the real one by tens of pixels, and after the hand
+    // stopped the icons kept sliding while the filter caught up. This is the
+    // 1€ filter instead (Casiez et al.): the cutoff follows the pointer's
+    // speed, so a slow, trembling hand is smoothed hard while a deliberate
+    // slide tracks nearly 1:1 — and stops the moment the pointer stops.
+    // Clicks are untouched (their own handlers); the filter snaps to the raw
+    // position on entry and drops out on exit, so the enter/leave animations
+    // are unchanged.
     readonly property point _rawPointer: _dockPointerHover.hovered
         ? _dockPointerHover.point.position
         : Qt.point(-10000, -10000)
     property point magnificationPointer: Qt.point(-10000, -10000)
+    // 1€ state: previous raw position and the smoothed speed estimate.
+    property point _filterPrevRaw: Qt.point(0, 0)
+    property point _filterSpeed: Qt.point(0, 0)
     FrameAnimation {
         running: container.magnificationPointer.x > -9999
             || _dockPointerHover.hovered
@@ -247,15 +255,35 @@ Item {
                 container.magnificationPointer = Qt.point(-10000, -10000)
                 return
             }
-            const cur = container.magnificationPointer
-            if (cur.x < -9999) {
+            const dt = Math.min(0.1, Math.max(frameTime, 1.0 / 240))
+            if (container.magnificationPointer.x < -9999) {
                 container.magnificationPointer = raw
+                container._filterPrevRaw = raw
+                container._filterSpeed = Qt.point(0, 0)
                 return
             }
-            const k = 1 - Math.exp(-frameTime / 0.08)
+            const alphaOf = function(cutoff) {
+                const tau = 1.0 / (2 * Math.PI * cutoff)
+                return 1.0 / (1.0 + tau / dt)
+            }
+            // Speed estimate, smoothed at the slow cutoff: it decays over
+            // ~130 ms after a stop, so the cutoff stays high long enough for
+            // the position to converge onto the raw pointer before the heavy
+            // smoothing (and with it the tremor rejection) resumes.
+            const ivx = (raw.x - container._filterPrevRaw.x) / dt
+            const ivy = (raw.y - container._filterPrevRaw.y) / dt
+            const av = alphaOf(1.2)
+            const sp = container._filterSpeed
+            const vx = sp.x + (ivx - sp.x) * av
+            const vy = sp.y + (ivy - sp.y) * av
+            container._filterSpeed = Qt.point(vx, vy)
+            container._filterPrevRaw = raw
+            const cutoff = Math.min(30.0, 1.2 + 0.03 * Math.hypot(vx, vy))
+            const a = alphaOf(cutoff)
+            const cur = container.magnificationPointer
             container.magnificationPointer = Qt.point(
-                cur.x + (raw.x - cur.x) * k,
-                cur.y + (raw.y - cur.y) * k)
+                cur.x + (raw.x - cur.x) * a,
+                cur.y + (raw.y - cur.y) * a)
         }
     }
 
@@ -382,15 +410,15 @@ Item {
         }
         return { states: states, offs: offs }
     }
-    // The raw offsets pass through one shared ~120 ms follower. The greedy
-    // deltas recompute in steps as the anchor hands over between adjacent
-    // slots, and the chain multiplies whatever pointer tremor upstream
-    // filtering left; at the far ends that arrived as a ~1-2 px micro-rhythm
-    // ("small repeated stretching" while sliding with a real hand). One filter
-    // for the whole row -- rather than one per icon -- keeps dividers,
+    // The raw offsets pass through one shared follower. The greedy deltas
+    // recompute in steps as the anchor hands over between adjacent slots; one
+    // filter for the whole row -- rather than one per icon -- keeps dividers,
     // carousels and the glass exactly coherent with the icons: the members
     // never slide against each other, and holding the pointer still holds the
-    // row still.
+    // row still. The response only rounds off ~1 px handover steps; its ramp
+    // lag (v·response, the post-stop glide) is cancelled by the lead on the
+    // spread progress in DockIcon, so it can stay smooth instead of trading
+    // slide-time shimmer for a short tail.
     property var _smoothedOffsets: ({})
     readonly property bool _spreadFollowActive: {
         // Prime a decaying dependency so the animation stops once at rest.
@@ -416,8 +444,8 @@ Item {
             for (let i = 0; i < sts.length; i++) {
                 const it = sts[i].item
                 const cur = m[it] === undefined ? layout.offs[i] : m[it]
-                m[it] = Magnification.advance(cur, layout.offs[i],
-                    frameTime, 0.12, 0.01)
+                m[it] = Magnification.advanceCritical(cur, layout.offs[i],
+                    frameTime, 0.11, 0.8, 0.01)
             }
         }
     }
@@ -458,22 +486,21 @@ Item {
     }
     // The glass follows the live spread -- the dock grows with the
     // magnification and comes back down as the pointer moves away -- through
-    // its own ~150 ms follower. Raw changes pulse once per slot crossed, which
-    // read as the dock twitching longer/shorter; the follower turns that into
-    // one steady breath. (Holding the widest value was tried and rejected: it
-    // froze the size, and its ratchet also dragged the pointer anchor.)
+    // its own ~70 ms follower with a critical landing (the tail does not
+    // crawl the last pixels after the pointer stops). Raw changes pulse once
+    // per slot crossed, which read as the dock twitching longer/shorter; the
+    // follower turns that into one steady breath. (Holding the widest value
+    // was tried and rejected: it froze the size, and its ratchet also dragged
+    // the pointer anchor.)
     property real _smoothSpreadTotal: 0
     readonly property real hoverSpreadTotal: _smoothSpreadTotal
     FrameAnimation {
         running: Math.abs(container._spreadRawTotal
             - container._smoothSpreadTotal) > 0.05
         onTriggered: {
-            const raw = container._spreadRawTotal
-            container._smoothSpreadTotal = raw
-                - (raw - container._smoothSpreadTotal)
-                    * Math.exp(-frameTime / 0.15)
-            if (Math.abs(raw - container._smoothSpreadTotal) < 0.05)
-                container._smoothSpreadTotal = raw
+            container._smoothSpreadTotal = Magnification.advanceCritical(
+                container._smoothSpreadTotal, container._spreadRawTotal,
+                frameTime, 0.07, 1.2, 0.05)
         }
     }
     // The pointer in contentRow coordinates, so the integral compares along
@@ -506,14 +533,24 @@ Item {
     FrameAnimation {
         running: container._spreadTrace && container.hoverSpreadTotal > 0.5
         onTriggered: {
-            const states = container._spreadStates
+            const layout = container._spreadOffsets
+            const members = container._spreadStates
+            function rawOf(item) {
+                for (let i = 0; i < layout.states.length; i++)
+                    if (layout.states[i].item === item)
+                        return layout.offs[i]
+                return 0
+            }
+            const f = members.length > 0 ? members[0].item : null
+            const l = members.length > 0 ? members[members.length - 1].item : null
             console.log("[DockSpread] px=" + container._spreadPointer.x.toFixed(2)
                 + " w=" + container.width.toFixed(3)
                 + " total=" + container.hoverSpreadTotal.toFixed(2)
-                + " first=" + (states.length > 0
-                    ? container.spreadFor(states[0].item).toFixed(2) : "0")
-                + " last=" + (states.length > 0
-                    ? container.spreadFor(states[states.length - 1].item).toFixed(2) : "0"))
+                + " rawTotal=" + container._spreadRawTotal.toFixed(2)
+                + " first=" + (f ? container.spreadFor(f).toFixed(2) : "0")
+                + " rawFirst=" + (f ? rawOf(f).toFixed(2) : "0")
+                + " last=" + (l ? container.spreadFor(l).toFixed(2) : "0")
+                + " rawLast=" + (l ? rawOf(l).toFixed(2) : "0"))
         }
     }
     HoverHandler {

@@ -298,12 +298,22 @@ Item {
     // faster display, and its default epsilon stops these two units at different
     // times. FrameAnimation follows the render cadence and sleeps once settled.
     property real _magnificationProgress: 0
-    // The hover spread reads a SLOWER copy of the same influence: crossing one
-    // slot at speed pulses the sharp profile at ~6-7 Hz, and the layout (and
-    // the glass) pulsed with it. A ~150 ms follower damps that to about a
-    // seventh and leaves a steady, non-jittery reflow; the offsets stay an
-    // upper bound on the rendered growth, so gaps never pinch.
+    // The hover spread reads a lead-compensated copy of the same damped
+    // progress. A first-order progress always trails a moving influence by
+    // rate·response, and the spread's need inherits that as lag -- after a
+    // stop the row kept sliding while the copy caught up (~5 px on the far
+    // icons). Leading the SPREAD copy by the influence's own velocity cancels
+    // that lag in steady motion, so the room-making is already in place when
+    // the pointer stops. The rendered scale keeps the plain progress (its feel
+    // is untouched). While the pointer is in the row the lead runs both ways:
+    // icons behind it decay, and leading them downward merely tightens a
+    // resting gap by a couple of invisible px. Once the pointer has left, the
+    // lead is zero, so the exit decay is never led downward and the offsets
+    // stay an upper bound on the rendered growth -- gaps never pinch. The
+    // container's follower rounds off what remains.
     property real _spreadProgress: 0
+    property real _prevInfluence: 0
+    property real _influenceVelocity: 0
     // Public companions the DockContainer's hover spread reads to compute how
     // far each neighbour has to make room.
     readonly property real magnificationProgress: _magnificationProgress
@@ -313,14 +323,33 @@ Item {
         || _spreadProgress !== _magnificationInfluence
     FrameAnimation {
         running: icon._magnificationAnimating
+        onRunningChanged: {
+            if (running) {
+                icon._prevInfluence = icon._magnificationInfluence
+                icon._influenceVelocity = 0
+            }
+        }
         onTriggered: {
             icon._magnificationProgress = Magnification.advance(
                 icon._magnificationProgress, icon._magnificationInfluence,
                 frameTime, DockAnimation.magnificationResponseSeconds,
                 DockAnimation.magnificationEpsilon)
+            const dt = Math.min(0.1, Math.max(frameTime, 1.0 / 240))
+            const inf = icon._magnificationInfluence
+            // ~5 Hz velocity estimate: steady slide motion survives it, the
+            // per-frame jitter of the influence does not.
+            const av = 1.0 / (1.0 + (1.0 / (2 * Math.PI * 5)) / dt)
+            const iv = (inf - icon._prevInfluence) / dt
+            icon._prevInfluence = inf
+            icon._influenceVelocity += (iv - icon._influenceVelocity) * av
+            const lead = magnificationPointer.x > -9999
+                ? Math.max(-0.12, Math.min(0.12,
+                    icon._influenceVelocity
+                        * DockAnimation.magnificationResponseSeconds))
+                : 0
             icon._spreadProgress = Magnification.advance(
-                icon._spreadProgress, icon._magnificationInfluence,
-                frameTime, DockAnimation.magnificationResponseSeconds * 3.6,
+                icon._spreadProgress, inf + lead,
+                frameTime, DockAnimation.magnificationResponseSeconds,
                 DockAnimation.magnificationEpsilon)
         }
     }
