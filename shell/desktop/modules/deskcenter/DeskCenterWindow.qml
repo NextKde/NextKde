@@ -156,11 +156,11 @@ PanelWindow {
     }
     readonly property var widgetLabels: ({
         clock: "时钟", weather: "天气", calendar: "日历", todo: "待办",
-        system: "系统", activity: "活动", music: "音乐"
+        system: "系统", activity: "活动", music: "音乐", notifications: "通知"
     })
     readonly property var widgetSymbols: ({
         clock: "◷", weather: "☀", calendar: "▦", todo: "✓",
-        system: "⌁", activity: "◌", music: "♫"
+        system: "⌁", activity: "◌", music: "♫", notifications: "✉"
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -285,9 +285,13 @@ PanelWindow {
     // rows. The desktop never scrolls and cards never shrink their type.
     function configuredWidget(id, priority, startColor, endColor) {
         const span = DeskCenterConfigService.spanFor(id)
+        const dimensions = DeskCenterConfigService.dimensionsFor(id)
         return { id: id, title: "", columns: span[0], rows: span[1],
             priority: priority, startColor: startColor, endColor: endColor,
-            surface: false }
+            surface: false, side: DeskCenterConfigService.sideFor(id),
+            width: dimensions.width || root.spanSize(span[0]),
+            height: dimensions.height || root.spanSize(span[1]),
+            topOffset: DeskCenterConfigService.topOffsetFor(id) }
     }
     readonly property var widgetDefinitions: {
         // Make the binding depend on persisted configuration changes.
@@ -303,7 +307,8 @@ PanelWindow {
             configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
             configuredWidget("system", 70, "#f5f8fc", "#e6edf6"),
             configuredWidget("activity", 60, "#40506a", "#29364e"),
-            configuredWidget("music", 50, "#51415d", "#332a3d")
+            configuredWidget("music", 50, "#51415d", "#332a3d"),
+            configuredWidget("notifications", 85, "#434b58", "#2a313d")
         ]
         const byId = ({})
         for (const widget of definitions)
@@ -321,13 +326,47 @@ PanelWindow {
         return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
     }
 
-    readonly property var placements: packWidgets(widgetDefinitions, widgetColumns, usableRows)
+    readonly property real rightWidgetWidth: {
+        const widgets = widgetDefinitions.filter(widget => widget.side === "right")
+        return widgets.length ? Math.min(root.spanSize(widgetColumns), Math.max(...widgets.map(widget => widget.width))) : 0
+    }
+    readonly property real rightWidgetOrigin: root.width - root.rightInset - rightWidgetWidth
+    readonly property real widgetAvailableHeight: Math.max(120, root.height - root.topInset - root.bottomInset)
+    readonly property var placements: WidgetLayout.packPixelSides(widgetDefinitions,
+        root.spanSize(widgetColumns), rightWidgetWidth, widgetAvailableHeight, root.gap)
+    readonly property bool hasLeftWidgets: placements.some(placement => placement.side === "left")
+    readonly property bool hasRightWidgets: placements.some(placement => placement.side === "right")
     function placementFor(widgetId) {
         for (let i = 0; i < placements.length; i++)
             if (placements[i].id === widgetId)
                 return placements[i]
         return null
     }
+    function finishWidgetDrag(widgetId, centerX, centerY) {
+        const side = centerX > root.width / 2 ? "right" : "left"
+        let nearestId = widgetId
+        let nearestDistance = Number.POSITIVE_INFINITY
+        for (let i = 0; i < widgetRepeater.count; ++i) {
+            const candidate = widgetRepeater.itemAt(i)
+            if (!candidate || !candidate.visible || candidate.modelData.id === widgetId
+                || DeskCenterConfigService.sideFor(candidate.modelData.id) !== side) continue
+            const dx = centerX - (candidate.x + candidate.width / 2)
+            const dy = centerY - (candidate.y + candidate.height / 2)
+            const distance = dx * dx + dy * dy
+            if (distance < nearestDistance) {
+                nearestDistance = distance
+                nearestId = candidate.modelData.id
+            }
+        }
+        const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
+        if (nearestId !== widgetId) DeskCenterConfigService.moveWidget(widgetId, targetIndex)
+        DeskCenterConfigService.setSide(widgetId, side)
+        const placement = root.placementFor(widgetId)
+        const height = placement ? placement.height : root.spanSize(2)
+        DeskCenterConfigService.setTopOffset(widgetId,
+            Math.max(0, Math.min(root.widgetAvailableHeight - height, centerY - root.topInset - height / 2)))
+    }
+
     function spanSize(span) { return span * cellSize + (span - 1) * gap }
 
     function materialWidgetSurface(id) {
@@ -416,7 +455,7 @@ PanelWindow {
         visible: root.editMode || opacity > 0
         enabled: root.editMode
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
-        anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
+        anchors { top: parent.top; right: parent.right; topMargin: Math.max(8, root.topInset - 40); rightMargin: 24 }
         spacing: 8
 
         Repeater {
@@ -546,31 +585,69 @@ PanelWindow {
         delegate: DeskWidgetCard {
             id: card
             required property var modelData
+            objectName: "desktop-widget-" + modelData.id
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
             visible: placement !== null
-            z: widgetDrag.active ? 120 : (root.editMode ? 20 : 1)
+            property bool resizing: false
+            property real previewWidth: -1
+            property real previewHeight: -1
+            property real resizeStartX: 0
+            property real resizeStartY: 0
+            property real resizeStartWidth: 0
+            property real resizeStartHeight: 0
+            function beginResize(area, px, py) {
+                const point = area.mapToItem(desktopCoordinates, px, py)
+                resizeStartX = point.x
+                resizeStartY = point.y
+                resizeStartWidth = width
+                resizeStartHeight = height
+                resizing = true
+            }
+            function updateResize(area, px, py, horizontal, vertical) {
+                if (!resizing) return
+                const point = area.mapToItem(desktopCoordinates, px, py)
+                if (horizontal) {
+                    const direction = placement.side === "right" ? -1 : 1
+                    previewWidth = Math.max(180, Math.min(root.spanSize(root.widgetColumns),
+                        resizeStartWidth + direction * (point.x - resizeStartX)))
+                }
+                if (vertical) previewHeight = Math.max(140, Math.min(root.height - root.bottomInset - y,
+                    resizeStartHeight + point.y - resizeStartY))
+            }
+            function finishResize() {
+                if (!resizing) return
+                const widgetId = modelData.id
+                const finalWidth = width
+                const finalHeight = height
+                resizing = false
+                previewWidth = -1
+                previewHeight = -1
+                DeskCenterConfigService.setDimensions(widgetId, finalWidth, finalHeight)
+            }
+            z: widgetDrag.active || resizing ? 120 : (root.editMode ? 20 : 1)
             transform: Translate { x: card.dragOffsetX; y: card.dragOffsetY }
             scale: widgetDrag.active ? 1.035 : 1
             // The clock is the one card whose glass outline is a shape rather
             // than a rectangle: it draws MaterialFlower, so its surface has to
             // be the flower itself — no card fill, no rectangular KWin material,
             // and frost clipped to the petal outline.
-            flowerShapedSurface: modelData.id === "clock"
+            flowerShapedSurface: modelData.id === "clock" && DeskCenterConfigService.clockStyle === "analog"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
             showSurface: modelData.surface
-            x: root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap)
-            y: root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap)
-            width: root.spanSize(placement?.columns ?? 1)
-            height: root.spanSize(placement?.rows ?? 1)
-            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            x: placement?.side === "right" ? root.width - root.rightInset - (placement?.x ?? 0) - width
+                : root.leftInset + (placement?.x ?? 0)
+            y: root.topInset + (placement?.y ?? 0)
+            width: previewWidth >= 0 ? previewWidth : (placement?.width ?? root.cellSize)
+            height: previewHeight >= 0 ? previewHeight : (placement?.height ?? root.cellSize)
+            Behavior on x { enabled: !card.resizing; NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
             Behavior on y { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
-            Behavior on height { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on width { enabled: !card.resizing; NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
+            Behavior on height { enabled: !card.resizing; NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.standardEasing } }
             Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
             TapHandler {
@@ -582,7 +659,7 @@ PanelWindow {
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: root.editMode
+                enabled: root.editMode && !card.resizing
                 acceptedButtons: Qt.LeftButton
                 onTranslationChanged: {
                     if (!active)
@@ -595,30 +672,17 @@ PanelWindow {
                         return
                     const centerX = card.x + card.width / 2 + card.dragOffsetX
                     const centerY = card.y + card.height / 2 + card.dragOffsetY
-                    let nearestId = card.modelData.id
-                    let nearestDistance = Number.POSITIVE_INFINITY
-                    for (let i = 0; i < widgetRepeater.count; ++i) {
-                        const candidate = widgetRepeater.itemAt(i)
-                        if (!candidate)
-                            continue
-                        const dx = centerX - (candidate.x + candidate.width / 2)
-                        const dy = centerY - (candidate.y + candidate.height / 2)
-                        const distance = dx * dx + dy * dy
-                        if (distance < nearestDistance) {
-                            nearestDistance = distance
-                            nearestId = candidate.modelData.id
-                        }
-                    }
-                    const targetIndex = DeskCenterConfigService.orderedIds().indexOf(nearestId)
-                    DeskCenterConfigService.moveWidget(card.modelData.id, targetIndex)
+                    const widgetId = card.modelData.id
                     card.dragOffsetX = 0
                     card.dragOffsetY = 0
+                    root.finishWidgetDrag(widgetId, centerX, centerY)
                 }
             }
 
             HoverHandler { id: widgetHover }
 
             Rectangle {
+                objectName: "widget-edit-entry-" + card.modelData.id
                 z: 50
                 visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
@@ -632,10 +696,11 @@ PanelWindow {
                     id: sizeLabel
                     anchors.centerIn: parent
                     text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 右键编辑"
+                        DeskCenterConfigService.sizeFor(card.modelData.id)] + " · 编辑"
                     color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 9; weight: Font.DemiBold }
                 }
+                TapHandler { onTapped: root.enterWidgetEditMode(false) }
             }
 
             Rectangle {
@@ -656,28 +721,126 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
+            Row {
                 z: 80
                 visible: root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
-                width: editSizeText.implicitWidth + 16
-                height: 26
-                radius: AppearanceTokens.isMaterial ? 13 : 9
-                color: AppearanceTokens.surface.pick(
-                    AppearanceTokens.colors.primaryContainer,
-                    Qt.rgba(0, 0, 0, 0.56))
+                spacing: 4
+                Repeater {
+                    model: ["small", "medium", "large"]
+                    Rectangle {
+                        required property string modelData
+                        objectName: "widget-size-" + card.modelData.id + "-" + modelData
+                        width: 27; height: 26; radius: 9
+                        color: DeskCenterConfigService.sizeFor(card.modelData.id) === modelData
+                            ? AppearanceTokens.colors.primary
+                            : AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                        Text {
+                            anchors.centerIn: parent
+                            text: ({small: "小", medium: "中", large: "大"})[modelData]
+                            color: DeskCenterConfigService.sizeFor(card.modelData.id) === modelData
+                                ? AppearanceTokens.colors.primaryForeground
+                                : AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                            font { pixelSize: 10; weight: Font.DemiBold }
+                        }
+                        TapHandler { onTapped: DeskCenterConfigService.setSize(card.modelData.id, modelData) }
+                    }
+                }
+            }
+
+            Rectangle {
+                objectName: "widget-side-" + card.modelData.id
+                z: 80
+                visible: root.editMode
+                anchors { right: parent.right; top: parent.top; margins: 8 }
+                width: sideLabel.implicitWidth + 16
+                height: 26; radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
                 Text {
-                    id: editSizeText
+                    id: sideLabel
                     anchors.centerIn: parent
-                    text: ({ small: "小", medium: "中", large: "大" })[
-                        DeskCenterConfigService.sizeFor(card.modelData.id)]
-                    color: AppearanceTokens.surface.pick(
-                        AppearanceTokens.colors.primaryContainerForeground, "white")
+                    text: DeskCenterConfigService.sideFor(card.modelData.id) === "right" ? "移到左侧" : "移到右侧"
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
                     font { pixelSize: 10; weight: Font.DemiBold }
                 }
                 TapHandler {
-                    onTapped: DeskCenterConfigService.cycleSize(card.modelData.id)
+                    onTapped: DeskCenterConfigService.setSide(card.modelData.id,
+                        DeskCenterConfigService.sideFor(card.modelData.id) === "right" ? "left" : "right")
                 }
+            }
+
+            Rectangle {
+                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                z: 80
+                visible: root.editMode && card.modelData.id === "clock"
+                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
+                width: clockStyleLabel.implicitWidth + 16
+                height: 26
+                radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                Text {
+                    id: clockStyleLabel
+                    anchors.centerIn: parent
+                    text: DeskCenterConfigService.clockStyle === "analog" ? "切换数字时钟" : "切换指针时钟"
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                    font.pixelSize: 10
+                }
+                TapHandler {
+                    onTapped: DeskCenterConfigService.setClockStyle(
+                        DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
+                }
+            }
+
+            MouseArea {
+                id: bottomResize
+                objectName: "widget-resize-height-" + card.modelData.id
+                z: 110
+                anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 12; rightMargin: 12 }
+                height: 12
+                hoverEnabled: true
+                preventStealing: true
+                cursorShape: Qt.SizeVerCursor
+                onPressed: mouse => card.beginResize(bottomResize, mouse.x, mouse.y)
+                onPositionChanged: mouse => { if (pressed) card.updateResize(bottomResize, mouse.x, mouse.y, false, true) }
+                onReleased: card.finishResize()
+                onCanceled: card.finishResize()
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 36; height: 3; radius: 1.5
+                    color: AppearanceTokens.content.glassInk(bottomResize.containsMouse || card.resizing ? 0.90 : 0.35)
+                }
+            }
+            MouseArea {
+                id: widthResize
+                objectName: "widget-resize-width-" + card.modelData.id
+                z: 110
+                visible: root.editMode || widgetHover.hovered || card.resizing
+                x: card.placement?.side === "right" ? 0 : parent.width - width
+                anchors { top: parent.top; bottom: parent.bottom; topMargin: 40; bottomMargin: 40 }
+                width: 10
+                hoverEnabled: true
+                preventStealing: true
+                cursorShape: Qt.SizeHorCursor
+                onPressed: mouse => card.beginResize(widthResize, mouse.x, mouse.y)
+                onPositionChanged: mouse => { if (pressed) card.updateResize(widthResize, mouse.x, mouse.y, true, false) }
+                onReleased: card.finishResize()
+                onCanceled: card.finishResize()
+            }
+            MouseArea {
+                id: cornerResize
+                objectName: "widget-resize-corner-" + card.modelData.id
+                z: 115
+                visible: root.editMode || widgetHover.hovered || card.resizing
+                x: card.placement?.side === "right" ? 0 : parent.width - width
+                anchors.bottom: parent.bottom
+                width: 14; height: 14
+                hoverEnabled: true
+                preventStealing: true
+                cursorShape: card.placement?.side === "right" ? Qt.SizeBDiagCursor : Qt.SizeFDiagCursor
+                onPressed: mouse => card.beginResize(cornerResize, mouse.x, mouse.y)
+                onPositionChanged: mouse => { if (pressed) card.updateResize(cornerResize, mouse.x, mouse.y, true, true) }
+                onReleased: card.finishResize()
+                onCanceled: card.finishResize()
             }
 
             // Instantiate only this card's content. `visible: false` keeps a
@@ -686,6 +849,7 @@ PanelWindow {
             Item {
                 id: widgetContentLayer
                 objectName: "widget-content-layer"
+                enabled: !root.editMode
                 anchors.fill: parent
                 // Glass widgets use monochrome content independently of the
                 // application icons. Colour cards retain their own artwork.
@@ -717,82 +881,15 @@ PanelWindow {
                 // different surface -- its own colour, its own opacity, its own
                 // outline. The clock only adds its face below.
 
-                Canvas {
-                    id: analogClock
+                Loader {
                     anchors.fill: parent
-                    anchors.margins: 14
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        const size = Math.min(width, height)
-                        const center = size / 2
-                        const radius = Math.max(0, size / 2 - 3)
-                        if (radius <= 0)
-                            return
-                        const date = clock.date
-                        ctx.reset()
-                        ctx.translate((width - size) / 2 + center, (height - size) / 2 + center)
-                        // In the shared glass modes the card material is the
-                        // face: do not paint a second opaque white disc.
-                        if (!AppearanceTokens.content.onBackdrop) {
-                            ctx.fillStyle = "#fafafa"
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill()
-                        }
-                        if (!AppearanceTokens.isMaterial) {
-                            ctx.strokeStyle = AppearanceTokens.content.ink("#dedede", 0.42).toString()
-                            ctx.lineWidth = 1
-                            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke()
-                        }
-	                        ctx.strokeStyle = AppearanceTokens.content.ink("#171717").toString()
-                        ctx.lineCap = "round"
-                        for (let mark = 0; mark < 12; mark++) {
-                            const angle = mark * Math.PI / 6
-                            ctx.lineWidth = mark % 3 === 0 ? 1.8 : 0.8
-                            ctx.beginPath()
-                            ctx.moveTo(Math.sin(angle) * (radius - 4), -Math.cos(angle) * (radius - 4))
-                            ctx.lineTo(Math.sin(angle) * (radius - (mark % 3 === 0 ? 10 : 7)), -Math.cos(angle) * (radius - (mark % 3 === 0 ? 10 : 7)))
-                            ctx.stroke()
-                        }
-                        // Full hour numerals make the small analogue clock
-                        // readable at a glance, rather than relying on ticks
-                        // alone. Their radius leaves a clear channel for the
-                        // hands in this one-cell tile.
-	                        ctx.fillStyle = AppearanceTokens.content.ink("#242126").toString()
-                        ctx.font = "bold " + Math.max(7, Math.round(radius * 0.18)) + "px sans-serif"
-                        ctx.textAlign = "center"
-                        ctx.textBaseline = "middle"
-                        for (let number = 1; number <= 12; number++) {
-                            const angle = number * Math.PI / 6
-                            const numberRadius = radius * 0.68
-                            ctx.fillText(String(number),
-                                Math.sin(angle) * numberRadius,
-                                -Math.cos(angle) * numberRadius)
-                        }
-                        const hour = (date.getHours() % 12 + date.getMinutes() / 60) * Math.PI / 6
-                        const minute = date.getMinutes() * Math.PI / 30
-                        const second = date.getSeconds() * Math.PI / 30
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.primary.toString()
-                        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(hour) * radius * 0.48, -Math.cos(hour) * radius * 0.48); ctx.stroke()
-                        if (AppearanceTokens.isMaterial)
-                            ctx.strokeStyle = AppearanceTokens.colors.tertiary.toString()
-                        ctx.lineWidth = 1.8; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(minute) * radius * 0.70, -Math.cos(minute) * radius * 0.70); ctx.stroke()
-	                        ctx.strokeStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.secondary.toString(), "#ee7659").toString(); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(second) * radius * 0.76, -Math.cos(second) * radius * 0.76); ctx.stroke()
-	                        ctx.fillStyle = AppearanceTokens.content.accent(AppearanceTokens.colors.primary.toString(), "#ee7659").toString(); ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill()
-                    }
-                    Connections { target: clock; function onDateChanged() { analogClock.requestPaint() } }
-                    // A Canvas reads the scheme only when it paints, so a
-                    // shell-style switch (material -> macos) or a colour-source
-                    // switch has to ask for a repaint explicitly, independently
-                    // of both the date tick and the widget surface switch.
-                    Connections {
-                        target: AppearanceTokens
-                        function onColorRevisionChanged() { analogClock.requestPaint() }
-                        function onIsMaterialChanged() { analogClock.requestPaint() }
-                    }
-	                    Connections {
-	                        target: AppearanceTokens.content
-	                        function onOnBackdropChanged() { analogClock.requestPaint() }
-                    }
+                    active: DeskCenterConfigService.clockStyle === "digital"
+                    sourceComponent: DigitalClock { currentDate: clock.date }
+                }
+                Loader {
+                    anchors.fill: parent
+                    active: DeskCenterConfigService.clockStyle === "analog"
+                    sourceComponent: AnalogClock { currentDate: clock.date }
                 }
 
 	                Rectangle {
@@ -2461,6 +2558,14 @@ PanelWindow {
             }
                 }
             }
+
+            Loader {
+                anchors.fill: parent
+                active: card.visible && card.modelData.id === "notifications"
+                sourceComponent: Component {
+                    DeskNotificationWidget {}
+                }
+            }
         }
     }
 
@@ -2470,12 +2575,13 @@ PanelWindow {
     Item {
         id: desktopFileGrid
         objectName: "desktop-file-grid"
-        // Files and their labels always stay above wallpaper subjects, even
-        // while a widget or file is being rearranged near the shared boundary.
+        // Files stay above wallpaper subjects and can use empty slots on
+        // either side; the free-slot grid excludes each widget rectangle.
         z: 3
-        x: root.leftInset + (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.placements.length > 0 ? 4 * (root.cellSize + root.gap) : 0)
+        x: root.leftInset
         y: root.topInset
-        width: root.width - x - root.rightInset
+        width: Math.max(0, (root.screen?.name === ScreenLifecycle.activeScreen?.name && root.hasRightWidgets
+            ? root.rightWidgetOrigin - root.gap : root.width - root.rightInset) - x)
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
@@ -4010,7 +4116,17 @@ PanelWindow {
             validY: desktopFileGrid.y
             validWidth: desktopFileGrid.width
             validHeight: desktopFileGrid.height
-            baseCellWidth: desktopFileGrid.itemWidth
+            // Include gutters in the host pitch so the comfortable grid
+            // reaches both edges instead of leaving an unusable left strip.
+            baseCellWidth: {
+                const columns = Math.max(1, Math.floor((desktopFileGrid.width + 16) / (desktopFileGrid.preferredItemWidth + 16)))
+                return (desktopFileGrid.width - (columns - 1) * 16) / columns
+            }
+            blockedRects: root.screen?.name === ScreenLifecycle.activeScreen?.name
+                ? root.placements.map(p => ({
+                    x: p.side === "right" ? root.width - root.rightInset - p.x - p.width : root.leftInset + p.x,
+                    y: root.topInset + p.y, width: p.width, height: p.height
+                })) : []
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
             iconVisualSize: desktopFileGrid.iconSize + 12

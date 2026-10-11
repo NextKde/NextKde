@@ -16,13 +16,14 @@ export function metrics(baseWidth, baseHeight, iconSize, density, lineHeight) {
 
 // Keep valid manual placements, then place displaced/newly visible entries in
 // free slots. A smaller field must never leave icons underneath the widgets.
-export function reflowSlots(ids, previous, capacity) {
+export function reflowSlots(ids, previous, capacity, blockedSlots = []) {
+    const blocked = new Set(blockedSlots);
     const next = {};
     const occupied = new Set();
     const pending = [];
     for (const id of ids) {
         const slot = previous[id];
-        if (Number.isInteger(slot) && slot >= 0 && slot < capacity && !occupied.has(slot)) {
+        if (Number.isInteger(slot) && slot >= 0 && slot < capacity && !blocked.has(slot) && !occupied.has(slot)) {
             next[id] = slot;
             occupied.add(slot);
         } else {
@@ -31,7 +32,7 @@ export function reflowSlots(ids, previous, capacity) {
     }
     let slot = 0;
     for (const id of pending) {
-        while (occupied.has(slot)) slot++;
+        while (occupied.has(slot) || blocked.has(slot)) slot++;
         if (slot >= capacity) break;
         next[id] = slot;
         occupied.add(slot++);

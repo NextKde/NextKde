@@ -11,6 +11,7 @@ import qs.desktop.modules.common
 Item {
     id: root
 
+    property var blockedRects: []
     property real validX: 0
     property real validY: 0
     property real validWidth: width
@@ -32,10 +33,29 @@ Item {
     readonly property real columnPitch: cellWidth + cellGap
     readonly property real rowPitch: cellHeight + cellGap
     readonly property int columnCount: Math.max(1,
-        Math.floor((validWidth + cellGap) / columnPitch))
+        Math.floor((validWidth + cellGap + 0.001) / columnPitch))
     readonly property int rowCount: Math.max(1,
         Math.floor((validHeight + cellGap) / rowPitch))
     readonly property int capacity: columnCount * rowCount
+    readonly property var blockedSlots: {
+        const result = []
+        if (!blockedRects.length) return result
+        for (let slot = 0; slot < capacity; slot++) {
+            const point = pointForSlot(slot)
+            const x = point.x + (cellWidth - contentWidth) / 2
+            const y = point.y + 2
+            if (blockedRects.some(r => x < r.x + r.width + 4 && x + contentWidth > r.x - 4
+                && y < r.y + r.height + 4 && y + contentHeight > r.y - 4)) result.push(slot)
+        }
+        return result
+    }
+    readonly property var availableSlots: {
+        const blocked = new Set(blockedSlots)
+        const result = []
+        for (let slot = 0; slot < capacity; slot++) if (!blocked.has(slot)) result.push(slot)
+        return result
+    }
+    function slotAvailable(slot) { return slot >= 0 && slot < capacity && blockedSlots.indexOf(slot) < 0 }
     readonly property real gridWidth: columnCount * cellWidth
         + Math.max(0, columnCount - 1) * cellGap
     readonly property real gridOriginX: validX + validWidth - gridWidth
@@ -376,11 +396,11 @@ Item {
             return -1
         const localX = pointX - gridOriginX
         const localY = pointY - validY
-        const column = Math.floor(localX / columnPitch)
-        const row = Math.floor(localY / rowPitch)
-        if (column < 0 || column >= columnCount || row < 0 || row >= rowCount)
-            return -1
-        return (columnCount - 1 - column) * rowCount + row
+        // The outer gutter still belongs to the nearest edge cell.
+        const column = Math.max(0, Math.min(columnCount - 1, Math.floor(localX / columnPitch)))
+        const row = Math.max(0, Math.min(rowCount - 1, Math.floor(localY / rowPitch)))
+        const slot = (columnCount - 1 - column) * rowCount + row
+        return slotAvailable(slot) ? slot : -1
     }
 
     function pointInGap(pointX, pointY) {
@@ -423,37 +443,18 @@ Item {
         delete next[id]
         delete owners[source]
         const direction = source > target ? 1 : -1
+        const targetIndex = availableSlots.indexOf(target)
+        const chain = []
         let freeSlot = -1
-        for (let slot = target + direction;
-                slot >= 0 && slot < capacity;
-                slot += direction) {
-            if (owners[slot] === undefined) {
-                freeSlot = slot
-                break
-            }
+        for (let i = targetIndex; i >= 0 && i < availableSlots.length; i += direction) {
+            const slot = availableSlots[i]
+            chain.push(slot)
+            if (owners[slot] === undefined) { freeSlot = slot; break }
         }
-        // No free slot in the insertion direction: preserve the layout.
-        if (freeSlot < 0) {
-            return sourceSlots
-        }
-        if (direction > 0) {
-            for (let slot = freeSlot; slot > target; --slot) {
-                const previous = owners[slot - 1]
-                if (previous !== undefined) {
-                    next[previous] = slot
-                    owners[slot] = previous
-                    delete owners[slot - 1]
-                }
-            }
-        } else {
-            for (let slot = freeSlot; slot < target; ++slot) {
-                const nextOwner = owners[slot + 1]
-                if (nextOwner !== undefined) {
-                    next[nextOwner] = slot
-                    owners[slot] = nextOwner
-                    delete owners[slot + 1]
-                }
-            }
+        if (freeSlot < 0) return sourceSlots
+        for (let i = chain.length - 1; i > 0; i--) {
+            const previous = owners[chain[i - 1]]
+            if (previous !== undefined) next[previous] = chain[i]
         }
         next[id] = target
         return next
@@ -471,20 +472,21 @@ Item {
     function layoutAfterGroupDrop(sourceSlots, ids, anchorIndex, targetSlot) {
         if (ids.length === 0 || targetSlot < 0 || targetSlot >= capacity)
             return sourceSlots
-        const startSlot = Math.max(0, Math.min(capacity - ids.length,
-            targetSlot - anchorIndex))
+        if (!slotAvailable(targetSlot) || ids.length > availableSlots.length) return sourceSlots
+        const startIndex = Math.max(0, Math.min(availableSlots.length - ids.length,
+            availableSlots.indexOf(targetSlot) - anchorIndex))
         const anchorId = ids[anchorIndex]
         const moveTowardHigherSlots = sourceSlots[anchorId] < targetSlot
         let next = sourceSlots
         if (moveTowardHigherSlots) {
             for (let index = ids.length - 1; index >= 0; --index) {
-                const point = pointForSlot(startSlot + index)
+                const point = pointForSlot(availableSlots[startIndex + index])
                 next = layoutAfterDrop(next, ids[index],
                     point.x + cellWidth / 2, point.y + cellHeight / 2, false)
             }
         } else {
             for (let index = 0; index < ids.length; ++index) {
-                const point = pointForSlot(startSlot + index)
+                const point = pointForSlot(availableSlots[startIndex + index])
                 next = layoutAfterDrop(next, ids[index],
                     point.x + cellWidth / 2, point.y + cellHeight / 2, false)
             }
@@ -536,8 +538,8 @@ Item {
         // Use the signal's current entries directly. A derived `entryIds`
         // binding may still contain the previous value while onEntriesChanged
         // is running, which would make every filesystem update one step late.
-        for (let index = 0; index < currentEntries.length && index < capacity; ++index)
-            initial[currentEntries[index].path] = index
+        for (let index = 0; index < currentEntries.length && index < availableSlots.length; ++index)
+            initial[currentEntries[index].path] = availableSlots[index]
         selectedIds = selectedIds.filter(function(id) {
             return initial[id] !== undefined
         })
@@ -562,7 +564,7 @@ Item {
         // placements; only explicit Arrange/Reset discards the existing map.
         const ids = (sourceEntries || entries).map(entry => entry.path)
         slots = DesktopGridMetrics.reflowSlots(ids,
-            Object.assign({}, savedSlots, slots), capacity)
+            Object.assign({}, savedSlots, slots), capacity, blockedSlots)
         previewSlots = slots
         layoutReflowPending = false
         selectedIds = selectedIds.filter(function(id) { return slots[id] !== undefined })
@@ -572,6 +574,7 @@ Item {
     }
 
     onCapacityChanged: Qt.callLater(reflowLayout)
+    onBlockedSlotsChanged: Qt.callLater(reflowLayout)
     onSavedSlotsChanged: {
         if (!dragActive) slots = copySlots(savedSlots)
         reflowLayout(entries)
@@ -739,6 +742,15 @@ Item {
 
         onPressed: function(mouse) {
             held = false
+            const point = rootPoint(mouse)
+            // The icon grid sits above wallpaper subjects and now spans the
+            // whole desktop. Leave widget rectangles to the handlers below it.
+            if (root.blockedRects.some(rect => point.x >= rect.x
+                    && point.x < rect.x + rect.width && point.y >= rect.y
+                    && point.y < rect.y + rect.height)) {
+                mouse.accepted = false
+                return
+            }
             if (mouse.button === Qt.RightButton) {
                 root.selectedIds = []
                 root.contextMenuRequested(null, rootPoint(mouse))
@@ -749,7 +761,6 @@ Item {
             // to the host; the TextInput's focus-loss handler commits first.
             if (root.renamingId !== "")
                 root.activityRequested()
-            const point = rootPoint(mouse)
             root.selectionStart = point
             root.selectionEnd = point
             root.selectionBoxActive = false

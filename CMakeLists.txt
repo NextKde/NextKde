@@ -477,6 +477,17 @@ if(BUILD_TESTING)
             LABELS ui TIMEOUT 20)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
+        foreach(fixture widget-layout notification-fold notification-contrast notification-banner-actions)
+            add_test(NAME kos-ui.${fixture}
+                COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/${fixture}/run.py)
+            set_tests_properties(kos-ui.${fixture} PROPERTIES LABELS ui TIMEOUT 60 RUN_SERIAL TRUE)
+        endforeach()
+        if(KOS_NODE_EXECUTABLE)
+            add_test(NAME kos-ui.desktop-icon-placement
+                COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-icon-placement/run.mjs
+                    ${KOS_INTERACTION_QUICKSHELL})
+            set_tests_properties(kos-ui.desktop-icon-placement PROPERTIES LABELS ui TIMEOUT 30 RUN_SERIAL TRUE)
+        endif()
         add_test(NAME kos-ui.interaction-runtime
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-runtime/run.py)
         add_test(NAME kos-ui.widget-experience

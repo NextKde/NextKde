@@ -35,3 +35,14 @@ assert.ok(Object.values(slots).every(n=>n>=0 && n<36),'smaller fields have no of
 slots = reflowSlots(ids, slots, 90);
 assert.equal(Object.keys(slots).length,90,'all entries return when space is restored');
 console.log('Desktop density: capacity, label bounds, gutters, and reversible reflow passed');
+
+const blocked = [0, 2, 6];
+const withWidgets = reflowSlots(['a','b','c','d'], {a:5,b:2,c:4,d:0}, 8, blocked);
+assert.equal(withWidgets.a,5,'valid manual position stays unchanged');
+assert.equal(withWidgets.c,4,'uncovered manual position stays unchanged');
+assert.ok(Object.values(withWidgets).every(slot => !blocked.includes(slot)), 'widgets exclude their actual slots');
+assert.equal(new Set(Object.values(withWidgets)).size,4,'reflow avoids collisions');
+const freed = reflowSlots(['a','b','c','d','e'],withWidgets,8,[]);
+assert.equal(freed.a,5,'moving a widget does not reset an existing manual position');
+assert.equal(Object.keys(freed).length,5,'new space is usable after a widget moves');
+console.log('Desktop icon bounds: actual widget slots excluded; uncovered positions preserved');
