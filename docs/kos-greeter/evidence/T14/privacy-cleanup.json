@@ -1,0 +1,6 @@
+{
+  "scope": "synthetic test logs only; not real PAM audit",
+  "logCount": 39,
+  "syntheticSecretMarkerHits": {},
+  "remainingMatchedVirtualProcesses": []
+}

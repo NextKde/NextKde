@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+app_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec /usr/bin/qs --log-rules '*.debug=false' -p "$app_root/wallpaper.qml"

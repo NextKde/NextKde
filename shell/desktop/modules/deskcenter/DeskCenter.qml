@@ -25,7 +25,7 @@ Scope {
                     id: wallpaperWindow
                     screen: outputScope.modelData
                     visible: ScreenLifecycle.outputAvailable
-                        && (WallpaperPreviewService.active || WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
+                        && (SessionEntryService.pending || SessionEntryService.defaultBackground || WallpaperPreviewService.active || WallpaperService.takeoverEnabled || SpatialWallpaperService.ready)
                     pointerX: WallpaperPreviewService.active
                         ? previewWindow.depthPointerX : widgetWindow.depthPointerX
                     pointerY: WallpaperPreviewService.active

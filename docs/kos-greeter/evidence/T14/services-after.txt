@@ -1,0 +1,7 @@
+Id=greetd.service
+ActiveState=active
+UnitFileState=enabled
+
+Id=greetd.service
+ActiveState=active
+UnitFileState=enabled

@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../Kos/Ui/wallpapers" as SharedWallpapers
 import qs.desktop.modules.common
 import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as WallpaperCatalog
 
@@ -7,6 +8,7 @@ import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as WallpaperCatalog
 Item {
     id: root
 
+    property color backgroundColor: "#111111"
     property url source: ""
     property var targetScreen: null
     property bool previewTarget: false
@@ -23,19 +25,23 @@ Item {
     readonly property int effectMode: ({left: 1, right: 2, top: 3, bottom: 4,
         wipe: 5, wave: 6, grow: 7, center: 7, outer: 8, cinematic: 9})[activeTransition] || 0
     readonly property int animationDuration: activeTransition === "simple" ? 260 : 800
+    property bool entryTransitionConsumed: false
     property real revealProgress: 0
     readonly property bool revealSupported: GraphicsInfo.api !== GraphicsInfo.Software
     readonly property bool useReveal: effectMode > 0 && revealSupported
 
     function reportReady(path) {
         if (root.previewTarget) WallpaperPreviewService.imageReady(path, root.targetScreen?.name || "")
-        else if (root.targetScreen) WallpaperService.reportImageReady(root.targetScreen.name, path)
+        else if (root.targetScreen) WallpaperService.reportImageReady(root.targetScreen.name,
+            path === SessionEntryService.sessionImage ? SessionEntryService.verifiedSource : path)
     }
     // The motion owns the screen until it finishes; the service waits for this
     // before letting the Plasma restyle run.
     function reportSettled() {
         if (root.previewTarget || !root.targetScreen) return
-        WallpaperService.reportTransitionSettled(root.targetScreen.name, root.currentImage.source)
+        WallpaperService.reportTransitionSettled(root.targetScreen.name,
+            root.currentImage.source.toString() === SessionEntryService.sessionImage
+                ? SessionEntryService.verifiedSource : root.currentImage.source)
     }
     readonly property real pixelRatio: Math.max(1,
         Number(targetScreen?.devicePixelRatio || 1))
@@ -104,6 +110,10 @@ Item {
         activeSeed = root.previewTarget
             ? WallpaperPreviewService.transitionSeed : WallpaperService.transitionSeed
         activeTransition = WallpaperCatalog.resolvedTransition(root.transition, activeSeed)
+        if (!root.previewTarget && SessionEntryService.pending && !entryTransitionConsumed) {
+            entryTransitionConsumed = true
+            activeTransition = "none"
+        }
         if (!currentImage.source.toString() || activeTransition === "none") {
             promote()
             return
@@ -181,9 +191,9 @@ Item {
         }
     }
 
-    Rectangle { anchors.fill: parent; color: "#111111"; z: -1 }
+    Rectangle { anchors.fill: parent; color: root.backgroundColor; z: -1 }
 
-    component WallpaperBuffer: Image {
+    component WallpaperBuffer: SharedWallpapers.StaticWallpaperImage {
         id: buffer
         anchors.fill: parent
         z: root.nextImage === buffer ? 1 : 0

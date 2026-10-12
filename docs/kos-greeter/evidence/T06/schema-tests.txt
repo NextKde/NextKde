@@ -1,0 +1,1 @@
+NOT RUN: system Python lacks jsonschema. No package installed. Runtime validator and example CLI passed.

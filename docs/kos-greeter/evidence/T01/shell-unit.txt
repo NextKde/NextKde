@@ -1,0 +1,5 @@
+$ systemctl --user show kos-shell.service -p ActiveState -p ExecStart -p After
+exit=0
+After=plasma-kwin_wayland.service home.mount app.slice basic.target graphical-session.target kos-platform.service plasma-plasmashell.service -.mount kos-data.service
+ActiveState=active
+ExecStart={ path=/usr/bin/qs ; argv[]=/usr/bin/qs --no-duplicate -c kos ; ignore_errors=no ; start_time=[Sun 2026-10-11 13:36:17 CST] ; stop_time=[n/a] ; pid=65813 ; code=(null) ; status=0/0 }

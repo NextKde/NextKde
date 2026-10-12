@@ -1,0 +1,28 @@
+$ git show --format=fuller --stat 76137dc
+exit=0
+commit 76137dc85ea8d44074a036d1550e608450c08750
+Author:     liubw <liubw@infogo.com.cn>
+AuthorDate: Thu Sep 17 21:28:20 2026 +0800
+Commit:     liubw <liubw@infogo.com.cn>
+CommitDate: Thu Sep 17 21:28:20 2026 +0800
+
+    refactor(kosctl): drop install/uninstall sddm
+    
+    `kosctl install sddm` has greeter-integration problems, so the sign-in theme is
+    no longer installed from the checkout. The theme source stays in apps/sddm and
+    can still be previewed with `sddm-greeter --test-mode --theme apps/sddm`.
+    
+    - kosctl: install_sddm_theme / remove_sddm_theme and their dispatch branches are
+      gone; a bare `install`/`uninstall` and the named `lockscreen`/`apps` paths are
+      unchanged. usage no longer lists sddm.
+    - uninstall no longer removes the system theme -- that needs root -- but reports
+      a leftover /usr/share/sddm/themes/kos or /etc/sddm.conf.d/kos-theme.conf with
+      the command to delete it, so an install from an earlier kosctl is not silently
+      kept.
+    - README: the optional-components section is now lock screen only, plus a new
+      "SDDM 登录界面：暂时不提供" section covering the status, what the installer
+      used to write, manual preview, and the TTY recovery steps.
+
+ README.md    | 48 ++++++++++++++++++++++++--------------------
+ tools/kosctl | 65 ++++++++++++++++++------------------------------------------
+ 2 files changed, 45 insertions(+), 68 deletions(-)

@@ -1,0 +1,37 @@
+[
+  {
+    "connector": "eDP-2",
+    "hardwareId": "edid-sha256:3d508bba6ff6eb6924c6cdf197fb05c8eb0f4d539cfbf9891f19afe19fce32f0",
+    "connected": true,
+    "enabled": true,
+    "modes": [
+      {
+        "width": 2560,
+        "height": 1600,
+        "refreshHz": 59.999000549316406
+      },
+      {
+        "width": 2560,
+        "height": 1600,
+        "refreshHz": 239.9980010986328
+      }
+    ],
+    "currentMode": {
+      "width": 2560,
+      "height": 1600,
+      "refreshHz": 239.9980010986328
+    },
+    "preferredMode": {
+      "width": 2560,
+      "height": 1600,
+      "refreshHz": 59.999000549316406
+    },
+    "scale": 1.5,
+    "rotation": 0,
+    "position": [
+      0,
+      0
+    ],
+    "priority": 1
+  }
+]

@@ -1,0 +1,7 @@
+Id=plasmalogin.service
+ActiveState=active
+UnitFileState=enabled
+
+Id=greetd.service
+ActiveState=inactive
+UnitFileState=disabled

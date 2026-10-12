@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+import os, shutil, subprocess, tempfile
+from pathlib import Path
+from PIL import Image, ImageStat
+assert os.environ.get('KOS_T08_VIRTUAL') == '1'
+assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t08-')
+APP=Path(__file__).resolve().parents[1]
+E=APP.parents[1]/'docs/kos-greeter/evidence/glass-kwallet-fix/render'
+E.mkdir(parents=True,exist_ok=True)
+with tempfile.TemporaryDirectory() as tmp:
+    root=Path(tmp); shutil.copytree(APP/'qml',root/'qml')
+    shutil.copytree(APP.parents[1]/'shared/qml/wallpapers',root/'wallpapers')
+    image=Image.new('RGB',(640,400))
+    for y in range(400):
+        for x in range(640): image.putpixel((x,y),(250 if (x//4)%2 else 20,100,30))
+    image.save(root/'pattern.png')
+    for case in ('blur','software','missing-effect'):
+        (root/'shell.qml').write_text('''import QtQuick
+import Quickshell
+import "qml" as Greeter
+ShellRoot { FloatingWindow { id: win; visible: true; implicitWidth: 640; implicitHeight: 400
+ Item { id: composition; anchors.fill: parent
+ Image { anchors.fill: parent; source: "OUT/pattern.png" }
+ Greeter.WallpaperHost { id: localWallpaper; anchors.fill: parent; visible: true; source: "OUT/pattern.png" }
+ Greeter.GlassFieldBackground { id: glass; x: 195; y: 180; width: 250; height: 40; backdrop: localWallpaper; sampleOrigin: Qt.point(x,y); focused: true }
+ }
+ Timer { interval: 1200; running: true; onTriggered: {
+  glass.grabToImage(r => { r.saveToFile("OUT/field.png");
+   composition.grabToImage(s => { s.saveToFile("OUT/scene.png"); Qt.quit(); });
+  });
+ } }
+} }'''.replace('OUT',tmp))
+        if case=='missing-effect': (root/'qml/GaussianGlass.qml').write_text('import MissingModuleForFixture\nItem {}\n')
+        env=os.environ.copy();env.pop('GREETD_SOCK',None)
+        if case=='software': env['QT_QUICK_BACKEND']='software'
+        result=subprocess.run(['qs','--log-rules','*.debug=false','-p',str(root)],env=env,capture_output=True,text=True,timeout=8)
+        log=result.stdout+result.stderr
+        (E/(case+'.log')).write_text(log)
+        assert result.returncode==0,log
+        if case!='missing-effect': assert 'Error:' not in log and 'ERROR:' not in log,log
+        field=Image.open(root/'field.png').convert('RGBA')
+        assert field.getpixel((0,0))[3]==0,field.getpixel((0,0))
+        if case=='blur':
+            stats=ImageStat.Stat(field.crop((45,17,205,23)).convert('RGB'))
+            assert stats.mean[0]>70,stats.mean
+            assert stats.stddev[0]<40,stats.stddev
+            print('PASS Gaussian wallpaper sample mean/stddev:',stats.mean,stats.stddev,flush=True)
+        shutil.copy(root/'field.png',E/(case+'-field.png'))
+        shutil.copy(root/'scene.png',E/(case+'-scene.png'))
+        print('PASS rounded glass render and fallback:',case,flush=True)
+
+subprocess.run(['python3',str(APP/'tests/glass-position-session')],check=True)

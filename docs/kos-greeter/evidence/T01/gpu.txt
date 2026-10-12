@@ -1,0 +1,46 @@
+$ lspci -k
+exit=0
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: pcieport
+	Kernel modules: shpchp
+	Kernel driver in use: piix4_smbus
+	Kernel modules: i2c_piix4, sp5100_tco
+	Kernel driver in use: k10temp
+	Kernel modules: k10temp
+01:00.0 VGA compatible controller: NVIDIA Corporation AD106M [GeForce RTX 4070 Max-Q / Mobile] (rev a1)
+	Kernel driver in use: nvidia
+	Kernel modules: nouveau, nvidia_drm, nvidia
+	Kernel driver in use: snd_hda_intel
+	Kernel modules: snd_hda_intel
+	Kernel driver in use: nvme
+	Kernel modules: nvme
+	Kernel driver in use: iwlwifi
+	Kernel modules: iwlwifi
+	Kernel driver in use: r8169
+	Kernel modules: r8169
+05:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Raphael [Radeon 610M] (rev da)
+	Kernel driver in use: amdgpu
+	Kernel modules: amdgpu
+	Kernel driver in use: snd_hda_intel
+	Kernel modules: snd_hda_intel
+	Kernel driver in use: ccp
+	Kernel modules: ccp
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci
+	Kernel driver in use: snd_pci_acp6x
+	Kernel modules: snd_pci_acp3x, snd_rn_pci_acp3x, snd_pci_acp5x, snd_pci_acp6x, snd_acp_pci, snd_pci_ps, snd_pci_acp7x, snd_sof_amd_renoir, snd_sof_amd_rembrandt, snd_sof_amd_vangogh, snd_sof_amd_acp63, snd_sof_amd_acp70
+	Kernel driver in use: snd_hda_intel
+	Kernel modules: snd_hda_intel
+	Kernel driver in use: xhci_hcd
+	Kernel modules: xhci_pci

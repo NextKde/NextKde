@@ -1,0 +1,17 @@
+.....usage: test [-h] [--start] [--check] [--timeout TIMEOUT] [--vt VT]
+test: error: Use Ctrl+Alt+F3, log in, then sudo this script; recovery TTY must differ from test VT
+usage: test [-h] [--start] [--check] [--timeout TIMEOUT] [--vt VT]
+test: error: Use Ctrl+Alt+F3, log in, then sudo this script; recovery TTY must differ from test VT
+........
+----------------------------------------------------------------------
+Ran 13 tests in 0.225s
+
+OK
+No temporary Greeter test to roll back.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+No temporary Greeter test to roll back.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.

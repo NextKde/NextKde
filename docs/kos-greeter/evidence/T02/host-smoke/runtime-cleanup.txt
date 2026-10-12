@@ -1,0 +1,6 @@
+/run/kos-greeter-test: absent
+/run/lock/kos-greeter-test.lock: absent
+/run/systemd/system/kos-greeter-test.service: absent
+/run/systemd/system/kos-greeter-rollback.service: absent
+/run/systemd/system/kos-greeter-rollback.timer: absent
+/run/systemd/system/plasmalogin.service: absent

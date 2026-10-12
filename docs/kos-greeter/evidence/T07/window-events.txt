@@ -1,0 +1,18 @@
+  INFO: Launching config: "/tmp/tmp8yns5yf6/wallpaper.qml"
+  INFO: Shell ID: "d8621c29744fc8d51cec31ba0dc4aea0" Path ID "d8621c29744fc8d51cec31ba0dc4aea0"
+  INFO: Saving logs to "/run/user/1000/quickshell/by-id/dv51hgyqmt/log.qslog"
+  INFO qml: KOS_WALLPAPER_WINDOW Virtual-0 true
+  INFO qml: KOS_WALLPAPER_WINDOW Virtual-1 true
+  INFO: Configuration Loaded
+  INFO qml: KOS_WALLPAPER_FRAME_SUBMITTED Virtual-0
+  INFO qml: KOS_WALLPAPER_FRAME_SUBMITTED Virtual-1
+  INFO qml: T07_WINDOW_STATE Virtual-0 true
+  INFO qml: T07_WINDOW_STATE Virtual-1 true
+  INFO qml: T07_WINDOW_STATE Virtual-0 true
+  INFO qml: T07_WINDOW_STATE Virtual-1 true
+  INFO qml: KOS_WALLPAPER_WINDOW Virtual-1 false
+  INFO qml: KOS_WALLPAPER_DESTROYED
+  INFO qml: KOS_WALLPAPER_WINDOW Virtual-0 true
+  INFO qml: KOS_WALLPAPER_FRAME_SUBMITTED Virtual-0
+  INFO qml: T07_WINDOW_STATE Virtual-1 true
+  INFO qml: T07_WINDOW_STATE Virtual-0 true

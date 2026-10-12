@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+import hashlib
+import json
+import os
+import math
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import time
+from PIL import Image, ImageDraw, ImageChops
+assert os.environ.get('KOS_T07_TEST') == '1'
+assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t07-')
+APP = Path(__file__).resolve().parents[1]
+EVIDENCE = APP.parents[1] / 'docs/kos-greeter/evidence/T07'
+EVIDENCE.mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    shutil.copytree(APP / 'qml', root / 'qml')
+    shutil.copytree(APP / 'companion', root / 'companion', ignore=shutil.ignore_patterns('__pycache__'))
+    shutil.copytree(APP / 'wallpapers', root / 'wallpapers')
+    image = Image.new('RGB', (913,557), '#143d65')
+    draw = ImageDraw.Draw(image)
+    for x in range(0,913,37): draw.rectangle((x,0,x+14,556), fill='#edaf38')
+    draw.ellipse((330,180,570,420), fill='#d63f64')
+    image.save(root / 'source.png')
+    import sys
+    sys.path.insert(0, str(APP / 'companion'))
+    from resources import Store, NOTICE
+    from wallpaper import snapshot
+    store = Store(root / 'store')
+    manifest = store.publish(1000, (root / 'source.png').read_bytes(), consent=True, notice=NOTICE)
+    state = snapshot(root / 'store', 1000, os.getuid())
+    assert state['sha256'] == manifest['resources']['wallpaper']['sha256']
+    (EVIDENCE / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    results = []
+    crop_centers = []
+    for scale, fit in ((scale, fit) for scale in (1, 1.5) for fit in ('crop','fit','stretch','center')):
+        inventory = json.loads(subprocess.check_output(['kscreen-doctor','-j']))
+        connector = inventory['outputs'][0]['name']
+        subprocess.run(['kscreen-doctor', 'output.' + connector + '.scale.' + str(scale)], check=True)
+        time.sleep(.2)
+        effective = json.loads(subprocess.check_output(['kscreen-doctor','-j']))
+        assert next(o for o in effective['outputs'] if o['name'] == connector)['scale'] == scale, effective
+        label = fit + '-' + str(scale)
+        (root / 'shell.qml').write_text('''import QtQuick
+import Quickshell
+import "qml" as Greeter
+import "wallpapers" as Wallpapers
+ShellRoot {
+ FloatingWindow {
+  id: win; implicitWidth: 683; implicitHeight: 457; screen: Quickshell.screens.find(s => s.name === "%s"); visible: true; color: "#16283b"
+  Greeter.WallpaperHost { id: host; anchors.fill: parent; source: "%s"; fitMode: "%s"; onDecoded: console.info("DECODED"); onFrameSubmitted: console.info("SUBMITTED") }
+  Item { id: offline; anchors.fill: parent; visible: false
+   Rectangle { anchors.fill: parent; color: "#16283b" }
+   Image { anchors.fill: parent; source: Qt.resolvedUrl("source.png"); fillMode: ({crop: Image.PreserveAspectCrop, fit: Image.PreserveAspectFit, stretch: Image.Stretch, center: Image.Pad})["%s"]; smooth: true; sourceSize: Qt.size(Math.ceil(width * win.devicePixelRatio * 1.06), Math.ceil(height * win.devicePixelRatio * 1.06)) }
+  }
+  onBackingWindowVisibleChanged: if (backingWindowVisible) console.info("MAPPED")
+
+  Timer { interval: 1200; running: true; onTriggered: {
+   console.info("DPR " + win.devicePixelRatio);
+   console.info("COMPOSITION " + JSON.stringify(host.composition));
+   host.grabToImage(function(r) { r.saveToFile("%s/host.png"); offline.visible = true;
+    offline.grabToImage(function(s) { s.saveToFile("%s/offline.png"); Qt.quit(); }, Qt.size(683, 457));
+   }, Qt.size(683, 457));
+  } }
+ }
+}''' % (connector,state["source"],fit,fit,tmp,tmp))
+        render_env = os.environ.copy(); render_env['QT_SCALE_FACTOR'] = str(scale)
+        output = subprocess.run(['qs','--log-rules','*.debug=false','-p',str(root)], env=render_env, capture_output=True, text=True, timeout=10)
+        assert output.returncode == 0, output.stdout + output.stderr
+        logs = output.stdout + output.stderr
+        assert all(marker in logs for marker in ('DECODED','MAPPED','SUBMITTED')), logs
+        assert 'DPR ' + str(scale).removesuffix('.0') in logs, logs
+        a = Image.open(root/'host.png').convert('RGB'); b = Image.open(root/'offline.png').convert('RGB')
+        assert ImageChops.difference(a,b).getbbox() is None, fit
+        shutil.copy(root/'host.png', EVIDENCE / (label + '-host.png'))
+        shutil.copy(root/'offline.png', EVIDENCE / (label + '-offline.png'))
+        actual = json.loads(next(line.split('COMPOSITION ',1)[1] for line in logs.splitlines() if 'COMPOSITION ' in line))
+        if fit == 'crop':
+            points = [(x,y) for y in range(a.height) for x in range(a.width) if (lambda c: c[0] > c[1]*1.5 and c[0] > c[2]*1.5)(a.getpixel((x,y)))]
+            crop_centers.append([sum(p[i]+.5 for p in points)/len(points)/scale for i in (0,1)])
+        sw,sh = image.size; w,h = 683,457
+        factor = max(w/sw,h/sh) if fit == 'crop' else min(w/sw,h/sh) if fit == 'fit' else 1
+        results.append(dict(actual=actual,fit=fit,scale=scale,physical=list(a.size),logical=[w,h],source=[sw,sh],painted=[sw*factor,sh*factor] if fit != 'stretch' else [w,h],
+            offset=[(w-sw*factor)/2,(h-sh*factor)/2] if fit != 'stretch' else [0,0],samePixels=True))
+    assert math.dist(*crop_centers) <= 1.0, crop_centers
+    (EVIDENCE/'composition.json').write_text(json.dumps(dict(sha256=hashlib.sha256((root/'source.png').read_bytes()).hexdigest(),cases=results,cropSubjectCenters=crop_centers,cropSubjectDrift=math.dist(*crop_centers)),indent=2)+'\n')
+    shutil.copy(root/'source.png', EVIDENCE/'source.png')
+    faults = []
+    for fault, theme, source in (('healthy-theme', 'forest', ''), ('missing-image', '', 'absent.png'), ('untrusted-theme', 'external', ''), ('theme-dependencies', 'forest', ''), ('theme-timeout', 'forest', '')):
+        if fault == 'theme-timeout':
+            (root/'companion/theme.py').write_text('import time\ntime.sleep(60)\n')
+        if fault == 'theme-dependencies':
+            (root / 'wallpapers/themes/forest/assets/forest-cinematic.png').unlink()
+        (root / 'shell.qml').write_text('''import QtQuick
+import Quickshell
+import "qml" as Greeter
+ShellRoot { FloatingWindow { visible: true; implicitWidth: 320; implicitHeight: 240
+ Greeter.WallpaperHost { id: host; anchors.fill: parent; source: "%s"; trustedTheme: "%s"; onThemeResourceReady: console.info("THEME_READY"); property double started: Date.now(); onFallback: reason => console.info("FALLBACK " + reason + " " + (Date.now() - started)) }
+ Timer { interval: 3500; running: true; onTriggered: host.grabToImage(r => { r.saveToFile("%s/fault.png"); Qt.quit(); }) }
+} }''' % (source,theme,tmp))
+        output = subprocess.run(['qs','--log-rules','*.debug=false','-p',str(root)], capture_output=True, text=True, timeout=8)
+        logs = output.stdout + output.stderr
+        assert output.returncode == 0 and ('THEME_READY' if fault == 'healthy-theme' else 'FALLBACK') in logs, logs
+        if fault == 'healthy-theme':
+            assert 'FALLBACK' not in logs, logs
+            print('PASS T07 healthy verified theme')
+            continue
+        fallback_line = next(line.split('FALLBACK ',1)[1] for line in logs.splitlines() if 'FALLBACK ' in line)
+        faults.append(dict(fault=fault,event=fallback_line,defaultPixels=True))
+        pixels = Image.open(root/'fault.png').convert('RGB')
+        assert pixels.getextrema() == ((22,22),(40,40),(59,59)), (fault,pixels.getextrema())
+        shutil.copy(root/'fault.png', EVIDENCE/(fault+'.png'))
+        print('PASS T07 fallback: ' + fault)
+    (EVIDENCE/'faults.json').write_text(json.dumps(faults,indent=2)+'\n')
+    shutil.copy(APP/'wallpaper.qml', root/'wallpaper.qml')
+    windows = root/'qml/WallpaperWindows.qml'
+    windows.write_text(windows.read_text().replace('            Component.onDestruction:', '''            Timer { interval: 100; running: true; repeat: true; onTriggered: console.info("T07_WINDOW_STATE " + window.screen.name + " " + window.backingWindowVisible) }
+            Component.onDestruction:'''))
+    with (root/'background.log').open('w') as stream:
+        background = subprocess.Popen(['qs','--log-rules','*.debug=false','-p',str(root/'wallpaper.qml')], stdout=stream,stderr=stream)
+        def wait(marker, count=0, start=0):
+            end = time.monotonic() + 5
+            while time.monotonic() < end:
+                logs = (root/'background.log').read_text()[start:]
+                if logs.count(marker) > count: return
+                if background.poll() is not None: raise AssertionError(logs)
+                time.sleep(.1)
+            raise AssertionError(logs)
+        try:
+            wait('KOS_WALLPAPER_FRAME_SUBMITTED')
+            logs = (root/'background.log').read_text()
+            assert logs.count('KOS_WALLPAPER_WINDOW') >= 2, logs
+            outputs = json.loads(subprocess.check_output(['kscreen-doctor','-j']))['outputs']
+            restored_marker = 'KOS_WALLPAPER_WINDOW ' + outputs[1]['name'] + ' true'
+            initial_count = logs.count(restored_marker)
+            subprocess.run(['kscreen-doctor','output.'+outputs[1]['name']+'.disable'],check=True)
+            wait('KOS_WALLPAPER_DESTROYED')
+            assert background.poll() is None
+            restored_offset = len((root/'background.log').read_text())
+            subprocess.run(['kscreen-doctor','output.'+outputs[1]['name']+'.enable'],check=True)
+            wait(restored_marker, initial_count)
+            for output in outputs:
+                wait('T07_WINDOW_STATE ' + output['name'] + ' true', start=restored_offset)
+            assert background.poll() is None
+        finally:
+            background.terminate(); background.wait(timeout=5)
+        (EVIDENCE/'window-events.txt').write_text((root/'background.log').read_text())
+    print('PASS T07 outputs: two background windows, disable destroys subscription, restore alive')
+    print('PASS T07 Qt renders: four fit modes, identical host/offline pixels, decode/mapped/submitted distinct')

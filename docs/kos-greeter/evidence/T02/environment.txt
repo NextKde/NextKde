@@ -1,0 +1,5 @@
+greetd 0.10.3-2
+quickshell 0.3.2-1
+kwin 6.7.5-3
+qt6-base 6.12.0-2
+qt6-declarative 6.12.0-1

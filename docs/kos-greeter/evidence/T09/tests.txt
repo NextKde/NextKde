@@ -1,0 +1,3 @@
+KOS_HANDOFF default-background
+{"KOS_HANDOFF_PATH": "/tmp/tmp6kf0nk6s/runtime/kos-handoff-a384b66b2f0c436fa86d1319de2c2aee/handoff.json", "KOS_HANDOFF_SESSION": "a384b66b2f0c436fa86d1319de2c2aee", "KOS_HANDOFF_SHA256": "f13cd71aa8736502e35a07bef25e7aa295335f5b62b54c922f7751114de03f68"}
+PASS T09: 37 rejection cases; atomic permissions, same-UID isolation, single-use, revoke/replacement, lock, child failure/signal cleanup; elapsed=0.237s

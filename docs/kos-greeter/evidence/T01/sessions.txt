@@ -1,0 +1,4 @@
+$ loginctl list-sessions --no-legend
+exit=0
+1 1000 <USER> seat0 776 user    tty1 no -
+2 1000 <USER> -     785 manager -    no -

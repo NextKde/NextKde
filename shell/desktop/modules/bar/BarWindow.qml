@@ -10,6 +10,13 @@ import qs.desktop.modules.platform
 // unified Dock host; this file owns layer-shell geometry and auto-hide.
 PanelWindow {
     id: root
+    contentItem.opacity: SessionEntryService.progress
+    contentItem.enabled: SessionEntryService.progress === 1
+    Timer {
+        interval: 100; running: true; repeat: true
+        onTriggered: SessionEntryService.essential("bar", root.backingWindowVisible
+            && root.screen === ScreenLifecycle.activeScreen && root.width > 0 && root.height > 0)
+    }
 
     property bool barEnabled: true
 

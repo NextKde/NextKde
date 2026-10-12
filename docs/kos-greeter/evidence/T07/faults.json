@@ -1,0 +1,22 @@
+[
+  {
+    "fault": "missing-image",
+    "event": "decode-error 2",
+    "defaultPixels": true
+  },
+  {
+    "fault": "untrusted-theme",
+    "event": "untrusted-theme 1",
+    "defaultPixels": true
+  },
+  {
+    "fault": "theme-dependencies",
+    "event": "theme-dependencies 112",
+    "defaultPixels": true
+  },
+  {
+    "fault": "theme-timeout",
+    "event": "theme-timeout 3005",
+    "defaultPixels": true
+  }
+]

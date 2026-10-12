@@ -1,0 +1,14 @@
+Command: python3 -B apps/greeter/tests/virtual-display.test.py
+Backend: isolated dbus-run-session + KWin --virtual --output-count 2, 1024x768@60
+Exit: 0
+PASS virtual KWin: atomic startup scale 1.5 and actual readback
+PASS virtual KWin: priority migration, scale 2, viewport bounds, response retained
+PASS virtual KWin: output disable/removal and restoration, same authentication item
+PASS virtual KWin: ineffective negative-layout request detected, supported fallback, no resubmit
+PASS virtual KWin: small-screen scroll viewport remained mapped
+  INFO qml: T06_VIEW Virtual-1 1024x768 0,0
+  INFO qml: T06_VIEW Virtual-1 512x384 0,0
+  INFO qml: T06_VIEW Virtual-0 512x384 1024,0
+  INFO qml: T06_VIEW Virtual-0 512x384 0,0
+  INFO qml: T06_VIEW Virtual-1 683x512 0,0
+  INFO qml: T06_VIEW Virtual-1 341x256 0,0

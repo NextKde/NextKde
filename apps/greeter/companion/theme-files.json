@@ -1,0 +1,73 @@
+{
+  "starfield": {
+    "FloatingPointTable.qml": "cd0aeb5c979343444d8cc49c1e719bbc432b0e45c73a5a73f7cd1330ca87d0d2",
+    "FlowParticleField.qml": "551c609e1acdf543296bd17447cc1b7350d81545139e3db272b7996345e0ecdc",
+    "ForegroundEffects.qml": "3f1be41d805ba40f0739a2e640ff67d3a2115f771d4e3f4d9201cde33858dc36",
+    "PhysicalSceneBackdrop.qml": "01825548651e97ad5950054deacc9d32b7d2835e8e46313aeb8b13fa44097e23",
+    "assets/preview.png": "35ac8a68171ee6f0751810d1abd8e4798d56f05bb23bb53188c42faa5ce70fef",
+    "main.qml": "458a8c6ec5d830ff4dd30cf8dbd393ae58fc07021349ca329cec646e3c7548ed",
+    "shaders/bloom.frag.qsb": "ce8880f5f1a58b3f42591667084e611f210a6a03ac8e48d66e182e3467406f68",
+    "shaders/decode_table.frag.qsb": "237ba529237999cba50ae97dc45ce4cb5284492025457a965e2d813ab4308256",
+    "shaders/flow_particle.frag.qsb": "fda2150f19f94c1793eba7d4a85552fbe15265d7f4d692f0383ac284ceb8a7a0",
+    "shaders/flow_particle.vert.qsb": "7f09912f5c61cf32f2d78cbdd9e85a776e7b7d8bd9c6f6c255ed0f286991e9e2",
+    "shaders/flow_simulate.frag.qsb": "a78186855602c7cdeb56630eea6c29ff5180d04dbe85e0713a39170029b3fb7d",
+    "shaders/foreground_effects.frag.qsb": "a8284f69a81ddf563afe11a06821e3601fd249ccff6b120b6694fd81e71abc8a",
+    "shaders/physical_scene.frag.qsb": "e96690d6d3ffdd35b1ed9a246e66442f474b2dc334b6f1d71d1e7cddacdd6108",
+    "vendor/black-hole/noise_texture.png": "7ba6d84ad14496b6299b57dbbc75b400fad4e9ab022dcacfc7f3fa3751009ed9"
+  },
+  "blackhole": {
+    "CinematicBlackHole.qml": "d70f079c2b1689d8657c12173a141db01271efe444961aafa39293fa74b0e39d",
+    "FloatingPointTable.qml": "cd0aeb5c979343444d8cc49c1e719bbc432b0e45c73a5a73f7cd1330ca87d0d2",
+    "ForegroundEffects.qml": "3f1be41d805ba40f0739a2e640ff67d3a2115f771d4e3f4d9201cde33858dc36",
+    "PhysicalSceneBackdrop.qml": "737d6b99348f40d3fcbdff82906b9d23eb1fe403a6e798021bbe6cbf3a7815ea",
+    "assets/blackhole-cinematic-reference.png": "8d7a1d7b4014ebbd30090624b0a15abed1eba9bd5a1bcd71e4279b5bc3f5af29",
+    "assets/preview.png": "8d7a1d7b4014ebbd30090624b0a15abed1eba9bd5a1bcd71e4279b5bc3f5af29",
+    "main.qml": "88ea5d42e4ac515e725894602c326da5b62d1781dec82f4d3345c10c8ea5f248",
+    "shaders/bloom.frag.qsb": "ce8880f5f1a58b3f42591667084e611f210a6a03ac8e48d66e182e3467406f68",
+    "shaders/cinematic_blackhole.frag.qsb": "91780089785848c3324c9552eec21a9f8dad6cde6b4180856b1ff4468f80df24",
+    "shaders/decode_table.frag.qsb": "237ba529237999cba50ae97dc45ce4cb5284492025457a965e2d813ab4308256",
+    "shaders/foreground_effects.frag.qsb": "a8284f69a81ddf563afe11a06821e3601fd249ccff6b120b6694fd81e71abc8a",
+    "shaders/physical_scene.frag.qsb": "e96690d6d3ffdd35b1ed9a246e66442f474b2dc334b6f1d71d1e7cddacdd6108",
+    "vendor/black-hole/black_body-float.png": "bb0df789dd36b23a644505cc83028278a489980933816f85e749a02cf8b39bd3",
+    "vendor/black-hole/deflection-float.png": "15b725437ccbbec4c20a05bd45c3365dca1578f2451e49914aa0811bbe297101",
+    "vendor/black-hole/doppler-float.png": "d4d9f00b9c52cf63337ef1cc7067d6b4c0cd111a1e3c3e94a84db24b53ef6d55",
+    "vendor/black-hole/inverse_radius-float.png": "78e487a7a5baf2993c45599ef91d750f028d6bae097047518b28c50fa878e8d0",
+    "vendor/black-hole/noise_texture.png": "7ba6d84ad14496b6299b57dbbc75b400fad4e9ab022dcacfc7f3fa3751009ed9"
+  },
+  "weather": {
+    "FloatingPointTable.qml": "cd0aeb5c979343444d8cc49c1e719bbc432b0e45c73a5a73f7cd1330ca87d0d2",
+    "FlowParticleField.qml": "551c609e1acdf543296bd17447cc1b7350d81545139e3db272b7996345e0ecdc",
+    "ForegroundEffects.qml": "3f1be41d805ba40f0739a2e640ff67d3a2115f771d4e3f4d9201cde33858dc36",
+    "PhysicalSceneBackdrop.qml": "ba2c6a9bb55696bd93e7c113fd1e096bb9a37602787b836f2736a48f34f777f3",
+    "assets/preview.png": "90ccafe4886cdb2d074596018d1c5451e93ef048f548fa76c215de93bc60d6b8",
+    "main.qml": "f12685576220226e94bba2bc72badbb9ec0d5d8843b19009d0af970a4e22504e",
+    "shaders/bloom.frag.qsb": "ce8880f5f1a58b3f42591667084e611f210a6a03ac8e48d66e182e3467406f68",
+    "shaders/decode_table.frag.qsb": "237ba529237999cba50ae97dc45ce4cb5284492025457a965e2d813ab4308256",
+    "shaders/flow_particle.frag.qsb": "fda2150f19f94c1793eba7d4a85552fbe15265d7f4d692f0383ac284ceb8a7a0",
+    "shaders/flow_particle.vert.qsb": "7f09912f5c61cf32f2d78cbdd9e85a776e7b7d8bd9c6f6c255ed0f286991e9e2",
+    "shaders/flow_simulate.frag.qsb": "a78186855602c7cdeb56630eea6c29ff5180d04dbe85e0713a39170029b3fb7d",
+    "shaders/foreground_effects.frag.qsb": "a8284f69a81ddf563afe11a06821e3601fd249ccff6b120b6694fd81e71abc8a",
+    "shaders/physical_scene.frag.qsb": "e96690d6d3ffdd35b1ed9a246e66442f474b2dc334b6f1d71d1e7cddacdd6108",
+    "vendor/black-hole/noise_texture.png": "7ba6d84ad14496b6299b57dbbc75b400fad4e9ab022dcacfc7f3fa3751009ed9"
+  },
+  "forest": {
+    "ForestFireflies.qml": "896f4a5e743585179899291bc047e02067edbb15e31eb915521888b22447993e",
+    "NatureWallpaper.qml": "e5b0c08b2aa0c33bd12af00d617fc7669968a583f26ef57246651d62e724ad2f",
+    "assets/firefly-gold.svg": "e7c5301e7b0a9db0e0ea3ec957007fb563328cd16c3e124b9292014fc0c17ab5",
+    "assets/firefly-green.svg": "bae782a55526d8cd0be28ac7e8f8923becd7ca29913027896f224494a063d6ce",
+    "assets/forest-cinematic.png": "ff87923845b32c4e1734c0f637b3718732e8e3120ae60cfa2cba328ba0a27416",
+    "assets/preview.png": "ff87923845b32c4e1734c0f637b3718732e8e3120ae60cfa2cba328ba0a27416",
+    "main.qml": "7a8c73d37aa7eba838ac72f261940cb31ae0516e4c297f19703bf5bda56f562e",
+    "shaders/forest_card_light.frag.qsb": "b25b6fee97f3dca73acd79dd164dafc397c0a2b34f26d8e87cd75d9c63682155",
+    "shaders/nature_wallpaper.frag.qsb": "ccd920bc85fb9ab094559147a2ccdfb8d2c143330abfdf818f1666ff54183d10"
+  },
+  "underwater": {
+    "ForestFireflies.qml": "896f4a5e743585179899291bc047e02067edbb15e31eb915521888b22447993e",
+    "NatureWallpaper.qml": "69855a715802dd2b7c4833befce163178f7db9ec5e6f5c25a19bf77e236bc48e",
+    "assets/preview.png": "8fe29a520131aba55a7e292baea6ef3e0078c589ae140880e417dbd91c5e6792",
+    "assets/underwater-cinematic.png": "8fe29a520131aba55a7e292baea6ef3e0078c589ae140880e417dbd91c5e6792",
+    "main.qml": "1f839dbf4c0f5751121510c5917d68d61b74972539a29a4880e271fea8a9a998",
+    "shaders/nature_wallpaper.frag.qsb": "ccd920bc85fb9ab094559147a2ccdfb8d2c143330abfdf818f1666ff54183d10",
+    "vendor/black-hole/noise_texture.png": "7ba6d84ad14496b6299b57dbbc75b400fad4e9ab022dcacfc7f3fa3751009ed9"
+  }
+}

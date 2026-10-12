@@ -1,0 +1,31 @@
+command: systemctl show display-manager.service greetd.service kos-greeter-test.service kos-greeter-rollback.service kos-greeter-rollback.timer kos-greeter-switch.service -p Id -p LoadState -p ActiveState -p UnitFileState
+exit: 0
+Id=plasmalogin.service
+LoadState=loaded
+ActiveState=active
+UnitFileState=enabled
+
+Id=greetd.service
+LoadState=loaded
+ActiveState=inactive
+UnitFileState=disabled
+
+Id=kos-greeter-test.service
+LoadState=not-found
+ActiveState=inactive
+UnitFileState=
+
+Id=kos-greeter-rollback.service
+LoadState=not-found
+ActiveState=inactive
+UnitFileState=
+
+Id=kos-greeter-rollback.timer
+LoadState=not-found
+ActiveState=inactive
+UnitFileState=
+
+Id=kos-greeter-switch.service
+LoadState=not-found
+ActiveState=inactive
+UnitFileState=

@@ -1,0 +1,4 @@
+$ pacman -Q nvidia-utils plasmalogin
+exit=1
+nvidia-utils 615.78.08-1
+error: package 'plasmalogin' was not found

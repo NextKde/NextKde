@@ -1,0 +1,8 @@
+dfcd31e4b8bda7c4d4c8561be0823f28fcc2fcd55a8939a7b4853b46bba3deb5  apps/greeter/companion/measurement.py
+ab431de4354175fe736162eecfeaca4273519ee119a90c411ef4beca4b1f9d5c  apps/greeter/tests/measurement.test.py
+0bea6ce4358d2b1f6fe39a7fea07c699108d2069a2bcdaecbc3a0dd2a9b87d79  docs/kos-greeter/evidence/T13/PROTOCOL.md
+a9e16cb0721993e0c5e9c6a97dd957bbe8501be1088fb5e2766c14be78e400ab  docs/kos-greeter/evidence/T13/REPORT.md
+33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4  docs/kos-greeter/evidence/T13/tests.log
+9b6f72dd1c8f77872d2793410b85dd847310d28140fbb75131408a346f281391  docs/kos-greeter/tasks/T13.md
+d069f03a4ae3e3f0e87400137890bbbad1d7199db6bef4f8f9c88581dd5f783f  docs/kos-greeter/tasks/README.md
+d989fa49c0c9fc03020562a4ae6980740c4111bc697ae4f518f30b955feca688  docs/kos-greeter/README.md

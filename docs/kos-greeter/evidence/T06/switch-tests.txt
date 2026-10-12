@@ -1,0 +1,17 @@
+......[1;34musage: [0m[1;35mtest[0m [[32m-h[0m] [[36m--start[0m] [[36m--check[0m] [[36m--timeout [33mTIMEOUT[0m] [[36m--vt [33mVT[0m]
+test: error: Use a text TTY different from test VT 1; stdin=/dev/pts/2, sudo origin=(none)
+[1;34musage: [0m[1;35mtest[0m [[32m-h[0m] [[36m--start[0m] [[36m--check[0m] [[36m--timeout [33mTIMEOUT[0m] [[36m--vt [33mVT[0m]
+test: error: Use a text TTY different from test VT 1; stdin=/dev/tty1, sudo origin=(none)
+........
+----------------------------------------------------------------------
+Ran 14 tests in 0.252s
+
+OK
+No temporary Greeter test to roll back.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.
+No temporary Greeter test to roll back.
+Rollback complete: original manager active; temporary app/config/units removed.
+Rollback complete: original manager active; temporary app/config/units removed.

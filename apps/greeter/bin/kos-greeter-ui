@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+app_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+# No debug logging: the greetd protocol carries secrets.
+exec /usr/bin/qs --log-rules '*.debug=false' -p "$app_root/shell.qml"

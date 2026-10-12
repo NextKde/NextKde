@@ -1,0 +1,3 @@
+$ uname -r
+exit=0
+7.2.9-zen1-1-zen

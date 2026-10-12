@@ -1,0 +1,5 @@
+Current post-rollback process names only; not the login-time process tree.
+kwin_wayland: 1
+qs: 1
+greetd: 0
+plasmalogin: 1

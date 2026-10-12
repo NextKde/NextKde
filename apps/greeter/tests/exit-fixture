@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+fixture_root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec /usr/bin/qs -p "$fixture_root/exit-fixture.qml"

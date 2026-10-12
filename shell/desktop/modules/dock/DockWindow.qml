@@ -19,6 +19,13 @@ import "../../../Kos/Ui"
 // through (docs/DockArchitecture.md, "Visibility modes and auto-hide").
 PanelWindow {
     id: root
+    contentItem.opacity: SessionEntryService.progress
+    contentItem.enabled: SessionEntryService.progress === 1
+    Timer {
+        interval: 100; running: true; repeat: true
+        onTriggered: SessionEntryService.essential("dock", root.backingWindowVisible
+            && root.screen === ScreenLifecycle.activeScreen && root.width > 0 && root.height > 0)
+    }
 
     // KWin maps this namespace to the Dock window type. An unrecognised name
     // makes the transparent surface a normal window in Window View.

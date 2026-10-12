@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+"""Capture only synthetic, empty-input Qt fixtures on an independent compositor."""
+import os, shutil, subprocess, tempfile
+from pathlib import Path
+assert os.environ.get('KOS_T08_VIRTUAL') == '1'
+assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t08-')
+APP = Path(__file__).resolve().parents[1]
+E = Path(os.environ.get('KOS_GREETER_EVIDENCE', str(APP.parents[1] / 'docs/kos-greeter/evidence/T08')))
+os.environ['KOS_GREETER_EVIDENCE'] = str(E)
+E.mkdir(parents=True, exist_ok=True)
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)/'app'
+    shutil.copytree(APP, root, ignore=shutil.ignore_patterns('tests','__pycache__'))
+    (root/'companion/accounts.py').write_text('import json\nprint(json.dumps([dict(uid=1001,username="fixture-one",displayName="示例用户一",avatar=""),dict(uid=1002,username="fixture-two",displayName="示例用户二",avatar="")]))\n')
+    original = (APP/'shell.qml').read_text()
+    # No mock PAM or secrets in these rendered storyboard fixtures.
+    for scene in ('multi','single','waiting','failure','exit','reduced'):
+        output = E/scene; output.mkdir(exist_ok=True)
+        if scene == 'single':
+            (root/'companion/accounts.py').write_text('import json\nprint(json.dumps([dict(uid=1001,username="fixture-one",displayName="示例用户",avatar="")]))\n')
+        else:
+            (root/'companion/accounts.py').write_text('import json\nprint(json.dumps([dict(uid=1001,username="fixture-one",displayName="示例用户一",avatar=""),dict(uid=1002,username="fixture-two",displayName="示例用户二",avatar="")]))\n')
+        setup = {'multi':'', 'single':'root.selectUser(root.accounts[0]); root.phase="AwaitingPrompt"; root.notice="密码";', 'waiting':'root.selectUser(root.accounts[0]); root.phase="Authenticating"; root.notice="正在认证…";', 'failure':'root.selectUser(root.accounts[0]); root.phase="AwaitingPrompt"; root.notice="密码"; root.feedback="认证失败，请重新输入";', 'exit':'root.selectUser(root.accounts[0]); root.phase="AwaitingPrompt"; root.notice="密码";', 'reduced':'root.selectUser(root.accounts[0]); root.phase="AwaitingPrompt"; root.notice="密码";'}[scene]
+        source = original.replace('visible: root.startupFallback || Quickshell.env("QT_QPA_PLATFORM") === "offscreen"','visible: true')
+        source = source.replace('(!Greetd.available && !root.choosingUser)', 'false')
+        # Record actual Qt frameSwapped, without launching a session in this visual fixture.
+        source = source.replace('if (Greetd.state !== GreetdState.ReadyToLaunch)', 'if (false)')
+        source = source.replace('mark("FrameSubmitted"); step("launch"); mark("LaunchRequested");', 'mark("FixtureFrameSubmitted");')
+        source = source.replace('Greetd.launch(sessionCommand, [], false);', '// No session launch in the empty-input visual fixture.')
+        driver = '''
+    property int captureIndex: 0
+    property bool prepared: false
+    Timer { interval: 16; running: true; repeat: true; onTriggered: {
+        if (!root.startupComplete || root.accounts.length !== ACCOUNT_COUNT) return;
+        if (!root.prepared) { SETUP root.prepared = true; }
+        if (response.text !== "") throw new Error("Refuse nonempty input capture");
+        let index = root.captureIndex++;
+        if (ANIMATED && index === 30) {
+            root.phase="Exiting"; root.mark("ExitStarted"); exitAnimation.restart();
+        }
+        composition.grabToImage(r => { r.saveToFile("OUTPUT/frame-" + String(index).padStart(3,"0") + ".png"); console.info("CAPTURE " + index + " " + Date.now()); });
+        if (index === 75) Qt.quit();
+    } }
+'''.replace('ACCOUNT_COUNT','1' if scene == 'single' else '2').replace('SETUP',setup).replace('ANIMATED','true' if scene in ('exit','reduced') else 'false').replace('OUTPUT',str(output))
+        (root/'shell.qml').write_text(source.rsplit('}',1)[0]+driver+'}\n')
+        env = os.environ.copy(); env.pop('GREETD_SOCK',None)
+        if scene == 'reduced': env['KOS_GREETER_REDUCED_MOTION']='1'
+        result = subprocess.run(['qs','--log-rules','*.debug=false','-p',str(root)],env=env,capture_output=True,text=True,timeout=12)
+        log = result.stdout + result.stderr
+        (E/(scene+'.log')).write_text(log)
+        assert result.returncode == 0 and 'Error:' not in log and 'ReferenceError' not in log,log
+        if scene in ('exit','reduced'):
+            assert 'ExitComplete' in log and 'FixtureFrameSubmitted' in log,log
+            from PIL import Image
+            pixels=Image.open(output/'frame-070.png').convert('RGB')
+            assert pixels.getextrema() == ((22,22),(40,40),(59,59)), pixels.getextrema()
+        shutil.copy(output/'frame-020.png',E/(scene+'.png'))
+        import re
+        samples = [(int(i), int(t)) for i,t in re.findall(r'CAPTURE (\d+) (\d+)',log)]
+        samples = sorted({i:t for i,t in samples}.items())
+        entries=[]
+        for n,(i,t) in enumerate(samples):
+            if not (output/f'frame-{i:03}.png').exists(): continue
+            entries.append(f"file '{output}/frame-{i:03}.png'")
+            entries.append(f"duration {max(.001, (samples[n+1][1]-t)/1000) if n+1<len(samples) else .016}")
+        playlist = Path(tmp)/'frames.txt'; playlist.write_text('\n'.join(entries)+'\n')
+        subprocess.run(['ffmpeg','-loglevel','error','-y','-f','concat','-safe','0','-i',str(playlist),'-fps_mode','vfr','-c:v','libx264','-pix_fmt','yuv420p',str(E/(scene+'.mp4'))],check=True)
+        # Keep key frames and video; intermediate rendered images are regenerable.
+        for f in output.glob('*.png'):
+            if f.name not in ('frame-030.png','frame-040.png','frame-050.png','frame-070.png'): f.unlink()
+        print('PASS T08 rendered empty-input storyboard:',scene,flush=True)
+subprocess.run(['python3',str(APP/'tests/ipc.test.py')],check=True)

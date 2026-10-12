@@ -1,0 +1,368 @@
+{
+  "sha256": "bed30ceddf4f1ab057819c174488acddeffbb0619e5f1596aa8812448a41226b",
+  "cases": [
+    {
+      "actual": {
+        "painted": [
+          749.1030927835052,
+          457
+        ],
+        "offset": [
+          -33.051546391752595,
+          0
+        ],
+        "decodeBudget": [
+          724,
+          485
+        ],
+        "decodedSize": [
+          795,
+          485
+        ],
+        "dpr": 1
+      },
+      "fit": "crop",
+      "scale": 1,
+      "physical": [
+        683,
+        457
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        749.0861759425494,
+        457.0
+      ],
+      "offset": [
+        -33.0430879712747,
+        0.0
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          683,
+          416.6729559748428
+        ],
+        "offset": [
+          0,
+          20.163522012578596
+        ],
+        "decodeBudget": [
+          724,
+          485
+        ],
+        "decodedSize": [
+          795,
+          485
+        ],
+        "dpr": 1
+      },
+      "fit": "fit",
+      "scale": 1,
+      "physical": [
+        683,
+        457
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        683.0,
+        416.68236582694414
+      ],
+      "offset": [
+        0.0,
+        20.158817086527932
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          683,
+          457
+        ],
+        "offset": [
+          0,
+          0
+        ],
+        "decodeBudget": [
+          724,
+          485
+        ],
+        "decodedSize": [
+          724,
+          442
+        ],
+        "dpr": 1
+      },
+      "fit": "stretch",
+      "scale": 1,
+      "physical": [
+        683,
+        457
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        683,
+        457
+      ],
+      "offset": [
+        0,
+        0
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          724,
+          442
+        ],
+        "offset": [
+          -20.5,
+          7.5
+        ],
+        "decodeBudget": [
+          724,
+          485
+        ],
+        "decodedSize": [
+          724,
+          442
+        ],
+        "dpr": 1
+      },
+      "fit": "center",
+      "scale": 1,
+      "physical": [
+        683,
+        457
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        913,
+        557
+      ],
+      "offset": [
+        -115.0,
+        -50.0
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          749.3039889958735,
+          457
+        ],
+        "offset": [
+          -33.151994497936755,
+          0
+        ],
+        "decodeBudget": [
+          1086,
+          727
+        ],
+        "decodedSize": [
+          1192,
+          727
+        ],
+        "dpr": 1.5
+      },
+      "fit": "crop",
+      "scale": 1.5,
+      "physical": [
+        1025,
+        686
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        749.0861759425494,
+        457.0
+      ],
+      "offset": [
+        -33.0430879712747,
+        0.0
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          683,
+          416.56124161073825
+        ],
+        "offset": [
+          0,
+          20.219379194630875
+        ],
+        "decodeBudget": [
+          1086,
+          727
+        ],
+        "decodedSize": [
+          1192,
+          727
+        ],
+        "dpr": 1.5
+      },
+      "fit": "fit",
+      "scale": 1.5,
+      "physical": [
+        1025,
+        686
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        683.0,
+        416.68236582694414
+      ],
+      "offset": [
+        0.0,
+        20.158817086527932
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          683,
+          457
+        ],
+        "offset": [
+          0,
+          0
+        ],
+        "decodeBudget": [
+          1086,
+          727
+        ],
+        "decodedSize": [
+          913,
+          557
+        ],
+        "dpr": 1.5
+      },
+      "fit": "stretch",
+      "scale": 1.5,
+      "physical": [
+        1025,
+        686
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        683,
+        457
+      ],
+      "offset": [
+        0,
+        0
+      ],
+      "samePixels": true
+    },
+    {
+      "actual": {
+        "painted": [
+          913,
+          557
+        ],
+        "offset": [
+          -115,
+          -50
+        ],
+        "decodeBudget": [
+          1086,
+          727
+        ],
+        "decodedSize": [
+          913,
+          557
+        ],
+        "dpr": 1.5
+      },
+      "fit": "center",
+      "scale": 1.5,
+      "physical": [
+        1025,
+        686
+      ],
+      "logical": [
+        683,
+        457
+      ],
+      "source": [
+        913,
+        557
+      ],
+      "painted": [
+        913,
+        557
+      ],
+      "offset": [
+        -115.0,
+        -50.0
+      ],
+      "samePixels": true
+    }
+  ],
+  "cropSubjectCenters": [
+    [
+      336.09089580830545,
+      246.55555375174518
+    ],
+    [
+      336.7358276316676,
+      246.72192230337672
+    ]
+  ],
+  "cropSubjectDrift": 0.666044707025868
+}

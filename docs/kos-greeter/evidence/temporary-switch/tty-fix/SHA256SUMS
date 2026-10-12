@@ -1,0 +1,8 @@
+6e5d9e4adbdf04197fa689b251a6bd1d32fa6b003a1b51571d3cda94970892b3  apps/greeter/TEMPORARY-TEST.zh-CN.md
+161c8dc61279ee7db4138c181961cdfcdf9b034c6aa0da0c4f28e5e01e26425e  apps/greeter/tests/switch-scripts.test.py
+c9dcabc39db67fcf9d57a2ce14fd89e6460ab8cf8a402e136a0eb4932cca32b1  docs/kos-greeter/evidence/temporary-switch/tty-fix/REPORT.md
+4ae09c833e7e18a3a73e27103d0661ffd19d45aea87053ac8d7e04a52b1b3c48  docs/kos-greeter/evidence/temporary-switch/tty-fix/final-state.txt
+4ebe3bf284458000a2a3ab394137fa9c9e460be13ca362e074407d34b4180a92  docs/kos-greeter/evidence/temporary-switch/tty-fix/preflight.txt
+b696553ca28c12ebec4c54bfa2746af72abea7e1d37fe8ccb0a4114dece94ce4  docs/kos-greeter/evidence/temporary-switch/tty-fix/tests.txt
+1207e727d8cfbd2955fb48fb5ed08cf27f4b07925a3b450324ca10bb61c0391b  tools/rollback-greeter.py
+f155293702862198288afd1681469c96ffc98e8629b9f38e21117cf6a20ea2ea  tools/test-greeter.py

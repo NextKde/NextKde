@@ -1,0 +1,71 @@
+$ kwin_wayland --help
+exit=0
+用法：kwin_wayland [选项] [/path/to/application...]
+KDE window manager
+
+选项：
+  --lock                                       Disable configuration options
+  --crashes <n>                                Indicate that KWin has recently
+                                               crashed n times
+  -h, --help                                   在命令行选项上显示帮助。
+  --help-all                                   Displays help, including generic
+                                               Qt options.
+  -v, --version                                显示版本信息。
+  --author                                     显示开发人员信息。
+  --license                                    显示许可证信息。
+  --desktopfile <文件名>                          此应用程序的桌面项的基准文件名
+  --xwayland                                   Start a rootless Xwayland
+                                               server.
+  -s, --socket <socket>                        Name of the Wayland socket to
+                                               listen on. If not set "wayland-0"
+                                               is used.
+  --wayland-fd <wayland-fd>                    Wayland socket to use for
+                                               incoming connections. This can be
+                                               combined with --socket to name
+                                               the socket
+  --xwayland-fd <xwayland-fds>                 XWayland socket to use for
+                                               Xwayland's incoming connections.
+                                               This can be set multiple times
+  --xwayland-display <xwayland-display>        Name of the xwayland display
+                                               that has been pre-set up
+  --xwayland-xauthority <xwayland-xauthority>  Name of the xauthority file 
+  --replace                                    Exits this instance so it can be
+                                               restarted by
+                                               kwin_wayland_wrapper.
+  --x11-display <display>                      The X11 Display to use in
+                                               windowed mode on platform X11.
+  --wayland-display <display>                  The Wayland Display to use in
+                                               windowed mode on platform
+                                               Wayland.
+  --virtual                                    Render to a virtual framebuffer.
+  --width <width>                              The width for windowed mode.
+                                               Default width is 1024.
+  --height <height>                            The height for windowed mode.
+                                               Default height is 768.
+  --scale <scale>                              The scale for windowed mode.
+                                               Default value is 1.
+  --output-count <count>                       The number of windows to open as
+                                               outputs in windowed mode. Default
+                                               value is 1
+  --drm                                        Render through drm node.
+  --locale1                                    Extract locale information from
+                                               locale1 rather than the user's
+                                               configuration
+  --fullscreen <fullscreen>                    Whether or not to make windowed
+                                               mode fullscreen
+  --inputmethod <path/to/imserver>             Input method that KWin starts.
+  --lockscreen                                 Starts the session in locked
+                                               mode.
+  --no-lockscreen                              Starts the session without lock
+                                               screen support.
+  --no-global-shortcuts                        Starts the session without
+                                               global shortcuts support.
+  --no-kactivities                             Disable KActivities integration.
+  --exit-with-session </path/to/session>       Exit after the session
+                                               application, which is started by
+                                               KWin, closed.
+
+参数：
+  applications                                 Applications to start once
+                                               Wayland and Xwayland server are
+                                               started
