@@ -88,6 +88,18 @@ BridgeEffect::BridgeEffect()
         KWin::input()->installInputEventFilter(m_input.get());
     }
 
+    const auto watchFullscreen = [this](KWin::EffectWindow *window) {
+        connect(window, &KWin::EffectWindow::windowFullScreenChanged,
+                this, [this](KWin::EffectWindow *changed) {
+                    m_input->fullscreenChanged(changed);
+                });
+    };
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded,
+            this, watchFullscreen);
+    for (auto *window : KWin::effects->stackingOrder()) {
+        watchFullscreen(window);
+    }
+
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this,
             [this](KWin::EffectWindow *window) {
                 // The session first: it is the only one that could still be

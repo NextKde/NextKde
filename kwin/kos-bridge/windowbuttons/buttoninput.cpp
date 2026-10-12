@@ -105,11 +105,33 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
 
 ButtonInput::~ButtonInput() = default;
 
+void ButtonInput::fullscreenChanged(KWin::EffectWindow *window)
+{
+    if (!window || !window->isFullScreen() || !m_renderer) {
+        return;
+    }
+    if (m_session->window() == window) {
+        m_session->cancel();
+    }
+    // Also clears source-capture hits and closes this window's tiling menu.
+    m_renderer->clearHits(window, true);
+    // Keep consumed press bookkeeping until its matching release arrives.
+}
+
+void ButtonInput::clearFullscreenState()
+{
+    // Check only the two transient owners, without walking the window stack.
+    // This also protects input arriving before the state-change callback.
+    fullscreenChanged(m_session->window());
+    fullscreenChanged(m_renderer->tileMenuWindow());
+}
+
 bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
 {
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     // A drag of a panel is this filter's own, and stays swallowed wherever the
     // pointer goes. It is tested before the pass-through below, which would
@@ -193,6 +215,7 @@ bool ButtonInput::pointerButton(KWin::PointerButtonEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     if (event->state == KWin::PointerButtonState::Released) {
         if (m_session->dragging() && event->button == Qt::LeftButton) {
@@ -319,6 +342,7 @@ bool ButtonInput::pointerAxis(KWin::PointerAxisEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     // While adjusting, the wheel resizes the panel, and it is taken whether or
     // not the pointer is still on it: the pointer is free to leave the panel
@@ -373,6 +397,7 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
     if (!event || !m_renderer) {
         return false;
     }
+    clearFullscreenState();
 
     if (event->state == KWin::KeyboardKeyState::Released) {
         if (m_consumedKeys.remove(event->key)) {

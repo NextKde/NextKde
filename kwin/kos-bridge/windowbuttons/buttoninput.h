@@ -54,8 +54,11 @@ public:
 
     // The window is going away: an adjust session on it is over.
     void forgetWindow(KWin::EffectWindow *window);
+    // Fullscreen has no controls: drop transient input state immediately.
+    void fullscreenChanged(KWin::EffectWindow *window);
 
 private:
+    void clearFullscreenState();
     void performAction(KWin::EffectWindow *window, ButtonRenderer::Action action);
     // Applies one cell of the tiling menu: KWin's own tiling and maximizing for
     // the halves and the whole area, and a placement this effect makes for the
