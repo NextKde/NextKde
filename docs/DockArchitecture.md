@@ -358,11 +358,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 10):
+Core user configuration fields (schema version 11):
 
 ```json
 {
-  "version": 10,
+  "version": 11,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -381,9 +381,17 @@ Core user configuration fields (schema version 10):
   "windowGrouping": "grouped",
   "showLauncher": true,
   "showTrash": true,
-  "showRevealIndicator": true
+  "showRevealIndicator": true,
+  "hoverScale": null,
+  "hoverLift": null
 }
 ```
+
+Schema 11 adds `hoverScale` / `hoverLift`: the hovered icon's peak scale
+(1.0–1.6) and its lift as a fraction of the icon size (0–0.25). `null`
+follows the active shell style (the macOS style magnifies, the taskbar-like
+styles do not); a number is the user's explicit choice and works in every
+style. The settings page writes the ratios; the shell clamps them.
 
 Schema 3 contains `visibilityMode` (see the next section), `windowGrouping`,
 the legacy icon appearance triplet (`iconMode`: `color | grayscale | tint`,
