@@ -268,10 +268,8 @@ Item {
                 position: position,
                 dockStyle: dockStyle,
                 contentStyle: contentStyle,
-                // Hover magnification: the effective peak scale / lift (the
-                // style default when the user has not overridden it).
+                // The one hover control uses the effective peak scale.
                 hoverScale: ConfigService.effectiveHoverScale,
-                hoverLift: ConfigService.effectiveHoverLift,
                 infoCardMode: infoCardMode,
                 infoCardAutoRotate: ConfigService.infoCardAutoRotate,
                 infoCardOrder: JSON.stringify(ConfigService.infoCardOrder),
@@ -324,11 +322,6 @@ Item {
 
         function updateHoverScale(scale: real): string {
             ConfigService.updateHoverScale(scale)
-            return snapshot()
-        }
-
-        function updateHoverLift(lift: real): string {
-            ConfigService.updateHoverLift(lift)
             return snapshot()
         }
 

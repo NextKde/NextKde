@@ -82,7 +82,7 @@ Item {
     }
 
     function cardVisible(candidate) {
-        if (pageOrder.indexOf(candidate) < 0)
+        if ((pageOrder || []).indexOf(candidate) < 0)
             return false
         if (candidate === musicPage)
             return hasMusic
@@ -137,7 +137,7 @@ Item {
     }
 
     function ensureValidPage(preferClock) {
-        if (preferClock && showClock && pageOrder.indexOf(clockPage) >= 0) {
+        if (preferClock && showClock && (pageOrder || []).indexOf(clockPage) >= 0) {
             previousPage = page
             page = clockPage
             return

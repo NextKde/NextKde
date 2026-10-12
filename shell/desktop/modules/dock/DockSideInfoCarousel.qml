@@ -79,7 +79,7 @@ Item {
     }
 
     function pageAvailable(candidate) {
-        if (pageOrder.indexOf(candidate) < 0)
+        if ((pageOrder || []).indexOf(candidate) < 0)
             return false
         if (candidate === musicPage)
             return hasMusic

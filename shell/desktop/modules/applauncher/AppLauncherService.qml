@@ -39,7 +39,6 @@ QtObject {
         service.dockAmbientPrimary = primary
         service.dockAmbientSecondary = secondary
         service.dockForegroundColor = foreground
-        console.log("[AppLauncherService] presentation " + width + "x" + height)
     }
 
     onOpenChanged: console.log("[AppLauncherService] open=" + open)

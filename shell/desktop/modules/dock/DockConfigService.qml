@@ -43,23 +43,16 @@ QtObject {
     // Compact keeps the whole content group together. Relaxed spends any
     // taskbar slack between apps/windows and the trailing information area.
     property string contentStyle: "compact"
-    // ── Hover magnification ──
-    // Peak scale of the hovered icon and its lift as a fraction of the icon
-    // size. The fisheye decays both across the neighbours, so one pair of
-    // values describes the whole effect. null = follow the active shell style
-    // (the macOS style magnifies, the taskbar-like styles do not); a number is
-    // the user's explicit choice and works in every style. The defaults come
-    // from the style tokens themselves, so an untouched profile is pixel-for-
-    // pixel what that style shipped with.
+    // One hover setting controls both peak magnification and lift. null
+    // follows the shell style; an explicit value works in every style.
     property var hoverScale: null
-    property var hoverLift: null
     readonly property real minHoverScale: 1.0
-    readonly property real maxHoverScale: 3.2
-    readonly property real maxHoverLift: 0.5
-    readonly property real effectiveHoverScale: svc.hoverScale !== null
-        ? svc.hoverScale : AppearanceTokens.dock.magnificationMaxScale
-    readonly property real effectiveHoverLift: svc.hoverLift !== null
-        ? svc.hoverLift : AppearanceTokens.dock.magnificationLiftRatio
+    readonly property real maxHoverScale: 3.0
+    readonly property real effectiveHoverScale: Math.max(svc.minHoverScale,
+        Math.min(svc.maxHoverScale, svc.hoverScale !== null
+            ? svc.hoverScale : AppearanceTokens.dock.magnificationMaxScale))
+    // At 100% both effects stop; every extra 100% adds 20% icon-size lift.
+    readonly property real effectiveHoverLift: 0.2 * (effectiveHoverScale - 1)
     // Internal compatibility projections while renderers consume the concise
     // product model. They are derived, never persisted or exposed in settings.
     readonly property string widthMode: dockStyle === "taskbar" ? "stretch" : "auto"
@@ -254,19 +247,6 @@ QtObject {
                 && Math.abs(svc.hoverScale - clamped) <= 0.0005)
             return false
         svc.hoverScale = clamped
-        scheduleSave()
-        return true
-    }
-
-    function updateHoverLift(rawLift) {
-        const next = Number(rawLift)
-        if (!Number.isFinite(next))
-            return false
-        const clamped = Math.max(0, Math.min(svc.maxHoverLift, next))
-        if (svc.hoverLift !== null
-                && Math.abs(svc.hoverLift - clamped) <= 0.0005)
-            return false
-        svc.hoverLift = clamped
         scheduleSave()
         return true
     }
@@ -571,17 +551,16 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 11,
+            version: 12,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
             // Product-level layout (v6)
             dockStyle:     svc.dockStyle,
             contentStyle:  svc.contentStyle,
-            // Hover magnification (v11). null persists as null: "follow the
+            // Hover magnification (v12). null persists as null: "follow the
             // shell style" is a state, not an accident of a missing key.
             hoverScale:    svc.hoverScale,
-            hoverLift:     svc.hoverLift,
             barHeight:     svc.barHeight,
             iconOverrides: svc.iconOverrides,
             dockItems:     svc.dockItems,
@@ -675,27 +654,24 @@ QtObject {
                 scheduleSave()
             }
         }
-        // Hover magnification (v11). A missing key keeps null = follow the
+        // Hover magnification (v12). A missing key keeps null = follow the
         // shell style; only numbers are accepted, clamped to the slider range.
         if (obj.hoverScale !== undefined && obj.hoverScale !== null) {
             const scale = Number(obj.hoverScale)
             if (Number.isFinite(scale)) {
                 svc.hoverScale = Math.max(svc.minHoverScale,
                     Math.min(svc.maxHoverScale, scale))
+                if (svc.hoverScale !== scale)
+                    scheduleSave()
             } else {
                 console.warn("[DockConfig] invalid hoverScale ignored")
                 scheduleSave()
             }
         }
-        if (obj.hoverLift !== undefined && obj.hoverLift !== null) {
-            const lift = Number(obj.hoverLift)
-            if (Number.isFinite(lift)) {
-                svc.hoverLift = Math.max(0, Math.min(svc.maxHoverLift, lift))
-            } else {
-                console.warn("[DockConfig] invalid hoverLift ignored")
-                scheduleSave()
-            }
-        }
+        // Drop the obsolete independent lift value when migrating. The
+        // retained scale now drives both effects and is capped at 300%.
+        if (obj.hoverLift !== undefined || Number(obj.version ?? 0) < 12)
+            scheduleSave()
 
         // Accept both proposed PR card schemas, then persist only the ordered
         // component model. Missing keys retain the historical four cards.

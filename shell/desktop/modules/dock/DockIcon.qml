@@ -5,6 +5,7 @@ import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
 import "DockMagnification.mjs" as Magnification
+import "AdaptiveMath.mjs" as AdaptiveMath
 
 // ────────────────────────────────────────────────────────────────
 // DockIcon — Single icon in the dock.
@@ -91,10 +92,10 @@ Item {
     // A small neutral marker for persistent shell-control state, currently
     // used by the Trash icon while it contains recoverable items.
     property bool   statusBadge: false
-    // This is proportional to iconSize (3px when iconSize is 44px). It is
-    // also included in AdaptiveMath, so the active background never overlaps
-    // a neighbour or makes the real Row wider than the calculated width.
-    property real   activeBackgroundGap: 4.4
+    // Per-edge padding includes the rounded-corner inset. Layout reserves the
+    // same value so the larger plate cannot collide with its neighbours.
+    property real activeBackgroundGap: AdaptiveMath.activeBackgroundPadding(
+        iconSize, AppearanceTokens.dock.activeRadiusRatio)
     // Side-dock layout: the whole row is rotated 90 degrees; the icon image
     // counter-rotates so the artwork stays upright.
     property bool   vertical: false
@@ -115,6 +116,30 @@ Item {
     readonly property real activeBackgroundRadius: iconSize
         * AppearanceTokens.dock.activeRadiusRatio
     readonly property real iconSlotSize: iconSize + activeBackgroundGap * 2
+    // Keep at least the full square artwork box, including corner clearance.
+    // Reserve it even for aspect-fitted artwork so loading cannot move tasks.
+    readonly property real iconPaintedWidth:
+        iconRenderer.item ? (iconRenderer.item.paintedWidth || iconSize) : iconSize
+    readonly property real iconPaintedHeight:
+        iconRenderer.item ? (iconRenderer.item.paintedHeight || iconSize) : iconSize
+    readonly property real iconSlotWidth:
+        Math.max(iconSize, iconPaintedWidth) + activeBackgroundGap * 2
+    readonly property real iconSlotHeight:
+        Math.max(iconSize, iconPaintedHeight) + activeBackgroundGap * 2
+    // The item magnifies as a whole. Counter-scale the plate's padding and
+    // radius so their on-screen sizes stay constant as the artwork grows.
+    // Keep the reserved slot unchanged: this is paint geometry only.
+    readonly property real _plateHoverScale: Math.max(1,
+        _hoverScale * _magnificationScale)
+    // Tighten the visible plate gently with the existing hover wave. Its
+    // resting rounded-corner reserve remains intact when hover ends.
+    readonly property real _plateHoverGap: activeBackgroundGap
+        * (1 - 0.25 * magnificationProgress)
+    readonly property real activePlateWidth:
+        Math.max(iconSize, iconPaintedWidth) + 2 * _plateHoverGap / _plateHoverScale
+    readonly property real activePlateHeight:
+        Math.max(iconSize, iconPaintedHeight) + 2 * _plateHoverGap / _plateHoverScale
+    readonly property real activePlateRadius: activeBackgroundRadius / _plateHoverScale
     readonly property bool dotIndicator:
         AppearanceTokens.dock.indicatorStyle === "dot"
     readonly property real runningIndicatorWidth: dotIndicator
@@ -234,8 +259,8 @@ Item {
     // Reserve the background's outer slot for every app icon. Only the active
     // window paints it; reserving the slot prevents focus changes from moving
     // the surrounding icons.
-    width:  iconSlotSize
-    height: iconSlotSize
+    width:  iconSlotWidth
+    height: iconSlotHeight
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     // ═══════════════════════════════════════════════════════════
@@ -247,8 +272,7 @@ Item {
     // taskbar-like styles too; otherwise the active style decides.
     readonly property bool _usesDistanceMagnification:
         (AppearanceTokens.dock.magnificationEnabled
-            || ConfigService.hoverScale !== null
-            || ConfigService.hoverLift !== null)
+            || ConfigService.hoverScale !== null)
         && magnificationRoot !== null
     readonly property bool _distanceMagnificationEnabled:
         _usesDistanceMagnification
@@ -271,7 +295,7 @@ Item {
             : icon.mapToItem(magnificationRoot, cx, cy)
     }
     readonly property real _magnificationInfluence: {
-        if (!_distanceMagnificationEnabled || !visible)
+        if (_usesSharedMagnification || !_distanceMagnificationEnabled || !visible)
             return 0.0
         const center = icon._slotCentreInRoot()
         // 影响核在「容器中心相对坐标」里比较指针与槽位中心。dock 加宽是
@@ -306,70 +330,31 @@ Item {
     // faster display, and its default epsilon stops these two units at different
     // times. FrameAnimation follows the render cadence and sleeps once settled.
     property real _magnificationProgress: 0
-    // The hover spread reads a lead-compensated copy of the same damped
-    // progress. A first-order progress always trails a moving influence by
-    // rate·response, and the spread's need inherits that as lag -- after a
-    // stop the row kept sliding while the copy caught up (~5 px on the far
-    // icons). Leading the SPREAD copy by the influence's own velocity cancels
-    // that lag in steady motion, so the room-making is already in place when
-    // the pointer stops. The rendered scale keeps the plain progress (its feel
-    // is untouched). While the pointer is in the row the lead runs both ways:
-    // icons behind it decay, and leading them downward merely tightens a
-    // resting gap by a couple of invisible px. Once the pointer has left, the
-    // lead is zero, so the exit decay is never led downward and the offsets
-    // stay an upper bound on the rendered growth -- gaps never pinch. The
-    // container's follower rounds off what remains.
-    property real _spreadProgress: 0
-    property real _prevInfluence: 0
-    property real _influenceVelocity: 0
-    // Public companions the DockContainer's hover spread reads to compute how
-    // far each neighbour has to make room.
-    readonly property real magnificationProgress: _magnificationProgress
-    readonly property real spreadMagnificationProgress: _spreadProgress
-    readonly property bool _magnificationAnimating:
-        _magnificationProgress !== _magnificationInfluence
-        || _spreadProgress !== _magnificationInfluence
+    readonly property bool _usesSharedMagnification: _usesDistanceMagnification
+        && typeof magnificationRoot.magnificationFor === "function"
+    readonly property real magnificationProgress: _usesSharedMagnification
+        ? magnificationRoot.magnificationFor(icon) : _magnificationProgress
+    readonly property real spreadMagnificationProgress: magnificationProgress
+    readonly property bool _magnificationAnimating: !_usesSharedMagnification
+        && _magnificationProgress !== _magnificationInfluence
     FrameAnimation {
         running: icon._magnificationAnimating
-        onRunningChanged: {
-            if (running) {
-                icon._prevInfluence = icon._magnificationInfluence
-                icon._influenceVelocity = 0
-            }
-        }
         onTriggered: {
             icon._magnificationProgress = Magnification.advance(
                 icon._magnificationProgress, icon._magnificationInfluence,
                 frameTime, DockAnimation.magnificationResponseSeconds,
                 DockAnimation.magnificationEpsilon)
-            const dt = Math.min(0.1, Math.max(frameTime, 1.0 / 240))
-            const inf = icon._magnificationInfluence
-            // ~5 Hz velocity estimate: steady slide motion survives it, the
-            // per-frame jitter of the influence does not.
-            const av = 1.0 / (1.0 + (1.0 / (2 * Math.PI * 5)) / dt)
-            const iv = (inf - icon._prevInfluence) / dt
-            icon._prevInfluence = inf
-            icon._influenceVelocity += (iv - icon._influenceVelocity) * av
-            const lead = magnificationPointer.x > -9999
-                ? Math.max(-0.12, Math.min(0.12,
-                    icon._influenceVelocity
-                        * DockAnimation.magnificationResponseSeconds))
-                : 0
-            icon._spreadProgress = Magnification.advance(
-                icon._spreadProgress, inf + lead,
-                frameTime, DockAnimation.magnificationResponseSeconds,
-                DockAnimation.magnificationEpsilon)
         }
     }
     readonly property real _magnificationScale:
-        1.0 + _magnificationProgress
+        1.0 + magnificationProgress
             * (ConfigService.effectiveHoverScale - 1.0)
     // Continuous (sub-pixel) lift: rounding this to whole pixels would quantise
     // the small magnification lift into a couple of visible steps.
     readonly property real _magnificationLift:
         -(icon.iconSize
             * ConfigService.effectiveHoverLift
-            * _magnificationProgress)
+            * magnificationProgress)
     // The distance curve already includes the hovered icon. Keep the original
     // one-icon fallback for hosts without a shared pointer.
     property real _hoverScale:
@@ -391,8 +376,13 @@ Item {
     // on this whole item: an offscreen texture is sized to the item's bounds
     // and clips overflow, which would hide the running/status indicators
     // that deliberately extend past the icon edge.
+    readonly property real _hoverDirection: vertical && dockEdge === "right" ? -1 : 1
     transform: Translate {
-        y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
+        // Grow towards the workspace: cancel the downward half of a
+        // centre-origin scale before adding the configured hover lift.
+        y: icon._attentionLift + icon._hoverDirection
+            * (icon._hoverLift + icon._magnificationLift
+                - icon.height / 2 * (icon._hoverScale * icon._magnificationScale - 1))
         // The magnified row spreads so neighbours are never covered (see
         // DockContainer's hover spread); the compensation term cancels the
         // row's re-centring while the container grows.
@@ -443,6 +433,8 @@ Item {
     readonly property bool _hovering: {
         if (!icon.interactive || !icon.visible)
             return false
+        if (_usesSharedMagnification)
+            return magnificationRoot.hoverFor(icon)
         if (magnificationRoot === null || magnificationPointer.x < -9999
                 || magnificationPointer.y < -9999)
             // No container pointer to test against. This path does read the
@@ -614,6 +606,19 @@ Item {
         }
     }
 
+    // Dwell and cancellation must use the same transformed hover state as
+    // the highlight; a layout MouseArea edge can move during magnification.
+    on_HoveringChanged: {
+        if (_hovering) {
+            previewCloseDelay.stop()
+            if (_previewWindowId && !editMode && !DockModelService.activeContextMenu)
+                previewDelay.restart()
+        } else {
+            previewDelay.stop()
+            previewCloseDelay.restart()
+        }
+    }
+
     // A pinned app with no live window has no thumbnail to show. Use a small
     // edge-aware label instead of opening an empty preview surface.
     PopupWindow {
@@ -690,10 +695,10 @@ Item {
     // ═══════════════════════════════════════════════════════════
     Rectangle {
         id: activeBackground
-        width: icon.iconSlotSize
-        height: icon.iconSlotSize
+        width: icon.activePlateWidth
+        height: icon.activePlateHeight
         anchors.centerIn: parent
-        radius: icon.activeBackgroundRadius
+        radius: icon.activePlateRadius
         // The active window paints a white slot; urgency paints orange-red.
         // Both are local to the icon, so the highlight always tracks its task
         // without any shared indicator or geometry tracking.
@@ -717,10 +722,11 @@ Item {
 
     DockIconHighlight {
         objectName: "dock-selection-highlight"
-        width: icon.iconSize + icon.activeBackgroundGap
-        height: width
+        // Padding/radius retain their resting on-screen clearance on hover.
+        width: icon.activePlateWidth
+        height: icon.activePlateHeight
         anchors.centerIn: parent
-        cornerRadius: icon.activeBackgroundRadius
+        cornerRadius: icon.activePlateRadius
         // Counter-rotate the lighting just like the artwork: "top" stays up
         // on both side Docks, while the entire plate follows the icon's lift.
         rotation: icon.vertical ? -90 : 0
@@ -756,8 +762,8 @@ Item {
     Rectangle {
         id: hoverHighlight
         objectName: "dock-legacy-hover-highlight"
-        width: icon.iconSize
-        height: icon.iconSize
+        width: Math.max(icon.iconSize, icon.iconPaintedWidth)
+        height: Math.max(icon.iconSize, icon.iconPaintedHeight)
         anchors.centerIn: parent
         radius: icon.activeBackgroundRadius
         color: Qt.rgba(1, 1, 1, 0.12)
@@ -1050,15 +1056,7 @@ Item {
                 icon.activate()
             }
         }
-        onEntered: {
-            if (icon._previewWindowId && !icon.editMode
-                    && !DockModelService.activeContextMenu)
-                previewDelay.restart()
-        }
-        onExited: {
-            previewDelay.stop()
-            previewCloseDelay.restart()
-        }
+
     }
 
 }

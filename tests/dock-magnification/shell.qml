@@ -136,6 +136,43 @@ Item {
         interactive = false // Do not open real tooltip/preview surfaces in this probe.
         ptr = Qt.point(-10000, -10000)
     }
+    function checkBottomGeometry() {
+        const item = rep.itemAt(1)
+        const oldScale = ConfigService.hoverScale
+        const oldLift = ConfigService.hoverLift
+        for (const s of [1, 1.2, 2]) {
+            for (const lift of [0, 0.08, 0.3]) {
+                ConfigService.hoverScale = s
+                ConfigService.hoverLift = lift
+                for (const progress of [0, 0.25, 1]) {
+                    item._magnificationProgress = progress
+                    const outerY = edge === "right" ? 0 : item.height
+                    const bottom = item.mapToItem(item.parent, item.width / 2, outerY)
+                    const expected = item.y + outerY
+                        - item._hoverDirection * item.iconSize * lift * progress
+                    check(Math.abs(bottom.y - expected) < 0.001,
+                        "bottom edge must follow lift alone at scale=" + s + " lift=" + lift)
+                    const hoverScale = item._magnificationScale
+                    for (const plate of [childNamed(item, "dock-selection-highlight"),
+                            childNamed(item, "dock-legacy-active-background")]) {
+                        const gap = (plate.width - item.iconSize) * hoverScale / 2
+                        const radius = (plate.cornerRadius ?? plate.radius) * hoverScale
+                        check(Math.abs(gap - item.activeBackgroundGap) < 0.001,
+                            "hover must not magnify the active plate padding")
+                        // Check the worst-case square artwork corner against
+                        // the rounded arc, including the original clearance.
+                        const arcDistance = Math.SQRT2 * Math.max(0, radius - gap)
+                        check(arcDistance <= radius - item.iconSize * 0.1 + 0.001,
+                            "hover plate must retain clearance at artwork corners")
+                    }
+                }
+            }
+        }
+        ConfigService.hoverScale = oldScale
+        ConfigService.hoverLift = oldLift
+        item._magnificationProgress = 0
+        console.log("REPORT " + edge + " bottom-edge geometry passed at scales 1/1.2/2")
+    }
     function beginPhase(next) {
         phase = next
         ticks = 0
@@ -144,8 +181,13 @@ Item {
     function samplePhase() {
         const scaleProgress = (target.scale - 1)
             / (AppearanceTokens.dock.magnificationMaxScale - 1)
-        const liftProgress = -target.transform[0].y
+        const liftProgress = -(target.transform[0].y * target._hoverDirection
+            + target.height / 2 * (target.scale - 1))
             / (target.iconSize * AppearanceTokens.dock.magnificationLiftRatio)
+        const outerY = edge === "right" ? 0 : target.height
+        const bottom = target.mapToItem(target.parent, target.width / 2, outerY)
+        check((bottom.y - target.y - outerY) * target._hoverDirection <= 0.001,
+            "magnification pushed the bottom edge below the resting slot")
         maxPhaseError = Math.max(maxPhaseError, Math.abs(scaleProgress - liftProgress))
         check(target.width === target.iconSlotSize && target.height === target.iconSlotSize,
             "animation changed layout geometry")
@@ -162,6 +204,7 @@ Item {
                 target = rep.itemAt(1)
                 checkSelectionStates()
                 checkBoundary()
+                checkBottomGeometry()
                 beginPhase(1)
             } else if (phase === 1 && ticks === 35) {
                 maxPhaseError = 0

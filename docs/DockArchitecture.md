@@ -20,11 +20,11 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Pointer magnification
 
-`DockIcon` measures pointer distance from its untransformed layout slot in
-`DockContainer` coordinates, including when the content row is rotated for a
-side Dock. The smoothstep distance curve sets a normalized target; one
-`FrameAnimation` follows it using the elapsed-time response in
-`DockMagnification.mjs`. Scale and lift derive from that same animated value.
+`DockContainer` measures pointer distance from untransformed layout slots in
+its content Row, including when that Row is rotated for a side Dock. A quartic
+spatial field drives the group; one shared `FrameAnimation` eases entry/exit
+using the elapsed-time response in `DockMagnification.mjs`. Scale, lift and
+translations derive from the same frame snapshot.
 Do not put separate animations on the composed transforms or add a binary
 hover lift to the distance curve: those cause phase mismatch and slot-boundary
 jumps. Attention feedback is composed separately, without a second animation.
@@ -358,11 +358,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 11):
+Core user configuration fields (schema version 12):
 
 ```json
 {
-  "version": 11,
+  "version": 12,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -382,16 +382,28 @@ Core user configuration fields (schema version 11):
   "showLauncher": true,
   "showTrash": true,
   "showRevealIndicator": true,
-  "hoverScale": null,
-  "hoverLift": null
+  "hoverScale": null
 }
 ```
 
-Schema 11 adds `hoverScale` / `hoverLift`: the hovered icon's peak scale
-(1.0–1.6) and its lift as a fraction of the icon size (0–0.25). `null`
-follows the active shell style (the macOS style magnifies, the taskbar-like
-styles do not); a number is the user's explicit choice and works in every
-style. The settings page writes the ratios; the shell clamps them.
+Schema 12 keeps one `hoverScale` setting: the hovered icon's peak scale
+(1.0–3.0, displayed as 100–300%). Lift is derived as
+`0.2 * (effectiveHoverScale - 1)` of the icon size and follows the same
+neighbour influence as magnification. At 100%, both effects stop. `null`
+follows the active shell style; a number works in every style. Migration
+retains the old scale, clamps values above 3.0 and removes the independent
+`hoverLift` key introduced in schema 11. Settings and IPC expose only scale.
+
+The configured scale is a peak: crowded layouts reduce the shared wave to
+keep its painted slots within the output, including edge padding. A linear
+pass limits scale, lift and translations together; the adaptive resting icon
+size is unchanged by hover. At 100%, plate-gap tightening is disabled too.
+Relaxed layouts spend their empty middle slot on application growth through
+paint translations, keeping trailing controls and resting Row geometry fixed.
+Workspace layout publication uses resting physical width/height on every
+edge and does not subscribe to the live hover extent or glass shift.
+Settings serializes Dock requests and protects in-progress slider previews
+from unrelated replies.
 
 Schema 3 contains `visibilityMode` (see the next section), `windowGrouping`,
 the legacy icon appearance triplet (`iconMode`: `color | grayscale | tint`,

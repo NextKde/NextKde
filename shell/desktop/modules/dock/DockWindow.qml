@@ -98,9 +98,9 @@ PanelWindow {
     readonly property real hoverHeadroom: {
         const slot = dockContainer.iconSize
             + dockContainer.activeBackgroundGap * 2
-        const grow = slot * (ConfigService.effectiveHoverScale - 1) / 2
+        const grow = slot * (ConfigService.effectiveHoverScale - 1)
         const lift = slot * ConfigService.effectiveHoverLift
-        const slack = Math.max(0, (dockContainer.height - slot) / 2)
+        const slack = Math.max(0, (root.dockThickness - slot) / 2)
         return Math.max(0, Math.ceil(grow + lift - slack)) + 4
     }
     // Cross-edge thickness = glass + float. Length is forced by the anchors
@@ -196,25 +196,29 @@ PanelWindow {
                 + dockContainer.hoverGlassShift))
         : root.height - root.edgeMargin - dockContainer.height
 
+    readonly property real restingDockWidth: root.vertical
+        ? dockContainer.computedDockHeight : dockContainer.restingComputedWidth
+    readonly property real restingDockHeight: root.vertical
+        ? dockContainer.restingComputedWidth : dockContainer.computedDockHeight
+    readonly property rect workspaceDockRect: Qt.rect(
+        root.surfaceGlobalX + (root.vertical
+            ? (root.position === "right"
+                ? root.width - root.edgeMargin - root.restingDockWidth : root.edgeMargin)
+            : (root.stretched ? root.stretchInset : (root.width - root.restingDockWidth) / 2)),
+        root.surfaceGlobalY + (root.vertical
+            ? (root.stretched ? root.reservedTop + root.stretchInset
+                : root.reservedTop + (root.height - root.reservedTop - root.restingDockHeight) / 2)
+            : root.height - root.edgeMargin - root.restingDockHeight),
+        root.restingDockWidth, root.restingDockHeight)
+
     function publishWorkspaceLayout() {
-        if (!root.screen || dockContainer.width <= 0 || dockContainer.height <= 0)
+        if (!root.screen || root.restingDockWidth <= 0 || root.restingDockHeight <= 0)
             return
-        // Publish the RESTING extent: a hover widens the glass, but the space
-        // windows keep clear must not breathe with the pointer (and the
-        // framework would otherwise re-place every window per hover frame).
-        const restingWidth = dockContainer.restingComputedWidth
+        // Publish resting physical axes on every edge. The visual glass shift
+        // and live hover length must never enter the workspace contract.
         WorkspaceLayoutService.updateDock(root.screen, root.position, {
-            x: root.surfaceGlobalX + (root.vertical
-                ? (root.position === "right"
-                    ? root.width - root.edgeMargin - restingWidth
-                    : root.edgeMargin)
-                : (root.stretched ? root.stretchInset
-                    : (root.width - restingWidth) / 2)),
-            y: root.surfaceGlobalY + root.restY,
-            width: restingWidth,
-            height: dockContainer.height
-        // Hide modes deliberately publish no gap: otherwise a new window
-        // would avoid an invisible Dock after it has slid away.
+            x: root.workspaceDockRect.x, y: root.workspaceDockRect.y,
+            width: root.workspaceDockRect.width, height: root.workspaceDockRect.height
         }, root.workspaceMargin)
     }
 
@@ -227,26 +231,8 @@ PanelWindow {
 
     onScreenChanged: layoutPublishTimer.restart()
     onPositionChanged: layoutPublishTimer.restart()
-    // restX follows the hover spread every frame (the glass widening); the
-    // published resting extent must not.
-    onRestXChanged: {
-        if (dockContainer.hoverSpreadTotal < 0.5)
-            layoutPublishTimer.restart()
-    }
-    onRestYChanged: layoutPublishTimer.restart()
-    onSurfaceGlobalXChanged: layoutPublishTimer.restart()
-    onSurfaceGlobalYChanged: layoutPublishTimer.restart()
-
-    Connections {
-        target: dockContainer
-        // The hover spread retargets the container width every frame; the
-        // published resting extent only changes when the true layout does.
-        function onWidthChanged() {
-            if (dockContainer.hoverSpreadTotal < 0.5)
-                layoutPublishTimer.restart()
-        }
-        function onHeightChanged() { layoutPublishTimer.restart() }
-    }
+    onWorkspaceDockRectChanged: layoutPublishTimer.restart()
+    onWorkspaceMarginChanged: layoutPublishTimer.restart()
 
     Timer {
         interval: 67
@@ -314,6 +300,8 @@ PanelWindow {
 
         DockContainer {
             id: dockContainer
+            pointerInputItem: dockHoverRegion
+            pointerEventRoot: root.contentItem
             targetScreen: root.screen
             surfaceOriginX: root.surfaceGlobalX
             surfaceOriginY: root.surfaceGlobalY
@@ -333,6 +321,35 @@ PanelWindow {
         y: hide.offsetY + root.restY
         width: dockContainer.width
         height: dockContainer.height
+        visible: false
+    }
+
+    // A stable input rectangle covers the maximum hover envelope. Idle input
+    // is still limited to the glass; while magnifying, elevated artwork remains
+    // interactive. Never derive this sensor's origin from the live glass width.
+    Item {
+        id: dockHoverRegion
+        readonly property real spread: (dockContainer.magnificationRadius * 4 / 3
+            + dockContainer.iconSize + dockContainer.activeBackgroundGap * 2)
+            * Math.max(0, ConfigService.effectiveHoverScale - 1)
+        x: root.vertical
+            ? (root.position === "right" ? dockHitRegion.x - root.hoverHeadroom : dockHitRegion.x)
+            : hide.offsetX + (root.width - dockContainer.restingComputedWidth - spread) / 2
+        y: root.vertical
+            ? hide.offsetY + root.reservedTop
+                + (root.height - root.reservedTop - dockContainer.restingComputedWidth - spread) / 2
+            : dockHitRegion.y - root.hoverHeadroom
+        width: root.vertical ? dockContainer.width + root.hoverHeadroom
+            : dockContainer.restingComputedWidth + spread
+        height: root.vertical ? dockContainer.restingComputedWidth + spread
+            : dockContainer.height + root.hoverHeadroom
+    }
+    Item {
+        id: hoverHitRegion
+        x: dockHoverRegion.x
+        y: dockHoverRegion.y
+        width: dockContainer.pointerInside && hide.revealProgress > 0 ? dockHoverRegion.width : 0
+        height: dockContainer.pointerInside && hide.revealProgress > 0 ? dockHoverRegion.height : 0
         visible: false
     }
 
@@ -375,6 +392,7 @@ PanelWindow {
     // through. In "always" mode the handle target collapses to zero.
     mask: Region {
         Region { item: dockHitRegion }
+        Region { item: hoverHitRegion }
         Region { item: revealHandle.hitTarget }
     }
 }

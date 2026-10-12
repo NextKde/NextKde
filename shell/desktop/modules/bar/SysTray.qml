@@ -424,6 +424,7 @@ Item {
 
                 AnimatedPopupWindow {
                     id: trayTooltip
+                    objectName: "systray-tooltip"
                     motionOrigin: !root.dockHosted ? Item.Top
                         : root.dockEdge === "left" ? Item.Left
                         : root.dockEdge === "right" ? Item.Right : Item.Bottom

@@ -2272,16 +2272,11 @@ ApplicationWindow {
         readonly property var dockContentStyles: ["compact", "relaxed"]
         property int dockStyleIndex: 0
         readonly property var dockStyles: ["floating", "taskbar", "transparent"]
-        // Hover magnification. The page works in percents so both rows read
-        // naturally; the shell takes the ratios (percent / 100) and clamps them
-        // into its own range. 100% scale = flat, so the slider doubles as the
-        // off switch, and an explicit value turns the effect on in every shell
-        // style (the untouched default follows the style).
+        // One percentage controls magnification and its proportional lift.
+        // 100% disables both; the shell clamps the peak to 300%.
         property real dockHoverScalePct: 119
         readonly property real minHoverScalePct: 100
-        readonly property real maxHoverScalePct: 320
-        property real dockHoverLiftPct: 4
-        readonly property real maxHoverLiftPct: 50
+        readonly property real maxHoverScalePct: 300
         property int visibilityModeIndex: 0
         readonly property var visibilityModes: ["always", "smart", "persistent"]
         property int windowGroupingIndex: 0
@@ -2297,7 +2292,6 @@ ApplicationWindow {
         property string errorText: ""
         property bool layoutDirty: false
         property bool hoverScaleDirty: false
-        property bool hoverLiftDirty: false
 
         function positionIndexFromString(position) {
             const idx = dockPositions.indexOf(position)
@@ -2327,24 +2321,21 @@ ApplicationWindow {
         function applyState(state) {
             if (!state || state.baseHeight === undefined)
                 return
-            dockHeight = Number(state.baseHeight)
+            // Do not overwrite a slider preview with an unrelated IPC reply.
+            if (!layoutDirty && !dockHeightSlider._pressed)
+                dockHeight = Number(state.baseHeight)
             dockPositionIndex = positionIndexFromString(state.position)
             dockContentStyleIndex = dockContentStyleIndexFromString(state.contentStyle)
             dockStyleIndex = dockStyleIndexFromString(state.dockStyle)
             // The snapshot always carries the effective values, so an untouched
             // profile opens on exactly what the Dock is drawing right now.
             const hoverScale = Number(state.hoverScale)
-            dockHoverScalePct = Number.isFinite(hoverScale)
-                ? Math.max(minHoverScalePct, Math.min(maxHoverScalePct,
-                    Math.round(hoverScale * 100)))
-                : 119
-            const hoverLift = Number(state.hoverLift)
-            dockHoverLiftPct = Number.isFinite(hoverLift)
-                ? Math.max(0, Math.min(maxHoverLiftPct,
-                    Math.round(hoverLift * 100)))
-                : 4
-            hoverScaleDirty = false
-            hoverLiftDirty = false
+            if (!hoverScaleDirty && !hoverScaleSlider._pressed) {
+                dockHoverScalePct = Number.isFinite(hoverScale)
+                    ? Math.max(minHoverScalePct, Math.min(maxHoverScalePct,
+                        Math.round(hoverScale * 100)))
+                    : 119
+            }
             visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode)
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
@@ -2352,7 +2343,6 @@ ApplicationWindow {
             showNotificationBadges = state.showNotificationBadges !== false
             showRevealIndicator = state.showRevealIndicator !== false
             stateReady = true
-            layoutDirty = false
             errorText = ""
         }
 
@@ -2377,9 +2367,7 @@ ApplicationWindow {
             bridge.updateDockStyle(dockStyles[index])
         }
 
-        // Hover magnification: preview while dragging, commit on release. The
-        // two rows keep separate dirty flags so releasing one never commits the
-        // other's in-flight value.
+        // Hover magnification: preview while dragging, commit on release.
         function previewHoverScale(position) {
             const next = Math.round(minHoverScalePct
                 + position * (maxHoverScalePct - minHoverScalePct))
@@ -2395,22 +2383,6 @@ ApplicationWindow {
             hoverScaleDirty = false
             if (bridge)
                 bridge.updateDockHoverScale(dockHoverScalePct / 100)
-        }
-
-        function previewHoverLift(position) {
-            const next = Math.round(position * maxHoverLiftPct)
-            if (next === dockHoverLiftPct)
-                return
-            dockHoverLiftPct = next
-            hoverLiftDirty = true
-        }
-
-        function commitHoverLift() {
-            if (!hoverLiftDirty)
-                return
-            hoverLiftDirty = false
-            if (bridge)
-                bridge.updateDockHoverLift(dockHoverLiftPct / 100)
         }
 
         function saveVisibilityMode(index) {
@@ -2543,6 +2515,7 @@ ApplicationWindow {
                             font.pixelSize: 12
                         }
                         LiquidControls.LiquidSlider {
+                            id: dockHeightSlider
                             // The shared controls carry the host's palette, so the
                             // Material form has to hand them the Material accent: their own
                             // default is the iPadOS blue this window was designed with.
@@ -2595,7 +2568,7 @@ ApplicationWindow {
                             spacing: 1
                             Text { text: "悬停放大"; color: theme.primaryText; font.pixelSize: 14 }
                             Text {
-                                text: "指针停靠时图标放大的峰值；100% 等于关闭，任意风格可用"
+                                text: "放大时同步上移；100% 关闭，最高 300%"
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                             }
@@ -2623,50 +2596,6 @@ ApplicationWindow {
                             }
                             onCanceled: { dockPage.hoverScaleDirty = false; dockPage.refresh() }
                             onCommitRequested: dockPage.commitHoverScale()
-                        }
-                    }
-                }
-
-                Rectangle { width: parent.width; height: 1; color: theme.separator }
-
-                Item {
-                    width: parent.width
-                    height: 62
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "↥"; tint: "#5ac8fa" }
-                        ColumnLayout {
-                            spacing: 1
-                            Text { text: "悬停上移"; color: theme.primaryText; font.pixelSize: 14 }
-                            Text {
-                                text: "放大时同步上抬（图标尺寸的比例），做出上浮的灵动感"
-                                color: theme.secondaryText
-                                font.pixelSize: 11
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: Math.round(dockPage.dockHoverLiftPct) + "%"
-                            color: theme.secondaryText
-                            font.pixelSize: 12
-                        }
-                        LiquidControls.LiquidSlider {
-                            id: hoverLiftSlider
-                            accentColor: theme.accent
-                            Layout.preferredWidth: 156
-                            trackColor: theme.divider
-                            // Ctrl+滚轮一档 = 1%（显示就是整数百分比）
-                            wheelStep: 1 / dockPage.maxHoverLiftPct
-                            value: dockPage.dockHoverLiftPct
-                                / dockPage.maxHoverLiftPct
-                            onPreviewChanged: function(position) {
-                                dockPage.previewHoverLift(position)
-                            }
-                            onCanceled: { dockPage.hoverLiftDirty = false; dockPage.refresh() }
-                            onCommitRequested: dockPage.commitHoverLift()
                         }
                     }
                 }
