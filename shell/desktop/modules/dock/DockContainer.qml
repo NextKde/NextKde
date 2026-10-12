@@ -6,6 +6,7 @@ import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
+import "DockMagnification.mjs" as Magnification
 
 // ────────────────────────────────────────────────────────────────
 // DockContainer — Adaptive layout engine.
@@ -179,11 +180,19 @@ Item {
     // naturalDockWidth is the width the content asks for. A taskbar or relaxed
     // layout grows to the available edge length. distributionSlack is spent
     // only by relaxed content, between apps/windows and trailing components.
-    readonly property int naturalDockWidth: Math.round(_layout.dockWidth
+    // The hover spread is added on top of restingDockWidth as a REAL width:
+    // rounding it to whole pixels made the glass (and, through the centred row,
+    // every icon) step by a pixel per frame while the pointer slid.
+    readonly property int restingDockWidth: Math.round(_layout.dockWidth
         + accessoryContentWidth
         + accessoryDividerCount * (2 + dividerMargin * 2)
         + accessoryGapCount * itemSpacing)
-    readonly property int computedDockWidth: fillsAvailableLength
+    readonly property real naturalDockWidth: restingDockWidth + hoverSpreadTotal
+    // The resting counterpart of computedDockWidth (no hover spread).
+    readonly property int restingComputedWidth: fillsAvailableLength
+        ? Math.max(restingDockWidth, availableLength)
+        : restingDockWidth
+    readonly property real computedDockWidth: fillsAvailableLength
         ? Math.max(naturalDockWidth, availableLength)
         : naturalDockWidth
     readonly property real distributionSlack: Math.max(0, computedDockWidth
@@ -217,9 +226,346 @@ Item {
     readonly property bool pointerInside: _dockPointerHover.hovered
     // Keep the pointer in DockContainer coordinates. Mapping each icon back to
     // this same Item is safe for both bottom and rotated side Docks.
-    readonly property point magnificationPointer: _dockPointerHover.hovered
+    //
+    // The hover machinery is driven by a filtered pointer: a hand on a mouse
+    // trembles by a pixel or two at tens of hertz, and feeding that raw made
+    // the whole row answer every micro-move with a small stretch/shrink. A
+    // fixed low-pass traded that tremor for lag: at slide speed the filtered
+    // pointer trailed the real one by tens of pixels, and after the hand
+    // stopped the icons kept sliding while the filter caught up. This is the
+    // 1€ filter instead (Casiez et al.): the cutoff follows the pointer's
+    // speed, so a slow, trembling hand is smoothed hard while a deliberate
+    // slide tracks nearly 1:1 — and stops the moment the pointer stops.
+    // Clicks are untouched (their own handlers); the filter snaps to the raw
+    // position on entry and drops out on exit, so the enter/leave animations
+    // are unchanged.
+    readonly property point _rawPointer: _dockPointerHover.hovered
         ? _dockPointerHover.point.position
         : Qt.point(-10000, -10000)
+    property point magnificationPointer: Qt.point(-10000, -10000)
+    // 滤波收敛判定：指针静止且滤波值已贴住目标时，动画必须**停机**。悬停期
+    // 每帧无条件重赋 Qt.point 会以对象身份变化触发全链信号（influence/
+    // follower/图标变换逐帧重算），浮点尾动让图标变换在 ±1e-6 抖动——
+    // 分数缩放下每帧重采样出 1-4/255 的整排微抖（实测：指针在 dock 上时
+    // 玻璃区域每帧 20-150 像素差异 + 周期性 ~1500 像素尖峰；指针移离后
+    // 同区域 15 对帧全零）。
+    readonly property bool _filterActive: {
+        if (_dockPointerHover.hovered)
+            return true
+        return magnificationPointer.x > -9999
+            && Math.abs(magnificationPointer.x - _rawPointer.x) > 0.05
+    }
+    // 1€ state: previous raw position and the smoothed speed estimate.
+    property point _filterPrevRaw: Qt.point(0, 0)
+    property point _filterSpeed: Qt.point(0, 0)
+    FrameAnimation {
+        running: container._filterActive
+        onTriggered: {
+            const raw = container._rawPointer
+            if (raw.x < -9999) {
+                container.magnificationPointer = Qt.point(-10000, -10000)
+                return
+            }
+            const dt = Math.min(0.1, Math.max(frameTime, 1.0 / 240))
+            if (container.magnificationPointer.x < -9999) {
+                container.magnificationPointer = raw
+                container._filterPrevRaw = raw
+                container._filterSpeed = Qt.point(0, 0)
+                return
+            }
+            const alphaOf = function(cutoff) {
+                const tau = 1.0 / (2 * Math.PI * cutoff)
+                return 1.0 / (1.0 + tau / dt)
+            }
+            // Speed estimate, smoothed at the slow cutoff: it decays over
+            // ~130 ms after a stop, so the cutoff stays high long enough for
+            // the position to converge onto the raw pointer before the heavy
+            // smoothing (and with it the tremor rejection) resumes.
+            const ivx = (raw.x - container._filterPrevRaw.x) / dt
+            const ivy = (raw.y - container._filterPrevRaw.y) / dt
+            const av = alphaOf(1.2)
+            const sp = container._filterSpeed
+            const vx = sp.x + (ivx - sp.x) * av
+            const vy = sp.y + (ivy - sp.y) * av
+            container._filterSpeed = Qt.point(vx, vy)
+            container._filterPrevRaw = raw
+            const cutoff = Math.min(30.0, 1.2 + 0.03 * Math.hypot(vx, vy))
+            const a = alphaOf(cutoff)
+            const cur = container.magnificationPointer
+            const nx = cur.x + (raw.x - cur.x) * a
+            const ny = cur.y + (raw.y - cur.y) * a
+            // 仅在值真正移动时赋值：静止帧不再以新对象身份触发下游。
+            if (nx !== cur.x || ny !== cur.y)
+                container.magnificationPointer = Qt.point(nx, ny)
+        }
+    }
+
+    // ── Hover spread: the magnified row makes room ──
+    // The fisheye grows each icon inside its fixed slot; past the resting gap
+    // the neighbours would be covered. macOS instead spreads the row: every
+    // member slides away from the pointer by the integral of the growth
+    // between it and the pointer. That keeps the point under the cursor pinned
+    // to the same spot on the hovered icon, and scales every gap with the
+    // local magnification, so nothing is ever covered. The container grows by
+    // the same amount (naturalDockWidth below), so the glass follows too.
+    // Coordinates are contentRow-local LAYOUT coordinates: mapped through the
+    // parent, never through the member itself. Folding a member's own
+    // lift/spread/scale into the input would make the spread chase its own
+    // output and stutter while the pointer slides across the row.
+    readonly property var _spreadStates: {
+        // Re-evaluated whenever any icon's magnification progress moves.
+        const states = []
+        if (!contentRow)
+            return states
+        // Layout centre of a row member in contentRow coordinates, with the
+        // member's own transform excluded (map from its parent). Direct
+        // children of the row are already in row coordinates.
+        function layoutCentre(item, directChild) {
+            if (directChild || !item.parent)
+                return item.x + item.width / 2
+            return item.parent.mapToItem(contentRow,
+                item.x + item.width / 2, item.y + item.height / 2).x
+        }
+        function visit(node, directChild) {
+            for (let i = 0; i < node.children.length; i++) {
+                const child = node.children[i]
+                if (!child || !child.visible || child.width <= 0)
+                    continue
+                if (child.magnificationProgress !== undefined) {
+                    states.push({ item: child,
+                        cx: layoutCentre(child, directChild),
+                        half: child.iconSlotSize / 2, growable: true,
+                        // The NEED is the real rendered growth, read from the
+                        // damped companion so the layout does not pulse at the
+                        // slot-crossing frequency.
+                        scale: 1 + child.spreadMagnificationProgress
+                            * (ConfigService.effectiveHoverScale - 1) })
+                } else if (child.children !== undefined
+                        && child.children.length > 0) {
+                    // A rigid member can still contain icons (the pinned
+                    // delegate rows hold one icon per window); walk into it
+                    // and keep the icons. A member with no icon inside counts
+                    // by its own bounds.
+                    const before = states.length
+                    visit(child, false)
+                    if (states.length === before) {
+                        states.push({ item: child,
+                            cx: layoutCentre(child, directChild),
+                            half: child.width / 2, growable: false, scale: 1 })
+                    }
+                }
+            }
+        }
+        visit(contentRow, true)
+        return states
+    }
+    // ── Spread offsets: the mac-style reflow ──
+    // Adjacent icons first spend their own gap (down to a hairline) before the
+    // row has to move at all: `need` is the extra width the two scaled icons
+    // demand from their shared gap, `slack` is what that gap can give. Only the
+    // leftover propagates one pair further out, so icons beyond a couple of
+    // slots never move -- the row opens a pocket around the pointer instead of
+    // translating as a block. The pointer's own pair contributes fractionally,
+    // which keeps every offset continuous while the pointer travels and pins
+    // the icon under the cursor in place.
+    readonly property var _spreadOffsets: {
+        const states = _spreadStates.slice()
+        states.sort((a, b) => a.cx - b.cx)
+        const n = states.length
+        const offs = new Array(n).fill(0)
+        const p = _spreadPointer.x
+        if (n < 2 || p < -9999 || isEditing)
+            return { states: states, offs: offs }
+        const minGap = 2
+        const delta = new Array(n - 1)
+        for (let i = 0; i < n - 1; i++) {
+            const a = states[i], b = states[i + 1]
+            const pitch = b.cx - a.cx
+            if (pitch <= 1) {
+                delta[i] = 0
+                continue
+            }
+            const need = a.half * (a.scale - 1) + b.half * (b.scale - 1)
+            const slack = Math.max(0, pitch - a.half - b.half - minGap)
+            delta[i] = Math.max(0, need - slack)
+        }
+        // The pair the pointer is inside contributes by how far the pointer
+        // has crossed it; everything further out adds its own leftover.
+        // k never reaches n-1: delta has n-1 entries, and indexing it with the
+        // last state (pointer past the trailing edge) made every offset NaN --
+        // the whole row stopped rendering. The fraction clamps instead.
+        let k = 0
+        while (k < n - 2 && states[k + 1].cx <= p)
+            k++
+        let frac = 0
+        {
+            const pitch = states[k + 1].cx - states[k].cx
+            if (pitch > 0)
+                frac = Math.max(0, Math.min(1, (p - states[k].cx) / pitch))
+        }
+        // The pointer pins the spot it sits on: inside the straddled pair that
+        // leaves the left icon the fraction it still has to move and the right
+        // icon the remainder, so both stay continuous as the pointer crosses a
+        // centre (swapping these two fractions is a ~50 px jump per icon).
+        offs[k] = -delta[k] * frac
+        let acc = offs[k]
+        for (let i = k - 1; i >= 0; i--) {
+            acc -= delta[i]
+            offs[i] = acc
+        }
+        if (k < n - 1) {
+            let accR = delta[k] * (1 - frac)
+            offs[k + 1] = accR
+            for (let i = k + 2; i < n; i++) {
+                accR += delta[i - 1]
+                offs[i] = accR
+            }
+        }
+        return { states: states, offs: offs }
+    }
+    // The raw offsets pass through one shared follower. The greedy deltas
+    // recompute in steps as the anchor hands over between adjacent slots; one
+    // filter for the whole row -- rather than one per icon -- keeps dividers,
+    // carousels and the glass exactly coherent with the icons: the members
+    // never slide against each other, and holding the pointer still holds the
+    // row still. The response only rounds off ~1 px handover steps; its ramp
+    // lag (v·response, the post-stop glide) is cancelled by the lead on the
+    // spread progress in DockIcon, so it can stay smooth instead of trading
+    // slide-time shimmer for a short tail.
+    property var _smoothedOffsets: ({})
+    readonly property bool _spreadFollowActive: {
+        // Prime a decaying dependency so the animation stops once at rest.
+        if (container._smoothSpreadTotal > 0.001)
+            return true
+        const layout = container._spreadOffsets
+        const sts = layout.states
+        const m = container._smoothedOffsets
+        for (let i = 0; i < sts.length; i++) {
+            const cur = m[sts[i].item]
+            const tgt = layout.offs[i]
+            if (cur === undefined ? tgt !== 0 : Math.abs(cur - tgt) > 0.01)
+                return true
+        }
+        return false
+    }
+    FrameAnimation {
+        running: container._spreadFollowActive
+        onTriggered: {
+            const layout = container._spreadOffsets
+            const sts = layout.states
+            const m = container._smoothedOffsets
+            for (let i = 0; i < sts.length; i++) {
+                const it = sts[i].item
+                const cur = m[it] === undefined ? layout.offs[i] : m[it]
+                m[it] = Magnification.advanceCritical(cur, layout.offs[i],
+                    frameTime, 0.11, 0.8, 0.01)
+            }
+        }
+    }
+    // Used by every row member that has to move with the spread. The centre is
+    // looked up in the cached states, so a member never re-derives it from its
+    // own (already moved) geometry.
+    function spreadFor(item) {
+        const layout = _spreadOffsets
+        const states = layout.states
+        for (let i = 0; i < states.length; i++) {
+            if (states[i].item === item) {
+                const smoothed = _smoothedOffsets[item]
+                return smoothed === undefined ? layout.offs[i] : smoothed
+            }
+        }
+        return 0
+    }
+    // How much wider the row becomes, and therefore how much the container
+    // and its glass grow. The row itself keeps its on-screen origin (the
+    // container is centred on the screen and the row is centred in the
+    // container, so the two shifts cancel), so no compensation is needed.
+    readonly property real _spreadRawTotal: {
+        const states = _spreadOffsets.states
+        if (states.length === 0)
+            return 0
+        let left = Infinity, right = -Infinity
+        let baseLeft = Infinity, baseRight = -Infinity
+        for (let i = 0; i < states.length; i++) {
+            const s = states[i]
+            const dx = spreadFor(s.item)
+            const half = s.half * s.scale
+            left = Math.min(left, s.cx + dx - half)
+            right = Math.max(right, s.cx + dx + half)
+            baseLeft = Math.min(baseLeft, s.cx - s.half)
+            baseRight = Math.max(baseRight, s.cx + s.half)
+        }
+        return Math.max(0, (right - left) - (baseRight - baseLeft))
+    }
+    // The glass follows the live spread -- the dock grows with the
+    // magnification and comes back down as the pointer moves away -- through
+    // its own ~70 ms follower with a critical landing (the tail does not
+    // crawl the last pixels after the pointer stops). Raw changes pulse once
+    // per slot crossed, which read as the dock twitching longer/shorter; the
+    // follower turns that into one steady breath. (Holding the widest value
+    // was tried and rejected: it froze the size, and its ratchet also dragged
+    // the pointer anchor.)
+    property real _smoothSpreadTotal: 0
+    readonly property real hoverSpreadTotal: _smoothSpreadTotal
+    FrameAnimation {
+        running: Math.abs(container._spreadRawTotal
+            - container._smoothSpreadTotal) > 0.05
+        onTriggered: {
+            container._smoothSpreadTotal = Magnification.advanceCritical(
+                container._smoothSpreadTotal, container._spreadRawTotal,
+                frameTime, 0.07, 1.2, 0.05)
+        }
+    }
+    // The pointer in contentRow coordinates, so the integral compares along
+    // the axis the icons' centres live on. mapFromItem keeps side Docks (the
+    // whole row is rotated 90 degrees) correct without a special case, and the
+    // tracked geometry reads re-map while the container keeps resizing.
+    //
+    // The last VALID position is held after the pointer leaves. The spread is
+    // then driven purely by the icons' eased scales, so a quick exit decays
+    // with them instead of snapping the row home in one frame.
+    // ⚠️ Stored in contentRow coordinates, never in the container's: the
+    // container widens with the spread, its local origin moves with it, and a
+    // container-local value read back on a later frame would drift sideways on
+    // its own -- which dragged the whole spread (and the icons) left in a slow
+    // periodic creep while the pointer stood still. The row's screen position
+    // is fixed, so its coordinates are stable.
+    property point _lastPointer: Qt.point(-10000, -10000)
+    onMagnificationPointerChanged: {
+        if (magnificationPointer.x > -9999 && contentRow)
+            _lastPointer = contentRow.mapFromItem(container,
+                magnificationPointer.x, magnificationPointer.y)
+    }
+    readonly property point _spreadPointer: _lastPointer
+    // Diagnostic (KOS_DOCK_SPREAD_TRACE=1): one line per frame while a spread
+    // is active. The spread's smoothness during a pointer slide cannot be
+    // judged from still shots, so the series is logged — pointer, total
+    // growth, and the outermost members' offsets.
+    readonly property bool _spreadTrace:
+        Quickshell.env("KOS_DOCK_SPREAD_TRACE") === "1"
+    FrameAnimation {
+        running: container._spreadTrace && container.hoverSpreadTotal > 0.5
+        onTriggered: {
+            const layout = container._spreadOffsets
+            const members = container._spreadStates
+            function rawOf(item) {
+                for (let i = 0; i < layout.states.length; i++)
+                    if (layout.states[i].item === item)
+                        return layout.offs[i]
+                return 0
+            }
+            const f = members.length > 0 ? members[0].item : null
+            const l = members.length > 0 ? members[members.length - 1].item : null
+            console.log("[DockSpread] px=" + container._spreadPointer.x.toFixed(2)
+                + " w=" + container.width.toFixed(3)
+                + " total=" + container.hoverSpreadTotal.toFixed(2)
+                + " rawTotal=" + container._spreadRawTotal.toFixed(2)
+                + " first=" + (f ? container.spreadFor(f).toFixed(2) : "0")
+                + " rawFirst=" + (f ? rawOf(f).toFixed(2) : "0")
+                + " last=" + (l ? container.spreadFor(l).toFixed(2) : "0")
+                + " rawLast=" + (l ? rawOf(l).toFixed(2) : "0"))
+        }
+    }
     HoverHandler {
         id: _dockPointerHover
         enabled: true
@@ -336,7 +682,11 @@ Item {
     }
     Behavior on width {
         NumberAnimation {
-            duration: DockAnimation.dockResizeDuration
+            // The hover spread retargets every frame; animating that would make
+            // the glass trail the icons. Discrete layout changes keep the
+            // interpolation.
+            duration: container.hoverSpreadTotal > 0.5
+                ? 0 : DockAnimation.dockResizeDuration
             easing.type: DockAnimation.dockResizeEasing
         }
     }
@@ -515,6 +865,9 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+            transform: Translate {
+                x: container.spreadFor(leadingAccessoryLoader)
+            }
         }
 
         DockDivider {
@@ -898,9 +1251,13 @@ Item {
         // spacer carries no content, so an auto-width dock collapses it to 0
         // and the row keeps its historical compact layout.
         Item {
+            id: distributionSpacer
             width: container.relaxed ? container.distributionSlack : 0
             height: 1
             visible: width > 0
+            transform: Translate {
+                x: container.spreadFor(distributionSpacer)
+            }
         }
 
         // ── Divider 2: windows | information slot (conditional) ──
@@ -957,6 +1314,9 @@ Item {
             width: active && item ? item.implicitWidth : 0
             height: container.computedDockHeight
             visible: active
+            transform: Translate {
+                x: container.spreadFor(trailingAccessoryLoader)
+            }
         }
     }
 

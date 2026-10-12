@@ -242,9 +242,14 @@ Item {
     // Scale model
     // ═══════════════════════════════════════════════════════════
     // Distance-based magnification. The Item's width/height remain the fixed
-    // layout slot; only its visual transform changes.
+    // layout slot; only its visual transform changes. An explicit user value
+    // (dock settings) turns it on in every style, so the sliders work on the
+    // taskbar-like styles too; otherwise the active style decides.
     readonly property bool _usesDistanceMagnification:
-        AppearanceTokens.dock.magnificationEnabled && magnificationRoot !== null
+        (AppearanceTokens.dock.magnificationEnabled
+            || ConfigService.hoverScale !== null
+            || ConfigService.hoverLift !== null)
+        && magnificationRoot !== null
     readonly property bool _distanceMagnificationEnabled:
         _usesDistanceMagnification
         && magnificationPointer.x > -9999
@@ -269,16 +274,31 @@ Item {
         if (!_distanceMagnificationEnabled || !visible)
             return 0.0
         const center = icon._slotCentreInRoot()
-        const iconAxis = vertical ? center.y : center.x
-        const pointerAxis = vertical ? magnificationPointer.y
-                                     : magnificationPointer.x
+        // 影响核在「容器中心相对坐标」里比较指针与槽位中心。dock 加宽是
+        // 对称的：槽位的根坐标与容器宽度各平移 ΔW/2、互相抵消，指针的根
+        // 坐标同样抵消——于是影响与 dock 宽度无关。用根坐标直接
+        // 比较会形成「加宽→图标平移→影响重算→让位→再加宽」的反馈环：
+        // 放大峰值调到 2.0 后环路增益过 1，进入 ±2 设备像素的极限环振荡
+        //（玻璃边缘 809↔811 实测），这就是用户把量程翻倍后看到的抽搐。
+        const axis = vertical ? magnificationRoot.height / 2
+                              : magnificationRoot.width / 2
+        const iconAxis = (vertical ? center.y : center.x) - axis
+        const pointerAxis = (vertical ? magnificationPointer.y
+                                      : magnificationPointer.x) - axis
         const radius = Math.max(icon.iconSize * 2.0,
             AppearanceTokens.dock.magnificationRadius)
         if (!Number.isFinite(iconAxis) || !Number.isFinite(pointerAxis)
                 || radius <= 0)
             return 0.0
+        // The kernel holds its peak across the icon's own slot before it starts
+        // to decay. Without the plateau the scale peaks only at the exact slot
+        // centre, so sliding the pointer along the row makes every icon breathe
+        // as the pointer crosses centres and gaps. Half the slot keeps one icon
+        // at full scale across its span while the gaps stay a uniform ~1% dip.
+        const plateau = Math.min(icon.iconSlotSize / 2, radius * 0.6)
         const normalized = Math.max(0.0, Math.min(1.0,
-            1.0 - Math.abs(iconAxis - pointerAxis) / radius))
+            1.0 - Math.max(0.0, Math.abs(iconAxis - pointerAxis) - plateau)
+                / Math.max(1.0, radius - plateau)))
         return normalized * normalized * (3.0 - 2.0 * normalized)
     }
     // Animate one normalized value, not the resulting scale and pixel offset
@@ -286,39 +306,83 @@ Item {
     // faster display, and its default epsilon stops these two units at different
     // times. FrameAnimation follows the render cadence and sleeps once settled.
     property real _magnificationProgress: 0
+    // The hover spread reads a lead-compensated copy of the same damped
+    // progress. A first-order progress always trails a moving influence by
+    // rate·response, and the spread's need inherits that as lag -- after a
+    // stop the row kept sliding while the copy caught up (~5 px on the far
+    // icons). Leading the SPREAD copy by the influence's own velocity cancels
+    // that lag in steady motion, so the room-making is already in place when
+    // the pointer stops. The rendered scale keeps the plain progress (its feel
+    // is untouched). While the pointer is in the row the lead runs both ways:
+    // icons behind it decay, and leading them downward merely tightens a
+    // resting gap by a couple of invisible px. Once the pointer has left, the
+    // lead is zero, so the exit decay is never led downward and the offsets
+    // stay an upper bound on the rendered growth -- gaps never pinch. The
+    // container's follower rounds off what remains.
+    property real _spreadProgress: 0
+    property real _prevInfluence: 0
+    property real _influenceVelocity: 0
+    // Public companions the DockContainer's hover spread reads to compute how
+    // far each neighbour has to make room.
+    readonly property real magnificationProgress: _magnificationProgress
+    readonly property real spreadMagnificationProgress: _spreadProgress
     readonly property bool _magnificationAnimating:
         _magnificationProgress !== _magnificationInfluence
+        || _spreadProgress !== _magnificationInfluence
     FrameAnimation {
         running: icon._magnificationAnimating
+        onRunningChanged: {
+            if (running) {
+                icon._prevInfluence = icon._magnificationInfluence
+                icon._influenceVelocity = 0
+            }
+        }
         onTriggered: {
             icon._magnificationProgress = Magnification.advance(
                 icon._magnificationProgress, icon._magnificationInfluence,
+                frameTime, DockAnimation.magnificationResponseSeconds,
+                DockAnimation.magnificationEpsilon)
+            const dt = Math.min(0.1, Math.max(frameTime, 1.0 / 240))
+            const inf = icon._magnificationInfluence
+            // ~5 Hz velocity estimate: steady slide motion survives it, the
+            // per-frame jitter of the influence does not.
+            const av = 1.0 / (1.0 + (1.0 / (2 * Math.PI * 5)) / dt)
+            const iv = (inf - icon._prevInfluence) / dt
+            icon._prevInfluence = inf
+            icon._influenceVelocity += (iv - icon._influenceVelocity) * av
+            const lead = magnificationPointer.x > -9999
+                ? Math.max(-0.12, Math.min(0.12,
+                    icon._influenceVelocity
+                        * DockAnimation.magnificationResponseSeconds))
+                : 0
+            icon._spreadProgress = Magnification.advance(
+                icon._spreadProgress, inf + lead,
                 frameTime, DockAnimation.magnificationResponseSeconds,
                 DockAnimation.magnificationEpsilon)
         }
     }
     readonly property real _magnificationScale:
         1.0 + _magnificationProgress
-            * (AppearanceTokens.dock.magnificationMaxScale - 1.0)
+            * (ConfigService.effectiveHoverScale - 1.0)
     // Continuous (sub-pixel) lift: rounding this to whole pixels would quantise
     // the small magnification lift into a couple of visible steps.
     readonly property real _magnificationLift:
         -(icon.iconSize
-            * AppearanceTokens.dock.magnificationLiftRatio
+            * ConfigService.effectiveHoverLift
             * _magnificationProgress)
     // The distance curve already includes the hovered icon. Keep the original
-    // one-icon fallback for non-macOS shell styles.
+    // one-icon fallback for hosts without a shared pointer.
     property real _hoverScale:
         !_usesDistanceMagnification && _hovering
-            ? AppearanceTokens.dock.hoverScale : 1.0
+            ? ConfigService.effectiveHoverScale : 1.0
     // Only isolated/non-fisheye hosts use binary hover feedback. Adding it to
     // the distance curve introduces a several-pixel jump at every slot edge.
     // Keep it disabled even during pointer exit, while the fisheye settles.
     property real _hoverLift: !_usesDistanceMagnification
         && _hovering && !showActiveBackground
-        && AppearanceTokens.dock.hoverLiftRatio > 0
+        && ConfigService.effectiveHoverLift > 0
         ? -Math.max(2, Math.round(iconSize
-            * AppearanceTokens.dock.hoverLiftRatio)) : 0
+            * ConfigService.effectiveHoverLift)) : 0
     property real _attentionScale: 1.0
     property real _attentionLift: 0
     property real _attentionGlow: 0
@@ -329,6 +393,11 @@ Item {
     // that deliberately extend past the icon edge.
     transform: Translate {
         y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
+        // The magnified row spreads so neighbours are never covered (see
+        // DockContainer's hover spread); the compensation term cancels the
+        // row's re-centring while the container grows.
+        x: (icon.magnificationRoot && icon.magnificationRoot.spreadFor)
+            ? icon.magnificationRoot.spreadFor(icon) : 0
     }
 
     function acknowledgeAttention() {
