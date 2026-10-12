@@ -79,6 +79,7 @@ private:
         int edgeOpacity = -1;
         int shadowOpacity = -1;
         int shadow = -1;
+        int animationShape = -1;
     } m_uniforms;
     std::unique_ptr<KWin::GLShader> m_shader;
     QHash<KWin::EffectWindow *, Reservation> m_reservations;

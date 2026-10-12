@@ -60,3 +60,12 @@ endif()
 install(TARGETS kos_dock_window_animation
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+if(BUILD_TESTING)
+    add_executable(kos-liquid-live-test tests/liquidlive.cpp)
+    target_link_libraries(kos-liquid-live-test PRIVATE Qt6::Widgets Qt6::DBus)
+    add_executable(kos-liquid-motion-test tests/liquidmotion.cpp)
+    target_link_libraries(kos-liquid-motion-test PRIVATE Qt6::Core)
+    add_test(NAME kos-dock-animation.liquid-motion COMMAND kos-liquid-motion-test)
+    set_tests_properties(kos-dock-animation.liquid-motion PROPERTIES LABELS logic TIMEOUT 10)
+endif()

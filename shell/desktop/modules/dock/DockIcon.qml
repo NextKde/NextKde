@@ -150,41 +150,15 @@ Item {
     signal contextRequested()
     property bool _heldForEdit: false
 
-    // When the compositor's window-to-icon animation finishes, the redirected
-    // window texture disappears and the Dock must already show the real icon.
-    // Previously the whole icon blinked (opacity 1 -> 0 -> 1) to mask that
-    // seam; that read as a flicker on every minimize/restore. Now the icon
-    // stays fully opaque and only the AppIcon image is recycled exactly when
-    // the animation completes, so the handoff has no visible flash.
-    function playWindowToIconHandoff(durationMs) {
-        windowHandoffTimer.interval = Math.max(0, Number(durationMs) - 60)
-        windowHandoffTimer.restart()
-    }
-
-    property Timer windowHandoffTimer: Timer {
-        interval: 240
-        repeat: false
-        onTriggered: icon._reloadIconRenderer()
-    }
-
-    // KWin's private KOS Effect consumes compositor-global icon rectangles.
-    // The target uses the stable slot centre rather than the renderer's hover
-    // scale/lift. Ancestor transforms still preserve the Dock's live hide and
-    // surface scale, while minimize/restore now share one exact centre.
+    // Land on the artwork actually displayed, including hover scale/lift.
+    // A static slot target lies below a hovered icon and makes the handoff
+    // appear to fall into the Dock, then jump back up to its real artwork.
     function windowAnimationTarget() {
         if (!icon.visible || !icon.appId || icon.iconSize <= 0)
             return null
-        const slotParent = icon.parent
-        const centerX = icon.x + icon.width / 2
-        const centerY = icon.y + icon.height / 2
-        const topLeft = slotParent
-            ? slotParent.mapToItem(null, centerX - icon.iconSize / 2,
-                                   centerY - icon.iconSize / 2)
-            : iconRenderer.mapToItem(null, 0, 0)
-        const bottomRight = slotParent
-            ? slotParent.mapToItem(null, centerX + icon.iconSize / 2,
-                                   centerY + icon.iconSize / 2)
-            : iconRenderer.mapToItem(null, iconRenderer.width, iconRenderer.height)
+        const topLeft = iconRenderer.mapToItem(null, 0, 0)
+        const bottomRight = iconRenderer.mapToItem(null,
+            iconRenderer.width, iconRenderer.height)
         const left = icon.surfaceOriginX
             + Math.min(topLeft.x, bottomRight.x)
         const top = icon.surfaceOriginY
@@ -230,6 +204,7 @@ Item {
     onIconSourceChanged: DockWindowAnimationTargetService.schedulePublish()
     onVisibleChanged: DockWindowAnimationTargetService.schedulePublish()
     onIconSizeChanged: DockWindowAnimationTargetService.schedulePublish()
+    onScaleChanged: DockWindowAnimationTargetService.schedulePublish()
 
     // Reserve the background's outer slot for every app icon. Only the active
     // window paints it; reserving the slot prevents focus changes from moving
@@ -329,6 +304,7 @@ Item {
     // that deliberately extend past the icon edge.
     transform: Translate {
         y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
+        onYChanged: DockWindowAnimationTargetService.schedulePublish()
     }
 
     function acknowledgeAttention() {

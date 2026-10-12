@@ -4078,8 +4078,8 @@ ApplicationWindow {
                         SettingsNavBar {
                             objectName: "windowHideAnimation"
                             disabled: windowPage.backend === null
-                            model: [{ id: "none", label: "无" }, { id: "scale", label: "缩放" }, { id: "genie", label: "水滴" }]
-                            currentIndex: ["none", "scale", "genie"].indexOf(windowPage.snapshot.hideAnimation ?? "scale")
+                            model: [{ id: "none", label: "无" }, { id: "scale", label: "缩放" }, { id: "genie", label: "吸入" }, { id: "liquid", label: "iOS 水滴" }]
+                            currentIndex: ["none", "scale", "genie", "liquid"].indexOf(windowPage.snapshot.hideAnimation ?? "liquid")
                             onSelectionChanged: function(index) { windowPage.backend.setAnimation("hide", model[index].id) }
                         }
                     }

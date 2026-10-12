@@ -5,8 +5,8 @@ import qs.desktop.modules.common
 import qs.desktop.modules.platform
 
 // Publishes the current compositor-global Dock icon rectangles to the private
-// KOS KWin effect. Geometry uses the layout slot centre and static iconSize,
-// so hover magnification does not move the window animation endpoint.
+// KOS KWin effect. Geometry follows the displayed artwork, including hover
+// magnification and lift, so texture handoff lands at the visible icon.
 QtObject {
     id: service
 
@@ -30,7 +30,10 @@ QtObject {
     }
 
     function schedulePublish() {
-        publishTimer.restart()
+        // Throttle animation updates: restarting on every frame would postpone
+        // publishing until magnification settles.
+        if (!publishTimer.running)
+            publishTimer.start()
     }
 
     function _payload() {
@@ -73,34 +76,6 @@ QtObject {
     function _normalizedAppId(value) {
         return String(value || "").trim().toLowerCase()
             .replace(/\.desktop$/i, "")
-    }
-
-    function _consumeAnimationEvent(event) {
-        if (!event || event.transition !== "minimize")
-            return
-
-        const appId = _normalizedAppId(event.appId)
-        const windowId = String(event.windowId || "")
-        let selected = null
-        for (let index = 0; index < _icons.length; index++) {
-            const candidate = _icons[index]
-            if (candidate && windowId
-                    && String(candidate.animationWindowId || "") === windowId) {
-                selected = candidate
-                break
-            }
-        }
-        if (!selected) {
-            for (let index = 0; index < _icons.length; index++) {
-                const candidate = _icons[index]
-                if (candidate && _normalizedAppId(candidate.appId) === appId) {
-                    selected = candidate
-                    break
-                }
-            }
-        }
-        if (selected)
-            selected.playWindowToIconHandoff(Number(event.durationMs || 0))
     }
 
     // Arm KWin before executing the application. The callback is deliberately
@@ -173,14 +148,6 @@ QtObject {
         onTriggered: {
             service._lastPayload = ""
             service.publishNow()
-        }
-    }
-
-    property Connections platformEvents: Connections {
-        target: PlatformClient
-        function onEventReceived(eventName, payload) {
-            if (eventName === "animation.started")
-                service._consumeAnimationEvent(payload)
         }
     }
 

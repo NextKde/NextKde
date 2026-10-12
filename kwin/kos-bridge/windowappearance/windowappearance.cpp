@@ -482,7 +482,14 @@ void WindowAppearanceManager::forget(KWin::EffectWindow *window)
 {
     auto it = m_windows.find(window);
     if (it != m_windows.end()) {
-        restore(window, it.value());
+        // windowDeleted is emitted while other effects are dismantling their
+        // animation tables. Mutating the scene here emits expanded-geometry
+        // changes into those partially destroyed tables. The scene owns all
+        // our child items and will destroy them with the window; only drop
+        // our tracking and connections. Live reconfiguration uses restore().
+        for (const auto &connection : it->connections) {
+            disconnect(connection);
+        }
         m_windows.erase(it);
     }
 }

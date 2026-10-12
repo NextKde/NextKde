@@ -57,7 +57,7 @@ QVariantMap WindowSettings::state() const {
     const KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
     const KConfigGroup decoration(config, QStringLiteral("org.kde.kdecoration2"));
     const QString hide = animation.readEntry("HideAnimation",
-        animation.readEntry("AnimationStyle", QStringLiteral("scale")));
+        animation.readEntry("AnimationStyle", QStringLiteral("liquid")));
     return {{"enabled", doc.value("enabled").toBool(true)},
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"shadow", defaults.value("shadow").toObject().value("enabled").toBool(true)},
@@ -140,7 +140,7 @@ bool WindowSettings::setAnimation(const QString &kind, const QString &style) {
     const bool close = kind == "close";
     if ((!close && kind != "hide") || (close
         ? style != "none" && style != "fade" && style != "scale"
-        : style != "none" && style != "scale" && style != "genie")) return false;
+        : style != "none" && style != "scale" && style != "genie" && style != "liquid")) return false;
     m_error.clear();
     auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
     config->reparseConfiguration();
@@ -156,6 +156,15 @@ bool WindowSettings::installDefaults() {
     QString error;
     const auto integration = read(path(QStringLiteral("window-integration.json")), &error);
     if (!error.isEmpty()) { m_error = error; return false; }
+    const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
+    config->reparseConfiguration();
+    KConfigGroup animation(config, QStringLiteral("Effect-kos_dock_window_animation"));
+    // First-install default only. Preserve both explicit choices and the
+    // legacy AnimationStyle selection when updating an existing installation.
+    if (!animation.hasKey("HideAnimation") && !animation.hasKey("AnimationStyle")) {
+        animation.writeEntry("HideAnimation", QStringLiteral("liquid"));
+        if (!config->sync()) { m_error = QStringLiteral("Cannot save animation defaults"); return false; }
+    }
     // Never undo a saved opt-out on an upgrade or `kosctl start`.
     if (integration.contains("originalDecoration")) return true;
     return setTakeover(state().value("enabled").toBool());

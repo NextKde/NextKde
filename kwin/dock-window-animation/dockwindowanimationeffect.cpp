@@ -1,8 +1,15 @@
 #include "dockwindowanimationeffect.h"
+#include "liquidmotion.h"
 #include "../kos-bridge/windowappearance/sharedwindowsource.h"
 
 #include <effect/effecthandler.h>
 #include <window.h>
+#include <core/output.h>
+#include <core/rendertarget.h>
+#include <core/renderviewport.h>
+#include <opengl/gltexture.h>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -14,7 +21,10 @@
 #include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QPainter>
+#include <QPainterPath>
 #include <QTimer>
+#include <QUrl>
 
 #include <algorithm>
 #include <chrono>
@@ -154,11 +164,20 @@ DockWindowAnimationEffect::~DockWindowAnimationEffect()
         else
             m_claimedRoles.remove(window);
     }
+    if (m_liquidShader) {
+        effects->makeOpenGLContextCurrent();
+        m_liquidShader.reset();
+    }
 }
 
 bool DockWindowAnimationEffect::supported()
 {
-    return OffscreenEffect::supported() && effects->animationsSupported();
+    const KConfigGroup group(KSharedConfig::openConfig(QStringLiteral("kwinrc")),
+        QStringLiteral("Effect-kos_dock_window_animation"));
+    // Explicit guest demo opt-in. Keep KWin's software-renderer protection
+    // for ordinary installations; a demo is not a performance benchmark.
+    return OffscreenEffect::supported() && (effects->animationsSupported()
+        || group.readEntry("AllowSoftwareDemo", false));
 }
 
 void DockWindowAnimationEffect::reconfigure(ReconfigureFlags flags)
@@ -166,15 +185,25 @@ void DockWindowAnimationEffect::reconfigure(ReconfigureFlags flags)
     Q_UNUSED(flags)
     const KConfigGroup group(KSharedConfig::openConfig(QStringLiteral("kwinrc")),
                              QStringLiteral("Effect-kos_dock_window_animation"));
-    m_openDuration = std::clamp(group.readEntry("OpenDuration", 300), 80, 1200);
+    m_openDuration = std::clamp(group.readEntry("OpenDuration", 180), 80, 1200);
     // Keep the Dock animation independent from KWin's legacy scale duration.
     m_minimizeDuration = std::clamp(group.readEntry("GenieDuration", 300), 160, 1200);
     m_restoreDuration = std::clamp(group.readEntry("RestoreDuration", 200), 80, 1200);
-    m_morphStyle = group.readEntry("AnimationStyle", QStringLiteral("scale"))
+    m_morphStyle = group.readEntry("AnimationStyle", QStringLiteral("liquid"))
         == QLatin1String("genie") ? MorphStyle::Genie : MorphStyle::Scale;
-    m_hideAnimation = group.readEntry("HideAnimation", group.readEntry("AnimationStyle", QStringLiteral("scale")));
+    m_hideAnimation = group.readEntry("HideAnimation", group.readEntry("AnimationStyle", QStringLiteral("liquid")));
+    if (m_hideAnimation == QLatin1String("liquid")) {
+        m_minimizeDuration = std::clamp(group.readEntry("LiquidMinimizeDuration", 240), 160, 1200);
+        m_restoreDuration = std::clamp(group.readEntry("LiquidRestoreDuration", 160), 80, 1200);
+    }
     m_closeAnimation = group.readEntry("CloseAnimation", QStringLiteral("scale"));
     m_closeDuration = std::clamp(group.readEntry("CloseDuration", 180), 80, 1200);
+    // Compile the legacy contour outside the animation's first paint. Icons
+    // use KWin's stock texture shader, which is already used by the scene.
+    if (m_hideAnimation == QLatin1String("liquid") && OffscreenEffect::supported()) {
+        effects->makeOpenGLContextCurrent();
+        ensureLiquidShader();
+    }
 }
 
 QString DockWindowAnimationEffect::normalizedId(const QString &value) const
@@ -208,6 +237,7 @@ void DockWindowAnimationEffect::updateTargets(const QString &payload)
         Target target;
         target.appId = normalizedId(object.value(QStringLiteral("appId")).toString());
         target.windowId = object.value(QStringLiteral("windowId")).toString();
+        target.iconSource = object.value(QStringLiteral("iconSource")).toString();
         target.geometry = QRectF(object.value(QStringLiteral("x")).toDouble(),
                                  object.value(QStringLiteral("y")).toDouble(),
                                  object.value(QStringLiteral("width")).toDouble(),
@@ -243,6 +273,7 @@ bool DockWindowAnimationEffect::prepareLaunch(const QString &payload)
     Target target;
     target.appId = normalizedId(object.value(QStringLiteral("appId")).toString());
     target.windowId = object.value(QStringLiteral("windowId")).toString();
+    target.iconSource = object.value(QStringLiteral("iconSource")).toString();
     target.geometry = QRectF(object.value(QStringLiteral("x")).toDouble(),
                              object.value(QStringLiteral("y")).toDouble(),
                              object.value(QStringLiteral("width")).toDouble(),
@@ -286,7 +317,17 @@ bool DockWindowAnimationEffect::prepareLaunch(const QString &payload)
 
 QString DockWindowAnimationEffect::status() const
 {
+    auto intervals = m_paintIntervals;
+    std::sort(intervals.begin(), intervals.end());
+    const auto percentile = [&intervals](qreal fraction) -> qreal {
+        if (intervals.isEmpty()) return 0.0;
+        return intervals[std::min(qsizetype(std::ceil(fraction * intervals.size())) - 1, intervals.size() - 1)];
+    };
     const QJsonObject object{
+        {QStringLiteral("paintIntervalSamples"), intervals.size()},
+        {QStringLiteral("paintIntervalMedianMs"), percentile(0.50)},
+        {QStringLiteral("paintIntervalP95Ms"), percentile(0.95)},
+        {QStringLiteral("paintIntervalMaxMs"), intervals.isEmpty() ? 0.0 : intervals.last()},
         {QStringLiteral("targetsByApp"), m_targetsByApp.size()},
         {QStringLiteral("targetsByWindow"), m_targetsByWindow.size()},
         {QStringLiteral("animatingWindows"), m_animations.size()},
@@ -294,13 +335,18 @@ QString DockWindowAnimationEffect::status() const
         {QStringLiteral("openDuration"), m_openDuration},
         {QStringLiteral("minimizeDuration"), m_minimizeDuration},
         {QStringLiteral("restoreDuration"), m_restoreDuration},
-        {QStringLiteral("deformation"), m_morphStyle == MorphStyle::Genie
+        {QStringLiteral("deformation"), m_hideAnimation == QLatin1String("liquid")
+            ? QStringLiteral("fast-scale-icon-handoff-and-settle") : m_morphStyle == MorphStyle::Genie
             ? QStringLiteral("water-drop-mesh-and-fade")
             : QStringLiteral("direct-scale-and-fade")},
         {QStringLiteral("hideAnimation"), m_hideAnimation},
         {QStringLiteral("closeAnimation"), m_closeAnimation},
         {QStringLiteral("closeAnimationCount"), static_cast<qint64>(m_closeAnimationCount)},
-        {QStringLiteral("textureHandoff"), QStringLiteral("disabled")},
+        {QStringLiteral("textureHandoff"), m_hideAnimation == QLatin1String("liquid")
+            ? QStringLiteral("cached-icon-at-66-percent") : QStringLiteral("disabled")},
+        {QStringLiteral("iconUploads"), static_cast<qint64>(m_iconUploadCount)},
+        {QStringLiteral("iconOnlyDraws"), static_cast<qint64>(m_iconOnlyDrawCount)},
+        {QStringLiteral("liquidWindowDraws"), static_cast<qint64>(m_liquidWindowDrawCount)},
         {QStringLiteral("openAnimationCount"), static_cast<qint64>(m_openAnimationCount)},
         {QStringLiteral("minimizeAnimationCount"), static_cast<qint64>(m_minimizeAnimationCount)},
         {QStringLiteral("restoreAnimationCount"), static_cast<qint64>(m_restoreAnimationCount)},
@@ -423,6 +469,7 @@ void DockWindowAnimationEffect::finishAnimation(EffectWindow *window)
     // for anything that reads the fade after this animation.
     window->setData(KosDockAnimationGlassFadeRole, 1.0);
     window->setData(KOS::DockSourceAnimationRole, QVariant());
+    window->setData(KOS::DockSourceShapeRole, QVariant());
     releaseClaim(window);
     if (const auto it = m_animations.find(window); it != m_animations.end()) {
         unredirect(window);
@@ -484,6 +531,8 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
             animation.timeLine.toggleDirection();
         animation.timeLine.setDuration(duration);
     } else {
+        animation.lastPaintView = nullptr;
+        animation.lastPaintNs = -1;
         animation.timeLine = TimeLine(duration, direction);
         animation.timeLine.setEasingCurve(QEasingCurve::Linear);
         animation.visibleRef = transition == Transition::Open
@@ -495,9 +544,53 @@ void DockWindowAnimationEffect::startAnimation(EffectWindow *window,
             animation.deletedRef = std::make_shared<EffectWindowDeletedRef>(window);
     }
     animation.target = target;
+    window->setData(KOS::DockSourceShapeRole, QVariant());
     animation.transition = transition;
     animation.closeScale = m_closeAnimation != QLatin1String("fade");
     animation.useGenie = m_hideAnimation == QLatin1String("genie");
+    if (!reversesRedirectedAnimation) {
+        animation.useLiquid = m_hideAnimation == QLatin1String("liquid")
+            && (transition == Transition::Minimize || transition == Transition::Restore);
+        animation.iconImage = {};
+        animation.iconTexture.reset();
+        animation.iconUploadAttempted = false;
+        if (animation.useLiquid) {
+            QIcon artwork;
+            const QUrl source(target.iconSource);
+            if (source.isLocalFile()) {
+                artwork = QIcon(source.toLocalFile());
+            } else if (target.iconSource.startsWith(QLatin1Char('/'))) {
+                artwork = QIcon(target.iconSource);
+            } else if (target.iconSource.startsWith(QLatin1String("image://icon/"))) {
+                const QString name = target.iconSource.mid(13).section(QLatin1Char('?'), 0, 0);
+                artwork = name.startsWith(QLatin1Char('/')) ? QIcon(name) : QIcon::fromTheme(name);
+            }
+            if (artwork.isNull()) artwork = window->icon();
+            const qreal scale = window->screen() ? window->screen()->scale() : 1.0;
+            const auto footprint = KOS::liquidMotion(windowGeometry, target.geometry, 1.0 - 55.0 / m_minimizeDuration, m_minimizeDuration).geometry;
+            const int requestedPixels = qCeil(std::max(footprint.width(), footprint.height()) * scale);
+            // Fixed buckets also let QIcon's pixmap cache reuse rasterization
+            // across successive animations with slightly different geometry.
+            const int pixels = requestedPixels <= 128 ? 128 : requestedPixels <= 256 ? 256 : 512;
+            animation.iconImage = artwork.pixmap(QSize(pixels, pixels)).toImage();
+            if (!animation.iconImage.isNull()) {
+                QImage rounded(animation.iconImage.size(), QImage::Format_ARGB32_Premultiplied);
+                rounded.fill(Qt::transparent);
+                QPainterPath mask;
+                mask.addRoundedRect(QRectF(QPointF(), rounded.size()),
+                    rounded.width() * 0.24, rounded.height() * 0.24);
+                QPainter painter(&rounded);
+                painter.setRenderHint(QPainter::Antialiasing);
+                painter.setClipPath(mask);
+                painter.drawImage(0, 0, animation.iconImage);
+                painter.end();
+                animation.iconImage = std::move(rounded);
+            }
+            // No artwork: preserve the existing scale animation instead of
+            // replacing the window with an invisible/placeholder icon.
+            if (animation.iconImage.isNull()) animation.useLiquid = false;
+        }
+    }
     // 固化记录 CSD 阴影缓冲区相对偏移量（用于 Wayland 客户端最小化几何补偿）
     if (m_csdOffsets.contains(window)) {
         animation.csdOffset = m_csdOffsets.value(window);
@@ -573,8 +666,9 @@ void DockWindowAnimationEffect::addAnimationRepaint(
     // (with a 2px safety margin) rather than the entire screen.
     if (!window)
         return;
+    const qreal margin = std::max(2.0, 0.1 * std::max(targetGeometry.width(), targetGeometry.height()));
     const QRectF region = QRectF(window->expandedGeometry())
-        .united(targetGeometry).adjusted(-2, -2, 2, 2);
+        .united(targetGeometry).adjusted(-margin, -margin, margin, margin);
     effects->addRepaint(qFloor(region.x()), qFloor(region.y()),
                         qCeil(region.width()), qCeil(region.height()));
 }
@@ -586,6 +680,37 @@ void DockWindowAnimationEffect::drawWindow(
 {
     auto it = m_animations.find(window);
     if (it != m_animations.end()) {
+        it->renderScale = viewport.scale();
+        if (it->useLiquid) {
+            if (!it->iconUploadAttempted) {
+                it->iconUploadAttempted = true;
+                it->iconTexture = GLTexture::upload(it->iconImage);
+                it->iconImage = {};
+                if (it->iconTexture) {
+                    ++m_iconUploadCount;
+                    it->iconTexture->setFilter(GL_LINEAR);
+                    it->iconTexture->setWrapMode(GL_CLAMP_TO_EDGE);
+                } else {
+                    it->useLiquid = false;
+                }
+            }
+            if (it->useLiquid) {
+                const auto pose = KOS::liquidMotion(QRectF(window->frameGeometry()),
+                    it->target.geometry, it->timeLine.value(), m_minimizeDuration);
+                if (pose.windowOpacity() <= 0.0) {
+                    ++m_iconOnlyDrawCount;
+                    // The tail never enters the source provider: no capture,
+                    // window shader, shadow shading or legacy FBO draw.
+                    // Keep the fallback snapshot until finish/reversal. Freeing
+                    // its FBO at handoff can interrupt the flight and forces a
+                    // recapture if the user immediately restores the window.
+                    window->setData(KosDockAnimationGlassFadeRole, 0.0);
+                    drawLiquidIcon(renderTarget, viewport, window, *it, deviceRegion, data);
+                    return;
+                }
+                ++m_liquidWindowDrawCount;
+            }
+        }
         auto *providerObject = effects->property(KOS::SharedWindowSourceProperty).value<QObject *>();
         if (auto *provider = qobject_cast<KOS::SharedWindowSource *>(providerObject)) {
             if (provider->drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion,
@@ -595,10 +720,16 @@ void DockWindowAnimationEffect::drawWindow(
                 // A fallback allocation from an earlier frame/configuration
                 // must not remain as a second texture beside the shared one.
                 unredirect(window);
+                if (it->useLiquid)
+                    drawLiquidIcon(renderTarget, viewport, window, *it, deviceRegion, data);
                 return;
             }
         }
         redirect(window);
+        if (it->useLiquid) {
+            if (ensureLiquidShader()) setShader(window, m_liquidShader.get());
+            else it->useLiquid = false;
+        }
     }
 
     if (it != m_animations.end()
@@ -625,10 +756,107 @@ void DockWindowAnimationEffect::drawWindow(
     }
 
     const QVariant previousCapture = window->data(KOS::LegacyWindowSourceCaptureRole);
+    const WindowPaintData iconData(data);
     if (it != m_animations.end()) window->setData(KOS::LegacyWindowSourceCaptureRole, true);
     OffscreenEffect::drawWindow(renderTarget, viewport, window, mask,
                                 deviceRegion, data);
     window->setData(KOS::LegacyWindowSourceCaptureRole, previousCapture);
+    if (it != m_animations.end() && it->useLiquid)
+        drawLiquidIcon(renderTarget, viewport, window, *it, deviceRegion, iconData);
+}
+
+bool DockWindowAnimationEffect::ensureLiquidShader()
+{
+    if (m_liquidShader) return true;
+    if (m_liquidShaderAttempted) return false;
+    m_liquidShaderAttempted = true;
+    const QByteArray fragment = R"(#version 140
+#if GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
+uniform sampler2D sampler;
+uniform vec4 modulation;
+in vec2 texcoord0;
+#include "saturation.glsl"
+#include "colormanagement.glsl"
+uniform vec4 kosLiquidSourceRect;
+uniform vec2 kosLiquidFrameSize;
+uniform vec2 kosLiquidSize;
+uniform vec2 kosLiquidRadii;
+out vec4 fragColor;
+void main(void)
+{
+    vec2 source = kosLiquidSourceRect.xy
+        + vec2(texcoord0.x, 1.0 - texcoord0.y) * kosLiquidSourceRect.zw;
+    vec2 p = source / kosLiquidFrameSize * kosLiquidSize;
+    float r = p.y < kosLiquidSize.y * 0.5 ? kosLiquidRadii.x : kosLiquidRadii.y;
+    r = min(r, min(kosLiquidSize.x, kosLiquidSize.y) * 0.5);
+    vec2 q = abs(p - kosLiquidSize * 0.5) - kosLiquidSize * 0.5 + vec2(r);
+    float distance = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    float aa = max(fwidth(distance), 0.0001);
+    float coverage = 1.0 - smoothstep(-aa * 0.5, aa * 0.5, distance);
+    vec4 result = texture(sampler, texcoord0) * coverage;
+    result = sourceEncodingToNitsInDestinationColorspace(result);
+    result = adjustSaturation(result);
+    result *= modulation;
+    fragColor = nitsToDestinationEncoding(result);
+}
+)";
+    m_liquidShader = ShaderManager::instance()->generateCustomShader(
+        ShaderTrait::MapTexture | ShaderTrait::Modulate | ShaderTrait::AdjustSaturation
+        | ShaderTrait::TransformColorspace, {}, fragment);
+    if (!m_liquidShader || !m_liquidShader->link()) {
+        qCWarning(KWIN_KOS_DOCK_ANIMATION) << "Liquid contour shader unavailable; using scale";
+        m_liquidShader.reset();
+        return false;
+    }
+    return true;
+}
+
+void DockWindowAnimationEffect::drawLiquidIcon(const RenderTarget &target,
+    const RenderViewport &viewport, EffectWindow *window, WindowAnimation &animation,
+    const Region &deviceRegion, const WindowPaintData &data)
+{
+    const auto pose = KOS::liquidMotion(QRectF(window->frameGeometry()),
+        animation.target.geometry, animation.timeLine.value(), m_minimizeDuration);
+    if (!animation.iconTexture || pose.artworkOpacity() <= 0.0) return;
+    const Region clip = viewport.transform().map(deviceRegion & viewport.deviceRect(),
+        target.transformedSize());
+    if (clip.isEmpty()) return;
+    ShaderBinder binder(ShaderTrait::MapTexture | ShaderTrait::Modulate
+        | ShaderTrait::AdjustSaturation | ShaderTrait::TransformColorspace);
+    auto *shader = binder.shader();
+    const qreal scale = viewport.scale();
+    QMatrix4x4 mvp = viewport.projectionMatrix();
+    mvp.translate(pose.geometry.x() * scale, pose.geometry.y() * scale);
+    mvp *= data.toMatrix(scale);
+    mvp.scale(pose.geometry.width() * scale, pose.geometry.height() * scale);
+    shader->setUniform(GLShader::Mat4Uniform::ModelViewProjectionMatrix, mvp);
+    const qreal opacity = pose.artworkOpacity() * data.opacity();
+    const qreal rgb = opacity * data.brightness();
+    shader->setUniform(GLShader::Vec4Uniform::ModulationConstant, QVector4D(rgb, rgb, rgb, opacity));
+    shader->setUniform(GLShader::FloatUniform::Saturation, data.saturation());
+    const auto xyz = target.colorDescription()->containerColorimetry().toXYZ();
+    shader->setUniform(GLShader::Vec3Uniform::PrimaryBrightness,
+        QVector3D(xyz(1, 0), xyz(1, 1), xyz(1, 2)));
+    shader->setUniform(GLShader::IntUniform::TextureWidth, animation.iconTexture->width());
+    shader->setUniform(GLShader::IntUniform::TextureHeight, animation.iconTexture->height());
+    shader->setColorspaceUniforms(ColorDescription::sRGB, target.colorDescription(), RenderingIntent::Perceptual);
+    const GLboolean blend = glIsEnabled(GL_BLEND);
+    const GLboolean scissor = glIsEnabled(GL_SCISSOR_TEST);
+    GLint box[4], srcRgb, dstRgb, srcAlpha, dstAlpha;
+    glGetIntegerv(GL_SCISSOR_BOX, box);
+    glGetIntegerv(GL_BLEND_SRC_RGB, &srcRgb); glGetIntegerv(GL_BLEND_DST_RGB, &dstRgb);
+    glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcAlpha); glGetIntegerv(GL_BLEND_DST_ALPHA, &dstAlpha);
+    glEnable(GL_SCISSOR_TEST); glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    // Constant unit quad: geometry changes live in the matrix, avoiding VBO
+    // rebuilds and integer snapping of the shrinking icon every frame.
+    animation.iconTexture->render(clip, QSizeF(1, 1), true);
+    glBlendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+    glScissor(box[0], box[1], box[2], box[3]);
+    if (!blend) glDisable(GL_BLEND);
+    if (!scissor) glDisable(GL_SCISSOR_TEST);
 }
 
 void DockWindowAnimationEffect::applyDockMorph(
@@ -665,7 +893,11 @@ void DockWindowAnimationEffect::applyDockMorph(
 
     const QRectF sourceGeometry(
         geometry.topLeft() + sourceBounds.topLeft(), sourceBounds.size());
-    const qreal transformProgress = smootherStep(progress);
+    // A newly created window should expand immediately, then settle. A
+    // reversed contraction starts too slowly and looks stalled after launch.
+    const qreal transformProgress = animation.transition == Transition::Open
+        ? std::pow(std::clamp(progress, 0.0, 1.0), 3.0)
+        : smootherStep(progress);
     const QSizeF currentSize(
         std::lerp(sourceGeometry.width(), target.width(), transformProgress),
         std::lerp(sourceGeometry.height(), target.height(), transformProgress));
@@ -851,18 +1083,52 @@ void DockWindowAnimationEffect::apply(EffectWindow *window, int mask,
         }
     }
 
-    // The window remains the only flying texture and simply disappears on
-    // the final approach. Restore/open run the same curve in reverse.
-    const qreal fadeProgress = smoothStep(
-        (it->timeLine.value() - 0.80) / 0.20);
-    data.multiplyOpacity(1.0 - fadeProgress);
+    if (it->useLiquid) {
+        const QRectF frame(window->frameGeometry());
+        const auto pose = KOS::liquidMotion(frame, it->target.geometry, it->timeLine.value(), m_minimizeDuration);
+        window->setData(KOS::DockSourceShapeRole, QVariant::fromValue(QVector4D(
+            pose.geometry.width() / frame.width(), pose.geometry.height() / frame.height(),
+            pose.topRadius, pose.bottomRadius)));
+        QRectF bounds;
+        for (const auto &quad : std::as_const(quads))
+            bounds = bounds.isNull() ? QRectF(quad.bounds()) : bounds.united(QRectF(quad.bounds()));
+        if (m_liquidShader) {
+            ShaderBinder binder(m_liquidShader.get());
+            m_liquidShader->setUniform("kosLiquidSourceRect", QVector4D(bounds.x(), bounds.y(), bounds.width(), bounds.height()));
+            m_liquidShader->setUniform("kosLiquidFrameSize", QVector2D(frame.width(), frame.height()));
+            m_liquidShader->setUniform("kosLiquidSize", QVector2D(pose.geometry.width() * it->renderScale, pose.geometry.height() * it->renderScale));
+            m_liquidShader->setUniform("kosLiquidRadii", QVector2D(pose.topRadius * it->renderScale, pose.bottomRadius * it->renderScale));
+        }
+        data.multiplyOpacity(pose.windowOpacity());
+        for (auto &quad : quads) {
+            for (int index = 0; index < 4; ++index) {
+                quad[index].setX(pose.geometry.x() - frame.x()
+                    + quad[index].x() / frame.width() * pose.geometry.width());
+                quad[index].setY(pose.geometry.y() - frame.y()
+                    + quad[index].y() / frame.height() * pose.geometry.height());
+            }
+        }
+        window->setData(KosDockAnimationGlassFadeRole,
+            1.0 - smoothStep(it->timeLine.value() / kGlassFadeSpan));
+        return;
+    }
+
+    if (it->transition == Transition::Open) {
+        // Reveal new content promptly, without waiting for a reversed Dock fade.
+        data.multiplyOpacity(smoothStep((1.0 - it->timeLine.value()) / 0.12));
+    } else {
+        const qreal fadeProgress = smoothStep((it->timeLine.value() - 0.80) / 0.20);
+        data.multiplyOpacity(1.0 - fadeProgress);
+    }
 
     // The glass backdrop is anchored to the window's frame and cannot follow
     // the deformation, so it is faded with the animation instead of being left
     // behind: minimizing drops the material while the body is already streaming
     // into the Dock, restoring and opening bring it back during the final
     // approach, where the window itself is about to cover that area.
-    const qreal arrived = 1.0 - it->timeLine.value();
+    const qreal arrived = it->transition == Transition::Open
+        ? 1.0 - std::pow(it->timeLine.value(), 3.0)
+        : 1.0 - it->timeLine.value();
     const qreal glassFade = it->transition == Transition::Minimize
         ? 1.0 - smoothStep(it->timeLine.value() / kGlassFadeSpan)
         : smoothStep((arrived - (1.0 - kGlassFadeSpan)) / kGlassFadeSpan);
@@ -898,6 +1164,26 @@ void DockWindowAnimationEffect::prePaintScreen(ScreenPrePaintData &data)
 }
 #endif
 
+void DockWindowAnimationEffect::recordPaintInterval(WindowAnimation &animation, RenderView *view)
+{
+    if (!m_paintClock.isValid()) m_paintClock.start();
+    const qint64 now = m_paintClock.nsecsElapsed();
+    // Different views (e.g. screenshot captures or multiple outputs) must
+    // not be counted as consecutive frames of the same presentation stream.
+    if (animation.lastPaintView == view && animation.lastPaintNs >= 0) {
+        if (m_paintIntervals.size() >= 512) m_paintIntervals.removeFirst();
+        const qreal interval = (now - animation.lastPaintNs) / 1000000.0;
+        m_paintIntervals.append(interval);
+        if (interval > 30.0) {
+            qCDebug(KWIN_KOS_DOCK_ANIMATION) << "Long paint interval" << interval
+                << "transition" << int(animation.transition)
+                << "previous progress" << animation.timeLine.value();
+        }
+    }
+    animation.lastPaintView = view;
+    animation.lastPaintNs = now;
+}
+
 #ifdef KOS_KWIN_PAINT_TIME_API
 void DockWindowAnimationEffect::prePaintWindow(RenderView *view,
                                                 EffectWindow *window,
@@ -906,8 +1192,10 @@ void DockWindowAnimationEffect::prePaintWindow(RenderView *view,
 {
     auto it = m_animations.find(window);
     if (it != m_animations.end()) {
+        recordPaintInterval(*it, view);
         it->timeLine.advance(presentTime);
         data.setTransformed();
+        if (it->useLiquid) data.setTranslucent();
     }
     effects->prePaintWindow(view, window, data, presentTime);
 }
@@ -918,8 +1206,10 @@ void DockWindowAnimationEffect::prePaintWindow(RenderView *view,
 {
     auto it = m_animations.find(window);
     if (it != m_animations.end()) {
+        recordPaintInterval(*it, view);
         it->timeLine.advance(view);
         data.setTransformed();
+        if (it->useLiquid) data.setTranslucent();
     }
     effects->prePaintWindow(view, window, data);
 }
@@ -939,8 +1229,9 @@ void DockWindowAnimationEffect::postPaintScreen()
         const QRectF targetGeometry = it->target.geometry;
         addAnimationRepaint(window, targetGeometry);
         if (it->timeLine.done()) {
+            const qreal margin = std::max(2.0, 0.1 * std::max(targetGeometry.width(), targetGeometry.height()));
             const QRectF finalRepaint = QRectF(window->expandedGeometry())
-                .united(targetGeometry).adjusted(-2, -2, 2, 2);
+                .united(targetGeometry).adjusted(-margin, -margin, margin, margin);
             finishAnimation(window);
             // Repaint the envelope once more after the final frame so the
             // redirected texture cannot remain as a stale compositor image.

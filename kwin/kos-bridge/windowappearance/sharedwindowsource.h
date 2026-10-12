@@ -13,6 +13,9 @@ inline constexpr char SharedWindowSourceProperty[] = "_kos_shared_window_source_
 inline constexpr int WindowSourceCaptureRole = 0x4b4f5343; // KOSC
 inline constexpr int LegacyWindowSourceCaptureRole = 0x4b4f5345; // KOSE
 inline constexpr int DockSourceAnimationRole = 0x4b4f5344; // KOSD
+// QVector4D: current frame X/Y scale and top/bottom radius in logical pixels.
+// The source remains sharp; only the completed animated draw uses this mask.
+inline constexpr int DockSourceShapeRole = 0x4b4f5346; // KOSF
 using WindowSourceMorph = std::function<void(KWin::WindowPaintData &, KWin::WindowQuadList &)>;
 class SharedWindowSource
 {

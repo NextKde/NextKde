@@ -4,7 +4,9 @@
 #include <effect/offscreeneffect.h>
 #include <effect/timeline.h>
 
+#include <QElapsedTimer>
 #include <QHash>
+#include <QImage>
 #include <QList>
 #include <QRectF>
 #include <QString>
@@ -13,6 +15,8 @@
 
 namespace KWin
 {
+class GLTexture;
+class GLShader;
 
 class DockWindowAnimationEffect final : public OffscreenEffect
 {
@@ -79,6 +83,7 @@ private:
     struct Target {
         QString appId;
         QString windowId;
+        QString iconSource;
         QRectF geometry;
     };
 
@@ -90,6 +95,13 @@ private:
         Transition transition = Transition::Minimize;
         bool closeScale = true;
         bool useGenie = false;
+        bool useLiquid = false;
+        QImage iconImage;
+        std::shared_ptr<GLTexture> iconTexture;
+        bool iconUploadAttempted = false;
+        qreal renderScale = 1.0;
+        RenderView *lastPaintView = nullptr;
+        qint64 lastPaintNs = -1;
         // CSD 客户端自绘阴影缓冲区相对于窗口 frameGeometry 的物理偏移量
         QPointF csdOffset = QPointF(0, 0);
 
@@ -144,6 +156,15 @@ private:
                         WindowQuadList &quads) const;
     void applyBottomGenie(EffectWindow *window, WindowAnimation &animation,
                           WindowQuadList &quads) const;
+    void drawLiquidIcon(const RenderTarget &target, const RenderViewport &viewport,
+                        EffectWindow *window, WindowAnimation &animation,
+                        const Region &deviceRegion, const WindowPaintData &data);
+    void recordPaintInterval(WindowAnimation &animation, RenderView *view);
+    QElapsedTimer m_paintClock;
+    QList<qreal> m_paintIntervals;
+    bool ensureLiquidShader();
+    std::unique_ptr<GLShader> m_liquidShader;
+    bool m_liquidShaderAttempted = false;
     std::optional<Target> targetForWindow(EffectWindow *window) const;
     std::optional<Target> takePendingLaunchForWindow(EffectWindow *window);
     QStringList windowIdentityCandidates(EffectWindow *window) const;
@@ -157,7 +178,7 @@ private:
     // 跟踪各窗口在未最小化状态下的真实 CSD 阴影缓冲区偏移量
     QHash<EffectWindow *, QPointF> m_csdOffsets;
 
-    int m_openDuration = 300;
+    int m_openDuration = 180;
     int m_minimizeDuration = 300;
     int m_restoreDuration = 200;
     MorphStyle m_morphStyle = MorphStyle::Scale;
@@ -170,6 +191,9 @@ private:
     quint64 m_closeAnimationCount = 0;
     quint64 m_launchTicketCount = 0;
     quint64 m_launchTicketConsumedCount = 0;
+    quint64 m_iconUploadCount = 0;
+    quint64 m_iconOnlyDrawCount = 0;
+    quint64 m_liquidWindowDrawCount = 0;
     QString m_lastAnimatedAppId;
 };
 

@@ -43,6 +43,8 @@ int main(int argc, char **argv) {
     KConfigGroup decoration(config,"org.kde.kdecoration2");
     decoration.writeEntry("library", "third_party"); decoration.writeEntry("theme", "theme-a"); CHECK(config->sync());
     CHECK(settings.installDefaults());
+    CHECK(settings.state()["hideAnimation"]=="liquid");
+    CHECK(KConfigGroup(config,"Effect-kos_dock_window_animation").readEntry("HideAnimation", QString())=="liquid");
     CHECK(settings.state()["decoration"]=="kos_decoration");
     CHECK(settings.setTakeover(false));
     CHECK(settings.state()["decoration"]=="third_party");
@@ -68,6 +70,13 @@ int main(int argc, char **argv) {
     CHECK(!settings.setRadius(-1)); CHECK(!settings.setRadius(201)); CHECK(get()==saved);
     { QLockFile lock(filename+".lock"); CHECK(lock.tryLock(0)); CHECK(!settings.setShadow(true)); CHECK(get()==saved); }
     CHECK(!settings.setAnimation("close", "genie"));
+    CHECK(!settings.setAnimation("close", "liquid"));
+    CHECK(settings.setAnimation("hide", "liquid"));
+    CHECK(settings.state()["hideAnimation"]=="liquid");
+    QProcess liquidReopened;
+    liquidReopened.start(QCoreApplication::applicationFilePath(), {"--install-defaults"});
+    CHECK(liquidReopened.waitForFinished(5000)); CHECK(liquidReopened.exitCode()==0);
+    CHECK(QJsonDocument::fromJson(liquidReopened.readAllStandardOutput()).object()["hideAnimation"]=="liquid");
     CHECK(settings.state()["closeAnimation"]=="fade");
     put("malformed"); CHECK(!settings.setRadius(12)); CHECK(get()=="malformed");
     put(R"({"version":1,"defaults":{"stroke":{"width":1}}})");

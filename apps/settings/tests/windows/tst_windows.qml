@@ -63,9 +63,9 @@ Item {
         function test_animation_choices() {
             for (const kind of ["hide", "close"]) {
                 const picker=control(kind === "hide" ? "windowHideAnimation" : "windowCloseAnimation")
-                const styles=kind === "hide" ? ["none","scale","genie"] : ["none","fade","scale"]
-                for (let i=0;i<3;++i) {
-                    mouseClick(picker, picker.width * (i+0.5)/3, picker.height/2)
+                const styles=kind === "hide" ? ["none","scale","genie","liquid"] : ["none","fade","scale"]
+                for (let i=0;i<styles.length;++i) {
+                    mouseClick(picker, picker.width * (i+0.5)/styles.length, picker.height/2)
                     compare(backend.state[kind+"Animation"], styles[i])
                 }
             }

@@ -79,9 +79,18 @@ uniform vec4 kosFrameColor;
 uniform float kosEdgeOpacity;
 uniform float kosShadowOpacity;
 uniform vec4 kosShadow; // contact sigma, ambient sigma, their opacities
+uniform vec4 kosAnimationShape; // X/Y scale, top/bottom radius in device pixels
 
 float kosDistance(vec2 p)
 {
+    if (kosAnimationShape.x > 0.0) {
+        p *= kosAnimationShape.xy;
+        vec2 size = kosSize * kosAnimationShape.xy;
+        float r = p.y < size.y * 0.5 ? kosAnimationShape.z : kosAnimationShape.w;
+        r = min(r, min(size.x, size.y) * 0.5);
+        vec2 q = abs(p - size * 0.5) - size * 0.5 + vec2(r);
+        return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+    }
     vec2 q = abs(p - kosSize * 0.5) - (kosSize * 0.5 - vec2(kosRadius));
     if (kosRadius <= 0.0 || min(q.x, q.y) <= 0.0) {
         return max(q.x, q.y) - kosRadius;
@@ -218,6 +227,7 @@ bool ContinuousClip::available()
     m_uniforms.edgeOpacity = m_shader->uniformLocation("kosEdgeOpacity");
     m_uniforms.shadowOpacity = m_shader->uniformLocation("kosShadowOpacity");
     m_uniforms.shadow = m_shader->uniformLocation("kosShadow");
+    m_uniforms.animationShape = m_shader->uniformLocation("kosAnimationShape");
     return true;
 }
 
@@ -419,6 +429,10 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         m_shader->setUniform(m_uniforms.size, QVector2D(style.size.width() * scale, style.size.height() * scale));
         m_shader->setUniform(m_uniforms.radius, style.radius * scale);
         m_shader->setUniform(m_uniforms.exponent, curveExponent(style.smoothness));
+        auto shape = window->data(DockSourceShapeRole).value<QVector4D>();
+        shape.setZ(shape.z() * scale);
+        shape.setW(shape.w() * scale);
+        m_shader->setUniform(m_uniforms.animationShape, shape);
         m_shader->setUniform(m_uniforms.stroke, style.stroke * scale);
         m_shader->setUniform(m_uniforms.frameWidth, style.frameWidth * scale);
         m_shader->setUniform(m_uniforms.edgeColor, style.outline.colorFor(style.dark));
