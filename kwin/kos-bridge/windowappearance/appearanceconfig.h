@@ -114,7 +114,8 @@ struct StateSettings
     // decided here (see the plan, section 10) -- the value is carried but the
     // effect currently behaves as `Inherit` for tiles.
     enum class Policy { Off, Square, Inherit };
-    Policy fullscreen = Policy::Inherit;
+    // Retained for configuration compatibility; fullscreen always drops KOS chrome.
+    Policy fullscreen = Policy::Off;
     Policy maximized = Policy::Inherit;
     Policy tiled = Policy::Inherit;
 };
