@@ -16,7 +16,7 @@ spec = importlib.util.spec_from_file_location('greeter_recovery', MODULE)
 recovery = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(recovery)
 APP = Path(__file__).resolve().parents[1] / 'apps/greeter'
-FILES = ('qml/GlassFieldBackground.qml', 'qml/GaussianGlass.qml', 'shell.qml', 'wallpaper.qml', 'qml/Lifecycle.js', 'qml/WallpaperHost.qml',
+FILES = ('qml/LoadingSpinner.qml', 'qml/GlassFieldBackground.qml', 'qml/GaussianGlass.qml', 'shell.qml', 'wallpaper.qml', 'qml/Lifecycle.js', 'qml/WallpaperHost.qml',
          'qml/WallpaperSource.qml', 'qml/WallpaperWindows.qml', 'companion/accounts.py',
          'companion/outputs.py', 'companion/display.py', 'companion/resources.py',
          'companion/wallpaper.py', 'companion/kos_wallpaper.py', 'companion/theme.py', 'companion/theme-files.json',

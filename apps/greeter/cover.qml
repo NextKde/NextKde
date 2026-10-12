@@ -11,6 +11,8 @@ ShellRoot {
     property bool feedReady: false
     property bool revealing: false
     property real coverOpacity: 1
+    readonly property bool reducedMotion: Quickshell.env("KOS_GREETER_REDUCED_MOTION") === "1"
+    readonly property int revealDuration: reducedMotion ? 1 : 620
     function requestReveal(payload) {
         if (revealing || !state.session) return "rejected";
         let value;
@@ -23,7 +25,7 @@ ShellRoot {
         }
         revealing = true; record("RevealStarted"); fade.start(); return "accepted";
     }
-    NumberAnimation { id: fade; target: root; property: "coverOpacity"; to: 0; duration: 280; onFinished: root.finish("RevealComplete") }
+    NumberAnimation { id: fade; target: root; property: "coverOpacity"; to: 0; duration: root.revealDuration; easing.type: Easing.OutCubic; onFinished: root.finish("RevealComplete") }
     function finish(reason) { record(reason); Qt.quit(); }
     // Independent of resource readiness, output count, and Shell availability.
     Timer { interval: 15000; running: true; onTriggered: root.finish("Timeout") }
@@ -78,19 +80,30 @@ ShellRoot {
             // Empty input region: keyboard/TTY and desktop shortcuts remain usable.
             mask: Region {}
             color: "transparent"
-            contentItem.opacity: root.coverOpacity
-            Rectangle { anchors.fill: parent; color: "#16283b" }
-            Greeter.WallpaperHost {
-                id: host
-                pixelRatio: window.screen ? window.screen.devicePixelRatio : 1
-                decodeWidth: window.screen?.width ?? window.implicitWidth
-                decodeHeight: window.screen?.height ?? window.implicitHeight
-                anchors.fill: parent
-                source: root.state.source; fitMode: root.state.fit
-                onResourceSettledChanged: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
-                Component.onCompleted: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
-                onFrameSubmitted: root.record("FrameSubmitted " + window.screen.name + " " + root.state.version)
-                onFallback: reason => root.record("Fallback " + reason)
+            contentItem.clip: true
+            Item {
+                width: window.width; height: window.height
+                // Move the whole scene together; the desktop is already painted below.
+                y: -height * (1 - root.coverOpacity)
+                Rectangle { anchors.fill: parent; color: "#16283b" }
+                Greeter.WallpaperHost {
+                    id: host
+                    pixelRatio: window.screen ? window.screen.devicePixelRatio : 1
+                    decodeWidth: window.screen?.width ?? window.implicitWidth
+                    decodeHeight: window.screen?.height ?? window.implicitHeight
+                    anchors.fill: parent
+                    source: root.state.source; fitMode: root.state.fit
+                    onResourceSettledChanged: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
+                    Component.onCompleted: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
+                    onFrameSubmitted: root.record("FrameSubmitted " + window.screen.name + " " + root.state.version)
+                    onFallback: reason => root.record("Fallback " + reason)
+                }
+                Greeter.LoadingSpinner {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: parent.height * 0.79
+                    reducedMotion: root.reducedMotion
+                    running: !root.revealing
+                }
             }
             onBackingWindowVisibleChanged: root.record("WindowMapped " + screen.name + " " + backingWindowVisible)
             Component.onDestruction: root.record("OutputRemoved")

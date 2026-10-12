@@ -80,7 +80,8 @@ QtObject {
         released = true; discovering = false; pending = false; record(reason); animation.start();
     }
     property NumberAnimation animation: NumberAnimation {
-        target: root; property: "progress"; to: 1; duration: 280
+        target: root; property: "progress"; to: 1; duration: Quickshell.env("KOS_GREETER_REDUCED_MOTION") === "1" ? 1 : 620
+        easing.type: Easing.OutCubic
         onFinished: root.record("RevealComplete")
     }
     property Timer deadline: Timer { interval: 12000; running: true; onTriggered: root.release("Timeout") }

@@ -417,6 +417,11 @@ ShellRoot {
                 inputMethodHints: root.echoResponse ? Qt.ImhNone : Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
                 onAccepted: root.submit()
             }
+            Greeter.LoadingSpinner {
+                anchors.horizontalCenter: parent.horizontalCenter
+                visible: ["Authenticating", "ReadyToLaunch", "Exiting", "LaunchRequested"].includes(root.phase)
+                reducedMotion: root.reducedMotion
+            }
             Label {
                 text: root.feedback || (root.promptError || root.phase === "Terminated" || (!Greetd.available && !root.choosingUser) ? root.notice : (root.phase === "Authenticating" && root.notice !== "认证中" ? root.notice : ""))
                 visible: text.length > 0; Accessible.name: text
