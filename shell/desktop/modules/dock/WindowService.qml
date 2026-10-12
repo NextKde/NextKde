@@ -6,6 +6,7 @@ import qs.desktop.modules.platform
 import qs.desktop.modules.common
 import "ProcessIdentity.mjs" as ProcessIdentity
 import "WindowRecordIndex.mjs" as WindowRecordIndex
+import "PayloadArray.mjs" as PayloadArray
 
 // WindowService — provider-neutral runtime window model.
 //
@@ -304,7 +305,7 @@ QtObject {
                 pid: Number(source.pid || 0),
                 appId: source.appId || "",
                 title: source.title || "",
-                desktopIds: Array.isArray(source.desktops) ? source.desktops : [],
+                desktopIds: PayloadArray.toArray(source.desktops) || [],
                 onAllDesktops: !!source.onAllDesktops,
                 // Full-reveal geometry & placement for Dock collision.
                 geometry: source.geometry && source.geometry.width > 0
@@ -345,7 +346,7 @@ QtObject {
                 iconSource: iconSource,
                 title: toplevel.title || identity.name || identity.desktopId,
                 isUrgent: useKwin ? !!source.urgent : foreignUrgent,
-                desktopIds: Array.isArray(toplevel.desktopIds) ? toplevel.desktopIds : [],
+                desktopIds: PayloadArray.toArray(toplevel.desktopIds) || [],
                 onAllDesktops: !!toplevel.onAllDesktops,
                 // Provision-normalised placement used by the Dock auto-hide
                 // controller. Foreign-toplevel has no compositor geometry, so
@@ -805,9 +806,11 @@ QtObject {
 
         for (let i = 0; i < records.length; i++) {
             const r = records[i];
+            const toplevelDesktops = PayloadArray.toArray(r.toplevel?.desktopIds) || [];
+            const recordDesktops = PayloadArray.toArray(r.desktopIds) || [];
             const onDesktop = r.toplevel?.onAllDesktops
-                || (Array.isArray(r.toplevel?.desktopIds) && r.toplevel.desktopIds.indexOf(currentId) >= 0)
-                || (Array.isArray(r.desktopIds) && r.desktopIds.indexOf(currentId) >= 0);
+                || (toplevelDesktops.length > 0 && toplevelDesktops.indexOf(currentId) >= 0)
+                || (recordDesktops.length > 0 && recordDesktops.indexOf(currentId) >= 0);
             if (onDesktop) {
                 currentDeskWindows.push(r);
             }
@@ -853,7 +856,11 @@ QtObject {
                         String(event.ticket ?? ""), !!event.found);
                     return;
                 }
-                if (event.type === "snapshot" && Array.isArray(event.windows)) {
+                // Payload arrays arrive as QV4 sequences through the signal
+                // boundary (see PayloadArray.mjs); never gate them on
+                // Array.isArray, which is false for every real snapshot.
+                const windows = PayloadArray.toArray(event.windows)
+                if (event.type === "snapshot" && windows) {
                         // Coalesce redundant snapshots. The KWin script already
                         // publishes only on change, but a second filter here
                         // keeps the model rebuild rate bounded even if a future
@@ -863,7 +870,7 @@ QtObject {
                         // activeDesktop 同理：桌面表面（quickshell）不在
                         // windows 里，它拿走/交还焦点时 windows 与 activeId
                         // 都不变——漏键会把桌面聚焦状态冻结在旧值。
-                        const snapshotJson = JSON.stringify(event.windows)
+                        const snapshotJson = JSON.stringify(windows)
                             + "#" + (event.activeId ?? "")
                             + "#" + (event.activeDesktop ? 1 : 0);
                         if (snapshotJson === svc._lastSnapshotJson)
@@ -874,11 +881,11 @@ QtObject {
                         // authoritative list also delayed focus changes.
                         svc.kwinActiveId = String(event.activeId ?? "");
                         svc.kwinActiveDesktop = !!event.activeDesktop;
-                        svc._kwinWindows = event.windows;
+                        svc._kwinWindows = windows;
                         if (!svc._kwinReceivedInitialSnapshot) {
                             svc._kwinReceivedInitialSnapshot = true;
                             console.info("[WindowService] initial KWin snapshot windows="
-                                + event.windows.length)
+                                + windows.length)
                         }
                         // KWin already coalesces metadata bursts and throttles
                         // live geometry. Apply its authoritative snapshot now;
@@ -908,8 +915,7 @@ QtObject {
                                 + event.id + " error=" + event.error);
                         }
                 } else if (event.type === "desktops") {
-                        svc.desktops = Array.isArray(event.desktops)
-                            ? event.desktops : [];
+                        svc.desktops = PayloadArray.toArray(event.desktops) || [];
                         svc.currentDesktopId = event.current ?? "";
                         if (!svc._kwinReceivedDesktopSnapshot) {
                             svc._kwinReceivedDesktopSnapshot = true;

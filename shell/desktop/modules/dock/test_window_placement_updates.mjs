@@ -7,6 +7,10 @@ const source = readFileSync(new URL("WindowService.qml", import.meta.url), "utf8
 // Also exercise the same update path after the independent indexing PR lands.
 const usesIndex = source.includes("WindowRecordIndex.indexWindowRecords");
 const WindowRecordIndex = usesIndex ? await import("./WindowRecordIndex.mjs") : null;
+// Payload arrays are coerced through this module; the extracted production
+// functions reference it, so the mock context has to provide it too.
+const usesPayloadArray = source.includes("PayloadArray.toArray");
+const PayloadArray = usesPayloadArray ? await import("./PayloadArray.mjs") : null;
 // Discover the private helpers instead of listing them by hand. A hand-written
 // list silently rots: the moment `_rebuild` starts calling a new helper (as it
 // did with `_pruneThumbnails`) the extraction skips it, the mock service has no
@@ -50,6 +54,7 @@ const svc = { records: [], _kwinWindows: [], _nextWindowNumber: 1,
     thumbnailRevision: 0, _thumbnailUrlsByHandle: {},
     _thumbnailPendingByHandle: {}};
 const context = vm.createContext({ svc, windowModel, WindowRecordIndex,
+    PayloadArray,
     _collectToplevels: () => [],
     AppIdentityService: { resolve: id => ({ desktopId: id, rawAppId: id, iconSource: id }) },
 });
