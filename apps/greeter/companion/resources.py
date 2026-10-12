@@ -5,6 +5,7 @@ path for a root process to open. A future authenticated broker must bind uid to
 its peer credentials. This module must only run in a trusted store owner process.
 """
 import contextlib
+from collections import OrderedDict
 import fcntl
 import hashlib
 import io
@@ -45,6 +46,24 @@ def image_copy(data, avatar=False):
             if len(result) > MAX_BYTES:
                 raise ValueError('encoded budget')
             return result, list(clean.size)
+
+
+# Cache only canonical validation results, never image bytes or authorization.
+# Live file ownership/permissions/content hash and manifest are checked on
+# every consume; a changed/revoked resource cannot reuse its old result.
+_CANONICAL_DIMENSIONS = OrderedDict()
+
+
+def canonical_dimensions(data, digest, avatar=False):
+    key = (digest, avatar)
+    if key in _CANONICAL_DIMENSIONS:
+        _CANONICAL_DIMENSIONS.move_to_end(key)
+        return list(_CANONICAL_DIMENSIONS[key])
+    clean, size = image_copy(data, avatar)
+    if clean != data: raise ValueError('noncanonical resource')
+    _CANONICAL_DIMENSIONS[key] = tuple(size)
+    if len(_CANONICAL_DIMENSIONS) > 128: _CANONICAL_DIMENSIONS.popitem(last=False)
+    return size
 
 
 class Store:
@@ -164,7 +183,7 @@ class Store:
                 raise ValueError('untrusted resource')
             return f.read(limit + 1)
 
-    def _read(self, d, uid):
+    def _read(self, d, uid, verify_images=True):
         try:
             m = json.loads(self._file(d / 'manifest.json', 4096))
             if set(m) != {'schemaVersion', 'uid', 'version', 'issuedAt', 'expiresAt', 'mode', 'fit', 'crop', 'resources'}:
@@ -193,11 +212,24 @@ class Store:
                     return None
                 if set(desc) != {'file', 'sha256', 'size'} or desc['file'] != name + '.png':
                     return None
+                if (len(desc['size']) != 2 or any(v <= 0 or v > 8192 for v in desc['size'])
+                    or desc['size'][0] * desc['size'][1] > MAX_PIXELS
+                    or (name == 'avatar' and max(desc['size']) > 512)
+                    or type(desc['sha256']) is not str or not re.fullmatch(r'[0-9a-f]{64}', desc['sha256'])):
+                    return None
+                if not verify_images:
+                    # References are only scheduling hints. Actual consumers
+                    # still verify bytes/canonical dimensions before display.
+                    info = (version / desc['file']).lstat()
+                    if (not stat.S_ISREG(info.st_mode) or info.st_uid != self.owner
+                        or info.st_nlink != 1 or info.st_mode & 0o022 or info.st_size > MAX_BYTES):
+                        return None
+                    continue
                 data = self._file(version / desc['file'], MAX_BYTES)
                 if hashlib.sha256(data).hexdigest() != desc['sha256']:
                     return None
-                clean, size = image_copy(data, name == 'avatar')
-                if size != desc['size'] or clean != data:
+                size = canonical_dimensions(data, desc['sha256'], name == 'avatar')
+                if size != desc['size']:
                     return None
                 result[name] = data
             return m, result

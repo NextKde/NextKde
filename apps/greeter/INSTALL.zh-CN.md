@@ -31,7 +31,7 @@ sudo python3 /home/wwt/Downloads/NextKde/tools/rollback-greeter.py
 
 默认 Greeter 位于 VT1，文字恢复 TTY 必须不同。图形终端或管道执行立即切换会拒绝。`--files-only` 安装 app/greetd 配置而不改变服务 enablement；这是安装与开机选择分离的可选模式，与 `--activate-now` 互斥。
 
-安装写入系统用户级 `kos-shell.service` 路径 drop-in，让已有 T11 Shell 找到独立安装的 Cover；仅 daemon-reload 当前调用者的用户管理器，不重启 Shell、不导入全局认证/DBus环境。该 drop-in 不包含令牌。Shell 自身需已有 T11 模块，脚本不顺带升级整个桌面；未接入门控的 Shell 仍依靠独立 Cover 超时撤罩。当前共享 Shell 仍不支持同 UID 的并发桌面。
+安装写入系统用户级 `kos-shell.service` 路径 drop-in，让已有 T11 Shell 找到独立安装的 Cover；仅 daemon-reload 当前调用者的用户管理器，不重启 Shell、不导入全局认证/DBus环境。该 drop-in 不包含令牌。Shell 自身需已有 T11 模块，脚本不顺带升级整个桌面；历史安装中未接入门控的 Shell 只能依靠独立 Cover 超时撤罩；本轮初装和更新会预检并拒绝不兼容 Shell。当前共享 Shell 仍不支持同 UID 的并发桌面。
 
 ## 更新已安装版本
 
@@ -41,11 +41,11 @@ sudo python3 /home/wwt/Downloads/NextKde/tools/rollback-greeter.py
 ./tools/install-greeter.sh
 ```
 
-已有有效安装快照时自动更新，无需先卸载。通过 Linux 原子目录交换替换完整 app，删除旧版源码中已移除的文件；升级失败恢复旧 app，下一次执行自动处理未完成事务。原位升级要求 app 与恢复快照处于同一文件系统，不满足则在替换前拒绝。断电恢复仍未实机验证。
+已有有效安装快照时自动更新，无需先卸载。通过 Linux 原子目录交换替换完整 app，删除旧版源码中已移除的文件；app 替换事务失败恢复旧 app，下一次执行自动处理未完成事务；随后独立服务策略迁移失败只恢复原策略/receipt，app 可能已升级，详见“认证失败与后台恢复”。原位升级要求 app 与恢复快照处于同一文件系统，不满足则在替换前拒绝。断电恢复仍未实机验证。
 
 升级保持原开机选择：曾用 `--files-only` 安装的版本不会因默认更新被启用。更新不接受 `--activate-now`；已有持久启用时也不能用 `--files-only` 改成禁用。当前账户公开图按构建时的明确同意刷新，无同意或 `--no-wallpaper-sync` 撤回当前账户副本，其他账户副本保留。同包被跳过时，壁纸续期/撤回仍使用 `--refresh-wallpaper`。
 
-配置/服务链接被管理员修改、快照不完整或回滚未完成时拒绝自动覆盖。自动更新的是 app 源码/资源，沿用既有服务配置与恢复入口；不升级完整 Shell、系统依赖或 PAM，也不更改旧安装的配置契约。
+配置/服务链接被管理员修改、快照不完整或回滚未完成时拒绝自动覆盖。自动更新 app 源码/资源并沿用原恢复入口；本轮新增托管 greetd 恢复策略迁移是服务 drop-in 的明确变更，使用独立可恢复事务，详见“认证失败与后台恢复”。不升级完整 Shell、系统依赖或 PAM，不改变开机选择与原管理器备份。
 
 ## 回滚
 
@@ -70,9 +70,9 @@ sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
 
 回滚停止已装 greetd，清理本次新增的 greetd/logind 会话（保留安装前同一 boot 的会话及其他非 greetd 会话），恢复原 greetd 配置、原 drop-in/恢复入口、systemd 开机链接和必要的 getty 状态，重新启动原管理器并核验 active，再删除已装 app、公开壁纸副本及私有快照。重复回滚无害；不能恢复已经退出的窗口或未保存数据。
 
-快照位于 `/var/lib/kos-greeter-install`，0700；配置备份为0600，保存之前不修改服务或配置。相同 bundle 重复安装跳过；检测到不同 bundle 会自动原位更新为当前本地源码，不自动拉取远程源码。升级保留首次安装的原管理器备份、服务启用状态和会话清理基线，不重启 greetd/当前桌面，新版在下一次登录使用。回滚检测到管理员后来修改了管理配置/别名时拒绝覆盖；服务恢复失败保留快照和 app，修正原因后可重试。不要在安装/回滚中手动编辑相关 unit/config。
+快照位于 `/var/lib/kos-greeter-install`，0700；配置备份为0600，保存之前不修改服务或配置。相同 bundle 重复安装跳过 app 替换，但仍检查/迁移恢复策略；检测到不同 bundle 会自动原位更新为当前本地源码，不自动拉取远程源码。升级保留首次安装的原管理器备份、服务启用状态和会话清理基线，不重启 greetd/当前桌面，新版在下一次登录使用。回滚检测到管理员后来修改了管理配置/别名时拒绝覆盖；服务恢复失败保留快照和 app，修正原因后可重试。不要在安装/回滚中手动编辑相关 unit/config。
 
-greetd **daemon 服务失败**时 `kos-greeter-recover.service` 调用同一恢复代码；`Restart=no` 避免 daemon 无限重启。该机制不检测“daemon仍运行但图形界面无法操作”，也不保证硬件故障或断电恢复；这些仍需真实登录验证。
+greetd daemon 意外退出（包含 exit=0）使用 `Restart=always` 重建，`StartLimitIntervalSec=infinity` 与 `StartLimitBurst=3` 限制总启动次数（含首次）；达到失败上限后 `kos-greeter-recover.service` 调用同一恢复代码。它不自行检测仍运行但不可操作的图形界面，本轮 UI 的可见重连/有限监督负责部分前端异常；硬件故障、断电及真实管理器恢复仍需实机验证。
 
 ## 壁纸公开副本
 
@@ -112,3 +112,59 @@ sudo python3 tools/fix-greetd-kwallet.py
 更新不会重启当前桌面。退出后重新用账户密码登录，检查密码框是否透出当前壁纸，并打开 Chrome 验证钱包是否自动解锁。钱包密码须与账户登录密码一致；本轮未访问钱包内容，也未执行真实认证测试。
 
 PAM 备份路径由脚本输出，位于 `/var/backups/kos-greeter/greetd-pam-*`。需要撤回时用 `sudo cp -p` 将该次备份恢复至 `/etc/pam.d/greetd`；Greeter app 回滚不自动撤销这次独立 PAM 修复。
+
+## 登录交接版本同步（2026-10-12 修复）
+
+Greeter 独立升级不会自动升级桌面 Shell。缺少 T11 就绪协议或新版本组件帧门控的旧 Shell，会被安装/更新/`--check` 预检拒绝，并显示缺失文件。此前仅 Greeter 安装完整不能推导桌面侧也包含 T1–T14。
+
+在仓库根目录，以桌面普通用户执行：
+
+```sh
+python3 tools/sync-greeter-shell.py --check
+python3 tools/sync-greeter-shell.py
+./tools/install-greeter.sh
+```
+
+第一条列出新增、更新、移除文件及备份位置，不修改安装目录。第二条仅同步 `~/.config/quickshell/kos/desktop` 和可信 `Kos/Ui`；保留 Kos 原生插件、其他 apps、platform/data 二进制、Shell 根入口及用户配置。它把 shared QML symlink 转成真实文件，不留下指向源码树的安装链接。覆盖上述目录里的手工 QML 改动，先检查列表。
+
+同步使用同文件系统暂存和目录 rename，每个目录替换为完整新目录；异常时恢复两个旧目录，成功保留 `~/.config/quickshell/kos-shell-backup-时间-随机值/`。多目录切换不是断电事务。生产 `kos-shell.service` 已设置 `QS_DISABLE_FILE_WATCHER=1`，当前会话不重载；新文件在下次 Shell 启动/登录生效。此命令不重启进程、不修改服务/显示管理器/PAM，也不安装其他应用。
+
+需要恢复 Shell 时，先停止 Shell，再从打印的备份中恢复 `desktop` 和 `Kos` 两个目录；不要在其运行并开启文件监听时手工逐文件恢复。Greeter 仍使用原独立回退入口。
+
+## 登录 VT 诊断输出修复（2026-10-12）
+
+生产 Greeter 和认证后的用户入口在运行检查/启动子进程前，将 stdout/stderr 接到 libsystemd 的 journal stream，分别使用 `kos-greeter-session`、`kos-user-session` identifier；stdin 仍是原来的 TTY，固定启动 argv、进程/信号关系不变。Greeter 的独立 KWin、dbus、Quickshell，以及用户 startplasma/Cover 继承这些输出，不向登录 VT 写初始化/退出日志。系统服务托管的用户 KWin 本来就使用 journal，本修复没有改它。
+
+```sh
+journalctl -b -t kos-greeter-session -t kos-user-session -o short-monotonic
+journalctl --user -b -u kos-shell.service -o short-monotonic
+```
+
+固定事件 `KOS_SESSION_PHASE GreeterCompositorStarting/PlasmaStarting/CoverSupervisorStarting` 和 Cover 的 `SocketConnected` 可用于定位加载画面出现之前的阶段；帧提交仍不等于 scanout。`--check` 诊断模式继续直接输出，便于安装预检。
+
+journal 初始化不可用时丢弃 stdout/stderr，并尝试发送固定 syslog 故障码，不向 VT 回退。入口和 Cover 自有诊断写入遇到断线也安全降级，不因诊断异常中断固定启动；连 `/dev/null` 打开/重定向失败时关闭 fd1/2，并静默处理 Python 诊断。生产子进程保留 SIGPIPE 忽略，避免仅因日志管道关闭而被该信号终止；子程序自行更改信号或将写入错误视为致命的行为不能由入口保证。已启动子进程的 stream 无法由父进程事后更换，journal 断线可能丢失其后日志。stream 使用标准阻塞写语义，API 初始化/写入不承诺硬实时期限。不会启用认证协议 debug 或记录认证数据。
+
+入口仅在 fd0 确认是继承的 Linux `/dev/tty1`–`tty63`、KDGETMODE 成功且重新打开的是同一设备时清除该 VT 的旧文本/滚屏缓存。它不切 VT、不清理 PTY 或别的终端、不修改显示模式。来自内核、greetd/PAM 或其它进程的独立输出仍可能出现；消除它们需要另行定位。两 KWin 接管期间的黑屏不因日志重定向而自动消失。本批无显示管理器/PAM/全局服务更改，正常独立 app 更新后下次登录生效。
+
+## 认证失败与后台恢复（2026-10-12）
+
+错误认证后保留登录画面、清空响应，再建立新的认证会话。Quickshell 在 auth_error 后自动 cancel；若 greetd 已清掉失败 worker、该 cancel 返回普通错误，本界面只在明确的认证失败恢复阶段重试，其他后台错误不一律忽略。后台异常或等待超时保留可见提示及“重新连接登录服务”按钮，不再1.8秒自动退出到黑屏。按钮只重建Quickshell UI，保持原Greeter KWin；UI入口最多启动3次（包括首次），不无限重连，不重启已启动的用户桌面。
+
+安装/更新还会迁移托管 greetd drop-in：Restart=always、RestartSec=1、StartLimitIntervalSec=infinity、StartLimitBurst=3。它覆盖daemon意外exit=0，包括本机这次“greeter未创建会话退出”后的正常退出码；3次总启动预算包括第一次启动，达到限制后OnFailure使用原恢复入口。人工systemctl stop/回退停止不会被自动Restart打断。预算可由reset-failed显式重置，systemd卸载unit时计数也可能清除，不宣称跨开机永久计数。
+
+迁移只daemon-reload，不restart/切换当前会话；同bundle更新也检查策略。它使用单独迁移记录保存旧drop-in和receipt，失败恢复原策略/receipt，不覆盖首份原管理器备份。app升级与策略迁移是两个可恢复事务；后者失败时app可能已经升级，但原策略被保留。旧恢复实现遇到policy-updating阶段仍可按首份文件快照回退。
+
+如果登录已经卡死，在文字TTY3恢复（这些操作会重启登录入口，别在正常桌面随意执行）：
+
+```sh
+sudo systemctl restart greetd
+```
+
+若报告start-limit-hit，先执行：
+
+```sh
+sudo systemctl reset-failed greetd
+sudo systemctl restart greetd
+```
+
+要回原显示管理器，使用 `./tools/rollback-installed-greeter.sh` 的正式入口；原备份保留。`register-default-apps.py`只注册应用、MIME、按钮和sycoca缓存，不是登录恢复命令；随后重启恢复不能归功于该注册脚本修复PAM/greetd。

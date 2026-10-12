@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import QtQuick.Window
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
@@ -19,11 +20,25 @@ import "../../../Kos/Ui"
 // through (docs/DockArchitecture.md, "Visibility modes and auto-hide").
 PanelWindow {
     id: root
-    contentItem.opacity: SessionEntryService.progress
+    // A tiny covered opacity keeps actual content in the submitted frame.
+    contentItem.opacity: SessionEntryService.pending ? Math.max(0.001, SessionEntryService.progress) : SessionEntryService.progress
     contentItem.enabled: SessionEntryService.progress === 1
+    property bool entryFrameSubmitted: false
+    readonly property string entryReadySignature: [root.backingWindowVisible,
+        root.screen ? root.screen.name : "", root.width, root.height,
+        ConfigService.ready, AppearanceConfigService.ready, WindowService.providerReady].join("|")
+    onEntryReadySignatureChanged: entryFrameSubmitted = false
+    Connections {
+        target: root.contentItem.Window.window
+        function onFrameSwapped() {
+            if (root.backingWindowVisible && root.width > 0 && root.height > 0
+                && ConfigService.ready && AppearanceConfigService.ready && WindowService.providerReady)
+                root.entryFrameSubmitted = true;
+        }
+    }
     Timer {
         interval: 100; running: true; repeat: true
-        onTriggered: SessionEntryService.essential("dock", root.backingWindowVisible
+        onTriggered: SessionEntryService.essential("dock", root.backingWindowVisible && root.entryFrameSubmitted
             && root.screen === ScreenLifecycle.activeScreen && root.width > 0 && root.height > 0)
     }
 

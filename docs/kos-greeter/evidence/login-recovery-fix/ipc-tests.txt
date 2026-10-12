@@ -1,0 +1,15 @@
+PASS: actual Quickshell + mock IPC: success create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: single create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: failure create_session,post_auth_message_response,cancel_session,create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: cancel create_session,cancel_session
+PASS: actual Quickshell + mock IPC: disconnect create_session,post_auth_message_response
+PASS: actual Quickshell + mock IPC: launch-rejected create_session,post_auth_message_response,start_session,cancel_session,create_session
+PASS: actual Quickshell + mock IPC: multi create_session,post_auth_message_response,post_auth_message_response,post_auth_message_response,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: alice create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: bob create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: cancel-alice create_session,cancel_session,create_session
+PASS: actual Quickshell + mock IPC: frame-timeout create_session,post_auth_message_response
+PASS: actual Quickshell + mock IPC: setup-failure create_session,cancel_session
+PASS: actual Quickshell + mock IPC: cleanup-error create_session,post_auth_message_response,cancel_session,create_session,post_auth_message_response,start_session
+PASS: actual Quickshell + mock IPC: backend-error create_session
+PASS: actual Quickshell + mock IPC: backend-reconnect create_session

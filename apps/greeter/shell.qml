@@ -51,6 +51,8 @@ ShellRoot {
     }
     property string notice: Greetd.available ? "" : "登录服务未连接"
     property string feedback: ""
+    property bool authFailureRecovery: false
+    property int recoveryErrors: 0
     property bool echoResponse: false
     property bool promptError: false
     property var accounts: []
@@ -173,7 +175,16 @@ ShellRoot {
     function wipe() { response.text = ""; }
     function terminate() {
         wipe(); watchdog.stop(); exitAnimation.stop(); exitFrameArmed = false;
-        step("fatal"); Qt.quit();
+        step("fatal"); Qt.exit(70);
+    }
+    function backendUnavailable() {
+        wipe(); watchdog.stop(); authenticationRestart.stop(); exitAnimation.stop(); exitFrameArmed = false;
+        phase = "BackendUnavailable"; feedback = "登录服务暂时不可用，请重新连接"; notice = "";
+        Qt.callLater(function() { reconnectButton.forceActiveFocus(); });
+    }
+    function reconnectBackend() {
+        if (phase !== "BackendUnavailable") return;
+        wipe(); console.info("KOS_GREETER_UI_RECONNECT"); Qt.exit(75);
     }
     function cancel() {
         if (!["Authenticating", "AwaitingPrompt", "ReadyToLaunch", "Exiting"].includes(phase)) return;
@@ -183,7 +194,7 @@ ShellRoot {
     function submit() {
         if (!Greetd.available) return;
         if (phase === "Idle" && !choosingUser && username.text.trim().length > 0) {
-            wipe(); responseSent = false; promptError = false; notice = "认证中"; step("begin"); watchdog.interval = 60000; watchdog.restart();
+            authFailureRecovery = false; wipe(); responseSent = false; promptError = false; notice = "认证中"; step("begin"); watchdog.interval = 60000; watchdog.restart();
             Greetd.createSession(username.text.trim());
         } else if (phase === "AwaitingPrompt") {
             responseSent = true; feedback = ""; step("respond"); watchdog.restart();
@@ -193,12 +204,9 @@ ShellRoot {
     }
     Connections {
         target: Greetd
-        function onAvailableChanged() {
-            if (Greetd.available && root.phase === "Idle" && !root.choosingUser && root.selectedUid !== null) authenticationRestart.restart();
-        }
         function onAuthMessage(message, error, responseRequired, echoResponse) {
             if (!["Authenticating", "AwaitingPrompt"].includes(root.phase)) return;
-            root.wipe(); root.notice = message; root.promptError = error; watchdog.restart();
+            root.recoveryErrors = 0; root.authFailureRecovery = false; root.wipe(); root.notice = message; root.promptError = error; watchdog.restart();
             if (responseRequired) {
                 root.echoResponse = echoResponse; root.step("prompt"); response.forceActiveFocus();
             } else { root.step("message"); }
@@ -207,10 +215,10 @@ ShellRoot {
             if (root.phase === "Cancelling") return;
             if (!["Authenticating", "AwaitingPrompt"].includes(root.phase)) {
                 if (root.phase === "LaunchRequested") root.recoverBackend();
-                else root.terminate();
+                else root.backendUnavailable();
                 return;
             }
-            root.wipe(); watchdog.stop(); root.step("failure"); root.feedback = root.responseSent ? "认证失败，请重新输入" : "无法开始认证，请按回车重试";
+            root.authFailureRecovery = true; root.wipe(); watchdog.stop(); root.step("failure"); root.feedback = root.responseSent ? "认证失败，请重新输入" : "无法开始认证，请按回车重试";
             if (root.responseSent) authenticationRestart.restart();
         }
         function onStateChanged() {
@@ -221,9 +229,18 @@ ShellRoot {
             }
         }
         function onError(error) {
-            root.wipe(); exitAnimation.stop(); root.exitFrameArmed = false;
-            root.phase = "Terminated"; root.notice = "登录连接异常；即将退出并由登录宿主重建会话";
-            watchdog.stop(); diagnosticExit.restart();
+            // QS automatically cancels after authFailure. A dead auth worker
+            // can reject that cancellation after greetd has cleared configuring.
+            // Only this phase/history is recoverable; don't ignore other errors.
+            if (root.authFailureRecovery && root.phase === "Idle") {
+                root.wipe(); watchdog.stop();
+                if (++root.recoveryErrors <= 3) {
+                    console.info("KOS_GREETER_AUTH_CLEANUP_RECOVERY");
+                    if (root.responseSent) authenticationRestart.restart();
+                } else root.backendUnavailable();
+                return;
+            }
+            root.backendUnavailable();
         }
         function onReadyToLaunch() {
             if (root.phase !== "Authenticating") return;
@@ -237,7 +254,7 @@ ShellRoot {
     Timer {
         id: watchdog
         interval: 60000
-        onTriggered: root.terminate()
+        onTriggered: root.backendUnavailable()
     }
     Timer {
         id: authenticationRestart; interval: 80; repeat: true
@@ -245,11 +262,10 @@ ShellRoot {
         onRunningChanged: if (running) attempts = 0
         onTriggered: {
             if (root.phase !== "Idle" || root.choosingUser) { stop(); return; }
-            if (++attempts > 60) { stop(); root.terminate(); return; }
+            if (++attempts > 60) { stop(); root.backendUnavailable(); return; }
             if (Greetd.state === GreetdState.Inactive) { stop(); root.submit(); }
         }
     }
-    Timer { id: diagnosticExit; interval: 1800; onTriggered: Qt.quit() }
     ParallelAnimation {
         id: exitAnimation
         NumberAnimation { target: visual; property: "opacity"; to: 0; duration: root.exitDuration; easing.type: Easing.InOutQuad }
@@ -301,9 +317,9 @@ ShellRoot {
         Item {
             id: visual
             anchors.fill: parent
-            enabled: !["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling"].includes(root.phase)
+            enabled: !["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling", "BackendUnavailable"].includes(root.phase)
             Keys.onEscapePressed: event => {
-                if (!["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling"].includes(root.phase)) root.backToList();
+                if (!["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling", "BackendUnavailable"].includes(root.phase)) root.backToList();
             }
             property date now: new Date()
             Timer { interval: 1000; running: true; repeat: true; onTriggered: visual.now = new Date() }
@@ -430,9 +446,15 @@ ShellRoot {
                 wrapMode: Text.Wrap; textFormat: Text.PlainText; font.pixelSize: 13
             }
             Button {
+                id: reconnectButton
+                visible: root.phase === "BackendUnavailable"
+                width: parent.width; height: 34; text: "重新连接登录服务"
+                onClicked: root.reconnectBackend()
+            }
+            Button {
                 visible: !root.choosingUser && (root.accounts.length > 1 || root.selectedUid === null)
                 width: parent.width; height: 28; text: "切换用户"
-                enabled: !["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling"].includes(root.phase)
+                enabled: !["ReadyToLaunch", "Exiting", "LaunchRequested", "Terminated", "Cancelling", "BackendUnavailable"].includes(root.phase)
                 onClicked: root.backToList()
                 background: Item {}
                 contentItem: Text { text: parent.text; color: "#ccffffff"; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }

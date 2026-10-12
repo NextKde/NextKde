@@ -10,8 +10,12 @@ T12 更新：非默认静态图通过桌面侧 `entry.py` 读取当前 UID 的�
 
 每输出正式窗口的 `contentItem.Window.window.frameSwapped` 在当前图片 ready、过渡结束且 source/fit 匹配时登记 session/output/hash 事件；T12 使用独立静态接点层登记主题/空间回退帧，不把动态/空间状态冒充可恢复；该层留白底色与 Greeter/Cover 同为 #16283b。输出列表变更清空帧登记，当前全输出共同就绪才揭幕。默认正式窗口绘制固定 `#16283b` 后也可提交帧，不等待空图片解码。
 
-收到明确 accepted 回执后，Cover opacity 从 1 到 0、bar/Dock opacity 从 0 到 1，各执行 280ms；起点为 IPC 请求/回执，存在通信延迟，不宣称 compositor 原子同步。两边记录 RevealStarted/RevealComplete。正式静态字节在揭幕后保持，避免二次壁纸替换；用户改变图片、fit、mode、takeover、空间开关时解除交接覆盖，恢复日常配置。默认背景同样解除。
+收到明确 accepted 回执后，Cover opacity 从 1 到 0、bar/Dock opacity 从 0 到 1，各执行 620ms（reduced motion 为 1ms）；起点为 IPC 请求/回执，存在通信延迟，不宣称 compositor 原子同步。两边记录 RevealStarted/RevealComplete。正式静态字节在揭幕后保持，避免二次壁纸替换；用户改变图片、fit、mode、takeover、空间开关时解除交接覆盖，恢复日常配置。默认背景同样解除。
 
 12 秒桌面期限无条件开放 bar/Dock；Cover 15 秒自身撤罩、25 秒 supervisor 总期限仍独立生效。输出或组件故障不无限等待。人工恢复为 `qs -p /绝对路径/apps/greeter/cover.qml ipc call cover abort`；卡死时相同路径 `kill`。未安装或切换任何系统服务。
 
 frameSwapped 是帧提交，非 scanout。完整 A03/A10 仍需要真实三阶段截图、冷热启动录像、输出/缩放记录；虚拟窗口夹具不能替代。T08 的认证终帧版本未固定到 wrapper，仍不能证明三阶段整体版本一致。
+
+## 2026-10-12 就绪门槛追加
+
+揭幕还须等待 `WindowService.providerReady`（初始窗口集合完成，允许零窗口）。bar/Dock 在配置、窗口 provider、映射及几何有效后收到 frameSwapped 才上报 essential；映射、输出、尺寸或这些 ready 值变化时清除登记。pending 内容保留 0.001 opacity，让 Qt 提交内容而非跳过全透明子树；Cover 仍覆盖其上。此为内容初始化后的窗口提交门槛，不保证全部图标异步资源已完成、不代表真实屏幕呈现。12/15/25 秒故障期限本轮保留，慢于该期限按既有超时恢复，不承诺无限等待。

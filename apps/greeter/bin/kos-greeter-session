@@ -8,11 +8,14 @@ import sys
 
 COMMAND = ['/usr/lib/plasma-dbus-run-session-if-needed', '/usr/bin/startplasma-wayland']
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'companion'))
+from session_output import prepare_session_output, phase, diagnostic
 
 def main():
     if sys.argv[1:] == ['--check']:
         check()
         return
+    prepare_session_output('kos-greeter-session')
     if sys.argv[1:] not in (['--isolated-seat'], ['--temporary-seat'], ['--installed-seat']):
         sys.exit('Use --check, --isolated-seat in a VM, or --temporary-seat via the explicit timed test scripts. No deployment is performed.')
     if sys.argv[1:] == ['--installed-seat'] and ROOT != Path('/usr/local/lib/kos-greeter/app'):
@@ -23,12 +26,13 @@ def main():
         sys.exit('Refusing an existing graphical session; use a disposable VM greetd seat.')
     check()
     os.environ['KOS_GREETER_OUTPUT_APPLY'] = '1'
+    phase('GreeterCompositorStarting')
     os.execv('/usr/bin/dbus-run-session', [
         'dbus-run-session', '--', '/usr/bin/kwin_wayland', '--drm', '--no-lockscreen', '--no-global-shortcuts',
         '--no-kactivities', '--exit-with-session', str(ROOT / 'bin/kos-greeter-ui')])
 
 def check():
-    paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/greetd', '/usr/bin/kscreen-doctor', str(ROOT / 'bin/kos-user-session'), *COMMAND]
+    paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/greetd', '/usr/bin/kscreen-doctor', str(ROOT / 'bin/kos-user-session'), str(ROOT / 'bin/kos-greeter-ui'), *COMMAND]
     for path in paths:
         if not os.access(path, os.X_OK):
             sys.exit('Missing executable: ' + path)
@@ -36,7 +40,7 @@ def check():
     desktop.read('/usr/share/wayland-sessions/plasma.desktop')
     if shlex.split(desktop.get('Desktop Entry', 'Exec', fallback='')) != COMMAND:
         sys.exit('Installed Plasma entry differs from the reviewed allowlist; refusing launch.')
-    print('Dependency and installed session allowlist check passed (not a login test).')
+    diagnostic('Dependency and installed session allowlist check passed (not a login test).')
 
 if __name__ == '__main__':
     main()

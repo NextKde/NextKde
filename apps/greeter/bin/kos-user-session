@@ -12,6 +12,7 @@ import time
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP / 'companion'))
 from handoff import Runtime, build, PUBLIC_ROOT
+from session_output import prepare_session_output, phase, diagnostic
 
 COMMAND = ['/usr/lib/plasma-dbus-run-session-if-needed', '/usr/bin/startplasma-wayland']
 
@@ -53,15 +54,17 @@ def run_session(runtime, root=PUBLIC_ROOT, owner=0, command=None):
     interrupted_at = None
     try:
         lock = runtime.lock()
+        phase('HandoffReferenceStarting')
         try:
-            desc = build(runtime.session, runtime.uid, root, owner)
-            runtime.write(desc, root, owner)
-            runtime.consume(root, owner, remove=False)
+            desc = build(runtime.session, runtime.uid, root, owner, verify_resources=False)
+            runtime.write(desc, root, owner, verify_resources=False)
+            runtime.consume(root, owner, remove=False, verify_resources=False)
             valid = True
         except (OSError, ValueError, TypeError, KeyError):
             # Failure reasons are fixed codes; never dump JSON or environment.
-            print('KOS_HANDOFF default-background', file=sys.stderr)
+            diagnostic('KOS_HANDOFF default-background', error=True)
             valid = False
+        phase('HandoffReferenceReady')
         env = dict(os.environ)
         for k in ('KOS_HANDOFF_PATH', 'KOS_HANDOFF_SESSION', 'KOS_HANDOFF_SHA256'):
             env.pop(k, None)
@@ -80,12 +83,14 @@ def run_session(runtime, root=PUBLIC_ROOT, owner=0, command=None):
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             handlers[sig] = signal.signal(sig, forward)
         if interrupted is not None: return 128 + interrupted
-        child = subprocess.Popen(COMMAND if command is None else command, env=env, start_new_session=True)
+        phase('PlasmaStarting')
+        child = subprocess.Popen(COMMAND if command is None else command, env=env, start_new_session=True, restore_signals=False)
         if command is None:
             try:
-                cover = subprocess.Popen(['/usr/bin/python3', str(APP / 'companion/cover.py'), '--supervise', str(child.pid)], env=env, start_new_session=True)
+                phase('CoverSupervisorStarting')
+                cover = subprocess.Popen(['/usr/bin/python3', str(APP / 'companion/cover.py'), '--supervise', str(child.pid)], env=env, start_new_session=True, restore_signals=False)
             except OSError:
-                print('KOS_COVER unavailable', file=sys.stderr)
+                diagnostic('KOS_COVER unavailable', error=True)
         if interrupted is not None: forward(interrupted, None)
         while True:
             try: return child.wait(timeout=.1)
@@ -110,18 +115,21 @@ def run_session(runtime, root=PUBLIC_ROOT, owner=0, command=None):
 def main():
     try:
         if sys.argv[1:] == ['--check']:
-            check(); print('PASS fixed Plasma session entry (not a login test)'); return 0
+            check(); diagnostic('PASS fixed Plasma session entry (not a login test)'); return 0
+        prepare_session_output('kos-user-session')
         if sys.argv[1:]: raise ValueError('unexpected-arguments')
         check()
         runtime = Runtime(os.environ.get('XDG_RUNTIME_DIR', ''))
         try:
+            phase('SessionPreflightStarting')
             reject_existing()
+            phase('SessionPreflightReady')
         except BaseException:
             runtime.close(); raise
         root = APP / 'public-display' if APP == Path('/run/kos-greeter-test/app') else PUBLIC_ROOT
         return run_session(runtime, root)
     except (OSError, ValueError, subprocess.SubprocessError):
-        print('KOS_SESSION refused-or-failed', file=sys.stderr)
+        diagnostic('KOS_SESSION refused-or-failed', error=True)
         return 1
 
 

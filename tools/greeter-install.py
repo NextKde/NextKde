@@ -23,6 +23,7 @@ STATE_REL = 'var/lib/kos-greeter-install'
 FILES = ('etc/greetd/config.toml', 'etc/systemd/system/greetd.service.d/kos-greeter.conf',
          'etc/systemd/system/kos-greeter-recover.service',
          'etc/systemd/user/kos-shell.service.d/kos-greeter.conf', 'usr/local/sbin/kos-greeter-rollback')
+GREETER_POLICY = b'[Unit]\nOnFailure=kos-greeter-recover.service\nStartLimitIntervalSec=infinity\nStartLimitBurst=3\n[Service]\nRestart=always\nRestartSec=1\n'
 NAME = re.compile(r'[A-Za-z0-9_.@-]+\.service')
 
 
@@ -77,6 +78,37 @@ def read_regular(path, limit=128*1024*1024):
         if len(data) > limit: raise RuntimeError('File exceeded budget')
         return data
     finally: os.close(fd)
+
+
+def shell_compatibility(directory):
+    """Read-only capability check; independent app never upgrades the Shell."""
+    required = {
+        'desktop/modules/common/SessionEntryService.qml': ('function check()', 'WindowService.providerReady'),
+        'desktop/modules/common/qmldir': ('singleton SessionEntryService',),
+        'desktop/modules/dock/DockWindow.qml': ('SessionEntryService', 'entryFrameSubmitted'),
+        'desktop/modules/bar/BarWindow.qml': ('SessionEntryService', 'entryFrameSubmitted'),
+        'desktop/modules/wallpaper/SpatialWallpaperWindow.qml': ('SessionEntryService', 'onFrameSwapped'),
+        'desktop/modules/wallpaper/WallpaperImageLayer.qml': ('SessionEntryService',),
+        'Kos/Ui/wallpapers/StaticWallpaperImage.qml': ('Image',),
+        'Kos/Ui/wallpapers/qmldir': ('StaticWallpaperImage',),
+    }
+    missing = []
+    for relative, markers in required.items():
+        try: content = (directory / relative).read_text()
+        except OSError: content = ''
+        if not all(marker in content for marker in markers): missing.append(relative)
+    return missing
+
+
+def require_caller_shell():
+    caller = int(os.environ.get('SUDO_UID', '-1'))
+    if caller <= 0: raise RuntimeError('Install using sudo from your desktop account')
+    directory = Path(pwd.getpwuid(caller).pw_dir) / '.config/quickshell/kos'
+    missing = shell_compatibility(directory)
+    if missing:
+        raise RuntimeError('Installed Shell lacks compatible login handoff: ' + ', '.join(missing)
+            + '. As your normal user run: python3 ' + str(REPO / 'tools/sync-greeter-shell.py')
+            + ' --check; then repeat without --check, and rerun install. No restart is performed.')
 
 
 def build(destination, sync=True):
@@ -172,7 +204,7 @@ class Installer:
             info = regular(source); total += info.st_size
             if total > 128*1024*1024 or hashlib.sha256(read_regular(source)).hexdigest() != record['hash']:
                 raise RuntimeError('Bundle changed or exceeded size budget')
-        for required in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-user-session','app/companion/entry.py'):
+        for required in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/session_output.py'):
             if required not in manifest: raise RuntimeError('Incomplete bundle')
         return manifest
 
@@ -315,6 +347,49 @@ class Installer:
             env={'XDG_RUNTIME_DIR':'/run/user/'+str(uid),
                  'DBUS_SESSION_BUS_ADDRESS':'unix:path=/run/user/'+str(uid)+'/bus'})
 
+    def recover_policy(self):
+        journal = self.state/'policy-update.json'
+        if not journal.exists(): return
+        self.safe(journal)
+        record = json.loads(read_regular(journal, 128*1024))
+        previous = record['state']; data = self.load()
+        path = self.root/FILES[1]
+        old = bytes.fromhex(record['before'])
+        if hashlib.sha256(old).hexdigest() != previous['installed_files'][FILES[1]]:
+            raise RuntimeError('Invalid policy migration backup')
+        current = self.current_files()
+        allowed = dict(previous['installed_files']); allowed[FILES[1]] = record['after']
+        if current not in (previous['installed_files'], allowed):
+            raise RuntimeError('Managed files changed during policy migration; backup retained')
+        committed = data.get('phase') == 'installed' and data.get('installed_files') == allowed
+        if not committed:
+            atomic(path, old)
+            systemctl('daemon-reload')
+            self.save(previous)
+        journal.unlink()
+
+    def ensure_policy(self):
+        # Separate transaction after app upgrade; old rollback implementations
+        # skip receipt checks for an in-progress phase and retain original files.
+        self.recover_policy()
+        data = self.load(); self.verify_receipt(data)
+        path = self.root/FILES[1]
+        old = read_regular(path, 4096)
+        if old == GREETER_POLICY: return
+        journal = self.state/'policy-update.json'
+        record = dict(state=data, before=old.hex(), after=hashlib.sha256(GREETER_POLICY).hexdigest())
+        atomic(journal, json.dumps(record).encode(), 0o600)
+        try:
+            self.save(dict(data, phase='policy-updating'))
+            atomic(path, GREETER_POLICY)
+            systemctl('daemon-reload')
+            self.save(dict(data, installed_files=self.current_files()))
+        except BaseException:
+            self.recover_policy()
+            raise
+        journal.unlink()
+        print('Migrated bounded daemon recovery policy; no service restarted.')
+
     def exchange_apps(self, stage):
         # Linux atomic directory exchange: readers never see a missing app path.
         libc = ctypes.CDLL(None, use_errno=True)
@@ -398,9 +473,11 @@ class Installer:
 
     @public_umask
     def install(self, bundle, enable=True, now=False, sync=True):
+        require_caller_shell()
         manifest = self.validate_bundle(bundle)
         digest = hashlib.sha256(json.dumps(manifest,sort_keys=True).encode()).hexdigest()
         if self.state.exists():
+            self.recover_policy()
             data = self.load()
             if data.get('phase') != 'installed': raise RuntimeError('Complete pending rollback before updating')
             self.recover_upgrade(); data = self.load()
@@ -409,8 +486,11 @@ class Installer:
                 raise RuntimeError('--files-only cannot change an existing boot selection')
             if data.get('phase') == 'installed' and data.get('digest') == digest and data.get('sync') == sync:
                 self.verify_receipt(data)
+                self.ensure_policy()
                 print('Identical installation already present; original recovery snapshot preserved.'); return
-            return self.upgrade(bundle, manifest, digest, data, sync)
+            self.upgrade(bundle, manifest, digest, data, sync)
+            self.ensure_policy()
+            return
         original, props = self.preflight()
         if now: recovery_tty(1)
         data = dict(version=1, original=original, original_active=props.get('ActiveState')=='active',
@@ -462,7 +542,7 @@ class Installer:
             self.installed_check()
             root_app='/'+APP_REL
             atomic(self.root/FILES[0], ('[terminal]\nvt = 1\nswitch = true\n[general]\nsource_profile = false\n[default_session]\ncommand = "'+root_app+'/bin/kos-greeter-session --installed-seat"\nuser = "greeter"\n').encode())
-            atomic(self.root/FILES[1], b'[Unit]\nOnFailure=kos-greeter-recover.service\n[Service]\nRestart=no\n')
+            atomic(self.root/FILES[1], GREETER_POLICY)
             atomic(self.root/FILES[2], ('[Unit]\nDescription=Restore the previous KOS display manager on Greeter failure\n[Service]\nType=oneshot\nExecStart=/usr/bin/python3 /'+STATE_REL+'/rollback.py --recover\nTimeoutStartSec=300\n').encode())
             atomic(self.root/FILES[3], ('[Service]\nEnvironment=KOS_GREETER_APP_DIR='+root_app+'\n').encode())
             atomic(self.root/FILES[4], Path(__file__).read_bytes(),0o755)
@@ -486,6 +566,7 @@ class Installer:
 
     @public_umask
     def rollback(self, recover=False):
+        self.recover_policy()
         if not self.state.exists(): print('No persistent Greeter installation to roll back.'); return
         self.recover_upgrade()
         data=self.load()
@@ -551,6 +632,7 @@ def main():
     if os.geteuid()!=0: parser.error('Use sudo for install/check/status/rollback')
     installer=Installer()
     if args.check:
+        require_caller_shell()
         if installer.state.exists():
             data=installer.load(); installer.verify_receipt(data)
             if data.get('phase') != 'installed': raise RuntimeError('Complete pending rollback first')

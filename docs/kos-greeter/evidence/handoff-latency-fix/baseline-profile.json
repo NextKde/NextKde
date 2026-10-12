@@ -1,0 +1,31 @@
+{
+  "published_resource_only": true,
+  "canonical_calls": 6,
+  "stages": [
+    [
+      "build",
+      0.5138103780000165,
+      1
+    ],
+    [
+      "write",
+      0.43689042699998026,
+      1
+    ],
+    [
+      "consume",
+      0.43304915099997743,
+      1
+    ],
+    [
+      "read_reference",
+      0.4295401279999851,
+      1
+    ],
+    [
+      "cover_resource_state",
+      0.8650050059999899,
+      2
+    ]
+  ]
+}

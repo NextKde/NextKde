@@ -9,6 +9,8 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
+import struct
 import time
 from PIL import Image
 
@@ -43,7 +45,14 @@ with tempfile.TemporaryDirectory() as temp:
     sock = socket.socket(socket.AF_UNIX)
     sock.bind(str(root / 'wayland-test')); sock.listen()
     try:
+        def roundtrip():
+            client, _ = sock.accept()
+            with client:
+                assert client.recv(12) == struct.pack('=III', 1, 12 << 16, 2)
+                client.sendall(struct.pack('=III', 2, 12 << 16, 1))
+        worker = threading.Thread(target=roundtrip); worker.start()
         assert cover.connectable(root / 'wayland-test', {os.getpid()})
+        worker.join()
         assert not cover.connectable(root / 'wayland-test', set())
     finally: sock.close()
 from unittest.mock import patch
@@ -93,8 +102,8 @@ with tempfile.TemporaryDirectory(prefix='kos-t10-supervisor-') as temp:
     env['XDG_CONFIG_HOME'] = temp + '/config'
     for attempt in range(2):
         with (OUT / f'kwin-restart-{attempt}.log').open('w') as stream:
-            compositor = subprocess.Popen(['dbus-run-session','--','kwin_wayland','--virtual','--output-count','2','--width','1024','--height','768','--socket',f'wayland-kos-t10-supervisor-{os.getpid()}-{attempt}','--no-lockscreen','--no-global-shortcuts','--no-kactivities','--exit-with-session',str(APP / 'tests/cover-idle-session')], env=env, stdout=stream, stderr=stream, start_new_session=True)
-            supervisor = subprocess.Popen([sys.executable,str(APP / 'companion/cover.py'),'--supervise',str(compositor.pid)], env=env, stdout=stream, stderr=stream, start_new_session=True)
+            compositor = subprocess.Popen(['dbus-run-session','--',('kwin_wayland' if attempt == 0 else 'kwin_wayland_wrapper'),'--virtual','--output-count','2','--width','1024','--height','768','--socket',f'wayland-kos-t10-supervisor-{os.getpid()}-{attempt}','--no-lockscreen','--no-global-shortcuts','--no-kactivities','--exit-with-session',str(APP / 'tests/cover-idle-session')], env=env, stdout=stream, stderr=stream, start_new_session=True)
+            supervisor = subprocess.Popen([sys.executable, '-c', 'import sys; sys.path.insert(0,sys.argv[1]); import cover; cover.compositor_pids=lambda p: {n for n in cover.descendants(p) if cover.is_kwin(n)}; cover.supervise(int(sys.argv[2]))', str(APP / 'companion'), str(compositor.pid)], env=env, stdout=stream, stderr=stream, start_new_session=True)
             try:
                 deadline = time.monotonic()+10
                 log = OUT / f'kwin-restart-{attempt}.log'

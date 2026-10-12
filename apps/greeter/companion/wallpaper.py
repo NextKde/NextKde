@@ -13,6 +13,12 @@ class Reader(Store):
         self.owner = owner
         self._directory(self.root)
 
+    def manifest(self, uid):
+        """Bounded live reference metadata; not proof that image bytes are ready."""
+        with self.locked(uid) as directory:
+            result = self._read(directory, uid, verify_images=False)
+            return result[0] if result else None
+
     def _directory(self, path):
         import stat
         s = path.lstat()

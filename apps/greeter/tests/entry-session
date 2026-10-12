@@ -28,6 +28,7 @@ def run_case(name, delay=0, lost=False, bad=False, default=False, late=False, fi
         (app/'companion/cover.py').write_text('import json,time\nwhile True:\n print(json.dumps('+repr(state)+'),flush=True); time.sleep(.5)\n')
         service = (REPO/'shell/desktop/modules/common/SessionEntryService.qml').read_text()
         service = service.replace('import qs.desktop.modules.wallpaper','').replace('import qs.desktop.modules.dock','')
+        service = service.replace('WindowService.providerReady', 'config.ready')
         service = service.replace('WallpaperService','wallpaper').replace('ConfigService.ready','config.ready').replace('Appearanceconfig','appearance')
         # AppearanceConfigService was replaced by the previous literal replacement.
         service = service.replace('AppearanceConfigService','appearance').replace('Appearanceconfig','appearance')

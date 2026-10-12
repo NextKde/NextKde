@@ -58,8 +58,8 @@ def run(case):
                             attempts += 1
                             if case in ('alice', 'bob', 'cancel-alice'):
                                 assert request['username'] == 'fixture-' + case.removeprefix('cancel-')
-                            if case == 'setup-failure':
-                                data = json.dumps({'type':'error','error_type':'auth_error','description':'Fixture unavailable account'}).encode()
+                            if case in ('setup-failure','backend-error','backend-reconnect'):
+                                data = json.dumps({'type':'error','error_type':'auth_error' if case == 'setup-failure' else 'error','description':'Fixture unavailable backend'}).encode()
                                 connection.sendall(struct.pack('<I',len(data))+data)
                                 continue
                             rounds = 0
@@ -74,12 +74,14 @@ def run(case):
                                 continue
                             if case == 'disconnect':
                                 return
-                            if case == 'failure' and attempts == 1:
+                            if case in ('failure', 'cleanup-error') and attempts == 1:
                                 reply = {'type': 'error', 'error_type': 'auth_error', 'description': 'Test failure'}
                             else:
                                 reply = {'type': 'success'}
                         elif kind == 'cancel_session':
-                            reply = {'type': 'success'}
+                            if case == 'cleanup-error' and attempts == 1:
+                                reply = {'type':'error','error_type':'error','description':'unable to send message: Connection refused (os error 111)'}
+                            else: reply = {'type': 'success'}
                         elif kind == 'start_session':
                             assert request['cmd'] == [str(directory / 'bin/kos-user-session')]
                             assert request.get('env', []) == []
@@ -114,7 +116,7 @@ def run(case):
                     else { root.selectUser(null); username.text = "fixture-user"; username.accepted(); }
                 }
             } else if (TEST_BOOT && root.testStage === 1 && root.phase === "Idle" && root.feedback !== "") {
-                console.info("TEST_SETUP_FAILED"); root.terminate();
+                console.info("TEST_SETUP_FAILED"); Qt.quit();
             } else if (root.testStage === 1 && root.phase === "AwaitingPrompt") {
                 if (!response.enabled || !response.activeFocus) throw new Error("Password not ready and focused");
                 root.testStage = 2;
@@ -124,13 +126,13 @@ def run(case):
             } else if (root.testStage === 2 && TEST_CANCEL && !TEST_KEEP && root.phase === "Idle") {
                 if (!root.choosingUser || username.text !== "" || response.text !== "" || !otherUserButton.activeFocus)
                     throw new Error("List recovery failed");
-                console.info("TEST_CANCELLED"); root.terminate();
+                console.info("TEST_CANCELLED"); Qt.quit();
             } else if (root.testStage === 2 && root.phase === "AwaitingPrompt") {
                 if (response.text !== "" || !response.activeFocus) throw new Error("Retry did not clear and focus input");
-                if (TEST_KEEP) { console.info("TEST_CANCELLED"); root.terminate(); }
+                if (TEST_KEEP) { console.info("TEST_CANCELLED"); Qt.quit(); }
                 else if (TEST_REJECT) {
                     if (root.feedback === "") throw new Error("Launch rejection diagnostic missing");
-                    console.info("TEST_RECOVERED"); root.terminate();
+                    console.info("TEST_RECOVERED"); Qt.quit();
                 } else {
                     if (TEST_MULTI && !root.echoResponse) throw new Error("Visible prompt did not enable echo");
                     if (TEST_FAILURE && root.feedback === "") throw new Error("Failure feedback missing");
@@ -139,7 +141,10 @@ def run(case):
             }
         }
     }
-'''.replace('TEST_BOOT', 'true' if case == 'setup-failure' else 'false').replace('TEST_SINGLE', 'true' if case == 'single' else 'false').replace('TEST_FAILURE', 'true' if case == 'failure' else 'false').replace('TEST_REJECT', 'true' if case == 'launch-rejected' else 'false').replace('TEST_ACCOUNT', str({'alice': 0, 'bob': 1, 'cancel-alice': 0}.get(case, -1))).replace('TEST_MULTI', 'true' if case == 'multi' else 'false').replace('TEST_KEEP', 'true' if case == 'cancel-alice' else 'false').replace('TEST_CANCEL', 'true' if case in ('cancel', 'cancel-alice') else 'false')
+'''.replace('TEST_BOOT', 'true' if case == 'setup-failure' else 'false').replace('TEST_SINGLE', 'true' if case == 'single' else 'false').replace('TEST_FAILURE', 'true' if case in ('failure','cleanup-error') else 'false').replace('TEST_REJECT', 'true' if case == 'launch-rejected' else 'false').replace('TEST_ACCOUNT', str({'alice': 0, 'bob': 1, 'cancel-alice': 0}.get(case, -1))).replace('TEST_MULTI', 'true' if case == 'multi' else 'false').replace('TEST_KEEP', 'true' if case == 'cancel-alice' else 'false').replace('TEST_CANCEL', 'true' if case in ('cancel', 'cancel-alice') else 'false')
+        driver += """
+ Timer { interval: 2200; running: true; repeat: true; onTriggered: { if (["disconnect", "frame-timeout", "backend-error", "backend-reconnect"].includes("CASE") && root.phase === "BackendUnavailable") { console.info("TEST_VISIBLE_RECOVERY"); if ("CASE" === "backend-reconnect") root.reconnectBackend(); else Qt.quit(); } } }
+""".replace('CASE', case)
         source = (APP / 'shell.qml').read_text()
         if case == 'disconnect':
             source = source.replace('60000', '500')
@@ -166,12 +171,12 @@ def run(case):
         thread.join(timeout=11)
         server.close()
         output = (process.stdout + process.stderr).decode(errors='replace')
-        assert process.returncode == 0, (case, output)
+        assert process.returncode == (75 if case == 'backend-reconnect' else 0), (case, output)
         assert not errors, errors
         assert not thread.is_alive(), 'Mock thread did not terminate'
         assert 'fixture-response' not in output, 'Response appeared in logs'
         assert 'TypeError' not in output and 'ReferenceError' not in output, output
-        if case in ('success', 'single', 'failure', 'multi', 'alice', 'bob'):
+        if case in ('success', 'single', 'failure', 'multi', 'alice', 'bob','cleanup-error'):
             assert requests[-1] == 'start_session', requests
             assert 'KOS_GREETER_STATE Terminated' in output
             states = ['ReadyToLaunch', 'Exiting', 'LaunchRequested', 'Terminated']
@@ -188,11 +193,13 @@ def run(case):
             assert 'TEST_RECOVERED' in output and requests[-2:] == ['cancel_session', 'create_session'], output
         else:
             assert 'start_session' not in requests, requests
+        if case in ('disconnect','frame-timeout','backend-error','backend-reconnect'):
+            assert 'TEST_VISIBLE_RECOVERY' in output and 'start_session' not in requests, output
         if case == 'setup-failure':
             assert requests.count('create_session') == 1 and 'post_auth_message_response' not in requests and 'TEST_SETUP_FAILED' in output, requests
         if case == 'multi':
             assert requests.count('post_auth_message_response') == 4, requests
-        if case == 'failure':
+        if case in ('failure','cleanup-error'):
             assert requests.count('create_session') == 2
         if case == 'cancel':
             assert requests[-1] == 'cancel_session', requests
@@ -204,5 +211,5 @@ def run(case):
             (evidence / ('ipc-' + case + '.log')).write_text('\n'.join(line for line in output.splitlines() if 'KOS_GREETER_' in line or 'TEST_RECOVERED' in line) + '\n')
         print('PASS: actual Quickshell + mock IPC:', case, ','.join(requests))
 
-for scenario in ('success', 'single', 'failure', 'cancel', 'disconnect', 'launch-rejected', 'multi', 'alice', 'bob', 'cancel-alice', 'frame-timeout', 'setup-failure'):
+for scenario in ('success', 'single', 'failure', 'cancel', 'disconnect', 'launch-rejected', 'multi', 'alice', 'bob', 'cancel-alice', 'frame-timeout', 'setup-failure','cleanup-error','backend-error','backend-reconnect'):
     run(scenario)

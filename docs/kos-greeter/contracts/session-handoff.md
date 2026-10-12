@@ -29,3 +29,7 @@ wrapper 持有同 UID 的持久 flock inode `kos-desktop-session.lock`，拒绝�
 ## 验收范围
 
 见 ../evidence/T09/REPORT.md。A11/A13 的 T09 描述、文件和本地进程子项可独立验收；真实 PAM/双KWin/三阶段画面/scanout/持久安装没有在本卡运行，也不因此重新打开已经关闭的 T02/T06。
+
+## 2026-10-12 wrapper关键路径降时
+
+生产wrapper的build/write/consume显式采用metadata-only live引用检查：仍校验有限schema、UID/session/摘要、root发布目录/manifest有效期/版本/fit/hash字段、目标文件元数据，但不将它当图片已就绪。被引用资源的真实字节/hash/canonical/尺寸在Cover read_reference和消费路径仍完整验证，失败回退；其余调用默认完整检查。这样不在启动Plasma前重复PNG解码/重编码。

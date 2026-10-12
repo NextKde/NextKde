@@ -66,7 +66,7 @@ QtObject {
     }
     function check() {
         if (!pending || (!defaultBackground && !imageMatches) || !essentials.dock || !ConfigService.ready
-            || !AppearanceConfigService.ready
+            || !AppearanceConfigService.ready || !WindowService.providerReady
             || (!AppearanceConfigService.barIntegratedWithDock && !essentials.bar)) return;
         const outputs = Quickshell.screens.map(s => s.name).sort();
         if (JSON.stringify(outputs) !== JSON.stringify(handoff.outputs) || !outputs.length

@@ -1,0 +1,22 @@
+[
+  {
+    "file": "src/backends/drm/drm_gpu.cpp",
+    "sha256": "907a021be62915650dc5ba2e176e7ecc650c33448659355c138202bc84be1d6a",
+    "url": "https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/backends/drm/drm_gpu.cpp"
+  },
+  {
+    "file": "src/backends/drm/drm_buffer.cpp",
+    "sha256": "99444bda5dbb5387ebd77c2d7a8a4928a8e8985e973801f99f90fe441c212c05",
+    "url": "https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/backends/drm/drm_buffer.cpp"
+  },
+  {
+    "file": "src/core/session_logind.cpp",
+    "sha256": "e874e3e390258c3cd896de0bbe786e3b94d3417fe1b3b107f438bbec2c8734d2",
+    "url": "https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/core/session_logind.cpp"
+  },
+  {
+    "file": "src/main_wayland.cpp",
+    "sha256": "1a9581c8836333a27c798704d9f5cfd0047bff17e0742a9d705ad99ba117b690",
+    "url": "https://raw.githubusercontent.com/KDE/kwin/v6.7.5/src/main_wayland.cpp"
+  }
+]

@@ -25,3 +25,13 @@ QML 的独立 Python feed 单次消费 T09 引用，忽略 KOS_HANDOFF_PATH，�
 Python 事件 `SocketConnected/SocketTimeout/Deadline/SessionEnded/Exited` 使用 monotonic_ns。QML 的 `ResourceReady/WindowMapped/FrameSubmitted/OutputRemoved/Timeout/ShellReady/Recovery` 使用 Date.now 毫秒，WAYLAND_DEBUG 为协议时间线；二者不能直接相减。测试恢复耗时由外部 Python monotonic 测量。ResourceReady 在此包含已决定的固定回退；WindowMapped 是 backingWindowVisible，FrameSubmitted 是 frameSwapped。未接 presentation-time，均不是 scanout，不能推出零黑帧。
 
 T08 最终资源 hash 尚未显式传入 wrapper，因此 T10 只能校验 T09 描述相对活跃版本；不能证明认证终帧/Cover/桌面三阶段在 launch 前后更新时一致。该缺口保留 T11/T14。
+
+## 2026-10-12 生产 wrapper 修复
+
+限定树内允许 `kwin_wayland` 及 Linux comm 截断名 `kwin_wayland_wr`。后者创建并 listen socket，再把 fd 传给 KWin，因此 SO_PEERCRED 是 wrapper。对端验证通过之后，还执行最多 150ms 的 `wl_display.sync` callback 协议往返；仅 socket connect 不足以触发 Cover。未响应、协议错误/断连均继续有界发现，不启动 UI。它不是首帧或 scanout 证据。
+
+隔离 supervisor 回归显式禁止固定用户服务 fallback，只发现测试 compositor 子树；分别运行直接 KWin 与实际 KWin wrapper，防止测试误连正在使用的桌面。
+
+## 2026-10-12 资源重复工作消除
+
+消费者首次对该内容hash完成严格canonical字节检查之后，可在进程内复用hash/尺寸验证结果；每次仍读取live授权/版本与实际文件bytes并校验权限、SHA256、尺寸，不缓存图片/授权，不绕过撤销。128项上限。source/fit/crop/首帧settled门控保持；不是低清占位策略。新增SocketPeerMatched仅表示可信listener被发现，不等于Wayland响应/可绘制。性能与底层研究见 evidence/handoff-latency-fix/REPORT.md。

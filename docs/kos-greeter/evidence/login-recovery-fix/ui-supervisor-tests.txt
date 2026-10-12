@@ -1,0 +1,10 @@
+.KOS_GREETER_UI restart 1
+KOS_GREETER_UI restart 2
+.KOS_GREETER_UI restart 1
+KOS_GREETER_UI restart 2
+KOS_GREETER_UI restart-limit
+...
+----------------------------------------------------------------------
+Ran 5 tests in 2.503s
+
+OK

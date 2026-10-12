@@ -1,0 +1,27 @@
+[
+  {
+    "project": "greetd",
+    "url": "https://raw.githubusercontent.com/kennylevinsen/greetd/0.10.3/greetd/src/context.rs",
+    "sha256": "f2f715115310779316bfae5a3ee2a688724d834186f62f6b82a3fe88f25ee3df"
+  },
+  {
+    "project": "greetd",
+    "url": "https://raw.githubusercontent.com/kennylevinsen/greetd/0.10.3/greetd/src/main.rs",
+    "sha256": "8fa1c64be99b0f65cbaabbdc1715e142fb0b0d4b31ac86c09ddfbe705247b5e1"
+  },
+  {
+    "project": "greetd",
+    "url": "https://raw.githubusercontent.com/kennylevinsen/greetd/0.10.3/greetd/src/server.rs",
+    "sha256": "3ba5b64b8b3dd14bbce962b7d14db38eaba2bd3b9e75af1a85dccee95c22b13f"
+  },
+  {
+    "project": "quickshell",
+    "url": "https://raw.githubusercontent.com/quickshell-mirror/quickshell/v0.3.2/src/services/greetd/connection.cpp",
+    "sha256": "11f60ebf24a587f8a1044c002754eaba18c546940ac2786c297deb61217191eb"
+  },
+  {
+    "project": "quickshell",
+    "url": "https://raw.githubusercontent.com/quickshell-mirror/quickshell/v0.3.2/src/services/greetd/qml.hpp",
+    "sha256": "e7d99897e713b897dde8850e3b1241c24886cfe885dd5688a86742d952d3c870"
+  }
+]

@@ -2,7 +2,7 @@
 import os, signal, subprocess, tempfile
 from pathlib import Path
 APP=Path(__file__).resolve().parents[1]
-OUT=APP.parents[1]/'docs/kos-greeter/evidence/T11/startup-background'
+OUT=Path(os.environ.get('KOS_STARTUP_BACKGROUND_EVIDENCE', str(APP.parents[1]/'docs/kos-greeter/evidence/T11/startup-background')))
 OUT.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='kos-first-frame-') as temp:
  env=dict(os.environ,XDG_CONFIG_HOME=temp+'/config',KOS_STARTUP_BACKGROUND_EVIDENCE=str(OUT))

@@ -1,0 +1,1 @@
+PASS --build --no-wallpaper-sync includes session_output.py with matching manifest hash and both entry imports; bundle removed after verification. No install performed.

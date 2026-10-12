@@ -36,7 +36,7 @@ ShellRoot {
         running: true
         stdout: SplitParser {
             onRead: data => {
-                try { root.state = JSON.parse(data); root.feedReady = true; stale.restart(); }
+                try { root.state = JSON.parse(data); if (!root.feedReady) root.record("FeedReceived"); root.feedReady = true; stale.restart(); }
                 catch (_) { root.state = ({source: "", fit: "crop", version: "default"}); root.feedReady = true; }
             }
         }
@@ -95,6 +95,7 @@ ShellRoot {
                     source: root.state.source; fitMode: root.state.fit
                     onResourceSettledChanged: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
                     Component.onCompleted: { if (resourceSettled) root.record("ResourceReady " + window.screen.name); window.showWhenReady(); }
+                    onDecoded: root.record("ImageDecoded " + window.screen.name + " " + root.state.version)
                     onFrameSubmitted: root.record("FrameSubmitted " + window.screen.name + " " + root.state.version)
                     onFallback: reason => root.record("Fallback " + reason)
                 }

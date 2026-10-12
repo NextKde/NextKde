@@ -42,7 +42,7 @@ def parse(raw):
         raise ValueError('invalid-json') from error
 
 
-def validate(desc, session, uid, root=PUBLIC_ROOT, owner=0, now=None):
+def validate(desc, session, uid, root=PUBLIC_ROOT, owner=0, now=None, verify_resources=True):
     keys(desc, 'schemaVersion sessionId issuedAt expiresAt user resource wallpaper outputs transition')
     if type(desc['schemaVersion']) is not int or desc['schemaVersion'] != 1:
         raise ValueError('schema')
@@ -100,25 +100,27 @@ def validate(desc, session, uid, root=PUBLIC_ROOT, owner=0, now=None):
         return desc
     if type(r['version']) is not str or not re.fullmatch(r'v-[0-9a-f]{32}', r['version']) or type(r['sha256']) is not str or not re.fullmatch(r'[0-9a-f]{64}', r['sha256']):
         raise ValueError('resource-id')
-    current = Reader(root, owner).consume(uid)
+    reader = Reader(root, owner)
+    current = reader.consume(uid) if verify_resources else reader.manifest(uid)
     if not current:
         raise ValueError('resource-unavailable')
-    manifest, images = current
-    if manifest['version'] != r['version'] or hashlib.sha256(images['wallpaper']).hexdigest() != r['sha256'] or manifest['fit'] != w['fit']:
+    manifest, images = current if verify_resources else (current, None)
+    if manifest['version'] != r['version'] or manifest['resources']['wallpaper']['sha256'] != r['sha256'] or manifest['fit'] != w['fit']:
         raise ValueError('resource-replaced')
     return desc
 
 
-def build(session, uid, root=PUBLIC_ROOT, owner=0):
+def build(session, uid, root=PUBLIC_ROOT, owner=0, verify_resources=True):
     now = int(time.time())
     d = dict(schemaVersion=1, sessionId=session, issuedAt=now, expiresAt=now+120,
              user={'uid': uid}, resource={'version': 'default', 'sha256': ''},
              wallpaper={'kind': 'image', 'fit': 'crop', 'phase': None}, outputs=[],
              transition={'suppressInitialWallpaperTransition': True, 'exitDurationMs': 240, 'revealDurationMs': 240})
     try:
-        current = Reader(root, owner).consume(uid)
+        reader = Reader(root, owner)
+        current = reader.consume(uid) if verify_resources else reader.manifest(uid)
         if current:
-            m, _ = current
+            m = current[0] if verify_resources else current
             d['resource'] = {'version': m['version'], 'sha256': m['resources']['wallpaper']['sha256']}
             d['wallpaper']['fit'] = m['fit']
     except (OSError, ValueError):
@@ -155,8 +157,8 @@ class Runtime:
         return s
 
 
-    def write(self, desc, root=PUBLIC_ROOT, owner=0):
-        validate(desc, self.session, self.uid, root, owner)
+    def write(self, desc, root=PUBLIC_ROOT, owner=0, verify_resources=True):
+        validate(desc, self.session, self.uid, root, owner, verify_resources=verify_resources)
         raw = json.dumps(desc, allow_nan=False, separators=(',', ':')).encode()
         if len(raw) > MAX_JSON: raise ValueError('json-budget')
         temp = '.tmp-' + uuid.uuid4().hex
@@ -174,7 +176,7 @@ class Runtime:
             try: os.unlink(temp, dir_fd=self.fd)
             except FileNotFoundError: pass
 
-    def consume(self, root=PUBLIC_ROOT, owner=0, remove=True):
+    def consume(self, root=PUBLIC_ROOT, owner=0, remove=True, verify_resources=True):
         fd = os.open('handoff.json', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=self.fd)
         with os.fdopen(fd, 'rb') as src:
             s = self._secure(src.fileno())
@@ -182,7 +184,7 @@ class Runtime:
                 raise ValueError('file-replaced')
             raw = src.read(MAX_JSON+1)
         if hashlib.sha256(raw).digest() != self.digest: raise ValueError('file-modified')
-        result = validate(parse(raw), self.session, self.uid, root, owner)
+        result = validate(parse(raw), self.session, self.uid, root, owner, verify_resources=verify_resources)
         if remove: os.unlink('handoff.json', dir_fd=self.fd)
         return result
 

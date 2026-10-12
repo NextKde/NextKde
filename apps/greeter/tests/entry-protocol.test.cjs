@@ -40,3 +40,14 @@ vm.runInContext(previewHandler,state);
 assert.equal(state.sessionImage,''); assert.equal(state.defaultBackground,false);
 assert.equal(state.imageMatches,false);
 console.log('PASS T12 daily preview releases static presentation after entry');
+const gate = service.slice(service.indexOf('    function check()'), service.indexOf('    function release('));
+const ready = {pending:true,defaultBackground:true,imageMatches:false,essentials:{dock:true,bar:true},
+ ConfigService:{ready:true},AppearanceConfigService:{ready:true,barIntegratedWithDock:false},
+ WindowService:{providerReady:false},Quickshell:{screens:[{name:'A'}]},handoff:{session:'s',hash:'',version:'default',fit:'crop',outputs:['A']},
+ frames:{A:true},coverPath:'/fixture/cover.qml',reveal:{running:false}};
+vm.createContext(ready); vm.runInContext(gate,ready);
+ready.check(); assert.equal(ready.reveal.running,false,'provider initial snapshot must finish');
+ready.WindowService.providerReady=true; ready.essentials.dock=false;
+ready.check(); assert.equal(ready.reveal.running,false,'Dock needs its ready frame');
+ready.essentials.dock=true; ready.check(); assert.equal(ready.reveal.running,true);
+console.log('PASS desktop reveal waits for provider and essential frames');

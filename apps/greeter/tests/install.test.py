@@ -21,7 +21,7 @@ class Transaction(unittest.TestCase):
   self.temp=tempfile.TemporaryDirectory(prefix='kos-install-fake-')
   self.root=Path(self.temp.name)/'root';self.root.mkdir()
   self.bundle=Path(self.temp.name)/'bundle';self.bundle.mkdir()
-  for relative in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-user-session','app/companion/entry.py'):
+  for relative in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/session_output.py'):
    path=self.bundle/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('# fixture\n')
    path.chmod(0o755 if relative.startswith('app/bin/') else 0o644)
   self.manifest()
@@ -36,7 +36,7 @@ class Transaction(unittest.TestCase):
   self.calls=[];self.fail=None;self.sessions=['old 1000 user'];self.services={'old':'plasmalogin'}
   self.patches=[patch.object(m,'systemctl',side_effect=self.systemctl),patch.object(m,'properties',side_effect=self.properties),
     patch.object(m,'run',side_effect=self.command),patch.object(self.inst,'preflight',return_value=('plasmalogin.service',{'ActiveState':'active'})),
-    patch.object(self.inst,'installed_check')]
+    patch.object(self.inst,'installed_check'),patch.object(m,'require_caller_shell')]
   for p in self.patches:p.start()
  def tearDown(self):
   for p in reversed(self.patches):p.stop()
@@ -75,6 +75,86 @@ class Transaction(unittest.TestCase):
   self.assertEqual(stat.S_IMODE(self.config.stat().st_mode),0o640)
   self.assertEqual(self.inst.links('plasmalogin.service'),self.links)
   self.assertFalse(self.inst.app.exists());self.assertFalse(self.inst.state.exists())
+ def old_policy(self):
+  self.inst.install(self.bundle)
+  old=b'[Unit]\nOnFailure=kos-greeter-recover.service\n[Service]\nRestart=no\n'
+  (self.root/m.FILES[1]).write_bytes(old)
+  data=self.inst.load();data['installed_files']=self.inst.current_files();self.inst.save(data)
+  self.calls.clear();return old,data
+ def test_policy_migrates_identical_bundle_preserving_first_snapshot(self):
+  old,data=self.old_policy();original_files=json.dumps(data['files'],sort_keys=True)
+  self.inst.install(self.bundle)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),m.GREETER_POLICY)
+  self.assertEqual(json.dumps(self.inst.load()['files'],sort_keys=True),original_files)
+  self.assertEqual(self.inst.load()['installed_links'],data['installed_links'])
+  self.assertEqual(self.calls,[('daemon-reload',)])
+  self.inst.verify_receipt(self.inst.load())
+ def test_policy_migration_failure_restores_old_receipt(self):
+  old,data=self.old_policy();self.fail=('daemon-reload',)
+  with self.assertRaises(RuntimeError):self.inst.install(self.bundle)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),old)
+  self.assertEqual(self.inst.load(),data)
+  self.assertFalse((self.inst.state/'policy-update.json').exists())
+ def test_policy_interruption_restores_before_next_update(self):
+  old,data=self.old_policy()
+  record=dict(state=data,before=old.hex(),after=hashlib.sha256(m.GREETER_POLICY).hexdigest())
+  m.atomic(self.inst.state/'policy-update.json',json.dumps(record).encode(),0o600)
+  self.inst.save(dict(data,phase='policy-updating'))
+  m.atomic(self.root/m.FILES[1],m.GREETER_POLICY)
+  self.inst.recover_policy();self.assertEqual(self.inst.load(),data)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),old)
+ def test_policy_committed_interruption_only_cleans_journal(self):
+  old,data=self.old_policy()
+  record=dict(state=data,before=old.hex(),after=hashlib.sha256(m.GREETER_POLICY).hexdigest())
+  m.atomic(self.inst.state/'policy-update.json',json.dumps(record).encode(),0o600)
+  m.atomic(self.root/m.FILES[1],m.GREETER_POLICY)
+  committed=dict(data,installed_files=self.inst.current_files());self.inst.save(committed)
+  self.inst.recover_policy();self.assertEqual(self.inst.load(),committed)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),m.GREETER_POLICY)
+ def test_policy_upgrade_branch_migrates_without_restart(self):
+  old,data=self.old_policy();self.upgrade_bundle()
+  with patch.object(self.inst,'publish'):self.inst.install(self.bundle)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),m.GREETER_POLICY)
+  self.assertEqual(self.inst.load()['files'],data['files'])
+  self.assertFalse(any(call[0] in ('start','stop','restart','enable','disable') for call in self.calls))
+ def test_old_rollback_can_handle_pending_policy_phase(self):
+  old,data=self.old_policy()
+  record=dict(state=data,before=old.hex(),after=hashlib.sha256(m.GREETER_POLICY).hexdigest())
+  m.atomic(self.inst.state/'policy-update.json',json.dumps(record).encode(),0o600)
+  self.inst.save(dict(data,phase='policy-updating'))
+  m.atomic(self.root/m.FILES[1],m.GREETER_POLICY)
+  # Old rollback code has no migration recovery method; its existing receipt
+  # check only applies to phase=installed and restores original file snapshots.
+  with patch.object(self.inst,'recover_policy'):
+   self.inst.rollback()
+  self.assert_restored()
+ def test_policy_config_commit_failure_restores_old_policy(self):
+  old,data=self.old_policy();real=self.inst.save;calls=0
+  def fail(value):
+   nonlocal calls
+   calls+=1
+   if calls==2:raise OSError('policy state commit')
+   real(value)
+  with patch.object(self.inst,'save',side_effect=fail),self.assertRaisesRegex(OSError,'policy state commit'):
+   self.inst.install(self.bundle)
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),old)
+  self.assertEqual(self.inst.load(),data)
+ def test_policy_admin_change_is_not_overwritten(self):
+  old,data=self.old_policy()
+  record=dict(state=data,before=old.hex(),after=hashlib.sha256(m.GREETER_POLICY).hexdigest())
+  m.atomic(self.inst.state/'policy-update.json',json.dumps(record).encode(),0o600)
+  self.inst.save(dict(data,phase='policy-updating'))
+  (self.root/m.FILES[1]).write_bytes(b'admin change')
+  with self.assertRaisesRegex(RuntimeError,'changed during'):self.inst.recover_policy()
+  self.assertEqual((self.root/m.FILES[1]).read_bytes(),b'admin change')
+ def test_shell_check_precedes_every_install_branch(self):
+  self.inst.install(self.bundle)
+  self.calls.clear()
+  with patch.object(m, 'require_caller_shell', side_effect=RuntimeError('incompatible Shell')):
+   with self.assertRaisesRegex(RuntimeError, 'incompatible Shell'): self.inst.install(self.bundle)
+   self.upgrade_bundle()
+   with self.assertRaisesRegex(RuntimeError, 'incompatible Shell'): self.inst.install(self.bundle)
+  self.assertEqual(self.calls, [])
  def test_install_boot_default_and_exact_rollback(self):
   self.inst.install(self.bundle)
   self.assertEqual(self.properties('display-manager.service')['Id'],'greetd.service')
