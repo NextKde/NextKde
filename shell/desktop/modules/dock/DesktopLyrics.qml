@@ -89,7 +89,7 @@ Scope {
                         border.color: Qt.rgba(1, 1, 1, 0.22)
                         Text {
                             anchors.centerIn: parent
-                            text: qsTr("↔ 移动")
+                            text: I18n.text("↔ 移动")
                             color: "white"
                             font.pixelSize: 12
                         }
@@ -106,12 +106,12 @@ Scope {
                         anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 9 }
                         spacing: 28
                         Text {
-                            text: qsTr("拖动歌词框调整位置")
+                            text: I18n.text("拖动歌词框调整位置")
                             color: Qt.rgba(1, 1, 1, 0.72)
                             font.pixelSize: 12
                         }
                         Repeater {
-                            model: [qsTr("恢复默认位置"), qsTr("完成")]
+                            model: [I18n.text("恢复默认位置"), I18n.text("完成")]
                             delegate: Text {
                                 required property int index
                                 required property string modelData
@@ -136,7 +136,7 @@ Scope {
                         anchors.leftMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.rightMargin: DeskCenterConfigService.desktopLyricsEditing ? 22 : 84
                         anchors.topMargin: nextText.visible ? 13 : 14
-                        text: lyricWindow.currentLine || (DeskCenterConfigService.desktopLyricsEditing ? qsTr("拖动这里调整歌词位置") : "")
+                        text: lyricWindow.currentLine || (DeskCenterConfigService.desktopLyricsEditing ? I18n.text("拖动这里调整歌词位置") : "")
                         color: "white"
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight

@@ -197,7 +197,7 @@ Item {
             spacing: 2
             Text {
                 width: parent.width
-                text: "体感 " + WeatherService.apparentTemperature
+                text: I18n.text("体感 ") + WeatherService.apparentTemperature
                 color: ThemeService.foregroundColor
                 opacity: 0.88
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -205,7 +205,7 @@ Item {
             }
             Text {
                 width: parent.width
-                text: "湿度 " + WeatherService.humidity
+                text: I18n.text("湿度 ") + WeatherService.humidity
                 color: ThemeService.foregroundColor
                 opacity: 0.74
                 font.pixelSize: Math.max(8, widget.iconSize * 0.19)
@@ -237,7 +237,7 @@ Item {
             }
         }
         Text {
-            text: "· 体感 " + WeatherService.apparentTemperature
+            text: I18n.text("· 体感 ") + WeatherService.apparentTemperature
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter

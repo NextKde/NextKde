@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "platform/file_paths.h"
 #include "collection_service.h"
 #include "online/platform_catalog.h"
@@ -79,11 +80,11 @@ CollectionService::CollectionService(infrastructure::database::Database &db,
   homeCharts_=home.value("charts").toArray().toVariantList();
   homePreviews_=home.value("previews").toArray().toVariantList();
   dailyTracks_=home.value("dailyTracks").toArray().toVariantList();
-  dailySource_=home.value("dailySource").toString(QStringLiteral("网易云每日推荐"));
+  dailySource_=home.value("dailySource").toString(QCoreApplication::translate("ListenFree", "网易云每日推荐"));
   homeFetchedAt_=QDateTime::fromString(home.value("fetchedAt").toString(),Qt::ISODate);
   if(homePreviews_.size()!=2) homePreviews_={
-      QVariantMap{{"id","3779629"},{"title","新歌榜"},{"source","wy"},{"kind","playlist"},{"tracks",QVariantList{}}},
-      QVariantMap{{"id","3778678"},{"title","热歌榜"},{"source","wy"},{"kind","playlist"},{"tracks",QVariantList{}}}};
+      QVariantMap{{"id","3779629"},{"title",QCoreApplication::translate("ListenFree", "新歌榜")},{"source","wy"},{"kind","playlist"},{"tracks",QVariantList{}}},
+      QVariantMap{{"id","3778678"},{"title",QCoreApplication::translate("ListenFree", "热歌榜")},{"source","wy"},{"kind","playlist"},{"tracks",QVariantList{}}}};
 }
 
 void CollectionService::refreshHome(bool force) {
@@ -102,14 +103,14 @@ void CollectionService::refreshHome(bool force) {
   get(QUrl("https://music.163.com/api/personalized/playlist?limit=12&total=true&n=1000"),[this,listsFrom](QJsonObject obj,QString error){
     const auto rows=listsFrom(obj.value("result").toArray()).mid(0,12);
     if(error.isEmpty() && !rows.isEmpty()){homeRecommendations_=rows;homeSucceeded_=true;emit homeRecommendationsChanged();}
-    else homeError_=QStringLiteral("部分推荐暂时无法更新，请稍后重试");
+    else homeError_=QCoreApplication::translate("ListenFree", "部分推荐暂时无法更新，请稍后重试");
     finishHomeRequest();
   });
   get(QUrl("https://music.163.com/api/toplist"),[this,listsFrom](QJsonObject obj,QString error){
     const auto raw=obj.value("list").toArray();auto rows=listsFrom(raw);
     if(error.isEmpty() && !rows.isEmpty()){
       homeCharts_=rows;homeSucceeded_=true;emit homeChartsChanged();
-    } else homeError_=QStringLiteral("部分榜单暂时无法更新，请稍后重试");
+    } else homeError_=QCoreApplication::translate("ListenFree", "部分榜单暂时无法更新，请稍后重试");
     finishHomeRequest();
   });
   for(int i=0;i<2;++i){
@@ -120,7 +121,7 @@ void CollectionService::refreshHome(bool force) {
         auto preview=homePreviews_[i].toMap();preview["tracks"]=rows;
         preview["artwork"]=obj.value("playlist").toObject().value("coverImgUrl").toString();
         homePreviews_[i]=preview;homeSucceeded_=true;emit homePreviewsChanged();
-      } else homeError_=QStringLiteral("部分榜单暂时无法更新，请稍后重试");
+      } else homeError_=QCoreApplication::translate("ListenFree", "部分榜单暂时无法更新，请稍后重试");
       finishHomeRequest();
     });
   }
@@ -135,10 +136,10 @@ void CollectionService::loadDailyTracks(bool fallback) {
     if(fallback)for(const auto& value:obj.value("result").toArray())songs.append(value.toObject().value("song"));
     const auto rows=online::platformSongs("wy",QJsonObject{{"songs",songs}}).mid(0,30);
     if(error.isEmpty() && !rows.isEmpty()){
-      dailyTracks_=rows;dailySource_=fallback ? QStringLiteral("网易云推荐新歌") : QStringLiteral("网易云每日推荐");
+      dailyTracks_=rows;dailySource_=fallback ? QCoreApplication::translate("ListenFree", "网易云推荐新歌") : QCoreApplication::translate("ListenFree", "网易云每日推荐");
       homeSucceeded_=true;emit dailyTracksChanged();
     } else if(!fallback){loadDailyTracks(true);return;}
-    else homeError_=QStringLiteral("每日推荐暂时无法更新，请稍后重试");
+    else homeError_=QCoreApplication::translate("ListenFree", "每日推荐暂时无法更新，请稍后重试");
     finishHomeRequest();
   });
 }
@@ -165,7 +166,7 @@ bool CollectionService::save(const QVariantList &lists) {
           "collections.v1",
           QString::fromUtf8(QJsonDocument(QJsonArray::fromVariantList(lists))
                                 .toJson(QJsonDocument::Compact)))) {
-    emit notice("歌单保存失败，请检查数据目录");
+    emit notice(QCoreApplication::translate("ListenFree", "歌单保存失败，请检查数据目录"));
     return false;
   }
   lists_ = lists;
@@ -185,7 +186,7 @@ QString CollectionService::create(const QString &name,
                   {"title", name.trimmed()},
                   {"kind", "Local"},
                   {"tracks", rows},
-                  {"subtitle", QString::number(rows.size()) + " 首歌曲"},
+                  {"subtitle", QString::number(rows.size()) + QCoreApplication::translate("ListenFree", " 首歌曲")},
                   {"color", "#5699c5"}});
   return save(lists) ? id : QString{};
 }
@@ -244,7 +245,7 @@ void CollectionService::toggleTrackLiked(const QVariantMap &track) {
   }
   if (!removed) rows.append(cleanRows.first());
   list["tracks"] = rows;
-  list["subtitle"] = QString::number(rows.size()) + " 首歌曲";
+  list["subtitle"] = QString::number(rows.size()) + QCoreApplication::translate("ListenFree", " 首歌曲");
   list["artwork"] = rows.isEmpty() ? QString{} : rows.first().toMap().value("artwork").toString();
   if (i < 0) lists.prepend(list); else lists[i] = list;
   save(lists);
@@ -278,8 +279,8 @@ void CollectionService::toggleSaved(const QVariantMap &collection) {
       {"wy","https://music.163.com/#/playlist?id="},{"tx","https://y.qq.com/n/ryqq/playlist/"},
       {"kg","https://www.kugou.com/yy/special/single/"},{"mg","https://music.migu.cn/v3/music/playlist/"}};
     if(reference.value("kind")!="album" && reference.value("url").toString().isEmpty()) reference["url"]=links.value(provider)+id;
-    reference["subtitle"]="在线收藏 · 打开时更新";
-  } else reference["subtitle"]="本地收藏 · "+QString::number(reference.value("tracks").toList().size())+" 首歌曲";
+    reference["subtitle"]=QCoreApplication::translate("ListenFree", "在线收藏 · 打开时更新");
+  } else reference["subtitle"]=QCoreApplication::translate("ListenFree", "本地收藏 · ")+QString::number(reference.value("tracks").toList().size())+QCoreApplication::translate("ListenFree", " 首歌曲");
   rows.append(reference);save(rows);
 }
 void CollectionService::addTracks(const QString &id,
@@ -290,7 +291,7 @@ void CollectionService::addTracks(const QString &id,
   auto lists = lists_;
   auto row = lists[i].toMap();
   if (row.value("reference").toBool()) {
-    emit notice("在线收藏是原歌单的只读引用，请选择或新建本地歌单");
+    emit notice(QCoreApplication::translate("ListenFree", "在线收藏是原歌单的只读引用，请选择或新建本地歌单"));
     return;
   }
   auto rows = row.value("tracks").toList();
@@ -305,7 +306,7 @@ void CollectionService::addTracks(const QString &id,
       rows.append(v);
   }
   row["tracks"] = rows;
-  row["subtitle"] = QString::number(rows.size()) + " 首歌曲";
+  row["subtitle"] = QString::number(rows.size()) + QCoreApplication::translate("ListenFree", " 首歌曲");
   lists[i] = row;
   save(lists);
 }
@@ -320,7 +321,7 @@ void CollectionService::removeTrack(const QString &id, int at) {
     return;
   rows.removeAt(at);
   row["tracks"] = rows;
-  row["subtitle"] = QString::number(rows.size()) + " 首歌曲";
+  row["subtitle"] = QString::number(rows.size()) + QCoreApplication::translate("ListenFree", " 首歌曲");
   lists[i] = row;
   save(lists);
 }
@@ -342,8 +343,8 @@ CollectionService::get(const QUrl &url,
         const auto bytes = reply->isOpen() ? reply->readAll() : QByteArray{};
         const auto obj = QJsonDocument::fromJson(bytes).object();
         const auto err = reply->error() != QNetworkReply::NoError
-                             ? QStringLiteral("网络请求失败，请重试")
-                         : obj.isEmpty() ? QStringLiteral("服务返回了无效数据")
+                             ? QCoreApplication::translate("ListenFree", "网络请求失败，请重试")
+                         : obj.isEmpty() ? QCoreApplication::translate("ListenFree", "服务返回了无效数据")
                                          : QString{};
         reply->deleteLater();
         done(obj, err);
@@ -366,9 +367,9 @@ void CollectionService::refresh(const QString &order) {
       if(networkOk)recommendations_=online::platformPlaylists(provider,response);
       if(recommendations_.isEmpty()) {
         if(provider=="wy" && networkOk && response.value("code").toInt()==200) {
-          error_=order_=="new" ? QStringLiteral("网易云暂未返回最新歌单，可切换“最热”查看")
-                              : QStringLiteral("网易云暂未返回此分类的歌单，请稍后重试");
-        } else error_=QStringLiteral("此平台歌单暂不可用，请稍后重试");
+          error_=order_=="new" ? QCoreApplication::translate("ListenFree", "网易云暂未返回最新歌单，可切换“最热”查看")
+                              : QCoreApplication::translate("ListenFree", "网易云暂未返回此分类的歌单，请稍后重试");
+        } else error_=QCoreApplication::translate("ListenFree", "此平台歌单暂不可用，请稍后重试");
         qWarning().noquote()<<"Playlist catalog"<<provider<<"order"<<order_
             <<"HTTP"<<reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt()
             <<"network"<<static_cast<int>(reply->error())<<"code"<<response.value("code").toVariant();
@@ -409,7 +410,7 @@ void CollectionService::refresh(const QString &order) {
       }
       recommendations_ = rows;
     } else
-      error_ = err.isEmpty() ? QStringLiteral("歌单服务暂不可用") : err;
+      error_ = err.isEmpty() ? QCoreApplication::translate("ListenFree", "歌单服务暂不可用") : err;
     --requests_;
     emit discoverChanged();
   });
@@ -489,7 +490,7 @@ void CollectionService::filter(const QString &key, const QString &value) {
   else if (tagIds_.contains(label))
     activeTag_ = tagIds_.value(label);
   else {
-    emit notice("分类尚未加载完成，请稍后重试");
+    emit notice(QCoreApplication::translate("ListenFree", "分类尚未加载完成，请稍后重试"));
     return;
   }
   refresh(order_);
@@ -521,7 +522,7 @@ void CollectionService::open(const QVariantMap &collection) {
   if (detailBusy_) {
     const auto provider=collection.value("source","kw").toString();
     if (provider=="bili") {
-      if (!bilibili_) { detailBusy_=false; detail_["error"]="哔哩哔哩尚未准备好"; emit detailChanged(); return; }
+      if (!bilibili_) { detailBusy_=false; detail_["error"]=QCoreApplication::translate("ListenFree", "哔哩哔哩尚未准备好"); emit detailChanged(); return; }
       const auto generation=detailGeneration_;
       bilibiliDetailId_=bilibili_->detail(detail_.value("bvid",detail_.value("id")).toString(),this,
           [this,generation](QVariantMap data,QString error) {
@@ -536,10 +537,10 @@ void CollectionService::open(const QVariantMap &collection) {
     else if(provider=="wy" || provider=="kg")remotePlaylist(detailGeneration_);
     else {
       const auto gen=detailGeneration_;auto* reply=online::platformRequest(*network_,provider,"detail",detail_.value("id").toString());
-      if(!reply){detailBusy_=false;detail_["error"]="此平台歌单暂不可用";emit detailChanged();return;}
+      if(!reply){detailBusy_=false;detail_["error"]=QCoreApplication::translate("ListenFree", "此平台歌单暂不可用");emit detailChanged();return;}
       detailReply_=reply;connect(reply,&QNetworkReply::finished,this,[this,reply,provider,gen]{reply->deleteLater();if(gen!=detailGeneration_)return;detailReply_=nullptr;detailBusy_=false;
         if(reply->error()==QNetworkReply::NoError){const auto parsed=online::platformDetail(provider,online::platformJson(reply->readAll()));for(auto i=parsed.cbegin();i!=parsed.cend();++i)if(i.value().isValid()&&i.value()!=QString(""))detail_[i.key()]=i.value();}
-        if(detail_.value("tracks").toList().isEmpty())detail_["error"]="歌单不存在、为空或平台暂不可用";emit detailChanged();});
+        if(detail_.value("tracks").toList().isEmpty())detail_["error"]=QCoreApplication::translate("ListenFree", "歌单不存在、为空或平台暂不可用");emit detailChanged();});
     }
   }
 }
@@ -555,11 +556,11 @@ void CollectionService::finishRemoteDetail(const QString &error) {
   const auto count = detail_.value("tracks").toList().size();
   const auto total = detail_.value("total").toInt();
   if (!error.isEmpty())
-    detail_["error"] = QStringLiteral("%1（已加载 %2 首）").arg(error).arg(count);
+    detail_["error"] = QCoreApplication::translate("ListenFree", "%1（已加载 %2 首）").arg(error).arg(count);
   else if (count >= playlistTrackLimit && total > count)
-    detail_["error"] = QStringLiteral("此歌单已加载前 5000 首歌曲");
+    detail_["error"] = QCoreApplication::translate("ListenFree", "此歌单已加载前 5000 首歌曲");
   else if (count < total)
-    detail_["error"] = QStringLiteral("已加载 %1 / %2 首，部分歌曲暂不可用").arg(count).arg(total);
+    detail_["error"] = QCoreApplication::translate("ListenFree", "已加载 %1 / %2 首，部分歌曲暂不可用").arg(count).arg(total);
   detailTrackIds_.clear();
   detailTracksById_.clear();
   detailPageDigests_.clear();
@@ -581,7 +582,7 @@ void CollectionService::remotePlaylist(quint64 gen) {
         ? object.value("code").toInt() == 200 && !playlist.isEmpty()
         : object.value("list").toObject().value("list").toObject().contains("total");
     if (reply->error() != QNetworkReply::NoError || !valid) {
-      finishRemoteDetail(QStringLiteral("歌单获取失败，请重新打开重试"));
+      finishRemoteDetail(QCoreApplication::translate("ListenFree", "歌单获取失败，请重新打开重试"));
       return;
     }
     const auto parsed = online::platformDetail(provider, object);
@@ -645,7 +646,7 @@ void CollectionService::neteaseTracks(int offset, quint64 gen) {
     detailReply_ = nullptr;
     const auto object = online::platformJson(reply->readAll());
     if (reply->error() != QNetworkReply::NoError || object.value("code").toInt() != 200 || !object.value("songs").isArray()) {
-      finishRemoteDetail(QStringLiteral("歌曲详情加载中断，请重新打开重试"));
+      finishRemoteDetail(QCoreApplication::translate("ListenFree", "歌曲详情加载中断，请重新打开重试"));
       return;
     }
     for (const auto &value : online::platformSongs("wy", object)) {
@@ -669,13 +670,13 @@ void CollectionService::kugouPage(int number, int received, quint64 gen) {
     const auto object = online::platformJson(reply->readAll());
     const auto data = object.value("data").toObject();
     if (reply->error() != QNetworkReply::NoError || object.value("status").toInt() != 1 || !data.value("info").isArray()) {
-      finishRemoteDetail(QStringLiteral("歌单分页加载中断，请重新打开重试"));
+      finishRemoteDetail(QCoreApplication::translate("ListenFree", "歌单分页加载中断，请重新打开重试"));
       return;
     }
     const auto raw = data.value("info").toArray();
     const auto digest = QCryptographicHash::hash(QJsonDocument(raw).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
     if (!raw.isEmpty() && detailPageDigests_.contains(digest)) {
-      finishRemoteDetail(QStringLiteral("平台重复返回同一页，请稍后重试"));
+      finishRemoteDetail(QCoreApplication::translate("ListenFree", "平台重复返回同一页，请稍后重试"));
       return;
     }
     detailPageDigests_.insert(digest);
@@ -704,7 +705,7 @@ void CollectionService::kugouPage(int number, int received, quint64 gen) {
 void CollectionService::albumPage(int number, quint64 gen) {
   const auto provider=detail_.value("source").toString();
   auto* reply=online::platformRequest(*network_,provider,"album",detail_.value("id").toString(),"hot",number,100);
-  if(!reply){detailBusy_=false;detail_["error"]="此平台专辑暂不可用";emit detailChanged();return;}
+  if(!reply){detailBusy_=false;detail_["error"]=QCoreApplication::translate("ListenFree", "此平台专辑暂不可用");emit detailChanged();return;}
   detailReply_=reply;
   connect(reply,&QNetworkReply::finished,this,[this,reply,provider,number,gen] {
     reply->deleteLater();if(gen!=detailGeneration_)return;detailReply_=nullptr;
@@ -724,7 +725,7 @@ void CollectionService::albumPage(int number, quint64 gen) {
     const bool more=provider!="wy" && !batch.isEmpty() && (batch.size()==100 || (provider=="mg" && rows.size()<miguTotal))
                     && rows.size()<5000 && reply->error()==QNetworkReply::NoError;
     detailBusy_=more;
-    if(reply->error()!=QNetworkReply::NoError || rows.isEmpty())detail_["error"]="专辑为空或平台暂未提供歌曲，请稍后重试";
+    if(reply->error()!=QNetworkReply::NoError || rows.isEmpty())detail_["error"]=QCoreApplication::translate("ListenFree", "专辑为空或平台暂未提供歌曲，请稍后重试");
     emit detailChanged();if(more)albumPage(number+1,gen);
   });
 }
@@ -747,11 +748,11 @@ void CollectionService::openLink(const QString &link) {
   QRegularExpression re("(?:[?&](?:id|disstid|pid)=|playlist_detail/|playlist/|single/|^)([0-9]+)");
   const auto m = re.match(link.trimmed());
   if (!m.hasMatch()) {
-    emit notice("请输入当前平台的歌单链接或歌单 ID");
+    emit notice(QCoreApplication::translate("ListenFree", "请输入当前平台的歌单链接或歌单 ID"));
     return;
   }
   open(
-      {{"id", m.captured(1)}, {"source",platform_}, {"kind", "playlist"}, {"title", "正在加载歌单"}});
+      {{"id", m.captured(1)}, {"source",platform_}, {"kind", "playlist"}, {"title", QCoreApplication::translate("ListenFree", "正在加载歌单")}});
 }
 void CollectionService::page(int number, quint64 gen) {
   const bool chart = detail_.value("kind") == "chart";
@@ -772,7 +773,7 @@ void CollectionService::page(int number, quint64 gen) {
           return;
         detailReply_ = nullptr;
         if (err.isEmpty() && !chart && obj.value("result").toString() != "ok")
-          err = "歌单不存在或暂不可用";
+          err = QCoreApplication::translate("ListenFree", "歌单不存在或暂不可用");
         if (!err.isEmpty()) {
           detail_["error"] = err;
           detailBusy_ = false;
@@ -795,7 +796,7 @@ void CollectionService::page(int number, quint64 gen) {
                           rows.size() < 5000;
         if (!more && rows.size() < detail_.value("total").toInt() &&
             rows.size() >= 5000)
-          detail_["error"] = "此歌单已加载前 5000 首歌曲";
+          detail_["error"] = QCoreApplication::translate("ListenFree", "此歌单已加载前 5000 首歌曲");
         detailBusy_ = more;
         emit detailChanged();
         if (more)

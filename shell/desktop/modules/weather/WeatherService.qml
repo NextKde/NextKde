@@ -1,5 +1,6 @@
 pragma Singleton
 
+import qs.desktop.modules.common
 import QtQuick
 import qs.desktop.modules.platform
 
@@ -67,18 +68,18 @@ QtObject {
     }
 
     function conditionText(code) {
-        if (code === 0) return "晴"
-        if (code === 1) return "大部晴朗"
-        if (code === 2) return "局部多云"
-        if (code === 3) return "阴"
-        if (code === 45 || code === 48) return "雾"
-        if (code >= 51 && code <= 57) return "毛毛雨"
-        if (code >= 61 && code <= 67) return "雨"
-        if (code >= 71 && code <= 77) return "雪"
-        if (code >= 80 && code <= 82) return "阵雨"
-        if (code >= 85 && code <= 86) return "阵雪"
-        if (code >= 95) return "雷暴"
-        return "天气未知"
+        if (code === 0) return I18n.text("晴")
+        if (code === 1) return I18n.text("大部晴朗")
+        if (code === 2) return I18n.text("局部多云")
+        if (code === 3) return I18n.text("阴")
+        if (code === 45 || code === 48) return I18n.text("雾")
+        if (code >= 51 && code <= 57) return I18n.text("毛毛雨")
+        if (code >= 61 && code <= 67) return I18n.text("雨")
+        if (code >= 71 && code <= 77) return I18n.text("雪")
+        if (code >= 80 && code <= 82) return I18n.text("阵雨")
+        if (code >= 85 && code <= 86) return I18n.text("阵雪")
+        if (code >= 95) return I18n.text("雷暴")
+        return I18n.text("天气未知")
     }
 
     function conditionSymbol(code, day) {
@@ -95,10 +96,10 @@ QtObject {
 
     function forecastLabel(isoDate, index) {
         if (index === 0)
-            return "今天"
+            return I18n.text("今天")
         if (index === 1)
-            return "明天"
-        const weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+            return I18n.text("明天")
+        const weekdays = [I18n.text("周日"), I18n.text("周一"), I18n.text("周二"), I18n.text("周三"), I18n.text("周四"), I18n.text("周五"), I18n.text("周六")]
         const parsed = new Date(String(isoDate) + "T12:00:00")
         return Number.isNaN(parsed.getTime()) ? String(isoDate) : weekdays[parsed.getDay()]
     }
@@ -107,7 +108,7 @@ QtObject {
         DataClient.request("weather.snapshot", {}, function(response) {
             if (!response.ok) {
                 if (!available)
-                    errorMessage = String(response.error?.message ?? "天气数据服务尚未就绪")
+                    errorMessage = String(response.error?.message ?? I18n.text("天气数据服务尚未就绪"))
                 return
             }
             applyWeather(response.result?.weather ?? {})
@@ -134,7 +135,7 @@ QtObject {
     function refresh() {
         DataClient.request("weather.refresh", {}, function(response) {
             if (!response.ok)
-                errorMessage = String(response.error?.message ?? "天气刷新失败")
+                errorMessage = String(response.error?.message ?? I18n.text("天气刷新失败"))
         })
     }
 

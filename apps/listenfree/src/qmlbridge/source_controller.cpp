@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "qmlbridge/source_controller.h"
 #include "sourcehost/script_metadata.h"
 #include "online/track_origin.h"
@@ -49,21 +50,21 @@ QString terminalName(sourcehost::SourceHostClient::RequestTerminal terminal) {
   using Terminal = sourcehost::SourceHostClient::RequestTerminal;
   switch (terminal) {
   case Terminal::TimedOut:
-    return QStringLiteral("请求超时");
+    return QCoreApplication::translate("ListenFree", "请求超时");
   case Terminal::Cancelled:
-    return QStringLiteral("请求已取消");
+    return QCoreApplication::translate("ListenFree", "请求已取消");
   case Terminal::HostStopped:
-    return QStringLiteral("音源宿主已停止");
+    return QCoreApplication::translate("ListenFree", "音源宿主已停止");
   case Terminal::HostCrashed:
-    return QStringLiteral("音源宿主异常退出");
+    return QCoreApplication::translate("ListenFree", "音源宿主异常退出");
   case Terminal::WriteFailed:
-    return QStringLiteral("无法写入音源宿主");
+    return QCoreApplication::translate("ListenFree", "无法写入音源宿主");
   case Terminal::RemoteError:
-    return QStringLiteral("音源请求失败");
+    return QCoreApplication::translate("ListenFree", "音源请求失败");
   case Terminal::Succeeded:
     break;
   }
-  return QStringLiteral("音源请求失败");
+  return QCoreApplication::translate("ListenFree", "音源请求失败");
 }
 
 QString errorMessage(const QJsonObject &payload) {
@@ -72,7 +73,7 @@ QString errorMessage(const QJsonObject &payload) {
       payload.value(QStringLiteral("message")).toString().trimmed();
   if (!message.isEmpty() && !code.isEmpty())
     return QStringLiteral("%1（%2）").arg(message, code);
-  return message.isEmpty() ? (code.isEmpty() ? QStringLiteral("音源请求失败")
+  return message.isEmpty() ? (code.isEmpty() ? QCoreApplication::translate("ListenFree", "音源请求失败")
                                                : code)
                            : message;
 }
@@ -80,25 +81,25 @@ QString errorMessage(const QJsonObject &payload) {
 QString hostStateLabel(const sourcehost::SourceHostClient *host,
                        bool enabled, bool available) {
   if (!enabled)
-    return QStringLiteral("未启用");
+    return QCoreApplication::translate("ListenFree", "未启用");
   if (!available)
-    return QStringLiteral("宿主缺失");
+    return QCoreApplication::translate("ListenFree", "宿主缺失");
   if (!host)
-    return QStringLiteral("未启动");
+    return QCoreApplication::translate("ListenFree", "未启动");
   using State = sourcehost::SourceHostClient::HostState;
   switch (host->state()) {
   case State::Starting:
-    return QStringLiteral("启动中");
+    return QCoreApplication::translate("ListenFree", "启动中");
   case State::Ready:
-    return QStringLiteral("已就绪");
+    return QCoreApplication::translate("ListenFree", "已就绪");
   case State::RestartWaiting:
-    return QStringLiteral("重启中");
+    return QCoreApplication::translate("ListenFree", "重启中");
   case State::Stopping:
-    return QStringLiteral("停止中");
+    return QCoreApplication::translate("ListenFree", "停止中");
   case State::Stopped:
-    return QStringLiteral("已停止");
+    return QCoreApplication::translate("ListenFree", "已停止");
   }
-  return QStringLiteral("未知状态");
+  return QCoreApplication::translate("ListenFree", "未知状态");
 }
 
 QString safeBaseName(const QFileInfo &info) {
@@ -182,14 +183,14 @@ void SourceController::load() {
           map.insert(QStringLiteral("updatePrompt"),
                      map.value(QStringLiteral("updatePrompt"), true));
           map.insert(QStringLiteral("status"),
-                     map.value(QStringLiteral("status"), QStringLiteral("已导入")));
+                     map.value(QStringLiteral("status"), QCoreApplication::translate("ListenFree", "已导入")));
           map.insert(QStringLiteral("path"), QDir(sourceDirectory()).filePath(QFileInfo(path).fileName()));
           QFile scriptFile(map.value("path").toString());
           if (scriptFile.open(QIODevice::ReadOnly)) {
             const auto metadata = sourcehost::scriptMetadata(scriptFile.read(kMaxPluginBytes));
             for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
           }
-          map.insert(QStringLiteral("availabilityStatus"), QStringLiteral("待检测"));
+          map.insert(QStringLiteral("availabilityStatus"), QCoreApplication::translate("ListenFree", "待检测"));
           map.insert(QStringLiteral("hostReady"), false);
           sources_.append(map);
         }
@@ -264,7 +265,7 @@ bool SourceController::selectSource(const QString &id) {
                           .toMap()
                           .value(QStringLiteral("removable"))
                           .toBool()) {
-    setStatus(QStringLiteral("已切换到内置音源"));
+    setStatus(QCoreApplication::translate("ListenFree", "已切换到内置音源"));
   } else if (hostEnabled_) {
     loadActivePlugin();
   }
@@ -307,7 +308,7 @@ bool SourceController::removeSource(const QString &id) {
   persist();
   hostSourceInfo_.clear();
   emit sourcesChanged();
-  setStatus(QStringLiteral("已移除音源"));
+  setStatus(QCoreApplication::translate("ListenFree", "已移除音源"));
   setError({});
   if (hostEnabled_ && hostReady() && indexOf(activeId_) >= 0 &&
       sources_.at(indexOf(activeId_)).toMap().value(QStringLiteral("removable"))
@@ -340,11 +341,11 @@ bool SourceController::importLocalFile(const QString &path) {
   if (!info.isFile() || info.size() <= 0 || info.size() > kMaxPluginBytes ||
       (extension != QStringLiteral("js") &&
        extension != QStringLiteral("mjs"))) {
-    setError(QStringLiteral("音源文件必须是 1 MiB 以内的 .js/.mjs 文件"));
+    setError(QCoreApplication::translate("ListenFree", "音源文件必须是 1 MiB 以内的 .js/.mjs 文件"));
     return false;
   }
   if (!QDir().mkpath(sourceDirectory())) {
-    setError(QStringLiteral("无法创建音源目录"));
+    setError(QCoreApplication::translate("ListenFree", "无法创建音源目录"));
     return false;
   }
   const auto displayName = safeBaseName(info);
@@ -353,28 +354,28 @@ bool SourceController::importLocalFile(const QString &path) {
                                                        QStringLiteral(".") +
                                                        extension);
   QFile original(info.absoluteFilePath());
-  if (!original.open(QIODevice::ReadOnly)) { setError(QStringLiteral("无法读取音源文件")); return false; }
+  if (!original.open(QIODevice::ReadOnly)) { setError(QCoreApplication::translate("ListenFree", "无法读取音源文件")); return false; }
   const auto script = original.readAll();
   QSaveFile saved(target);
   if (!saved.open(QIODevice::WriteOnly) || saved.write(script) != script.size() || !saved.commit()) {
-    setError(QStringLiteral("无法复制音源文件"));
+    setError(QCoreApplication::translate("ListenFree", "无法复制音源文件"));
     return false;
   }
   const auto id = QStringLiteral("custom.") + name;
   QVariantMap map{{QStringLiteral("id"), id},
                   {QStringLiteral("name"), displayName},
                   {QStringLiteral("kind"), QStringLiteral("custom")},
-                  {QStringLiteral("description"), QStringLiteral("本地 JavaScript 音源")},
-                  {QStringLiteral("version"), QStringLiteral("本地文件")},
+                  {QStringLiteral("description"), QCoreApplication::translate("ListenFree", "本地 JavaScript 音源")},
+                  {QStringLiteral("version"), QCoreApplication::translate("ListenFree", "本地文件")},
                   {QStringLiteral("origin"), QStringLiteral("local")},
                   {QStringLiteral("path"), target},
                   {QStringLiteral("enabled"), true},
                   {QStringLiteral("removable"), true},
                   {QStringLiteral("updatePrompt"), true},
-                  {QStringLiteral("status"), QStringLiteral("已导入")}};
+                  {QStringLiteral("status"), QCoreApplication::translate("ListenFree", "已导入")}};
   const auto metadata = sourcehost::scriptMetadata(script);
   for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
-  map["availabilityStatus"] = "待检测";
+  map["availabilityStatus"] = QCoreApplication::translate("ListenFree", "待检测");
   const int old = indexOf(id);
   if (old >= 0)
     sources_.removeAt(old);
@@ -384,7 +385,7 @@ bool SourceController::importLocalFile(const QString &path) {
   persist();
   emit sourcesChanged();
   emit activeChanged();
-  setStatus(QStringLiteral("已导入并切换到本地音源"));
+  setStatus(QCoreApplication::translate("ListenFree", "已导入并切换到本地音源"));
   setError({});
   if (hostEnabled_)
     loadActivePlugin();
@@ -395,14 +396,14 @@ bool SourceController::importUrl(const QUrl &url) {
   if (!url.isValid() || url.scheme().compare(QStringLiteral("https"),
                                               Qt::CaseInsensitive) != 0 ||
       url.host().isEmpty()) {
-    setError(QStringLiteral("音源地址必须是 HTTPS"));
+    setError(QCoreApplication::translate("ListenFree", "音源地址必须是 HTTPS"));
     return false;
   }
   if (busy_)
     return false;
   busy_ = true;
   emit busyChanged();
-  setStatus(QStringLiteral("正在下载音源…"));
+  setStatus(QCoreApplication::translate("ListenFree", "正在下载音源…"));
   setError({});
   QNetworkRequest request(url);
   request.setTransferTimeout(15000);
@@ -426,11 +427,11 @@ void SourceController::finishUrlImport() {
   reply->deleteLater();
   if (networkError != QNetworkReply::NoError || data.isEmpty() ||
       data.size() > kMaxPluginBytes) {
-    setError(QStringLiteral("下载音源失败或文件超过 1 MiB"));
+    setError(QCoreApplication::translate("ListenFree", "下载音源失败或文件超过 1 MiB"));
     return;
   }
   if (!QDir().mkpath(sourceDirectory())) {
-    setError(QStringLiteral("无法创建音源目录"));
+    setError(QCoreApplication::translate("ListenFree", "无法创建音源目录"));
     return;
   }
   QString name = QFileInfo(url.path()).completeBaseName().trimmed();
@@ -442,25 +443,25 @@ void SourceController::finishUrlImport() {
                                                        QStringLiteral(".js"));
   QSaveFile file(target);
   if (!file.open(QIODevice::WriteOnly) || file.write(data) != data.size() || !file.commit()) {
-    setError(QStringLiteral("无法保存远程音源"));
+    setError(QCoreApplication::translate("ListenFree", "无法保存远程音源"));
     return;
   }
   const auto id = QStringLiteral("custom.") + storageName;
   QVariantMap map{{QStringLiteral("id"), id},
                   {QStringLiteral("name"), name},
                   {QStringLiteral("kind"), QStringLiteral("custom")},
-                  {QStringLiteral("description"), QStringLiteral("HTTPS JavaScript 音源")},
-                  {QStringLiteral("version"), QStringLiteral("远程文件")},
+                  {QStringLiteral("description"), QCoreApplication::translate("ListenFree", "HTTPS JavaScript 音源")},
+                  {QStringLiteral("version"), QCoreApplication::translate("ListenFree", "远程文件")},
                   {QStringLiteral("origin"), QStringLiteral("url")},
                   {QStringLiteral("url"), url.toString()},
                   {QStringLiteral("path"), target},
                   {QStringLiteral("enabled"), true},
                   {QStringLiteral("removable"), true},
                   {QStringLiteral("updatePrompt"), true},
-                  {QStringLiteral("status"), QStringLiteral("已导入")}};
+                  {QStringLiteral("status"), QCoreApplication::translate("ListenFree", "已导入")}};
   const auto metadata = sourcehost::scriptMetadata(data);
   for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) map[it.key()] = it.value();
-  map["availabilityStatus"] = "待检测";
+  map["availabilityStatus"] = QCoreApplication::translate("ListenFree", "待检测");
   const int old = indexOf(id);
   if (old >= 0)
     sources_.removeAt(old);
@@ -470,7 +471,7 @@ void SourceController::finishUrlImport() {
   persist();
   emit sourcesChanged();
   emit activeChanged();
-  setStatus(QStringLiteral("已导入并切换到远程音源"));
+  setStatus(QCoreApplication::translate("ListenFree", "已导入并切换到远程音源"));
   setError({});
   if (hostEnabled_)
     loadActivePlugin();
@@ -500,7 +501,7 @@ void SourceController::initializeHost() {
   emit hostChanged();
   updateCustomStatuses();
   if (!hostAvailable_) {
-    setStatus(QStringLiteral("自定义音源宿主未找到，本地音乐仍可使用"));
+    setStatus(QCoreApplication::translate("ListenFree", "自定义音源宿主未找到，本地音乐仍可使用"));
     return;
   }
   host_ = std::make_unique<sourcehost::SourceHostClient>(hostExecutablePath_);
@@ -509,7 +510,7 @@ void SourceController::initializeHost() {
     emit hostChanged();
     updateCustomStatuses();
     setError({});
-    setStatus(QStringLiteral("音源宿主已就绪，正在验证当前音源…"));
+    setStatus(QCoreApplication::translate("ListenFree", "音源宿主已就绪，正在验证当前音源…"));
     loadActivePlugin();
   });
   connect(host_.get(), &sourcehost::SourceHostClient::stateChanged, this,
@@ -538,12 +539,12 @@ void SourceController::initializeHost() {
                             message == QStringLiteral("sourcehost-hello-write-failed")
                                 ? message : QStringLiteral("protocol-error"));
             if (!message.trimmed().isEmpty())
-              setError(QStringLiteral("音源宿主：%1").arg(message.left(512)));
+              setError(QCoreApplication::translate("ListenFree", "音源宿主：%1").arg(message.left(512)));
           });
   connect(host_.get(), &sourcehost::SourceHostClient::crashed, this,
-          [this] { handleHostFailure(QStringLiteral("音源宿主异常退出")); });
+          [this] { handleHostFailure(QCoreApplication::translate("ListenFree", "音源宿主异常退出")); });
   if (!host_->start()) {
-    handleHostFailure(QStringLiteral("无法启动音源宿主"));
+    handleHostFailure(QCoreApplication::translate("ListenFree", "无法启动音源宿主"));
     return;
   }
   emit hostChanged();
@@ -568,9 +569,9 @@ void SourceController::loadActivePlugin() {
   }
   const auto path = map.value(QStringLiteral("path")).toString().trimmed();
   if (path.isEmpty() || !QFileInfo(path).isFile()) {
-    updateSource(activeId_, {{QStringLiteral("status"), QStringLiteral("文件不存在")},
+    updateSource(activeId_, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "文件不存在")},
                              {QStringLiteral("hostReady"), false}});
-    setError(QStringLiteral("音源脚本文件不存在"));
+    setError(QCoreApplication::translate("ListenFree", "音源脚本文件不存在"));
     return;
   }
   if (!pendingLoadId_.isEmpty())
@@ -582,17 +583,17 @@ void SourceController::loadActivePlugin() {
   request.payload.insert(QStringLiteral("path"), path);
   pendingLoadId_ = request.requestId;
   pendingLoadSourceId_ = activeId_;
-  updateSource(activeId_, {{QStringLiteral("status"), QStringLiteral("验证中")},
+  updateSource(activeId_, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "验证中")},
                            {QStringLiteral("hostReady"), false}});
-  setStatus(QStringLiteral("正在验证音源脚本…"));
+  setStatus(QCoreApplication::translate("ListenFree", "正在验证音源脚本…"));
   setError({});
   if (!host_->request(request, sourcehost::PluginClientTimeoutMs)) {
     const auto failedId = pendingLoadSourceId_;
     pendingLoadId_.clear();
     pendingLoadSourceId_.clear();
-    updateSource(failedId, {{QStringLiteral("status"), QStringLiteral("验证失败")},
+    updateSource(failedId, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "验证失败")},
                             {QStringLiteral("hostReady"), false}});
-    setError(QStringLiteral("无法向音源宿主发送验证请求"));
+    setError(QCoreApplication::translate("ListenFree", "无法向音源宿主发送验证请求"));
   }
 }
 
@@ -616,7 +617,7 @@ void SourceController::handleHostMessage(
   if (message.type == sourcehost::MessageType::Error &&
       (code == QStringLiteral("plugin.runtime-failed") || code == QStringLiteral("plugin.not-loaded"))) {
     hostSourceInfo_.clear();
-    updateSource(activeId_, {{QStringLiteral("status"), QStringLiteral("音源运行失败，请重新连接")},
+    updateSource(activeId_, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "音源运行失败，请重新连接")},
                             {QStringLiteral("hostReady"), false}});
     setError(errorMessage(message.payload));
   }
@@ -630,11 +631,11 @@ void SourceController::handleHostMessage(
         !message.payload.value(QStringLiteral("ok")).toBool()) {
       const auto reason = message.type == sourcehost::MessageType::Error
                               ? errorMessage(message.payload)
-                              : QStringLiteral("脚本没有报告成功状态");
-      updateSource(sourceId, {{QStringLiteral("status"), QStringLiteral("验证失败")},
+                              : QCoreApplication::translate("ListenFree", "脚本没有报告成功状态");
+      updateSource(sourceId, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "验证失败")},
                               {QStringLiteral("hostReady"), false}});
       setError(reason);
-      setStatus(QStringLiteral("音源验证失败"));
+      setStatus(QCoreApplication::translate("ListenFree", "音源验证失败"));
       return;
     }
 
@@ -661,9 +662,9 @@ void SourceController::handleHostMessage(
       capabilities.insert(it.key(), mapped);
     }
     if (providerIds.isEmpty()) {
-      updateSource(sourceId, {{QStringLiteral("status"), QStringLiteral("未声明可用源")},
+      updateSource(sourceId, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "未声明可用源")},
                               {QStringLiteral("hostReady"), false}});
-      setError(QStringLiteral("音源脚本未声明可用源"));
+      setError(QCoreApplication::translate("ListenFree", "音源脚本未声明可用源"));
       return;
     }
     QString provider;
@@ -680,13 +681,13 @@ void SourceController::handleHostMessage(
     if (provider.isEmpty())
       provider = providerIds.first().toString();
     updateSource(sourceId,
-                 {{QStringLiteral("status"), QStringLiteral("已加载")},
+                 {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "已加载")},
                   {QStringLiteral("hostReady"), true},
                   {QStringLiteral("hostSourceId"), provider},
                   {QStringLiteral("providerIds"), providerIds},
                   {QStringLiteral("capabilities"), capabilities}});
     setError({});
-    setStatus(QStringLiteral("音源已加载：%1").arg(provider));
+    setStatus(QCoreApplication::translate("ListenFree", "音源已加载：%1").arg(provider));
     return;
   }
 
@@ -731,10 +732,10 @@ void SourceController::handleHostTerminal(
     pendingLoadId_.clear();
     pendingLoadSourceId_.clear();
     const auto reason = terminalName(terminal);
-    updateSource(sourceId, {{QStringLiteral("status"), QStringLiteral("验证失败")},
+    updateSource(sourceId, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "验证失败")},
                             {QStringLiteral("hostReady"), false}});
     setError(reason);
-    setStatus(QStringLiteral("音源验证失败"));
+    setStatus(QCoreApplication::translate("ListenFree", "音源验证失败"));
     return;
   }
   if (terminal == sourcehost::SourceHostClient::RequestTerminal::Succeeded)
@@ -756,7 +757,7 @@ void SourceController::handleHostFailure(const QString &message) {
     const auto sourceId = pendingLoadSourceId_;
     pendingLoadId_.clear();
     pendingLoadSourceId_.clear();
-    updateSource(sourceId, {{QStringLiteral("status"), QStringLiteral("宿主不可用")},
+    updateSource(sourceId, {{QStringLiteral("status"), QCoreApplication::translate("ListenFree", "宿主不可用")},
                             {QStringLiteral("hostReady"), false}});
   }
   const auto pending = pendingResolutions_;
@@ -780,22 +781,22 @@ void SourceController::updateCustomStatuses() {
     QString status;
     bool ready = false;
     if (!hostEnabled_ || !hostAvailable_)
-      status = QStringLiteral("待验证");
+      status = QCoreApplication::translate("ListenFree", "待验证");
     else if (!hostReady()) {
       const auto state = host_ ? host_->state() : sourcehost::SourceHostClient::HostState::Stopped;
       status = state == sourcehost::SourceHostClient::HostState::Stopped
-                   ? QStringLiteral("连接已断开，请重新连接")
+                   ? QCoreApplication::translate("ListenFree", "连接已断开，请重新连接")
                    : state == sourcehost::SourceHostClient::HostState::RestartWaiting
-                         ? QStringLiteral("正在重新连接")
-                         : QStringLiteral("正在连接音源");
+                         ? QCoreApplication::translate("ListenFree", "正在重新连接")
+                         : QCoreApplication::translate("ListenFree", "正在连接音源");
     }
     else if (id == activeId_ && hostSourceInfo_.isEmpty())
-      status = QStringLiteral("待验证");
+      status = QCoreApplication::translate("ListenFree", "待验证");
     else if (id == activeId_ && !hostSourceInfo_.isEmpty()) {
-      status = QStringLiteral("已加载");
+      status = QCoreApplication::translate("ListenFree", "已加载");
       ready = true;
     } else {
-      status = map.value("availabilityStatus", QStringLiteral("待检测")).toString();
+      status = map.value("availabilityStatus", QCoreApplication::translate("ListenFree", "待检测")).toString();
     }
     if (map.value(QStringLiteral("status")).toString() != status) {
       map.insert(QStringLiteral("status"), status);
@@ -862,17 +863,17 @@ QString SourceController::resolve(const QString &sourceId,
   const auto normalizedSource =
       sourceId.trimmed().isEmpty() ? activeId_ : sourceId.trimmed();
   if (indexOf(normalizedSource) < 0) {
-    setError(QStringLiteral("音源不存在"));
+    setError(QCoreApplication::translate("ListenFree", "音源不存在"));
     return {};
   }
   if (!hostReady()) {
     loadActivePlugin();
-    setError(hostAvailable_ ? QStringLiteral("音源正在连接，请稍后重试播放")
-                            : QStringLiteral("音源宿主不可用"));
+    setError(hostAvailable_ ? QCoreApplication::translate("ListenFree", "音源正在连接，请稍后重试播放")
+                            : QCoreApplication::translate("ListenFree", "音源宿主不可用"));
     return {};
   }
   if (musicInfo.isEmpty()) {
-    setError(QStringLiteral("缺少歌曲信息"));
+    setError(QCoreApplication::translate("ListenFree", "缺少歌曲信息"));
     return {};
   }
   QString selectedQuality = quality.trimmed();
@@ -880,20 +881,20 @@ QString SourceController::resolve(const QString &sourceId,
   const auto provider = requestedProvider.isEmpty() ? hostProviderFor(normalizedSource, action, &selectedQuality)
       : (hostSourceInfo_.contains(requestedProvider) ? requestedProvider : QString{});
   if (provider.isEmpty()) {
-    setError(QStringLiteral("当前音源不支持 %1").arg(action));
+    setError(QCoreApplication::translate("ListenFree", "当前音源不支持 %1").arg(action));
     return {};
   }
   if (!pendingLoadId_.isEmpty() || hostSourceInfo_.isEmpty()) {
-    setError(QStringLiteral("音源正在初始化，请稍后重试播放"));
+    setError(QCoreApplication::translate("ListenFree", "音源正在初始化，请稍后重试播放"));
     return {};
   }
   const auto info = hostSourceInfo_.value(provider);
   if (normalizedSource != activeId_ || !hasString(info.value("actions"), action)) {
-    setError(QStringLiteral("当前音源不支持此平台的请求"));return {};
+    setError(QCoreApplication::translate("ListenFree", "当前音源不支持此平台的请求"));return {};
   }
   if (action == "musicUrl" && !hasString(info.value("qualitys"), selectedQuality)) {
     const auto choices=info.value("qualitys").toList();
-    if(choices.isEmpty()){setError(QStringLiteral("当前音源未声明可用音质"));return {};}
+    if(choices.isEmpty()){setError(QCoreApplication::translate("ListenFree", "当前音源未声明可用音质"));return {};}
     selectedQuality=hasString(info.value("qualitys"),"320k")?QString("320k"):choices.first().toString();
   }
   sourcehost::SourceMessage request;
@@ -914,11 +915,11 @@ QString SourceController::resolve(const QString &sourceId,
                              {normalizedSource, action, selectedQuality});
   if (!host_->request(request, sourcehost::PluginClientTimeoutMs)) {
     pendingResolutions_.remove(request.requestId);
-    setError(QStringLiteral("无法向音源宿主发送请求"));
+    setError(QCoreApplication::translate("ListenFree", "无法向音源宿主发送请求"));
     return {};
   }
   setError({});
-  setStatus(QStringLiteral("正在请求音源…"));
+  setStatus(QCoreApplication::translate("ListenFree", "正在请求音源…"));
   return request.requestId;
 }
 
@@ -933,9 +934,9 @@ void SourceController::recordCapabilities(const QString &id, const QJsonObject &
   const bool useful = actions.contains("musicUrl") || actions.contains("search");
   updateSource(id, {{"capabilities", providers.toVariantMap()},
       {"providerNames", names.join(" / ")}, {"searchSupported", actions.contains("search")},
-      {"capabilityText", actions.contains("search") ? (actions.contains("musicUrl") ? QStringLiteral("脚本搜索 · 播放解析") : QStringLiteral("仅脚本搜索"))
-                            : actions.contains("musicUrl") ? QStringLiteral("仅播放解析") : QStringLiteral("无可用动作")},
-      {"availabilityStatus", useful ? QStringLiteral("初始化通过") : QStringLiteral("无可用能力")},
+      {"capabilityText", actions.contains("search") ? (actions.contains("musicUrl") ? QCoreApplication::translate("ListenFree", "脚本搜索 · 播放解析") : QCoreApplication::translate("ListenFree", "仅脚本搜索"))
+                            : actions.contains("musicUrl") ? QCoreApplication::translate("ListenFree", "仅播放解析") : QCoreApplication::translate("ListenFree", "无可用动作")},
+      {"availabilityStatus", useful ? QCoreApplication::translate("ListenFree", "初始化通过") : QCoreApplication::translate("ListenFree", "无可用能力")},
       {"lastCheck", QDateTime::currentDateTime().toString(Qt::ISODate)}, {"checkError", QString{}}});
 }
 
@@ -950,8 +951,8 @@ QString SourceController::requestScript(const QString &id, const QString &action
                                         const QVariantMap &info, const QString &quality) {
   const auto index = indexOf(id);
   if (index < 0 || !hostAvailable_ || scriptRequests_.size() >= 8) {
-    setError(index < 0 ? QStringLiteral("该曲目的洛雪音源已移除，请重新导入")
-        : !hostAvailable_ ? QStringLiteral("音源宿主不可用") : QStringLiteral("音源请求过多，请稍后重试"));
+    setError(index < 0 ? QCoreApplication::translate("ListenFree", "该曲目的洛雪音源已移除，请重新导入")
+        : !hostAvailable_ ? QCoreApplication::translate("ListenFree", "音源宿主不可用") : QCoreApplication::translate("ListenFree", "音源请求过多，请稍后重试"));
     return {};
   }
   const auto source = sources_.at(index).toMap();
@@ -972,23 +973,23 @@ QString SourceController::requestScript(const QString &id, const QString &action
   const auto loadId = operationId + ".load";
   auto finish = [this, client, operationId, id, action](QVariantMap data, const QString &error) {
     if (!scriptRequests_.remove(operationId)) return;
-    if (action == "check") updateSource(id, {{"status", error.isEmpty() ? QStringLiteral("初始化通过") : QStringLiteral("检测失败")},
-        {"availabilityStatus", error.isEmpty() ? QStringLiteral("初始化通过") : QStringLiteral("检测失败")},
+    if (action == "check") updateSource(id, {{"status", error.isEmpty() ? QCoreApplication::translate("ListenFree", "初始化通过") : QCoreApplication::translate("ListenFree", "检测失败")},
+        {"availabilityStatus", error.isEmpty() ? QCoreApplication::translate("ListenFree", "初始化通过") : QCoreApplication::translate("ListenFree", "检测失败")},
         {"checkError", error}, {"lastCheck", QDateTime::currentDateTime().toString(Qt::ISODate)}});
-    if (action != "check") updateSource(id, {{"lastRequestStatus", error.isEmpty() ? QStringLiteral("最近请求成功") : QStringLiteral("最近请求失败")},
+    if (action != "check") updateSource(id, {{"lastRequestStatus", error.isEmpty() ? QCoreApplication::translate("ListenFree", "最近请求成功") : QCoreApplication::translate("ListenFree", "最近请求失败")},
         {"checkError", error}});
     client->disconnect(this);
     client->stop();
     client->deleteLater();
     emit resolutionFinished(operationId, id, action, data, error);
   };
-  if (action == "check") updateSource(id, {{"status", QStringLiteral("检测中…")}, {"checkError", QString{}}});
+  if (action == "check") updateSource(id, {{"status", QCoreApplication::translate("ListenFree", "检测中…")}, {"checkError", QString{}}});
   connect(client, &sourcehost::SourceHostClient::ready, this, [client, source, loadId, finish] {
     sourcehost::SourceMessage request;
     request.type = sourcehost::MessageType::LoadPlugin;
     request.requestId = loadId;
     request.payload = {{"path", source.value("path").toString()}};
-    if (!client->request(request, sourcehost::PluginClientTimeoutMs)) finish({}, QStringLiteral("无法加载音源"));
+    if (!client->request(request, sourcehost::PluginClientTimeoutMs)) finish({}, QCoreApplication::translate("ListenFree", "无法加载音源"));
   });
   connect(client, &sourcehost::SourceHostClient::requestFinished, this,
       [finish](const QString &, sourcehost::SourceHostClient::RequestTerminal terminal) {
@@ -997,7 +998,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
       finish({}, terminalName(terminal));
   });
   connect(client, &sourcehost::SourceHostClient::crashed, this,
-      [finish] { finish({}, QStringLiteral("音源宿主异常退出")); });
+      [finish] { finish({}, QCoreApplication::translate("ListenFree", "音源宿主异常退出")); });
   connect(client, &sourcehost::SourceHostClient::protocolError, this,
       [finish](const QString &error) { finish({}, error); });
   connect(client, &sourcehost::SourceHostClient::messageReceived, this,
@@ -1008,13 +1009,13 @@ QString SourceController::requestScript(const QString &id, const QString &action
     if (message.requestId == loadId) {
       if (message.type == Type::Error || !message.payload.value("ok").toBool()) {
         const auto error = errorMessage(message.payload);
-        updateSource(id, {{"availabilityStatus", QStringLiteral("初始化失败")}, {"checkError", error}});
+        updateSource(id, {{"availabilityStatus", QCoreApplication::translate("ListenFree", "初始化失败")}, {"checkError", error}});
         finish({}, error); return;
       }
       const auto providers = message.payload.value("sources").toObject();
       recordCapabilities(id, providers);
       if (action == "check") {
-        if (providers.isEmpty()) finish({}, QStringLiteral("脚本未声明可用能力"));
+        if (providers.isEmpty()) finish({}, QCoreApplication::translate("ListenFree", "脚本未声明可用能力"));
         else finish({{"capabilities", providers.toVariantMap()}}, {});
         return;
       }
@@ -1024,8 +1025,8 @@ QString SourceController::requestScript(const QString &id, const QString &action
         if (action == "search" || it.key() == info.value("source").toString()) selected.append(it.key());
       }
       if (selected.isEmpty()) {
-        finish({}, action == "search" ? QStringLiteral("该脚本仅支持播放解析，未提供搜索。请使用平台搜索。")
-                                      : QStringLiteral("该脚本不支持此曲目的请求")); return;
+        finish({}, action == "search" ? QCoreApplication::translate("ListenFree", "该脚本仅支持播放解析，未提供搜索。请使用平台搜索。")
+                                      : QCoreApplication::translate("ListenFree", "该脚本不支持此曲目的请求")); return;
       }
       // Register all IDs before sending: a failed write can complete inline.
       for (const auto &provider : selected) state->providers.insert(operationId + "." + provider, provider);
@@ -1033,7 +1034,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
         QString requestedQuality = quality;
         const auto qualities = providers.value(provider).toObject().value("qualitys").toArray();
         if (action == "musicUrl" && !hasString(qualities.toVariantList(), requestedQuality)) {
-          if (qualities.isEmpty()) { finish({}, QStringLiteral("音源未声明可用音质")); return; }
+          if (qualities.isEmpty()) { finish({}, QCoreApplication::translate("ListenFree", "音源未声明可用音质")); return; }
           requestedQuality = hasString(qualities.toVariantList(), "320k") ? QStringLiteral("320k") : qualities.first().toString();
         }
         sourcehost::SourceMessage request;
@@ -1042,7 +1043,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
                      : action == "pic" ? Type::ResolvePic : Type::ResolveMusicUrl;
         request.payload = {{"source", provider}, {"type", action == "musicUrl" ? requestedQuality : action},
                            {"musicInfo", QJsonObject::fromVariantMap(info)}};
-        if (!client->request(request, sourcehost::PluginClientTimeoutMs)) { finish({}, QStringLiteral("无法发送音源请求")); return; }
+        if (!client->request(request, sourcehost::PluginClientTimeoutMs)) { finish({}, QCoreApplication::translate("ListenFree", "无法发送音源请求")); return; }
       }
       return;
     }
@@ -1105,7 +1106,7 @@ QString SourceController::requestScript(const QString &id, const QString &action
   // launch failure emits the completion signal.
   QTimer::singleShot(0, client, [this, client, operationId, finish] {
     if (!scriptRequests_.contains(operationId)) return;
-    if (!client->start()) finish({}, QStringLiteral("无法启动音源宿主"));
+    if (!client->start()) finish({}, QCoreApplication::translate("ListenFree", "无法启动音源宿主"));
   });
   return operationId;
 }
@@ -1183,7 +1184,7 @@ void SourceController::refresh() {
     loadActivePlugin();
   else
     updateCustomStatuses();
-  setStatus(QStringLiteral("音源列表已刷新"));
+  setStatus(QCoreApplication::translate("ListenFree", "音源列表已刷新"));
   emit sourcesChanged();
 }
 

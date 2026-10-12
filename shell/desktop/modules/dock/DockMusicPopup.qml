@@ -179,7 +179,7 @@ AnimatedPopupWindow {
 
                 Text {
                     width: parent.width
-                    text: popup.player?.trackTitle || "未播放曲目"
+                    text: popup.player?.trackTitle || I18n.text("未播放曲目")
                     color: ThemeService.foregroundColor
                     elide: Text.ElideRight
                     font {
@@ -189,7 +189,7 @@ AnimatedPopupWindow {
                 }
                 Text {
                     width: parent.width
-                    text: popup.player?.trackArtist || "未知艺术家"
+                    text: popup.player?.trackArtist || I18n.text("未知艺术家")
                     color: ThemeService.foregroundColor
                     opacity: 0.72
                     elide: Text.ElideRight
@@ -344,7 +344,7 @@ AnimatedPopupWindow {
                 x: 9.5
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-previous"
-                text: qsTr("上一首")
+                text: I18n.text("上一首")
                 enabled: popup.player?.canGoPrevious ?? false
                 onClicked: DockMprisService.previous()
             }
@@ -352,7 +352,7 @@ AnimatedPopupWindow {
                 anchors.centerIn: parent
                 primary: true
                 iconName: popup.player?.isPlaying ? "media-pause" : "media-play"
-                text: popup.player?.isPlaying ? qsTr("暂停") : qsTr("播放")
+                text: popup.player?.isPlaying ? I18n.text("暂停") : I18n.text("播放")
                 busy: DockMprisService.loading
                 enabled: popup.player?.canTogglePlaying ?? false
                 onClicked: DockMprisService.togglePlayPause()
@@ -361,7 +361,7 @@ AnimatedPopupWindow {
                 x: 109.5
                 anchors.verticalCenter: parent.verticalCenter
                 iconName: "media-next"
-                text: qsTr("下一首")
+                text: I18n.text("下一首")
                 enabled: popup.player?.canGoNext ?? false
                 onClicked: DockMprisService.next()
             }

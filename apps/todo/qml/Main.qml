@@ -76,7 +76,7 @@ KosApplicationWindow {
     }
 
     function todayKey() {
-        return Qt.formatDate(now, "yyyy-MM-dd")
+        return AppTheme.formatDate(now, "yyyy-MM-dd")
     }
 
     function filteredTodos() {

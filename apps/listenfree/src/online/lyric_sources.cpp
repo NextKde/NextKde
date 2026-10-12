@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "online/lyric_sources.h"
 #include "online/lyric_matching.h"
 #include "online/platform_catalog.h"
@@ -32,7 +33,7 @@ QNetworkReply* request(QNetworkAccessManager& network,const QUrl& url,const QJso
 QUrl queryUrl(const QString& base,const QList<QPair<QString,QString>>& params) { QUrl url(base);QUrlQuery query;query.setQueryItems(params);url.setQuery(query);return url; }
 }
 QString lyricSourceName(const QString& source) {
-    return QMap<QString,QString>{{"wy","网易云音乐"},{"tx","QQ 音乐"},{"kg","酷狗音乐"},{"kw","酷我音乐"},{"mg","咪咕音乐"},{"lrclib","LRCLIB"},{"amll","AMLL TTML"}}.value(source,source);
+    return QMap<QString,QString>{{"wy",QCoreApplication::translate("ListenFree", "网易云音乐")},{"tx",QCoreApplication::translate("ListenFree", "QQ 音乐")},{"kg",QCoreApplication::translate("ListenFree", "酷狗音乐")},{"kw",QCoreApplication::translate("ListenFree", "酷我音乐")},{"mg",QCoreApplication::translate("ListenFree", "咪咕音乐")},{"lrclib","LRCLIB"},{"amll","AMLL TTML"}}.value(source,source);
 }
 QNetworkReply* lyricSearchRequest(QNetworkAccessManager& network,const QString& source,const QVariantMap& track,const QString& query) {
     if(source=="wy"||source=="tx"||source=="mg")return platformRequest(network,source,"search",query);

@@ -66,6 +66,10 @@ endif()
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
     if(KOS_NODE_EXECUTABLE)
+        add_test(NAME kos-shell.language
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
+        set_tests_properties(kos-shell.language PROPERTIES LABELS logic TIMEOUT 10)
         foreach(test timed_lyrics unpin_identity)
             add_test(NAME kos-shell.${test}
                 COMMAND ${KOS_NODE_EXECUTABLE}

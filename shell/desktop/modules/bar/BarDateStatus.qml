@@ -24,7 +24,7 @@ Item {
         GlassText {
             id: timeText
             anchors.verticalCenter: parent.verticalCenter
-            text: Qt.formatDateTime(clock.date, "h:mm")
+            text: I18n.formatDateTime(clock.date, "h:mm")
             color: ThemeService.foregroundColor
             renderType: Text.NativeRendering
             font {
@@ -36,7 +36,7 @@ Item {
 
         GlassText {
             anchors.verticalCenter: parent.verticalCenter
-            text: Qt.formatDateTime(clock.date, "M月d日 dddd")
+            text: I18n.formatDateTime(clock.date, I18n.text("M月d日 dddd"))
             color: ThemeService.foregroundColor
             renderType: Text.NativeRendering
             font {

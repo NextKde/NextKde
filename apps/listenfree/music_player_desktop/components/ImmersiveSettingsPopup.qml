@@ -46,18 +46,18 @@ Basic.Popup {
                     Repeater {
                         model:[
                             {key:"classic",name:qsTr("流光"),detail:qsTr("逐字扫光 · 轻盈浮动"),symbol:"Aa"},
-                            {key:"cadenza",name:qsTr("心象"),detail:qsTr("字距呼吸 · 层叠余辉"),symbol:"心"},
-                            {key:"partita",name:qsTr("云阶"),detail:qsTr("错落分组 · 阶梯排版"),symbol:"阶"},
-                            {key:"fume",name:qsTr("浮名"),detail:qsTr("纸面游走 · 逐字印记"),symbol:"名"},
+                            {key:"cadenza",name:qsTr("心象"),detail:qsTr("字距呼吸 · 层叠余辉"),symbol:qsTr("心")},
+                            {key:"partita",name:qsTr("云阶"),detail:qsTr("错落分组 · 阶梯排版"),symbol:qsTr("阶")},
+                            {key:"fume",name:qsTr("浮名"),detail:qsTr("纸面游走 · 逐字印记"),symbol:qsTr("名")},
                             {key:"cappella",name:qsTr("群唱"),detail:qsTr("对话气泡 · 交替吟唱"),symbol:"···"},
-                            {key:"tilt",name:qsTr("倾诉"),detail:qsTr("斜向长句 · 字符交错"),symbol:"斜"},
+                            {key:"tilt",name:qsTr("倾诉"),detail:qsTr("斜向长句 · 字符交错"),symbol:qsTr("斜")},
                             {key:"claddagh",name:qsTr("回环"),detail:qsTr("椭圆轨道 · 逐字聚焦"),symbol:"∞"},
                             {key:"diorama",name:qsTr("镜台"),detail:qsTr("空间镜头 · 字形残影"),symbol:"◇"},
-                            {key:"monet",name:qsTr("莫奈"),detail:qsTr("柔色画布 · 纵向诗行"),symbol:"墨"},
+                            {key:"monet",name:qsTr("莫奈"),detail:qsTr("柔色画布 · 纵向诗行"),symbol:qsTr("墨")},
                             {key:"pendolo",name:qsTr("时计"),detail:qsTr("轮轴弧线 · 擒纵节奏"),symbol:"◷"},
                             {key:"sonnet",name:qsTr("商籁"),detail:qsTr("海报构图 · 片段蒙太奇"),symbol:"S"},
                             {key:"tempera",name:qsTr("凝彩"),detail:qsTr("色块构成 · 字符入场"),symbol:"▧"},
-                            {key:"still",name:qsTr("静止"),detail:qsTr("安静阅读 · 前后诗句"),symbol:"静"}]
+                            {key:"still",name:qsTr("静止"),detail:qsTr("安静阅读 · 前后诗句"),symbol:qsTr("静")}]
                         delegate:Choice {
                             required property var modelData
                             width:(parent.width-(parent.columns-1)*8)/parent.columns;height:60

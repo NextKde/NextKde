@@ -43,7 +43,7 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative qt6-wayland \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules wayland \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu
@@ -117,7 +117,7 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative qt6-wayland \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
 

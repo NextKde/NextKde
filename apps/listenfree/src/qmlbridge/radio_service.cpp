@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "radio_service.h"
 #include <QDnsLookup>
 #include <QJsonArray>
@@ -41,7 +42,7 @@ void RadioService::setMode(const QString& value) {
 }
 QVariantList RadioService::categories()const {
     if(provider_=="netease" && mode()=="broadcast")return neteaseCategories_;
-    if(provider_=="radiobrowser")return {QVariantMap{{"id",""},{"name","全部地区"}},QVariantMap{{"id","CN"},{"name","中国"}},QVariantMap{{"id","JP"},{"name","日本"}},QVariantMap{{"id","US"},{"name","美国"}},QVariantMap{{"id","GB"},{"name","英国"}}};
+    if(provider_=="radiobrowser")return {QVariantMap{{"id",""},{"name",QCoreApplication::translate("ListenFree", "全部地区")}},QVariantMap{{"id","CN"},{"name",QCoreApplication::translate("ListenFree", "中国")}},QVariantMap{{"id","JP"},{"name",QCoreApplication::translate("ListenFree", "日本")}},QVariantMap{{"id","US"},{"name",QCoreApplication::translate("ListenFree", "美国")}},QVariantMap{{"id","GB"},{"name",QCoreApplication::translate("ListenFree", "英国")}}};
     return {};
 }
 void RadioService::setCategory(const QString& value) {
@@ -104,7 +105,7 @@ void RadioService::get(const QUrl& url,std::function<void(QByteArray,QString)> d
     auto* reply=network_.get(request);reply_=reply;reply->setReadBufferSize(limit+1);
     connect(reply,&QNetworkReply::readyRead,this,[reply,limit]{if(reply->bytesAvailable()>limit)reply->abort();});
     connect(reply,&QNetworkReply::finished,this,[this,reply,gen,done=std::move(done)] {
-        const auto error=reply->error()==QNetworkReply::NoError?QString{}:QStringLiteral("连接失败，请稍后重试");
+        const auto error=reply->error()==QNetworkReply::NoError?QString{}:QCoreApplication::translate("ListenFree", "连接失败，请稍后重试");
         const auto bytes=reply->isOpen()?reply->readAll():QByteArray{};reply->deleteLater();
         if(gen!=generation_)return;done(bytes,error);
     });
@@ -146,7 +147,7 @@ void RadioService::loadBrowser(int attempt) {
     QUrl url("https://"+browserHosts_[hostIndex_%browserHosts_.size()]+"/json/stations/search");url.setQuery(q);
     get(url,[this,attempt](QByteArray bytes,QString error) {
         if(!error.isEmpty() && attempt+1<browserHosts_.size()){++hostIndex_;loadBrowser(attempt+1);return;}
-        if(error.isEmpty() && !QJsonDocument::fromJson(bytes).isArray())error=QStringLiteral("电台目录返回了无效数据");
+        if(error.isEmpty() && !QJsonDocument::fromJson(bytes).isArray())error=QCoreApplication::translate("ListenFree", "电台目录返回了无效数据");
         if(!error.isEmpty()){busy_=false;error_=error;emit changed();return;}
         finish(online::radioBrowserStations(bytes),-1,QJsonDocument::fromJson(bytes).array().size()==30);
     });
@@ -160,7 +161,7 @@ void RadioService::loadNetease() {
     } else {
         if(neteaseCategories_.isEmpty()) {
             get(netease("voice/broadcast/category/region/get"),[this](QByteArray bytes,QString error) {
-                neteaseCategories_={QVariantMap{{"id","0"},{"name","全部分类"}}};
+                neteaseCategories_={QVariantMap{{"id","0"},{"name",QCoreApplication::translate("ListenFree", "全部分类")}}};
                 const auto root=QJsonDocument::fromJson(bytes).object();
                 for(const auto& value:root.value("data").toObject().value("categoryList").toArray()) {
                     const auto row=value.toObject();if(row.value("id").toVariant().toString()=="0")continue;
@@ -174,7 +175,7 @@ void RadioService::loadNetease() {
     }
     get(url,[this](QByteArray bytes,QString error) {
         const auto root=QJsonDocument::fromJson(bytes).object();
-        if(error.isEmpty() && root.value("code").toInt()!=200)error=QStringLiteral("网易云暂不可用，请稍后重试");
+        if(error.isEmpty() && root.value("code").toInt()!=200)error=QCoreApplication::translate("ListenFree", "网易云暂不可用，请稍后重试");
         if(!error.isEmpty()){busy_=false;error_=error;emit changed();return;}
         if(!podcast().isEmpty()){finish(online::neteasePrograms(root),root.value("count").toInt(-1),root.value("more").toBool());return;}
         if(mode()=="podcast") {
@@ -187,7 +188,7 @@ void RadioService::fetchBroadcast(const QString& lastId,const QString& score) {
     get(netease("voice/broadcast/channel/list",{{"categoryId",category().isEmpty()?"0":category()},{"regionId","0"},{"limit","100"},{"lastId",lastId},{"score",score}}),
         [this,lastId](QByteArray bytes,QString error) {
             const auto root=QJsonDocument::fromJson(bytes).object();
-            if(error.isEmpty() && root.value("code").toInt()!=200)error=QStringLiteral("网易云广播目录暂不可用");
+            if(error.isEmpty() && root.value("code").toInt()!=200)error=QCoreApplication::translate("ListenFree", "网易云广播目录暂不可用");
             if(!error.isEmpty()){busy_=false;error_=error;emit changed();return;}
             const auto data=root.value("data").toObject();const auto rows=online::neteaseBroadcastStations(data);
             QSet<QString> seen;for(const auto& row:broadcastRows_)seen.insert(key(row.toMap()));

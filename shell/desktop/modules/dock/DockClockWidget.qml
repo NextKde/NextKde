@@ -35,7 +35,7 @@ Item {
     }
 
     function shortWeekday(date) {
-        return ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][date.getDay()]
+        return [I18n.text("周日"), I18n.text("周一"), I18n.text("周二"), I18n.text("周三"), I18n.text("周四"), I18n.text("周五"), I18n.text("周六")][date.getDay()]
     }
 
     // Clock has no content-owned palette like weather or album artwork, so it
@@ -207,7 +207,7 @@ Item {
                     id: timeText
                     anchors.centerIn: parent
                     width: parent.width
-                    text: Qt.formatDateTime(clock.date, "HH:mm:ss")
+                    text: I18n.formatDateTime(clock.date, "HH:mm:ss")
                     color: AppearanceTokens.motion.drawsFormDecorations
                         ? Qt.rgba(1, 1, 1,
                             0.18 + 0.18 * AppearanceTokens.glass.liquidStrength)
@@ -232,7 +232,7 @@ Item {
             Text {
                 width: parent.width
                 height: Math.round(widget.iconSize * 0.27)
-                text: Qt.formatDateTime(calendarClock.dayDate, "yyyy年M月d日")
+                text: I18n.formatDateTime(calendarClock.dayDate, I18n.text("yyyy年M月d日"))
                     + " " + widget.shortWeekday(calendarClock.dayDate)
                 color: ThemeService.foregroundColor
                 opacity: 0.82
@@ -257,13 +257,13 @@ Item {
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日落"
+                label: I18n.text("日落")
                 value: WeatherService.sunsetTime
             }
             SolarEventRow {
                 width: parent.width
                 height: parent.height / 2
-                label: "日出"
+                label: I18n.text("日出")
                 value: WeatherService.sunriseTime
             }
         }
@@ -283,7 +283,7 @@ Item {
             glyphColor: "white"
         }
         Text {
-            text: Qt.formatDateTime(calendarClock.minuteDate, "HH:mm")
+            text: I18n.formatDateTime(calendarClock.minuteDate, "HH:mm")
             color: "white"
             anchors.verticalCenter: parent.verticalCenter
             font {
@@ -293,7 +293,7 @@ Item {
             }
         }
         Text {
-            text: "· 日落 " + WeatherService.sunsetTime
+            text: I18n.text("· 日落 ") + WeatherService.sunsetTime
             color: "white"
             opacity: 0.68
             anchors.verticalCenter: parent.verticalCenter

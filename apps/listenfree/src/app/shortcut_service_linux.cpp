@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "shortcut_service.h"
 #include <QApplication>
 #include <QKeyEvent>
@@ -7,8 +8,8 @@ namespace {
 QString prefix(const QString& group) { return "shortcuts." + group + "."; }
 QString actionName(const QString& key) {
     const auto action = key.section('.', -1);
-    static const QMap<QString, QString> names{{"playPause", "播放/暂停"}, {"previous", "上一首"},
-        {"next", "下一首"}, {"focusSearch", "聚焦搜索"}, {"back", "返回"}, {"volumeUp", "提高音量"}, {"volumeDown", "降低音量"}};
+    static const QMap<QString, QString> names{{"playPause", QCoreApplication::translate("ListenFree", "播放/暂停")}, {"previous", QCoreApplication::translate("ListenFree", "上一首")},
+        {"next", QCoreApplication::translate("ListenFree", "下一首")}, {"focusSearch", QCoreApplication::translate("ListenFree", "聚焦搜索")}, {"back", QCoreApplication::translate("ListenFree", "返回")}, {"volumeUp", QCoreApplication::translate("ListenFree", "提高音量")}, {"volumeDown", QCoreApplication::translate("ListenFree", "降低音量")}};
     return names.value(action, action);
 }
 }
@@ -28,7 +29,7 @@ QString ShortcutService::validate(const QString& text, bool) {
     if (text.isEmpty()) return {};
     const auto sequence = QKeySequence::fromString(text, QKeySequence::PortableText);
     if (sequence.count() != 1 || sequence[0].key() == Qt::Key_unknown || !sequence[0].key())
-        return "无法识别该组合键。";
+        return QCoreApplication::translate("ListenFree", "无法识别该组合键。");
     return {};
 }
 
@@ -70,7 +71,7 @@ void ShortcutService::setWindow(QWindow* window) { window_=window; rebuildLocal(
 bool ShortcutService::enabled(const QString& group) const { return group=="application" ? applicationEnabled_ : globalEnabled_; }
 bool ShortcutService::fail(const QString& message,const QString& conflict) { error_=message; conflict_=conflict; ++revision_; emit changed(); return false; }
 bool ShortcutService::commit(const QMap<QString, QString>& desired,bool application,bool global) {
-    if (global) return fail("Linux 测试版暂不支持全局快捷键；应用内快捷键可正常使用。");
+    if (global) return fail(QCoreApplication::translate("ListenFree", "Linux 测试版暂不支持全局快捷键；应用内快捷键可正常使用。"));
     QMap<QString, Registration> next;
     QMap<QString, QString> conflicts;
     for (auto it=desired.cbegin();it!=desired.cend();++it) {
@@ -80,7 +81,7 @@ bool ShortcutService::commit(const QMap<QString, QString>& desired,bool applicat
         const auto native=nativeKey(QKeySequence::fromString(it.value(),QKeySequence::PortableText));
         const auto identity=native.identity();
         const auto scoped=it.key().section('.',1,1)+identity;
-        if (conflicts.contains(scoped)) return fail("与“"+actionName(conflicts.value(scoped))+"”的快捷键冲突，未保存。",conflicts.value(scoped));
+        if (conflicts.contains(scoped)) return fail(QCoreApplication::translate("ListenFree", "与“")+actionName(conflicts.value(scoped))+QCoreApplication::translate("ListenFree", "”的快捷键冲突，未保存。"),conflicts.value(scoped));
         conflicts[scoped]=it.key();
         if (global && isGlobal) next[identity]={0,it.key().section('.',-1),it.value()};
     }
@@ -97,19 +98,19 @@ bool ShortcutService::commit(const QMap<QString, QString>& desired,bool applicat
     }
     if(!saved) for(auto it=previous.cbegin();it!=previous.cend();++it) settings_.setValue(it.key(),it.value());
     writing_=false;
-    if (!saved) return fail("快捷键保存失败，原绑定仍然有效。");
+    if (!saved) return fail(QCoreApplication::translate("ListenFree", "快捷键保存失败，原绑定仍然有效。"));
     registered_=next; bindings_=desired; applicationEnabled_=application; globalEnabled_=global;
     error_.clear(); conflict_.clear(); ++revision_; rebuildLocal(); emit changed(); return true;
 }
 bool ShortcutService::setBinding(const QString& key,const QString& sequence) {
-    if(!bindings_.contains(key))return fail("未知快捷键动作。");
+    if(!bindings_.contains(key))return fail(QCoreApplication::translate("ListenFree", "未知快捷键动作。"));
     if(const auto error=validate(sequence,key.startsWith(prefix("global")));!error.isEmpty())return fail(error);
     if (!sequence.isEmpty()) {
         const auto identity = nativeKey(QKeySequence::fromString(sequence, QKeySequence::PortableText)).identity();
         for (auto it=bindings_.cbegin(); it!=bindings_.cend(); ++it)
             if (it.key()!=key && it.key().section('.',1,1)==key.section('.',1,1) && !it.value().isEmpty()
                 && nativeKey(QKeySequence::fromString(it.value(),QKeySequence::PortableText)).identity()==identity)
-                return fail("与“"+actionName(it.key())+"”的快捷键冲突，未保存。",it.key());
+                return fail(QCoreApplication::translate("ListenFree", "与“")+actionName(it.key())+QCoreApplication::translate("ListenFree", "”的快捷键冲突，未保存。"),it.key());
     }
     auto desired=bindings_;
     desired[key]=QKeySequence::fromString(sequence,QKeySequence::PortableText).toString(QKeySequence::PortableText);

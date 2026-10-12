@@ -83,7 +83,7 @@ KosApplicationWindow {
                 text: control.text
                 color: control.enabled ? AppTheme.text : AppTheme.mutedText
                 font.pixelSize: control.nested ? 10 : 11
-                elide: Text.ElideRight
+                wrapMode: Text.WordWrap
                 verticalAlignment: Text.AlignVCenter
             }
 
@@ -180,7 +180,7 @@ KosApplicationWindow {
     }
 
     function dateKey(date) {
-        return Qt.formatDate(date, "yyyy-MM-dd")
+        return AppTheme.formatDate(date, "yyyy-MM-dd")
     }
 
     function startOfWeek(date) {
@@ -435,16 +435,16 @@ KosApplicationWindow {
 
     function headerTitle() {
         if (activeView === "month")
-            return Qt.formatDate(visibleMonth, "MMMM yyyy")
+            return AppTheme.formatDate(visibleMonth, "MMMM yyyy")
         if (activeView === "day")
-            return Qt.formatDate(selectedDate, Locale.LongFormat)
+            return AppTheme.formatDate(selectedDate, Locale.LongFormat)
         const end = new Date(weekStart.getFullYear(), weekStart.getMonth(),
                              weekStart.getDate() + 6)
         if (weekStart.getMonth() === end.getMonth())
-            return Qt.formatDate(weekStart, "MMM d") + " – "
-                + Qt.formatDate(end, "d, yyyy")
-        return Qt.formatDate(weekStart, "MMM d") + " – "
-            + Qt.formatDate(end, "MMM d, yyyy")
+            return AppTheme.formatDate(weekStart, "MMM d") + " – "
+                + AppTheme.formatDate(end, "d, yyyy")
+        return AppTheme.formatDate(weekStart, "MMM d") + " – "
+            + AppTheme.formatDate(end, "MMM d, yyyy")
     }
 
     function showStatus(message) {
@@ -619,7 +619,7 @@ KosApplicationWindow {
                         }
 
                         Label {
-                            text: Qt.formatDate(root.now, "ddd")
+                            text: AppTheme.formatDate(root.now, "ddd")
                             color: AppTheme.mutedText
                             font.pixelSize: 10
                         }
@@ -660,7 +660,7 @@ KosApplicationWindow {
 
                     Label {
                         Layout.fillWidth: true
-                        text: Qt.formatDate(root.visibleMonth, "MMMM yyyy")
+                        text: AppTheme.formatDate(root.visibleMonth, "MMMM yyyy")
                         color: AppTheme.text
                         horizontalAlignment: Text.AlignHCenter
                         font.weight: Font.DemiBold
@@ -727,7 +727,7 @@ KosApplicationWindow {
                             height: miniCalendar.cellHeight
                             hoverEnabled: true
                             opacity: inVisibleMonth ? 1 : 0.42
-                            Accessible.name: Qt.formatDate(cellDate, Locale.LongFormat)
+                            Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                             onClicked: {
                                 root.selectedDate = cellDate
                                 if (cellDate.getMonth()
@@ -916,7 +916,7 @@ KosApplicationWindow {
                                 ? qsTr("Calendar and Todo are synchronized")
                                 : qsTr("Waiting for the local PIM service")
                             color: pim.connected ? AppTheme.positive : AppTheme.warning
-                            elide: Text.ElideRight
+                            wrapMode: Text.WordWrap
                             font.pixelSize: 9
                         }
                     }
@@ -960,11 +960,13 @@ KosApplicationWindow {
 
                     Label {
                         Layout.fillWidth: true
-                        Layout.minimumWidth: 142
+                        Layout.minimumWidth: root.compact ? 100 : 142
                         text: root.headerTitle()
                         color: AppTheme.text
-                        font.pixelSize: 22
+                        font.pixelSize: root.compact ? 17 : 22
                         font.weight: Font.DemiBold
+                        fontSizeMode: Text.HorizontalFit
+                        minimumPixelSize: 13
                         elide: Text.ElideRight
                     }
 
@@ -1099,7 +1101,7 @@ KosApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Label {
-                                    text: Qt.formatDate(root.selectedDate, Locale.LongFormat)
+                                    text: AppTheme.formatDate(root.selectedDate, Locale.LongFormat)
                                     color: AppTheme.text
                                     font.pixelSize: 15
                                     font.weight: Font.DemiBold

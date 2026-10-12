@@ -36,7 +36,9 @@ SettingsTransfer::SettingsTransfer(infrastructure::database::Database& db, Setti
 QJsonObject SettingsTransfer::schema() {
     auto rules=QJsonDocument::fromJson(settingsSchema).object();
     auto folder=rules.value("download.folder").toObject();folder["default"]=QStandardPaths::writableLocation(QStandardPaths::MusicLocation)+"/ListenFree";
-    rules["download.folder"]=folder;return rules;
+    rules["download.folder"]=folder;
+    rules.remove("ui.language"); // Device language is not a portable preference.
+    return rules;
 }
 QVariantList SettingsTransfer::categories() const {
     return {QVariantMap{{"id","general"},{"name",tr("基本")}}, QVariantMap{{"id","library"},{"name",tr("资料库")}},

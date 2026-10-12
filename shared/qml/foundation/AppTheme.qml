@@ -4,6 +4,15 @@ import QtQuick
 
 QtObject {
     id: theme
+    // Qt.formatDate* uses the C locale; use the selected UI locale explicitly.
+    readonly property var uiLocale: Qt.locale()
+    function formatDate(date, format) {
+        if (uiLocale.name.startsWith("zh") && format === "MMMM yyyy") format = "yyyy年M月"
+        return date.toLocaleDateString(uiLocale, format)
+    }
+    function formatTime(date, format) { return date.toLocaleTimeString(uiLocale, format) }
+    function formatDateTime(date, format) { return date.toLocaleString(uiLocale, format) }
+
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.

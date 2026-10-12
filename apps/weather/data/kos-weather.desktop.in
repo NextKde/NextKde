@@ -2,10 +2,13 @@
 Version=1.0
 Type=Application
 Name=KOS Weather
+Name[zh]=KOS 天气
 Name[zh_CN]=KOS 天气
 GenericName=Weather
+GenericName[zh]=天气
 GenericName[zh_CN]=天气
 Comment=View current conditions and forecasts for saved locations
+Comment[zh]=查看已保存地点的实时天气与预报
 Comment[zh_CN]=查看已保存地点的实时天气与预报
 TryExec=@KOS_APP_EXECUTABLE@
 Exec=@KOS_APP_EXECUTABLE@
@@ -20,5 +23,6 @@ Actions=Settings;
 
 [Desktop Action Settings]
 Name=Settings
+Name[zh]=设置
 Name[zh_CN]=设置
 Exec=@KOS_APP_EXECUTABLE@ --settings

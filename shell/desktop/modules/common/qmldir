@@ -39,3 +39,5 @@ MediaControlButton 1.0 MediaControlButton.qml
 ActionFeedbackToast 1.0 ActionFeedbackToast.qml
 
 DesktopConfirmDialog 1.0 DesktopConfirmDialog.qml
+
+singleton I18n 1.0 I18n.qml

@@ -13,7 +13,18 @@ add_library(Kos::AppCore ALIAS kos_app_core)
 target_include_directories(kos_app_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../shared/i18n>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
+qt_add_translations(kos_app_core
+    SOURCE_TARGETS kos_app_core
+    SOURCES
+        ../calendar/qml ../todo/qml ../weather/qml
+        ../../shared/qml/foundation ../../shared/pim
+    TS_FILES translations/kos_apps_zh_CN.ts translations/kos_apps_en_US.ts
+    RESOURCE_PREFIX /kos/i18n
 )
 
 target_link_libraries(kos_app_core PUBLIC
@@ -54,4 +65,18 @@ if(BUILD_TESTING)
     )
     set_tests_properties(kos-application.preferences PROPERTIES TIMEOUT 20)
     set_tests_properties(kos-application.preferences PROPERTIES LABELS data)
+
+    add_executable(kos-language-test ../../tests/localization/LanguageTest.cpp)
+    target_link_libraries(kos-language-test PRIVATE Kos::AppCore Qt6::Test)
+    foreach(language zh_CN zh_TW zh_HK en_US fr_FR ja_JP)
+        if(language MATCHES "^zh")
+            set(expected zh)
+        else()
+            set(expected en)
+        endif()
+        add_test(NAME kos-language.${language} COMMAND kos-language-test)
+        set_tests_properties(kos-language.${language} PROPERTIES
+            ENVIRONMENT "LANG=en_US.UTF-8;LC_ALL=en_US.UTF-8;LANGUAGE=${language};EXPECTED_LANGUAGE=${expected}"
+            LABELS data TIMEOUT 10)
+    endforeach()
 endif()

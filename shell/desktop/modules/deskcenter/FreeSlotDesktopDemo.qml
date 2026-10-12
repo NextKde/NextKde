@@ -250,7 +250,7 @@ Item {
     function displayName(entry) {
         const path = entry && entry.path ? entry.path : ""
         const name = (entry && (entry.title || entry.name))
-            || path.split("/").pop() || "未命名"
+            || path.split("/").pop() || I18n.text("未命名")
         if (showExtensions || (entry && entry.kind === "folder"))
             return name
         const extensionIndex = name.lastIndexOf(".")
@@ -902,7 +902,7 @@ Item {
         Text {
             anchors.centerIn: parent
             text: root.externalDragAction === Qt.MoveAction
-                ? "移动到桌面" : "复制到桌面"
+                ? I18n.text("移动到桌面") : I18n.text("复制到桌面")
             color: Qt.rgba(1, 1, 1, 0.78)
         }
     }

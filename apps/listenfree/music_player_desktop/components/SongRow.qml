@@ -50,7 +50,7 @@ Rectangle {
     readonly property bool local: String(track.localPath || "").length > 0 || String(track.source || "").toLowerCase() === "local"
     readonly property string originLabel: track.originKind === "lx"
         ? qsTr("洛雪 · ") + (track.originSourceName || qsTr("已移除音源"))
-        : ({kw: "酷我", kg: "酷狗", tx: "QQ 音乐", wy: "网易云", mg: "咪咕", bili: "哔哩哔哩"})[track.source] || ""
+        : ({kw: qsTr("酷我"), kg: qsTr("酷狗"), tx: qsTr("QQ 音乐"), wy: qsTr("网易云"), mg: qsTr("咪咕"), bili: qsTr("哔哩哔哩")})[track.source] || ""
     readonly property bool hovered: hover.hovered
     readonly property real numberWidth: compact ? 28 : 38
     readonly property real coverSize: compact ? 34 : 40

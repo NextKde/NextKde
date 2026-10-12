@@ -2,10 +2,13 @@
 Version=1.0
 Type=Application
 Name=KOS Todo
+Name[zh]=KOS 待办事项
 Name[zh_CN]=KOS 待办事项
 GenericName=Task Manager
+GenericName[zh]=任务管理器
 GenericName[zh_CN]=任务管理器
 Comment=Organize tasks, lists, due dates, and calendar links
+Comment[zh]=管理任务、清单、截止时间与日历联动
 Comment[zh_CN]=管理任务、清单、截止时间与日历联动
 TryExec=@KOS_APP_EXECUTABLE@
 Exec=@KOS_APP_EXECUTABLE@
@@ -20,15 +23,18 @@ Actions=Today;Planned;Settings;
 
 [Desktop Action Today]
 Name=Today
+Name[zh]=今天
 Name[zh_CN]=今天
 Exec=@KOS_APP_EXECUTABLE@ --view today
 
 [Desktop Action Planned]
 Name=Planned
+Name[zh]=计划
 Name[zh_CN]=计划
 Exec=@KOS_APP_EXECUTABLE@ --view planned
 
 [Desktop Action Settings]
 Name=Settings
+Name[zh]=设置
 Name[zh_CN]=设置
 Exec=@KOS_APP_EXECUTABLE@ --settings

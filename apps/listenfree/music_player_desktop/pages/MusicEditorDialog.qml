@@ -472,7 +472,7 @@ Item {
             component PropertyField: Column {
                 id: propertyField
                 property string label: qsTr("属性")
-                property string value: "未知"
+                property string value: qsTr("未知")
                 width: (contentFrame.width - 44) / 2
                 spacing: 3
                 Text {

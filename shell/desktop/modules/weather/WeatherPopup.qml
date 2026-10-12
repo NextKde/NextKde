@@ -53,7 +53,7 @@ AnimatedPopupWindow {
                 spacing: 2
                 Text { text: WeatherService.cityName; color: ThemeService.foregroundColor; font.pixelSize: 14 }
                 Text { text: WeatherService.temperature; color: ThemeService.foregroundColor; font.pixelSize: 32; font.weight: Font.Bold }
-                Text { text: WeatherService.conditionText(WeatherService.weatherCode) + " · 体感 " + WeatherService.apparentTemperature; color: ThemeService.foregroundColor; opacity: 0.72; font.pixelSize: 12 }
+                Text { text: WeatherService.conditionText(WeatherService.weatherCode) + I18n.text(" · 体感 ") + WeatherService.apparentTemperature; color: ThemeService.foregroundColor; opacity: 0.72; font.pixelSize: 12 }
             }
         }
 
@@ -73,9 +73,9 @@ AnimatedPopupWindow {
             spacing: 20
             Repeater {
                 model: [
-                    { label: "湿度", value: WeatherService.humidity },
-                    { label: "风速", value: WeatherService.windSpeed },
-                    { label: "风向", value: WeatherService.windDirection }
+                    { label: I18n.text("湿度"), value: WeatherService.humidity },
+                    { label: I18n.text("风速"), value: WeatherService.windSpeed },
+                    { label: I18n.text("风向"), value: WeatherService.windDirection }
                 ]
                 delegate: Column {
                     required property var modelData
@@ -85,7 +85,7 @@ AnimatedPopupWindow {
                 }
             }
             Item { width: 1; height: 1 }
-            Text { text: WeatherService.errorMessage || (WeatherService.stale ? "缓存数据" : "刚刚更新"); color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: WeatherService.errorMessage || (WeatherService.stale ? I18n.text("缓存数据") : I18n.text("刚刚更新")); color: ThemeService.foregroundColor; opacity: 0.5; font.pixelSize: 10; anchors.verticalCenter: parent.verticalCenter }
         }
     }
 }
