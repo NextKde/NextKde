@@ -326,7 +326,15 @@ Item {
             return item.parent.mapToItem(contentRow,
                 item.x + item.width / 2, item.y + item.height / 2).x
         }
+        // Returns whether the subtree contained any growable icon. Rigid
+        // subtrees are counted by their TOP member: deeper frames register
+        // leaves first (a carousel's visible card, say), and those leaves
+        // never receive a translate of their own -- the extent would grow for
+        // a movement that never renders, while the icons slide over the
+        // stationary member. Roll them back and count the member itself, so
+        // the model and the rendered row describe the same geometry.
         function visit(node, directChild) {
+            let foundGrowable = false
             for (let i = 0; i < node.children.length; i++) {
                 const child = node.children[i]
                 if (!child || !child.visible || child.width <= 0)
@@ -340,6 +348,7 @@ Item {
                         // slot-crossing frequency.
                         scale: 1 + child.spreadMagnificationProgress
                             * (ConfigService.effectiveHoverScale - 1) })
+                    foundGrowable = true
                 } else if (child.children !== undefined
                         && child.children.length > 0) {
                     // A rigid member can still contain icons (the pinned
@@ -347,14 +356,18 @@ Item {
                     // and keep the icons. A member with no icon inside counts
                     // by its own bounds.
                     const before = states.length
-                    visit(child, false)
-                    if (states.length === before) {
+                    const inner = visit(child, false)
+                    if (inner) {
+                        foundGrowable = true
+                    } else {
+                        states.length = before
                         states.push({ item: child,
                             cx: layoutCentre(child, directChild),
                             half: child.width / 2, growable: false, scale: 1 })
                     }
                 }
             }
+            return foundGrowable
         }
         visit(contentRow, true)
         return states
@@ -480,10 +493,10 @@ Item {
     // and its glass grow. The row itself keeps its on-screen origin (the
     // container is centred on the screen and the row is centred in the
     // container, so the two shifts cancel), so no compensation is needed.
-    readonly property real _spreadRawTotal: {
+    readonly property var _spreadExtent: {
         const states = _spreadOffsets.states
         if (states.length === 0)
-            return 0
+            return { total: 0, shift: 0 }
         let left = Infinity, right = -Infinity
         let baseLeft = Infinity, baseRight = -Infinity
         for (let i = 0; i < states.length; i++) {
@@ -495,8 +508,26 @@ Item {
             baseLeft = Math.min(baseLeft, s.cx - s.half)
             baseRight = Math.max(baseRight, s.cx + s.half)
         }
-        return Math.max(0, (right - left) - (baseRight - baseLeft))
+        return {
+            total: Math.max(0, (right - left) - (baseRight - baseLeft)),
+            // Where the displaced extent's centre sits relative to the
+            // resting one, along the row axis. The glass grows by `total`
+            // around the screen centre, but a hover near one end displaces
+            // the row asymmetrically -- the extent's centre wanders by
+            // `shift`, so a symmetrically-widening glass overflows the row
+            // on the far side and leaves a blank on the near one. DockWindow
+            // re-centres the glass on the extent with this value, and
+            // contentRow undoes it on its own x, so the icons stay pinned.
+            shift: ((right + left) - (baseRight + baseLeft)) / 2
+        }
     }
+    readonly property real _spreadRawTotal: _spreadExtent.total
+    // Glass recentring for asymmetric hovers. Zero for the stretched styles:
+    // their glass width does not track the spread, so there is nothing to
+    // re-centre. Signs hold for side docks too: the row's rotation maps the
+    // row axis onto the screen's vertical, which is the axis restY centres.
+    readonly property real hoverGlassShift: fillsAvailableLength
+        ? 0 : _spreadExtent.shift
     // The glass follows the live spread -- the dock grows with the
     // magnification and comes back down as the pointer moves away -- through
     // its own ~70 ms follower with a critical landing (the tail does not
@@ -852,7 +883,10 @@ Item {
         rotation: container.vertical ? 90 : 0
         transformOrigin: Item.Center
         anchors.verticalCenter: parent.verticalCenter
-        anchors.horizontalCenter: parent.horizontalCenter
+        // Horizontal centre minus the glass's recentring shift, so the icons
+        // stay exactly where the pointer pinned them while the glass moves to
+        // hug the displaced row (see _spreadExtent.shift).
+        x: (parent.width - width) / 2 - container.hoverGlassShift
         spacing: container.itemSpacing
         leftPadding: container.hPadding
         rightPadding: container.hPadding

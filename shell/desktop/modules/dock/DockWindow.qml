@@ -186,12 +186,14 @@ PanelWindow {
             ? root.width - root.edgeMargin - dockContainer.width
             : root.edgeMargin)
         : (root.stretched ? root.stretchInset
-            : (root.width - dockContainer.width) / 2)
+            : (root.width - dockContainer.width) / 2
+                + dockContainer.hoverGlassShift)
     readonly property real restY: root.vertical
         ? (root.stretched
             ? root.reservedTop + root.stretchInset
             : (root.reservedTop
-                + (root.height - root.reservedTop - dockContainer.height) / 2))
+                + (root.height - root.reservedTop - dockContainer.height) / 2
+                + dockContainer.hoverGlassShift))
         : root.height - root.edgeMargin - dockContainer.height
 
     function publishWorkspaceLayout() {
