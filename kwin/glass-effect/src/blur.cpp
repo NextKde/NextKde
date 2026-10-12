@@ -1065,7 +1065,12 @@ BlurRegion BlurEffect::contentRegion(EffectWindow *w, const BorderRadius *fallba
 
     if (auto it = m_windows.find(w); it != m_windows.end()) {
         const std::optional<BlurRegion> &content = it->second.content;
-        if (!m_settings.roundedCorners.ignoreContentBlurRegion || w->isDock()) {
+        // Shell cards occupy only part of their transparent surface. Honour
+        // their explicit region even when an old Glass configuration asks for
+        // whole-window blur; otherwise the material is aligned to the surface
+        // origin instead of the card. Ordinary applications keep the setting.
+        if (!m_settings.roundedCorners.ignoreContentBlurRegion || w->isDock()
+            || (content.has_value() && !content->isEmpty() && isQuickshellWindow(w))) {
             if (content.has_value()) {
                 if (content->isEmpty()) {
                     // A number of layer-shell clients (notably Quickshell)
@@ -1607,10 +1612,11 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // alignment below is one translation for all of it, so a set that is a
         // strict subset (or superset) of the region shifts every shape by the
         // difference -- a card panel whose overlay sheet was left out of the
-        // union slid its whole glass by 238px. Report it (the geometry below is
-        // still the best available guess) rather than fail silently.
-        if (declaredShapeBounds.size() != effectShape.boundingRect().size()
-            || declaredShapeTranslation != QPoint(0, 0)) {
+        // union slid its whole glass by 238px. A nonzero translation alone is
+        // normal: the surface may be away from the output origin.
+        const bool declaredShapeMatchesRegion =
+            declaredShapeBounds.size() == effectShape.boundingRect().size();
+        if (!declaredShapeMatchesRegion) {
             if (shapeTraceEnabled()) {
                 qCWarning(shapeTraceCategory())
                     << "declared shape set does not match the blur region;"
@@ -1625,50 +1631,50 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
             // that card deliberately declares no shape: the declared set becomes
             // a strict subset of the region.
             //
-            // Dropping the draws leaves surfaceShapeDraws empty, and the
+            // Skipping the shape loop leaves surfaceShapeDraws empty, and the
             // region-driven path below then supplies both the geometry and the
             // blur level from the region the compositor actually published.
-            draws.clear();
-            shapeGeometry = decltype(shapeGeometry){};
         }
-        for (const SurfaceShape &shape : declaredSurfaceShapes) {
-            const QRect logicalRect = shape.geometry.toAlignedRect();
-            if (logicalRect.isEmpty()) {
-                continue;
-            }
-            BlurRegion shapeRegion;
+        if (declaredShapeMatchesRegion) {
+            for (const SurfaceShape &shape : declaredSurfaceShapes) {
+                const QRect logicalRect = shape.geometry.toAlignedRect();
+                if (logicalRect.isEmpty()) {
+                    continue;
+                }
+                BlurRegion shapeRegion;
 #ifdef GLASS_X11
-            shapeRegion += logicalRect;
+                shapeRegion += logicalRect;
 #else
-            shapeRegion += Rect(logicalRect);
+                shapeRegion += Rect(logicalRect);
 #endif
-            shapeRegion.translate(declaredShapeTranslation);
-            const BlurRegion transformedShape = shapeRegion;
-            if (!transformedShape.intersects(effectShape)) {
-                continue;
-            }
-            SurfaceShapeDraw draw;
-            draw.shape = shape;
-            draw.rects = buildEffectiveShape(transformedShape);
-            if (draw.rects.isEmpty()) {
-                continue;
-            }
-            if (shape.blurEnabled && !blurStrengthValues.isEmpty()) {
-                draw.blurLevel = qBound(1, int(shape.blurLevel), int(blurStrengthValues.size()));
-            }
-            const QRect transformedBounds = transformedShape.boundingRect();
+                shapeRegion.translate(declaredShapeTranslation);
+                const BlurRegion transformedShape = shapeRegion;
+                if (!transformedShape.intersects(effectShape)) {
+                    continue;
+                }
+                SurfaceShapeDraw draw;
+                draw.shape = shape;
+                draw.rects = buildEffectiveShape(transformedShape);
+                if (draw.rects.isEmpty()) {
+                    continue;
+                }
+                if (shape.blurEnabled && !blurStrengthValues.isEmpty()) {
+                    draw.blurLevel = qBound(1, int(shape.blurLevel), int(blurStrengthValues.size()));
+                }
+                const QRect transformedBounds = transformedShape.boundingRect();
 #ifdef GLASS_X11
-            draw.nativeBox = snapToPixelGridF(scaledRect(transformedBounds,
-                viewport.scale())).translated(-scaledBackgroundRect.topLeft());
+                draw.nativeBox = snapToPixelGridF(scaledRect(transformedBounds,
+                    viewport.scale())).translated(-scaledBackgroundRect.topLeft());
 #else
-            draw.nativeBox = QRectF(transformedBounds.x() * viewport.scale(),
-                transformedBounds.y() * viewport.scale(),
-                transformedBounds.width() * viewport.scale(),
-                transformedBounds.height() * viewport.scale())
-                .translated(-scaledBackgroundRect.topLeft());
+                draw.nativeBox = QRectF(transformedBounds.x() * viewport.scale(),
+                    transformedBounds.y() * viewport.scale(),
+                    transformedBounds.width() * viewport.scale(),
+                    transformedBounds.height() * viewport.scale())
+                    .translated(-scaledBackgroundRect.topLeft());
 #endif
-            shapeGeometry.append(draw.rects);
-            draws.append(draw);
+                shapeGeometry.append(draw.rects);
+                draws.append(draw);
+            }
         }
         if (!draws.isEmpty()) {
             effectiveContentShape = shapeGeometry;
