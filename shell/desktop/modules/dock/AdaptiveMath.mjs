@@ -33,14 +33,19 @@ const MAX_WIDTH_RATIO = 0.98
 // long icon column keeps breathing room above and below instead of visually
 // touching both screen edges.
 const MAX_HEIGHT_RATIO = 0.95
-const ACTIVE_BG_CLEARANCE_RATIO = 0.1
+const ACTIVE_BG_CLEARANCE_RATIO = 0.035
 
 // Reserve clearance at the rounded corner, not just along the straight edge.
 // A square artwork corner is sqrt(2) * (radius - padding) from the arc centre;
 // require that distance to be at most radius - clearance.
-export function activeBackgroundPadding(iconSize, radiusRatio = 0.30) {
-    return iconSize * Math.max(ACTIVE_BG_CLEARANCE_RATIO,
-        radiusRatio - (radiusRatio - ACTIVE_BG_CLEARANCE_RATIO) * Math.SQRT1_2)
+export function activeBackgroundPadding(iconSize, radiusRatio = 0.30, clearanceScale = 1) {
+    if (iconSize <= 0) return 0
+    // A small corner clearance at the usual icon size. Keep this proportional:
+    // the adaptive solver evaluates iconSize=1 to obtain the padding ratio.
+    // Hover tightens breathing room without reducing the corner inset.
+    const clearance = iconSize * ACTIVE_BG_CLEARANCE_RATIO * clearanceScale
+    const radius = iconSize * Math.max(0, radiusRatio)
+    return Math.max(clearance, radius - (radius - clearance) * Math.SQRT1_2)
 }
 
 // ── Clamp utility ──

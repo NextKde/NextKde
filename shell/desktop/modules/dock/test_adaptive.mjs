@@ -55,7 +55,7 @@ for (const size of [18, 44, 70]) {
         const padding = activeBackgroundPadding(size, radiusRatio);
         const radius = size * radiusRatio;
         const clearance = radius - Math.SQRT2 * Math.max(0, radius - padding);
-        if (clearance < size * 0.1 - 0.001)
+        if (clearance < size * 0.035 - 0.001)
             errors++, console.log('FAIL: rounded corner clearance', size, radiusRatio);
         const layout = computeLayout(60, 5, 3, false, 1920,
             { vpad: 0.12, activeRadiusRatio: radiusRatio });

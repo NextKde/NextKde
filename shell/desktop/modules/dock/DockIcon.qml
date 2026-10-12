@@ -131,10 +131,13 @@ Item {
     // Keep the reserved slot unchanged: this is paint geometry only.
     readonly property real _plateHoverScale: Math.max(1,
         _hoverScale * _magnificationScale)
-    // Tighten the visible plate gently with the existing hover wave. Its
-    // resting rounded-corner reserve remains intact when hover ends.
+    // Tighten only breathing room; preserve the minimum rounded-corner inset.
+    // The layout reads this same delta so its extent matches the painted plate.
+    readonly property real hoverGapReduction: Math.max(0,
+        activeBackgroundGap - AdaptiveMath.activeBackgroundPadding(
+            iconSize, AppearanceTokens.dock.activeRadiusRatio, 0.75))
     readonly property real _plateHoverGap: activeBackgroundGap
-        * (1 - 0.25 * magnificationProgress)
+        - hoverGapReduction * magnificationProgress
     readonly property real activePlateWidth:
         Math.max(iconSize, iconPaintedWidth) + 2 * _plateHoverGap / _plateHoverScale
     readonly property real activePlateHeight:

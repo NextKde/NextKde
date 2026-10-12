@@ -47,9 +47,8 @@ export function layout(states, pointer, progress, maxScale, radius, spacing = 0,
             + u2 * (-4 / 7 + u2 / 9))));
         const dx = Math.sign(d) * density * (Math.min(distance, shoulder)
             + support * integral) * amplitude;
-        const padding = state.half - (state.artHalf ?? state.half);
         const half = state.half + (state.artHalf ?? state.half) * (scale - 1)
-            - (state.growable ? padding * 0.25 * influence : 0);
+            - (state.growable ? (state.hoverGapReduction ?? 0) * influence : 0);
         return { item: state.item, progress: influence, dx: dx, scale: scale, half: half };
     });
     const flexibleIndex = states.findIndex(state => state.flexible);

@@ -280,6 +280,7 @@ Item {
             states.push({ item: item, cx: layoutCentre(item),
                 half: item.iconSlotWidth / 2,
                 artHalf: Math.max(item.iconSize, item.iconPaintedWidth) / 2,
+                hoverGapReduction: item.hoverGapReduction,
                 growable: true })
         }
         // Only pinned app groups expose nested icons. Stack and accessories
