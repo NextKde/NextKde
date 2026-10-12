@@ -206,14 +206,14 @@ Item {
                     radius: 8
                     visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                     color: (pointer.containsMouse || (menuPopup.visible && root.popupRootId === modelData.id))
-                        ? Qt.rgba(ThemeService.foregroundColor.r,
-                            ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                        ? Qt.rgba(ThemeService.barInk.r,
+                            ThemeService.barInk.g, ThemeService.barInk.b, 0.16) : "transparent"
                     z: -1
                 }
                 Text {
                     anchors.centerIn: parent
                     text: modelData.label || ""
-                    color: ThemeService.foregroundColor
+                    color: ThemeService.barInk
                     font: labelMetrics.font
                     renderType: Text.NativeRendering
                     elide: Text.ElideRight
@@ -262,11 +262,11 @@ Item {
                 radius: 8
                 visible: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 color: (morePointer.containsMouse || (menuPopup.visible && root.popupRootId === 0))
-                    ? Qt.rgba(ThemeService.foregroundColor.r,
-                        ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.16) : "transparent"
+                    ? Qt.rgba(ThemeService.barInk.r,
+                        ThemeService.barInk.g, ThemeService.barInk.b, 0.16) : "transparent"
                 z: -1
             }
-            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.foregroundColor; font.pixelSize: 16; renderType: Text.NativeRendering }
+            Text { anchors.centerIn: parent; text: "››"; color: ThemeService.barInk; font.pixelSize: 16; renderType: Text.NativeRendering }
             MouseArea {
                 id: morePointer
                 anchors.fill: parent

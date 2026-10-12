@@ -1346,6 +1346,20 @@ public:
         callAppearance({QStringLiteral("updateBarLayoutMode"), mode});
     }
 
+    // The Bar's mac-style ground: the style choice, then the tint's opacity.
+    // 0 is the default Bar; with the style on, the tint travels as a
+    // three-decimal number, the shell clamps it to 0..1 and the page's slider
+    // only produces values in its own narrower range.
+    Q_INVOKABLE void updateBarMacStyle(bool enabled) {
+        callAppearance({QStringLiteral("updateBarMacStyle"),
+                        enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateBarMacTint(double tint) {
+        callAppearance({QStringLiteral("updateBarMacTint"),
+                        QString::number(tint, 'f', 3)});
+    }
+
     Q_INVOKABLE void updateDockWindowAnimationStyle(const QString &style) {
         callAppearance({QStringLiteral("updateDockWindowAnimationStyle"), style});
     }
@@ -1659,6 +1673,13 @@ private:
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),
                 object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("transparent"))},
+            // A shell older than this page has neither key; the fallbacks are
+            // the off/30% values such a shell renders with, so the selector and
+            // the slider agree with the Bar even before the first write.
+            {QStringLiteral("barMacStyle"),
+                object.value(QStringLiteral("barMacStyle")).toBool(false)},
+            {QStringLiteral("barMacTint"),
+                object.value(QStringLiteral("barMacTint")).toDouble(0.30)},
             {QStringLiteral("dockWindowAnimationStyle"),
                 object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
             {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
