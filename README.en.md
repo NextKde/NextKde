@@ -46,11 +46,91 @@ must be listed explicitly. KWin also exports Wayland, libdrm, and libepoxy
 development interfaces, but those are hard dependencies of Arch's `kwin`
 package and do not need to be repeated here.
 
+### Debian 13 (trixie)
+
+`kosctl` installs missing build packages automatically on Debian too, through
+`apt-get`: `./tools/kosctl doctor` reports every gap and
+`./tools/kosctl install` fills it in.
+
+Going from a clean machine to a running desktop — **including the clone** — takes a single
+script, which walks through the environment check, sudo setup, proxy detection, Quickshell
+and dependency installation, cloning, building, installing and verification:
+
+```sh
+bash tools/install-debian13.sh --check         # check only, changes nothing (no sudo)
+bash tools/install-debian13.sh                 # install
+bash tools/install-debian13.sh --all --start   # also install the standalone apps and lock screen, then apply
+```
+
+Run it as your **logged-in desktop user**, never through `sudo`: the shell configuration
+lands in `~/.config/quickshell/kos`, the services are systemd *user* units, and the desktop
+takeover edits `~/.config/plasma-*-appletsrc` — all of them belong to your own `HOME`. So
+`KOS_PREFIX` defaults to `$HOME/.local`, and the script refuses a prefix outside `HOME`.
+
+During the build `kosctl` fetches a pinned ONNX Runtime SDK from GitHub with curl (skipped
+when `KOS_BUILD_SPATIAL=off`). On networks that cannot reach GitHub directly, the script
+detects a local proxy and hands it to git and the build only — apt stays direct, which is
+faster against a domestic mirror.
+
+Where Debian differs from Arch — and where a Debian build usually gets stuck:
+
+- Debian's `kwin-dev` does **not** bring the libdrm and libgbm development
+  files the way Arch's `kwin` package does. `libdrm-dev` and `libgbm-dev` must
+  be named explicitly, or CMake stops with `Could NOT find Libdrm`.
+- The xcb extension headers KWin exports (composite, randr, res, shm, sync, ...)
+  are not pulled in by `kwin-dev` either.
+- glib finished its time_t transition in trixie (`libglib2.0-0` became
+  `libglib2.0-0t64`). `kosctl` picks whichever name the archive actually has;
+  install the `t64` name by hand.
+- The glass effect builds with `-DGLASS_X11=OFF` and looks for X11 with
+  `QUIET`, so the X11 Xlib headers are not a build requirement.
+- **Quickshell 0.3.x is not in the trixie main archive**, but
+  `trixie-backports` ships 0.3.0 — the only route that needs no third-party
+  source: `sudo apt install -t trixie-backports quickshell`. Otherwise build it
+  from source following the
+  [Quickshell documentation](https://quickshell.org/docs/), temporarily enable
+  a sid source, or use the Ubuntu PPA shown below. `doctor` prints a hint when
+  it is missing.
+
+Manual install, equivalent to what the script does:
+
+```sh
+sudo apt install \
+  git cmake ninja-build g++ golang-go curl patchelf pkg-config \
+  extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev \
+  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev \
+  qt6-image-formats-plugins qt6-5compat-dev libqt6svg6 \
+  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
+  qml6-module-qtqml-models qml6-module-qtqml-workerscript \
+  qml6-module-qt5compat-graphicaleffects libopencv-dev \
+  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev \
+  kwin-dev libdrm-dev libgbm-dev libepoxy-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev \
+  libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxkbcommon-x11-dev \
+  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
+  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
+```
+
+Optional runtime integrations:
+
+```sh
+sudo apt install \
+  network-manager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils kde-spectacle \
+  libglib2.0-0t64 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+```
+
 ### Ubuntu 26.04 (resolute)
 
-`kosctl` installs missing build packages automatically on Arch and NixOS only.
-On Ubuntu, install them manually. The list below has been verified with a full
-default build on 26.04.
+`kosctl` installs missing build packages automatically on Arch, Debian-family
+systems (Ubuntu included) and NixOS. The list below mirrors what the script
+installs, for manual cross-checking; it has been verified with a full default
+build on 26.04.
 
 Quickshell 0.3.x is not in the Ubuntu archive yet; use the PPA recommended by
 the [Quickshell documentation](https://quickshell.org/docs/), which provides a
@@ -86,11 +166,14 @@ Optional runtime integrations (mirroring the Arch list above):
 sudo apt install \
   network-manager wireplumber bluez brightnessctl \
   wl-clipboard cliphist xdg-utils kde-spectacle \
-  libglib2.0-0 qml6-module-qtquick-dialogs libqt6sql6-sqlite
+  libglib2.0-0t64 qml6-module-qtquick-dialogs libqt6sql6-sqlite
 ```
 
 Key naming differences versus Arch: `kdecoration` is `libkdecorations3-dev`,
-`vulkan-headers` is `libvulkan-dev`, and `spectacle` is `kde-spectacle`.
+`vulkan-headers` is `libvulkan-dev`, `spectacle` is `kde-spectacle`, and
+`glib2` is `libglib2.0-0t64` (the canonical name after the time_t transition;
+`libglib2.0-0` may still exist in some releases as a transitional package,
+but install the `t64` name).
 Also note: `libplasma-dev` provides `Plasma/plasma_version.h` used by the
 glass effect; `libkf6kio-dev` and `libkf6calendarcore-dev` are direct CMake
 dependencies of the platform service and Settings (on Arch they arrive
