@@ -2,6 +2,7 @@
 #include "../kos-bridge/windowappearance/sharedwindowsource.h"
 
 #include <effect/effecthandler.h>
+#include <main.h>
 #include <window.h>
 
 #include <KConfigGroup>
@@ -126,6 +127,21 @@ DockWindowAnimationEffect::DockWindowAnimationEffect()
 DockWindowAnimationEffect::~DockWindowAnimationEffect()
 {
     QDBusConnection::sessionBus().unregisterObject(QString::fromLatin1(dbusPath));
+    if (kwinApp()->isTerminating()) {
+        // During ApplicationWayland teardown, even a window still present in
+        // stackingOrder() can no longer service visibility updates. Releasing
+        // visibleRef from finishAnimation() reenters WindowItem and crashes.
+        // KWin will destroy the remaining windows with the workspace; abandon
+        // these window references without callbacks only on process shutdown.
+        for (auto it = m_animations.begin(); it != m_animations.end(); ++it) {
+            new (&it.value().visibleRef) EffectWindowVisibleRef();
+            if (it.value().deletedRef)
+                new (it.value().deletedRef.get()) EffectWindowDeletedRef();
+        }
+        m_animations.clear();
+        m_claimedRoles.clear();
+        return;
+    }
     // When the effect is unloaded, KWin may already have deleted windows that
     // still key these tables (windowDeleted is not guaranteed to have reached
     // us first). Deleted windows are gone from the stacking order, so only a
