@@ -1963,15 +1963,14 @@ PopupWindow {
 
             Row {
                 anchors {
-                    right: parent.right
+                    horizontalCenter: parent.horizontalCenter
                     bottom: parent.bottom
-                    rightMargin: 18
                     bottomMargin: 18
                 }
                 spacing: 12
 
                 Rectangle {
-                    width: 88
+                    width: 104
                     height: 32
                     radius: height / 2
                     color: sessionConfirm.contentControlFill
