@@ -150,6 +150,12 @@ struct LiveCard
     // 悬停状态机（特效自驱：cursorPos 命中静止矩形——与 QML 输入区同界；
     // 动画在本进程跑，与内容同管线同时钟 = 像素级同步）
     bool hovered = false;
+    // 驻留协同（2026-10-13）：QML 侧 hoverDwellDelay 驻留后才触发聚焦布局
+    //（退避），特效放大若命中即动＝"放大先动、退避驻留后才动"两段式
+    //（用户实测延迟感）。命中先挂起，驻留期满与 QML 布局同拍启动。
+    bool hoverPending = false;
+    std::chrono::nanoseconds hoverPendingSince{0};
+    std::chrono::milliseconds hoverDwellMs{0};
     qreal curScale = 1.0;   // 当前插值（绘制用）
     qreal curTiltDeg = 0;
     qreal scaleFrom = 1.0, scaleTo = 1.0, tiltFrom = 0, tiltTo = 0;

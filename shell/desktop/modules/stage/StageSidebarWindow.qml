@@ -1087,7 +1087,9 @@ PanelWindow {
                     fade: slot.opacity,            // 压暗 × 边缘渐隐（QML 同源）
                     closeHover: slot.cardItem.closeHot,
                     hoverScale: p.hoverScale, hoverTilt: p.hoverTilt,
-                    hoverMs: p.hoverMs, fanSpacing: p.fanSpacing,
+                    hoverMs: p.hoverMs,
+                    hoverDwellMs: p.hoverDwellMs !== undefined ? p.hoverDwellMs : 0,
+                    fanSpacing: p.fanSpacing,
                     fanHoverSpread: p.fanHoverSpread,
                     cardTint: p.cardTint, cardBorder: p.cardBorder,
                     cardDepth: p.cardDepth, cardTopLight: p.cardTopLight,

@@ -235,6 +235,7 @@ Item {
             engagingTilt: (card.rightSide ? -1 : 1)
                 * (scrollMode ? restTilt : hoverT),
             hoverMs: StageConfigService.cardEnterDuration + 40,
+            hoverDwellMs: StageConfigService.hoverDwellDelay,
             tiltMs: StageConfigService.tiltAnimDuration,
             enterMs: StageConfigService.cardEnterDuration,
             animMs: StageConfigService.animDuration,
