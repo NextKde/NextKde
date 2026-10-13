@@ -10,6 +10,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVector>
+#include "animationwindowreferences.h"
 
 namespace KWin
 {
@@ -82,9 +83,7 @@ private:
         QRectF geometry;
     };
 
-    struct WindowAnimation {
-        EffectWindowVisibleRef visibleRef;
-        std::shared_ptr<EffectWindowDeletedRef> deletedRef;
+    struct WindowAnimation : KOS::AnimationWindowReferences<EffectWindowVisibleRef, EffectWindowDeletedRef> {
         TimeLine timeLine;
         Target target;
         Transition transition = Transition::Minimize;
