@@ -53,7 +53,7 @@ QtObject {
     readonly property int nameLabelMaximumHeight: 28
     readonly property int nameLabelGap: 6
     readonly property real launchLandingSeconds: 0.13
-    readonly property real launchBounceSeconds: 0.72
+    readonly property real launchBounceSeconds: 0.48
     readonly property real launchBounceHeightRatio: 0.65
     readonly property int launchMinimumFeedbackMs: 500
     readonly property int launchFeedbackTimeoutMs: 15000
