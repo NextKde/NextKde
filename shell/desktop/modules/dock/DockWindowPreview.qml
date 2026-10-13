@@ -216,10 +216,12 @@ PopupWindow {
         }
         radius: 14
         cornerExponent: AppearanceTokens.shape.cornerExponent
-        baseColor: ThemeService.backgroundColor
-        surfaceOpacity: 0.88
-        materialDepth: 2
-        material: "clear"
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        // Same tint recipe as the launcher surface: the shared adaptive
+        // scrim at its "transparent" preset, no custom base fill, material
+        // or depth overrides on top of the common liquid glass.
+        scrimLevel: "transparent"
+        scrimOpacity: 1
 
         HoverHandler {
             id: backgroundHover
