@@ -137,6 +137,13 @@ export function launchBounce(phase) {
     return 4 * t * (1 - t);
 }
 
+// A ready window must not clear launch feedback before its first painted
+// frames. This only bounds the visual state; it never delays application launch.
+export function releaseLaunchFeedback(startedAt, now, windowReady, minimumMs, timeoutMs) {
+    const elapsed = Math.max(0, now - startedAt);
+    return elapsed >= timeoutMs || (windowReady && elapsed >= minimumMs);
+}
+
 // The entire possible visual excursion must fit the fixed layer surface,
 // including a launch at hover's peak. Shared by the surface and its input
 // envelope, without changing resting geometry or workspace reservations.

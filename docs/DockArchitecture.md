@@ -103,11 +103,14 @@ The latter check is explicitly skipped when no Wayland compositor is available.
 `DockLaunchService` owns transient, canonical-desktop-ID launch feedback for
 Dock clicks on applications without windows. It observes `WindowService`
 readiness and `AppActionService.launchFailed`, and expires windowless launches
-after 15 seconds. Repeated clicks while pending do not spawn duplicate launches.
+after 15 seconds. An immediately ready window preserves at least 500 ms of
+launch feedback; this only delays clearing the animation state, never launching
+or displaying the application. Failed launches still clear immediately.
+Repeated clicks while pending do not spawn duplicate launches.
 The compositor launch ticket is still prepared before executing the app.
 
 `DockIcon` composes a frame-driven ballistic bounce with its shared hover
-transform. A newly ready or failed launch lands within 130 ms rather
+transform. Once its feedback state clears, the icon lands within 130 ms rather
 than continuing another full bounce. Side Docks bounce towards the workspace. Launch motion does
 not alter resting slots or KWin's stable window-animation target.
 

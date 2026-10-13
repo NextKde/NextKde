@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import qs.desktop.modules.common
+import "DockMagnification.mjs" as Magnification
 
 // Runtime feedback only: canonical identities and window readiness belong to
 // the existing services. Failed/windowless launches must never bounce forever.
@@ -20,9 +21,12 @@ QtObject {
         pending = next
     }
     function reconcile() {
+        const now = Date.now()
         for (const desktopId of Object.keys(pending)) {
-            if (WindowService.windowsForApp(desktopId).length > 0
-                    || Date.now() - pending[desktopId] >= DockAnimation.launchFeedbackTimeoutMs)
+            if (Magnification.releaseLaunchFeedback(pending[desktopId], now,
+                    WindowService.windowsForApp(desktopId).length > 0,
+                    DockAnimation.launchMinimumFeedbackMs,
+                    DockAnimation.launchFeedbackTimeoutMs))
                 finish(desktopId)
         }
     }
