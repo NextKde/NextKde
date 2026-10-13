@@ -550,22 +550,43 @@ void StageAnimEffect::prePaintScreen(ScreenPrePaintData &data)
                         || (card.hovered && grown.contains(cur)));
                 if (hit)
                     hoverTaken = true;
-                if (hit != card.hovered) {
+                // 驻留协同：放大补间与 QML 聚焦布局（退避）同拍起跑——
+                // 旧实现特效命中即放大，QML 驻留 hoverDwellDelay 后才退避
+                // ＝"放大先动、退避半拍后才动"两段式（用户实测延迟感）。
+                // hoverDwellMs=0（驻留关）保持原即时行为。
+                auto applyHover = [&](bool on) {
                     qCInfo(STAGEANIM_LOG) << "live hover"
-                        << (hit ? "IN " : "OUT") << card.id.left(10)
+                        << (on ? "IN " : "OUT") << card.id.left(10)
                         << "cur" << int(cur.x()) << int(cur.y())
                         << "rest" << card.target.rect;
-                    card.hovered = hit;
+                    card.hovered = on;
                     card.scaleFrom = card.curScale;
                     card.tiltFrom = card.curTiltDeg;
-                    card.scaleTo = hit ? card.hoverScale : 1.0;
-                    card.tiltTo = hit ? card.hoverTiltDeg : card.target.angleDeg;
+                    card.scaleTo = on ? card.hoverScale : 1.0;
+                    card.tiltTo = on ? card.hoverTiltDeg : card.target.angleDeg;
                     // hoverBlend 也从当前值起摆（v87 审查）：旧实现
                     // (hovered?1:0)*cubic 在翻转/打断瞬间单帧硬跳
                     card.hoverBlendFrom = card.hoverBlend;
-                    card.hoverBlendTo = hit ? 1.0 : 0.0;
+                    card.hoverBlendTo = on ? 1.0 : 0.0;
                     card.hoverTl = TimeLine(card.hoverMs);
                     card.hoverAnimating = true;
+                };
+                if (hit != card.hovered && !card.hoverPending) {
+                    if (hit && card.hoverDwellMs.count() > 0) {
+                        card.hoverPending = true;
+                        card.hoverPendingSince = stageAnimClockNow();
+                    } else {
+                        applyHover(hit);
+                    }
+                }
+                if (card.hoverPending) {
+                    if (!hit) {
+                        card.hoverPending = false; // 驻留期内划走＝作废
+                    } else if (stageAnimClockNow()
+                            - card.hoverPendingSince >= card.hoverDwellMs) {
+                        card.hoverPending = false;
+                        applyHover(true);
+                    }
                 }
             }
             if (card.hoverAnimating) {
@@ -1098,6 +1119,7 @@ struct CardMeta
     // v87 审查收敛：三套默认漂移＝发布端漏字段时静默落到另一套视觉）
     qreal hoverScale = 1.05, hoverTiltDeg = 0;
     std::chrono::milliseconds hoverMs{280};
+    std::chrono::milliseconds hoverDwellMs{0}; // QML 驻留（hoverDwellDelay）同拍
     qreal fanSpacing = 8, tintAlpha = 0.55, borderAlpha = 0.13;
     qreal fanHoverSpread = 1.4;
     qreal depthStrength = 0.38, topLight = 0.07;
@@ -1138,6 +1160,7 @@ static void applyCardMeta(LiveCard &card, const CardMeta &m)
     card.hoverScale = m.hoverScale;
     card.hoverTiltDeg = m.hoverTiltDeg;
     card.hoverMs = m.hoverMs;
+    card.hoverDwellMs = m.hoverDwellMs;
     card.fanSpacing = m.fanSpacing;
     card.fanHoverSpread = m.fanHoverSpread;
     card.depthStrength = m.depthStrength;
@@ -1424,6 +1447,8 @@ void StageAnimEffect::reloadLiveCards()
                 meta.topLight = o.value(QStringLiteral("cardTopLight")).toDouble(0.07);
                 meta.fade = qBound(0.0, o.value(QStringLiteral("fade")).toDouble(1.0), 1.0);
                 meta.cardOpacity = o.value(QStringLiteral("cardOpacity")).toDouble(1.0);
+                meta.hoverDwellMs = std::chrono::milliseconds(
+                    qMax(0, o.value(QStringLiteral("hoverDwellMs")).toInt(0)));
                 meta.closeHot = o.value(QStringLiteral("closeHover")).toBool();
                 meta.selfMergeHint = o.value(QStringLiteral("selfMergeHint")).toBool();
                 meta.rightSide = o.value(QStringLiteral("rightSide")).toBool();
@@ -1933,6 +1958,13 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
     RenderViewport viewport(src, scale, renderTarget, QPoint());
 #if STAGE_LIVE_CONTENT_RENDER_67
     if (!m_itemRenderer67) {
+#if defined(STAGE_RENDERER_RENDERDEVICE_API)
+        // KWin 6.8：构造收 RenderDevice（EglDisplay 由其持有），
+        // 经公开的 RenderBackend::renderDevice() 取当前后端设备
+        m_itemRenderer67 = new ItemRendererOpenGL(
+            Compositor::self()->backend()->renderDevice());
+        qCDebug(STAGEANIM_LOG) << "6.8 itemrenderer created";
+#else
         ::EGLDisplay ed = eglGetCurrentDisplay();
         if (!ed)
             ed = eglGetDisplay(EGL_DEFAULT_DISPLAY);
@@ -1942,6 +1974,7 @@ void StageAnimEffect::renderLiveTexture(LiveCard &card)
         m_eglDisplay67 = new EglDisplay(ed, exts, nullptr);
         m_itemRenderer67 = new ItemRendererOpenGL(m_eglDisplay67);
         qCDebug(STAGEANIM_LOG) << "6.7 itemrenderer created";
+#endif
     }
     m_itemRenderer67->beginFrame(renderTarget, viewport);
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);

@@ -17,7 +17,11 @@
 #include "opengl/gltexture.h"
 #if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API)
 #include "scene/itemrenderer.h"
+#if defined(STAGE_RENDERER_RENDERDEVICE_API)
+#include "core/renderbackend.h"
+#else
 #include "opengl/egldisplay.h"
+#endif
 #endif
 
 // 6.6 公开的离屏渲染入口（Compositor::scene()->renderer()）在 6.7+ 被收进
@@ -150,6 +154,12 @@ struct LiveCard
     // 悬停状态机（特效自驱：cursorPos 命中静止矩形——与 QML 输入区同界；
     // 动画在本进程跑，与内容同管线同时钟 = 像素级同步）
     bool hovered = false;
+    // 驻留协同（2026-10-13）：QML 侧 hoverDwellDelay 驻留后才触发聚焦布局
+    //（退避），特效放大若命中即动＝"放大先动、退避驻留后才动"两段式
+    //（用户实测延迟感）。命中先挂起，驻留期满与 QML 布局同拍启动。
+    bool hoverPending = false;
+    std::chrono::nanoseconds hoverPendingSince{0};
+    std::chrono::milliseconds hoverDwellMs{0};
     qreal curScale = 1.0;   // 当前插值（绘制用）
     qreal curTiltDeg = 0;
     qreal scaleFrom = 1.0, scaleTo = 1.0, tiltFrom = 0, tiltTo = 0;
@@ -300,7 +310,10 @@ private:
     QPointF m_cursorHotspot;
 #if STAGE_LIVE_CONTENT_RENDER_67
     ItemRenderer *m_itemRenderer67 = nullptr;
-    EglDisplay *m_eglDisplay67 = nullptr;
+#if defined(ANLAND_KWIN_67) && !defined(KOS_KWIN_PAINT_TIME_API) \
+    && !defined(STAGE_RENDERER_RENDERDEVICE_API)
+    EglDisplay *m_eglDisplay67 = nullptr; // 6.8 走 RenderDevice 路径不需要
+#endif
 #endif
     bool m_liveEnabled = true; // kwinrc LiveCards 总闸（默认开，排障用）
 };
