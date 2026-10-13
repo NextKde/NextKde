@@ -735,7 +735,10 @@ Item {
         rotation: icon.vertical ? -90 : 0
         enabled: icon._glassSelectionHighlight && !icon.showUrgentBackground
             && !icon.editMode && !icon.isDragging
-        hovered: icon._hovering
+        // Hover alone must not light the plate -- the active task owns the
+        // background. Hovering the active icon keeps its brighter rim.
+        hovered: icon._hovering && icon.showActiveBackground
+            && !icon.useSharedActiveBackground
         selected: icon.showActiveBackground && !icon.useSharedActiveBackground
         pressed: icon.interactive && _mouseArea.pressed
         dark: AppearanceTokens.isDarkTheme
