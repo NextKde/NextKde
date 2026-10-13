@@ -21,7 +21,7 @@ class Transaction(unittest.TestCase):
   self.temp=tempfile.TemporaryDirectory(prefix='kos-install-fake-')
   self.root=Path(self.temp.name)/'root';self.root.mkdir()
   self.bundle=Path(self.temp.name)/'bundle';self.bundle.mkdir()
-  for relative in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/session_output.py'):
+  for relative in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/greeter_config.py','app/companion/session_output.py'):
    path=self.bundle/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_text('# fixture\n')
    path.chmod(0o755 if relative.startswith('app/bin/') else 0o644)
   self.manifest()

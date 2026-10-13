@@ -15,6 +15,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from entry_launch_guard import block_real_launch
+
 ROOT = Path(__file__).resolve().parents[3]
 
 def load():
@@ -319,13 +321,14 @@ class SwitchTests(unittest.TestCase):
         loader = SourceFileLoader('session_wrapper', str(ROOT / 'apps/greeter/bin/kos-greeter-session'))
         spec = importlib.util.spec_from_loader(loader.name, loader)
         wrapper = importlib.util.module_from_spec(spec); loader.exec_module(wrapper)
-        with patch.object(wrapper.sys, 'argv', ['session', '--temporary-seat']), patch.dict(wrapper.os.environ, {'GREETD_SOCK': '/fixture/socket'}, clear=True), patch.object(wrapper, 'check'), patch.object(wrapper.os, 'execv') as execute:
+        with block_real_launch(), patch.object(wrapper.sys, 'argv', ['session', '--temporary-seat']), patch.dict(wrapper.os.environ, {'GREETD_SOCK': '/fixture/socket'}, clear=True), patch.object(wrapper, 'check'), patch.object(wrapper, 'prepare_session_output'), patch.object(wrapper, 'phase'), patch.object(wrapper, 'prepare_greeter_config', side_effect=lambda env: dict(env, XDG_CONFIG_HOME='/fixture/private-config')), patch.object(wrapper.os, 'execve') as execute:
             wrapper.main()
         argv = execute.call_args.args
         self.assertEqual(argv[0], '/usr/bin/dbus-run-session')
         self.assertEqual(argv[1][:3], ['dbus-run-session', '--', '/usr/bin/kwin_wayland'])
         self.assertIn('--exit-with-session', argv[1])
-        with patch.object(wrapper.sys, 'argv', ['session', '--temporary-seat']), patch.dict(wrapper.os.environ, {'GREETD_SOCK': '/fixture/socket', 'WAYLAND_DISPLAY': 'wayland-fixture'}, clear=True), patch.object(wrapper.os, 'execv') as execute:
+        self.assertEqual(argv[2]['XDG_CONFIG_HOME'], '/fixture/private-config')
+        with block_real_launch(), patch.object(wrapper.sys, 'argv', ['session', '--temporary-seat']), patch.dict(wrapper.os.environ, {'GREETD_SOCK': '/fixture/socket', 'WAYLAND_DISPLAY': 'wayland-fixture'}, clear=True), patch.object(wrapper, 'prepare_session_output'), patch.object(wrapper.os, 'execve') as execute:
             with self.assertRaises(SystemExit): wrapper.main()
             execute.assert_not_called()
 

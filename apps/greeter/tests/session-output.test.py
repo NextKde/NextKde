@@ -10,6 +10,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 import stat
+from entry_launch_guard import block_real_launch
+
 APP = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP/'companion'))
 import session_output as output
@@ -121,13 +123,15 @@ Path(sys.argv[3]).write_text('continued')
   import runpy
   greeter=runpy.run_path(str(APP/'bin/kos-greeter-session'))['main']
   events=[];global_vars=greeter.__globals__
-  with patch.dict(global_vars,prepare_session_output=lambda name:events.append('redirect'),check=lambda:events.append('check'),phase=lambda name:None), \
+  with block_real_launch(), patch.dict(global_vars,prepare_session_output=lambda name:events.append('redirect'),check=lambda:events.append('check'),phase=lambda name:None,prepare_greeter_config=lambda env:dict(env, XDG_CONFIG_HOME='/fixture/private-config')), \
     patch.object(sys,'argv',['entry','--temporary-seat']),patch.dict(os.environ,{'GREETD_SOCK':'fixture'},clear=True), \
-    patch.object(os,'execv',side_effect=lambda *args:events.append(('exec',args))):
+    patch.object(os,'execve',side_effect=lambda *args:events.append(('exec',args))):
    greeter()
   self.assertEqual(events[:2],['redirect','check'])
   command=events[2][1];self.assertEqual(command[0],'/usr/bin/dbus-run-session')
   self.assertIn('--drm',command[1]);self.assertIn('--exit-with-session',command[1])
+  self.assertEqual(command[2]['XDG_CONFIG_HOME'],'/fixture/private-config')
+  self.assertEqual(command[2]['KOS_GREETER_OUTPUT_APPLY'],'1')
  def test_check_command_remains_visible(self):
   result=subprocess.run([sys.executable,str(APP/'bin/kos-greeter-session'),'--check'],capture_output=True,text=True)
   self.assertEqual(result.returncode,0,result.stderr);self.assertIn('check passed',result.stdout)

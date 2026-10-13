@@ -10,6 +10,7 @@
 #include <window.h>
 #include <KDecoration3/Decoration>
 #include <QPalette>
+#include <QScopedValueRollback>
 #include <algorithm>
 #include <cmath>
 
@@ -155,7 +156,7 @@ int WindowAppearanceManager::tierFor(KWin::EffectWindow *window) const
 
 void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuousAvailable)
 {
-    if (!window || !m_config.enabled() || !KWin::effects
+    if (m_restoring || !window || !m_config.enabled() || !KWin::effects
         || !window->window() || !window->windowItem()) {
         return;
     }
@@ -454,6 +455,7 @@ void WindowAppearanceManager::animate()
 
 void WindowAppearanceManager::restore(KWin::EffectWindow *window, WindowState &state)
 {
+    QPointer<KWin::Window> native = window ? window->window() : nullptr;
     for (const auto &connection : state.connections) {
         disconnect(connection);
     }
@@ -462,19 +464,26 @@ void WindowAppearanceManager::restore(KWin::EffectWindow *window, WindowState &s
     }
     if (state.decoration) {
         state.decoration->setProperty(DecorationRadiiProperty, state.declaredDecorationRadii);
+    }
+    if (state.decoration) {
         state.decoration->setProperty(DecorationShadowProperty, state.declaredDecorationShadow);
     }
     delete state.sceneShadow.data();
     delete state.outline.data();
     delete state.frame.data();
     delete state.continuousBounds.data();
-    if (window && window->window() && state.initialized) {
-        auto *native = window->window();
+    if (native && state.initialized) {
         const QVector4D r = state.declaredRadius;
         native->setProperty(WindowRadiiProperty, state.declaredGeometryProperty);
-        native->setProperty(VisualRadiiProperty, state.declaredVisualRadiiProperty);
-        native->setProperty(CurveExponentProperty, state.declaredExponentProperty);
-        native->setBorderRadius(KWin::BorderRadius(r.x(), r.y(), r.z(), r.w()));
+        if (native) {
+            native->setProperty(VisualRadiiProperty, state.declaredVisualRadiiProperty);
+        }
+        if (native) {
+            native->setProperty(CurveExponentProperty, state.declaredExponentProperty);
+        }
+        if (native) {
+            native->setBorderRadius(KWin::BorderRadius(r.x(), r.y(), r.z(), r.w()));
+        }
     }
 }
 
@@ -482,19 +491,41 @@ void WindowAppearanceManager::forget(KWin::EffectWindow *window)
 {
     auto it = m_windows.find(window);
     if (it != m_windows.end()) {
-        restore(window, it.value());
+        // windowDeleted can be emitted while another effect is releasing its
+        // last deleted-window reference during destruction. Do not mutate the
+        // scene here: removing an Item changes expanded geometry synchronously
+        // and can re-enter that partially destroyed effect. Our scene nodes
+        // have a QObject parent (the WindowItem), which owns their destruction.
+        // A deleted window needs no restoration of live-window properties.
+        for (const auto &connection : it.value().connections) {
+            disconnect(connection);
+        }
         m_windows.erase(it);
+    }
+    if (m_windows.isEmpty()) {
+        m_animTimer.stop();
+        m_tierTimer.stop();
     }
 }
 
 void WindowAppearanceManager::restoreAll()
 {
+    if (m_restoring) {
+        return;
+    }
+    QScopedValueRollback restoring(m_restoring, true);
     m_animTimer.stop();
     m_tierTimer.stop();
-    for (auto it = m_windows.begin(); it != m_windows.end(); ++it) {
-        restore(it.key(), it.value());
+    while (!m_windows.isEmpty()) {
+        const auto it = m_windows.begin();
+        auto *window = it.key();
+        auto state = std::move(it.value());
+        m_windows.erase(it);
+        // Restore may emit synchronous scene/property signals. Its state must
+        // no longer reside in the hash: a windowDeleted callback can forget
+        // this or another window without invalidating our iterator/reference.
+        restore(window, state);
     }
-    m_windows.clear();
     m_shadowCache.clear();
 }
 

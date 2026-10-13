@@ -22,7 +22,7 @@ FILES = ('qml/LoadingSpinner.qml', 'qml/GlassFieldBackground.qml', 'qml/Gaussian
          'companion/wallpaper.py', 'companion/kos_wallpaper.py', 'companion/theme.py', 'companion/theme-files.json',
          'config/outputs.json', 'bin/kos-greeter-ui', 'bin/kos-greeter-session',
          'bin/kos-greeter-outputs', 'bin/kos-greeter-wallpaper',
-         'companion/handoff.py', 'companion/session_output.py', 'bin/kos-user-session', 'cover.qml', 'companion/cover.py')
+         'companion/handoff.py', 'companion/greeter_config.py', 'companion/session_output.py', 'bin/kos-user-session', 'cover.qml', 'companion/cover.py')
 SHARED = APP.parents[1] / 'shared/qml/wallpapers'
 
 

@@ -43,6 +43,7 @@ Q_SIGNALS:
     void configurationChanged();
 
 private:
+    friend class WindowAppearanceLifecycleTest;
     struct WindowState
     {
         QVector4D declaredRadius;
@@ -96,6 +97,7 @@ private:
     QElapsedTimer m_clock;
     QTimer m_animTimer;
     QTimer m_tierTimer;
+    bool m_restoring = false;
 };
 
 } // namespace KOS

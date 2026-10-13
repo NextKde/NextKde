@@ -168,3 +168,13 @@ sudo systemctl restart greetd
 ```
 
 要回原显示管理器，使用 `./tools/rollback-installed-greeter.sh` 的正式入口；原备份保留。`register-default-apps.py`只注册应用、MIME、按钮和sycoca缓存，不是登录恢复命令；随后重启恢复不能归功于该注册脚本修复PAM/greetd。
+
+## 登录 KWin 退出崩溃与专用配置（2026-10-13）
+
+登录入口在Greeter UID的可信0700运行时目录创建私有配置/缓存/data目录，明确关闭包括kos_bridge、scale在内的桌面效果。密码框QML玻璃和既有输出同步保留；专用环境不传给认证后Plasma wrapper，不读取桌面kwinrc，不修改账户HOME。配置准备失败退出70，交给既有有限恢复策略；`--check`只读，不创建这些目录。
+
+通过现有 `./tools/install-greeter.sh` 更新可安装新helper；已有安装更新不会重启当前桌面，新入口在下一次Greeter会话生效。本批没有安装或重启。runtime缓存由logind UID runtime生命周期清理，同UID其他会话或linger可能延后回收，不能保证compositor退出就立即删除。
+
+项目kos_bridge源码同时修复了已删除窗口清理与活窗口卸载恢复。Greeter installer不编译/安装这个C++插件；插件需独立构建更新，不能替换当前已加载的`.so`后热重载。本批仅在 `/tmp/kos-bridge-exit-crash-build` 编译，未安装；登录配置隔离本身可先随Greeter app更新生效。
+
+编译、生产场景Item离线回归与96项Greeter隔离测试通过；实际登录、DRM/VT连续背景和黑帧时长仍未测。证据及测试隔离事故记录见 [修复报告](../../docs/kos-greeter/evidence/exit-crash-fix/REPORT.md)，不能将本批理解为已保证零黑帧。

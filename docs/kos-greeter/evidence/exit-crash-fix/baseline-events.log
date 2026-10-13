@@ -1,0 +1,20 @@
+Read-only baseline; boot=71984b3904ed4504a207688a8acc808d; software events are not scanout measurements.
+[   32.944528] WWTARCHLINUX kos-greeter-session[919]:   INFO qml: KOS_GREETER_STATE LaunchRequested
+[   32.944538] WWTARCHLINUX kos-greeter-session[919]:   INFO qml: KOS_GREETER_VISUAL LaunchRequested 1791849862781
+[   32.950132] WWTARCHLINUX kos-greeter-session[919]:   INFO qml: KOS_WALLPAPER_DESTROYED
+[   33.089861] WWTARCHLINUX kos-greeter-session[836]: KCrash: Application 'kwin_wayland' crashing... crashRecursionCounter = 2
+[   35.294719] WWTARCHLINUX kos-user-session[1599]: KOS_SESSION_PHASE SessionPreflightStarting 35294710361
+[   35.303663] WWTARCHLINUX kos-user-session[1599]: KOS_SESSION_PHASE SessionPreflightReady 35303632428
+[   35.303797] WWTARCHLINUX kos-user-session[1599]: KOS_SESSION_PHASE HandoffReferenceStarting 35303775486
+[   35.304608] WWTARCHLINUX kos-user-session[1599]: KOS_SESSION_PHASE HandoffReferenceReady 35304592166
+[   35.304702] WWTARCHLINUX kos-user-session[1599]: KOS_SESSION_PHASE PlasmaStarting 35304693346
+[   35.356982] WWTARCHLINUX kos-user-session[1605]: KOS_COVER SocketDiscoveryStarted 35356962710
+[   35.541819] WWTARCHLINUX kos-user-session[1605]: KOS_COVER SocketPeerMatched 35541802424
+[   37.513658] WWTARCHLINUX kos-user-session[1605]: KOS_COVER SocketConnected 37513625656
+[   38.130293] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER FeedReceived 1791849867967
+[   38.213131] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER ImageDecoded eDP-2 v-da96a6db060b41c6870f60647ce0f726 1791849868050
+[   38.218741] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER WindowMapped eDP-2 true 1791849868055
+[   38.339036] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER ImageDecoded eDP-2 v-da96a6db060b41c6870f60647ce0f726 1791849868176
+[   38.343904] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER FrameSubmitted eDP-2 v-da96a6db060b41c6870f60647ce0f726 1791849868181
+[   41.643413] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER RevealStarted 1791849870298
+[   42.277857] WWTARCHLINUX kos-user-session[1737]:   INFO qml: KOS_COVER RevealComplete 1791849870933

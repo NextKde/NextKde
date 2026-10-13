@@ -1,0 +1,14 @@
+{
+  "apps/greeter/bin/kos-greeter-session": "ac36b581ef9af2599ca2e691f2d079e64e6dc0013b311c4a6b48534de6ed43e5",
+  "apps/greeter/companion/greeter_config.py": "a3dff1cc1ab3a41ac96b86bb9231215aebbec5554ba5b3cc994e9c7a31f3f742",
+  "apps/greeter/tests/greeter-config.test.py": "2d9da4a4fbf3cbdeec4a7aa708b3be8d52d8f492f165cbcb8672beec4939be4a",
+  "apps/greeter/tests/entry_launch_guard.py": "025d6082738ac8f4e378e202f37e4248cb85a2db471c67000c4a3c33e8a526c4",
+  "apps/greeter/tests/install.test.py": "200cba5da433dfb815f3eba001e11c6567fb0a3a47b7ffe2cdb64d8ee43b7c4b",
+  "apps/greeter/tests/session-output.test.py": "593a9a45dd0564f0be88730c74bcdd9a861810da6693bcc9712b2fc8529a8df5",
+  "apps/greeter/tests/switch-scripts.test.py": "1ea30a42bfcb3650da417f43dbff1155186209b334fadaf3797c241d8f4c1870",
+  "tools/test-greeter.py": "8ba35f3a8d3517685a7b43f5354252f70faa5fbd0dc58ade97d7ff7123d27787",
+  "tools/greeter-install.py": "43d2b8a3203e63b8e1c6e12eaecd02e6f56bf839f2651d11b7983d5cd0dbd74f",
+  "docs/kos-greeter/evidence/exit-crash-fix/greeter-isolation.md": "a2cd5af9885c47e109c593684be5685e0e50493ff3174fa8d19fbaeeef21ddad",
+  "docs/kos-greeter/evidence/exit-crash-fix/greeter-tests.txt": "9fdf1bc505a7ad463aa73a314177fefb3acdb07538dc05569664b9f6713b31ba",
+  "docs/kos-greeter/evidence/exit-crash-fix/greeter-test-isolation-incident.log": "c212fa190bf92e6a8e7488bcee08746f0a1f074d9fe63bc96337bec76ddef477"
+}

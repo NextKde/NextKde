@@ -10,6 +10,7 @@ COMMAND = ['/usr/lib/plasma-dbus-run-session-if-needed', '/usr/bin/startplasma-w
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'companion'))
 from session_output import prepare_session_output, phase, diagnostic
+from greeter_config import prepare as prepare_greeter_config
 
 def main():
     if sys.argv[1:] == ['--check']:
@@ -25,11 +26,16 @@ def main():
     if os.environ.get('WAYLAND_DISPLAY') or os.environ.get('DISPLAY'):
         sys.exit('Refusing an existing graphical session; use a disposable VM greetd seat.')
     check()
-    os.environ['KOS_GREETER_OUTPUT_APPLY'] = '1'
+    try:
+        environment = prepare_greeter_config(os.environ)
+    except (OSError, ValueError):
+        diagnostic('KOS_GREETER_CONFIG unavailable', error=True)
+        sys.exit(70)
+    environment['KOS_GREETER_OUTPUT_APPLY'] = '1'
     phase('GreeterCompositorStarting')
-    os.execv('/usr/bin/dbus-run-session', [
+    os.execve('/usr/bin/dbus-run-session', [
         'dbus-run-session', '--', '/usr/bin/kwin_wayland', '--drm', '--no-lockscreen', '--no-global-shortcuts',
-        '--no-kactivities', '--exit-with-session', str(ROOT / 'bin/kos-greeter-ui')])
+        '--no-kactivities', '--exit-with-session', str(ROOT / 'bin/kos-greeter-ui')], environment)
 
 def check():
     paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/greetd', '/usr/bin/kscreen-doctor', str(ROOT / 'bin/kos-user-session'), str(ROOT / 'bin/kos-greeter-ui'), *COMMAND]

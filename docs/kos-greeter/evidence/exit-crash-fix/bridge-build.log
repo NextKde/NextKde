@@ -1,0 +1,14 @@
+Command: ['cmake', '--build', '/tmp/kos-bridge-exit-crash-build', '-j', '4']
+Exit code: 0
+[  0%] Built target appearance_lifecycle_test_autogen_timestamp_deps
+[  0%] Built target rules_test_autogen_timestamp_deps
+[  0%] Built target kos_bridge_autogen_timestamp_deps
+[  0%] Built target scan_titlebar_autogen_timestamp_deps
+[  5%] Built target scan_titlebar_autogen
+[  5%] Built target rules_test_autogen
+[ 10%] Built target kos_bridge_autogen
+[ 10%] Built target appearance_lifecycle_test_autogen
+[ 20%] Built target scan_titlebar
+[ 37%] Built target rules_test
+[ 55%] Built target appearance_lifecycle_test
+[100%] Built target kos_bridge

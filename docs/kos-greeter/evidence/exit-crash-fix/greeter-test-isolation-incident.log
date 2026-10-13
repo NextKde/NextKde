@@ -1,0 +1,38 @@
+Date: 2026-10-13, Asia/Shanghai.
+Incident observed shortly before 10:10 local; exact second was not captured.
+Fixed command originally run:
+PYTHONDONTWRITEBYTECODE=1 python3 apps/greeter/tests/session-output.test.py
+
+The pre-existing test_operational_check_before_exec_is_redirected patched os.execv.
+Implementation changed the Greeter entry to os.execve to pass a private environment.
+The test therefore unintentionally replaced itself with:
+/usr/bin/dbus-run-session -- /usr/bin/kwin_wayland --drm --no-lockscreen --no-global-shortcuts --no-kactivities --exit-with-session /home/wwt/Downloads/NextKde/apps/greeter/bin/kos-greeter-ui
+
+Environment was patched clear=True with GREETD_SOCK=fixture; no real authentication
+socket, DISPLAY, WAYLAND_DISPLAY or DBUS_SESSION_BUS_ADDRESS was inherited.
+At this point the helper returned private config/cache dirs but had not yet added
+XDG_RUNTIME_DIR to the returned environment. Observed fixed error output:
+........error: XDG_RUNTIME_DIR is invalid or not set in the environment
+FATAL ERROR: could not add wayland socket
+KCrash: Application 'kwin_wayland' crashing... crashRecursionCounter = 2
+Process exit code: 139.
+
+No successful compositor or authentication connection is evidenced. Read-only ps
+check found no fixture dbus-run-session/KWin remaining, only the existing desktop
+KWin wrapper/compositor. No global kill, manager restart or system mutation was used.
+The exact private runtime directory created by this test was removed only after
+checking UID, exact four-subdirectory list, and controlled kwinrc byte equality.
+
+Immediate corrected session-output test with execve and config-preparation mocks:
+12 tests passed. UI supervisor: 5 tests passed. A subsequent boundary audit found
+another stale execv mock in switch-scripts.test.py; it was fixed before execution.
+
+Additional hard-fail guard now wraps all in-process Greeter main() tests, covering
+os exec*, posix_spawn*, system and subprocess.Popen. The intended execve mock is
+explicitly installed inside the guard. Other subprocess launches in session-output
+are Python/bin-sh fd/signal fixtures; operational check subprocesses pass --check.
+No cover-supervisor/handoff/graphical tests were executed in this batch.
+Independent reviewer confirmed the final guard/mock boundaries before re-execution.
+Final guarded regression: 15 config, 44 install, 12 session-output, 5 UI-supervisor,
+20 switch-scripts tests passed (96 total). No historical failure is counted as
+passing or removed from the evidence.

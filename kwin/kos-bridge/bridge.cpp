@@ -150,6 +150,13 @@ BridgeEffect::~BridgeEffect()
 {
     if (KWin::effects->property(SharedWindowSourceProperty).value<QObject *>() == this)
         KWin::effects->setProperty(SharedWindowSourceProperty, QVariant());
+    // QObject disconnects receiver connections only after members have been
+    // destroyed. Appearance restoration can emit scene signals synchronously;
+    // stop our callbacks first and restore while all sibling members are live.
+    disconnect(KWin::effects, nullptr, this, nullptr);
+    disconnect(m_renderer.get(), nullptr, this, nullptr);
+    disconnect(m_appearance.get(), nullptr, this, nullptr);
+    m_appearance->restoreAll();
 }
 
 void BridgeEffect::reconfigure(ReconfigureFlags flags)

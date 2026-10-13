@@ -8,6 +8,10 @@
 
 ## 用户问题与当前优先级
 
+2026-10-13追加：用户明确要求调用独立子代理修复。最新exit-crash-fix批次交付bridge窗口删除/卸载生命周期修复与Greeter专用效果配置/缓存，真实插件编译、离线生命周期回归及96项Greeter隔离测试通过；最终审查见reviews/exit-crash-fix.md，证据见evidence/exit-crash-fix/REPORT.md。未安装或重启，实际登录及黑帧未测。当前优先验证登录KWin正常退出，再追底层持帧；今天及昨晚两次成功登录的旧Greeter KWin均有相同AnimationEffect析构→bridge清理→几何回调SIGSEGV，不能继续假定旧KWin已经正常退出。
+
+本批首次旧session-output测试只mock execv漏拦新execve，意外启动KWin；缺失runtime导致socket初始化失败退出139，完整记录保留。随后修复全部入口mock并加硬失败守卫，经独立审查后重跑通过。宿主greetd/Plasma进程与会话保持，无fixture残留；不得将首次失败计为通过或移除这段事故证据。
+
 用户希望输入密码后连续显示加载背景，等真正桌面就绪再上滑揭开。现状曾是密码框转圈 → 黑屏 → 终端文字 → 黑屏 → 壁纸加载 → 上滑。文字问题用户已确认改善，黑屏仍存在。
 
 最新安装后还出现认证提示错误、随后黑屏和文字卡住，用户从 Ctrl+Alt+F3 执行 register-default-apps.py 并重启后进入桌面。该脚本仅应用/MIME注册，不能认定它修复登录；重启会重新启动 greetd。优先确认登录恢复稳定，再继续底层黑屏工作。
