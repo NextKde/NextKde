@@ -1615,20 +1615,27 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // union slid its whole glass by 238px. A nonzero translation alone is
         // normal: the surface may be away from the output origin.
         //
-        // The region and the shape integerise the same geometry through two
-        // independent pipelines, and they disagree by up to one pixel per axis:
-        // the region's union spans round(x) .. round(x + w) while the shape
-        // sends qRound(w), and which side rounds up flips with the sub-pixel
-        // geometry. The dock glass changes geometry every frame of a hover
-        // animation, so an exact comparison kept landing on the losing side and
-        // flickered the material between the declared-shape and region-driven
-        // paths. A real mismatch (a strict subset declaration) differs by far
-        // more than 1px, so a 1px tolerance only forgives rounding.
-        const QSize declaredRegionSizeDelta = declaredShapeBounds.size()
-            - effectShape.boundingRect().size();
+        // The region and the shape reach the compositor through independent
+        // paths and can be one frame apart: the client publishes the region
+        // from layout bindings while the shape geometry goes out from polish,
+        // so during an animation the two describe consecutive frames. The
+        // traced dock hover animation skews by up to ~12px in width, and a
+        // faster magnification skews proportionally more. Judging that a
+        // mismatch flickers the material between the declared-shape and
+        // region-driven paths for as long as the animation runs. Genuine
+        // mismatches -- a declaration describing other geometry -- are
+        // proportionally far larger (the traced cases were 85px and 229px on
+        // the same shells), so a 5%-of-size tolerance (8px floor) accepts the
+        // frame skew and still rejects a different rectangle.
+        const QSize regionSize = effectShape.boundingRect().size();
+        const QSize declaredSize = declaredShapeBounds.size();
+        const auto axisTolerated = [](int declared, int region) {
+            const int bound = std::max(8, qRound(qMax(declared, region) * 0.05));
+            return qAbs(declared - region) <= bound;
+        };
         const bool declaredShapeMatchesRegion =
-            qAbs(declaredRegionSizeDelta.width()) <= 1
-            && qAbs(declaredRegionSizeDelta.height()) <= 1;
+            axisTolerated(declaredSize.width(), regionSize.width())
+            && axisTolerated(declaredSize.height(), regionSize.height());
         if (!declaredShapeMatchesRegion) {
             if (shapeTraceEnabled()) {
                 qCWarning(shapeTraceCategory())
