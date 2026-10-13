@@ -41,3 +41,4 @@ ActionFeedbackToast 1.0 ActionFeedbackToast.qml
 DesktopConfirmDialog 1.0 DesktopConfirmDialog.qml
 
 singleton SessionEntryService 1.0 SessionEntryService.qml
+PopupAnchorBinding 1.0 PopupAnchorBinding.qml

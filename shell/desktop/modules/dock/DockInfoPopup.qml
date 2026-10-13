@@ -32,8 +32,9 @@ AnimatedPopupWindow {
     BackgroundEffect.blurRegion: popup.visible && popup.revealProgress > 0
         && AppearanceTokens.surface.usesKwinBlur ? infoSurface.blurRegion : null
 
+    PopupAnchorBinding { popupAnchor: popup.anchor; sourceItem: popup.anchorItem }
+
     anchor {
-        item: popup.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -12

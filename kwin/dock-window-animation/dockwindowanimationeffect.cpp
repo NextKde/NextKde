@@ -146,11 +146,10 @@ DockWindowAnimationEffect::~DockWindowAnimationEffect()
     // still key these tables (windowDeleted is not guaranteed to have reached
     // us first). Deleted windows are gone from the stacking order, so only a
     // key that is still listed there may be dereferenced.
-    const QList<EffectWindow *> liveWindows =
-        effects ? effects->stackingOrder() : QList<EffectWindow *>();
     const auto animatedWindows = m_animations.keys();
     for (EffectWindow *window : animatedWindows) {
-        if (liveWindows.contains(window))
+        // Earlier cleanup may synchronously destroy another tracked window.
+        if (effects && effects->stackingOrder().contains(window))
             finishAnimation(window);
     }
     // Entries left in m_animations belong to windows that are already gone.
@@ -165,7 +164,7 @@ DockWindowAnimationEffect::~DockWindowAnimationEffect()
     }
     const auto windows = m_claimedRoles.keys();
     for (EffectWindow *window : windows) {
-        if (liveWindows.contains(window))
+        if (effects && effects->stackingOrder().contains(window))
             releaseClaim(window);
         else
             m_claimedRoles.remove(window);
@@ -425,9 +424,10 @@ void DockWindowAnimationEffect::releaseClaim(EffectWindow *window)
         return;
     const auto roleIt = m_claimedRoles.find(window);
     if (roleIt != m_claimedRoles.end()) {
-        if (window->data(*roleIt) == ownerVariant(this))
-            window->setData(*roleIt, QVariant());
+        const int role = *roleIt;
         m_claimedRoles.erase(roleIt);
+        if (window->data(role) == ownerVariant(this))
+            window->setData(role, QVariant());
     }
 }
 
@@ -435,17 +435,20 @@ void DockWindowAnimationEffect::finishAnimation(EffectWindow *window)
 {
     if (!window)
         return;
+    const bool redirected = m_animations.contains(window);
+    // Hold the closing-window reference locally and detach before setData or
+    // unredirect can synchronously notify other effects or delete a window.
+    const auto finished = m_animations.take(window);
+    QPointer<EffectWindow> alive(window);
     // The window is painted normally again, so the glass material is restored
     // for anything that reads the fade after this animation.
     window->setData(KosDockAnimationGlassFadeRole, 1.0);
-    window->setData(KOS::DockSourceAnimationRole, QVariant());
-    releaseClaim(window);
-    if (const auto it = m_animations.find(window); it != m_animations.end()) {
+    if (alive)
+        alive->setData(KOS::DockSourceAnimationRole, QVariant());
+    if (alive)
+        releaseClaim(alive);
+    if (alive && redirected) {
         unredirect(window);
-        // Remove the table entry before releasing the closed-window reference:
-        // unrefWindow may synchronously emit windowDeleted.
-        const auto finished = m_animations.take(window);
-        Q_UNUSED(finished)
     }
 }
 

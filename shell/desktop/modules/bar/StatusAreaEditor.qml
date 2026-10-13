@@ -42,8 +42,9 @@ AnimatedPopupWindow {
     implicitHeight: 146
     color: "transparent"
     grabFocus: interactive
+    PopupAnchorBinding { popupAnchor: editor.anchor; sourceItem: editor.anchorItem }
+
     anchor {
-        item: editor.anchorItem
         edges: Edges.Bottom
         gravity: Edges.Bottom
         margins.bottom: 10

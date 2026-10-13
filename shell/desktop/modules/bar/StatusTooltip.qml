@@ -27,8 +27,9 @@ AnimatedPopupWindow {
     closeDuration: 70
     mask: Region { item: null }
 
+    PopupAnchorBinding { popupAnchor: root.anchor; sourceItem: root.anchorItem }
+
     anchor {
-        item: root.anchorItem
         edges: !root.dockHosted ? Edges.Bottom
             : root.dockEdge === "left" ? Edges.Right
             : root.dockEdge === "right" ? Edges.Left : Edges.Top
