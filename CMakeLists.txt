@@ -213,6 +213,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-magnification/test_response.mjs
         )
         set_tests_properties(kos-shell.dock-magnification-response PROPERTIES LABELS logic TIMEOUT 10)
+        foreach(DOCK_FEEDBACK_CHECK bounce headroom name_owner)
+            add_test(NAME kos-shell.dock-launch-${DOCK_FEEDBACK_CHECK}
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-launch-feedback/test_${DOCK_FEEDBACK_CHECK}.mjs)
+            set_tests_properties(kos-shell.dock-launch-${DOCK_FEEDBACK_CHECK}
+                PROPERTIES LABELS logic TIMEOUT 10)
+        endforeach()
         add_test(NAME kos-shell.stage-geometry
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs

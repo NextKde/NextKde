@@ -324,12 +324,16 @@ QtObject {
         const windows = WindowService.windowsForApp(identity.desktopId);
 
         if (windows.length === 0) {
+            if (DockLaunchService.isLaunching(identity.desktopId))
+                return;
+            DockLaunchService.begin(identity.desktopId);
             console.log("[DockModel] launch app=" + identity.desktopId);
             // KWin must receive the Dock launch ticket before the client can
             // map its first window. Otherwise the real window may be painted
             // once and only then jump back to the Dock animation origin.
             DockWindowAnimationTargetService.prepareLaunch(identity, function() {
-                AppActionService.launch(identity);
+                if (!AppActionService.launch(identity))
+                    DockLaunchService.finish(identity.desktopId);
             });
             return;
         }

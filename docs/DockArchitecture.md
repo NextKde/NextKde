@@ -22,25 +22,22 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 `DockContainer` measures pointer distance from untransformed layout slots in
 its content Row, including when that Row is rotated for a side Dock. A quintic smootherstep
-spatial field drives the group; pointer travel follows input directly, while
+spatial field drives the group; pointer travel is bounded to 0.6 logical pixels at low speed and follows raw
+samples exactly above 600 pixels/second, while
 one shared `FrameAnimation` eases entry/exit with a 26 ms time constant using
 the elapsed-time response in `DockMagnification.mjs`. The frame delta is capped
 at 1/30 second to avoid a jump after an idle period or stalled frame. Scale, lift and
 translations derive from the same frame snapshot.
-The container resolves one `hoveredApp` for labels, highlights and preview
-dwell from the pointer stored in the same published layout snapshot. It uses
-the shared painted horizontal bounds and the union of resting
-and lifted vertical bounds, preventing lift alone from cancelling hover.
-Rigid accessories retain their own hover handling and cannot own app hover.
-An 80 ms exit grace retains a latched pointer-presence state and the last scene
-position when the native hover handler briefly loses its surface; returning within the grace does not restart
-preview/name dwell. A reported position outside the input band still exits
-immediately. App-name labels wait 180 ms and have an empty input region, so
-the label itself cannot become a pointer target. Each container owns a single
-`DockAppNameTooltip` and dwell timer, retargeted from `hoveredApp`; standalone
-icons lazily load their fallback. Switching owners restarts dwell while
-unchanged ownership does not. Visible labels refresh their
-anchor after the shared frame is applied. Interactive previews keep their input.
+The container retains one `hoveredApp` for highlights and preview dwell from
+that published pointer/layout snapshot, using painted horizontal bounds and the
+union of resting and lifted vertical bounds. Name ownership is independently
+continuous across adjacent icon spacing, as described below. Rigid accessories
+retain their own hover handling and cannot own app hover. An 80 ms exit grace
+retains a latched pointer-presence state and last scene position when native
+hover briefly loses its surface; a reported position outside the input band
+still exits immediately. Interactive previews keep their input. The actual
+Dock uses its single immediate in-surface `DockNameLabel`; standalone icon hosts
+retain a lazy `DockAppNameTooltip` with a 180 ms fallback dwell.
 Do not put separate animations on the composed transforms or add a binary
 hover lift to the distance curve: those cause phase mismatch and slot-boundary
 jumps. Attention feedback is composed separately, without a second animation.
@@ -100,6 +97,49 @@ colored controls use a quieter overlay without muting the reflective rim.
 Qt Quick Test, then loads the shipping Launcher and Control Center as unmapped
 Wayland surfaces to verify selection, folder, edit, merge and preset bindings.
 The latter check is explicitly skipped when no Wayland compositor is available.
+
+### Launch feedback and names
+
+`DockLaunchService` owns transient, canonical-desktop-ID launch feedback for
+Dock clicks on applications without windows. It observes `WindowService`
+readiness and `AppActionService.launchFailed`, and expires windowless launches
+after 15 seconds. Repeated clicks while pending do not spawn duplicate launches.
+The compositor launch ticket is still prepared before executing the app.
+
+`DockIcon` composes a frame-driven ballistic bounce with its shared hover
+transform. A newly ready or failed launch lands within 130 ms rather
+than continuing another full bounce. Side Docks bounce towards the workspace. Launch motion does
+not alter resting slots or KWin's stable window-animation target.
+
+The Dock owns one `DockNameLabel` in its existing `DockWindow.contentItem`
+render tree. Icons publish label eligibility without creating popup windows or
+per-icon label frame drivers. The shared layout frame selects names through bounded, continuous ownership
+cells meeting at adjacent painted icon-center midpoints. Cells bridge spacing
+within each icon run, terminate at dividers/accessories, and also check the
+resting-plus-painted normal envelope. This selection does not alter click hit
+testing or preview dwell. Running apps retain their names until their own
+preview actually becomes visible; exact hover is not a label eligibility gate.
+The shared frame positions the selected name:
+it follows raw pointer position along the Dock and the transformed artwork edge
+across it. Switching icons only changes text; there is no Wayland popup
+reposition/configure round trip. The disabled label has no pointer handlers.
+
+`DockWindow` reserves both combined hover/launch excursion and separate name
+paint headroom before interaction starts. Name-only headroom is excluded from
+its hover/input region and never changes workspace reservations.
+`tests/dock-launch-feedback/run.mjs` checks readiness, asynchronous failure,
+timeout, 130 ms landing and label geometry on all three edges;
+`test_bounce.mjs` covers the flight curve and 60–240 Hz high-speed pointer traces;
+`test_headroom.mjs` checks real thin surface and input budgets for adaptive sizes
+and scales 1–3, including name-only pass-through space.
+`sweep_wayland.py` drives 1800 px/s synthetic icon/name sweeps on actual thin
+Wayland layer surfaces without moving the mouse or intercepting input. It
+asserts one mapped layer surface per edge, no popup/reposition requests, and
+reports actual EGL frame-commit intervals. It invokes the shipping
+`DockContainer.selectNameTarget` against actual shared layouts and mixed running
+icons, checking uniform/fast sweeps, gaps, three peak scales, normal/outer exits,
+menus, and visible-versus-unmapped previews. Those measurements demonstrate the
+render path; they do not substitute for subjective high-refresh desktop use.
 
 ## Service layers
 
