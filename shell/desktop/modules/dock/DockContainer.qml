@@ -225,10 +225,17 @@ Item {
     property Item pointerInputItem: container
     property Item pointerEventRoot: container
     property bool _pointerOverApps: false
-    readonly property bool pointerInside: _dockPointerHover.hovered
+    property bool _pointerHeld: false
+    readonly property bool pointerInside: _pointerHeld
         && pointerInputItem.contains(pointerInputItem.mapFromItem(null,
             _rawPointer.x, _rawPointer.y))
-    readonly property point _rawPointer: _dockPointerHover.point.scenePosition
+    readonly property point _livePointer: _dockPointerHover.point.scenePosition
+    property point _lastPointer: Qt.point(-10000, -10000)
+    readonly property point _rawPointer: _dockPointerHover.hovered ? _livePointer : _lastPointer
+    on_LivePointerChanged: {
+        if (_dockPointerHover.hovered)
+            _lastPointer = _livePointer
+    }
     property point magnificationPointer: Qt.point(-10000, -10000)
     property real hoverProgress: 0
     property point _rowPointer: Qt.point(-10000, -10000)
@@ -264,11 +271,11 @@ Item {
         const states = []
         if (!contentRow)
             return states
-        function layoutCentre(item) {
-            let centre = item.x + item.width / 2
+        function layoutCentre(item, crossAxis = false) {
+            let centre = crossAxis ? item.y + item.height / 2 : item.x + item.width / 2
             let ancestor = item.parent
             while (ancestor && ancestor !== contentRow) {
-                centre += ancestor.x
+                centre += crossAxis ? ancestor.y : ancestor.x
                 ancestor = ancestor.parent
             }
             return centre
@@ -278,6 +285,8 @@ Item {
                     || item.iconSlotSize === undefined)
                 return
             states.push({ item: item, cx: layoutCentre(item),
+                cy: layoutCentre(item, true), halfHeight: item.height / 2,
+                liftDirection: item._hoverDirection,
                 half: item.iconSlotWidth / 2,
                 artHalf: Math.max(item.iconSize, item.iconPaintedWidth) / 2,
                 hoverGapReduction: item.hoverGapReduction,
@@ -303,9 +312,8 @@ Item {
         }
         return states
     }
-    // All consumers read one snapshot. Only entry/exit is animated; pointer
-    // travel changes the spatial field directly, without independent followers
-    // for scale, offsets or glass width.
+    // Pointer travel is direct; only entry/exit amplitude is animated.
+    // Scale, offsets and glass width consume the same frame snapshot.
     property var _hoverLayout: ({ entries: [], byItem: new Map(), total: 0, shift: 0 })
     FrameAnimation {
         running: container._hoverDirty || container.hoverProgress !== container._hoverTarget
@@ -318,9 +326,11 @@ Item {
                     container._hoverLayout = { entries: [], byItem: new Map(), total: 0, shift: 0 }
                 return
             }
+            let hoverPoint = null
             if (container.pointerInside) {
                 const raw = container._rawPointer
                 const rowPoint = contentRow.mapFromItem(null, raw.x, raw.y)
+                hoverPoint = rowPoint
                 container.magnificationPointer = container.mapFromItem(null, raw.x, raw.y)
                 container._pointerOverApps = Magnification.overApps(
                     container._spreadStates, container._hoverLayout, rowPoint.x)
@@ -333,14 +343,18 @@ Item {
                 container.magnificationPointer = Qt.point(-10000, -10000)
             }
             const next = Magnification.advance(container.hoverProgress,
-                container._hoverTarget, frameTime,
+                container._hoverTarget, Math.min(frameTime, 1 / 30),
                 DockAnimation.magnificationResponseSeconds,
                 DockAnimation.magnificationEpsilon)
             container.hoverProgress = next
-            container._hoverLayout = Magnification.layout(container._spreadStates,
+            const frame = Magnification.layout(container._spreadStates,
                 container._rowPointer.x, next,
                 ConfigService.effectiveHoverScale, container.magnificationRadius,
                 container.itemSpacing, container.magnificationBounds)
+            // Resolve ownership against the same input/layout snapshot used
+            // for paint, not once on input and again against changed transforms.
+            frame.pointer = hoverPoint
+            container._hoverLayout = frame
         }
     }
     Connections {
@@ -355,11 +369,51 @@ Item {
         const entry = _hoverLayout.byItem.get(item)
         return entry ? entry.dx : 0
     }
+    // One owner per pointer update/frame. Consumers do not independently map
+    // through their animated transforms and compete for hover ownership.
+    readonly property var hoveredApp: {
+        if (!pointerInside) return null
+        const point = _hoverLayout.pointer
+        if (!point) return null
+        let owner = null, nearest = Infinity
+        for (const state of _spreadStates) {
+            const entry = _hoverLayout.byItem.get(state.item)
+            const cx = state.cx + (entry ? entry.dx : 0)
+            const half = entry ? entry.half : state.half
+            if (Math.abs(point.x - cx) > half) continue
+            if (!state.growable) {
+                if (state.blocksMagnification) return null
+                continue
+            }
+            if (!state.item.interactive) continue
+            const scale = entry ? entry.scale : 1
+            const progress = entry ? entry.progress : 0
+            const lift = (state.liftDirection ?? 1)
+                * (-state.item.iconSize * ConfigService.effectiveHoverLift * progress
+                    - state.halfHeight * (scale - 1))
+            // Keep the resting vertical band while admitting elevated artwork:
+            // lifting away from the pointer must not cancel and restart dwell.
+            const top = Math.min(state.cy - state.halfHeight,
+                state.cy + lift - state.halfHeight * scale)
+            const bottom = Math.max(state.cy + state.halfHeight,
+                state.cy + lift + state.halfHeight * scale)
+            if (point.y < top || point.y > bottom) continue
+            const distance = Math.abs(point.x - cx)
+            if (distance < nearest) {
+                nearest = distance
+                owner = state.item
+            }
+        }
+        return owner
+    }
     function hoverFor(item) {
-        if (!pointerInside || !_hoverLayout.byItem.has(item)) return false
-        const raw = _rawPointer
-        const local = item.mapFromItem(null, raw.x, raw.y)
-        return item.contains(local)
+        return hoveredApp === item
+    }
+    DockAppNameTooltip {
+        targetIcon: {
+            const owner = container.hoveredApp
+            return owner && owner._usesSharedMagnification ? owner : null
+        }
     }
     readonly property real hoverSpreadTotal: _hoverLayout.total
     readonly property real hoverGlassShift: fillsAvailableLength ? 0 : _hoverLayout.shift
@@ -374,11 +428,28 @@ Item {
         // of a dock corner from ending an in-progress session, and any
         // started drag cancels the pending exit.
         onHoveredChanged: {
-            if (hovered)
+            if (hovered) {
+                container._lastPointer = container._livePointer
+                container._pointerHeld = true
+                hoverExitTimer.stop()
                 editExitTimer.stop()
-            else if (container.editMode && !container.draggedPinnedLoader)
-                editExitTimer.restart()
+            } else {
+                // A popup/input-region update can briefly revoke hover even
+                // though the pointer has not moved. Retain its last position
+                // for one short grace period, without restarting preview dwell.
+                if (container._pointerHeld)
+                    hoverExitTimer.restart()
+                if (container.editMode && !container.draggedPinnedLoader)
+                    editExitTimer.restart()
+            }
         }
+    }
+
+    Timer {
+        id: hoverExitTimer
+        interval: DockAnimation.magnificationExitGrace
+        repeat: false
+        onTriggered: container._pointerHeld = _dockPointerHover.hovered
     }
 
     Timer {

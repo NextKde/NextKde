@@ -77,7 +77,10 @@ Item {
             if (hovered) {
                 musicPopupRequested = true
                 musicPopupCloseDelay.stop()
-                musicPopupOpenDelay.restart()
+                if (musicPopup.visible)
+                    DockModelService.openDockPopup(musicPopup)
+                else if (!musicPopupOpenDelay.running)
+                    musicPopupOpenDelay.start()
             } else if (!musicPopup.pointerInside) {
                 musicPopupOpenDelay.stop()
                 musicPopupCloseDelay.restart()
@@ -87,7 +90,7 @@ Item {
 
     Timer {
         id: musicPopupOpenDelay
-        interval: 420
+        interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
             if (!musicHover.hovered || !widget.player)

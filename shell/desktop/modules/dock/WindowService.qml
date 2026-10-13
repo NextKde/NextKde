@@ -64,6 +64,7 @@ QtObject {
     // (same content re-published) are dropped without scheduling a rebuild.
     property string _lastSnapshotJson: ""
     property var _pendingKwinActivation: null
+    property var _lastKwinActivationId: null
     property bool _kwinScriptStarted: false
     property bool _kwinSubscribePending: false
     // Process-side identity hints, keyed by window PID. A window resolves from
@@ -127,6 +128,7 @@ QtObject {
         }
         svc._kwinSubscribePending = false
         svc._pendingKwinActivation = null
+        svc._lastKwinActivationId = null
         svc._kwinActivationTimer.stop()
         // Thumbnail replies are event-only and cannot arrive after the socket
         // drops. Their temporary files may also belong to the old daemon.
@@ -161,22 +163,24 @@ QtObject {
     }
 
     property Timer _updateTimer: Timer {
-        interval: 40
+        interval: 16
         repeat: false
         onTriggered: svc._rebuild()
     }
 
-    // Merge pointer double-clicks or quick target changes before sending an
-    // IPC request. The platform bridge also coalesces requests, but doing it
-    // here avoids needless messages in the first place.
+    // Leading-edge activation is immediate. Only subsequent requests within
+    // this short window are coalesced; continuous input cannot postpone it.
     property Timer _kwinActivationTimer: Timer {
         interval: 24
         repeat: false
         onTriggered: {
             const command = svc._pendingKwinActivation;
             svc._pendingKwinActivation = null;
-            if (command)
+            if (command && command.id !== svc._lastKwinActivationId) {
+                svc._lastKwinActivationId = command.id;
                 svc._sendKwinCommand(command);
+                svc._kwinActivationTimer.start();
+            }
         }
     }
 
@@ -217,7 +221,7 @@ QtObject {
     }
 
     function _scheduleUpdate() {
-        _updateTimer.restart();
+        if (!_updateTimer.running) _updateTimer.start();
     }
 
     function _collectToplevels() {
@@ -934,16 +938,31 @@ QtObject {
 
     function _enqueueKwinCommand(command) {
         if (command.action === "activate") {
-            svc._pendingKwinActivation = command;
-            svc._kwinActivationTimer.restart();
+            if (!svc._kwinActivationTimer.running) {
+                svc._lastKwinActivationId = command.id;
+                svc._sendKwinCommand(command);
+                svc._kwinActivationTimer.start();
+            } else {
+                svc._pendingKwinActivation = command;
+            }
             return;
         }
         svc._sendKwinCommand(command);
     }
 
     function _sendKwinCommand(command) {
+        // A later focus/visibility action supersedes any queued single-window
+        // activation; never let an old click undo a minimize or group action.
+        if (["activate-group", "minimize", "minimize-group", "close", "engage-swap",
+                "switch-desktop", "show-overview", "toggle-overview"].includes(command.action)) {
+            svc._pendingKwinActivation = null;
+            svc._lastKwinActivationId = null;
+            svc._kwinActivationTimer.stop();
+        }
         PlatformClient.request("kwin.command", command, function(response) {
             if (!response?.ok) {
+                if (command.action === "activate" && svc._lastKwinActivationId === command.id)
+                    svc._lastKwinActivationId = null;
                 console.warn("[WindowService] KWin command failed: "
                     + (response?.error?.message || "platform unavailable"))
                 // A rejected thumbnail request never produces a thumbnail

@@ -12,9 +12,14 @@ export function advance(current, target, deltaSeconds, responseSeconds, epsilon)
     return Math.abs(target - next) <= epsilon ? target : next;
 }
 
-// A smooth, broad wave drives artwork and translation together. Its quartic
-// kernel reaches zero with a flat slope, so neighbouring icons join/leave
-// without the sharp cutoff of the former parabola.
+// Quintic smootherstep gives a broad centre and zero first/second derivatives
+// at both ends. Neighbours join the wave gradually instead of a narrow peak.
+export function influenceAt(distance, radius) {
+    const t = Math.min(1, Math.abs(distance) / Math.max(1, radius));
+    return 1 - t * t * t * (10 + t * (-15 + 6 * t));
+}
+
+// Artwork and translation use the same kernel and its analytic integral.
 export function layout(states, pointer, progress, maxScale, radius, spacing = 0, bounds = null) {
     // 100% disables the entire wave, including plate-gap tightening.
     if (maxScale <= 1) progress = 0;
@@ -34,17 +39,14 @@ export function layout(states, pointer, progress, maxScale, radius, spacing = 0,
     let baseLeft = Infinity, baseRight = -Infinity;
     const entries = states.map(state => {
         const d = state.cx - pointer;
-        const t = Math.min(1, Math.abs(d) / support);
-        const kernel = Math.pow(1 - t * t, 4);
+        const kernel = influenceAt(d, support);
         const influence = state.growable ? progress * kernel : 0;
         const scale = 1 + Math.max(0, maxScale - 1) * influence;
         const distance = Math.abs(d);
         const u = Math.min(1, Math.max(0, distance - shoulder) / support);
-        // Integral of (1-u*u)^4. The half-pitch envelope reserves enough
+        // Integral of 1 - 10*u^3 + 15*u^4 - 6*u^5. The half-pitch envelope reserves enough
         // space between adjacent growing artwork, including a wave flank.
-        const u2 = u * u;
-        const integral = u * (1 + u2 * (-4 / 3 + u2 * (6 / 5
-            + u2 * (-4 / 7 + u2 / 9))));
+        const integral = u - u * u * u * u * (2.5 + u * (-3 + u));
         const dx = Math.sign(d) * density * (Math.min(distance, shoulder)
             + support * integral) * amplitude;
         const half = state.half + (state.artHalf ?? state.half) * (scale - 1)
@@ -89,18 +91,21 @@ export function layout(states, pointer, progress, maxScale, radius, spacing = 0,
         }
     }
     let left = Infinity, right = -Infinity;
+    const byItem = new Map();
     for (let i = 0; i < entries.length; ++i) {
         const entry = entries[i], state = states[i];
         entry.progress *= fraction;
         entry.dx *= fraction;
         entry.scale = 1 + (entry.scale - 1) * fraction;
         entry.half = state.half + (entry.half - state.half) * fraction;
+        // Build lookup in this existing pass, without N temporary pair arrays.
+        byItem.set(entry.item, entry);
         if (state.flexible) continue;
         left = Math.min(left, state.cx + entry.dx - entry.half);
         right = Math.max(right, state.cx + entry.dx + entry.half);
     }
     const hasExtent = Number.isFinite(baseLeft) && amplitude > 0;
-    return { entries: entries, byItem: new Map(entries.map(entry => [entry.item, entry])),
+    return { entries: entries, byItem: byItem,
         total: hasExtent ? Math.max(0, right - left - (baseRight - baseLeft)) : 0,
         shift: hasExtent ? (right + left - baseRight - baseLeft) / 2 : 0 };
 }

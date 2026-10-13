@@ -414,25 +414,10 @@ Item {
     }
 
     // ── Hover animation ──
-    // Hover is resolved against the icon's *static* layout slot rather than the
-    // MouseArea's live geometry. `_mouseArea` is anchored to this item, so it
-    // moves with the very hover lift/scale it triggers: with the pointer parked
-    // on the slot's bottom edge the icon lifts out from under the cursor (the
-    // measured band is ~0.75px, one row at 1x), the hover clears, the icon drops
-    // back and the cycle repeats — an endless jitter. Testing the untransformed
-    // slot against the container pointer makes hover a pure function of the
-    // pointer again.
-    //
-    // The slot is not the zoomed artwork, and that is deliberate: a pointer in
-    // the gap between two slots, or in the overhang a magnified neighbour leaves
-    // past its slot, is no longer reported as hovering. The old test covered the
-    // 1.19x-scaled rect, which grew ~4.5px past the slot and therefore bridged
-    // the 4px inter-icon gap.
-    //
-    // A DockIcon whose container publishes no pointer (magnificationRoot unset,
-    // or the pointer outside it) keeps the MouseArea answer. The Dock's own
-    // icons, including the pinned launcher and trash, all receive the container
-    // root, so they take the pointer path; the fallback is for isolated hosts.
+    // The shared container resolves one hover owner from its frame snapshot.
+    // Labels, highlights and preview dwell use that same owner; the resting
+    // vertical band remains valid while the artwork lifts out of it.
+    // Isolated hosts keep their pointer/MouseArea fallback below.
     readonly property bool _hovering: {
         if (!icon.interactive || !icon.visible)
             return false
@@ -570,29 +555,25 @@ Item {
     readonly property var contextMenu: _contextMenuInstance
     readonly property var preview: _previewInstance
 
+    function openWindowPreview() {
+        if (!icon._hovering || !icon._hasWindows || icon.editMode
+                || DockModelService.activeContextMenu) return
+        const p = ensurePreviewLoaded()
+        p.appId = icon.appId
+        p.windowId = icon._previewWindowId
+        p.appName = icon.displayName
+        p.windows = icon._appWindows
+        DockModelService.openDockPopup(p)
+    }
+    property int previewDwellDelay: DockAnimation.windowPreviewDelay
     Timer {
         id: previewDelay
         // Short, deliberate dwell so a real hover feels immediate without
         // opening previews during a quick pointer pass.
-        interval: DockAnimation.windowPreviewDelay
+        interval: icon.previewDwellDelay
         repeat: false
         onTriggered: {
-            if (icon._hovering && icon._hasWindows && !icon.editMode
-                    && !DockModelService.activeContextMenu) {
-                const p = ensurePreviewLoaded()
-                console.log("[DockIcon] preview request app=" + icon.appId
-                    + " windowCount=" + icon._appWindows.length);
-                p.appId = icon.appId
-                p.windowId = icon._previewWindowId
-                // The strip is labelled with the application; each card labels
-                // its own window (see DockWindowPreview's per-card title).
-                p.appName = icon.displayName
-                p.windows = icon._appWindows
-                DockModelService.openDockPopup(p)
-            } else if (icon._hovering && icon.isRunning) {
-                console.log("[DockIcon] preview skipped app=" + icon.appId
-                    + " no window record")
-            }
+            icon.openWindowPreview()
         }
     }
 
@@ -614,61 +595,31 @@ Item {
     on_HoveringChanged: {
         if (_hovering) {
             previewCloseDelay.stop()
-            if (_previewWindowId && !editMode && !DockModelService.activeContextMenu)
-                previewDelay.restart()
+            if (_previewWindowId && !editMode && !DockModelService.activeContextMenu) {
+                if (icon.preview && icon.preview.visible) {
+                    previewDelay.stop()
+                    icon.openWindowPreview()
+                } else {
+                    const active = DockModelService.activeDockPopup
+                    previewDwellDelay = active && active.isWindowPreview && active.visible
+                        ? DockAnimation.windowPreviewSwitchDelay : DockAnimation.windowPreviewDelay
+                    if (!previewDelay.running) previewDelay.start()
+                }
+            }
         } else {
             previewDelay.stop()
             previewCloseDelay.restart()
         }
     }
 
-    // A pinned app with no live window has no thumbnail to show. Use a small
-    // edge-aware label instead of opening an empty preview surface.
-    PopupWindow {
-        id: appNameTooltip
-        readonly property bool shouldShow:
-            icon._hovering
-            && !icon._hasWindows
-            && !icon.isRunning
+    // Shared Dock hosts own one label. Standalone icons create a fallback
+    // only while eligible for a name tooltip, instead of eager hidden windows.
+    Loader {
+        active: !icon._usesSharedMagnification && icon._hovering
+            && !icon._hasWindows && !icon.isRunning && !icon.editMode
             && icon.displayName.trim().length > 0
-            && !icon.editMode
             && !DockModelService.activeContextMenu
-
-        visible: shouldShow
-        implicitWidth: appNameText.implicitWidth + 16
-        implicitHeight: appNameText.implicitHeight + 10
-        color: "transparent"
-
-        anchor {
-            item: icon
-            edges: icon.dockEdge === "bottom" ? Edges.Top
-                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
-            gravity: icon.dockEdge === "bottom" ? Edges.Top
-                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
-            margins.top: icon.dockEdge === "bottom" ? -6 : 0
-            margins.left: icon.dockEdge === "right" ? -6 : 0
-            margins.right: icon.dockEdge === "left" ? -6 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: ThemeService.tooltipBackground
-            border.width: 1
-            border.color: ThemeService.borderColor
-
-            Text {
-                id: appNameText
-                anchors.centerIn: parent
-                text: icon.displayName
-                color: ThemeService.foregroundColor
-                font {
-                    family: "Noto Sans CJK SC, sans-serif"
-                    pixelSize: 11
-                    weight: Font.DemiBold
-                }
-            }
-        }
+        sourceComponent: DockAppNameTooltip { targetIcon: icon }
     }
 
     // iPadOS-style edit-state wiggle. The held icon stays steady so it reads
@@ -719,7 +670,7 @@ Item {
                 && !icon._glassSelectionHighlight) || icon.showUrgentBackground
         z: -1
         Behavior on color {
-            ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+            ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
         }
     }
 
@@ -806,7 +757,7 @@ Item {
         target: pressHighlight
         property: "opacity"
         to: 1.0
-        duration: 150
+        duration: DockAnimation.iconPressHighlightDuration
         easing.type: DockAnimation.elementEnterEasing
     }
     NumberAnimation {
@@ -814,8 +765,21 @@ Item {
         target: pressHighlight
         property: "opacity"
         to: 0.0
-        duration: 150
+        duration: DockAnimation.iconPressHighlightDuration
         easing.type: DockAnimation.elementExitEasing
+    }
+    function setPressFeedback(pressed) {
+        pressFadeIn.stop()
+        pressFadeOut.stop()
+        if (icon._glassSelectionHighlight) {
+            // The glass plate already animates MouseArea.pressed. Do not run
+            // a second, invisible legacy animation for the same input.
+            pressHighlight.opacity = 0
+        } else if (pressed) {
+            pressFadeIn.restart()
+        } else {
+            pressFadeOut.restart()
+        }
     }
 
     Loader {
@@ -954,7 +918,7 @@ Item {
                         ThemeService.foregroundColor.b, 0.95)
                     Behavior on color {
                         enabled: runningIndicator.opacity > 0.01
-                        ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
                     }
                 }
             }
@@ -967,7 +931,7 @@ Item {
             color: ThemeService.accentColor
             Behavior on color {
                 enabled: visible
-                ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+                ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
             }
         }
     }
@@ -997,16 +961,16 @@ Item {
             icon._heldForEdit = false
             if (icon.dismissAppLauncherOnInteraction && AppLauncherService.open)
                 AppLauncherService.hide()
-            pressFadeIn.start()
+            icon.setPressFeedback(true)
         }
-        onReleased: pressFadeOut.start()
-        onCanceled: pressFadeOut.start()
+        onReleased: icon.setPressFeedback(false)
+        onCanceled: icon.setPressFeedback(false)
         onPressAndHold: {
             if (!icon.allowEdit)
                 return
             // Entering edit mode steals the pointer for reordering; the press
             // feedback should not linger while the icon wiggles.
-            pressFadeOut.start()
+            icon.setPressFeedback(false)
             icon._heldForEdit = true
             icon.requestEdit()
         }

@@ -22,6 +22,7 @@ AnimatedPopupWindow {
     property bool pointerInside: false
 
     motionOrigin: Item.Bottom
+    openDuration: DockAnimation.infoPopupEntranceDuration
     // Geometry is decided up front: a PopupWindow does not reflow its content
     // the way an in-window Item does.
     implicitWidth: 288

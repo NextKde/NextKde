@@ -132,11 +132,11 @@ QtObject {
     // Keep existing values round-trippable so older config files are not lost.
     property var iconOverrides:   ({})
     // `dockItems` is the canonical ordered list of pinned applications.
-    // App item: { type: "app", appId: "code.desktop" }
+    // Defaults are generic KDE tools, never a developer's personal app pins.
+    // App item: { type: "app", appId: "org.kde.kate.desktop" }
     property var dockItems: [
         { type: "app", appId: "org.kde.dolphin.desktop" },
         { type: "app", appId: "org.kde.kate.desktop" },
-        { type: "app", appId: "code.desktop" },
     ]
 
     // Compatibility projection for the current Dock UI and AppGroupService.
@@ -145,7 +145,6 @@ QtObject {
     property var pinnedAppIds: [
         "org.kde.dolphin.desktop",
         "org.kde.kate.desktop",
-        "code.desktop",
     ]
     property var    proportions:  defaultProportions
 

@@ -18,7 +18,7 @@ Item {
     property bool dockHosted: false
 
     // Dock hosts follow the other info cards (DockMusicPlayer contract):
-    // hovering the card opens the dashboard after a 420 ms dwell, and
+    // hovering the card opens the dashboard after the shared short dwell, and
     // leaving closes it 260 ms later unless the pointer moved into the
     // popup itself. The Bar keeps the hover tooltip + click toggle instead.
     property bool popupPointerInside: false
@@ -55,7 +55,10 @@ Item {
                 return
             if (containsMouse) {
                 dashboardCloseDelay.stop()
-                dashboardOpenDelay.restart()
+                if (detailsPopup.visible)
+                    DockModelService.openDockPopup(detailsPopup)
+                else if (!dashboardOpenDelay.running)
+                    dashboardOpenDelay.start()
             } else if (!root.popupPointerInside) {
                 dashboardOpenDelay.stop()
                 dashboardCloseDelay.restart()
@@ -65,7 +68,7 @@ Item {
 
     Timer {
         id: dashboardOpenDelay
-        interval: 420
+        interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
             if (root.dockHosted && hoverArea.containsMouse && root.available)
@@ -88,6 +91,9 @@ Item {
 
     AnimatedPopupWindow {
         id: temperatureTooltip
+        openDuration: 70
+        closeDuration: 70
+        mask: Region { item: null }
         motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
         // Dock hosts go straight to the dashboard on hover, so the compact
         // tooltip only serves the standalone Bar.
@@ -129,6 +135,8 @@ Item {
     // keeps the compact one-line tooltip for a quick glance.
     AnimatedPopupWindow {
         id: detailsPopup
+        openDuration: root.dockHosted ? DockAnimation.infoPopupEntranceDuration
+            : AppearanceTokens.motion.popupOpenDuration
         motionOrigin: root.dockHosted ? Item.Bottom : Item.Top
         implicitWidth: 360
         implicitHeight: 670
