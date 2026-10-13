@@ -15,7 +15,7 @@ export const deskCenterWidgetIds = [
 
 // The shell-owned StatusArea cells, in their declared trailing order.
 export const statusCellIds = [
-    "network", "battery", "settings", "controlcenter",
+    "network", "battery", "settings", "notifications", "controlcenter",
 ];
 
 // The cells the shell always renders, whatever the hidden set says. The

@@ -36,10 +36,6 @@ QtObject {
     property bool bluetoothDeviceChangeInProgress: false
     property string bluetoothChangingAddress: ""
     property bool doNotDisturbEnabled: false
-    property ListModel notificationHistory: ListModel {}
-    property int notificationHistoryMax: 50
-    property var historyGroups: []
-    property int historyRevision: 0
     property bool screenshotInProgress: false
     property bool sessionActionInProgress: false
     property alias logoutInProgress: service.sessionActionInProgress
@@ -69,42 +65,6 @@ QtObject {
         _openPanelCount = Math.max(0, _openPanelCount + (open ? 1 : -1))
     }
     onAnyPanelOpenChanged: if (anyPanelOpen) refresh()
-
-    function rebuildHistoryGroups() {
-        const groups = []
-        const groupIndex = ({})
-        for (let i = 0; i < notificationHistory.count; ++i) {
-            const row = notificationHistory.get(i)
-            const key = row.appName || "其他"
-            let index = groupIndex[key]
-            if (index === undefined) {
-                index = groups.length
-                groupIndex[key] = index
-                groups.push({ appName: key, appIcon: row.appIcon, items: [] })
-            }
-            groups[index].items.push({ notifId: row.notifId, summary: row.summary,
-                body: row.body, timestamp: row.timestamp })
-        }
-        historyGroups = groups
-        historyRevision++
-    }
-
-    function removeHistoryById(notifId) {
-        for (let i = 0; i < notificationHistory.count; ++i) {
-            if (notificationHistory.get(i).notifId === notifId) {
-                notificationHistory.remove(i)
-                return
-            }
-        }
-    }
-
-    property Connections _historyConnections: Connections {
-        target: service.notificationHistory
-        function onRowsInserted() { service.rebuildHistoryGroups() }
-        function onRowsRemoved() { service.rebuildHistoryGroups() }
-        function onRowsMoved() { service.rebuildHistoryGroups() }
-        function onModelReset() { service.rebuildHistoryGroups() }
-    }
 
     function refresh() {
         PlatformClient.request("audio.get", {}, function(response) {

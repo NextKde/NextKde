@@ -279,6 +279,35 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
                 LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.notification-history
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-history PROPERTIES LABELS ui TIMEOUT 15)
+            add_test(NAME kos-shell.notification-history-visual
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-visual.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-history-visual PROPERTIES LABELS ui TIMEOUT 15)
+            add_test(NAME kos-shell.notification-source-icons
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-icons.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-source-icons PROPERTIES LABELS ui TIMEOUT 15)
+            find_program(KOS_DBUS_RUN_SESSION_EXECUTABLE NAMES dbus-run-session)
+            find_program(KOS_GDBUS_EXECUTABLE NAMES gdbus)
+            if(KOS_DBUS_RUN_SESSION_EXECUTABLE AND KOS_GDBUS_EXECUTABLE)
+                add_test(NAME kos-shell.notification-history-dbus
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-dbus.mjs
+                        ${KOS_QUICKSHELL_EXECUTABLE})
+                set_tests_properties(kos-shell.notification-history-dbus PROPERTIES LABELS ui TIMEOUT 25)
+                add_test(NAME kos-shell.notification-policy-production
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-production.mjs
+                        ${KOS_QUICKSHELL_EXECUTABLE})
+                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS ui TIMEOUT 35)
+            endif()
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/static-work/run.mjs

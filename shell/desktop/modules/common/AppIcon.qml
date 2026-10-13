@@ -8,6 +8,7 @@ import Quickshell.Widgets
 Item {
     id: root
     property string source: ""
+    readonly property int imageStatus: renderer.item?.imageStatus ?? Image.Null
 
     // Icon appearance controls
     property real   opacityMultiplier: 1.0
@@ -55,6 +56,7 @@ Item {
         id: directIcon
 
         IconImage {
+            readonly property int imageStatus: backer.status
             readonly property real paintedWidth: backer.paintedWidth
             readonly property real paintedHeight: backer.paintedHeight
             source: root.source
@@ -69,6 +71,7 @@ Item {
         id: effectIcon
 
         Item {
+            readonly property int imageStatus: effectImage.backer.status
             readonly property real paintedWidth: effectImage.backer.paintedWidth
             readonly property real paintedHeight: effectImage.backer.paintedHeight
             IconImage {
