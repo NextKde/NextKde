@@ -35,8 +35,9 @@ AnimatedPopupWindow {
     color: "transparent"
     grabFocus: interactive
 
+    PopupAnchorBinding { popupAnchor: editor.anchor; sourceItem: editor.anchorItem }
+
     anchor {
-        item: editor.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -12

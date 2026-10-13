@@ -203,8 +203,9 @@ PopupWindow {
     mask: root.macosPopupMotion && !popupMotion.interactive ? emptyInputRegion : null
     Region { id: emptyInputRegion }
 
+    PopupAnchorBinding { popupAnchor: root.anchor; sourceItem: root.anchorItem }
+
     anchor {
-        item: root.anchorItem
         rect.x: root.centerBelowAnchor && root.anchorItem
             ? root.anchorItem.width / 2 - root.implicitWidth / 2 : 0
         rect.y: (root.centerBelowAnchor || root.centerBelowOffset > 0) ? root.centerBelowOffset : 0
