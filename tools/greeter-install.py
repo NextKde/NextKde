@@ -204,7 +204,7 @@ class Installer:
             info = regular(source); total += info.st_size
             if total > 128*1024*1024 or hashlib.sha256(read_regular(source)).hexdigest() != record['hash']:
                 raise RuntimeError('Bundle changed or exceeded size budget')
-        for required in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/greeter_config.py','app/companion/session_output.py'):
+        for required in ('app/shell.qml','app/cover.qml','app/bin/kos-greeter-session','app/bin/kos-greeter-ui','app/bin/kos-user-session','app/companion/entry.py','app/companion/greeter_config.py','app/companion/session_output.py','app/companion/plasma_session.py'):
             if required not in manifest: raise RuntimeError('Incomplete bundle')
         return manifest
 

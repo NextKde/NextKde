@@ -18,7 +18,7 @@ EVIDENCE = ROOT / 'docs/kos-greeter/evidence/T06'
 class Backend:
     def __init__(self):
         self.raw = json.loads((EVIDENCE / 'outputs.json').read_text())
-        self.hardware = {'eDP-2': json.loads((APP / 'config/outputs.json').read_text())['outputs'][0]['hardwareId']}
+        self.hardware = {'eDP-2': json.loads((EVIDENCE / 'machine-output.example.json').read_text())['outputs'][0]['hardwareId']}
         self.lid = False
         self.commands = []
         self.fail = False
@@ -55,7 +55,7 @@ class Backend:
 class DisplayTests(unittest.TestCase):
     def setUp(self):
         self.backend = Backend()
-        self.policy = json.loads((APP / 'config/outputs.json').read_text())
+        self.policy = json.loads((EVIDENCE / 'machine-output.example.json').read_text())
         self.controller = display.Controller(self.backend, self.policy, True)
 
     def test_apply_atomic_and_readback(self):
@@ -103,6 +103,19 @@ class DisplayTests(unittest.TestCase):
         result = self.controller.tick()
         self.assertAlmostEqual(result['outputs'][0]['mode']['refreshHz'], 59.999000549316406)
         self.assertEqual(self.backend.commands, [['output.eDP-2.mode.1']])
+
+    def test_shipped_policy_uses_preferred_without_personal_overrides(self):
+        policy = json.loads((APP / 'config/outputs.json').read_text())
+        self.assertEqual(policy, dict(schemaVersion=1, outputs=[]))
+        self.backend.raw['outputs'][0].update(scale=2, pos={'x': -1280, 'y': 100})
+        controller = display.Controller(self.backend, policy, True)
+        result = controller.tick()
+        self.assertEqual(result['status'], 'applied')
+        self.assertEqual(self.backend.commands, [['output.eDP-2.mode.1']])
+        self.assertEqual(result['outputs'][0]['scale'], 2)
+        self.assertEqual(result['outputs'][0]['position'], [-1280, 100])
+        controller.tick()
+        self.assertEqual(len(self.backend.commands), 1)
 
     def test_lid_external_unplug_reopen_and_priority(self):
         self.controller.tick()

@@ -83,7 +83,7 @@ def run(case):
                                 reply = {'type':'error','error_type':'error','description':'unable to send message: Connection refused (os error 111)'}
                             else: reply = {'type': 'success'}
                         elif kind == 'start_session':
-                            assert request['cmd'] == [str(directory / 'bin/kos-user-session')]
+                            assert request['cmd'] == ['/usr/bin/python3', str(directory / 'bin/kos-user-session')]
                             assert request.get('env', []) == []
                             reply = ({'type': 'error', 'error_type': 'auth_error', 'description': 'Test launch rejection'}
                                      if case == 'launch-rejected' else {'type': 'success'})

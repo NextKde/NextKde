@@ -1,23 +1,4 @@
 {
   "schemaVersion": 1,
-  "outputs": [
-    {
-      "hardwareId": "edid-sha256:3d508bba6ff6eb6924c6cdf197fb05c8eb0f4d539cfbf9891f19afe19fce32f0",
-      "connector": "eDP-2",
-      "mode": {
-        "width": 2560,
-        "height": 1600,
-        "refreshHz": 239.9980010986328
-      },
-      "scale": 1.5,
-      "rotation": 0,
-      "position": [
-        0,
-        0
-      ],
-      "priority": 1,
-      "hdr": false,
-      "vrr": "never"
-    }
-  ]
+  "outputs": []
 }

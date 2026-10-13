@@ -22,8 +22,10 @@ FILES = ('qml/LoadingSpinner.qml', 'qml/GlassFieldBackground.qml', 'qml/Gaussian
          'companion/wallpaper.py', 'companion/kos_wallpaper.py', 'companion/theme.py', 'companion/theme-files.json',
          'config/outputs.json', 'bin/kos-greeter-ui', 'bin/kos-greeter-session',
          'bin/kos-greeter-outputs', 'bin/kos-greeter-wallpaper',
-         'companion/handoff.py', 'companion/greeter_config.py', 'companion/session_output.py', 'bin/kos-user-session', 'cover.qml', 'companion/cover.py')
+         'companion/handoff.py', 'companion/greeter_config.py', 'companion/session_output.py', 'companion/plasma_session.py', 'bin/kos-user-session', 'cover.qml', 'companion/cover.py')
 SHARED = APP.parents[1] / 'shared/qml/wallpapers'
+GREETD_EXECUTABLE = next((path for path in ('/usr/bin/greetd', '/usr/sbin/greetd')
+                         if os.access(path, os.X_OK)), '/usr/bin/greetd')
 
 
 def wallpaper_files():
@@ -255,7 +257,7 @@ def prepare(data, wallpaper=None, kos=None):
         store.publish(uid, image, consent=True, notice=resources.NOTICE, fit=fit)
         write(state / 'app/config/wallpaper.json', json.dumps(dict(schemaVersion=1, defaultUid=uid)))
 
-    write(state / 'config.toml' , '[terminal]\nvt = ' + str(data['vt']) + '\nswitch = true\n[general]\nsource_profile = false\n[default_session]\ncommand = "/run/kos-greeter-test/app/bin/kos-greeter-session --temporary-seat"\nuser = "greeter"\n')
+    write(state / 'config.toml' , '[terminal]\nvt = ' + str(data['vt']) + '\nswitch = true\n[general]\nsource_profile = false\n[default_session]\ncommand = "/usr/bin/python3 /run/kos-greeter-test/app/bin/kos-greeter-session --temporary-seat"\nuser = "greeter"\n')
     # --timeout 0 (or --no-auto-rollback) disables the deadline entirely:
     # no timer unit and no OnFailure guard, so only a manual rollback or a
     # reboot (which clears /run units and the runtime mask) can restore.
@@ -265,7 +267,7 @@ def prepare(data, wallpaper=None, kos=None):
         write(recovery.UNIT_DIR / recovery.GUARD, '[Unit]\nDescription=KOS Greeter test rollback\nStartLimitIntervalSec=0\n[Service]\nType=oneshot\nExecStart=' + control + '\nTimeoutStartSec=1200\n')
         write(recovery.UNIT_DIR / recovery.TIMER, '[Unit]\nDescription=KOS Greeter test deadline\n[Timer]\nOnActiveSec=' + str(data['seconds']) + 's\nAccuracySec=1s\nUnit=' + recovery.GUARD + '\n')
         failure = 'OnFailure=' + recovery.GUARD + '\n'
-    write(recovery.UNIT_DIR / recovery.TEST, '[Unit]\nDescription=Temporary KOS Greeter test\nAfter=systemd-user-sessions.service systemd-logind.service getty@tty' + str(data['vt']) + '.service\nConflicts=' + data['original'] + ' getty@tty' + str(data['vt']) + '.service\n' + failure + '[Service]\nType=simple\nExecStart=/usr/bin/greetd --config /run/kos-greeter-test/config.toml\nRestart=no\nTimeoutStopSec=30\nKillMode=control-group\nSendSIGHUP=yes\nIgnoreSIGPIPE=no\nKeyringMode=shared\nStandardOutput=null\nStandardError=null\n')
+    write(recovery.UNIT_DIR / recovery.TEST, '[Unit]\nDescription=Temporary KOS Greeter test\nAfter=systemd-user-sessions.service systemd-logind.service getty@tty' + str(data['vt']) + '.service\nConflicts=' + data['original'] + ' getty@tty' + str(data['vt']) + '.service\n' + failure + '[Service]\nType=simple\nExecStart=' + GREETD_EXECUTABLE + ' --config /run/kos-greeter-test/config.toml\nRestart=no\nTimeoutStopSec=30\nKillMode=control-group\nSendSIGHUP=yes\nIgnoreSIGPIPE=no\nKeyringMode=shared\nStandardOutput=null\nStandardError=null\n')
 
 
 def apply():

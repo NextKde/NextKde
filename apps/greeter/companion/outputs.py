@@ -35,7 +35,8 @@ def mode(value):
 def validate(manifest):
     fields(manifest, 'schemaVersion outputs')
     integer(manifest['schemaVersion'], 1, 1)
-    if type(manifest['outputs']) is not list or not 1 <= len(manifest['outputs']) <= 16:
+    # No overrides is the portable default: use each output's supported modes.
+    if type(manifest['outputs']) is not list or not 0 <= len(manifest['outputs']) <= 16:
         raise ValueError('Invalid output count')
     identities = set()
     for output in manifest['outputs']:

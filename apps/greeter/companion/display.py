@@ -152,9 +152,7 @@ def topology(inventory):
 
 def safe_plan(inventory):
     # Empty policy deliberately never associates another screen by connector.
-    unknown = dict(schemaVersion=1, outputs=[dict(hardwareId='edid-sha256:' + '0' * 64,
-        connector='NO-OUTPUT', mode=dict(width=1, height=1, refreshHz=60), scale=1, rotation=0,
-        position=[0, 0], priority=1, hdr=False, vrr='never')])
+    unknown = dict(schemaVersion=1, outputs=[])
     return outputs.plan(unknown, inventory, 'startup')
 
 
@@ -244,9 +242,7 @@ def main():
         policy = trusted_policy(args.manifest)
     except (ValueError, OSError, KeyError, TypeError):
         # A missing/corrupt policy must not make login unavailable.
-        policy = dict(schemaVersion=1, outputs=[dict(hardwareId='edid-sha256:' + '0' * 64,
-            connector='NO-OUTPUT', mode=dict(width=1, height=1, refreshHz=60), scale=1, rotation=0,
-            position=[0, 0], priority=1, hdr=False, vrr='never')])
+        policy = dict(schemaVersion=1, outputs=[])
     controller = Controller(Backend(), policy, args.apply)
     previous = None
     while True:

@@ -22,6 +22,21 @@ class Displays(unittest.TestCase):
         self.assertEqual(result['outputs'][0]['scale'], 1.5)
         self.assertAlmostEqual(result['outputs'][0]['mode']['refreshHz'], 239.9980010986328)
 
+    def test_empty_policy_uses_preferred_or_current_without_hardware_override(self):
+        policy = dict(schemaVersion=1, outputs=[])
+        self.inventory[0].update(scale=2, rotation=90, position=[-800, 100])
+        result = outputs.plan(policy, self.inventory)
+        self.assertEqual(result['outputs'][0]['mode'], self.inventory[0]['preferredMode'])
+        self.assertEqual(result['outputs'][0]['scale'], 2)
+        self.assertEqual(result['outputs'][0]['rotation'], 90)
+        self.assertEqual(result['outputs'][0]['position'], [-800, 100])
+        self.inventory[0]['preferredMode'] = None
+        result = outputs.plan(policy, self.inventory)
+        self.assertEqual(result['outputs'][0]['mode'], self.inventory[0]['currentMode'])
+        self.assertEqual(result['modeRequests'], [])
+        self.inventory[0]['currentMode'] = None
+        self.assertEqual(outputs.plan(policy, self.inventory)['state'], 'unavailable')
+
     def test_exact_refresh_and_safe_preferred(self):
         self.manifest['outputs'][0]['mode']['refreshHz'] = 240
         result = outputs.plan(self.manifest, self.inventory)

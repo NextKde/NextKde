@@ -155,7 +155,7 @@ ShellRoot {
     }
     Timer { id: accountTimeout; interval: 10000; running: true; onTriggered: { accountReader.running = false; root.accountsReady = true; } }
     // Fixed allowlist, checked against the installed desktop entry by the wrapper.
-    readonly property var sessionCommand: [Quickshell.shellDir + "/bin/kos-user-session"]
+    readonly property var sessionCommand: ["/usr/bin/python3", Quickshell.shellDir + "/bin/kos-user-session"]
 
     function step(event) {
         let previous = phase;

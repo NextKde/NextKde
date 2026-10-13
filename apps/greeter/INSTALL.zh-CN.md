@@ -33,6 +33,12 @@ sudo python3 /home/wwt/Downloads/NextKde/tools/rollback-greeter.py
 
 安装写入系统用户级 `kos-shell.service` 路径 drop-in，让已有 T11 Shell 找到独立安装的 Cover；仅 daemon-reload 当前调用者的用户管理器，不重启 Shell、不导入全局认证/DBus环境。该 drop-in 不包含令牌。Shell 自身需已有 T11 模块，脚本不顺带升级整个桌面；历史安装中未接入门控的 Shell 只能依靠独立 Cover 超时撤罩；本轮初装和更新会预检并拒绝不兼容 Shell。当前共享 Shell 仍不支持同 UID 的并发桌面。
 
+## 通用显示默认
+
+随应用安装的 `config/outputs.json` 使用空输出覆盖清单，不包含个人 EDID、固定分辨率、240 Hz 或 1.5 倍缩放。默认选择设备报告的受支持推荐模式，推荐不可用时采用受支持当前模式，并保留已有有效缩放、位置和旋转；两者均不可用则报告无可用输出。HDR/VRR 和主屏优先级仍按首版显示策略处理。
+
+需要机器专属模式时，由管理员配置 `/etc/kos/greeter/outputs.json`，格式见 [显示契约](../../docs/kos-greeter/contracts/machine-outputs.md)。该文件优先于应用默认配置，缺失或校验失败时使用通用策略。它是管理员独立配置，不由 Greeter 安装/升级生成，也不在 app 回滚时自动删除。本次已在虚拟机通过显示规划9项及假KScreen控制器10项回归；未执行实际模式切换或物理显示器验收。
+
 ## 更新已安装版本
 
 直接再次运行：

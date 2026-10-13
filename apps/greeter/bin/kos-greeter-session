@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Explicit isolated experiment entry; never installs or switches a manager."""
-import configparser
 import os
 from pathlib import Path
 import shlex
 import sys
 
-COMMAND = ['/usr/lib/plasma-dbus-run-session-if-needed', '/usr/bin/startplasma-wayland']
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'companion'))
 from session_output import prepare_session_output, phase, diagnostic
 from greeter_config import prepare as prepare_greeter_config
+from plasma_session import installed_command, greetd_executable
 
 def main():
     if sys.argv[1:] == ['--check']:
@@ -35,17 +34,17 @@ def main():
     phase('GreeterCompositorStarting')
     os.execve('/usr/bin/dbus-run-session', [
         'dbus-run-session', '--', '/usr/bin/kwin_wayland', '--drm', '--no-lockscreen', '--no-global-shortcuts',
-        '--no-kactivities', '--exit-with-session', str(ROOT / 'bin/kos-greeter-ui')], environment)
+        '--no-kactivities', '--exit-with-session', shlex.join(['/usr/bin/python3', str(ROOT / 'bin/kos-greeter-ui')])], environment)
 
 def check():
-    paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/greetd', '/usr/bin/kscreen-doctor', str(ROOT / 'bin/kos-user-session'), str(ROOT / 'bin/kos-greeter-ui'), *COMMAND]
+    command = installed_command()
+    paths = ['/usr/bin/dbus-run-session', '/usr/bin/kwin_wayland', '/usr/bin/qs', '/usr/bin/python3', greetd_executable(), '/usr/bin/kscreen-doctor', *command]
     for path in paths:
         if not os.access(path, os.X_OK):
             sys.exit('Missing executable: ' + path)
-    desktop = configparser.ConfigParser(interpolation=None, strict=False)
-    desktop.read('/usr/share/wayland-sessions/plasma.desktop')
-    if shlex.split(desktop.get('Desktop Entry', 'Exec', fallback='')) != COMMAND:
-        sys.exit('Installed Plasma entry differs from the reviewed allowlist; refusing launch.')
+    for path in (ROOT / 'bin/kos-user-session', ROOT / 'bin/kos-greeter-ui'):
+        if not path.is_file() or not os.access(path, os.R_OK):
+            sys.exit('Missing readable session helper: ' + str(path))
     diagnostic('Dependency and installed session allowlist check passed (not a login test).')
 
 if __name__ == '__main__':
