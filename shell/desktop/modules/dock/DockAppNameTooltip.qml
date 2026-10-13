@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.desktop.modules.common
 
 // One shared label for the Dock; isolated DockIcon hosts can load it lazily.
 PopupWindow {
@@ -57,8 +58,9 @@ PopupWindow {
         function onXChanged() { Qt.callLater(tooltip.refreshAnchor) }
         function onYChanged() { Qt.callLater(tooltip.refreshAnchor) }
     }
+    PopupAnchorBinding { popupAnchor: tooltip.anchor; sourceItem: tooltip.targetIcon }
+
     anchor {
-        item: tooltip.targetIcon
         edges: tooltip.dockEdge === "bottom" ? Edges.Top
             : tooltip.dockEdge === "left" ? Edges.Right : Edges.Left
         gravity: tooltip.anchor.edges

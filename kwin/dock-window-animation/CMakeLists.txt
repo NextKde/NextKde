@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(kos_dock_window_animation LANGUAGES CXX)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,3 +61,9 @@ endif()
 install(TARGETS kos_dock_window_animation
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+if(BUILD_TESTING)
+    add_executable(kos_dock_animation_reference_lifetime_test tests/reference_lifetime_test.cpp)
+    add_test(NAME kos-dock-animation.reference-lifetime COMMAND kos_dock_animation_reference_lifetime_test)
+    set_tests_properties(kos-dock-animation.reference-lifetime PROPERTIES LABELS "logic")
+endif()
