@@ -1614,8 +1614,21 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         // difference -- a card panel whose overlay sheet was left out of the
         // union slid its whole glass by 238px. A nonzero translation alone is
         // normal: the surface may be away from the output origin.
+        //
+        // The region and the shape integerise the same geometry through two
+        // independent pipelines, and they disagree by up to one pixel per axis:
+        // the region's union spans round(x) .. round(x + w) while the shape
+        // sends qRound(w), and which side rounds up flips with the sub-pixel
+        // geometry. The dock glass changes geometry every frame of a hover
+        // animation, so an exact comparison kept landing on the losing side and
+        // flickered the material between the declared-shape and region-driven
+        // paths. A real mismatch (a strict subset declaration) differs by far
+        // more than 1px, so a 1px tolerance only forgives rounding.
+        const QSize declaredRegionSizeDelta = declaredShapeBounds.size()
+            - effectShape.boundingRect().size();
         const bool declaredShapeMatchesRegion =
-            declaredShapeBounds.size() == effectShape.boundingRect().size();
+            qAbs(declaredRegionSizeDelta.width()) <= 1
+            && qAbs(declaredRegionSizeDelta.height()) <= 1;
         if (!declaredShapeMatchesRegion) {
             if (shapeTraceEnabled()) {
                 qCWarning(shapeTraceCategory())
