@@ -23,7 +23,7 @@ STATE_REL = 'var/lib/kos-greeter-install'
 FILES = ('etc/greetd/config.toml', 'etc/systemd/system/greetd.service.d/kos-greeter.conf',
          'etc/systemd/system/kos-greeter-recover.service',
          'etc/systemd/user/kos-shell.service.d/kos-greeter.conf', 'usr/local/sbin/kos-greeter-rollback')
-GREETER_POLICY = b'[Unit]\nOnFailure=kos-greeter-recover.service\nStartLimitIntervalSec=infinity\nStartLimitBurst=3\n[Service]\nRestart=always\nRestartSec=1\n'
+GREETER_POLICY = b'[Unit]\nAfter=getty@tty1.service\nConflicts=getty@tty1.service\nOnFailure=kos-greeter-recover.service\nStartLimitIntervalSec=infinity\nStartLimitBurst=3\n[Service]\nRestart=always\nRestartSec=1\n'
 NAME = re.compile(r'[A-Za-z0-9_.@-]+\.service')
 
 

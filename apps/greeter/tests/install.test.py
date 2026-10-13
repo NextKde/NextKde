@@ -158,6 +158,9 @@ class Transaction(unittest.TestCase):
  def test_install_boot_default_and_exact_rollback(self):
   self.inst.install(self.bundle)
   self.assertEqual(self.properties('display-manager.service')['Id'],'greetd.service')
+  policy=(self.root/m.FILES[1]).read_text()
+  self.assertIn('Conflicts=getty@tty1.service',policy)
+  self.assertIn('After=getty@tty1.service',policy)
   self.assertNotIn(('stop','plasmalogin.service'),self.calls)
   self.assertNotIn(('start','greetd.service'),self.calls)
   self.inst.rollback();self.assert_restored()
