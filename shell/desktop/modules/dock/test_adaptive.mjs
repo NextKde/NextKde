@@ -1,5 +1,5 @@
 // Test harness for AdaptiveMath.mjs — run with: node test_adaptive.mjs
-import { computeLayout, MIN_ICON_SIZE } from "./AdaptiveMath.mjs";
+import { computeLayout, activeBackgroundPadding, MIN_ICON_SIZE } from "./AdaptiveMath.mjs";
 
 const cases = [
     [60, 5, 3, false, 1920, 'few icons, no music'],
@@ -45,8 +45,24 @@ if (configured.hPadding !== Math.round(configured.iconSize * 0.3))
     errors++, console.log('FAIL: configured hpad ignored');
 
 const normal = computeLayout(60, 1, 1, false, 1920);
-if (Math.abs(normal.activeBackgroundGap - normal.iconSize * 0.1) > 0.001)
+if (Math.abs(normal.activeBackgroundGap - activeBackgroundPadding(normal.iconSize)) > 0.001)
     errors++, console.log('FAIL: active background gap is not proportional');
+
+// Fully opaque square artwork is the worst case, regardless of the image's
+// transparent margins. Check actual distance to the corner arc at all styles.
+for (const size of [18, 44, 70]) {
+    for (const radiusRatio of [0.18, 0.28, 0.30]) {
+        const padding = activeBackgroundPadding(size, radiusRatio);
+        const radius = size * radiusRatio;
+        const clearance = radius - Math.SQRT2 * Math.max(0, radius - padding);
+        if (clearance < size * 0.035 - 0.001)
+            errors++, console.log('FAIL: rounded corner clearance', size, radiusRatio);
+        const layout = computeLayout(60, 5, 3, false, 1920,
+            { vpad: 0.12, activeRadiusRatio: radiusRatio });
+        if (layout.dockHeight + 0.5 < layout.iconSize + 2 * layout.activeBackgroundGap)
+            errors++, console.log('FAIL: active plate exceeds dock thickness');
+    }
+}
 
 const sideInfo = computeLayout(60, 3, 2, true, 1080, {}, 0.95, 2);
 if (sideInfo.infoUnits !== 2)

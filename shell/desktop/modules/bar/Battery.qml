@@ -17,14 +17,15 @@ Item {
     readonly property bool tintActive: IconAppearanceService.mode === "tint"
     readonly property color dockTintColor: tintActive
         ? IconAppearanceService.styledSymbolicColor()
-        : ThemeService.foregroundColor
+        : ThemeService.barInk
     opacity: tintActive ? IconAppearanceService.opacity : 1.0
     // The bar text carries a Text.Outline edge so it holds over a bright
     // backdrop; the battery is drawn from QML rectangles, which have no text
     // style, so the same edge comes from a shadow layer instead. Tint mode
-    // keeps the stronger drop shadow it always had.
+    // keeps the stronger drop shadow it always had. The mac-style ground
+    // paints a plate under the glyph, so the edge is dropped there.
     readonly property bool iconOutlined: !tintActive
-        && AppearanceTokens.isDarkTheme
+        && AppearanceTokens.isDarkTheme && !AppearanceTokens.bar.macStyle
     layer.enabled: tintActive || iconOutlined
     layer.effect: MultiEffect {
         shadowEnabled: true
@@ -119,11 +120,11 @@ Item {
         : percent > 95
         ? "#30d158"
         : percent >= 50
-            ? ThemeService.foregroundColor
+            ? ThemeService.barInk
             : percent >= 15
                 ? "#ff9f0a"
                 : "#ff453a"
     readonly property color boltColor: tintActive ? dockTintColor
         : percent >= 50 && percent <= 95
-        ? "#ff9f0a" : ThemeService.foregroundColor
+        ? "#ff9f0a" : ThemeService.barInk
 }

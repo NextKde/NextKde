@@ -6,6 +6,8 @@ PopupWindow {
 
     property bool requestedOpen: false
     property bool animationEnabled: true
+    property int openDuration: AppearanceTokens.motion.popupOpenDuration
+    property int closeDuration: AppearanceTokens.motion.popupCloseDuration
     property int motionOrigin: Item.Top
     readonly property real revealProgress: animationEnabled ? motion.progress : 1
     readonly property bool interactive: effectiveOpen
@@ -39,8 +41,8 @@ PopupWindow {
 
     PopupMotion {
         id: motion
-        openDuration: popup.animationEnabled ? AppearanceTokens.motion.popupOpenDuration : 0
-        closeDuration: popup.animationEnabled ? AppearanceTokens.motion.popupCloseDuration : 0
+        openDuration: popup.animationEnabled ? popup.openDuration : 0
+        closeDuration: popup.animationEnabled ? popup.closeDuration : 0
     }
     Region { id: emptyInputRegion }
 }

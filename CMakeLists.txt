@@ -279,6 +279,35 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
                 LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.notification-history
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-history PROPERTIES LABELS ui TIMEOUT 15)
+            add_test(NAME kos-shell.notification-history-visual
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-visual.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-history-visual PROPERTIES LABELS ui TIMEOUT 15)
+            add_test(NAME kos-shell.notification-source-icons
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-icons.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.notification-source-icons PROPERTIES LABELS ui TIMEOUT 15)
+            find_program(KOS_DBUS_RUN_SESSION_EXECUTABLE NAMES dbus-run-session)
+            find_program(KOS_GDBUS_EXECUTABLE NAMES gdbus)
+            if(KOS_DBUS_RUN_SESSION_EXECUTABLE AND KOS_GDBUS_EXECUTABLE)
+                add_test(NAME kos-shell.notification-history-dbus
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-dbus.mjs
+                        ${KOS_QUICKSHELL_EXECUTABLE})
+                set_tests_properties(kos-shell.notification-history-dbus PROPERTIES LABELS ui TIMEOUT 25)
+                add_test(NAME kos-shell.notification-policy-production
+                    COMMAND ${KOS_NODE_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/notification-history/run-production.mjs
+                        ${KOS_QUICKSHELL_EXECUTABLE})
+                set_tests_properties(kos-shell.notification-policy-production PROPERTIES LABELS ui TIMEOUT 35)
+            endif()
             add_test(NAME kos-shell.static-work-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/static-work/run.mjs
@@ -307,6 +336,17 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.glass-ink PROPERTIES TIMEOUT 15)
+            # Reads the resolved plate and ink of the Bar's mac style in the
+            # states its slider can put it in. The ink follows the wallpaper
+            # blended with the plate at the chosen tint, and an ink that read
+            # the plate alone still renders plausibly -- it only fails on a
+            # bright wallpaper at a low tint, which is what this walks.
+            add_test(NAME kos-shell.bar-mac-style
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/bar-mac-style/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.bar-mac-style PROPERTIES TIMEOUT 15)
             # Drives the shipping DockIcon's magnificationPointer by hand to
             # check where the Dock decides an icon is hovered. The hover test
             # must not read geometry that the hover lift itself moves, which is
@@ -558,6 +598,7 @@ if(BUILD_TESTING)
     if(KOS_QUICKSHELL_EXECUTABLE)
         set_tests_properties(kos-shell.static-work-runtime kos-shell.squircle-mask
             kos-shell.liquid-glass-panel kos-shell.glass-ink
+            kos-shell.bar-mac-style
             kos-shell.traditional-color-runtime
             kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
             PROPERTIES LABELS ui)

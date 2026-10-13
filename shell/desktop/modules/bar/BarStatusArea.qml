@@ -33,6 +33,7 @@ Item {
         { key: "network", component: networkQuickControl },
         { key: "battery", component: batteryQuickControl },
         { key: "settings", component: settingsQuickControl },
+        { key: "notifications", component: notificationQuickControl },
         { key: "controlcenter", component: controlCenterQuickControl }
     ]
     readonly property var visibleTrailingCells: trailingCells.filter(
@@ -43,6 +44,7 @@ Item {
     readonly property bool controlCenterOpen: controlCenter?.isOpen ?? false
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
+        || notificationPanel.requestedOpen
 
     // Report panel visibility into the service singleton so its fast refresh
     // only runs while a panel is actually showing the data. A count (not a
@@ -66,6 +68,7 @@ Item {
             closeControlCenter()
             return
         }
+        notificationPanel.close()
         controlCenterLoaded = true
         Qt.callLater(function() {
             if (controlCenterLoaded && controlCenter
@@ -122,7 +125,9 @@ Item {
                     verticalDock: root.verticalDock
                     sharedPanelOpen: networkPanel.requestedOpen
                         || bluetoothPanel.requestedOpen || root.controlCenterOpen
+                        || notificationPanel.requestedOpen
                     onPanelToggleRequested: {
+                        notificationPanel.close()
                         bluetoothPanel.close()
                         if (!networkPanel.requestedOpen)
                             root.closeControlCenter()
@@ -161,6 +166,30 @@ Item {
                 iconSize: systemTray.iconSize
                 dockHosted: root.dockHosted
                 verticalDock: root.verticalDock
+            }
+        }
+    }
+
+    Component {
+        id: notificationQuickControl
+        Item {
+            readonly property alias control: notificationToggle
+            NotificationHistoryToggle {
+                id: notificationToggle
+                anchors.centerIn: parent
+                iconSize: systemTray.iconSize
+                panelOpen: notificationPanel.requestedOpen
+                dockHosted: root.dockHosted
+                dockEdge: root.dockEdge
+                verticalDock: root.verticalDock
+                onPanelToggleRequested: {
+                    if (!notificationPanel.requestedOpen) {
+                        networkPanel.close()
+                        bluetoothPanel.close()
+                        root.closeControlCenter()
+                    }
+                    notificationPanel.toggle(notificationToggle)
+                }
             }
         }
     }
@@ -246,6 +275,11 @@ Item {
         id: statusAreaEditor
     }
 
+    NotificationHistoryPanel {
+        id: notificationPanel
+        dockHosted: root.dockHosted
+        dockEdge: root.dockEdge
+    }
     NetworkPanel {
         id: networkPanel
         dockHosted: root.dockHosted

@@ -153,7 +153,15 @@ Item {
         onTriggered: ctl._tryResolveBoot(true)
     }
 
-    function _scheduleEvaluate() { ctl._evaluateTimer.restart() }
+    function _scheduleEvaluate() {
+        if (!ctl._completed) return
+        if (!ctl._evaluateTimer.running) ctl._evaluateTimer.start()
+    }
+    function _evaluateInteraction() {
+        if (!ctl._completed) return
+        ctl._evaluateTimer.stop()
+        ctl._doEvaluate()
+    }
 
     // ────────────────────────────────────────────────────────────
     // Animation — a single NumberAnimation on revealProgress
@@ -280,8 +288,8 @@ Item {
     // ────────────────────────────────────────────────────────────
     // Main transition dispatch
     // ────────────────────────────────────────────────────────────
-    function _doEvaluate() {
-        ctl._recomputeConflict()
+    function _doEvaluate(conflictCurrent = false) {
+        if (!conflictCurrent) ctl._recomputeConflict()
         if (ctl.mode === "always") {
             // Only force-show once the saved mode is confirmed; during boot the
             // real mode may still be smart/persistent.
@@ -338,6 +346,7 @@ Item {
         ctl._hidePendingTimer.stop()
         ctl._revealDelayTimer.stop()
         ctl._tempHoldTimer.stop()
+        ctl._temporaryRevealHold = false
         ctl._anim.stop()
         ctl.revealProgress = 1
         ctl._setPhase("Shown")
@@ -405,7 +414,7 @@ Item {
     // ────────────────────────────────────────────────────────────
     // Input plumbing
     // ────────────────────────────────────────────────────────────
-    onModeChanged: ctl._scheduleEvaluate()
+    onModeChanged: ctl._evaluateInteraction()
     readonly property string _screenGeometryKey: targetScreen
         ? [targetScreen.x, targetScreen.y, targetScreen.width, targetScreen.height].join(":") : ""
     on_ScreenGeometryKeyChanged: ctl._scheduleEvaluate()
@@ -414,12 +423,12 @@ Item {
     onDockWidthChanged: ctl._scheduleEvaluate()
     onDockHeightChanged: ctl._scheduleEvaluate()
     onEdgeMarginChanged: ctl._scheduleEvaluate()
-    onPointerInsideDockChanged: ctl._scheduleEvaluate()
-    on_HandleHoveredChanged: ctl._scheduleEvaluate()
-    onEditingChanged: ctl._scheduleEvaluate()
-    onDraggingChanged: ctl._scheduleEvaluate()
-    onPopupOpenChanged: ctl._scheduleEvaluate()
-    onLauncherOpenChanged: ctl._scheduleEvaluate()
+    onPointerInsideDockChanged: ctl._evaluateInteraction()
+    on_HandleHoveredChanged: ctl._evaluateInteraction()
+    onEditingChanged: ctl._evaluateInteraction()
+    onDraggingChanged: ctl._evaluateInteraction()
+    onPopupOpenChanged: ctl._evaluateInteraction()
+    onLauncherOpenChanged: ctl._evaluateInteraction()
     onConfigReadyChanged: ctl._tryResolveBoot(false)
     onWindowDataReadyChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
 
@@ -435,11 +444,11 @@ Item {
             // React to an actual collision edge immediately; waiting on the
             // generic 80ms debounce made reveal/hide lag behind the window.
             if (ctl._recomputeConflict())
-                ctl._doEvaluate()
+                ctl._doEvaluate(true)
         }
         function onCurrentDesktopIdChanged() {
             if (ctl._recomputeConflict())
-                ctl._doEvaluate()
+                ctl._doEvaluate(true)
         }
     }
 

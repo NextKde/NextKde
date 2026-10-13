@@ -6,7 +6,7 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Non-negotiable rules
 
-1. Persist canonical desktop IDs such as `code.desktop`.
+1. Persist canonical desktop IDs such as `org.kde.kate.desktop`.
 2. Never compare a pinned desktop ID directly with a provider-specific raw
    window string. Resolve both through `AppIdentityService`.
 3. Never persist a Wayland `Toplevel`, a runtime window ID, activation state,
@@ -20,11 +20,27 @@ before adding Dock, Alt+Tab, preview, workspace, or app-menu behavior.
 
 ## Pointer magnification
 
-`DockIcon` measures pointer distance from its untransformed layout slot in
-`DockContainer` coordinates, including when the content row is rotated for a
-side Dock. The smoothstep distance curve sets a normalized target; one
-`FrameAnimation` follows it using the elapsed-time response in
-`DockMagnification.mjs`. Scale and lift derive from that same animated value.
+`DockContainer` measures pointer distance from untransformed layout slots in
+its content Row, including when that Row is rotated for a side Dock. A quintic smootherstep
+spatial field drives the group; pointer travel follows input directly, while
+one shared `FrameAnimation` eases entry/exit with a 26 ms time constant using
+the elapsed-time response in `DockMagnification.mjs`. The frame delta is capped
+at 1/30 second to avoid a jump after an idle period or stalled frame. Scale, lift and
+translations derive from the same frame snapshot.
+The container resolves one `hoveredApp` for labels, highlights and preview
+dwell from the pointer stored in the same published layout snapshot. It uses
+the shared painted horizontal bounds and the union of resting
+and lifted vertical bounds, preventing lift alone from cancelling hover.
+Rigid accessories retain their own hover handling and cannot own app hover.
+An 80 ms exit grace retains a latched pointer-presence state and the last scene
+position when the native hover handler briefly loses its surface; returning within the grace does not restart
+preview/name dwell. A reported position outside the input band still exits
+immediately. App-name labels wait 180 ms and have an empty input region, so
+the label itself cannot become a pointer target. Each container owns a single
+`DockAppNameTooltip` and dwell timer, retargeted from `hoveredApp`; standalone
+icons lazily load their fallback. Switching owners restarts dwell while
+unchanged ownership does not. Visible labels refresh their
+anchor after the shared frame is applied. Interactive previews keep their input.
 Do not put separate animations on the composed transforms or add a binary
 hover lift to the distance curve: those cause phase mismatch and slot-boundary
 jumps. Attention feedback is composed separately, without a second animation.
@@ -34,6 +50,20 @@ stops at the exact target rather than continuing to schedule idle frames.
 Icon slot sizes, hit testing, layout spacing and the existing magnification
 radius/maximum scale remain independent of the visual animation. Hosts without
 a shared magnification root retain single-icon hover feedback.
+
+Direct action feedback uses 45 ms press/70 ms highlight transitions. Window
+activation sends its leading request immediately and coalesces only subsequent
+requests in a bounded 24 ms window. Window presentation updates merge for 16 ms
+without resetting their deadline. Auto-hide interaction changes evaluate
+immediately; ordinary geometry changes use bounded 80 ms coalescing.
+
+Window previews dwell 220 ms on first entry, 75 ms while switching an already
+open preview, and recover a still-visible same-icon preview immediately. Their
+90 ms entrance starts on a render-frame callback rather than a fixed 16 ms
+timer. Info/music/temperature cards dwell 220 ms and enter over 100 ms. Closing
+handoff protection remains intact. Stack wheel events accumulate physical
+notches or touchpad pixels and merge once per frame instead of dropping events
+during a fixed cooldown. Pure text popups have empty pointer input regions.
 
 `tests/dock-magnification/test_response.mjs` checks response equivalence at
 30–240 Hz, reversal and settlement. `tests/dock-magnification/run.mjs` exercises
@@ -358,18 +388,18 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 10):
+Core user configuration fields (schema version 12):
 
 ```json
 {
-  "version": 10,
+  "version": 12,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
   "barHeight": 35,
   "iconOverrides": {},
   "dockItems": [
-    { "type": "app", "appId": "code.desktop" },
+    { "type": "app", "appId": "org.kde.dolphin.desktop" },
     { "type": "app", "appId": "org.kde.kate.desktop" }
   ],
   "pinnedAppIds": [],
@@ -381,9 +411,29 @@ Core user configuration fields (schema version 10):
   "windowGrouping": "grouped",
   "showLauncher": true,
   "showTrash": true,
-  "showRevealIndicator": true
+  "showRevealIndicator": true,
+  "hoverScale": null
 }
 ```
+
+Schema 12 keeps one `hoverScale` setting: the hovered icon's peak scale
+(1.0–3.0, displayed as 100–300%). Lift is derived as
+`0.2 * (effectiveHoverScale - 1)` of the icon size and follows the same
+neighbour influence as magnification. At 100%, both effects stop. `null`
+follows the active shell style; a number works in every style. Migration
+retains the old scale, clamps values above 3.0 and removes the independent
+`hoverLift` key introduced in schema 11. Settings and IPC expose only scale.
+
+The configured scale is a peak: crowded layouts reduce the shared wave to
+keep its painted slots within the output, including edge padding. A linear
+pass limits scale, lift and translations together; the adaptive resting icon
+size is unchanged by hover. At 100%, plate-gap tightening is disabled too.
+Relaxed layouts spend their empty middle slot on application growth through
+paint translations, keeping trailing controls and resting Row geometry fixed.
+Workspace layout publication uses resting physical width/height on every
+edge and does not subscribe to the live hover extent or glass shift.
+Settings serializes Dock requests and protects in-progress slider previews
+from unrelated replies.
 
 Schema 3 contains `visibilityMode` (see the next section), `windowGrouping`,
 the legacy icon appearance triplet (`iconMode`: `color | grayscale | tint`,

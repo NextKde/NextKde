@@ -94,11 +94,8 @@ PopupWindow {
     // the frame the new page commits.
     readonly property string outgoingPage: pageMotion.outgoingPage
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
-    // A standalone top Bar grows downward, so controls come first. A panel
-    // hosted by a bottom/side Dock grows away from the Dock, so keep the
-    // controls nearest the Dock and place notification history above them.
-    readonly property bool notificationFirst: dockHosted && dockEdge !== "top"
-    readonly property int mainControlsOffsetY: notificationFirst ? 186 : 0
+    readonly property bool dockFacingLayout: dockHosted && dockEdge !== "top"
+    readonly property int mainControlsOffsetY: 0
     signal networkRequested()
     signal bluetoothRequested()
     signal wifiNetworkSelected(var network)
@@ -154,7 +151,11 @@ PopupWindow {
 
     // The target screen (the bar's output). Cards live on the same screen.
     readonly property var targetScreen: ScreenLifecycle.activeScreen
-    readonly property int controlCenterHeight: 597
+    // Keep the main controls compact. The sound page needs its original
+    // 420px card plus both 20px margins; keep that room through its outgoing
+    // transition so neither the card nor its compositor blur is clipped.
+    readonly property int controlCenterHeight: requestedPage === "sound"
+        || displayedSubmenu === "sound" || outgoingPage === "sound" ? 460 : 411
     readonly property int controlCenterWidth: 336
     readonly property real effectiveBlur: dockHosted
         ? AppearanceConfigService.effectiveDockBlur
@@ -272,13 +273,8 @@ PopupWindow {
     // while it is visible. The effect aligns the whole declared shape set with
     // this region's top-left, so a shape that is declared but missing from the
     // region -- or the reverse -- slides the glass of *every* card by the
-    // difference. The overlay cards used to be left out on the grounds that they
-    // cover the primary area, but the notification-first layout puts the primary
-    // cards at y=258 while the session sheet stays at y=20: with an empty
-    // notification history (slotCard8 hidden) that is a 238px shift of the whole
-    // panel's glass. Gating on visibility keeps the two sets equal in every
-    // state -- a hidden card publishes no shape and contributes no area, and an
-    // empty card would otherwise blur a lingering frosted slab.
+    // difference. Overlay cards also publish shapes, so include their regions
+    // only while visible to keep the shape and blur sets aligned.
     Region { id: emptyRegion }
     Region {
         id: cardsBlurRegion
@@ -293,7 +289,6 @@ PopupWindow {
             slotCard5.visible ? slotCard5.blurRegion : emptyRegion,
             slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
             slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
-            slotCard8.visible ? slotCard8.blurRegion : emptyRegion,
             // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
             // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
             // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
@@ -387,7 +382,7 @@ PopupWindow {
                 return 0
             if (pageMotion.displayedPage !== c.pageTag)
                 return 0
-            return (panel.notificationFirst ? 1 : -1) * (1 - pageMotion.progress) * 8
+            return (panel.dockFacingLayout ? 1 : -1) * (1 - pageMotion.progress) * 8
         })
         c.enabled = Qt.binding(function() {
             return popupMotion.interactive && pageMotion.interactive
@@ -1623,168 +1618,6 @@ PopupWindow {
         }
     }
 
-    // ── Card 9: Notification history ─────────────────────────────────
-    // Session history grouped by app: dismissed/expired banners and DND
-    // notifications (which are never shown) land here. Each group header
-    // carries the app icon/name, and every row has its own close button.
-    ControlCenterCard {
-        id: slotCard8
-        coordinator: coordinator
-        // An empty history is not worth a permanently visible, permanently
-        // empty card taking up the bottom of the panel; only occupy that
-        // window/blur-region/hit-test space once there is something to show.
-        // cardShown (bound by the panel: hidden while a submenu/session sheet
-        // is open) is factored in here because this card overrides `visible`.
-        visible: cardShown && coordinator.cardAnchor !== null
-            && ControlCenterService.historyGroups.length > 0
-        offsetTop: panel.notificationFirst ? 20 : 403
-        offsetRight: 20
-        cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 296
-        // Keep notification history below the main controls in the top-bar layout.
-        cardHeight: 178
-        blurStrength: panel.effectiveBlur
-        liquidStrength: panel.effectiveLiquid
-
-        Item {
-            anchors { fill: parent; margins: 10 }
-
-            GlassText {
-                id: historyTitle
-                text: "通知历史"
-                color: ThemeService.foregroundColor
-                font { pixelSize: 12; weight: Font.Bold; family: "Noto Sans CJK SC" }
-                anchors { left: parent.left; top: parent.top }
-            }
-            GlassText {
-                text: "清空"
-                color: clearMouse.containsMouse ? "#0a84ff"
-                    : AppearanceTokens.surface.pick(
-                        AppearanceTokens.colors.surfaceContainerHigh,
-                        AppearanceTokens.content.glassInk(0.50))
-                font { pixelSize: 11; family: "Noto Sans CJK SC" }
-                anchors { right: parent.right; top: parent.top }
-                MouseArea {
-                    id: clearMouse
-                    anchors.fill: parent
-                    anchors.margins: -6
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        ControlCenterService.notificationHistory.clear()
-                        AppNotificationService.clearAll()
-                    }
-                }
-            }
-            ListView {
-                id: historyList
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: historyTitle.bottom
-                    topMargin: 6
-                    bottom: parent.bottom
-                }
-                model: ControlCenterService.historyGroups
-                clip: true
-                interactive: true
-                spacing: 6
-
-                // One group per app: a compact header + its notification rows.
-                delegate: Column {
-                    required property var modelData
-                    required property int index
-                    width: historyList.width
-
-                    Row {
-                        width: parent.width
-                        height: 18
-                        spacing: 5
-                        IconImage {
-                            width: 12; height: 12
-                            source: modelData.appIcon || ""
-                            // Theme icon: synchronous, see AppIcon.qml.
-                            asynchronous: false
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        GlassText {
-                            text: modelData.appName
-                            color: AppearanceTokens.content.glassInk(0.62)
-                            font { pixelSize: 10; weight: Font.DemiBold; family: "Noto Sans CJK SC" }
-                            elide: Text.ElideRight
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                    }
-                    Column {
-                        width: parent.width
-                        spacing: 3
-                        Repeater {
-                            model: modelData.items
-                            delegate: Item {
-                                required property var modelData
-                                required property int index
-                                width: historyList.width
-                                height: rowSummary.implicitHeight + (rowBody.visible ? rowBody.implicitHeight + 1 : 0)
-
-                                GlassText {
-                                    id: rowSummary
-                                    width: parent.width - removeButton.width - 6
-                                    text: modelData.summary.length > 0 ? modelData.summary : "通知"
-                                    color: ThemeService.foregroundColor
-                                    font { pixelSize: 11; weight: Font.Bold; family: "Noto Sans CJK SC" }
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-                                GlassText {
-                                    id: rowBody
-                                    anchors.top: rowSummary.bottom
-                                    anchors.topMargin: 1
-                                    width: parent.width - removeButton.width - 6
-                                    visible: text.length > 0
-                                    text: modelData.body
-                                    color: AppearanceTokens.content.glassInk(0.50)
-                                    font { pixelSize: 10; family: "Noto Sans CJK SC" }
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-                                GlassText {
-                                    id: removeButton
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "×"
-                                    color: removeMouse.containsMouse ? "#ff453a"
-                                        : AppearanceTokens.surface.pick(
-                                            AppearanceTokens.colors.surfaceContainerHigh,
-                                            AppearanceTokens.content.glassInk(0.42))
-                                    font { pixelSize: 13; weight: Font.Bold }
-                                    MouseArea {
-                                        id: removeMouse
-                                        anchors.fill: parent
-                                        anchors.margins: -5
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: ControlCenterService.removeHistoryById(modelData.notifId)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                GlassText {
-                    anchors.centerIn: parent
-                    visible: historyList.count === 0
-                    text: "暂无历史通知"
-                    color: AppearanceTokens.content.glassInk(0.30)
-                    font { pixelSize: 11; family: "Noto Sans CJK SC" }
-                }
-
-                // Wheel scrolling with inertia (notification history is the one list
-                // here that regularly outgrows its panel).
-                KosKineticScroll { flickable: historyList }
-            }
-        }
-    }
-
     // The session sheet is another page of the same popup.
     ControlCenterCard {
         id: sessionCard
@@ -1792,7 +1625,7 @@ PopupWindow {
         managedByCoordinator: false
         // Same slot as the Wi-Fi/Bluetooth submenu, so the session list is one
         // more page of the Control Center instead of a panel of its own.
-        offsetTop: panel.notificationFirst
+        offsetTop: panel.dockFacingLayout
             ? panel.controlCenterHeight - 20 - sessionCard.cardHeight
             : 20
         offsetRight: 20
@@ -2130,15 +1963,14 @@ PopupWindow {
 
             Row {
                 anchors {
-                    right: parent.right
+                    horizontalCenter: parent.horizontalCenter
                     bottom: parent.bottom
-                    rightMargin: 18
                     bottomMargin: 18
                 }
                 spacing: 12
 
                 Rectangle {
-                    width: 88
+                    width: 104
                     height: 32
                     radius: height / 2
                     color: sessionConfirm.contentControlFill
@@ -2207,7 +2039,7 @@ PopupWindow {
         // Top Bar submenus grow down from the systray. Bottom/side Dock
         // submenus instead keep their lower edge beside the systray/control
         // area, regardless of the selected submenu's individual height.
-        offsetTop: panel.notificationFirst
+        offsetTop: panel.dockFacingLayout
             ? panel.controlCenterHeight - 20 - submenuCard.cardHeight
             : 20
         offsetRight: 20

@@ -8,8 +8,13 @@ import QtQuick
 // white type with a restrained black readability edge. Callers can still
 // override the default color where semantic or accent text is required.
 Text {
+    // The Bar's mac-style ground paints a plate under the text, so the
+    // readability edge has nothing left to do there — it turns this off and
+    // lets its own ink carry the contrast.
+    property bool outlineEnabled: true
     color: AppearanceTokens.isDarkTheme ? "#ffffff" : "#000000"
-    style: AppearanceTokens.isDarkTheme ? Text.Outline : Text.Normal
-    styleColor: AppearanceTokens.isDarkTheme
+    style: outlineEnabled && AppearanceTokens.isDarkTheme
+        ? Text.Outline : Text.Normal
+    styleColor: outlineEnabled && AppearanceTokens.isDarkTheme
         ? Qt.rgba(0.03, 0.045, 0.07, 0.36) : "transparent"
 }

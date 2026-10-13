@@ -188,10 +188,13 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     const EffectiveAppearance eff = m_config.effectiveFor(window->windowClass(),
         {native->desktopFileName(), native->resourceClass()});
     const bool maximized = native->maximizeMode() == KWin::MaximizeFull;
-    const auto policy = window->isFullScreen() ? eff.states.fullscreen
+    // Fullscreen content must cover the output, regardless of appearance overrides.
+    const bool fullscreen = window->isFullScreen();
+    const auto policy = fullscreen ? StateSettings::Policy::Off
         : maximized ? eff.states.maximized : StateSettings::Policy::Inherit;
     const bool dropped = policy == StateSettings::Policy::Off;
     state.appearanceDropped = dropped;
+    state.fullscreen = fullscreen;
     const qreal scale = std::max<qreal>(0.01, native->targetScale());
     // Match KWin's pixel-snapped native corner radius; use the same value in
     // the decoration, inner outline, outer frame and both shadow layers.
@@ -205,15 +208,18 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     // Continuous mode clips the complete SSD/CSD frame in the compositor.
     // Keep its input sharp: native circular clipping would remove pixels
     // which the continuous contour still needs, or apply antialiasing twice.
-    const QVector4D target = dropped ? state.declaredRadius
+    const QVector4D target = fullscreen ? QVector4D() : dropped ? state.declaredRadius
         : continuous ? QVector4D() : state.radii.toVector();
-    const QVariant geometry = dropped ? state.declaredGeometryProperty : QVariant::fromValue(target);
+    const QVariant geometry = dropped && !fullscreen
+        ? state.declaredGeometryProperty : QVariant::fromValue(target);
     if (native->property(WindowRadiiProperty) != geometry) {
         native->setProperty(WindowRadiiProperty, geometry);
     }
-    const QVariant visualRadii = dropped ? state.declaredVisualRadiiProperty
+    const QVariant visualRadii = fullscreen ? QVariant::fromValue(QVector4D())
+        : dropped ? state.declaredVisualRadiiProperty
         : QVariant::fromValue(state.radii.toVector());
-    const QVariant exponent = dropped ? state.declaredExponentProperty
+    const QVariant exponent = fullscreen ? QVariant::fromValue(2.0)
+        : dropped ? state.declaredExponentProperty
         : QVariant::fromValue(continuous ? curveExponent(eff.corners.smoothness) : 2.0);
     if (native->property(VisualRadiiProperty) != visualRadii) {
         native->setProperty(VisualRadiiProperty, visualRadii);
@@ -325,7 +331,8 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
     if (decoration && decoration->property(DecorationAppearanceSupportedProperty).toBool()) {
         const auto shadow = state.usesDecorationShadow && atlas
             ? atlas->decorationShadow : std::shared_ptr<KDecoration3::DecorationShadow>();
-        const QVariant value = dropped ? state.declaredDecorationShadow : QVariant::fromValue(shadow);
+        const QVariant value = dropped && !fullscreen
+            ? state.declaredDecorationShadow : QVariant::fromValue(shadow);
         if (decoration->property(DecorationShadowProperty) != value) {
             decoration->setProperty(DecorationShadowProperty, value);
         }
@@ -350,7 +357,7 @@ void WindowAppearanceManager::prepare(KWin::EffectWindow *window, bool continuou
         // Detach the unused fallback, so it no longer enlarges window bounds.
         delete state.sceneShadow.data();
     }
-    if (dropped && state.nativeShadow) {
+    if (dropped && !fullscreen && state.nativeShadow) {
         state.nativeShadow->setOpacity(state.declaredNativeShadowOpacity);
     } else {
         applyOpacities(state);
@@ -408,7 +415,7 @@ void WindowAppearanceManager::applyOpacities(WindowState &state)
     }
     if (state.nativeShadow) {
         // Affect only the shadow node. Window/surface opacity is untouched.
-        state.nativeShadow->setOpacity(state.appearanceDropped
+        state.nativeShadow->setOpacity(state.fullscreen ? 0.0 : state.appearanceDropped
             ? state.declaredNativeShadowOpacity
             : state.usesDecorationShadow ? state.shadowOpacity : 0.0);
     }

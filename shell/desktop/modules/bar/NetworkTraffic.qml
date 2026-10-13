@@ -15,8 +15,16 @@ Item {
     // The readouts already take the glass tint through ThemeService; the
     // arrow glyph has to move with them or the two halves of one indicator
     // disagree. The ink follows the glass, so while 液态玻璃跟随外观模式 is off
-    // the arrow still strokes exactly the white it stroked before.
-    readonly property color glyphInk: AppearanceTokens.content.glassInk()
+    // the arrow still strokes exactly the white it stroked before. With the
+    // mac-style ground on, both halves take the strip's own ink instead.
+    readonly property color glyphInk: AppearanceTokens.bar.macStyle
+        ? ThemeService.barInk : AppearanceTokens.content.glassInk()
+    // The arrow's readability edge. It keeps the exact condition it had before
+    // and is dropped while the ground paints a plate under the mark. The two
+    // labels take the same condition (see the Texts below), where the edge was
+    // unconditional.
+    readonly property bool arrowOutlined: AppearanceTokens.isDarkTheme
+        && !AppearanceTokens.bar.macStyle
 
     implicitWidth: trafficContent.implicitWidth
     implicitHeight: 22
@@ -62,7 +70,7 @@ Item {
                 ctx.reset()
                 ctx.lineCap = "round"
                 ctx.lineJoin = "round"
-                if (AppearanceTokens.isDarkTheme) {
+                if (root.arrowOutlined) {
                     ctx.save()
                     ctx.strokeStyle = Qt.rgba(0, 0, 0, 0.38)
                     ctx.lineWidth = 1.35 + 2.2
@@ -79,15 +87,15 @@ Item {
             spacing: -1
             Text {
                 text: "下行 " + NetworkService.formatRate(NetworkService.downloadBytesPerSecond)
-                color: ThemeService.foregroundColor
-                style: Text.Outline
+                color: ThemeService.barInk
+                style: AppearanceTokens.bar.macStyle ? Text.Normal : Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
                 font { family: "SF Pro Display"; pixelSize: 9; weight: Font.DemiBold }
             }
             Text {
                 text: "上行 " + NetworkService.formatRate(NetworkService.uploadBytesPerSecond)
-                color: ThemeService.foregroundColor
-                style: Text.Outline
+                color: ThemeService.barInk
+                style: AppearanceTokens.bar.macStyle ? Text.Normal : Text.Outline
                 styleColor: Qt.rgba(0, 0, 0, 0.38)
                 font { family: "SF Pro Display"; pixelSize: 9; weight: Font.DemiBold }
             }

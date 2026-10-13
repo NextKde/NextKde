@@ -11,16 +11,17 @@
       "width": 1,
       "widthUnit": "physical",
       "appearance": "auto",
-      "colorMode": "theme",
+      "colorMode": "fixed",
+      "color": "#FFE0E0E0",
       "light": "#FF000000",
       "dark": "#FFFFFFFF",
-      "activeOpacity": 0.09,
-      "inactiveOpacity": 0.045
+      "activeOpacity": 0.16,
+      "inactiveOpacity": 0.08
     },
     "shadow": {
       "enabled": true,
       "dynamic": true,
-      "strength": 0.32,
+      "strength": 0.37,
       "minimumStrength": 0.08,
       "depthDecay": 0.7,
       "transitionMs": 180,
@@ -30,7 +31,7 @@
       "contactOpacity": 0.22,
       "ambientOpacity": 0.28
     },
-    "states": { "fullscreen": "inherit", "maximized": "inherit", "tiled": "inherit" }
+    "states": { "fullscreen": "off", "maximized": "inherit", "tiled": "inherit" }
   },
   "apps": {
     "org.kde.kate": {

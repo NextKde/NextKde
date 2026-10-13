@@ -73,6 +73,12 @@ Item {
     // glass inside a shared surface -- the desk-center widgets -- uses this,
     // because per-item compositor blur is not present on that surface.
     property bool useKwinEffect: true
+    // Set by a host that wants the compositor's plain frost rather than this
+    // panel's liquid finish. Withholding the shape declaration -- the geometry
+    // KWin draws refraction, glints and liquid noise from -- leaves only the
+    // blur region's own frosted plate, which is what the Bar's mac-style
+    // ground is: a tinted blur, never a lens. Every other host leaves it false.
+    property bool frostOnly: false
     // Opt-in: publish this panel's own blur strength to the compositor (protocol
     // v4 set_blur) instead of following the global kwinrc BlurStrength. Off by
     // default, so every existing surface keeps the global level and renders
@@ -221,7 +227,10 @@ Item {
         // material from it -- so leaving it on hands a self-painted card the
         // liquid finish it exists without. Dropping it leaves only the blur
         // region above, which is exactly the frost a tonal card asks for.
+        // `frostOnly` reaches the same place on purpose: a panel that asks for
+        // the blurred plate alone declares nothing either.
         shapeEnabled: root.visible && root.useKwinEffect && !root.tonal
+            && !root.frostOnly
         scrimEnabled: root.scrimEnabled
         scrimTint: root.scrimTint
         scrimCap: root._effectiveScrimCap * Math.max(0, Math.min(1, root.scrimOpacity))

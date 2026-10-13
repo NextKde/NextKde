@@ -20,6 +20,7 @@ AnimatedPopupWindow {
     }
     property bool pointerInside: popupMouse.containsMouse
     motionOrigin: Item.Bottom
+    openDuration: DockAnimation.infoPopupEntranceDuration
     readonly property bool monochrome: IconAppearanceService.mode !== "color"
 
     readonly property real safeLength: player?.lengthSupported

@@ -232,7 +232,10 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         m_menu.rect = QRectF();
     }
 
-    if (!sourceCapture && !window->isVisible()) {
+    if (window->isFullScreen() || (!sourceCapture && !window->isVisible())) {
+        if (window->isFullScreen() && m_menu.window == window) {
+            closeTileMenu();
+        }
         return;
     }
 
@@ -1247,7 +1250,7 @@ ButtonRenderer::Action ButtonRenderer::hitTest(const QPointF &logicalPos,
     const QList<KWin::EffectWindow *> windows = KWin::effects->stackingOrder();
     for (int i = windows.size() - 1; i >= 0; --i) {
         KWin::EffectWindow *w = windows[i];
-        if (!w || !w->isVisible()) {
+        if (!w || !w->isVisible() || w->isFullScreen()) {
             continue;
         }
         const auto found = m_hits.constFind(w);
@@ -1306,7 +1309,13 @@ void ButtonRenderer::clearHits(KWin::EffectWindow *window, bool clearSource)
 {
     m_hits.remove(window);
     if (clearSource) m_sourceHits.remove(window);
-    if (m_menu.window == window) m_menu.rect = QRectF();
+    if (m_menu.window == window) {
+        if (window->isFullScreen()) {
+            closeTileMenu();
+        } else {
+            m_menu.rect = QRectF();
+        }
+    }
 }
 
 void ButtonRenderer::forget(KWin::EffectWindow *window)

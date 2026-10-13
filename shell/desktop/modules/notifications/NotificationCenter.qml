@@ -1,3 +1,4 @@
+import QtQuick
 import Quickshell
 import Quickshell.Services.Notifications
 import qs.desktop.modules.bar
@@ -12,6 +13,28 @@ Scope {
 
     readonly property var targetScreen: ScreenLifecycle.activeScreen
 
+    function recordNotification(notification) {
+        if (!NotificationPolicyService.ready) return
+        NotificationPolicyService.remember(notification)
+        if (NotificationPolicyService.isBlocked(notification)) {
+            notification.tracked = false
+            return
+        }
+        notification.tracked = !ControlCenterService.doNotDisturbEnabled
+        AppNotificationService.recordNotification({
+            desktopEntry: notification.desktopEntry || "",
+            appName: notification.appName || "",
+            summary: notification.summary || "",
+            body: notification.body || "",
+            hints: notification.hints || ({})
+        })
+        notifGroupService.pushHistory(notification)
+    }
+    Component {
+        id: historyObserver
+        NotificationHistoryObserver {}
+    }
+
     NotificationServer {
         id: server
         bodySupported: true
@@ -23,26 +46,34 @@ Scope {
         keepOnReload: false
 
         onNotification: notification => {
-            // Count arrival events before tracked/untracked presentation is
-            // decided. Replacements are new message events even though they
-            // reuse one banner object.
-            AppNotificationService.recordNotification({
-                desktopEntry: notification.desktopEntry || "",
-                appName: notification.appName || "",
-                summary: notification.summary || "",
-                body: notification.body || "",
-                hints: notification.hints || ({})
+            // Quickshell updates a replacement in place without another
+            // server.notification signal. Watch the live object, including
+            // objects that DND leaves untracked, until its own destruction.
+            historyObserver.createObject(notification, {
+                notification: notification, record: root.recordNotification,
+                ready: Qt.binding(function() { return NotificationPolicyService.ready })
             })
-            // Do Not Disturb still accepts the notification at D-Bus level,
-            // but keeps it out of the visible banner stack. Untracked
-            // notifications never reach dismiss/expire, so snapshot them into
-            // the session history here or they would be lost entirely.
-            if (ControlCenterService.doNotDisturbEnabled) {
-                notification.tracked = false
-                notifGroupService.pushHistory(notification)
-            } else {
+            // Retain startup notifications until persistent policy is loaded;
+            // the banner surface stays hidden during that short window.
+            if (!NotificationPolicyService.ready)
                 notification.tracked = true
-            }
+        }
+    }
+
+    Connections {
+        target: NotificationPolicyService
+        function onBlockedKeysChanged() {
+            for (const notification of notifGroupService._collectNotifications())
+                if (NotificationPolicyService.isBlocked(notification))
+                    notification.tracked = false
+        }
+    }
+    Connections {
+        target: ControlCenterService
+        function onDoNotDisturbEnabledChanged() {
+            if (ControlCenterService.doNotDisturbEnabled)
+                for (const notification of notifGroupService._collectNotifications())
+                    notification.tracked = false
         }
     }
 
@@ -56,7 +87,7 @@ Scope {
 
     NotificationWindow {
         screen: root.targetScreen
-        visible: ScreenLifecycle.outputAvailable && root.targetScreen !== null
+        visible: NotificationPolicyService.ready && ScreenLifecycle.outputAvailable && root.targetScreen !== null
         groupService: notifGroupService
     }
 }

@@ -35,10 +35,11 @@ Item {
             width: 19
             height: 19
             kind: "temperature"
-            glyphColor: ThemeService.foregroundColor
+            glyphColor: ThemeService.barInk
             // The labels beside this glyph carry a Text.Outline edge; the
-            // glyph takes the same one so the row reads as a single mark.
-            outlined: ThemeService.isDark
+            // glyph takes the same one so the row reads as a single mark. The
+            // mac-style ground drops the edge on both halves at once.
+            outlined: ThemeService.isDark && !AppearanceTokens.bar.macStyle
             outlineColor: Qt.rgba(0, 0, 0, 0.40)
             anchors.verticalCenter: parent.verticalCenter
         }
@@ -49,8 +50,9 @@ Item {
 
             Text {
                 text: "平均温度 " + root.currentC + "°"
-                color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
+                color: ThemeService.barInk
+                style: ThemeService.isDark && !AppearanceTokens.bar.macStyle
+                    ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.40)
                 font {
                     family: "Noto Sans CJK SC, sans-serif"
@@ -61,8 +63,9 @@ Item {
 
             Text {
                 text: "最高温度 " + root.maximum5MinuteC + "°"
-                color: ThemeService.foregroundColor
-                style: ThemeService.isDark ? Text.Outline : Text.Normal
+                color: ThemeService.barInk
+                style: ThemeService.isDark && !AppearanceTokens.bar.macStyle
+                    ? Text.Outline : Text.Normal
                 styleColor: Qt.rgba(0, 0, 0, 0.40)
                 font {
                     family: "Noto Sans CJK SC, sans-serif"

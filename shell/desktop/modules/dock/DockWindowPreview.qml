@@ -19,6 +19,8 @@ PopupWindow {
     property var windows: []
     property real revealProgress: 0.0
     property bool closing: false
+    readonly property bool isWindowPreview: true
+    property bool entrancePending: false
 
     // Exposed to the owning DockIcon so it can bridge pointer movement across
     // the gap between two separate Wayland popup surfaces.
@@ -126,12 +128,12 @@ PopupWindow {
             closing = false
             preview.visible = true
             revealProgress = 0.0
-            previewRevealStart.restart()
+            preview.entrancePending = true
             return
         }
         if (!preview.visible || closing)
             return
-        previewRevealStart.stop()
+        preview.entrancePending = false
         previewEntrance.stop()
         previewHandoff.stop()
         closing = true
@@ -139,7 +141,7 @@ PopupWindow {
     }
 
     function dismissDockPopupImmediately() {
-        previewRevealStart.stop()
+        preview.entrancePending = false
         previewEntrance.stop()
         previewHandoff.stop()
         previewExit.stop()
@@ -148,11 +150,10 @@ PopupWindow {
         preview.visible = false
     }
 
-    Timer {
-        id: previewRevealStart
-        interval: 16
-        repeat: false
+    FrameAnimation {
+        running: preview.entrancePending && preview.visible && !preview.closing
         onTriggered: {
+            preview.entrancePending = false
             if (preview.visible && !preview.closing)
                 previewEntrance.restart()
         }
@@ -163,7 +164,7 @@ PopupWindow {
         target: preview
         property: "revealProgress"
         to: 1.0
-        duration: 120
+        duration: DockAnimation.windowPreviewEntranceDuration
         easing.type: DockAnimation.elementEnterEasing
     }
 
@@ -215,10 +216,12 @@ PopupWindow {
         }
         radius: 14
         cornerExponent: AppearanceTokens.shape.cornerExponent
-        baseColor: ThemeService.backgroundColor
-        surfaceOpacity: 0.88
-        materialDepth: 2
-        material: "clear"
+        scrimEnabled: AppearanceTokens.surface.usesBackdrop
+        // Same tint recipe as the launcher surface: the shared adaptive
+        // scrim at its "transparent" preset, no custom base fill, material
+        // or depth overrides on top of the common liquid glass.
+        scrimLevel: "transparent"
+        scrimOpacity: 1
 
         HoverHandler {
             id: backgroundHover

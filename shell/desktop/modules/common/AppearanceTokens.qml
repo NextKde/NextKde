@@ -457,6 +457,56 @@ QtObject {
         readonly property string surfaceMode: "transparent"
         readonly property bool unifiedWithDock:
             AppearanceConfigService.barIntegratedWithDock
+
+        // ── mac-style ground ────────────────────────────────────────────────
+        // True while the standalone Bar wears the macOS look: a blurred,
+        // tinted ground of its own instead of floating type kept legible by
+        // outlines. An integrated Bar lives inside the Dock's glass and keeps
+        // the Dock's outlines, so the style must never reach it -- hence the
+        // integration term, not the style choice alone.
+        readonly property bool macStyle:
+            AppearanceConfigService.barMacStyle
+                && !AppearanceConfigService.barIntegratedWithDock
+        // The ground's tint opacity; it only draws while the style is on. The
+        // settings slider produces 5%..85% and the shell clamps 0..1.
+        readonly property real macTint:
+            AppearanceConfigService.barMacTint
+        // How bright the thing behind the Bar is. The shell already samples the
+        // wallpaper -- the dominant colour the context menus tint their glass
+        // with -- so its luminance is the estimate; until one has been sampled
+        // the system window colour stands in, which is what the display-mode
+        // branch effectively measured before this.
+        readonly property color macBackdrop:
+            WallpaperColorSource.ready
+                ? WallpaperColorSource.primary : tokens.systemPalette.window
+        readonly property real macBackdropLuminance:
+            macBackdrop.r * 0.2126 + macBackdrop.g * 0.7152
+                + macBackdrop.b * 0.0722
+        // The plate opposes the backdrop: a bright wallpaper takes the dark
+        // grey so the strip separates from it, a dark wallpaper the light
+        // grey. Both greys are the macOS vibrancy neutrals, deliberately
+        // untinted so the strip reads as a system grey rather than as a
+        // coloured plate.
+        readonly property bool macPlateIsLight:
+            macBackdropLuminance <= 0.5
+        readonly property color macTintColor:
+            macPlateIsLight
+                ? Qt.rgba(0.961, 0.961, 0.969, 1.0)   // #F5F5F7
+                : Qt.rgba(0.114, 0.114, 0.122, 1.0)   // #1D1D1F
+        readonly property real macPlateLuminance:
+            macTintColor.r * 0.2126 + macTintColor.g * 0.7152
+                + macTintColor.b * 0.0722
+        // What the strip actually looks like: the blurred backdrop *under* the
+        // plate at the chosen opacity. ThemeService.barInk picks its ink
+        // against this blend rather than against the plate alone, so the type
+        // stays readable at every slider position -- at a low tint the strip
+        // is still mostly the wallpaper, and ink flipped against the plate
+        // there would be white on a bright backdrop.
+        readonly property real macStripLuminance:
+            macBackdropLuminance
+                + (macPlateLuminance - macBackdropLuminance) * macTint
+        readonly property bool macStripIsLight:
+            macStripLuminance > 0.5
     }
 
     readonly property QtObject widget: QtObject {

@@ -66,6 +66,7 @@ private:
         bool usesDecorationShadow = false;
         std::shared_ptr<const WindowAppearance::ShadowAtlas> shadowAtlas;
         bool appearanceDropped = false;
+        bool fullscreen = false;
         QPointer<KWin::OutlinedBorderItem> outline;
         QPointer<KWin::OutlinedBorderItem> frame;
         QPointer<KWin::Item> continuousBounds;

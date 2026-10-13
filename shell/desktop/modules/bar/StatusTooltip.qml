@@ -23,6 +23,9 @@ AnimatedPopupWindow {
     implicitWidth: Math.max(root.minimumWidth, tooltipColumn.implicitWidth + 18)
     implicitHeight: tooltipColumn.implicitHeight + 12
     color: "transparent"
+    openDuration: 70
+    closeDuration: 70
+    mask: Region { item: null }
 
     anchor {
         item: root.anchorItem

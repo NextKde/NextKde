@@ -27,11 +27,14 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     // Hover is an explicit pointer affordance: the icon lifts and grows while
     // its layout slot remains unchanged, so adaptive Dock geometry is stable.
-    readonly property int   iconHoverDuration:  AppearanceTokens.motion.fastDuration
-    readonly property real  iconHoverScale:     AppearanceTokens.dock.hoverScale
+    // The peak scale is the user's dock setting when set, else the style token
+    // (DockIcon reads the same effective value for its per-frame curve).
+    readonly property int   iconHoverDuration:  70
+    readonly property real  iconHoverScale:     ConfigService.effectiveHoverScale
     readonly property var   iconHoverEasing:    AppearanceTokens.motion.standardEasing
-    readonly property int   iconHighlightDuration: 140
-    readonly property int   iconPressHighlightDuration: 80
+    // Paint feedback settles quickly; it must not trail direct pointer motion.
+    readonly property int   iconHighlightDuration: 70
+    readonly property int   iconPressHighlightDuration: 45
 
     // Retain the legacy single-icon spring for hosts without a shared pointer.
     // The distance-based fisheye below does not use this fixed-step integrator.
@@ -39,11 +42,13 @@ QtObject {
     readonly property real  iconDamping:        0.40
     readonly property real  iconMass:           0.60
 
-    // Time constant for the frame-synchronized fisheye response: about 97 ms
+    // Time constant for the frame-synchronized entry/exit response: about 60 ms
     // to reach 90%, independent of display refresh rate. Epsilon is in
     // normalized influence units (well below a hundredth of a visual pixel).
-    readonly property real magnificationResponseSeconds: 0.042
+    readonly property real magnificationResponseSeconds: 0.026
     readonly property real magnificationEpsilon: 0.0001
+    readonly property int magnificationExitGrace: 80
+    readonly property int appNameTooltipDelay: 180
 
     // ═══════════════════════════════════════════════════════════
     // Music player expand / collapse
@@ -82,11 +87,15 @@ QtObject {
     readonly property var   smartHideHideEasing:      Easing.InCubic
     readonly property var   smartHideRevealEasing:    Easing.OutCubic
     readonly property int   smartHideBootWaitLimit:    450   // max wait for config+KWin snapshot
-    readonly property int   smartHideMinRemaining:      70   // floor for reversible animation
+    readonly property int   smartHideMinRemaining:      16   // tiny reversals need only one nominal frame
     readonly property int   smartHideUrgentRevealMs:   2200  // §5.8 temporary reveal for an urgent window
     // Window previews should feel like a direct hover affordance, while still
     // ignoring brief pointer passes across neighbouring Dock icons.
-    readonly property int   windowPreviewDelay:         300
+    readonly property int   windowPreviewDelay:         220
+    readonly property int   windowPreviewSwitchDelay:    75
+    readonly property int   windowPreviewEntranceDuration: 90
+    readonly property int   infoPopupOpenDelay:          220
+    readonly property int   infoPopupEntranceDuration:   100
     // Leave enough hand-off time to move from the Dock icon into the separate
     // preview surface, while keeping the preview responsive when abandoned.
     readonly property int   windowPreviewCloseDelay:     130

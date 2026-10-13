@@ -323,6 +323,31 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
     if (it == m_reservations.end() || !m_shader) {
         return false;
     }
+    KWin::Region deviceClip = region & viewport.deviceRect();
+    const auto *fullscreenEffect = KWin::effects->activeFullScreenEffect();
+    if (!morph && fullscreenEffect && fullscreenEffect->inherits("KWin::SlideEffect")
+        && (mask & PAINT_WINDOW_TRANSFORMED)
+        && data.scale() == QVector3D(1, 1, 1) && qFuzzyIsNull(data.rotationAngle())) {
+        // Slide paints each desktop once per output. Its destination clip
+        // alone lets the expanded shadow of a window on the right enter the
+        // left output's pass, even though the frame never belonged there.
+        // Move only source outputs touched by the actual frame, then intersect
+        // with Slide's desktop clip. A window spanning outputs keeps both.
+        KWin::Region sourceOutputs;
+        const QPointF translation(data.xTranslation(), data.yTranslation());
+        for (auto *output : KWin::effects->screens()) {
+            const QRectF outputGeometry(output->geometry());
+            if (QRectF(window->frameGeometry()).intersects(outputGeometry)) {
+                sourceOutputs |= viewport.mapToDeviceCoordinatesAligned(
+                    KWin::RectF(outputGeometry.translated(translation)));
+            }
+        }
+        deviceClip &= sourceOutputs;
+    }
+    // Empty output/desktop passes must not capture or draw the shared source.
+    if (deviceClip.isEmpty()) {
+        return true;
+    }
     auto &cache = it.value();
     const qreal sourceScale = window->screen()->scale();
     const auto reject = [this, window, sourceScale] {
@@ -404,7 +429,6 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
         m_shader->setUniform(m_uniforms.shadow, QVector4D(style.shadow.contactBlur * scale,
             ambient * scale, style.shadow.contactOpacity, style.shadow.ambientOpacity));
     }
-    Q_UNUSED(mask)
     // UVs survive the mesh deformation. Compute the continuous contour in
     // source coordinates, then deform its coverage together with the buttons.
     KWin::ShaderBinder binder(m_shader.get());
@@ -438,16 +462,15 @@ bool ContinuousClip::paint(const KWin::RenderTarget &target,
     m_shader->setUniform(KWin::GLShader::IntUniform::TextureHeight, cache.texture->height());
     m_shader->setColorspaceUniforms(KWin::ColorDescription::sRGB,
         target.colorDescription(), KWin::RenderingIntent::Perceptual);
-    const bool clipping = region != KWin::Region::infinite();
-    const auto clip = clipping ? viewport.transform().map(region, target.transformedSize()) : KWin::Region::infinite();
-    if (clipping) glEnable(GL_SCISSOR_TEST);
+    const auto clip = viewport.transform().map(deviceClip, target.transformedSize());
+    glEnable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     cache.texture->bind();
-    vbo->draw(clip, GL_TRIANGLES, 0, geometry.count(), clipping);
+    vbo->draw(clip, GL_TRIANGLES, 0, geometry.count(), true);
     cache.texture->unbind();
     glDisable(GL_BLEND);
-    if (clipping) glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_SCISSOR_TEST);
     vbo->unbindArrays();
     // The morph is local to this completed draw. WindowPaintData is copy
     // constructible but not assignable; callers need no mutated copy back.

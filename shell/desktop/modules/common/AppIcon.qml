@@ -8,6 +8,7 @@ import Quickshell.Widgets
 Item {
     id: root
     property string source: ""
+    readonly property int imageStatus: renderer.item?.imageStatus ?? Image.Null
 
     // Icon appearance controls
     property real   opacityMultiplier: 1.0
@@ -41,14 +42,23 @@ Item {
     // builds the new one in the same frame, so entering or leaving the effect
     // path always yields artwork that was born in the state it is shown in.
     Loader {
+        id: renderer
         anchors.fill: parent
         sourceComponent: root.needsEffect ? effectIcon : directIcon
     }
+
+    // IconImage exposes image metrics through backer, not on its wrapper.
+    // Both renderer paths report the same aspect-fitted artwork dimensions.
+    readonly property real paintedWidth: renderer.item ? renderer.item.paintedWidth : 0
+    readonly property real paintedHeight: renderer.item ? renderer.item.paintedHeight : 0
 
     Component {
         id: directIcon
 
         IconImage {
+            readonly property int imageStatus: backer.status
+            readonly property real paintedWidth: backer.paintedWidth
+            readonly property real paintedHeight: backer.paintedHeight
             source: root.source
             smooth: root.smooth
             asynchronous: root.asynchronous
@@ -61,6 +71,9 @@ Item {
         id: effectIcon
 
         Item {
+            readonly property int imageStatus: effectImage.backer.status
+            readonly property real paintedWidth: effectImage.backer.paintedWidth
+            readonly property real paintedHeight: effectImage.backer.paintedHeight
             IconImage {
                 id: effectImage
                 anchors.fill: parent

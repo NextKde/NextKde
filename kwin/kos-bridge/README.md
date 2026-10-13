@@ -420,7 +420,9 @@ shared decoration shadows and the CSD eight-tile fallback.
 Continuous mode uses a damage-driven offscreen window-content cache, with
 a 256 MiB texture budget and GPU size checks; unsupported/excess windows fall
 back to native arcs. It adds GPU rendering work for changing content and resize.
-It does not capture the background. Fullscreen keeps rounded corners by default.
+It does not capture the background. Fullscreen always uses square corners and
+hides KOS outlines, frames, shadows and traffic-light controls, regardless of
+appearance overrides. Leaving fullscreen restores the normal window appearance.
 Glass honors the unified geometry property to avoid applying a cached arc again.
 
 The draw chain is Glass (20), Dock/Stage animations (50), then Bridge (100).

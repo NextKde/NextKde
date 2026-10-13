@@ -915,6 +915,12 @@ public:
         callDock({QStringLiteral("updateDockStyle"), style});
     }
 
+    // One peak-scale setting also drives proportional hover lift in the Shell.
+    Q_INVOKABLE void updateDockHoverScale(double scale) {
+        callDock({QStringLiteral("updateHoverScale"),
+                  QString::number(scale, 'f', 4)});
+    }
+
     Q_INVOKABLE void updateDockIconMode(const QString &mode) {
         callDock({QStringLiteral("updateIconMode"), mode});
     }
@@ -1346,6 +1352,20 @@ public:
         callAppearance({QStringLiteral("updateBarLayoutMode"), mode});
     }
 
+    // The Bar's mac-style ground: the style choice, then the tint's opacity.
+    // 0 is the default Bar; with the style on, the tint travels as a
+    // three-decimal number, the shell clamps it to 0..1 and the page's slider
+    // only produces values in its own narrower range.
+    Q_INVOKABLE void updateBarMacStyle(bool enabled) {
+        callAppearance({QStringLiteral("updateBarMacStyle"),
+                        enabled ? QStringLiteral("true") : QStringLiteral("false")});
+    }
+
+    Q_INVOKABLE void updateBarMacTint(double tint) {
+        callAppearance({QStringLiteral("updateBarMacTint"),
+                        QString::number(tint, 'f', 3)});
+    }
+
     Q_INVOKABLE void updateDockWindowAnimationStyle(const QString &style) {
         callAppearance({QStringLiteral("updateDockWindowAnimationStyle"), style});
     }
@@ -1461,6 +1481,12 @@ private:
         StageSidebar,
     };
 
+    struct DockRequest {
+        QStringList arguments;
+        QString fallbackError;
+        RequestKind kind;
+    };
+
     QVariantMap snapshotFromReply(const QString &payload) {
         if (payload.isEmpty())
             return {};
@@ -1488,6 +1514,11 @@ private:
             // every snapshot refresh.
             {QStringLiteral("contentStyle"), object.value(QStringLiteral("contentStyle")).toString()},
             {QStringLiteral("dockStyle"), object.value(QStringLiteral("dockStyle")).toString()},
+            // Hover magnification. The shell sends the effective values, so an
+            // untouched profile opens on exactly what the Dock is drawing; the
+            // fallbacks match the macOS defaults the page starts with.
+            {QStringLiteral("hoverScale"),
+             object.value(QStringLiteral("hoverScale")).toDouble(1.19)},
             {QStringLiteral("iconMode"), object.value(QStringLiteral("iconMode")).toString()},
             {QStringLiteral("iconOpacity"), object.value(QStringLiteral("iconOpacity")).toDouble()},
             {QStringLiteral("iconTintColor"), object.value(QStringLiteral("iconTintColor")).toString()},
@@ -1659,6 +1690,13 @@ private:
                 barVisibility.isEmpty() ? QStringLiteral("always") : barVisibility},
             {QStringLiteral("barLayoutMode"),
                 object.value(QStringLiteral("barLayoutMode")).toString(QStringLiteral("transparent"))},
+            // A shell older than this page has neither key; the fallbacks are
+            // the off/30% values such a shell renders with, so the selector and
+            // the slider agree with the Bar even before the first write.
+            {QStringLiteral("barMacStyle"),
+                object.value(QStringLiteral("barMacStyle")).toBool(false)},
+            {QStringLiteral("barMacTint"),
+                object.value(QStringLiteral("barMacTint")).toDouble(0.30)},
             {QStringLiteral("dockWindowAnimationStyle"),
                 object.value(QStringLiteral("dockWindowAnimationStyle")).toString()},
             {QStringLiteral("tokenVersion"), object.value(QStringLiteral("tokenVersion")).toInt()},
@@ -1923,6 +1961,27 @@ private:
                   QStringLiteral("Dock 设置请求失败"), RequestKind::Dock);
     }
 
+    void pumpDockRequests() {
+        if (m_dockBusy || m_dockQueue.isEmpty()) return;
+        m_dockBusy = true;
+        const DockRequest request = m_dockQueue.takeFirst();
+        startShellAttempt(QStringLiteral("dock-settings"), request.arguments,
+                          request.fallbackError, request.kind,
+                          shellDirectories(), 0, 0, {});
+    }
+
+    QVariantMap latestDockState(const QString &payload) {
+        const QVariantMap state = snapshotFromReply(payload);
+        // Intermediate acknowledgements clear pending flags without replacing
+        // a newer selection that is still queued for the Shell.
+        return m_dockQueue.isEmpty() ? state : QVariantMap{};
+    }
+
+    void finishDockRequest() {
+        m_dockBusy = false;
+        pumpDockRequests();
+    }
+
     void callWallpaper(const QStringList &arguments) {
         // Serialize mutations so rapid multi-selection cannot apply out of order.
         if (arguments.value(0) == QStringLiteral("snapshot") && m_wallpaperBusy)
@@ -2047,6 +2106,11 @@ private:
 
     void callShell(const QString &target, const QStringList &arguments,
                    const QString &fallbackError, RequestKind kind) {
+        if (target == QStringLiteral("dock-settings")) {
+            m_dockQueue.append({arguments, fallbackError, kind});
+            pumpDockRequests();
+            return;
+        }
         startShellAttempt(target, arguments, fallbackError, kind,
                           shellDirectories(), 0, 0, {});
     }
@@ -2207,10 +2271,12 @@ private:
     void handleReply(RequestKind kind, const QString &payload) {
         switch (kind) {
         case RequestKind::Dock:
-            emit dockSnapshotChanged(snapshotFromReply(payload));
+            emit dockSnapshotChanged(latestDockState(payload));
+            finishDockRequest();
             break;
         case RequestKind::DockBuiltinVisibility:
-            emit dockBuiltinVisibilityChanged(snapshotFromReply(payload));
+            emit dockBuiltinVisibilityChanged(latestDockState(payload));
+            finishDockRequest();
             break;
         case RequestKind::Wallpaper: {
             const QVariantMap state = wallpaperSnapshotFromReply(payload);
@@ -2223,10 +2289,12 @@ private:
             break;
         }
         case RequestKind::DockNotificationBadgeVisibility:
-            emit dockNotificationBadgeVisibilityChanged(snapshotFromReply(payload));
+            emit dockNotificationBadgeVisibilityChanged(latestDockState(payload));
+            finishDockRequest();
             break;
         case RequestKind::DockRevealIndicatorVisibility:
-            emit dockRevealIndicatorVisibilityChanged(snapshotFromReply(payload));
+            emit dockRevealIndicatorVisibilityChanged(latestDockState(payload));
+            finishDockRequest();
             break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
@@ -2299,9 +2367,11 @@ private:
         switch (kind) {
         case RequestKind::Dock:
             emit dockSnapshotChanged({});
+            finishDockRequest();
             break;
         case RequestKind::DockBuiltinVisibility:
             emit dockBuiltinVisibilityChanged({});
+            finishDockRequest();
             break;
         case RequestKind::Wallpaper:
             m_wallpaperBusy = false;
@@ -2310,9 +2380,11 @@ private:
             break;
         case RequestKind::DockNotificationBadgeVisibility:
             emit dockNotificationBadgeVisibilityChanged({});
+            finishDockRequest();
             break;
         case RequestKind::DockRevealIndicatorVisibility:
             emit dockRevealIndicatorVisibilityChanged({});
+            finishDockRequest();
             break;
         case RequestKind::Appearance:
             emit appearanceSnapshotChanged({});
@@ -2354,6 +2426,8 @@ private:
         emit lastErrorChanged();
     }
 
+    bool m_dockBusy = false;
+    QList<DockRequest> m_dockQueue;
     bool m_wallpaperBusy = false;
     QList<QStringList> m_wallpaperQueue;
     QString m_lastError;

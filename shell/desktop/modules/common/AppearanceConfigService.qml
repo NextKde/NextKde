@@ -165,6 +165,17 @@ QtObject {
     property bool barIntegratedWithDock: false
     property string barVisibilityMode: "always" // "always" | "smart" | "persistent"
     property string barLayoutMode: "transparent" // "full" | "floating" | "transparent"
+    // The Bar's macOS-style ground. `barMacStyle` is the style choice -- off is
+    // the default Bar, outlines and all. With it on the Bar publishes its
+    // backdrop blur region even in the transparent layout, and paints a
+    // light/dark grey tint between that blur and its content, so the strip
+    // stays legible over any wallpaper without relying on text outlines.
+    // `barMacTint` is that tint's opacity and only means anything while the
+    // style is on; the blur strength itself follows the compositor's own
+    // region-material frost, so the tint is the one adjustable value. The
+    // settings page writes both.
+    property bool barMacStyle: false
+    property real barMacTint: 0.30
     property string dockWindowAnimationStyle: "scale"
     // Which individual surfaces are shown. Both lists hold the ids that are
     // *hidden*; an absent id is visible, so a newly added widget or StatusArea
@@ -545,6 +556,25 @@ QtObject {
         return true
     }
 
+    function updateBarMacStyle(rawValue) {
+        const value = _toBool(rawValue)
+        if (barMacStyle === value)
+            return false
+        barMacStyle = value
+        saveTimer.restart()
+        return true
+    }
+
+    function updateBarMacTint(rawValue) {
+        const value = _normalized(rawValue)
+        if (!Number.isFinite(value)
+                || Math.abs(barMacTint - value) <= 0.001)
+            return false
+        barMacTint = value
+        saveTimer.restart()
+        return true
+    }
+
     function updateDockWindowAnimationStyle(rawStyle) {
         const style = String(rawStyle)
         if (!isValidDockWindowAnimationStyle(style)
@@ -614,7 +644,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 29,
+            version: 30,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -658,6 +688,8 @@ QtObject {
             barIntegratedWithDock: service.barIntegratedWithDock,
             barVisibilityMode: service.barVisibilityMode,
             barLayoutMode: service.barLayoutMode,
+            barMacStyle: service.barMacStyle,
+            barMacTint: service.barMacTint,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
@@ -736,6 +768,12 @@ QtObject {
                     const hasBarIntegration = typeof object.barIntegratedWithDock === "boolean"
                     const barVisibility = String(object.barVisibilityMode ?? "")
                     const barLayout = String(object.barLayoutMode ?? "")
+                    // v30 adds the Bar's mac-style ground. A file written
+                    // before it has neither key, and the off/30% values are
+                    // exactly the appearance those installations already had,
+                    // so a missing pair is not a reason to rewrite the file.
+                    const hasBarMacStyle = typeof object.barMacStyle === "boolean"
+                        && Number.isFinite(Number(object.barMacTint))
                     const animationStyle = String(object.dockWindowAnimationStyle ?? "")
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key, and the empty arrays they fall back to
@@ -798,6 +836,12 @@ QtObject {
                         service.barVisibilityMode = barVisibility
                     if (service.isValidBarLayoutMode(barLayout))
                         service.barLayoutMode = barLayout
+                    if (hasBarMacStyle) {
+                        service.barMacStyle = object.barMacStyle
+                        const barMacTint = service._normalized(object.barMacTint)
+                        if (Number.isFinite(barMacTint))
+                            service.barMacTint = barMacTint
+                    }
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
                     if (service.isValidGlassStyle(glassStyle))
@@ -900,7 +944,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 29
+                    if (Number(object.version) !== 30
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
@@ -908,6 +952,7 @@ QtObject {
                             || !hasBarIntegration
                             || !hasGlassFollows
                             || !hasSpatialWallpaper
+                            || !hasBarMacStyle
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
                             || !service.isValidGlassStyle(glassStyle)

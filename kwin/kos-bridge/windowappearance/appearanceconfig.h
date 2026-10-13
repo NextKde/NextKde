@@ -73,12 +73,12 @@ struct OutlineSettings
     qreal width = 1.0;
     WidthUnit widthUnit = WidthUnit::Physical;
     WindowTone appearance = WindowTone::Auto;
-    ColorMode mode = ColorMode::Theme;
-    QColor fixedColor = QColor(0x80, 0x80, 0x80);
+    ColorMode mode = ColorMode::Fixed;
+    QColor fixedColor = QColor(0xe0, 0xe0, 0xe0);
     QColor light = QColor(Qt::black);
     QColor dark = QColor(Qt::white);
-    qreal activeOpacity = 0.09;
-    qreal inactiveOpacity = 0.045;
+    qreal activeOpacity = 0.16;
+    qreal inactiveOpacity = 0.08;
 
     QColor colorFor(bool sessionDark) const;
 };
@@ -87,7 +87,7 @@ struct ShadowSettings
 {
     bool enabled = true;
     bool dynamic = true;
-    qreal strength = 0.32;
+    qreal strength = 0.37;
     qreal minimumStrength = 0.08;
     qreal depthDecay = 0.7;
     int transitionMs = 180;
@@ -114,7 +114,8 @@ struct StateSettings
     // decided here (see the plan, section 10) -- the value is carried but the
     // effect currently behaves as `Inherit` for tiles.
     enum class Policy { Off, Square, Inherit };
-    Policy fullscreen = Policy::Inherit;
+    // Retained for configuration compatibility; fullscreen always drops KOS chrome.
+    Policy fullscreen = Policy::Off;
     Policy maximized = Policy::Inherit;
     Policy tiled = Policy::Inherit;
 };

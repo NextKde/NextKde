@@ -32,3 +32,8 @@ ControlCenterCard 1.0 ControlCenterCard.qml
 ControlCenterSlider 1.0 ControlCenterSlider.qml
 StatusTooltip 1.0 StatusTooltip.qml
 ControlCenterSelection 1.0 ControlCenterSelection.qml
+NotificationHistoryPanel 1.0 NotificationHistoryPanel.qml
+NotificationHistoryToggle 1.0 NotificationHistoryToggle.qml
+NotificationHistoryGroup 1.0 NotificationHistoryGroup.qml
+NotificationHistoryEntry 1.0 NotificationHistoryEntry.qml
+NotificationSourceIcon 1.0 NotificationSourceIcon.qml

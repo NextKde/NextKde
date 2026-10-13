@@ -54,6 +54,17 @@ QtObject {
     // light surface, and light ink on a dark surface. This role is shared by
     // launcher labels, symbolic tray icons, Dock glyphs and status content.
     readonly property color foregroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, (isDark ? darkFg : lightFg))
+    // The Bar's ink while the mac style owns the ground. Normally the Bar
+    // borrows the glass foreground -- white on the dark glass, which is
+    // exactly why its labels and glyphs carry a readability outline. With the
+    // strip on there is a tinted plate behind them, and the ink flips against
+    // what the strip actually looks like -- the wallpaper blended with the
+    // plate at the chosen tint (AppearanceTokens.bar.macStripIsLight) -- so
+    // black type lands on the light end of the strip and white on the dark
+    // end at every slider position, not just at full tint.
+    readonly property color barInk: AppearanceTokens.bar.macStyle
+        ? (AppearanceTokens.bar.macStripIsLight ? "#000000" : "#ffffff")
+        : foregroundColor
     readonly property color secondaryForegroundColor: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, (isDark ? darkSecondaryFg : lightSecondaryFg))
     readonly property color tertiaryForegroundColor: AppearanceTokens.surface.pick(Qt.rgba(AppearanceTokens.colors.surfaceVariantForeground.r,
             AppearanceTokens.colors.surfaceVariantForeground.g,

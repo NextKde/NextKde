@@ -33,7 +33,20 @@ const MAX_WIDTH_RATIO = 0.98
 // long icon column keeps breathing room above and below instead of visually
 // touching both screen edges.
 const MAX_HEIGHT_RATIO = 0.95
-const ACTIVE_BG_GAP_RATIO = 0.1 // icon/background gap as a fraction of iconSize
+const ACTIVE_BG_CLEARANCE_RATIO = 0.035
+
+// Reserve clearance at the rounded corner, not just along the straight edge.
+// A square artwork corner is sqrt(2) * (radius - padding) from the arc centre;
+// require that distance to be at most radius - clearance.
+export function activeBackgroundPadding(iconSize, radiusRatio = 0.30, clearanceScale = 1) {
+    if (iconSize <= 0) return 0
+    // A small corner clearance at the usual icon size. Keep this proportional:
+    // the adaptive solver evaluates iconSize=1 to obtain the padding ratio.
+    // Hover tightens breathing room without reducing the corner inset.
+    const clearance = iconSize * ACTIVE_BG_CLEARANCE_RATIO * clearanceScale
+    const radius = iconSize * Math.max(0, radiusRatio)
+    return Math.max(clearance, radius - (radius - clearance) * Math.SQRT1_2)
+}
 
 // ── Clamp utility ──
 function clamp(value, min, max) {
@@ -77,6 +90,12 @@ export function computeLayout(
         divmargin: Number.isFinite(Number(proportions?.divmargin)) ? Number(proportions.divmargin) : DEFAULT_PROPORTIONS.divmargin,
     }
 
+    const activeRadiusRatio = Number.isFinite(Number(proportions?.activeRadiusRatio))
+        ? Math.max(0, Number(proportions.activeRadiusRatio)) : 0.30
+    const activeGapRatio = activeBackgroundPadding(1, activeRadiusRatio)
+    // The complete plate must also fit the cross-axis panel thickness.
+    p.vpad = Math.max(p.vpad, activeGapRatio)
+
     const maxWidth = availableLength * maxLengthRatio
 
     // ── Determine right-side information section ──
@@ -114,7 +133,7 @@ export function computeLayout(
     //   2                : left + right edge padding
     const scaleFactor =
           iconUnits
-        + (appIconCount + (hasInfoSlot ? 1 : 0)) * 2 * ACTIVE_BG_GAP_RATIO
+        + (appIconCount + (hasInfoSlot ? 1 : 0)) * 2 * activeGapRatio
         + Math.max(0, itemCount - 1) * p.spacing
         + 2 * dividerCount * p.divmargin
         + 2 * p.hpad
@@ -147,7 +166,7 @@ export function computeLayout(
 
     const contentWidth  = iconSize * scaleFactor + fixedOverhead
     const dockWidth     = Math.min(contentWidth, maxWidth)
-    const activeBackgroundGap = iconSize * ACTIVE_BG_GAP_RATIO
+    const activeBackgroundGap = iconSize * activeGapRatio
 
     return {
         dockHeight,

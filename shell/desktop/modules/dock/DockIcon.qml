@@ -5,6 +5,7 @@ import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
 import "DockMagnification.mjs" as Magnification
+import "AdaptiveMath.mjs" as AdaptiveMath
 
 // ────────────────────────────────────────────────────────────────
 // DockIcon — Single icon in the dock.
@@ -91,10 +92,10 @@ Item {
     // A small neutral marker for persistent shell-control state, currently
     // used by the Trash icon while it contains recoverable items.
     property bool   statusBadge: false
-    // This is proportional to iconSize (3px when iconSize is 44px). It is
-    // also included in AdaptiveMath, so the active background never overlaps
-    // a neighbour or makes the real Row wider than the calculated width.
-    property real   activeBackgroundGap: 4.4
+    // Per-edge padding includes the rounded-corner inset. Layout reserves the
+    // same value so the larger plate cannot collide with its neighbours.
+    property real activeBackgroundGap: AdaptiveMath.activeBackgroundPadding(
+        iconSize, AppearanceTokens.dock.activeRadiusRatio)
     // Side-dock layout: the whole row is rotated 90 degrees; the icon image
     // counter-rotates so the artwork stays upright.
     property bool   vertical: false
@@ -115,6 +116,33 @@ Item {
     readonly property real activeBackgroundRadius: iconSize
         * AppearanceTokens.dock.activeRadiusRatio
     readonly property real iconSlotSize: iconSize + activeBackgroundGap * 2
+    // Keep at least the full square artwork box, including corner clearance.
+    // Reserve it even for aspect-fitted artwork so loading cannot move tasks.
+    readonly property real iconPaintedWidth:
+        iconRenderer.item ? (iconRenderer.item.paintedWidth || iconSize) : iconSize
+    readonly property real iconPaintedHeight:
+        iconRenderer.item ? (iconRenderer.item.paintedHeight || iconSize) : iconSize
+    readonly property real iconSlotWidth:
+        Math.max(iconSize, iconPaintedWidth) + activeBackgroundGap * 2
+    readonly property real iconSlotHeight:
+        Math.max(iconSize, iconPaintedHeight) + activeBackgroundGap * 2
+    // The item magnifies as a whole. Counter-scale the plate's padding and
+    // radius so their on-screen sizes stay constant as the artwork grows.
+    // Keep the reserved slot unchanged: this is paint geometry only.
+    readonly property real _plateHoverScale: Math.max(1,
+        _hoverScale * _magnificationScale)
+    // Tighten only breathing room; preserve the minimum rounded-corner inset.
+    // The layout reads this same delta so its extent matches the painted plate.
+    readonly property real hoverGapReduction: Math.max(0,
+        activeBackgroundGap - AdaptiveMath.activeBackgroundPadding(
+            iconSize, AppearanceTokens.dock.activeRadiusRatio, 0.75))
+    readonly property real _plateHoverGap: activeBackgroundGap
+        - hoverGapReduction * magnificationProgress
+    readonly property real activePlateWidth:
+        Math.max(iconSize, iconPaintedWidth) + 2 * _plateHoverGap / _plateHoverScale
+    readonly property real activePlateHeight:
+        Math.max(iconSize, iconPaintedHeight) + 2 * _plateHoverGap / _plateHoverScale
+    readonly property real activePlateRadius: activeBackgroundRadius / _plateHoverScale
     readonly property bool dotIndicator:
         AppearanceTokens.dock.indicatorStyle === "dot"
     readonly property real runningIndicatorWidth: dotIndicator
@@ -234,17 +262,21 @@ Item {
     // Reserve the background's outer slot for every app icon. Only the active
     // window paints it; reserving the slot prevents focus changes from moving
     // the surrounding icons.
-    width:  iconSlotSize
-    height: iconSlotSize
+    width:  iconSlotWidth
+    height: iconSlotHeight
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
     // ═══════════════════════════════════════════════════════════
     // Scale model
     // ═══════════════════════════════════════════════════════════
     // Distance-based magnification. The Item's width/height remain the fixed
-    // layout slot; only its visual transform changes.
+    // layout slot; only its visual transform changes. An explicit user value
+    // (dock settings) turns it on in every style, so the sliders work on the
+    // taskbar-like styles too; otherwise the active style decides.
     readonly property bool _usesDistanceMagnification:
-        AppearanceTokens.dock.magnificationEnabled && magnificationRoot !== null
+        (AppearanceTokens.dock.magnificationEnabled
+            || ConfigService.hoverScale !== null)
+        && magnificationRoot !== null
     readonly property bool _distanceMagnificationEnabled:
         _usesDistanceMagnification
         && magnificationPointer.x > -9999
@@ -266,19 +298,34 @@ Item {
             : icon.mapToItem(magnificationRoot, cx, cy)
     }
     readonly property real _magnificationInfluence: {
-        if (!_distanceMagnificationEnabled || !visible)
+        if (_usesSharedMagnification || !_distanceMagnificationEnabled || !visible)
             return 0.0
         const center = icon._slotCentreInRoot()
-        const iconAxis = vertical ? center.y : center.x
-        const pointerAxis = vertical ? magnificationPointer.y
-                                     : magnificationPointer.x
+        // 影响核在「容器中心相对坐标」里比较指针与槽位中心。dock 加宽是
+        // 对称的：槽位的根坐标与容器宽度各平移 ΔW/2、互相抵消，指针的根
+        // 坐标同样抵消——于是影响与 dock 宽度无关。用根坐标直接
+        // 比较会形成「加宽→图标平移→影响重算→让位→再加宽」的反馈环：
+        // 放大峰值调到 2.0 后环路增益过 1，进入 ±2 设备像素的极限环振荡
+        //（玻璃边缘 809↔811 实测），这就是用户把量程翻倍后看到的抽搐。
+        const axis = vertical ? magnificationRoot.height / 2
+                              : magnificationRoot.width / 2
+        const iconAxis = (vertical ? center.y : center.x) - axis
+        const pointerAxis = (vertical ? magnificationPointer.y
+                                      : magnificationPointer.x) - axis
         const radius = Math.max(icon.iconSize * 2.0,
             AppearanceTokens.dock.magnificationRadius)
         if (!Number.isFinite(iconAxis) || !Number.isFinite(pointerAxis)
                 || radius <= 0)
             return 0.0
+        // The kernel holds its peak across the icon's own slot before it starts
+        // to decay. Without the plateau the scale peaks only at the exact slot
+        // centre, so sliding the pointer along the row makes every icon breathe
+        // as the pointer crosses centres and gaps. Half the slot keeps one icon
+        // at full scale across its span while the gaps stay a uniform ~1% dip.
+        const plateau = Math.min(icon.iconSlotSize / 2, radius * 0.6)
         const normalized = Math.max(0.0, Math.min(1.0,
-            1.0 - Math.abs(iconAxis - pointerAxis) / radius))
+            1.0 - Math.max(0.0, Math.abs(iconAxis - pointerAxis) - plateau)
+                / Math.max(1.0, radius - plateau)))
         return normalized * normalized * (3.0 - 2.0 * normalized)
     }
     // Animate one normalized value, not the resulting scale and pixel offset
@@ -286,8 +333,13 @@ Item {
     // faster display, and its default epsilon stops these two units at different
     // times. FrameAnimation follows the render cadence and sleeps once settled.
     property real _magnificationProgress: 0
-    readonly property bool _magnificationAnimating:
-        _magnificationProgress !== _magnificationInfluence
+    readonly property bool _usesSharedMagnification: _usesDistanceMagnification
+        && typeof magnificationRoot.magnificationFor === "function"
+    readonly property real magnificationProgress: _usesSharedMagnification
+        ? magnificationRoot.magnificationFor(icon) : _magnificationProgress
+    readonly property real spreadMagnificationProgress: magnificationProgress
+    readonly property bool _magnificationAnimating: !_usesSharedMagnification
+        && _magnificationProgress !== _magnificationInfluence
     FrameAnimation {
         running: icon._magnificationAnimating
         onTriggered: {
@@ -298,27 +350,27 @@ Item {
         }
     }
     readonly property real _magnificationScale:
-        1.0 + _magnificationProgress
-            * (AppearanceTokens.dock.magnificationMaxScale - 1.0)
+        1.0 + magnificationProgress
+            * (ConfigService.effectiveHoverScale - 1.0)
     // Continuous (sub-pixel) lift: rounding this to whole pixels would quantise
     // the small magnification lift into a couple of visible steps.
     readonly property real _magnificationLift:
         -(icon.iconSize
-            * AppearanceTokens.dock.magnificationLiftRatio
-            * _magnificationProgress)
+            * ConfigService.effectiveHoverLift
+            * magnificationProgress)
     // The distance curve already includes the hovered icon. Keep the original
-    // one-icon fallback for non-macOS shell styles.
+    // one-icon fallback for hosts without a shared pointer.
     property real _hoverScale:
         !_usesDistanceMagnification && _hovering
-            ? AppearanceTokens.dock.hoverScale : 1.0
+            ? ConfigService.effectiveHoverScale : 1.0
     // Only isolated/non-fisheye hosts use binary hover feedback. Adding it to
     // the distance curve introduces a several-pixel jump at every slot edge.
     // Keep it disabled even during pointer exit, while the fisheye settles.
     property real _hoverLift: !_usesDistanceMagnification
         && _hovering && !showActiveBackground
-        && AppearanceTokens.dock.hoverLiftRatio > 0
+        && ConfigService.effectiveHoverLift > 0
         ? -Math.max(2, Math.round(iconSize
-            * AppearanceTokens.dock.hoverLiftRatio)) : 0
+            * ConfigService.effectiveHoverLift)) : 0
     property real _attentionScale: 1.0
     property real _attentionLift: 0
     property real _attentionGlow: 0
@@ -327,8 +379,18 @@ Item {
     // on this whole item: an offscreen texture is sized to the item's bounds
     // and clips overflow, which would hide the running/status indicators
     // that deliberately extend past the icon edge.
+    readonly property real _hoverDirection: vertical && dockEdge === "right" ? -1 : 1
     transform: Translate {
-        y: icon._hoverLift + icon._magnificationLift + icon._attentionLift
+        // Grow towards the workspace: cancel the downward half of a
+        // centre-origin scale before adding the configured hover lift.
+        y: icon._attentionLift + icon._hoverDirection
+            * (icon._hoverLift + icon._magnificationLift
+                - icon.height / 2 * (icon._hoverScale * icon._magnificationScale - 1))
+        // The magnified row spreads so neighbours are never covered (see
+        // DockContainer's hover spread); the compensation term cancels the
+        // row's re-centring while the container grows.
+        x: (icon.magnificationRoot && icon.magnificationRoot.spreadFor)
+            ? icon.magnificationRoot.spreadFor(icon) : 0
     }
 
     function acknowledgeAttention() {
@@ -352,28 +414,15 @@ Item {
     }
 
     // ── Hover animation ──
-    // Hover is resolved against the icon's *static* layout slot rather than the
-    // MouseArea's live geometry. `_mouseArea` is anchored to this item, so it
-    // moves with the very hover lift/scale it triggers: with the pointer parked
-    // on the slot's bottom edge the icon lifts out from under the cursor (the
-    // measured band is ~0.75px, one row at 1x), the hover clears, the icon drops
-    // back and the cycle repeats — an endless jitter. Testing the untransformed
-    // slot against the container pointer makes hover a pure function of the
-    // pointer again.
-    //
-    // The slot is not the zoomed artwork, and that is deliberate: a pointer in
-    // the gap between two slots, or in the overhang a magnified neighbour leaves
-    // past its slot, is no longer reported as hovering. The old test covered the
-    // 1.19x-scaled rect, which grew ~4.5px past the slot and therefore bridged
-    // the 4px inter-icon gap.
-    //
-    // A DockIcon whose container publishes no pointer (magnificationRoot unset,
-    // or the pointer outside it) keeps the MouseArea answer. The Dock's own
-    // icons, including the pinned launcher and trash, all receive the container
-    // root, so they take the pointer path; the fallback is for isolated hosts.
+    // The shared container resolves one hover owner from its frame snapshot.
+    // Labels, highlights and preview dwell use that same owner; the resting
+    // vertical band remains valid while the artwork lifts out of it.
+    // Isolated hosts keep their pointer/MouseArea fallback below.
     readonly property bool _hovering: {
         if (!icon.interactive || !icon.visible)
             return false
+        if (_usesSharedMagnification)
+            return magnificationRoot.hoverFor(icon)
         if (magnificationRoot === null || magnificationPointer.x < -9999
                 || magnificationPointer.y < -9999)
             // No container pointer to test against. This path does read the
@@ -506,29 +555,25 @@ Item {
     readonly property var contextMenu: _contextMenuInstance
     readonly property var preview: _previewInstance
 
+    function openWindowPreview() {
+        if (!icon._hovering || !icon._hasWindows || icon.editMode
+                || DockModelService.activeContextMenu) return
+        const p = ensurePreviewLoaded()
+        p.appId = icon.appId
+        p.windowId = icon._previewWindowId
+        p.appName = icon.displayName
+        p.windows = icon._appWindows
+        DockModelService.openDockPopup(p)
+    }
+    property int previewDwellDelay: DockAnimation.windowPreviewDelay
     Timer {
         id: previewDelay
         // Short, deliberate dwell so a real hover feels immediate without
         // opening previews during a quick pointer pass.
-        interval: DockAnimation.windowPreviewDelay
+        interval: icon.previewDwellDelay
         repeat: false
         onTriggered: {
-            if (icon._hovering && icon._hasWindows && !icon.editMode
-                    && !DockModelService.activeContextMenu) {
-                const p = ensurePreviewLoaded()
-                console.log("[DockIcon] preview request app=" + icon.appId
-                    + " windowCount=" + icon._appWindows.length);
-                p.appId = icon.appId
-                p.windowId = icon._previewWindowId
-                // The strip is labelled with the application; each card labels
-                // its own window (see DockWindowPreview's per-card title).
-                p.appName = icon.displayName
-                p.windows = icon._appWindows
-                DockModelService.openDockPopup(p)
-            } else if (icon._hovering && icon.isRunning) {
-                console.log("[DockIcon] preview skipped app=" + icon.appId
-                    + " no window record")
-            }
+            icon.openWindowPreview()
         }
     }
 
@@ -545,53 +590,36 @@ Item {
         }
     }
 
-    // A pinned app with no live window has no thumbnail to show. Use a small
-    // edge-aware label instead of opening an empty preview surface.
-    PopupWindow {
-        id: appNameTooltip
-        readonly property bool shouldShow:
-            icon._hovering
-            && !icon._hasWindows
-            && !icon.isRunning
-            && icon.displayName.trim().length > 0
-            && !icon.editMode
-            && !DockModelService.activeContextMenu
-
-        visible: shouldShow
-        implicitWidth: appNameText.implicitWidth + 16
-        implicitHeight: appNameText.implicitHeight + 10
-        color: "transparent"
-
-        anchor {
-            item: icon
-            edges: icon.dockEdge === "bottom" ? Edges.Top
-                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
-            gravity: icon.dockEdge === "bottom" ? Edges.Top
-                : icon.dockEdge === "left" ? Edges.Right : Edges.Left
-            margins.top: icon.dockEdge === "bottom" ? -6 : 0
-            margins.left: icon.dockEdge === "right" ? -6 : 0
-            margins.right: icon.dockEdge === "left" ? -6 : 0
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: ThemeService.tooltipBackground
-            border.width: 1
-            border.color: ThemeService.borderColor
-
-            Text {
-                id: appNameText
-                anchors.centerIn: parent
-                text: icon.displayName
-                color: ThemeService.foregroundColor
-                font {
-                    family: "Noto Sans CJK SC, sans-serif"
-                    pixelSize: 11
-                    weight: Font.DemiBold
+    // Dwell and cancellation must use the same transformed hover state as
+    // the highlight; a layout MouseArea edge can move during magnification.
+    on_HoveringChanged: {
+        if (_hovering) {
+            previewCloseDelay.stop()
+            if (_previewWindowId && !editMode && !DockModelService.activeContextMenu) {
+                if (icon.preview && icon.preview.visible) {
+                    previewDelay.stop()
+                    icon.openWindowPreview()
+                } else {
+                    const active = DockModelService.activeDockPopup
+                    previewDwellDelay = active && active.isWindowPreview && active.visible
+                        ? DockAnimation.windowPreviewSwitchDelay : DockAnimation.windowPreviewDelay
+                    if (!previewDelay.running) previewDelay.start()
                 }
             }
+        } else {
+            previewDelay.stop()
+            previewCloseDelay.restart()
         }
+    }
+
+    // Shared Dock hosts own one label. Standalone icons create a fallback
+    // only while eligible for a name tooltip, instead of eager hidden windows.
+    Loader {
+        active: !icon._usesSharedMagnification && icon._hovering
+            && !icon._hasWindows && !icon.isRunning && !icon.editMode
+            && icon.displayName.trim().length > 0
+            && !DockModelService.activeContextMenu
+        sourceComponent: DockAppNameTooltip { targetIcon: icon }
     }
 
     // iPadOS-style edit-state wiggle. The held icon stays steady so it reads
@@ -621,10 +649,10 @@ Item {
     // ═══════════════════════════════════════════════════════════
     Rectangle {
         id: activeBackground
-        width: icon.iconSlotSize
-        height: icon.iconSlotSize
+        width: icon.activePlateWidth
+        height: icon.activePlateHeight
         anchors.centerIn: parent
-        radius: icon.activeBackgroundRadius
+        radius: icon.activePlateRadius
         // The active window paints a white slot; urgency paints orange-red.
         // Both are local to the icon, so the highlight always tracks its task
         // without any shared indicator or geometry tracking.
@@ -642,22 +670,26 @@ Item {
                 && !icon._glassSelectionHighlight) || icon.showUrgentBackground
         z: -1
         Behavior on color {
-            ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+            ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
         }
     }
 
     DockIconHighlight {
         objectName: "dock-selection-highlight"
-        width: icon.iconSize + icon.activeBackgroundGap
-        height: width
+        // Padding/radius retain their resting on-screen clearance on hover.
+        width: icon.activePlateWidth
+        height: icon.activePlateHeight
         anchors.centerIn: parent
-        cornerRadius: icon.activeBackgroundRadius
+        cornerRadius: icon.activePlateRadius
         // Counter-rotate the lighting just like the artwork: "top" stays up
         // on both side Docks, while the entire plate follows the icon's lift.
         rotation: icon.vertical ? -90 : 0
         enabled: icon._glassSelectionHighlight && !icon.showUrgentBackground
             && !icon.editMode && !icon.isDragging
-        hovered: icon._hovering
+        // Hover alone must not light the plate -- the active task owns the
+        // background. Hovering the active icon keeps its brighter rim.
+        hovered: icon._hovering && icon.showActiveBackground
+            && !icon.useSharedActiveBackground
         selected: icon.showActiveBackground && !icon.useSharedActiveBackground
         pressed: icon.interactive && _mouseArea.pressed
         dark: AppearanceTokens.isDarkTheme
@@ -687,8 +719,8 @@ Item {
     Rectangle {
         id: hoverHighlight
         objectName: "dock-legacy-hover-highlight"
-        width: icon.iconSize
-        height: icon.iconSize
+        width: Math.max(icon.iconSize, icon.iconPaintedWidth)
+        height: Math.max(icon.iconSize, icon.iconPaintedHeight)
         anchors.centerIn: parent
         radius: icon.activeBackgroundRadius
         color: Qt.rgba(1, 1, 1, 0.12)
@@ -725,7 +757,7 @@ Item {
         target: pressHighlight
         property: "opacity"
         to: 1.0
-        duration: 150
+        duration: DockAnimation.iconPressHighlightDuration
         easing.type: DockAnimation.elementEnterEasing
     }
     NumberAnimation {
@@ -733,8 +765,21 @@ Item {
         target: pressHighlight
         property: "opacity"
         to: 0.0
-        duration: 150
+        duration: DockAnimation.iconPressHighlightDuration
         easing.type: DockAnimation.elementExitEasing
+    }
+    function setPressFeedback(pressed) {
+        pressFadeIn.stop()
+        pressFadeOut.stop()
+        if (icon._glassSelectionHighlight) {
+            // The glass plate already animates MouseArea.pressed. Do not run
+            // a second, invisible legacy animation for the same input.
+            pressHighlight.opacity = 0
+        } else if (pressed) {
+            pressFadeIn.restart()
+        } else {
+            pressFadeOut.restart()
+        }
     }
 
     Loader {
@@ -873,7 +918,7 @@ Item {
                         ThemeService.foregroundColor.b, 0.95)
                     Behavior on color {
                         enabled: runningIndicator.opacity > 0.01
-                        ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+                        ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
                     }
                 }
             }
@@ -886,7 +931,7 @@ Item {
             color: ThemeService.accentColor
             Behavior on color {
                 enabled: visible
-                ColorAnimation { duration: 150; easing.type: Easing.OutCubic }
+                ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
             }
         }
     }
@@ -916,16 +961,16 @@ Item {
             icon._heldForEdit = false
             if (icon.dismissAppLauncherOnInteraction && AppLauncherService.open)
                 AppLauncherService.hide()
-            pressFadeIn.start()
+            icon.setPressFeedback(true)
         }
-        onReleased: pressFadeOut.start()
-        onCanceled: pressFadeOut.start()
+        onReleased: icon.setPressFeedback(false)
+        onCanceled: icon.setPressFeedback(false)
         onPressAndHold: {
             if (!icon.allowEdit)
                 return
             // Entering edit mode steals the pointer for reordering; the press
             // feedback should not linger while the icon wiggles.
-            pressFadeOut.start()
+            icon.setPressFeedback(false)
             icon._heldForEdit = true
             icon.requestEdit()
         }
@@ -981,15 +1026,7 @@ Item {
                 icon.activate()
             }
         }
-        onEntered: {
-            if (icon._previewWindowId && !icon.editMode
-                    && !DockModelService.activeContextMenu)
-                previewDelay.restart()
-        }
-        onExited: {
-            previewDelay.stop()
-            previewCloseDelay.restart()
-        }
+
     }
 
 }
