@@ -2,6 +2,8 @@
 
 日期：2026-10-11。研究基线：`54512887915152c514b9d08f3a45ca14779e1adc`。
 
+2026-10-13 最新交接见 [HANDOFF.md](HANDOFF.md)：KWin/greetd/logind 三层显示交接实验及专用文件安装器已通过限定范围的独立复审；未由助手安装或启用，真实 PAM/三守护进程共同登录/NVIDIA DRM 和物理黑帧仍未验收。安装命令为 `./tools/install-greeter-handoff.sh`，仅安装 `/opt/kos-handoff` 文件，不启用服务；详见 [安装说明](../../apps/greeter/experimental/drm-handoff/systemd/INSTALL.md)。下文研究包定位和待实现命令描述属于早期基线，当前进度以最新交接为准。
+
 本包是可评审的研究、约束和任务分解，不代表登录管理器已经实现。新增内容只位于本目录，不修改项目实现或系统登录配置。候选架构为 greetd + 独立 KWin 登录会话 + Quickshell Greeter。
 
 ## 阅读顺序

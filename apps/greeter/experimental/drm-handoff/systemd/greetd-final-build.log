@@ -1,0 +1,65 @@
+   Compiling greetd v0.10.3 (/home/wwt/.cache/nextkde-builds/drm-handoff/greetd-0.10.3/greetd)
+warning: unreachable expression
+   --> greetd/src/session/interface.rs:135:42
+    |
+127 | /                 execv(
+128 | |                     &bin,
+129 | |                     &[
+130 | |                         &bin,
+...   |
+135 | |                 .expect("unable to exec");
+    | |                                         -^ unreachable expression
+    | |_________________________________________|
+    |                                           any code following this expression is unreachable
+    |
+note: this expression has type `Infallible`, which is uninhabited
+   --> greetd/src/session/interface.rs:127:17
+    |
+127 | /                 execv(
+128 | |                     &bin,
+129 | |                     &[
+130 | |                         &bin,
+...   |
+135 | |                 .expect("unable to exec");
+    | |_________________________________________^
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: unreachable expression
+   --> greetd/src/session/worker.rs:287:38
+    |
+278 | /             execve(
+279 | |                 &cpath,
+280 | |                 &[
+281 | |                     &cpath,
+...   |
+287 | |             .expect("unable to exec");
+    | |                                     -^ unreachable expression
+    | |_____________________________________|
+    |                                       any code following this expression is unreachable
+    |
+note: this expression has type `Infallible`, which is uninhabited
+   --> greetd/src/session/worker.rs:278:13
+    |
+278 | /             execve(
+279 | |                 &cpath,
+280 | |                 &[
+281 | |                     &cpath,
+...   |
+287 | |             .expect("unable to exec");
+    | |_____________________________________^
+
+warning: hiding a lifetime that's named elsewhere is confusing
+  --> greetd/src/session/conv.rs:31:63
+   |
+31 |     pub fn new(sock: &'a std::os::unix::net::UnixDatagram) -> SessionConv {
+   |                       -- the lifetime is named here           ^^^^^^^^^^^ the same lifetime is hidden here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: consistently use `'a`
+   |
+31 |     pub fn new(sock: &'a std::os::unix::net::UnixDatagram) -> SessionConv<'a> {
+   |                                                                          ++++
+
+warning: `greetd` (bin "greetd") generated 3 warnings (run `cargo fix --bin "greetd" -p greetd` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 4.52s

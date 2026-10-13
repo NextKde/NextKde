@@ -1,0 +1,8 @@
+{
+  "src/scene/workspacescene.cpp": "3e2ef0a06179e6b22d30ec100874060d701e90d16eff1d185b1b35ac10dba0a3",
+  "src/scene/workspacescene.h": "9efa7f8dfc28c06c584b21b7de6cbd00aa3d0d42a83aa628d60d402fc7f8d46b",
+  "src/main_wayland.cpp": "1a9581c8836333a27c798704d9f5cfd0047bff17e0742a9d705ad99ba117b690",
+  "src/backends/drm/drm_gpu.cpp": "907a021be62915650dc5ba2e176e7ecc650c33448659355c138202bc84be1d6a",
+  "src/backends/drm/drm_gpu.h": "c8b4976bc9a62599516423f8e5082dc5e7a891d9ac945e4fe44ffe296bca4067",
+  "src/helpers/wayland_wrapper/kwin_wrapper.cpp": "3edfd0da7d093364f7722d3fd76610508ea9e24aa2530e10a163a29325e516c3"
+}

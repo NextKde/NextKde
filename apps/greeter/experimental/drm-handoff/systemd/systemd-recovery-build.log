@@ -1,0 +1,6 @@
+ninja: Entering directory `/home/wwt/.cache/nextkde-builds/drm-handoff/systemd-build'
+[1/11] Generating src/version/version with a custom command (wrapped by meson to capture output)
+[2/5] Compiling C object test-greeter-handoff.p/src_login_test-greeter-handoff.c.o
+[3/5] Compiling C object systemd-logind.p/src_login_logind-session.c.o
+[4/5] Linking target test-greeter-handoff
+[5/5] Linking target systemd-logind

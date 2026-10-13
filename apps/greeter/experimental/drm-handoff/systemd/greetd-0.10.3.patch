@@ -1,0 +1,405 @@
+--- a/greetd/src/session/worker.rs
++++ b/greetd/src/session/worker.rs
+@@ -63,6 +63,7 @@
+     Args {
+         env: Vec<String>,
+         cmd: Vec<String>,
++        handoff_session: Option<String>,
+     },
+     Start,
+     Cancel,
+@@ -82,6 +83,7 @@
+ #[derive(Clone, Debug, Serialize, Deserialize)]
+ pub enum SessionChildToParent {
+     Success,
++    AuthenticatedUser { uid: u32 },
+     Error(Error),
+     PamMessage { style: AuthMessageType, msg: String },
+     FinalChildPid(u64),
+@@ -99,6 +101,11 @@
+ /// responsible for the entirety of the session setup and execution. It is
+ /// started by Session::start.
+ fn worker(sock: &UnixDatagram) -> Result<(), Error> {
++    // The PAM/control transport must never reach an unprivileged exec child.
++    use std::os::unix::io::AsRawFd;
++    if unsafe { libc::fcntl(sock.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } < 0 {
++        return Err("unable to seal internal worker channel".into());
++    }
+     let mut data = [0; 10240];
+     let (service, class, user, authenticate, tty, source_profile, listener_path) =
+         match ParentToSessionChild::recv(sock, &mut data)? {
+@@ -135,7 +142,9 @@
+     pam.setcred(PamFlag::ESTABLISH_CRED)?;
+ 
+     // Mark authentication as a success.
+-    SessionChildToParent::Success.send(sock)?;
++    let authenticated_user = nix::unistd::User::from_name(&pam.get_user()?)?
++        .ok_or("unable to resolve authenticated PAM user")?;
++    SessionChildToParent::AuthenticatedUser { uid: authenticated_user.uid.as_raw() }.send(sock)?;
+ 
+     // Add GREETD_SOCK if this is a greeter session - we do this early as we are about to reuse the
+     // buffer, invalidating our borrow.
+@@ -144,8 +153,8 @@
+     }
+ 
+     // Fetch our arguments from the parent.
+-    let (env, cmd) = match ParentToSessionChild::recv(sock, &mut data)? {
+-        ParentToSessionChild::Args { env, cmd } => (env, cmd),
++    let (env, cmd, handoff_session) = match ParentToSessionChild::recv(sock, &mut data)? {
++        ParentToSessionChild::Args { env, cmd, handoff_session } => (env, cmd, handoff_session),
+         ParentToSessionChild::Cancel => return Err("cancelled".into()),
+         msg => return Err(format!("expected Args or Cancel, got: {:?}", msg).into()),
+     };
+@@ -179,10 +188,11 @@
+             // Set the target VT mode to text for compatibility. Other login managers
+             // set this to graphics, but that disallows start of textual applications,
+             // which greetd aims to support.
+-            target_term.kd_setmode(terminal::KdMode::Text)?;
+-
+-            // Clear TTY so that it will be empty when we switch to it.
+-            target_term.term_clear()?;
++            if !greeter_handoff_prepared(handoff_session.as_deref()) {
++                target_term.kd_setmode(terminal::KdMode::Text)?;
++                // The ordinary text-session and failure paths retain their existing behavior.
++                target_term.term_clear()?;
++            }
+ 
+             // A bit more work if a VT switch is required.
+             if switch && vt != target_term.vt_get_current()? {
+@@ -312,6 +322,20 @@
+     Ok(())
+ }
+ 
++fn greeter_handoff_prepared(session: Option<&str>) -> bool {
++    let Some(path) = session else { return false; };
++    let Some(suffix) = path.strip_prefix("/org/freedesktop/login1/session/") else { return false; };
++    if suffix.is_empty() || suffix.len() > 128 || !suffix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
++        return false;
++    }
++    let result = std::process::Command::new("/usr/bin/busctl")
++        .args(["--system", "--timeout=1s", "--allow-interactive-authorization=no", "get-property",
++               "org.freedesktop.login1", path, "org.freedesktop.login1.Session", "GreeterHandoffPrepared"])
++        .env_clear().env("PATH", "/usr/bin:/bin")
++        .stdin(std::process::Stdio::null()).stderr(std::process::Stdio::null()).output();
++    matches!(result, Ok(out) if out.status.success() && out.stdout == b"b true\n")
++}
++
+ pub fn main(sock: &UnixDatagram) -> Result<(), Error> {
+     if let Err(e) = worker(sock) {
+         SessionChildToParent::Error(e.clone()).send(sock)?;
+--- a/greetd/src/session/interface.rs
++++ b/greetd/src/session/interface.rs
+@@ -90,11 +90,20 @@
+     task: Pid,
+     sock: TokioUnixDatagram,
+     last_msg: Option<SessionChildToParent>,
++    authenticated_uid: Option<u32>,
+ }
+ 
+ impl Session {
+     /// Create a session started as an external process.
+     pub fn new_external() -> Result<Session, Error> {
++        Self::new_external_with_inherited_fd(None)
++    }
++
++    pub fn task_pid(&self) -> u32 { self.task.as_raw() as u32 }
++    pub fn authenticated_uid(&self) -> Option<u32> { self.authenticated_uid }
++
++    /// Only the greeter receives the private root-daemon -> KWin channel.
++    pub fn new_external_with_inherited_fd(inherited_fd: Option<i32>) -> Result<Session, Error> {
+         // Pipe used to communicate the true PID of the final child.
+         let (parentfd, childfd) =
+             UnixDatagram::pair().map_err(|e| format!("could not create pipe: {}", e))?;
+@@ -110,6 +119,11 @@
+         let child = match unsafe { fork() }.map_err(|e| format!("unable to fork: {}", e))? {
+             ForkResult::Parent { child, .. } => child,
+             ForkResult::Child => {
++                if let Some(fd) = inherited_fd {
++                    if unsafe { libc::fcntl(fd, libc::F_SETFD, 0) } < 0 {
++                        unsafe { libc::_exit(70) };
++                    }
++                }
+                 execv(
+                     &bin,
+                     &[
+@@ -128,6 +142,7 @@
+             task: child,
+             sock: TokioUnixDatagram::from_std(parentfd)?,
+             last_msg: None,
++            authenticated_uid: None,
+         })
+     }
+ 
+@@ -168,8 +183,12 @@
+             SessionChildToParent::PamMessage { style, msg } => {
+                 Ok(SessionState::Question(style, msg))
+             }
+-            SessionChildToParent::Success => Ok(SessionState::Ready),
+-            SessionChildToParent::Error(e) => Err(e),
++            SessionChildToParent::AuthenticatedUser { uid } => {
++                self.authenticated_uid = Some(uid);
++                Ok(SessionState::Ready)
++            },
++            SessionChildToParent::Error(e) => { self.authenticated_uid = None; Err(e) },
++            SessionChildToParent::Success => Err("unexpected non-authentication success".into()),
+             msg => panic!(
+                 "expected PamMessage, Success or Error from session worker, got: {:?}",
+                 msg
+@@ -180,6 +199,7 @@
+     /// Cancel the session.
+     pub async fn cancel(&mut self) -> Result<(), Error> {
+         self.last_msg = None;
++        self.authenticated_uid = None;
+         ParentToSessionChild::Cancel.send(&mut self.sock).await?;
+         Ok(())
+     }
+@@ -203,7 +223,11 @@
+     /// Send the arguments that will be used to start the session.
+     ///
+     pub async fn send_args(&mut self, cmd: Vec<String>, env: Vec<String>) -> Result<(), Error> {
+-        let msg = ParentToSessionChild::Args { env, cmd };
++        self.send_args_handoff(cmd, env, None).await
++    }
++
++    pub async fn send_args_handoff(&mut self, cmd: Vec<String>, env: Vec<String>, handoff_session: Option<String>) -> Result<(), Error> {
++        let msg = ParentToSessionChild::Args { env, cmd, handoff_session };
+         msg.send(&mut self.sock).await?;
+ 
+         let msg = SessionChildToParent::recv(&mut self.sock).await?;
+@@ -255,3 +279,41 @@
+         })
+     }
+ }
++
++#[cfg(test)]
++mod handoff_tests {
++    use super::*;
++    fn fixture(message: SessionChildToParent) -> Session {
++        let (parent, peer) = UnixDatagram::pair().unwrap();
++        parent.set_nonblocking(true).unwrap();
++        peer.send(&serde_json::to_vec(&message).unwrap()).unwrap();
++        Session { task: Pid::from_raw(2), sock: TokioUnixDatagram::from_std(parent).unwrap(),
++                  last_msg: None, authenticated_uid: None }
++    }
++    #[tokio::test]
++    async fn ordinary_success_is_not_authentication_authority() {
++        let mut session = fixture(SessionChildToParent::Success);
++        assert!(session.get_state().await.is_err());
++        assert_eq!(session.authenticated_uid(), None);
++    }
++    #[tokio::test]
++    async fn failed_worker_never_authorizes_display_handoff() {
++        let mut session = fixture(SessionChildToParent::Error("fixture-auth-error".into()));
++        assert!(session.get_state().await.is_err());
++        assert_eq!(session.authenticated_uid(), None);
++    }
++    #[tokio::test]
++    async fn authenticated_worker_identity_is_preserved_on_ready_recheck() {
++        let mut session = fixture(SessionChildToParent::AuthenticatedUser { uid: 1234 });
++        assert!(matches!(session.get_state().await.unwrap(), SessionState::Ready));
++        assert_eq!(session.authenticated_uid(), Some(1234));
++        assert!(matches!(session.get_state().await.unwrap(), SessionState::Ready));
++        assert_eq!(session.authenticated_uid(), Some(1234));
++    }
++    #[tokio::test]
++    async fn awaiting_prompt_has_no_authenticated_identity() {
++        let mut session = fixture(SessionChildToParent::PamMessage { style: AuthMessageType::Secret, msg: "fixture".into() });
++        assert!(matches!(session.get_state().await.unwrap(), SessionState::Question(..)));
++        assert_eq!(session.authenticated_uid(), None);
++    }
++}
+--- a/greetd/src/context.rs
++++ b/greetd/src/context.rs
+@@ -1,6 +1,9 @@
+ use std::{
+     fs::File,
++    os::unix::{io::{AsRawFd, FromRawFd}, net::UnixDatagram, process::CommandExt},
+     path::Path,
++    process::{Command, Stdio},
++    sync::Mutex,
+     time::{Duration, Instant},
+ };
+ 
+@@ -48,6 +51,7 @@
+     source_profile: bool,
+     runfile: String,
+     listener_path: String,
++    handoff: Mutex<Option<UnixDatagram>>,
+ }
+ 
+ impl Context {
+@@ -75,6 +79,7 @@
+             source_profile,
+             runfile,
+             listener_path,
++            handoff: Mutex::new(None),
+         }
+     }
+ 
+@@ -87,8 +92,9 @@
+         user: &str,
+         service: &str,
+         cmd: Vec<String>,
++        inherited_fd: Option<i32>,
+     ) -> Result<SessionChild, Error> {
+-        let mut scheduled_session = Session::new_external()?;
++        let mut scheduled_session = Session::new_external_with_inherited_fd(inherited_fd)?;
+         scheduled_session
+             .initiate(
+                 service,
+@@ -108,7 +114,9 @@
+             }
+         }
+ 
+-        scheduled_session.send_args(cmd, vec![]).await?;
++        let env = inherited_fd.map(|fd| vec![format!("KOS_KWIN_HANDOFF_CONTROL_FD={}", fd)])
++            .unwrap_or_default();
++        scheduled_session.send_args(cmd, env).await?;
+         scheduled_session.start().await
+     }
+ 
+@@ -116,11 +124,28 @@
+     /// function does not take the inner lock, and can thus be used while it is
+     /// held.
+     async fn start_greeter(&self) -> Result<SessionChild, Error> {
++        if std::env::var_os("KOS_GREETD_HANDOFF").as_deref() == Some(std::ffi::OsStr::new("1")) {
++            let mut fds = [-1; 2];
++            if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0, fds.as_mut_ptr()) } < 0 {
++                return Err("handoff channel unavailable".into());
++            }
++            let parent = unsafe { UnixDatagram::from_raw_fd(fds[0]) };
++            let child = unsafe { UnixDatagram::from_raw_fd(fds[1]) };
++            let result = self.start_unauthenticated_session(
++                SessionClass::Greeter, &self.greeter_user, &self.greeter_service,
++                vec![self.greeter_bin.to_string()], Some(child.as_raw_fd()),
++            ).await;
++            if result.is_ok() {
++                *self.handoff.lock().map_err(|_| "handoff lock unavailable")? = Some(parent);
++            }
++            return result;
++        }
+         self.start_unauthenticated_session(
+             SessionClass::Greeter,
+             &self.greeter_user,
+             &self.greeter_service,
+             vec![self.greeter_bin.to_string()],
++            None,
+         )
+         .await
+     }
+@@ -167,7 +192,7 @@
+         let mut inner = self.inner.write().await;
+         inner.current = Some(SessionChildSet {
+             child: self
+-                .start_unauthenticated_session(SessionClass::User, user, &self.pam_service, cmd)
++                .start_unauthenticated_session(SessionClass::User, user, &self.pam_service, cmd, None)
+                 .await?,
+             time: Instant::now(),
+             is_greeter: false,
+@@ -273,8 +298,30 @@
+         match &mut session {
+             Some(s) => match s.session.get_state().await? {
+                 SessionState::Ready => {
++                    let mut handoff_session = None;
++                    let old = self.inner.read().await.current.as_ref()
++                        .filter(|g| g.is_greeter).map(|g| g.child.task.as_raw() as u32);
++                    if std::env::var_os("KOS_GREETD_HANDOFF").as_deref() == Some(std::ffi::OsStr::new("1")) {
++                        if !handoff_entry_allowed(&cmd, &env) {
++                            s.session.cancel().await?;
++                            return Err("experimental handoff only permits the fixed KOS graphical entry".into());
++                        }
++                        let old = old.ok_or("handoff requires a live greeter")?;
++                        let uid = s.session.authenticated_uid().ok_or("authenticated identity unavailable")?;
++                        let socket = self.handoff.lock().map_err(|_| "handoff lock unavailable")?
++                            .as_ref().ok_or("handoff channel unavailable")?.try_clone()?;
++                        let fd = socket.as_raw_fd();
++                        match Self::authorize_handoff(old, s.session.task_pid(), uid, fd) {
++                            Ok(path) => handoff_session = Some(path),
++                            Err(_) => {
++                                drop(socket);
++                                s.session.cancel().await?;
++                                return Err("display handoff unavailable; authentication cancelled".into());
++                            }
++                        }
++                    }
+                     // Send our arguments to the session.
+-                    s.session.send_args(cmd, env).await?;
++                    s.session.send_args_handoff(cmd, env, handoff_session).await?;
+ 
+                     let mut inner = self.inner.write().await;
+                     std::mem::swap(&mut session, &mut inner.scheduled);
+@@ -295,6 +342,52 @@
+                 SessionState::Question(..) => Err("session is not ready".into()),
+             },
+             None => Err("no session active".into()),
++        }
++    }
++
++    fn authorize_handoff(old: u32, next: u32, uid: u32, fd: i32) -> Result<String, Error> {
++        use std::io::Read;
++        use std::os::unix::fs::MetadataExt;
++        let path = Path::new("/opt/kos-handoff/libexec/kos-handoff-authorize");
++        for component in path.ancestors() {
++            let m = std::fs::symlink_metadata(component)?;
++            if m.uid() != 0 || m.mode() & 0o022 != 0 || m.file_type().is_symlink() {
++                return Err("untrusted handoff authorizer".into());
++            }
++        }
++        let mut command = Command::new(path);
++        command.args([old.to_string(), next.to_string(), uid.to_string(), fd.to_string()])
++            .env_clear().env("PATH", "/usr/bin:/bin").env("PYTHONNOUSERSITE", "1")
++            .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
++        unsafe {
++            command.pre_exec(move || {
++                if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
++                    return Err(std::io::Error::last_os_error());
++                }
++                Ok(())
++            });
++        }
++        let mut child = command.spawn()?;
++        let deadline = Instant::now() + Duration::from_secs(5);
++        loop {
++            if let Some(status) = child.try_wait()? {
++                if !status.success() { return Err("handoff authorizer failed".into()); }
++                let mut output = String::new();
++                child.stdout.take().ok_or("missing handoff reply")?.take(256).read_to_string(&mut output)?;
++                let path = output.trim();
++                let suffix = path.strip_prefix("/org/freedesktop/login1/session/")
++                    .ok_or("invalid handoff reply")?;
++                if suffix.is_empty() || suffix.len() > 128 || !suffix.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
++                    return Err("invalid handoff reply".into());
++                }
++                return Ok(path.to_owned());
++            }
++            if Instant::now() >= deadline {
++                let _ = child.kill();
++                let _ = child.wait();
++                return Err("handoff authorizer timed out".into());
++            }
++            std::thread::sleep(Duration::from_millis(10));
+         }
+     }
+ 
+@@ -416,3 +509,21 @@
+         Ok(())
+     }
+ }
++
++fn handoff_entry_allowed(cmd: &[String], env: &[String]) -> bool {
++    cmd.len() == 1 && cmd[0] == "/usr/local/lib/kos-greeter/app/bin/kos-user-session" && env.is_empty()
++}
++
++#[cfg(test)]
++mod handoff_entry_tests {
++    use super::handoff_entry_allowed;
++    #[test]
++    fn only_fixed_entry_without_arguments_or_environment_is_allowed() {
++        let entry = vec!["/usr/local/lib/kos-greeter/app/bin/kos-user-session".into()];
++        assert!(handoff_entry_allowed(&entry, &[]));
++        assert!(!handoff_entry_allowed(&entry, &["KWIN_BINARY=/tmp/untrusted".into()]));
++        assert!(!handoff_entry_allowed(&[entry[0].clone(), "--argument".into()], &[]));
++        assert!(!handoff_entry_allowed(&["/tmp/kos-user-session".into()], &[]));
++        assert!(!handoff_entry_allowed(&[], &[]));
++    }
++}

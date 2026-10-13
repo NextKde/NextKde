@@ -1,0 +1,613 @@
+--- a/src/login/logind.h
++++ b/src/login/logind.h
+@@ -16,6 +16,8 @@
+         Hashmap *seats;
+         Hashmap *sessions;
+         Hashmap *sessions_by_leader;
++        /* Experimental, root-authorized greeter -> user controller transition. Never serialized. */
++        Session *greeter_handoff_source;
+         Hashmap *users;  /* indexed by UID */
+         Hashmap *inhibitors;
+         Hashmap *buttons;
+--- a/src/login/logind-session.h
++++ b/src/login/logind-session.h
+@@ -137,6 +137,12 @@
+ 
+         sd_event_source *leader_pidfd_event_source;
+ 
++        PidRef greeter_handoff_target;
++        sd_event_source *greeter_handoff_timeout;
++        sd_event_source *greeter_handoff_target_source;
++        usec_t greeter_handoff_deadline;
++        bool greeter_handoff_used;
++
+         bool in_gc_queue;
+         bool started;
+         bool stopping;
+@@ -169,6 +175,11 @@
+ } Session;
+ 
+ int session_new(Manager *m, const char *id, Session **ret);
++int manager_recover_greeter_handoff(Manager *m);
++int session_prepare_greeter_handoff(Session *s, pid_t successor);
++void session_cancel_greeter_handoff(Session *s, bool restore);
++bool session_greeter_handoff_prepared(Session *s);
++void session_complete_greeter_handoff(Session *successor);
+ Session* session_free(Session *s);
+ 
+ DEFINE_TRIVIAL_CLEANUP_FUNC(Session*, session_free);
+--- a/src/login/logind-session.c
++++ b/src/login/logind-session.c
+@@ -27,6 +27,7 @@
+ #include "fd-util.h"
+ #include "format-util.h"
+ #include "fs-util.h"
++#include "fileio.h"
+ #include "hashmap.h"
+ #include "json-util.h"
+ #include "login-util.h"
+@@ -53,8 +54,9 @@
+ #include "user-util.h"
+ 
+ #define RELEASE_USEC (20*USEC_PER_SEC)
+-
+-static void session_restore_vt(Session *s);
++#define GREETER_HANDOFF_USEC (10*USEC_PER_SEC)
++
++static int session_restore_vt(Session *s);
+ 
+ int session_new(Manager *m, const char *id, Session **ret) {
+         _cleanup_(session_freep) Session *s = NULL;
+@@ -79,6 +81,7 @@
+                 .audit_id = AUDIT_SESSION_INVALID,
+                 .tty_validity = _TTY_VALIDITY_INVALID,
+                 .leader = PIDREF_NULL,
++                .greeter_handoff_target = PIDREF_NULL,
+         };
+         if (!s->id || !s->state_file)
+                 return -ENOMEM;
+@@ -156,6 +159,8 @@
+ 
+         if (!s)
+                 return NULL;
++
++        session_cancel_greeter_handoff(s, true);
+ 
+         sd_event_source_unref(s->stop_on_idle_event_source);
+ 
+@@ -1004,6 +1009,9 @@
+ 
+         assert(s);
+ 
++        if (force)
++                session_cancel_greeter_handoff(s, true);
++
+         /* This is called whenever we begin with tearing down a session record. It's called in four cases: explicit API
+          * request via the bus (either directly for the session object or for the seat or user object this session
+          * belongs to; 'force' is true), or due to automatic GC (i.e. scope vanished; 'force' is false), or because the
+@@ -1324,6 +1332,10 @@
+         int r;
+ 
+         assert(s);
++
++        /* Keep the old VT handle valid until transfer, timeout or target death. */
++        if (s->manager->greeter_handoff_source == s)
++                return false;
+ 
+         if (drop_not_started && !s->started)
+                 return true;
+@@ -1493,13 +1505,16 @@
+         return r;
+ }
+ 
+-static void session_restore_vt(Session *s) {
+-        int r;
+-
+-        assert(s);
++static int session_restore_vt(Session *s) {
++        int r;
++
++        assert(s);
++
++        if (session_greeter_handoff_prepared(s))
++                return -EBUSY;
+ 
+         if (s->vtfd < 0)
+-                return;
++                return -ENODEV;
+ 
+         r = vt_restore(s->vtfd);
+         if (r == -EIO) {
+@@ -1518,6 +1533,153 @@
+                 log_warning_errno(r, "Failed to restore VT, ignoring: %m");
+ 
+         s->vtfd = safe_close(s->vtfd);
++        return r;
++}
++
++/* Root-only /run marker survives daemon SIGKILL, but never survives reboot. It stores
++ * only a VT number, never authentication data or a resumable authorization. */
++#define GREETER_HANDOFF_MARKER "/run/systemd/greeter-handoff"
++
++int manager_recover_greeter_handoff(Manager *m) {
++        _cleanup_free_ char *value = NULL;
++        _cleanup_close_ int fd = -EBADF;
++        Session *other;
++        unsigned vtnr;
++        int r = read_one_line_file(GREETER_HANDOFF_MARKER, &value);
++        if (r == -ENOENT)
++                return 0;
++        if (r < 0)
++                return r;
++        r = safe_atou(value, &vtnr);
++        if (r < 0 || vtnr < 1 || vtnr > 63)
++                return -EINVAL;
++        /* Called only after ALL saved controllers were checked against the bus. */
++        HASHMAP_FOREACH(other, m->sessions)
++                if (other->seat == m->seat0 && other->vtnr == vtnr && other->controller)
++                        goto recovered;
++        char path[sizeof("/dev/tty") + DECIMAL_STR_MAX(vtnr)];
++        xsprintf(path, "/dev/tty%u", vtnr);
++        fd = open_terminal(path, O_RDWR|O_CLOEXEC|O_NONBLOCK|O_NOCTTY);
++        if (fd < 0)
++                return fd;
++        r = vt_restore(fd);
++        if (r < 0)
++                return r; /* Keep marker; a failed startup can retry safely. */
++recovered:
++        if (unlink(GREETER_HANDOFF_MARKER) < 0 && errno != ENOENT)
++                return -errno;
++        return 0;
++}
++
++bool session_greeter_handoff_prepared(Session *s) {
++        assert(s);
++        return s->manager->greeter_handoff_source == s &&
++               s->greeter_handoff_timeout &&
++               now(CLOCK_MONOTONIC) < s->greeter_handoff_deadline &&
++               pidref_is_alive(&s->greeter_handoff_target) > 0;
++}
++
++void session_cancel_greeter_handoff(Session *s, bool restore) {
++        assert(s);
++        if (s->manager->greeter_handoff_source != s)
++                return;
++
++        s->manager->greeter_handoff_source = NULL;
++        s->greeter_handoff_timeout = sd_event_source_unref(s->greeter_handoff_timeout);
++        s->greeter_handoff_target_source = sd_event_source_unref(s->greeter_handoff_target_source);
++        pidref_done(&s->greeter_handoff_target);
++        s->greeter_handoff_deadline = 0;
++        /* A cancelled attempt may be retried only while the original greeter still owns the VT. */
++        if (s->controller && session_is_active(s) && !s->stopping)
++                s->greeter_handoff_used = false;
++
++        bool recovered = s->controller != NULL;
++        /* Never reset a controller which has already acquired the same VT. */
++        LIST_FOREACH(sessions_by_seat, other, s->seat->sessions)
++                if (other != s && other->vtnr == s->vtnr && other->controller) {
++                        s->vtfd = safe_close(s->vtfd);
++                        restore = false;
++                        recovered = true;
++                        break;
++                }
++        if (restore && !s->controller)
++                recovered = session_restore_vt(s) >= 0;
++        /* Failed VT restoration must retain the only durable recovery record. */
++        if (recovered)
++                (void) unlink(GREETER_HANDOFF_MARKER);
++        session_add_to_gc_queue(s);
++}
++
++static int greeter_handoff_timeout(sd_event_source *event, uint64_t usec, void *userdata) {
++        session_cancel_greeter_handoff(ASSERT_PTR(userdata), true);
++        return 1;
++}
++
++static int greeter_handoff_target_exited(sd_event_source *event, int fd, uint32_t revents, void *userdata) {
++        session_cancel_greeter_handoff(ASSERT_PTR(userdata), true);
++        return 1;
++}
++
++int session_prepare_greeter_handoff(Session *s, pid_t successor) {
++        _cleanup_(pidref_done) PidRef target = PIDREF_NULL;
++        _cleanup_(sd_event_source_unrefp) sd_event_source *timer = NULL, *target_event = NULL;
++        uid_t uid;
++        int r;
++
++        assert(s);
++        if (s->class != SESSION_GREETER || !s->started || s->stopping || !s->controller ||
++            !s->seat || s->seat != s->manager->seat0 || s->vtnr == 0 || s->vtfd < 0 || !session_is_active(s))
++                return -EINVAL;
++        if (s->greeter_handoff_used || s->manager->greeter_handoff_source ||
++            access(GREETER_HANDOFF_MARKER, F_OK) >= 0)
++                return -EBUSY; /* Never overwrite a retained failed-recovery record. */
++        if (successor <= 1 || successor == s->leader.pid)
++                return -EINVAL;
++        r = pidref_set_pid(&target, successor);
++        if (r < 0)
++                return r;
++        if (target.fd < 0)
++                return -EOPNOTSUPP;
++        r = pidref_get_uid(&target, &uid);
++        if (r < 0)
++                return r;
++        if (uid != 0)
++                return -EPERM;
++
++        usec_t deadline = usec_add(now(CLOCK_MONOTONIC), GREETER_HANDOFF_USEC);
++        r = sd_event_add_time(s->manager->event, &timer, CLOCK_MONOTONIC, deadline, 0, greeter_handoff_timeout, s);
++        if (r < 0)
++                return r;
++        r = sd_event_add_io(s->manager->event, &target_event, target.fd, EPOLLIN, greeter_handoff_target_exited, s);
++        if (r < 0)
++                return r;
++        if (s->vtnr > 63)
++                return -EINVAL;
++        char marker[DECIMAL_STR_MAX(s->vtnr)];
++        xsprintf(marker, "%u", s->vtnr);
++        r = write_string_file(GREETER_HANDOFF_MARKER, marker,
++                              WRITE_STRING_FILE_CREATE|WRITE_STRING_FILE_ATOMIC|WRITE_STRING_FILE_MKDIR_0755);
++        if (r < 0)
++                return r; /* No suppression is allowed without durable recovery state. */
++        s->greeter_handoff_target = TAKE_PIDREF(target);
++        s->greeter_handoff_timeout = TAKE_PTR(timer);
++        s->greeter_handoff_target_source = TAKE_PTR(target_event);
++        s->greeter_handoff_deadline = deadline;
++        s->greeter_handoff_used = true;
++        s->manager->greeter_handoff_source = s;
++        return 0;
++}
++
++void session_complete_greeter_handoff(Session *s) {
++        assert(s);
++        Session *source = s->manager->greeter_handoff_source;
++        if (!s->controller || !source || source == s || source->seat != s->seat || source->vtnr != s->vtnr)
++                return;
++        if (!pidref_equal(&source->greeter_handoff_target, &s->leader))
++                log_debug("Greeter handoff cancelled by another VT controller.");
++        /* Either expected transfer or cancellation: the new controller already prepared this VT. */
++        source->vtfd = safe_close(source->vtfd);
++        session_cancel_greeter_handoff(source, false);
+ }
+ 
+ void session_leave_vt(Session *s) {
+@@ -1550,6 +1712,7 @@
+         }
+         if (r < 0)
+                 log_debug_errno(r, "Cannot release VT of session %s: %m", s->id);
++        session_cancel_greeter_handoff(s, true);
+ }
+ 
+ bool session_is_controller(Session *s, const char *sender) {
+@@ -1633,7 +1796,14 @@
+ 
+         session_release_controller(s, true);
+         s->controller = TAKE_PTR(name);
+-        (void) session_save(s);
++        /* Persist the new controller before removing the crash-recovery marker. */
++        r = session_save(s);
++        if (r < 0 && s->manager->greeter_handoff_source && s->manager->greeter_handoff_source != s) {
++                session_drop_controller(s);
++                return r; /* Do not commit a successor that restart cannot discover. */
++        }
++        if (r >= 0)
++                session_complete_greeter_handoff(s);
+ 
+         return 0;
+ }
+--- a/src/login/logind-session-dbus.c
++++ b/src/login/logind-session-dbus.c
+@@ -970,6 +970,52 @@
+         return sd_bus_reply_method_return(c, NULL);
+ }
+ 
++static int property_get_greeter_handoff(
++                sd_bus *bus, const char *path, const char *interface, const char *property,
++                sd_bus_message *reply, void *userdata, sd_bus_error *error) {
++        return sd_bus_message_append(reply, "b", session_greeter_handoff_prepared(ASSERT_PTR(userdata)));
++}
++
++static int method_prepare_greeter_handoff(sd_bus_message *message, void *userdata, sd_bus_error *error) {
++        _cleanup_(sd_bus_creds_unrefp) sd_bus_creds *creds = NULL;
++        uint32_t successor;
++        uid_t uid;
++        int r;
++
++        r = sd_bus_query_sender_creds(message, SD_BUS_CREDS_EUID, &creds);
++        if (r < 0)
++                return r;
++        r = sd_bus_creds_get_euid(creds, &uid);
++        if (r < 0)
++                return r;
++        if (uid != 0)
++                return sd_bus_error_set(error, SD_BUS_ERROR_ACCESS_DENIED, "Only the authenticated root login daemon may authorize a greeter handoff.");
++        r = sd_bus_message_read(message, "u", &successor);
++        if (r < 0)
++                return r;
++        if (successor > INT32_MAX)
++                return sd_bus_error_set(error, SD_BUS_ERROR_INVALID_ARGS, "Invalid successor process.");
++        r = session_prepare_greeter_handoff(ASSERT_PTR(userdata), (pid_t) successor);
++        if (r < 0)
++                return sd_bus_error_set_errno(error, -r);
++        return sd_bus_reply_method_return(message, NULL);
++}
++
++static int method_cancel_greeter_handoff(sd_bus_message *message, void *userdata, sd_bus_error *error) {
++        _cleanup_(sd_bus_creds_unrefp) sd_bus_creds *creds = NULL;
++        uid_t uid;
++        int r = sd_bus_query_sender_creds(message, SD_BUS_CREDS_EUID, &creds);
++        if (r < 0)
++                return r;
++        r = sd_bus_creds_get_euid(creds, &uid);
++        if (r < 0)
++                return r;
++        if (uid != 0)
++                return sd_bus_error_set(error, SD_BUS_ERROR_ACCESS_DENIED, "Root authorization required.");
++        session_cancel_greeter_handoff(ASSERT_PTR(userdata), true);
++        return sd_bus_reply_method_return(message, NULL);
++}
++
+ static const sd_bus_vtable session_vtable[] = {
+         SD_BUS_VTABLE_START(0),
+ 
+@@ -994,6 +1040,7 @@
+         SD_BUS_PROPERTY("Type", "s", property_get_type, offsetof(Session, type), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+         SD_BUS_PROPERTY("Class", "s", property_get_class, offsetof(Session, class), SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+         SD_BUS_PROPERTY("Active", "b", property_get_active, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
++        SD_BUS_PROPERTY("GreeterHandoffPrepared", "b", property_get_greeter_handoff, 0, 0),
+         SD_BUS_PROPERTY("State", "s", property_get_state, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+         SD_BUS_PROPERTY("IdleHint", "b", property_get_idle_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+         SD_BUS_PROPERTY("IdleSinceHint", "t", property_get_idle_since_hint, 0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+@@ -1042,6 +1089,13 @@
+                                 SD_BUS_NO_RESULT,
+                                 method_take_control,
+                                 SD_BUS_VTABLE_UNPRIVILEGED),
++        SD_BUS_METHOD_WITH_ARGS("PrepareGreeterHandoff",
++                                SD_BUS_ARGS("u", successor_worker_pid),
++                                SD_BUS_NO_RESULT,
++                                method_prepare_greeter_handoff,
++                                SD_BUS_VTABLE_UNPRIVILEGED),
++        SD_BUS_METHOD("CancelGreeterHandoff", NULL, NULL, method_cancel_greeter_handoff,
++                      SD_BUS_VTABLE_UNPRIVILEGED),
+         SD_BUS_METHOD("ReleaseControl",
+                       NULL,
+                       NULL,
+--- a/src/login/logind.c
++++ b/src/login/logind.c
+@@ -1285,6 +1285,10 @@
+ 
+         manager_load_scheduled_shutdown(m);
+ 
++        r = manager_recover_greeter_handoff(m);
++        if (r < 0)
++                return log_error_errno(r, "Failed to recover interrupted greeter handoff: %m");
++
+         /* Remove stale objects before we start them */
+         manager_gc(m, false);
+ 
+--- a/src/login/meson.build
++++ b/src/login/meson.build
+@@ -80,6 +80,11 @@
+                 'import' : ['systemd-logind'],
+         },
+         test_template + {
++                'sources' : files('test-greeter-handoff.c'),
++                'import' : ['systemd-logind'],
++                'link_args' : ['-Wl,--wrap=vt_restore', '-Wl,--wrap=open_terminal'],
++        },
++        test_template + {
+                 'sources' : files('test-session-properties.c'),
+                 'type' : 'manual',
+         },
+--- /dev/null
++++ b/src/login/test-greeter-handoff.c
+@@ -0,0 +1,208 @@
++/* SPDX-License-Identifier: LGPL-2.1-or-later */
++#include <sys/mman.h>
++#include <sys/wait.h>
++#include <signal.h>
++#include <unistd.h>
++#include "sd-event.h"
++#include "alloc-util.h"
++#include "fd-util.h"
++#include "hashmap.h"
++#include "logind.h"
++#include "logind-seat.h"
++#include "logind-session.h"
++#include "process-util.h"
++#include "tests.h"
++#include "string-util.h"
++
++/* This test never accesses a real VT. Production session_restore_vt calls this link-time substitute. */
++static unsigned restores;
++static bool fail_restore;
++int __wrap_open_terminal(const char *path, int flags);
++int __wrap_open_terminal(const char *path, int flags) {
++        assert_se(streq(path, "/dev/tty1"));
++        return memfd_create("recovered-fake-vt", MFD_CLOEXEC);
++}
++int __wrap_vt_restore(int fd);
++int __wrap_vt_restore(int fd) {
++        struct stat st;
++        assert_se(fstat(fd, &st) == 0 && S_ISREG(st.st_mode));
++        restores++;
++        return fail_restore ? -EIO : 0;
++}
++
++static Session *source_new(Manager *m, Seat *seat) {
++        Session *s;
++        assert_se(session_new(m, "fixture", &s) == 0);
++        s->seat = seat;
++        LIST_PREPEND(sessions_by_seat, seat->sessions, s);
++        seat->active = s;
++        s->class = SESSION_GREETER;
++        s->started = true;
++        s->controller = strdup(":fixture");
++        s->vtnr = 1;
++        assert_se((s->vtfd = memfd_create("fake-vt", MFD_CLOEXEC)) >= 0);
++        return s;
++}
++
++static void source_free(Session *s) {
++        /* No actual session was registered with a service manager in this fixture. */
++        free(s->controller);
++        s->controller = NULL;
++        s->started = false;
++        session_free(s);
++}
++
++static pid_t target_new(void) {
++        pid_t pid = fork();
++        assert_se(pid >= 0);
++        if (pid == 0) {
++                for (;;) pause();
++        }
++        return pid;
++}
++
++int main(int argc, char **argv) {
++        _cleanup_(sd_event_unrefp) sd_event *event = NULL;
++        _cleanup_(hashmap_freep) Hashmap *sessions = NULL;
++        Manager m = {};
++        Seat seat = { .manager = &m };
++        Session *s;
++        pid_t target;
++        unsigned before;
++
++        /* Root only inside the caller's disposable user/PID namespace. Never run as host root. */
++        assert_se(geteuid() == 0);
++        assert_se(access("/run/systemd/private", F_OK) < 0);
++        assert_se(access("/dev/tty1", F_OK) < 0);
++        assert_se(sd_event_new(&event) == 0);
++        assert_se(sessions = hashmap_new(&string_hash_ops));
++        m.event = event;
++        m.sessions = sessions;
++        m.seat0 = &seat;
++
++        target = target_new();
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0);
++        assert_se(session_greeter_handoff_prepared(s));
++        assert_se(!session_may_gc(s, true));
++        assert_se(session_prepare_greeter_handoff(s, target) == -EBUSY);
++        before = restores;
++        session_cancel_greeter_handoff(s, true);
++        assert_se(restores == before && !m.greeter_handoff_source);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0); /* live greeter retry */
++        source_free(s);
++        assert_se(restores == before + 1 && !m.greeter_handoff_source);
++        assert_se(sd_event_run(event, 0) >= 0); /* cancelled callbacks cannot outlive their source */
++        puts("PASS pin, bounded single arm, live retry, free/callback lifetime");
++
++        s = source_new(&m, &seat);
++        s->class = SESSION_USER;
++        assert_se(session_prepare_greeter_handoff(s, target) == -EINVAL);
++        s->class = SESSION_GREETER;
++        seat.active = NULL;
++        assert_se(session_prepare_greeter_handoff(s, target) == -EINVAL);
++        seat.active = s;
++        assert_se(session_prepare_greeter_handoff(s, 1) == -EINVAL);
++        source_free(s);
++        puts("PASS reject non-greeter, inactive VT, invalid target");
++
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0);
++        free(s->controller); s->controller = NULL; /* actual controller disappearance */
++        before = restores;
++        assert_se(sd_event_source_set_time(s->greeter_handoff_timeout, now(CLOCK_MONOTONIC)) >= 0);
++        for (unsigned i = 0; i < 8 && m.greeter_handoff_source; i++) assert_se(sd_event_run(event, 100000) >= 0);
++        assert_se(!m.greeter_handoff_source && restores == before + 1 && s->vtfd < 0);
++        assert_se(session_may_gc(s, true));
++        source_free(s);
++        puts("PASS expired handoff restores only the old VT and releases GC pin");
++
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0);
++        free(s->controller); s->controller = NULL;
++        before = restores;
++        assert_se(kill(target, SIGKILL) == 0);
++        assert_se(waitpid(target, NULL, 0) == target);
++        for (unsigned i = 0; i < 8 && m.greeter_handoff_source; i++) assert_se(sd_event_run(event, 100000) >= 0);
++        assert_se(!m.greeter_handoff_source && restores == before + 1);
++        source_free(s);
++        puts("PASS successor PID death cancels before the deadline");
++
++        target = target_new();
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0);
++        free(s->controller); s->controller = NULL;
++        char next_controller[] = ":next";
++        Session next = { .manager = &m, .seat = &seat, .vtnr = 2, .controller = next_controller, .leader = PIDREF_NULL };
++        assert_se(pidref_set_pid(&next.leader, target) == 0);
++        LIST_PREPEND(sessions_by_seat, seat.sessions, &next);
++        session_complete_greeter_handoff(&next);
++        assert_se(m.greeter_handoff_source == s); /* wrong VT never consumes authorization */
++        next.vtnr = 1;
++        before = restores;
++        session_complete_greeter_handoff(&next);
++        assert_se(!m.greeter_handoff_source && s->vtfd < 0 && restores == before);
++        assert_se(sd_event_run(event, 0) >= 0);
++        assert_se(restores == before); /* stale timeout cannot reset new controller */
++        LIST_REMOVE(sessions_by_seat, seat.sessions, &next);
++        pidref_done(&next.leader);
++        source_free(s);
++        kill(target, SIGKILL); assert_se(waitpid(target, NULL, 0) == target);
++        puts("PASS same-VT transfer never resets successor, including stale callbacks");
++        target = target_new();
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == 0);
++        free(s->controller); s->controller = NULL;
++        fail_restore = true;
++        session_cancel_greeter_handoff(s, true);
++        assert_se(!m.greeter_handoff_source && s->vtfd < 0);
++        assert_se(access("/run/systemd/greeter-handoff", F_OK) == 0);
++        source_free(s);
++        s = source_new(&m, &seat);
++        assert_se(session_prepare_greeter_handoff(s, target) == -EBUSY);
++        source_free(s);
++        fail_restore = false;
++        assert_se(manager_recover_greeter_handoff(&m) == 0);
++        assert_se(access("/run/systemd/greeter-handoff", F_OK) < 0);
++        kill(target, SIGKILL); assert_se(waitpid(target, NULL, 0) == target);
++        puts("PASS cancellation restore failure preserves recovery marker through session GC");
++
++        target = target_new();
++        int ready[2]; assert_se(pipe(ready) == 0);
++        pid_t daemon = fork(); assert_se(daemon >= 0);
++        if (daemon == 0) {
++                close(ready[0]);
++                sd_event *child_event; assert_se(sd_event_new(&child_event) == 0);
++                m.event = child_event;
++                Session *crashed = source_new(&m, &seat);
++                assert_se(session_prepare_greeter_handoff(crashed, target) == 0);
++                assert_se(write(ready[1], "R", 1) == 1);
++                for (;;) pause();
++        }
++        close(ready[1]); char signal;
++        assert_se(read(ready[0], &signal, 1) == 1); close(ready[0]);
++        assert_se(kill(daemon, SIGKILL) == 0);
++        assert_se(waitpid(daemon, NULL, 0) == daemon);
++        assert_se(access("/run/systemd/greeter-handoff", F_OK) == 0);
++        assert_se(kill(target, SIGKILL) == 0); assert_se(waitpid(target, NULL, 0) == target);
++        FILE *marker;
++        before = restores;
++        fail_restore = true;
++        assert_se(manager_recover_greeter_handoff(&m) == -EIO);
++        assert_se(access("/run/systemd/greeter-handoff", F_OK) == 0);
++        fail_restore = false;
++        assert_se(manager_recover_greeter_handoff(&m) == 0);
++        assert_se(restores == before + 2);
++        assert_se(access("/run/systemd/greeter-handoff", F_OK) < 0);
++        assert_se(manager_recover_greeter_handoff(&m) == 0);
++        puts("PASS crash marker recovery, failed-recovery retry, idempotence");
++        s = source_new(&m, &seat);
++        marker = fopen("/run/systemd/greeter-handoff", "w");
++        assert_se(marker); fputs("1\n", marker); assert_se(fclose(marker) == 0);
++        before = restores;
++        assert_se(manager_recover_greeter_handoff(&m) == 0);
++        assert_se(restores == before);
++        source_free(s);
++        puts("PASS crash recovery preserves live same-VT controller");
++        return 0;
++}

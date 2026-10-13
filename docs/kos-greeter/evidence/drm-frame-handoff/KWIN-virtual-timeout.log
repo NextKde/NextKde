@@ -1,0 +1,51 @@
+all virtual outputs reported background presentation
+Failed to gain real time thread priority (See CAP_SYS_NICE in the capabilities(7) man page). error: Operation not permitted
+kwin_core: Failed to open drm node /dev/dri/renderD129: No such file or directory
+kwin_core: Failed to open drm node /dev/dri/renderD128: No such file or directory
+Accepting client connections on sockets: QList("kos-fixture-wayland")
+kwin_xkbcommon: XKB: Include path failed: "/tmp/kos-handoff-runtime/kos-greeter-23ffcf01c697031484bf74e9fdfc156d/config/xkb" (No such file or directory)
+kwin_xkbcommon: XKB: Include path failed: "/tmp/.xkb" (No such file or directory)
+kwin_xkbcommon: XKB: Include path failed: "/etc/xkb" (No such file or directory)
+kwin_xkbcommon: XKB: Include path added: /usr/share/xkeyboard-config-2
+qt.qpa.input.devices: Registered QInputDevice(QPointingDevice("some touchscreen" TouchScreen id=8589934592 seat=seat0 ptrType=Finger maxPts=10)
+qt.qpa.input.devices: Registered QInputDevice(QPointingDevice("some tablet" Stylus id=8589934593 seat=seat0 ptrType=Pen caps=Position|Pressure|ZPosition maxPts=10)
+KOS_DRM_HANDOFF BootstrapLoaded
+kwin_screencast: Failed to connect PipeWire context
+qt.widgets.painting: Marking QRect(0,0 450x200) of QWidget(0x7ffe42e15a40) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Sending update request to QWidget(0x7ffe42e15a40) with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Marking QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Marking QRegion(0,0 450x200) of QWidget(0x7ffe42e15a40) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Syncing dirty widgets
+qt.widgets.painting: Syncing QRegion(0,0 450x200) of QWidget(0x7ffe42e15a40)
+qt.widgets.painting: Marking QRegion(0,0 450x200) of top level QWidget(0x7ffe42e15a40) as needing flush
+qt.widgets.painting: Painting and flushing dirty top level QRegion(0,0 450x200) and dirty widgets QList()
+qt.widgets.painting: Drawing QRegion(0,0 450x200) of QWidget(0x7ffe42e15a40) at QPoint(0,0) into paint device 0x55fff8ded938 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawAsRoot|DrawRecursive|UseEffectRegionBounds)
+qt.widgets.painting: Marking QRegion(0,0 450x200) of top level QWidget(0x7ffe42e15a40) as needing flush
+qt.widgets.painting: Drawing QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) at QPoint(10,10) into paint device 0x55fff8ded938 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawRecursive)
+qt.widgets.painting: Marking QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) as needing flush in QWidget(0x7ffe42e15a40) at offset QPoint(10,10)
+qt.widgets.painting: Flushing top level QRegion(0,0 450x200) and children QList()
+qt.widgets.painting: Syncing QRegion(0,0 450x200) of QWidget(0x7ffe42e15a40)
+qt.widgets.painting: Marking QRect(0,0 450x200) of QWidget(0x7ffe42e15a40) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Sending update request to QWidget(0x7ffe42e15a40) with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Marking QRect(0,0 430x180) of QLabel(0x7ffe42e15a70) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Syncing dirty widgets
+qt.widgets.painting: Painting and flushing dirty top level QRegion(null) and dirty widgets QList(QWidget(0x7ffe42e15a40), QLabel(0x7ffe42e15a70))
+qt.widgets.painting: Drawing QRegion(0,0 450x200) of QWidget(0x7ffe42e15a40) at QPoint(0,0) into paint device 0x55fff8da71d8 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawAsRoot|DrawRecursive|DontDrawOpaqueChildren)
+qt.widgets.painting: Marking QRegion(0,0 450x200) of top level QWidget(0x7ffe42e15a40) as needing flush
+qt.widgets.painting: Drawing QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) at QPoint(10,10) into paint device 0x55fff8da71d8 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawRecursive|DontDrawOpaqueChildren)
+qt.widgets.painting: Marking QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) as needing flush in QWidget(0x7ffe42e15a40) at offset QPoint(10,10)
+qt.widgets.painting: Drawing QRegion(10,10 430x180) of QWidget(0x7ffe42e15a40) at QPoint(0,0) into paint device 0x55fff8da71d8 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawAsRoot|DrawRecursive|UseEffectRegionBounds)
+qt.widgets.painting: Marking QRegion(10,10 430x180) of top level QWidget(0x7ffe42e15a40) as needing flush
+qt.widgets.painting: Drawing QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) at QPoint(10,10) into paint device 0x55fff8da71d8 with QFlags<QWidgetPrivate::DrawWidgetFlag>(DrawRecursive)
+qt.widgets.painting: Marking QRegion(0,0 430x180) of QLabel(0x7ffe42e15a70) as needing flush in QWidget(0x7ffe42e15a40) at offset QPoint(10,10)
+qt.widgets.painting: Flushing top level QRegion(0,0 450x200) and children QList()
+KOS_DRM_HANDOFF Armed
+KOS_DRM_HANDOFF AllOutputsPresented
+KOS_DRM_HANDOFF ArmTimeout
+qt.widgets.painting: Marking QRect(0,0 450x200) of QWidget(0x7ffe42e15a40) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Sending update request to QWidget(0x7ffe42e15a40) with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Marking QRect(0,0 430x180) of QLabel(0x7ffe42e15a70) dirty with QWidgetRepaintManager::UpdateLater
+qt.widgets.painting: Marking QRect(0,0 450x200) of QWidget(0x7ffe42e15a40) dirty with QWidgetRepaintManager::UpdateLater
+qt.qpa.input.devices: Unregistered QInputDevice(QPointingDevice("some tablet" Stylus id=8589934593 seat=seat0 ptrType=Pen caps=Position|Pressure|ZPosition maxPts=10)
+qt.qpa.input.devices: Unregistered QInputDevice(QPointingDevice("some touchscreen" TouchScreen id=8589934592 seat=seat0 ptrType=Finger maxPts=10)
+fixture timeout: PASS (virtual presentation only; no physical DRM/VT claim)

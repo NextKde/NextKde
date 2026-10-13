@@ -1,0 +1,12 @@
+PASS unpublished UID uses default and ignores stale nonce confirmation
+PASS consented image crosses a real readonly root-owned SCM_RIGHTS FD
+PASS fit metadata remains bound to the image and current nonce
+PASS withdrawal falls back and timeout never authorizes launch
+PASS near-expiry publication cannot be retained through a handoff
+PASS unsupported fit is explicit default, never mislabelled crop
+6 authorizer protocol/resource cases passed; no PAM/display/system-bus access
+PASS installed root selection never resurrects withdrawn var publication
+PASS prepare failure, expired/stale confirmation and EOF cancel; current READY commits
+Final authorizer cases passed; no PAM/display/system-bus access
+PASS fixed experimental entry; FD crosses real dbus-run-session to fake KWin and cannot enter UI
+PASS absent channel and existing desktop rejection; no real display or PAM used

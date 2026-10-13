@@ -1,0 +1,7 @@
+# Example only. Never copy to the running host. Start experimental greetd in a
+# disposable VM with KOS_GREETD_HANDOFF=1 and this explicit config path.
+[terminal]
+vt = 1
+[default_session]
+command = "/opt/kos-handoff/libexec/kos-greeter-session-handoff"
+user = "greeter"
