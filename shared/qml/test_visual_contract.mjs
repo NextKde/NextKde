@@ -472,7 +472,7 @@ assert.match(iconThemeReloadSource,
     /pixmapCacheAllowed:\s*true[\s\S]*pixmapCacheAllowed = false[\s\S]*revision\+\+/,
     "an icon-theme change bypasses stale process-wide decoded pixmaps");
 assert.match(dockAnimationSource,
-    /windowPreviewDelay:\s*300/,
+    /windowPreviewDelay:\s*220/,
     "Dock previews debounce pointer passes before requesting a full-screen capture");
 // The four-pixel separation from the Bar moved from a per-card offset into the
 // panel's own anchor margins when the panel became one window. The value and
