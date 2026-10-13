@@ -164,7 +164,7 @@ class Installer:
             if parent == self.root: break
 
     def lock(self):
-        path = self.root/'run/lock/kos-greeter-install.lock'; self.safe(path.parent)
+        path = self.root/'run/kos-greeter-install.lock'; self.safe(path.parent)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path, os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600)
         info = os.fstat(fd)

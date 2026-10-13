@@ -418,6 +418,14 @@ class Transaction(unittest.TestCase):
   try:
    with self.assertRaisesRegex(RuntimeError,'Another installation'):self.inst.lock()
   finally:os.close(fd)
+ def test_lock_works_with_world_writable_distro_lock_directory(self):
+  distro_lock=self.root/'run/lock';distro_lock.mkdir(parents=True);distro_lock.chmod(0o1777)
+  fd=self.inst.lock()
+  try:
+   lock=self.root/'run/kos-greeter-install.lock'
+   self.assertTrue(lock.is_file())
+   self.assertEqual(stat.S_IMODE(lock.stat().st_mode),0o600)
+  finally:os.close(fd)
  def test_active_install_failure_restores_previous_manager(self):
   self.fail=('start','greetd.service')
   with patch.object(m,'recovery_tty'),self.assertRaises(RuntimeError):self.inst.install(self.bundle,now=True)
