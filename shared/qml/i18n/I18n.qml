@@ -19,10 +19,23 @@ import "ZhCatalog.mjs" as ZhCN
 QtObject {
     id: root
 
-    // "zh-CN"（默认，保持现有中文界面）或 "en"。
+    // 生效语言：只接受 "zh-CN" / "en"。"auto" 由 shell 侧 I18nService 解析
+    // 后写入，绝不能直接落进这里（否则 tr() 查不到词典目录会全部回退英文）。
+    // 默认按系统语言解析：覆盖 I18nService 异步加载持久值之前的启动窗口，
+    // 让英文系统的用户从第一帧起就是英文。
     // 持久化与切换入口在 shell 侧 I18nService（state 文件 + IPC），
     // settings 通过 i18n-settings IPC 目标读写同一个值。
-    property string language: "zh-CN"
+    property string language: systemDefault()
+
+    // 系统语言解析的唯一实现（I18nService 与 settings 的本地兜底都走这里）：
+    // zh* -> zh-CN，其余一律 en；uiLanguages 为空时保持 zh-CN
+    // （避免无法识别系统语言的环境被意外切成英文）。
+    function systemDefault() {
+        const tags = Qt.locale().uiLanguages || []
+        for (let i = 0; i < tags.length; ++i)
+            if (/^zh/i.test(String(tags[i]))) return "zh-CN"
+        return tags.length > 0 ? "en" : "zh-CN"
+    }
 
     readonly property var _catalogs: ({
         "en": ({}),

@@ -4192,8 +4192,9 @@ ApplicationWindow {
         // {id, colors: [#rrggbb, ...]}; empty until a wallpaper seed exists.
         property var colorSchemes: []
         property string errorText: ""
-        // 界面语言（zh-CN / en），经 i18n-settings IPC 由 Shell 持有与落盘。
-        property string language: "zh-CN"
+        // 界面语言持久值（auto / zh-CN / en），经 i18n-settings IPC 由 Shell
+        // 持有与落盘；"auto" 的本地解析在 onI18nSnapshotChanged 里做。
+        property string language: "auto"
         readonly property var styles: [
             {
                 id: "macos",
@@ -4324,11 +4325,9 @@ ApplicationWindow {
                         && state.language !== "") {
                     themePage.language = String(state.language)
                     // "auto" 只作为持久值：生效语言由 shell 解析后同步回来时
-                    // 已经是具体值；这里在本地也解析一份，保证立即生效。
+                    // 已经是具体值；这里在本地也解析一份（同一实现），保证立即生效。
                     I18n.language = themePage.language === "auto"
-                        ? (Qt.locale().uiLanguages.some(function(tag) {
-                              return /^zh/i.test(String(tag)) }) ? "zh-CN" : "en")
-                        : themePage.language
+                        ? I18n.systemDefault() : themePage.language
                 }
             }
         }
