@@ -19,15 +19,13 @@ ApplicationWindow {
     visible: true
     title: I18n.tr("KOS settings")
     color: theme.background
-    // Frameless CSD form, only while the KOS decoration is selected
-    // (same kwinrc gate the bridge button panel uses). With any other
-    // decoration the window stays plain SSD and everything below is inert.
-    readonly property bool csd: windowSettings.kosDecorationSelected()
-    // Reserved top strip: bridge panel default geometry is offset(10,6) +
-    // 79x23 panel, so its bottom edge sits 29px from the top; 30 keeps one
-    // pixel of air. Drag/double-click maximize live in this band.
-    readonly property int chromeStrip: csd ? 30 : 0
-    flags: csd ? Qt.Window | Qt.FramelessWindowHint : Qt.Window
+    // 永远无边框(CSD):顶部 30px 保留带承载拖拽/双击最大化/窗口按钮。
+    // 按钮有两层:右上的自绘简单按钮(常驻、永远可点),以及 kos-bridge
+    // 在 KOS 装饰器选中时盖印在完全相同位置上的不透明面板(其 KWin 输入
+    // 过滤器先行拦截,点的是面板)。装饰器切走 → 面板消失 → 自绘按钮
+    // 露出来接着用。窗口在任何装饰器下都保持同一形态,无切换逻辑。
+    readonly property int chromeStrip: 30
+    flags: Qt.Window | Qt.FramelessWindowHint
 
     property int currentPage: 1
     readonly property int displayedPage: pageMotion.displayedPage === ""
@@ -98,14 +96,12 @@ ApplicationWindow {
             return value === undefined ? iPadOSValue : value
         }
         // 窗口底色 + 左侧栏 = 同一块平面，右侧内容区是它上面一块圆角面板。
-        // 底色**必须**是 #eff0f1，等于 BreezeLight 的 Window/BackgroundNormal(239,240,241)：
-        // 【SSD 模式】窗口装饰 kos_decoration 的标题栏取的就是
-        // client->palette().color(QPalette::Window)
-        // （kwin/kos-decoration/kosdecoration.cpp:157），两边同色标题栏才和
-        // 内容连成一块无缝的面。**永远不要动这个值**（2026-09-28 改过一次，标题栏立刻裂出色差）。
-        // 【CSD 模式】（csd == true，窗口无边框，顶带即窗口底色）：红绿灯面板由
-        // kos-bridge effect 从标题栏像素取色着色，底色不变即自然融合。
-        // 两种模式共用同一底色，切换装饰器时应用在下次开窗时换形态。
+        // 底色沿用 #eff0f1（BreezeLight 的 Window/BackgroundNormal），历史原因:
+        // 旧 SSD 形态下 kos-decoration 标题栏直接读 client palette 的这个颜色
+        // （kwin/kos-decoration/kosdecoration.cpp:157）。窗口现已永远无边框
+        // （见根窗口 flags 注释），没有标题栏衔接问题，但底色保持不变——
+        // kos-bridge 的红绿灯面板从顶带像素取色着色，同色才融合。
+        // **仍然不要随手改这个值**（2026-09-28 改过一次，裂出色差）。
         //   右侧面板 = #e3e5e7，即 Breeze 同组的 Window/BackgroundAlternate(227,229,231)
         // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。
         // （试过 #f2f2f7：ΔRGB 只有 (3,2,6)/1.023:1，肉眼分不出边界。加阴影已被否，
@@ -5973,11 +5969,10 @@ ApplicationWindow {
 
             ColumnLayout {
                 anchors.fill: parent
-                // 左 24 / 右 4 是有意不对称的：右侧要再叠加内容面板的 inset(20)，
-                // 4+20=24 才和左侧的 24 相等，session 卡片于是落在「窗口左缘 ↔
-                // 内容面板」这段视觉空间的正中；标题和搜索框跟卡片同列对齐。
+                // 两侧对称 24:内容区已顶天立地(无 inset),卡片不再需要
+                // 叠加内容面板的 inset 来凑视觉居中。
                 anchors.leftMargin: 24
-                anchors.rightMargin: 4
+                anchors.rightMargin: 24
                 anchors.topMargin: 22
                 anchors.bottomMargin: 16
                 spacing: 0
@@ -6189,19 +6184,13 @@ ApplicationWindow {
 
         Rectangle {
             id: contentSurface
-            // 右侧内容面板四周让开 inset（呼吸空间），否则贴边时圆角会被窗口
-            // 边缘切掉，只在左下露出一点圆弧。圆角之外露出的就是 theme.background
-            // （#eff0f1），也就是侧栏那块平面，看上去像分栏而不是割裂。
-            // 10 → 20：用户要求边距大一点、圆角区域小一点。面板自身的内边距
-            // （下面 Flickable 的 30/24）保持不变，所以变大的是面板外的留白。
-            readonly property real inset: 20
-            x: sidebar.width + inset
-            // CSD 模式下顶部让出保留带(chromeStrip),内容面板顶到带下缘;
-            // SSD 模式 chromeStrip 为 0,回到原 y=20。
-            y: inset + window.chromeStrip
-            width: parent.width - x - inset
-            height: parent.height - y - inset
-            radius: 18
+            // 右侧内容面顶天立地:从侧栏右缘一直铺到窗口上/右/下边缘,不留
+            // inset、不做圆角——与侧栏形成两栏平面分割(窗口永远无边框,顶部
+            // chromeStrip 保留带落在内容面色上,拖拽/红绿灯都在这一带)。
+            x: sidebar.width
+            y: 0
+            width: parent.width - x
+            height: parent.height
             color: theme.contentSurface
 
             Flickable {
@@ -6213,7 +6202,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 anchors.leftMargin: 30
                 anchors.rightMargin: 30
-                anchors.topMargin: 24
+                // 顶部让出 chromeStrip(拖拽带 + 红绿灯),页面标题落在带下缘。
+                anchors.topMargin: 24 + window.chromeStrip
                 anchors.bottomMargin: 24
                 contentWidth: Math.max(width, pageContent.width)
                 contentHeight: pageContent.implicitHeight
@@ -6397,12 +6387,11 @@ ApplicationWindow {
             }
         }
 
-        // ── CSD 窗口框(仅 csd 模式生效)────────────────────────────
-        // 顶部保留带:整条可拖拽移动,双击切换最大化。红绿灯面板区域由
-        // kos-bridge 的 KWin 输入过滤器先行拦截,不会落到这个 MouseArea。
-        // 移动手势必须在指针真正移动超过阈值后才启动:startSystemMove 会在
-        // 合成器侧抓取指针手势,若在按下的瞬间就启动,双击的最大化请求会
-        // 撞进进行中的手势,KWin 的最大化摆放会整体偏移(顶缝/压 dock)。
+        // ── 窗口框(常驻,窗口永远无边框)────────────────────────────
+        // 顶部保留带:整条可拖拽移动,双击切换最大化。移动手势必须在指针
+        // 真正移动超过阈值后才启动:startSystemMove 会在合成器侧抓取指针
+        // 手势,若在按下的瞬间就启动,双击的最大化请求会撞进进行中的手势,
+        // KWin 的最大化摆放会整体偏移(顶缝/压 dock)。
         MouseArea {
             id: titlebarDrag
             anchors {
@@ -6411,9 +6400,6 @@ ApplicationWindow {
                 top: parent.top
             }
             height: window.chromeStrip
-            enabled: window.csd
-            property point pressPos
-            property bool moveArmed: false
             onPressed: mouse => {
                 pressPos = Qt.point(mouse.x, mouse.y)
                 moveArmed = true
@@ -6431,6 +6417,43 @@ ApplicationWindow {
                 moveArmed = false
                 window.visibility === Window.Maximized
                     ? window.showNormal() : window.showMaximized()
+            }
+            property point pressPos
+            property bool moveArmed: false
+        }
+
+        // 自绘窗口按钮:几何与 bridge 面板对齐(offset 10,6 + padding 4.5),
+        // KOS 装饰器选中时被面板完整盖住(输入走面板),面板不在时它们就是
+        // 窗口控件。
+        Row {
+            anchors {
+                right: parent.right
+                rightMargin: 14.5   // 面板 offset.x 10 + panelPaddingX 4.5
+                top: parent.top
+                topMargin: 10.5     // offset.y 6 + panelPadding 4.5
+            }
+            spacing: 14
+            Repeater {
+                model: [
+                    { color: "#28c840", act: "max" },
+                    { color: "#febc2e", act: "min" },
+                    { color: "#ff5f57", act: "close" }
+                ]
+                delegate: Rectangle {
+                    required property var modelData
+                    width: 14; height: 14; radius: 7
+                    color: modelData.color
+                    opacity: 0.85
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: modelData.act === "min" ? window.showMinimized()
+                            : modelData.act === "max"
+                            ? (window.visibility === Window.Maximized
+                                ? window.showNormal() : window.showMaximized())
+                            : window.close()
+                    }
+                }
             }
         }
 
