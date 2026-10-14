@@ -13,6 +13,7 @@ import qs.desktop.modules.platform
 QtObject {
     id: service
 
+    signal launchFailed(string appId)
     signal pinRequested(string appId)
     signal unpinRequested(string appId)
     signal hideRequested(string appId)
@@ -103,11 +104,13 @@ QtObject {
                 if (!entry || entry.runInTerminal) {
                     // Spawning a terminal app without a TTY always dies; a
                     // silent dead process is worse than a logged refusal.
+                    service.launchFailed(appId)
                     console.warn("[AppAction] launch failed, no direct fallback "
                                  + "exists app=" + appId)
                     return
                 }
-                service._executeDirect(entry, appId, "platform-launch")
+                if (!service._executeDirect(entry, appId, "platform-launch"))
+                    service.launchFailed(appId)
             }
         })
         console.log("[AppAction] platform launch app=" + appId)

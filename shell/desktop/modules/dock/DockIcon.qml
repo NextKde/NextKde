@@ -371,6 +371,44 @@ Item {
         && ConfigService.effectiveHoverLift > 0
         ? -Math.max(2, Math.round(iconSize
             * ConfigService.effectiveHoverLift)) : 0
+    readonly property bool _launching: appId.length > 0
+        && DockLaunchService.isLaunching(AppIdentityService.canonicalId(appId))
+    property real _launchPhase: 0
+    property bool _launchBouncing: false
+    property real _landingProgress: 1
+    property real _landingStartLift: 0
+    readonly property real _launchLift: _launchBouncing && !editMode && !isDragging
+        ? (_landingProgress < 1
+            ? _landingStartLift * Math.pow(1 - _landingProgress, 2)
+            : -iconSize * DockAnimation.launchBounceHeightRatio
+                * Magnification.launchBounce(_launchPhase)) : 0
+    on_LaunchingChanged: {
+        if (_launching) {
+            _landingProgress = 1
+            _launchPhase = 0
+            _launchBouncing = true
+        } else if (_launchBouncing) {
+            _landingStartLift = _launchLift
+            _landingProgress = 0
+        }
+    }
+    FrameAnimation {
+        running: icon._launchBouncing
+        onTriggered: {
+            if (!icon._launching) {
+                icon._landingProgress = Math.min(1, icon._landingProgress
+                    + frameTime / DockAnimation.launchLandingSeconds)
+                if (icon._landingProgress === 1) {
+                    icon._launchPhase = 0
+                    icon._launchBouncing = false
+                }
+            } else {
+                icon._launchPhase = (icon._launchPhase
+                    + frameTime / DockAnimation.launchBounceSeconds) % 1
+            }
+            icon.updateDockName()
+        }
+    }
     property real _attentionScale: 1.0
     property real _attentionLift: 0
     property real _attentionGlow: 0
@@ -383,7 +421,7 @@ Item {
     transform: Translate {
         // Grow towards the workspace: cancel the downward half of a
         // centre-origin scale before adding the configured hover lift.
-        y: icon._attentionLift + icon._hoverDirection
+        y: icon._hoverDirection * (icon._attentionLift + icon._launchLift) + icon._hoverDirection
             * (icon._hoverLift + icon._magnificationLift
                 - icon.height / 2 * (icon._hoverScale * icon._magnificationScale - 1))
         // The magnified row spreads so neighbours are never covered (see
@@ -612,15 +650,24 @@ Item {
         }
     }
 
-    // Shared Dock hosts own one label. Standalone icons create a fallback
-    // only while eligible for a name tooltip, instead of eager hidden windows.
+    // The Dock owns one label in its existing surface. Delegates expose only
+    // eligibility; no popup windows or continuously running label drivers.
+    readonly property bool dockNameEligible: visible && interactive && !isDragging
+        && displayName.trim().length > 0 && !editMode
+        && !(preview && preview.visible)
+        && !DockModelService.activeContextMenu
+    function updateDockName() {
+        if (magnificationRoot && typeof magnificationRoot.updateNameLabel === "function")
+            magnificationRoot.updateNameLabel()
+    }
+    onDockNameEligibleChanged: updateDockName()
+    // Non-Dock hosts retain the existing lazy popup fallback. The shared Dock
+    // never constructs this separate surface or uses its dwell timer.
     Loader {
-        active: !icon._usesSharedMagnification && icon._hovering
-            && !icon._hasWindows && !icon.isRunning && !icon.editMode
-            && icon.displayName.trim().length > 0
-            && !DockModelService.activeContextMenu
+        active: !icon._usesSharedMagnification && icon._hovering && icon.dockNameEligible
         sourceComponent: DockAppNameTooltip { targetIcon: icon }
     }
+
 
     // iPadOS-style edit-state wiggle. The held icon stays steady so it reads
     // as the object under direct manipulation rather than a background item.

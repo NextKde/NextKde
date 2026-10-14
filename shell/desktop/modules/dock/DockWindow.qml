@@ -8,6 +8,7 @@ import qs.desktop.modules.deskcenter
 import qs.desktop.modules.platform
 import qs.desktop.modules.wallpaper
 import "../../../Kos/Ui"
+import "DockMagnification.mjs" as Magnification
 
 // One concrete output-bound Dock layer surface.
 //
@@ -95,22 +96,25 @@ PanelWindow {
     // it has to live inside the window. The glass, the wrapper and the input
     // mask keep their own size and position — this area is transparent and
     // click-through, it only stops the compositor from clipping the artwork.
-    readonly property real hoverHeadroom: {
-        const slot = dockContainer.iconSize
-            + dockContainer.activeBackgroundGap * 2
-        const grow = slot * (ConfigService.effectiveHoverScale - 1)
-        const lift = slot * ConfigService.effectiveHoverLift
-        const slack = Math.max(0, (root.dockThickness - slot) / 2)
-        return Math.max(0, Math.ceil(grow + lift - slack)) + 4
-    }
+    // Reserve launch + maximum hover together even before the first click,
+    // so starting a bounce never resizes/repositions the Wayland surface.
+    // dockHoverRegion below uses this same budget on all three edges.
+    readonly property real hoverHeadroom: Magnification.visualHeadroom(
+        dockContainer.iconSize, dockContainer.activeBackgroundGap,
+        ConfigService.effectiveHoverScale, ConfigService.effectiveHoverLift,
+        root.dockThickness, DockAnimation.launchBounceHeightRatio)
+    // Label paint stays in this surface. Its additional space is deliberately
+    // excluded from dockHoverRegion/input masks, so labels remain click-through.
+    readonly property real nameHeadroom: DockAnimation.nameLabelGap + (root.vertical
+        ? DockAnimation.nameLabelMaximumWidth : DockAnimation.nameLabelMaximumHeight)
     // Cross-edge thickness = glass + float. Length is forced by the anchors
     // (full screen along the anchored edge); these set the other dimension.
     implicitHeight: root.vertical ? 0
         : dockContainer.height + root.edgeMargin + root.workspaceMargin
-            + root.hoverHeadroom
+            + root.hoverHeadroom + root.nameHeadroom
     implicitWidth: root.vertical
         ? dockContainer.width + root.edgeMargin + root.workspaceMargin
-            + root.hoverHeadroom : 0
+            + root.hoverHeadroom + root.nameHeadroom : 0
 
     // ── Auto-hide controller ──
     // One controller per surface; inputs come from the singleton services and
@@ -300,6 +304,8 @@ PanelWindow {
 
         DockContainer {
             id: dockContainer
+            nameLabelHost: root.contentItem
+            nameLabelsEnabled: hide.revealProgress > 0 && dockWrapper.opacity > 0.05
             pointerInputItem: dockHoverRegion
             pointerEventRoot: root.contentItem
             targetScreen: root.screen

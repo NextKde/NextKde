@@ -38,3 +38,6 @@ singleton AppIdentityService 1.0 AppIdentityService.qml
 singleton WindowService 1.0 WindowService.qml
 singleton AppGroupService 1.0 AppGroupService.qml
 singleton DockTrashService 1.0 DockTrashService.qml
+
+singleton DockLaunchService 1.0 DockLaunchService.qml
+DockNameLabel 1.0 DockNameLabel.qml

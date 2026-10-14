@@ -48,7 +48,15 @@ QtObject {
     readonly property real magnificationResponseSeconds: 0.026
     readonly property real magnificationEpsilon: 0.0001
     readonly property int magnificationExitGrace: 80
-    readonly property int appNameTooltipDelay: 180
+    readonly property int appNameTooltipDelay: 180 // standalone popup fallback only
+    readonly property int nameLabelMaximumWidth: 220
+    readonly property int nameLabelMaximumHeight: 28
+    readonly property int nameLabelGap: 6
+    readonly property real launchLandingSeconds: 0.13
+    readonly property real launchBounceSeconds: 0.48
+    readonly property real launchBounceHeightRatio: 0.65
+    readonly property int launchMinimumFeedbackMs: 500
+    readonly property int launchFeedbackTimeoutMs: 15000
 
     // ═══════════════════════════════════════════════════════════
     // Music player expand / collapse
