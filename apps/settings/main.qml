@@ -6400,7 +6400,11 @@ ApplicationWindow {
         // ── CSD 窗口框(仅 csd 模式生效)────────────────────────────
         // 顶部保留带:整条可拖拽移动,双击切换最大化。红绿灯面板区域由
         // kos-bridge 的 KWin 输入过滤器先行拦截,不会落到这个 MouseArea。
+        // 移动手势必须在指针真正移动超过阈值后才启动:startSystemMove 会在
+        // 合成器侧抓取指针手势,若在按下的瞬间就启动,双击的最大化请求会
+        // 撞进进行中的手势,KWin 的最大化摆放会整体偏移(顶缝/压 dock)。
         MouseArea {
+            id: titlebarDrag
             anchors {
                 left: parent.left
                 right: parent.right
@@ -6408,9 +6412,26 @@ ApplicationWindow {
             }
             height: window.chromeStrip
             enabled: window.csd
-            onPressed: window.startSystemMove()
-            onDoubleClicked: window.visibility === Window.Maximized
-                ? window.showNormal() : window.showMaximized()
+            property point pressPos
+            property bool moveArmed: false
+            onPressed: mouse => {
+                pressPos = Qt.point(mouse.x, mouse.y)
+                moveArmed = true
+            }
+            onPositionChanged: mouse => {
+                if (!moveArmed)
+                    return
+                if (Math.abs(mouse.x - pressPos.x) > 4
+                    || Math.abs(mouse.y - pressPos.y) > 4) {
+                    moveArmed = false
+                    window.startSystemMove()
+                }
+            }
+            onDoubleClicked: {
+                moveArmed = false
+                window.visibility === Window.Maximized
+                    ? window.showNormal() : window.showMaximized()
+            }
         }
 
         WindowResizeHandles { targetWindow: window }
