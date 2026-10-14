@@ -638,4 +638,16 @@ for (const [path, desc] of [
         `${desc} integrates SelectionHighlight glass selection`);
 }
 
+// ── Notification history pane contracts ─────────────────────────────────────
+const notificationHistoryPane = read("../../shell/desktop/modules/bar/NotificationHistoryPane.qml");
+assert.match(notificationHistoryPane,
+    /footerButton[\s\S]*visible:\s*NotificationHistoryService\.count\s*>\s*0\s*&&/,
+    "notification deck footer button only appears when history is non-empty");
+assert.match(notificationHistoryPane,
+    /function clearHistory\(\)[\s\S]*reset\(\)/,
+    "clearing notification history resets the deck expansion state");
+assert.match(notificationHistoryPane,
+    /onHistoryUpdated[\s\S]*NotificationHistoryService\.count === 0[\s\S]*pane\.reset\(\)/,
+    "dropping notification count to zero resets deck expansion state");
+
 console.log("KOS UI visual contract: all checks passed");
