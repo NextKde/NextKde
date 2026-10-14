@@ -872,20 +872,13 @@ deploy_artifacts() {
 
     # --- Settings QML & shared controls ---
     if [[ "$nix_artifact" == true ]]; then
-        install -m 0644 "$artifact_root/share/kos/settings/main.qml" \
-            "$prefix/share/kos/settings/main.qml"
-        install -m 0644 "$artifact_root"/share/kos/settings/Wallpaper*.qml \
-            "$artifact_root/share/kos/settings/ThemeWallpaperTile.qml" \
-            "$artifact_root/share/kos/settings/ServicesSettingsPage.qml" \
+        install -m 0644 "$artifact_root"/share/kos/settings/*.qml \
             "$prefix/share/kos/settings/"
         cp -rL --no-preserve=mode "$artifact_root/share/kos/settings/icons" "$prefix/share/kos/settings/"
     else
-        install -m 0644 "$project_dir/apps/settings/main.qml" \
-            "$prefix/share/kos/settings/main.qml"
-        install -m 0644 "$project_dir"/apps/settings/Wallpaper*.qml \
-            "$prefix/share/kos/settings/"
-        install -m 0644 "$project_dir/apps/settings/ThemeWallpaperTile.qml" \
-            "$project_dir/apps/settings/ServicesSettingsPage.qml" \
+        # Ship every runtime page; a missing local type prevents main.qml loading.
+        # Only top-level QML belongs here, not the tests/ subdirectory.
+        install -m 0644 "$project_dir"/apps/settings/*.qml \
             "$prefix/share/kos/settings/"
         cp -rL --no-preserve=mode "$project_dir/apps/settings/icons" "$prefix/share/kos/settings/"
     fi

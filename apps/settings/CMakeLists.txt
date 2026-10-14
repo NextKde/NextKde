@@ -38,10 +38,8 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
-install(FILES NotificationsSettingsPage.qml main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
-    WallpaperGalleryTile.qml WallpaperValueMenu.qml WallpaperOptionsDialog.qml
-    WallpaperTextButton.qml WallpaperThumbnail.qml WallpaperColorPicker.qml
-    DESTINATION share/kos/settings)
+file(GLOB SETTINGS_RUNTIME_QML CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/*.qml")
+install(FILES ${SETTINGS_RUNTIME_QML} DESTINATION share/kos/settings)
 install(DIRECTORY icons DESTINATION share/kos/settings)
 
 if(BUILD_TESTING)
