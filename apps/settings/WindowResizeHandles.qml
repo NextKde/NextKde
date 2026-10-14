@@ -4,14 +4,14 @@ import QtQuick.Window
 // Eight invisible edge/corner zones for a frameless window, delegating the
 // actual resize to the Wayland compositor via startSystemResize. Copied from
 // apps/listenfree/music_player_desktop/components/WindowResizeHandles.qml.
-// Only active while the window is windowed and the frameless CSD form is on
-// (see the `csd` property on the root window in main.qml).
+// The settings window is always frameless (see the flags note on the root
+// window in main.qml); handles are only for the windowed state.
 Item {
     id: root
     required property var targetWindow
     anchors.fill: parent
     z: 100
-    enabled: targetWindow.csd && targetWindow.visibility === Window.Windowed
+    enabled: targetWindow.visibility === Window.Windowed
     Repeater {
         model: [Qt.TopEdge, Qt.BottomEdge, Qt.LeftEdge, Qt.RightEdge,
                 Qt.TopEdge | Qt.LeftEdge, Qt.TopEdge | Qt.RightEdge,

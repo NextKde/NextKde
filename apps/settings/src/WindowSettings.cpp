@@ -95,14 +95,6 @@ bool WindowSettings::patchAppearance(const QString &section, const QString &key,
     emit changed();
     return saved;
 }
-bool WindowSettings::kosDecorationSelected() {
-    // Mirrors the bridge's gate (kwin/kos-bridge/windowbuttons/buttonconfig.cpp):
-    // the frameless form is offered only while the KOS decoration is selected.
-    const auto config = KSharedConfig::openConfig(QStringLiteral("kwinrc"));
-    const KConfigGroup group(config, QStringLiteral("org.kde.kdecoration2"));
-    return group.readEntry("library", QString()) == QLatin1String("kos_decoration");
-}
-
 bool WindowSettings::setRadius(int radius) {
     if (radius < 0 || radius > 200) return false;
     return patchAppearance("corners", "radius", radius);
