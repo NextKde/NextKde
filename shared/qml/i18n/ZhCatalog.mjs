@@ -142,6 +142,7 @@ export const catalog = {
     "On": "已开启",
     "Off": "已关闭",
     "Stage scheduling": "台前调度",
+    "Stage": "台前调度",
     "Windows and animations": "窗口和动画",
     "Keep Awake": "保持唤醒",
     "Switching…": "切换中…",

@@ -1382,20 +1382,32 @@ PopupWindow {
         }
 
         GlassText {
-            anchors { left: stageDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
-            text: I18n.tr("Stage scheduling")
+            objectName: "control-center-stage-title"
+            anchors { left: stageDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; top: parent.top; topMargin: 8 }
+            text: I18n.tr("Stage")
+            elide: Text.ElideRight
             color: ThemeService.foregroundColor
             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
         }
 
         GlassText {
-            anchors { left: stageDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            anchors { left: stageDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            elide: Text.ElideRight
             text: StageModeService.enabled ? I18n.tr("On") : I18n.tr("Off")
             color: StageModeService.enabled
                 ? ThemeService.tileActiveGlyph : ThemeService.foregroundColor
             opacity: StageModeService.enabled ? 0.9 : 0.5
             font { pixelSize: 11; family: "Noto Sans CJK SC" }
         }
+
+        ToolTip.visible: stagePointer.containsMouse
+        ToolTip.delay: 500
+        ToolTip.text: I18n.tr("Stage scheduling")
+        Accessible.name: I18n.tr("Stage scheduling")
+        Accessible.role: Accessible.CheckBox
+        Accessible.checkable: true
+        Accessible.checked: StageModeService.enabled
+        Accessible.onPressAction: StageModeService.toggle()
 
         MouseArea {
             id: stagePointer
@@ -1451,14 +1463,16 @@ PopupWindow {
         }
 
         GlassText {
-            anchors { left: keepAwakeDisc.right; leftMargin: 8; top: parent.top; topMargin: 8 }
+            anchors { left: keepAwakeDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; top: parent.top; topMargin: 8 }
             text: I18n.tr("Keep Awake")
+            elide: Text.ElideRight
             color: ThemeService.foregroundColor
             font { pixelSize: 12; weight: Font.Medium; family: "Noto Sans CJK SC" }
         }
 
         GlassText {
-            anchors { left: keepAwakeDisc.right; leftMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            anchors { left: keepAwakeDisc.right; leftMargin: 8; right: parent.right; rightMargin: 8; bottom: parent.bottom; bottomMargin: 7 }
+            elide: Text.ElideRight
             text: ControlCenterService.keepAwakeChangeInProgress ? I18n.tr("Switching…")
                 : !ControlCenterService.keepAwakeAvailable ? I18n.tr("Unavailable")
                 : ControlCenterService.keepAwakeError ? I18n.tr("Switch failed")
