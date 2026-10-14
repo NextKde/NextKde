@@ -368,23 +368,28 @@ ApplicationWindow {
         required property string label
         required property string navSymbol
         required property color navTint
+        // Launch-only rows are plain links: no hover wash, no selection
+        // state, the click runs the action instead of switching pages.
+        property bool launchOnly: false
         width: parent ? parent.width : 0
         // Compact rows: 28 (user-picked) pulls the titles tight; the icon (18)
         // sits level with the 14px label.
         height: 28
         leftPadding: 10
         rightPadding: 10
-        highlighted: window.currentPage === pageIndex
+        highlighted: !launchOnly && window.currentPage === pageIndex
+        hoverEnabled: !launchOnly
         visible: window.searchText.length === 0
             || label.toLowerCase().indexOf(window.searchText.toLowerCase()) >= 0
         background: Rectangle {
             // M3's drawer items are full-round pills that carry selection in
             // secondaryContainer; the iPadOS form keeps its squircle of tinted
-            // wash.
+            // wash. Launch-only rows stay completely inert.
             radius: height / 2
-            color: parent.highlighted
-                ? (window.materialForm ? theme.selectedContainer : theme.selected)
-                : (parent.hovered ? theme.sidebarHover : "transparent")
+            color: parent.launchOnly ? "transparent"
+                : (parent.highlighted
+                    ? (window.materialForm ? theme.selectedContainer : theme.selected)
+                    : (parent.hovered ? theme.sidebarHover : "transparent"))
         }
         contentItem: Item {
             implicitHeight: 28
@@ -6122,13 +6127,29 @@ ApplicationWindow {
                             navSymbol: "⏵"
                             navTint: "#ff9f0a"
                         }
+                    }
+                }
 
-                        // Not a page: jumps to KDE's own settings. The click
-                        // handler replaces SidebarEntry's page switch; the
-                        // sentinel pageIndex keeps the row permanently
-                        // unhighlighted.
+                // A separate card holding one launch-only link: not a page,
+                // no hover or selection state, the click only opens KDE's
+                // own settings.
+                Rectangle {
+                    Layout.fillWidth: true
+                    color: theme.card
+                    radius: 18
+                    implicitHeight: navGroup3.implicitHeight + 8
+
+                    ColumnLayout {
+                        id: navGroup3
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 4
+                        spacing: 0
+
                         SidebarEntry {
                             Layout.fillWidth: true
+                            launchOnly: true
                             pageIndex: -1
                             label: I18n.tr("KDE System Settings")
                             navSymbol: "✦"
