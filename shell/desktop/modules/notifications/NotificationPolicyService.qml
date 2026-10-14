@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import qs.desktop.modules.platform
+import "../../../shared/qml/i18n"
 import "NotificationIdentity.mjs" as NotificationIdentity
 
 // Per-source policy persists independently of session-only notification history.
@@ -19,7 +20,7 @@ QtObject {
     function remember(notification) {
         const key = sourceKey(notification)
         const source = { key: key, desktopEntry: String(notification.desktopEntry || ""),
-            appName: String(notification.appName || notification.desktopEntry || "其他"),
+            appName: String(notification.appName || notification.desktopEntry || I18n.tr("Other")),
             appIcon: String(notification.appIcon || "") }
         const next = sources.slice()
         const index = next.findIndex(value => value.key === key)
@@ -44,7 +45,7 @@ QtObject {
         if (!ready) return
         JsonConfigStore.writePath(configPath, JSON.stringify({version: 1, sources: sources,
             blockedKeys: blockedKeys}, null, 2), function(ok) {
-                service.saveError = ok ? "" : "通知设置保存失败"
+                service.saveError = ok ? "" : I18n.tr("Failed to save notification settings")
             })
     }
     Component.onCompleted: JsonConfigStore.readPath(configPath, function(data, exists) {
@@ -59,7 +60,7 @@ QtObject {
                         && !seen.has(source.key) && (seen.add(source.key), true))
                         .map(source => ({key: source.key,
                             desktopEntry: String(source.desktopEntry || ""),
-                            appName: String(source.appName || source.desktopEntry || "其他"),
+                            appName: String(source.appName || source.desktopEntry || I18n.tr("Other")),
                             appIcon: String(source.appIcon || "")}))
                 }
                 if (Array.isArray(parsed.blockedKeys))

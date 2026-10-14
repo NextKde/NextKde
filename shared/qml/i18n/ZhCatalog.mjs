@@ -1018,4 +1018,38 @@ export const catalog = {
     "Window takeover settings are being updated; please retry": "窗口接管设置正在更新，请重试",
     "Could not save the KWin configuration": "无法保存 KWin 配置",
     "Could not save the animation configuration": "无法保存动画配置",
+
+    // settings · Dock 悬停效果区（main 合入）
+    "Hover effects": "悬停效果",
+    "Hover to zoom": "悬停放大",
+    "Scales up and lifts together; 100% disables, up to 300%": "放大时同步上移；100% 关闭，最高 300%",
+
+    // settings · 顶栏 mac 风格（main 合入）
+    "Bar style": "顶栏风格",
+    "mac style": "mac 风格",
+    "Frosted tint layer, outlines removed, ink follows the background": "磨砂着色层 + 去描边 + 墨色随背景",
+    "Keeps the default style when off (outline and shadow unchanged)": "关闭时保持默认风格（描边、投影不变）",
+    "Tint strength": "着色强度",
+    "Dark gray over light wallpapers, light gray over dark ones; higher is more opaque": "亮壁纸铺深灰、暗壁纸铺浅灰；越高越不透明",
+    "Only takes effect while “mac style” is on": "仅在「mac 风格」开启后生效",
+
+    // 通知中心（PR180，main 合入）
+    "App notifications": "应用通知",
+    "Do Not Disturb": "勿扰模式",
+    "Mutes banners; notifications stay in history": "静音横幅，通知仍保留在历史中",
+    "Manage app notifications ›": "管理应用通知 ›",
+    "‹ Back to Notification History": "‹ 返回通知历史",
+    "Identified by app name": "按应用名称识别",
+    "Allow": "允许",
+    "Blocked": "已屏蔽",
+    "Apps appear here once they send notifications": "收到通知后可在这里管理应用",
+    "No notifications": "暂无通知",
+    "Just now": "刚刚",
+    "minutes ago": "分钟前",
+    "hours ago": "小时前",
+    "days ago": "天前",
+    "%1 more notifications": "还有 %1 条通知",
+    "Collapse": "收起",
+    "Clear notifications": "清除",
+    "Failed to save notification settings": "通知设置保存失败",
 }

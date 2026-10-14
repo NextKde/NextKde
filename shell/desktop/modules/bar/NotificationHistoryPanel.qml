@@ -6,6 +6,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import qs.desktop.modules.notifications
+import "../../../shared/qml/i18n"
 import "../../../Kos/Ui"
 
 // Independent session notification history.
@@ -185,14 +186,14 @@ AnimatedPopupWindow {
     GlassText {
         id: title
         anchors { left: parent.left; top: parent.top; margins: 16 }
-        text: panel.manageApplications ? "应用通知" : "通知历史"
+        text: panel.manageApplications ? I18n.tr("App notifications") : I18n.tr("Notification History")
         color: panelSurface.foregroundColor
         font { pixelSize: 15; weight: Font.Bold }
     }
     GlassText {
         anchors { right: parent.right; verticalCenter: title.verticalCenter; rightMargin: 16 }
         visible: !panel.manageApplications
-        text: "清空"
+        text: I18n.tr("Clear")
         color: panelSurface.foregroundColor
         opacity: NotificationHistoryService.count > 0 ? 0.8 : 0.3
         font.pixelSize: 12
@@ -210,7 +211,7 @@ AnimatedPopupWindow {
         anchors { left: parent.left; right: parent.right; top: title.bottom; margins: 16; topMargin: 12 }
         height: 68
         GlassText {
-            text: "勿扰模式"
+            text: I18n.tr("Do Not Disturb")
             color: panelSurface.foregroundColor
             font.pixelSize: 13
             anchors { left: parent.left; top: parent.top; topMargin: 4 }
@@ -233,14 +234,14 @@ AnimatedPopupWindow {
         }
         GlassText {
             anchors { left: parent.left; top: parent.top; topMargin: 27 }
-            text: "静音横幅，通知仍保留在历史中"
+            text: I18n.tr("Mutes banners; notifications stay in history")
             color: panelSurface.foregroundColor
             opacity: 0.55
             font.pixelSize: 10
         }
         GlassText {
             anchors { left: parent.left; bottom: parent.bottom }
-            text: panel.manageApplications ? "‹ 返回通知历史" : "管理应用通知 ›"
+            text: panel.manageApplications ? I18n.tr("‹ Back to Notification History") : I18n.tr("Manage app notifications ›")
             color: panelSurface.foregroundColor
             opacity: 0.85
             font.pixelSize: 11
@@ -282,7 +283,7 @@ AnimatedPopupWindow {
                 }
                 GlassText {
                     width: parent.width
-                    text: modelData.desktopEntry || "按应用名称识别"
+                    text: modelData.desktopEntry || I18n.tr("Identified by app name")
                     textFormat: Text.PlainText
                     color: panelSurface.foregroundColor
                     opacity: 0.5
@@ -298,7 +299,7 @@ AnimatedPopupWindow {
                 color: blocked ? Qt.rgba(0.5, 0.5, 0.5, 0.2) : Qt.rgba(0.04, 0.52, 1, 0.55)
                 GlassText {
                     anchors.centerIn: parent
-                    text: allowToggle.blocked ? "已屏蔽" : "允许"
+                    text: allowToggle.blocked ? I18n.tr("Blocked") : I18n.tr("Allow")
                     color: panelSurface.foregroundColor
                     font.pixelSize: 11
                 }
@@ -314,7 +315,7 @@ AnimatedPopupWindow {
         GlassText {
             anchors.centerIn: parent
             visible: applicationsList.count === 0
-            text: "收到通知后可在这里管理应用"
+            text: I18n.tr("Apps appear here once they send notifications")
             color: panelSurface.foregroundColor
             opacity: 0.5
             font.pixelSize: 12
@@ -358,7 +359,7 @@ AnimatedPopupWindow {
     GlassText {
         anchors.centerIn: historyList
         visible: opacity > 0
-        text: "暂无通知"
+        text: I18n.tr("No notifications")
         color: panelSurface.foregroundColor
         opacity: !panel.manageApplications && NotificationHistoryService.count === 0
             && panel.historyEmptyReady && panel.historyExitCount === 0 ? 0.5 : 0

@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Widgets
+import "../../../shared/qml/i18n"
 
 Item {
     id: group
@@ -106,7 +107,7 @@ Item {
     Text {
         visible: group.headerHeight > 0
         anchors { right: clearButton.left; top: parent.top; rightMargin: 12; topMargin: 5 }
-        text: "收起"
+        text: I18n.tr("Collapse")
         color: group.ink
         opacity: 0.7
         font.pixelSize: 11
@@ -120,7 +121,7 @@ Item {
         id: clearButton
         visible: group.headerHeight > 0
         anchors { right: parent.right; top: parent.top; rightMargin: 6; topMargin: 5 }
-        text: "清除"
+        text: I18n.tr("Clear notifications")
         color: group.ink
         opacity: 0.55
         font.pixelSize: 11

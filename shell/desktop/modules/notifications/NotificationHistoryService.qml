@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import "NotificationIdentity.mjs" as NotificationIdentity
+import "../../../shared/qml/i18n"
 
 // Session-only snapshots. Server IDs identify replacement notifications;
 // stable history keys preserve their delegates when content changes.
@@ -66,7 +67,7 @@ QtObject {
             const row = history.get(i)
             const key = row.sourceKey
             if (!bySource.has(key)) {
-                const group = {sourceKey: key, appName: row.appName || "其他",
+                const group = {sourceKey: key, appName: row.appName || I18n.tr("Other"),
                     appIcon: row.appIcon, desktopEntry: String(row.desktopEntry || ""), expanded: expandedSources[key] === true, items: []}
                 bySource.set(key, group)
                 desired.push(group)

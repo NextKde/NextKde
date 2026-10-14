@@ -4,6 +4,7 @@ import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.notifications
 import qs.desktop.modules.dock
+import "../../../shared/qml/i18n"
 import "../../../Kos/Ui"
 
 // Dedicated entry for session notification history.
@@ -69,7 +70,7 @@ Item {
         shown: hoverArea.containsMouse && !root.panelOpen
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
-        primaryText: "通知历史"
+        primaryText: I18n.tr("Notification History")
         minimumWidth: 92
     }
 }

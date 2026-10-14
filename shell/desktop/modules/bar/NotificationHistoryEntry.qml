@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/i18n"
 
 // This delegate owns its exit. No ListView remove transition or height
 // animation competes with delayRemove; neighbours move after its release.
@@ -72,10 +73,10 @@ Item {
     function timeLabel() {
         if (!painted.timestamp) return ""
         const minutes = Math.max(0, Math.floor((clockNow - painted.timestamp) / 60000))
-        if (minutes === 0) return "刚刚"
-        if (minutes < 60) return minutes + " 分钟前"
-        if (minutes < 1440) return Math.floor(minutes / 60) + " 小时前"
-        return Math.floor(minutes / 1440) + " 天前"
+        if (minutes === 0) return I18n.tr("Just now")
+        if (minutes < 60) return minutes + " " + I18n.tr("minutes ago")
+        if (minutes < 1440) return Math.floor(minutes / 60) + " " + I18n.tr("hours ago")
+        return Math.floor(minutes / 1440) + " " + I18n.tr("days ago")
     }
     NotificationSourceIcon {
         x: 12; y: 12
@@ -109,7 +110,7 @@ Item {
         spacing: 4
         Text {
             width: parent.width
-            text: entry.painted.summary || "通知"
+            text: entry.painted.summary || I18n.tr("Notification")
             textFormat: Text.PlainText
             color: entry.ink
             elide: Text.ElideRight
@@ -135,7 +136,7 @@ Item {
     Text {
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 12; bottomMargin: 11 }
         visible: entry.painted.additionalCount > 0
-        text: "还有 " + entry.painted.additionalCount + " 条通知"
+        text: I18n.tr("%1 more notifications").arg(entry.painted.additionalCount)
         color: entry.ink
         opacity: 0.6
         font.pixelSize: 11

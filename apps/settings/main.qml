@@ -4999,7 +4999,7 @@ ApplicationWindow {
 
         function setBarMacStyle(enabled) {
             if (!bridge) {
-                errorText = "尚未构建 Settings 桥接程序"
+                errorText = I18n.tr("The Settings bridge has not been built")
                 return
             }
             bridge.updateBarMacStyle(enabled)
@@ -5196,7 +5196,7 @@ ApplicationWindow {
         }
 
         Text {
-            text: "顶栏风格".toUpperCase()
+            text: I18n.tr("Bar style").toUpperCase()
             color: theme.secondaryText
             font.pixelSize: 12
             font.weight: Font.DemiBold
@@ -5228,7 +5228,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "mac 风格"
+                                text: I18n.tr("mac style")
                                 color: theme.primaryText
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
@@ -5238,8 +5238,8 @@ ApplicationWindow {
                                 // selector is where the user learns that the
                                 // outlines go away with the style.
                                 text: barPage.barMacStyle
-                                    ? "磨砂着色层 + 去描边 + 墨色随背景"
-                                    : "关闭时保持默认风格（描边、投影不变）"
+                                    ? I18n.tr("Frosted tint layer, outlines removed, ink follows the background")
+                                    : I18n.tr("Keeps the default style when off (outline and shadow unchanged)")
                                 color: theme.secondaryText
                                 font.pixelSize: 11
                                 wrapMode: Text.Wrap
@@ -5249,8 +5249,8 @@ ApplicationWindow {
                         SettingsNavBar {
                             id: barMacStyleNavBar
                             model: [
-                                { id: "default", label: "默认" },
-                                { id: "mac", label: "mac 风格" }
+                                { id: "default", label: I18n.tr("Default") },
+                                { id: "mac", label: I18n.tr("mac style") }
                             ]
                             itemWidthOverride: 76
                             currentIndex: barPage.barMacStyle ? 1 : 0
@@ -5282,7 +5282,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             spacing: 2
                             Text {
-                                text: "着色强度"
+                                text: I18n.tr("Tint strength")
                                 color: barPage.barMacStyle
                                     ? theme.primaryText : theme.secondaryText
                                 font.pixelSize: 14
@@ -5293,8 +5293,8 @@ ApplicationWindow {
                                 // the row says so instead of silently doing
                                 // nothing.
                                 text: barPage.barMacStyle
-                                    ? "亮壁纸铺深灰、暗壁纸铺浅灰；越高越不透明"
-                                    : "仅在「mac 风格」开启后生效"
+                                    ? I18n.tr("Dark gray over light wallpapers, light gray over dark ones; higher is more opaque")
+                                    : I18n.tr("Only takes effect while “mac style” is on")
                                 color: barPage.barMacStyle
                                     ? theme.secondaryText : theme.tertiaryText
                                 font.pixelSize: 11
