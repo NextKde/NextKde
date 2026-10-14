@@ -129,6 +129,10 @@ The shared frame positions the selected name:
 it follows raw pointer position along the Dock and the transformed artwork edge
 across it. Switching icons only changes text; there is no Wayland popup
 reposition/configure round trip. The disabled label has no pointer handlers.
+The first name appears after a 250 ms dwell on an eligible icon. Moving to
+another icon before it appears restarts the dwell; once shown, adjacent names
+switch immediately. Leaving the eligible region or opening a preview/menu
+clears the dwell state. Standalone tooltip fallbacks use the same 250 ms delay.
 Pointer travel follows raw samples directly; only hover entry/exit amplitude
 settles over frames. Icon translation updates only the selected label's
 geometry, without rescanning the entire Dock for each bouncing icon.

@@ -48,7 +48,7 @@ QtObject {
     readonly property real magnificationResponseSeconds: 0.026
     readonly property real magnificationEpsilon: 0.0001
     readonly property int magnificationExitGrace: 80
-    readonly property int appNameTooltipDelay: 180 // standalone popup fallback only
+    readonly property int appNameTooltipDelay: 250
     readonly property int nameLabelMaximumWidth: 220
     readonly property int nameLabelMaximumHeight: 28
     readonly property int nameLabelGap: 6

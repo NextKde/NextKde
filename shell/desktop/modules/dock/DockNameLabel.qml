@@ -1,14 +1,16 @@
 import QtQuick
 
-// A single node in the Dock's render tree. No QWindow, Wayland reposition,
-// pointer handler, animation, or layer; icon changes replace only its text.
+// A single node in the Dock's render tree. One dwell timer gates the first
+// appearance; subsequent icon changes keep the visible label continuous.
 Rectangle {
     id: label
     objectName: "dockSharedNameLabel"
     property Item targetIcon: null
     property Item pointerRoot: null
     property point pointerPosition: Qt.point(-10000, -10000)
-    visible: targetIcon !== null && targetIcon.dockNameEligible === true
+    readonly property bool eligible: targetIcon !== null && targetIcon.dockNameEligible === true
+    property bool dwellComplete: false
+    visible: eligible && dwellComplete
     enabled: false
     z: 1000
     width: Math.min(DockAnimation.nameLabelMaximumWidth, labelText.implicitWidth + 16)
@@ -30,7 +32,31 @@ Rectangle {
         x = Math.max(0, Math.min(Math.max(0, parent.width - width), px))
         y = Math.max(0, Math.min(Math.max(0, parent.height - height), py))
     }
-    onTargetIconChanged: updateGeometry()
+    function synchronizeDwell() {
+        if (!eligible) {
+            nameDwell.stop()
+            dwellComplete = false
+        } else if (!dwellComplete) {
+            nameDwell.restart()
+        }
+    }
+    onTargetIconChanged: {
+        updateGeometry()
+        synchronizeDwell()
+    }
+    onEligibleChanged: synchronizeDwell()
+    Component.onCompleted: synchronizeDwell()
+    Timer {
+        id: nameDwell
+        interval: DockAnimation.appNameTooltipDelay
+        repeat: false
+        onTriggered: {
+            if (label.eligible) {
+                label.dwellComplete = true
+                label.updateGeometry()
+            }
+        }
+    }
     onPointerPositionChanged: updateGeometry()
     onWidthChanged: updateGeometry()
     Text {
