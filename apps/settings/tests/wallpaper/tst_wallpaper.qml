@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../.." as Settings
+import "../../../../shared/qml/i18n"
 
 TestCase {
     name: "WallpaperSettings"
@@ -19,6 +20,30 @@ TestCase {
     }
 
     SignalSpy { id: previewFinished; signalName: "desktopPreviewFinished" }
+
+    function test_languageSwitchUpdatesWallpaperLabels() {
+        const previous = I18n.language
+        try {
+            I18n.language = "en"
+            const page = createTemporaryObject(pageComponent, this)
+            verify(page !== null)
+            const effects = findChild(page, "wallpaperTransitionMenu")
+            verify(effects !== null)
+            compare(effects.model[0].label, "No transition")
+            compare(page.intervals[0].label, "Every minute")
+            compare(page.colorItems[0].title, "Cyan blue")
+            page.galleryCategory = "themes"
+            compare(page.galleryItems[0].label, "Stardust Gravity")
+
+            I18n.language = "zh-CN"
+            compare(effects.model[0].label, "无过渡")
+            compare(page.intervals[0].label, "每分钟")
+            compare(page.colorItems[0].title, "青蓝")
+            compare(page.galleryItems[0].label, "星尘引力")
+        } finally {
+            I18n.language = previous
+        }
+    }
 
     QtObject {
         id: bridgeMock
@@ -86,7 +111,7 @@ TestCase {
         verify(action !== null)
         verify(label !== null)
         compare(action.enabled, true)
-        compare(label.text, "桌面预览  ›")
+        compare(label.text, I18n.tr("Desktop preview  ›"))
         action.clicked(null)
         compare(bridgeMock.previewRequested, "/tmp/wallpaper.jpg")
     }
@@ -221,7 +246,7 @@ TestCase {
         const action = findChild(page, "currentWallpaperPreviewAction")
         const label = findChild(page, "currentWallpaperPreviewLabel")
         compare(action.enabled, false)
-        compare(label.text, "不可用")
+        compare(label.text, I18n.tr("Unavailable"))
     }
 
     function test_pageLoadsAndAcceptsSnapshot() {

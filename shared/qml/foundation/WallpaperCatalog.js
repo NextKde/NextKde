@@ -1,29 +1,29 @@
 // Shared by Settings and the desktop preview. IDs are persisted; labels are UI only.
 var transitions = [
-    { id: "none", label: "无过渡" }, { id: "simple", label: "轻柔淡入" },
-    { id: "fade", label: "平滑淡入淡出" }, { id: "left", label: "从左滑入" },
-    { id: "right", label: "从右滑入" }, { id: "top", label: "从上滑入" },
-    { id: "bottom", label: "从下滑入" }, { id: "wipe", label: "斜向擦除" },
-    { id: "wave", label: "波浪漫入" }, { id: "grow", label: "定点扩散" },
-    { id: "center", label: "中心展开" }, { id: "outer", label: "向内收拢" },
-    { id: "any", label: "随机扩散" }, { id: "random", label: "随机效果" },
-    { id: "cinematic", label: "柔和揭幕" }
+    { id: "none", label: "No transition" }, { id: "simple", label: "Gentle fade" },
+    { id: "fade", label: "Smooth crossfade" }, { id: "left", label: "Slide from left" },
+    { id: "right", label: "Slide from right" }, { id: "top", label: "Slide from top" },
+    { id: "bottom", label: "Slide from bottom" }, { id: "wipe", label: "Diagonal wipe" },
+    { id: "wave", label: "Flowing wave" }, { id: "grow", label: "Point expansion" },
+    { id: "center", label: "Expand from center" }, { id: "outer", label: "Contract inward" },
+    { id: "any", label: "Random expansion" }, { id: "random", label: "Random effect" },
+    { id: "cinematic", label: "Soft reveal" }
 ];
 var intervals = [
-    { minutes: 1, label: "每分钟" }, { minutes: 5, label: "每 5 分钟" },
-    { minutes: 15, label: "每 15 分钟" }, { minutes: 30, label: "每 30 分钟" },
-    { minutes: 60, label: "每小时" }, { minutes: 1440, label: "每天" }
+    { minutes: 1, label: "Every minute" }, { minutes: 5, label: "Every 5 minutes" },
+    { minutes: 15, label: "Every 15 minutes" }, { minutes: 30, label: "Every 30 minutes" },
+    { minutes: 60, label: "Every hour" }, { minutes: 1440, label: "Every day" }
 ];
 var colorSwatches = [
-    {title:"青蓝", color:"#4BCDE9"}, {title:"晴空", color:"#70A0F5"},
-    {title:"薰衣草", color:"#AD8CED"}, {title:"兰紫", color:"#CE54E9"},
-    {title:"玫瑰", color:"#E86C99"}, {title:"珊瑚", color:"#FA8D7E"},
-    {title:"蜜桃", color:"#FFA77D"}, {title:"奶杏", color:"#FFCA7E"},
-    {title:"金黄", color:"#FFDD78"}, {title:"柠檬", color:"#FFFA8A"},
-    {title:"青柠", color:"#E3EF89"}, {title:"嫩绿", color:"#B1D98A"},
-    {title:"鼠尾草", color:"#B2C2A6"}, {title:"雾蓝", color:"#9EB7BF"},
-    {title:"雾紫", color:"#B4A7B8"}, {title:"暖灰", color:"#B7AFA4"},
-    {title:"月白", color:"#FFFFFF"}, {title:"夜色", color:"#000000"}
+    {title:"Cyan blue", color:"#4BCDE9"}, {title:"Clear sky", color:"#70A0F5"},
+    {title:"Lavender", color:"#AD8CED"}, {title:"Orchid purple", color:"#CE54E9"},
+    {title:"Rose", color:"#E86C99"}, {title:"Coral", color:"#FA8D7E"},
+    {title:"Peach", color:"#FFA77D"}, {title:"Cream apricot", color:"#FFCA7E"},
+    {title:"Golden yellow", color:"#FFDD78"}, {title:"Lemon", color:"#FFFA8A"},
+    {title:"Lime", color:"#E3EF89"}, {title:"Spring green", color:"#B1D98A"},
+    {title:"Sage", color:"#B2C2A6"}, {title:"Misty blue", color:"#9EB7BF"},
+    {title:"Misty purple", color:"#B4A7B8"}, {title:"Warm gray", color:"#B7AFA4"},
+    {title:"Moon white", color:"#FFFFFF"}, {title:"Night", color:"#000000"}
 ];
 function hsvHex(h, s, v) {
     h = ((h % 1) + 1) % 1;
@@ -88,10 +88,10 @@ function transitionPreset(style) {
 
 // Stable theme IDs shared by Settings and the desktop renderer.
 var themes = [
-    { id: "starfield", label: "星尘引力", detail: "引力粒子、湍流星云与多尺度光晕", accent: "#729bda" },
-    { id: "blackhole", label: "事件视界", detail: "光线偏折、炽热吸积盘与跨层粒子轨迹", accent: "#e5a568" },
-    { id: "weather", label: "大气光场", detail: "体积散射、气流阻力与雨雾粒子", accent: "#7abbd6" },
-    { id: "underwater", label: "水下光影", detail: "流动焦散、穿透水光与上浮气泡", accent: "#55c9c3" },
-    { id: "forest", label: "萤火森林", detail: "月光薄雾、层叠树影与近景萤火", accent: "#b5ce75" }
+    { id: "starfield", label: "Stardust Gravity", detail: "Gravitational particles, turbulent nebulae and layered halos", accent: "#729bda" },
+    { id: "blackhole", label: "Event Horizon", detail: "Bent light, a glowing accretion disk and layered particle trails", accent: "#e5a568" },
+    { id: "weather", label: "Atmospheric Light", detail: "Volumetric scattering, airflow and rain particles", accent: "#7abbd6" },
+    { id: "underwater", label: "Underwater Light", detail: "Flowing caustics, underwater rays and rising bubbles", accent: "#55c9c3" },
+    { id: "forest", label: "Firefly Forest", detail: "Moonlit mist, layered trees and foreground fireflies", accent: "#b5ce75" }
 ];
 function theme(id) { return themes.find(item => item.id === id) || null; }

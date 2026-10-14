@@ -1,3 +1,4 @@
+import "../../shared/qml/i18n"
 import QtQuick
 import QtQuick.Layouts
 import "../../shared/qml/controls" as LiquidControls

@@ -1,3 +1,4 @@
+import "../../shared/qml/i18n"
 import QtQuick
 import "../../shared/qml/foundation/WallpaperCatalog.js" as WallpaperCatalog
 import QtQuick.Controls
@@ -79,7 +80,8 @@ Dialog {
                     LiquidControls.LiquidSelect {
                         objectName: "wallpaperTransitionMenu"
                         accentColor: dialog.colors.accent
-                        model: WallpaperCatalog.transitions
+                        model: WallpaperCatalog.transitions.map(item =>
+                            Object.assign({}, item, { label: I18n.tr(item.label) }))
                         textRole: "label"
                         currentIndex: Math.max(0, WallpaperCatalog.transitions.map(item => item.id).indexOf(dialog.transition))
                         onActivated: function(index) {

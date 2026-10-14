@@ -1,3 +1,4 @@
+import "../../shared/qml/i18n"
 import "../../shared/qml/controls" as SharedControls
 import QtQuick
 import QtQuick.Controls

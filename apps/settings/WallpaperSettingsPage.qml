@@ -1,3 +1,4 @@
+import "../../shared/qml/i18n"
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -99,11 +100,12 @@ ColumnLayout {
         && typeof bridge.updateWallpaperTakeoverEnabled === "function"
     readonly property int gridColumns: width >= 580 ? 3 : 2
     readonly property bool colorWallpaper: image.indexOf("/wallpaper-colors/") >= 0
-    readonly property var intervals: WallpaperCatalog.intervals
+    readonly property var intervals: WallpaperCatalog.intervals.map(item =>
+        Object.assign({}, item, { label: I18n.tr(item.label) }))
     readonly property var colorItems: {
         const items = WallpaperCatalog.colorSwatches.map(swatch => {
             const item = WallpaperCatalog.colorGradient(swatch.color, colorDepth)
-            item.title = swatch.title
+            item.title = I18n.tr(swatch.title)
             return item
         }).concat(customColors).map(item => ({
             title: item.title, color: "", palette: item,
@@ -115,7 +117,8 @@ ColumnLayout {
     readonly property var imageItems: buildImageItems()
     // 图像 = 我的图片(托管目录,mtime 降序=新导入置顶)在前、系统壁纸垫底;
     // 按路径去重,同路径算托管条目(可移除进回收站)。
-    readonly property var galleryItems: galleryCategory === "themes" ? WallpaperCatalog.themes.concat(packItems)
+    readonly property var galleryItems: galleryCategory === "themes" ? WallpaperCatalog.themes.map(item =>
+        Object.assign({}, item, { label: I18n.tr(item.label), detail: I18n.tr(item.detail) })).concat(packItems)
         : galleryCategory === "colors" ? colorItems : imageItems
     // 已安装主题包(marketplace):bridge 本地扫描,内置在前、包在后;
     // 与内置同 id 的包不展示(内置优先)。
@@ -605,7 +608,8 @@ ColumnLayout {
                 Text {
                     Layout.fillWidth: true
                     text: page.currentIsTheme
-                        ? (WallpaperCatalog.theme(page.displayedThemeId)?.label
+                        ? ((WallpaperCatalog.theme(page.displayedThemeId)
+                            ? I18n.tr(WallpaperCatalog.theme(page.displayedThemeId).label) : "")
                             || page.packItems.find(item => item.id === page.displayedThemeId)?.label
                             || I18n.tr("Theme wallpaper"))
                         : page.displayName(page.image)
@@ -678,7 +682,8 @@ ColumnLayout {
                 LiquidControls.LiquidSelect {
                     objectName: "wallpaperTransitionMenu"
                     accentColor: page.colors.accent
-                    model: WallpaperCatalog.transitions
+                    model: WallpaperCatalog.transitions.map(item =>
+                        Object.assign({}, item, { label: I18n.tr(item.label) }))
                     textRole: "label"
                     currentIndex: Math.max(0, WallpaperCatalog.transitions.map(item => item.id).indexOf(page.transition))
                     onActivated: function(index) {

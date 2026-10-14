@@ -46,7 +46,7 @@ PanelWindow {
         const index = effects.map(item => item.id).indexOf(WallpaperService.transition)
         const effect = effects[(index + 1) % effects.length]
         if (WallpaperService.setTransition(effect.id))
-            effectFeedback.show(I18n.tr("Dynamic effect switched to: %1").arg(effect.label), "media-shuffle")
+            effectFeedback.show(I18n.tr("Dynamic effect switched to: %1").arg(I18n.tr(effect.label)), "media-shuffle")
     }
 
     color: "transparent"
@@ -180,7 +180,8 @@ PanelWindow {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 14
-                        text: WallpaperCatalog.theme(modelData.slice(6))?.label
+                        text: (WallpaperCatalog.theme(modelData.slice(6))
+                            ? I18n.tr(WallpaperCatalog.theme(modelData.slice(6)).label) : "")
                             || ThemePackService.pack(modelData.slice(6))?.name || ""
                         color: "white"
                         font.pixelSize: 11
@@ -299,7 +300,7 @@ PanelWindow {
                             : SpatialWallpaperService.previewEnabled ? I18n.tr("Disable spatial effect") : modelData.label)
                         : modelData.label
                     Accessible.name: modelData.action === "transition"
-                        ? text + "：" + (WallpaperCatalog.transitions.find(item => item.id === WallpaperService.transition)?.label || "")
+                        ? text + "：" + I18n.tr(WallpaperCatalog.transitions.find(item => item.id === WallpaperService.transition)?.label || "")
                         : text
                     background: Item {}
                     contentItem: Item {

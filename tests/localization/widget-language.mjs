@@ -27,6 +27,10 @@ let checked = 0;
 for (const directory of ['../../shell/desktop/', '../../apps/settings/']) {
     for (const path of qmlFiles(new URL(directory, import.meta.url))) {
         const source = readFileSync(path, 'utf8');
+        if (path.pathname.includes('/apps/settings/') && source.includes('I18n.')) {
+            assert.match(source, /^import\s+"[^"\n]*\/i18n"\s*$/m,
+                `${path.pathname}: I18n calls require an explicit import`);
+        }
         // Literal calls can be checked without evaluating any QML or launching
         // the shell. Dynamic messages are checked by their producing code.
         for (const match of source.matchAll(/I18n\.(?:tr|trPattern)\(\s*("(?:[^"\\]|\\.)*")/g)) {
