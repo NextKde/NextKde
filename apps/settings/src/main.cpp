@@ -156,6 +156,13 @@ class SettingsBridge final : public QObject {
 
 public:
 
+    // Open KDE's own settings. systemsettings registers a KDBusService unique
+    // name, so launching while it runs forwards to the existing instance and
+    // raises its window -- one call covers both "open" and "activate".
+    Q_INVOKABLE void launchSystemSettings() {
+        QProcess::startDetached(QStringLiteral("systemsettings"), QStringList());
+    }
+
     explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
         // The Shell's own Settings entry goes through the platform daemon, which
         // exports KOS_SHELL_DIR for the session it belongs to. That is the one

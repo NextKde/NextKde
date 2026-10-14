@@ -170,6 +170,7 @@ export const catalog = {
     "Power Off": "关机",
     "Power": "电源",
     "Power Off or Log Out": "关机或注销",
+    "KDE System Settings": "KDE 系统设置",
     "Power off now?": "确定要关机吗？",
     "Restart now?": "确定要重启吗？",
     "Log out now?": "确定要注销吗？",

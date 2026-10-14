@@ -6122,6 +6122,19 @@ ApplicationWindow {
                             navSymbol: "⏵"
                             navTint: "#ff9f0a"
                         }
+
+                        // Not a page: jumps to KDE's own settings. The click
+                        // handler replaces SidebarEntry's page switch; the
+                        // sentinel pageIndex keeps the row permanently
+                        // unhighlighted.
+                        SidebarEntry {
+                            Layout.fillWidth: true
+                            pageIndex: -1
+                            label: I18n.tr("KDE System Settings")
+                            navSymbol: "✦"
+                            navTint: "#8e8e93"
+                            onClicked: settingsBridge.launchSystemSettings()
+                        }
                     }
                 }
 
