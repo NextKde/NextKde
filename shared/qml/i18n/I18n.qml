@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQuick
 import "ZhCatalog.mjs" as ZhCN
+import "SystemLanguage.mjs" as LanguagePolicy
 
 // UI 翻译单例。源语言是英文：代码里一律写 I18n.tr("English text")，
 // 词典按 "英文源串 -> 译文" 映射；zh-CN 激活时查 ZhCN.catalog，
@@ -28,13 +29,10 @@ QtObject {
     property string language: systemDefault()
 
     // 系统语言解析的唯一实现（I18nService 与 settings 的本地兜底都走这里）：
-    // zh* -> zh-CN，其余一律 en；uiLanguages 为空时保持 zh-CN
-    // （避免无法识别系统语言的环境被意外切成英文）。
+    // 只看首选语言：zh/zh-* -> zh-CN，其余（含空列表）为 en。
+    // 与 shared/i18n/SystemLanguage.h 保持一致，不用后续备用语言覆盖首选项。
     function systemDefault() {
-        const tags = Qt.locale().uiLanguages || []
-        for (let i = 0; i < tags.length; ++i)
-            if (/^zh/i.test(String(tags[i]))) return "zh-CN"
-        return tags.length > 0 ? "en" : "zh-CN"
+        return LanguagePolicy.systemLanguage(Qt.locale().uiLanguages)
     }
 
     readonly property var _catalogs: ({
@@ -57,7 +55,7 @@ QtObject {
     // 按当前语言格式化日期/时间。pattern 传 tr() 之后的模式串，
     // 星期/月份名按 locale 输出（zh_CN -> 星期四，en_US -> Thursday）。
     function fmt(date, pattern) {
-        return Qt.formatDateTime(date, pattern, qtLocale())
+        return date.toLocaleString(qtLocale(), pattern)
     }
 
     // 不含日期语义、只含文案的模式串翻译（如 "yyyy年M月" <-> "MMMM yyyy"）。

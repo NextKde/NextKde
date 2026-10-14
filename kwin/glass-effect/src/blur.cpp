@@ -1941,6 +1941,10 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
 
     vbo->bindArrays();
 
+    // Offscreen filters replace their targets, including transparent pixels.
+    // Blending here would mix the filtered backdrop with stale target content.
+    glDisable(GL_BLEND);
+
     // Filter local backdrop luminance independently of the material blur.
     // Four downsample passes remove fine wallpaper detail without reducing
     // mixed light/dark regions to a whole-window mean. This texture remains
@@ -2038,6 +2042,8 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     }
 
     auto runBlurPass = [&](const BlurPipelineSettings &settings) -> GLTexture * {
+        // Decoration passes can run after content has been composited onscreen.
+        glDisable(GL_BLEND);
         ShaderManager::instance()->pushShader(m_downsamplePass.shader.get());
 
         QMatrix4x4 projectionMatrix;
@@ -2236,10 +2242,10 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
         }
     }
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-
     auto drawBlurredRegion = [&](GLTexture *blurredTexture, int vertexOffset, int currentVertexCount, float blurOffset) {
+        // Restore premultiplied blending only when compositing onto the screen.
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         m_roundedOnscreenPass.shader->setUniform(m_roundedOnscreenPass.offsetLocation, blurOffset * m_upsampleOffset);
         glActiveTexture(GL_TEXTURE0);
         blurredTexture->bind();

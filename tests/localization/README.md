@@ -23,7 +23,7 @@ catalog is generated from `en_US.tsv` by
 ## Checks
 
 - `python tests/localization/check_catalogs.py`: extracted UI messages and placeholders.
-- `node tests/localization/widget-language.mjs`: primary-language selection and widget dictionary coverage.
+- `node tests/localization/widget-language.mjs`: the shared QML primary-language policy and literal Shell/Settings translation calls, including dictionary coverage and placeholders.
 - `ctest --test-dir BUILD -R language --output-on-failure`: app and shell language tests.
 - ListenFree's standalone build with `LISTENFREE_BUILD_TESTS=ON` adds
   `listenfree.language.*`, including saved-language override regression tests.

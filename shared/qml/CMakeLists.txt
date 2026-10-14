@@ -1,5 +1,6 @@
 set_source_files_properties(
     foundation/AppTheme.qml
+    i18n/I18n.qml
     controls/ControlForm.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE
 )
@@ -11,6 +12,7 @@ qt_add_qml_module(kos_ui
     PLUGIN_TARGET kos_ui_plugin
     RESOURCE_PREFIX /qt/qml
     QML_FILES
+        i18n/I18n.qml
         foundation/AppTheme.qml
         foundation/KosSidebar.qml
         foundation/KosSidebarToggle.qml
@@ -43,6 +45,10 @@ qt_add_qml_module(kos_ui
         controls/ControlForm.qml
         controls/LiquidTextField.qml
         controls/LiquidSegmentedControl.qml
+    RESOURCES
+        i18n/qmldir
+        i18n/ZhCatalog.mjs
+        i18n/SystemLanguage.mjs
 )
 
 add_library(Kos::Ui ALIAS kos_ui)

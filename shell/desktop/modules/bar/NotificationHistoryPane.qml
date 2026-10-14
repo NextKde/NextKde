@@ -16,6 +16,8 @@ Item {
     property Item captureAnchor: null
     property Item outerViewport: null
     property bool compositorGlass: AppearanceTokens.surface.usesKwinBlur
+    // Standalone history can show an empty state; embedded controls hide it.
+    property bool showEmptyState: true
     property real backdropScale: 1
     property real glassOpacity: 1
     property real maximumHeight: 560
@@ -24,7 +26,7 @@ Item {
     property bool folding: false
     property real revealProgress: expanded ? 1 : 0
     property real clockNow: Date.now()
-    readonly property color ink: ThemeService.foregroundColor
+    readonly property color ink: AppearanceTokens.content.glassInk()
     readonly property int displayedMessageCount: expanded ? NotificationHistoryService.count : Math.min(3, NotificationHistoryService.count)
     readonly property real previewRowsHeight: {
         const children = historyList.contentItem.children
@@ -205,24 +207,24 @@ Item {
                 border.color: pane.ink
             }
         }
-        contentItem: Text {
+        contentItem: GlassText {
             id: label
             text: button.text; color: pane.ink
-            opacity: button.enabled ? 0.88 : 0.35
+            opacity: button.enabled ? 1 : 0.35
             font { pixelSize: 11; weight: Font.Medium }
             horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
         }
     }
-    Text {
+    GlassText {
         x: 2; y: 7
         text: I18n.tr("Notifications")
         color: pane.ink
         font { pixelSize: 16; weight: Font.DemiBold }
     }
-    Text {
+    GlassText {
         x: 44; y: 10
         text: NotificationHistoryService.count || ""
-        color: pane.ink; opacity: 0.5
+        color: pane.ink; opacity: 0.85
         font.pixelSize: 11
     }
     DeckButton {
@@ -364,7 +366,7 @@ Item {
     ControlCenterGlass {
         id: emptyGlass
         x: 0; y: 36; width: pane.width; height: Math.max(0, pane.height - 36)
-        visible: NotificationHistoryService.count === 0 && pane.historyEmptyReady && pane.historyExitCount === 0
+        visible: pane.showEmptyState && NotificationHistoryService.count === 0 && pane.historyEmptyReady && pane.historyExitCount === 0
             && emptyOutline.width > 0 && emptyOutline.height > 0
         radius: 24
         blurAnchor: emptyOutline
@@ -373,7 +375,7 @@ Item {
         captureAnchor: pane.captureAnchor
         backdropScale: pane.backdropScale
         scrimOpacity: pane.glassOpacity; materialOpacity: pane.glassOpacity
-        Text { anchors.centerIn: parent; text: I18n.tr("No notifications yet"); color: pane.ink; opacity: 0.5; font.pixelSize: 12 }
+        GlassText { anchors.centerIn: parent; text: I18n.tr("No notifications yet"); color: pane.ink; opacity: 0.85; font.pixelSize: 12 }
     }
     Item {
         id: footer

@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import Quickshell.Widgets
 import "../../../shared/qml/i18n"
 
@@ -100,23 +101,23 @@ Item {
         desktopEntry: group.painted.desktopEntry
         ink: group.ink
     }
-    Text {
+    GlassText {
         visible: group.headerHeight > 0
         anchors { left: parent.left; top: parent.top; leftMargin: 24; topMargin: 5 }
         width: parent.width - (group.painted.count > 1 ? 116 : 30)
         text: group.painted.appName
         textFormat: Text.PlainText
         color: group.ink
-        opacity: 0.72
+        opacity: 1
         elide: Text.ElideRight
         font { pixelSize: 11; weight: Font.DemiBold }
     }
-    Text {
+    GlassText {
         visible: group.headerHeight > 0
         anchors { right: clearButton.left; top: parent.top; rightMargin: 12; topMargin: 5 }
         text: I18n.tr("Collapse")
         color: group.ink
-        opacity: 0.7
+        opacity: 0.85
         font.pixelSize: 11
         MouseArea {
             anchors.fill: parent; anchors.margins: -5
@@ -124,13 +125,13 @@ Item {
             onClicked: group.toggleRequested(group.painted.sourceKey, !group.painted.expanded)
         }
     }
-    Text {
+    GlassText {
         id: clearButton
         visible: group.headerHeight > 0
         anchors { right: parent.right; top: parent.top; rightMargin: 6; topMargin: 5 }
         text: I18n.tr("Clear notifications")
         color: group.ink
-        opacity: 0.55
+        opacity: 0.85
         font.pixelSize: 11
         MouseArea {
             anchors.fill: parent; anchors.margins: -5

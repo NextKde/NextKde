@@ -168,6 +168,9 @@ PopupWindow {
     readonly property real availableHeight: Math.max(1, (targetScreen?.height ?? 900) - 110)
     readonly property real fitScale: 1
     readonly property bool historyShown: cardMapped("")
+        && (NotificationHistoryService.count > 0
+            || !notificationHistory.historyEmptyReady
+            || notificationHistory.historyExitCount > 0)
     readonly property real historyMaximumHeight: Math.min(560,
         Math.max(208, availableHeight - controlAreaHeight - historyLayoutAdjustment))
     readonly property real historyHeight: historyShown ? notificationHistory.desiredHeight : 0
@@ -220,6 +223,7 @@ PopupWindow {
     }
     NotificationHistoryPane {
         id: notificationHistory
+        showEmptyState: false
         parent: panelCanvas
         x: 20
         y: panel.notificationsAboveControls ? 0 : panel.controlAreaHeight

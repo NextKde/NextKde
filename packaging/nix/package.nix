@@ -91,9 +91,7 @@ stdenv.mkDerivation {
 
     # --- Settings QML (for reference; kos-settings binary embeds path) ---
     mkdir -p $out/share/kos/settings
-    cp apps/settings/main.qml $out/share/kos/settings/main.qml
-    cp apps/settings/Wallpaper*.qml apps/settings/ThemeWallpaperTile.qml \
-      apps/settings/ServicesSettingsPage.qml $out/share/kos/settings/
+    cp apps/settings/*.qml $out/share/kos/settings/
     cp -r apps/settings/icons $out/share/kos/settings/
     mkdir -p $out/qml/Kos
     ln -s ${kos-spatial3d}/lib/qt6/qml/Kos/Spatial3D $out/qml/Kos/Spatial3D
