@@ -105,17 +105,17 @@ Item {
         desktopEntry: card.desktopEntry
         ink: card.ink
     }
-    Text {
+    GlassText {
         x: 44; y: 15
         width: Math.max(0, timeText.x - x - 10)
         text: card.appName || "通知"
         textFormat: Text.PlainText
         color: card.ink
-        opacity: 0.8
+        opacity: 1
         font { pixelSize: 11; weight: Font.DemiBold }
         elide: Text.ElideRight
     }
-    Text {
+    GlassText {
         id: timeText
         anchors { right: closeButton.left; rightMargin: 3; top: parent.top; topMargin: 15 }
         text: {
@@ -124,7 +124,7 @@ Item {
                 : minutes < 1440 ? Math.floor(minutes / 60) + " 小时前" : Math.floor(minutes / 1440) + " 天前"
         }
         color: card.ink
-        opacity: 0.6
+        opacity: 0.85
         font.pixelSize: 11
     }
     Column {
@@ -132,7 +132,7 @@ Item {
         x: 16; y: 38
         width: Math.max(0, parent.width - 32)
         spacing: 4
-        Text {
+        GlassText {
             id: summaryText
             width: parent.width
             text: card.showPreview ? card.summary || "通知" : "收到一条通知"
@@ -143,14 +143,14 @@ Item {
             maximumLineCount: card.detailsExpanded ? 2 : 1
             elide: Text.ElideRight
         }
-        Text {
+        GlassText {
             id: bodyText
             width: parent.width
             visible: card.showPreview && text.length > 0
             text: card.body
             textFormat: Text.PlainText
             color: card.ink
-            opacity: 0.78
+            opacity: 1
             font.pixelSize: 13
             lineHeight: 1.15
             wrapMode: Text.Wrap
@@ -179,7 +179,7 @@ Item {
             color: card.ink
             opacity: closeButton.down ? 0.14 : closeButton.hovered || closeButton.activeFocus ? 0.08 : 0
         }
-        contentItem: Text {
+        contentItem: GlassText {
             text: "×"
             color: card.ink
             opacity: closeButton.hovered || closeButton.activeFocus ? 0.85 : 0.4
@@ -189,7 +189,7 @@ Item {
         }
         onClicked: card.removeRequested(card.historyKey)
     }
-    Text {
+    GlassText {
         anchors { right: parent.right; bottom: parent.bottom; rightMargin: 14; bottomMargin: 7 }
         visible: card.canExpand
         text: card.detailsExpanded ? "⌃" : "⌄"

@@ -77,20 +77,19 @@ vec3 getHighlightColor(vec3 backgroundColor, float targetBrightness)
     return mix(vec3(targetBrightness), hueLifted, colorInfluence);
 }
 
-// The liquid rim's light colour. Over a dark backdrop the edge normally reads
-// as white light; over a bright one white light would vanish into the backdrop,
-// so it warms toward a dark gold -- "black gold", the tinted colour of light --
-// keeping the edge visible in both cases from the glass itself, without a
-// separate QString outline drawn by the client.
+// Preserve the white glint over dark backdrops. On bright backdrops use a
+// warm deep gold with a little local colour instead of near-black gold.
 vec3 rimLight(vec3 backdrop)
 {
     const vec3 luma = vec3(0.299, 0.587, 0.114);
-    // Nearly black with only a restrained warm-gold bias. This is the dark
-    // reflected edge of liquid glass, not a bright metallic gold stroke.
-    const vec3 darkGold = vec3(0.14, 0.11, 0.055);
     float lum = dot(backdrop, luma);
     float brightT = smoothstep(0.45, 0.80, lum);
-    return mix(vec3(1.0), darkGold, brightT);
+    vec3 whiteRim = mix(vec3(1.0),
+        clamp(getHighlightColor(backdrop, 1.0), 0.0, 1.0), 0.06);
+    const vec3 deepGold = vec3(0.46, 0.32, 0.12);
+    vec3 darkRim = mix(deepGold,
+        deepGold * clamp(backdrop, 0.0, 1.0), 0.08);
+    return mix(whiteRim, darkRim, brightT);
 }
 
 // ── Edge-confined liquid reflection ───────────────────────────────────
@@ -115,8 +114,10 @@ vec3 applyLiquidGlints(vec3 rgb, vec2 position, vec2 halfBlurSize,
     // of adding a separate directional reflection layer.
     float softness = clamp(materialSoftness, 0.0, 1.0);
     float softSpread = smoothstep(0.05, 0.65, softness);
-    const float liquidHighlightWidthPx = 3.0;
-    float widthScale = clamp(liquidHighlightWidthPx / 3.0, 0.80, 1.20);
+    // Follow the authored edge band gently; even a broad lens keeps a fine rim.
+    float edgeBand = clamp(edgeSizePixels, 0.1,
+        min(halfBlurSize.x, halfBlurSize.y) * 0.9);
+    float widthScale = clamp(edgeBand / 50.0, 0.90, 1.12);
     float straightSigma = max(edgeAntialiasWidth * 0.52,
         0.62 * widthScale);
     // A sub-pixel Gaussian is stable on an axis-aligned edge but aliases when
@@ -129,8 +130,17 @@ vec3 applyLiquidGlints(vec3 rgb, vec2 position, vec2 halfBlurSize,
     float arcSigma = max(0.72, edgeAntialiasWidth * 0.72);
     float sigma = mix(straightSigma, max(straightSigma, arcSigma),
         arcCoverage);
+    // Dark reflections make sub-pixel contour steps much more visible. Spread
+    // their coverage and lower the peak together, retaining the line's energy
+    // rather than turning antialiasing into a thicker, darker outline.
+    float darkRimWeight = smoothstep(0.45, 0.80,
+        dot(rgb, vec3(0.299, 0.587, 0.114)));
+    float filteredSigma = mix(sigma,
+        sqrt(sigma * sigma + edgeAntialiasWidth * edgeAntialiasWidth / 12.0),
+        darkRimWeight);
     float edgeDistance = max(-dist, 0.0);
-    float contourLine = exp(-0.5 * pow((edgeDistance - 1.0) / sigma, 2.0));
+    float contourLine = (sigma / filteredSigma)
+        * exp(-0.5 * pow((edgeDistance - 1.0) / filteredSigma, 2.0));
     // Soft glass is a longer inward scatter, not a wider solid stroke. An
     // exponential falloff loses energy continuously as it travels inward;
     // the smooth tail reaches zero at 26 px without leaving a hard inner ring.
@@ -144,19 +154,15 @@ vec3 applyLiquidGlints(vec3 rgb, vec2 position, vec2 halfBlurSize,
         * (1.0 - smoothstep(softGlowReachPx * 0.68,
             softGlowReachPx, edgeDistance));
 
-    // Keep the selected diagonal from the previous design. At 45 degrees the
-    // primary corner is top-left and the secondary corner is bottom-right.
-    // Each envelope is blended by the continuous SDF normal through the corner
-    // and decays over the full side length, so there is no tangent discontinuity.
-    // The authored light direction is fixed at 45 degrees (top-left).
-    // The material light is authored at 45 degrees (top-left). It is not a
-    // user preference, so keep it as part of the shader design.
+    // Keep the top-left / bottom-right pair, with a slight horizontal offset
+    // of each light's envelope. The same fades meet continuously at corners.
     const vec2 primarySign = vec2(-1.0, 1.0);
 
     float xProgress = clamp((position.x + halfBlurSize.x)
         / max(halfBlurSize.x * 2.0, 1.0), 0.0, 1.0);
     float yProgress = clamp((halfBlurSize.y - position.y)
         / max(halfBlurSize.y * 2.0, 1.0), 0.0, 1.0);
+    xProgress = clamp(xProgress + 0.04, 0.0, 1.0);
     float fromLeft = 1.0 - smoothstep(0.0, 1.0, xProgress);
     float fromRight = 1.0 - smoothstep(0.0, 1.0, 1.0 - xProgress);
     float fromTop = 1.0 - smoothstep(0.0, 1.0, yProgress);
@@ -189,7 +195,7 @@ vec3 applyLiquidGlints(vec3 rgb, vec2 position, vec2 halfBlurSize,
     float refractionResponse = smoothstep(0.05, 0.75,
         clamp(refractionStrength, 0.0, 1.0));
     float liquidResponse = refractionResponse;
-    // Liquid uses the authored white/black-gold rim. Soft glass uses only a
+    // Liquid uses a lightly backdrop-tinted rim. Soft glass uses only a
     // neutral lift of the backdrop itself, so its scatter cannot turn gold.
     vec3 rim = rimLight(rgb);
     rgb = mix(rgb, rim,
@@ -227,6 +233,11 @@ vec3 applySoftMaterial(vec3 rgb, vec2 position, vec2 halfBlurSize,
     vec3 diffused = mix(rgb, vec3(luma), 0.22);
     diffused = mix(diffused, smoothstep(vec3(0.0), vec3(1.0), diffused), 0.18);
     rgb = mix(rgb, diffused, softness);
+
+    // Keep soft diffusion, but skip the directional reflection when its
+    // uniform strength is zero: the final mix would return this same colour.
+    if (reflection <= 0.0)
+        return rgb;
 
     float minRadius = min(min(cornerRadius.x, cornerRadius.y),
         min(cornerRadius.z, cornerRadius.w));

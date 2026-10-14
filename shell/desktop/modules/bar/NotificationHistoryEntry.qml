@@ -1,4 +1,5 @@
 import QtQuick
+import qs.desktop.modules.common
 import QtQuick.Controls
 
 // This delegate owns its exit. No ListView remove transition or height
@@ -87,22 +88,22 @@ Item {
         desktopEntry: entry.painted.desktopEntry
         ink: entry.ink
     }
-    Text {
+    GlassText {
         x: 34; y: 13
         width: Math.max(0, timeText.x - x - 8)
         text: entry.painted.appName
         textFormat: Text.PlainText
         color: entry.ink
-        opacity: 0.7
+        opacity: 1
         elide: Text.ElideRight
         font { pixelSize: 10; weight: Font.DemiBold }
     }
-    Text {
+    GlassText {
         id: timeText
         anchors { right: parent.right; top: parent.top; rightMargin: 33; topMargin: 13 }
         text: entry.timeLabel()
         color: entry.ink
-        opacity: 0.48
+        opacity: 0.85
         font.pixelSize: 9
     }
     Column {
@@ -110,37 +111,33 @@ Item {
         anchors { left: parent.left; top: parent.top; leftMargin: 12; topMargin: 36 }
         width: parent.width - 24
         spacing: 4
-        Text {
+        GlassText {
             width: parent.width
             text: entry.showPreview ? entry.painted.summary || "通知" : "收到一条通知"
             textFormat: Text.PlainText
             color: entry.ink
             elide: Text.ElideRight
             font { pixelSize: 13; weight: Font.DemiBold }
-            style: entry.dark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.25)
         }
-        Text {
+        GlassText {
             width: parent.width
             visible: entry.showPreview && text.length > 0
             text: entry.painted.body
             textFormat: Text.PlainText
             color: entry.ink
-            opacity: 0.72
+            opacity: 1
             wrapMode: Text.Wrap
             maximumLineCount: 3
             elide: Text.ElideRight
             font.pixelSize: 12
-            style: entry.dark ? Text.Outline : Text.Normal
-            styleColor: Qt.rgba(0, 0, 0, 0.25)
         }
     }
-    Text {
+    GlassText {
         anchors { left: parent.left; bottom: parent.bottom; leftMargin: 12; bottomMargin: 11 }
         visible: entry.painted.additionalCount > 0
         text: "还有 " + entry.painted.additionalCount + " 条通知"
         color: entry.ink
-        opacity: 0.6
+        opacity: 0.85
         font.pixelSize: 11
     }
     AbstractButton {
@@ -155,7 +152,7 @@ Item {
             color: removeButton.down ? Qt.rgba(0.5, 0.5, 0.5, 0.3)
                 : removeButton.hovered || removeButton.activeFocus ? Qt.rgba(0.5, 0.5, 0.5, 0.18) : "transparent"
         }
-        contentItem: Text {
+        contentItem: GlassText {
             text: "×"
             color: entry.ink
             opacity: removeButton.hovered || removeButton.activeFocus ? 1 : 0.5

@@ -1257,6 +1257,9 @@ PanelWindow {
                     radius: Math.min(background.radius, width / 2, height / 2)
                     layer.enabled: fallbackEnabled && continuousCorners
                     cornerExponent: 2.35
+                    // Keep a light backdrop blur on the large launcher surface.
+                    blurOverrideEnabled: !tonal
+                    blurStrength: Math.max(0.2, AppearanceConfigService.effectiveDockBlur)
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     // Adaptive tint, one preset above the Dock's subtle level.
                     scrimLevel: "transparent"

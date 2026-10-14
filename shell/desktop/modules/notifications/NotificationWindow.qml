@@ -179,11 +179,7 @@ PanelWindow {
             readonly property bool isLow: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Low
             readonly property bool expanded: !card.groupCollapsed && card.groupCount > 1
-            readonly property color foregroundColor: ThemeService.foregroundColor
-            readonly property color textOutlineColor: ThemeService.isDark
-                ? Qt.rgba(0.05, 0.08, 0.12, 0.38)
-                : Qt.rgba(1, 1, 1, 0.50)
-            readonly property int textStyle: ThemeService.isDark ? Text.Outline : Text.Normal
+            readonly property color foregroundColor: AppearanceTokens.content.glassInk()
             readonly property string iconSource: card.displayIconSource
 
             // Hover state for pause-on-hover. A HoverHandler (not a MouseArea)
@@ -373,15 +369,13 @@ PanelWindow {
                 width: 34; height: width
                 anchors { left: parent.left; leftMargin: 14; top: parent.top; topMargin: 14 }
 
-                Text {
+                GlassText {
                     anchors.centerIn: parent
                     visible: !iconMask.visible
                     text: card.displayAppName.length > 0
                         ? card.displayAppName.slice(0, 1).toUpperCase()
                         : "•"
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 16; bold: true }
                 }
                 Rectangle {
@@ -421,7 +415,7 @@ PanelWindow {
                 height: 18; radius: 9
                 anchors { right: closeButton.left; rightMargin: 8; top: parent.top; topMargin: 15 }
                 color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.08)
-                Text {
+                GlassText {
                     id: badgeText
                     anchors.centerIn: parent
                     text: card.groupCount
@@ -453,27 +447,23 @@ PanelWindow {
                 }
                 spacing: 4
 
-                Text {
+                GlassText {
                     width: parent.width
                     text: card.expanded
                         ? (modelData.appName.length > 0 ? modelData.appName : "Notifications")
                         : card.displaySummary
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
                     font { pixelSize: 14; bold: true }
                     elide: Text.ElideRight
                     maximumLineCount: 1
                 }
 
-                Text {
+                GlassText {
                     width: parent.width
                     visible: !card.expanded && text.length > 0
                     text: card.displayBody
                     color: card.foregroundColor
-                    style: card.textStyle
-                    styleColor: card.textOutlineColor
-                    opacity: 0.78
+                    opacity: 1
                     font.pixelSize: 13
                     wrapMode: Text.Wrap
                     maximumLineCount: 4
@@ -493,7 +483,7 @@ PanelWindow {
                         width: content.width
                         height: Math.max(notifRowText.implicitHeight, 20)
                         visible: card.expanded
-                        Text {
+                        GlassText {
                             id: notifRowText
                             anchors {
                                 left: parent.left
@@ -505,18 +495,14 @@ PanelWindow {
                                 ? modelData.summary
                                 : (modelData.appName || "")
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             font { pixelSize: 13; bold: true }
                             elide: Text.ElideRight
                             maximumLineCount: 1
                         }
-                        Text {
+                        GlassText {
                             id: notifRowClose
                             text: "×"
                             color: card.foregroundColor
-                            style: card.textStyle
-                            styleColor: card.textOutlineColor
                             opacity: notifRowCloseArea.containsMouse ? 0.9 : 0.45
                             font.pixelSize: 16
                             anchors { right: parent.right; verticalCenter: parent.verticalCenter }
@@ -564,7 +550,7 @@ PanelWindow {
                                 dark: ThemeService.isDark
                                 fillStrength: 0.85
                             }
-                            Text {
+                            GlassText {
                                 id: actionLabel
                                 anchors.centerIn: parent
                                 text: {
@@ -620,7 +606,7 @@ PanelWindow {
                         color: card.foregroundColor
                         font.pixelSize: 13
                         text: ""
-                        Text {
+                        GlassText {
                             visible: !replyInput.text && !replyInput.activeFocus
                             text: card.notification
                                 ? (card.notification.inlineReplyPlaceholder || "Reply…")
@@ -645,12 +631,10 @@ PanelWindow {
 
             // ---- close button ----
 
-            Text {
+            GlassText {
                 id: closeButton
                 text: "×"
                 color: card.foregroundColor
-                style: card.textStyle
-                styleColor: card.textOutlineColor
                 opacity: 0.55
                 font.pixelSize: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
