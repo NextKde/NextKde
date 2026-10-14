@@ -103,6 +103,12 @@ if(BUILD_TESTING)
     endif()
 
     if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.segmented-layout
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/segmented-layout)
+        set_tests_properties(kos-settings.segmented-layout PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1"
+            LABELS ui TIMEOUT 15)
         add_test(NAME kos-settings.notifications
             COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/notifications/tst_notifications.qml)

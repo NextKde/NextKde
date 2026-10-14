@@ -419,6 +419,10 @@ ApplicationWindow {
     // rows only provide model/currentIndex and content-driven width overrides.
     component SettingsNavBar: LiquidControls.LiquidNavBar {
         size: "tiny"
+        sizeToLabels: true
+        Layout.minimumWidth: 0
+        Layout.preferredWidth: implicitWidth
+        Layout.maximumWidth: parent ? parent.width * 0.65 : implicitWidth
         accentColor: theme.role("primary", theme.dark ? "#64b5ff" : "#0066cc")
         selectedItemColor: window.materialForm
             ? theme.role("on_primary", "#ffffff") : accentColor
@@ -4867,7 +4871,6 @@ ApplicationWindow {
                     }
                 }
                 SettingsNavBar {
-                    Layout.preferredWidth: 216
                     Layout.preferredHeight: 30
                     size: "tiny"
                     barHeight: 30
@@ -5058,6 +5061,7 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             id: barLayoutNavBar
+                            objectName: "bar-layout-picker"
                             model: [
                                 { id: "full", label: I18n.tr("Full-width edge to edge") },
                                 { id: "floating", label: I18n.tr("Floating capsule") },
@@ -5098,6 +5102,7 @@ ApplicationWindow {
                         Item { Layout.fillWidth: true }
                         SettingsNavBar {
                             id: barVisibilityNavBar
+                            objectName: "bar-visibility-picker"
                             model: [
                                 { id: "always", label: I18n.tr("Always show") },
                                 { id: "smart", label: I18n.tr("Smart hide") },

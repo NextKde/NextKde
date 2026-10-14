@@ -180,6 +180,9 @@ Item {
 
             Text {
                 anchors.centerIn: parent
+                width: Math.max(0, parent.width - 16)
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
                 text: segmentDelegate.modelData
                 color: segmentDelegate.index === root._visualIndex
                     ? root.textColor : root.mutedTextColor
