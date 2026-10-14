@@ -114,10 +114,15 @@ if(BUILD_TESTING)
     endif()
 
     if(KOS_NODE_EXECUTABLE)
-        add_test(NAME kos-settings.notifications-bridge
-            COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/notifications/bridge.mjs
-                $<TARGET_FILE:kos-settings>)
-        set_tests_properties(kos-settings.notifications-bridge PROPERTIES LABELS ui TIMEOUT 20)
+        find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
+        if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-settings.notifications-bridge
+                COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/notifications/bridge.mjs
+                    $<TARGET_FILE:kos-settings> ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-settings.notifications-bridge PROPERTIES LABELS ui TIMEOUT 20)
+        else()
+            message(STATUS "Skipping kos-settings.notifications-bridge: Quickshell is unavailable")
+        endif()
         add_test(NAME kos-settings.window-install
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
                 $<TARGET_FILE:kos-settings>)

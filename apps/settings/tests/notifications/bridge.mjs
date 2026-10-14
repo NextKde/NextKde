@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const binary = process.argv[2];
-assert(binary, "usage: bridge.mjs <kos-settings binary>");
+const quickshell = process.argv[3] || "quickshell";
+assert(binary, "usage: bridge.mjs <kos-settings binary> [quickshell binary]");
 const directory = mkdtempSync(join(tmpdir(), "kos-notification-bridge-"));
 const shellDir = join(directory, "shell");
 mkdirSync(shellDir);
@@ -66,14 +67,16 @@ ApplicationWindow {
 }
 `);
 const env = {...process.env, QT_QPA_PLATFORM:"offscreen", QT_QUICK_BACKEND:"software", QT_FORCE_STDERR_LOGGING:"1", KOS_SHELL_DIR:shellDir};
-let child, log = "";
+let child, launchError, log = "";
 try {
-    child = spawn("quickshell", ["-p", shellDir, "--no-color"], { env });
+    child = spawn(quickshell, ["-p", shellDir, "--no-color"], { env });
+    child.on("error", error => { launchError = error; });
     child.stdout.on("data", data => { log += data; });
     child.stderr.on("data", data => { log += data; });
     const deadline = Date.now() + 5000;
-    while (!log.includes("Configuration Loaded") && Date.now() < deadline)
+    while (!launchError && !log.includes("Configuration Loaded") && Date.now() < deadline)
         await new Promise(resolve => setTimeout(resolve, 25));
+    assert(!launchError, "Quickshell fixture failed to start: " + launchError + "\n" + log);
     assert(log.includes("Configuration Loaded"), log);
     const result = spawnSync(binary, [], {env, encoding:"utf8", timeout:12000});
     const output = (result.stdout || "") + (result.stderr || "");
