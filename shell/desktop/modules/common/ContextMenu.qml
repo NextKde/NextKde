@@ -40,6 +40,10 @@ PopupWindow {
     // Compositor blur is declared below; these QML layers make it read as a
     // denser, slightly darker frosted surface on every shared context menu.
     property real surfaceOpacity: 0.98
+    property string scrimLevel: "balanced"
+    // Optional per-menu compositor blur; otherwise follow the global setting.
+    property bool blurOverrideEnabled: false
+    property real blurStrength: AppearanceConfigService.effectiveDockBlur
     property real menuRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 16)
     readonly property color effectiveForegroundColor: {
         if (!root.adaptiveForeground)
@@ -325,7 +329,9 @@ PopupWindow {
         surfaceOpacity: root.surfaceOpacity
         // Menu text sits on this surface, so use the balanced readability scrim.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "balanced"
+        scrimLevel: root.scrimLevel
+        blurOverrideEnabled: root.blurOverrideEnabled
+        blurStrength: root.blurStrength
         materialOpacity: revealFrame.morphing ? revealFrame.progress * pageMotion.progress : 1
         scale: (!root.capsuleReveal && root.macosPopupMotion && popupMotion.progress < 0.999)
             ? AppearanceTokens.motion.popupStartScale

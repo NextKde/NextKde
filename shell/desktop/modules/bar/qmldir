@@ -6,6 +6,7 @@ BarAutoHideController 1.0 BarAutoHideController.qml
 BarDateStatus 1.0 BarDateStatus.qml
 singleton AppMenuService 1.0 AppMenuService.qml
 GlobalMenu 1.0 GlobalMenu.qml
+SystemMenu 1.0 SystemMenu.qml
 BarStatusArea 1.0 BarStatusArea.qml
 StatusAreaEditor 1.0 StatusAreaEditor.qml
 Battery 1.0 Battery.qml

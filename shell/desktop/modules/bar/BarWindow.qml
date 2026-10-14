@@ -39,6 +39,7 @@ PanelWindow {
         pointerInsideBar: contentHoverHandler.hovered
         popupOpen: (barContentLoader.item?.statusArea?.anyPanelOpen ?? false)
             || (barContentLoader.item?.globalMenu?.menuOpen ?? false)
+            || (barContentLoader.item?.systemMenu?.menuOpen ?? false)
         launcherOpen: AppLauncherService.open
     }
 
@@ -170,11 +171,19 @@ PanelWindow {
                     id: barContentItem
                     readonly property alias statusArea: barStatusArea
                     readonly property alias globalMenu: barGlobalMenu
+                    readonly property alias systemMenu: barSystemMenu
+
+                    SystemMenu {
+                        id: barSystemMenu
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
 
                     BarDateStatus {
                         id: barDateStatus
                         anchors {
-                            left: parent.left
+                            left: barSystemMenu.right
+                            leftMargin: 8
                             verticalCenter: parent.verticalCenter
                         }
                     }

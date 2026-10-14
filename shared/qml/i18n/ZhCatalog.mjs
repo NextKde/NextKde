@@ -3,6 +3,17 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    // bar · macOS-style system menu
+    "About This Computer": "关于本机",
+    "System Settings…": "系统设置…",
+    "App Store…": "应用商店…",
+    "Recent Items": "最近使用的项目",
+    "Force Quit…": "强制退出…",
+    "Restart…": "重新启动…",
+    "Shut Down…": "关机…",
+    "Log Out %1…": "注销 %1…",
+    "(Not installed)": "（未安装）",
+    "(Not supported yet)": "（暂不支持）",
     // settings · 语言切换卡片
     "Language": "语言",
     "Switch the interface language; applies live.": "切换界面语言，立即生效。",
