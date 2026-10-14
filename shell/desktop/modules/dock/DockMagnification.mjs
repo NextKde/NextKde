@@ -156,18 +156,6 @@ export function visualHeadroom(iconSize, gap, maxScale, hoverLift, thickness, bo
     return Math.max(0, Math.ceil(grow + lift + bounce - slack)) + 4;
 }
 
-// Bound lag in pixels rather than time: high-speed sweeps follow the raw
-// sample exactly. A stationary sample settles exactly on the next frame.
-export function trackPointer(previousSample, sample, deltaSeconds) {
-    if (!Number.isFinite(previousSample) || !Number.isFinite(deltaSeconds)
-            || deltaSeconds <= 0 || previousSample < -9999) return sample;
-    const distance = sample - previousSample;
-    const speed = Math.abs(distance) / deltaSeconds;
-    const softness = Math.max(0, 1 - speed / 600);
-    const offset = Math.min(Math.abs(distance) * 0.25, 0.6 * softness * softness);
-    return sample - Math.sign(distance) * offset;
-}
-
 // Continuous ownership only inside contiguous icon runs. Cells meet at the
 // painted center midpoint; rigid/divider/spacer slots terminate each run.
 // Eligibility never changes the cell geometry or absorbs an excluded neighbor.

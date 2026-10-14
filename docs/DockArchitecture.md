@@ -113,6 +113,9 @@ The compositor launch ticket is still prepared before executing the app.
 transform. Once its feedback state clears, the icon lands within 130 ms rather
 than continuing another full bounce. Side Docks bounce towards the workspace. Launch motion does
 not alter resting slots or KWin's stable window-animation target.
+The animation driver stops for reduced motion, hidden Docks, editing and
+dragging. Launch readiness and expiry remain active independently; revealing
+the Dock resumes feedback only if that application's launch is still pending.
 
 The Dock owns one `DockNameLabel` in its existing `DockWindow.contentItem`
 render tree. Icons publish label eligibility without creating popup windows or
@@ -126,13 +129,17 @@ The shared frame positions the selected name:
 it follows raw pointer position along the Dock and the transformed artwork edge
 across it. Switching icons only changes text; there is no Wayland popup
 reposition/configure round trip. The disabled label has no pointer handlers.
+Pointer travel follows raw samples directly; only hover entry/exit amplitude
+settles over frames. Icon translation updates only the selected label's
+geometry, without rescanning the entire Dock for each bouncing icon.
 
 `DockWindow` reserves both combined hover/launch excursion and separate name
 paint headroom before interaction starts. Name-only headroom is excluded from
 its hover/input region and never changes workspace reservations.
 `tests/dock-launch-feedback/run.mjs` checks readiness, asynchronous failure,
-timeout, 130 ms landing and label geometry on all three edges;
-`test_bounce.mjs` covers the flight curve and 60–240 Hz high-speed pointer traces;
+timeout, reduced motion, hidden-Dock suspension, 130 ms landing and label
+geometry on all three edges;
+`test_bounce.mjs` covers the bounded flight curve;
 `test_headroom.mjs` checks real thin surface and input budgets for adaptive sizes
 and scales 1–3, including name-only pass-through space.
 `sweep_wayland.py` drives 1800 px/s synthetic icon/name sweeps on actual thin

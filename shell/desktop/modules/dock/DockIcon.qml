@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import qs.desktop.modules.common
 import qs.desktop.modules.applauncher
+import "../../../Kos/Ui"
 import "DockMagnification.mjs" as Magnification
 import "AdaptiveMath.mjs" as AdaptiveMath
 
@@ -377,23 +378,33 @@ Item {
     property bool _launchBouncing: false
     property real _landingProgress: 1
     property real _landingStartLift: 0
-    readonly property real _launchLift: _launchBouncing && !editMode && !isDragging
+    readonly property bool _launchAnimationAllowed: !AppTheme.reduceMotion
+        && visible && !editMode && !isDragging
+        && (!magnificationRoot || magnificationRoot.launchAnimationVisible !== false)
+    readonly property real _launchLift: _launchBouncing && _launchAnimationAllowed
         ? (_landingProgress < 1
             ? _landingStartLift * Math.pow(1 - _landingProgress, 2)
             : -iconSize * DockAnimation.launchBounceHeightRatio
                 * Magnification.launchBounce(_launchPhase)) : 0
-    on_LaunchingChanged: {
-        if (_launching) {
+    function synchronizeLaunchAnimation() {
+        if (!_launchAnimationAllowed) {
+            _launchBouncing = false
+            _launchPhase = 0
+            _landingProgress = 1
+            _landingStartLift = 0
+        } else if (_launching) {
             _landingProgress = 1
             _launchPhase = 0
             _launchBouncing = true
-        } else if (_launchBouncing) {
+        } else if (_launchBouncing && _landingProgress === 1) {
             _landingStartLift = _launchLift
             _landingProgress = 0
         }
     }
+    on_LaunchingChanged: synchronizeLaunchAnimation()
+    on_LaunchAnimationAllowedChanged: synchronizeLaunchAnimation()
     FrameAnimation {
-        running: icon._launchBouncing
+        running: icon._launchBouncing && icon._launchAnimationAllowed
         onTriggered: {
             if (!icon._launching) {
                 icon._landingProgress = Math.min(1, icon._landingProgress
@@ -406,7 +417,6 @@ Item {
                 icon._launchPhase = (icon._launchPhase
                     + frameTime / DockAnimation.launchBounceSeconds) % 1
             }
-            icon.updateDockName()
         }
     }
     property real _attentionScale: 1.0
@@ -419,6 +429,7 @@ Item {
     // that deliberately extend past the icon edge.
     readonly property real _hoverDirection: vertical && dockEdge === "right" ? -1 : 1
     transform: Translate {
+        onYChanged: icon.updateOwnNameGeometry()
         // Grow towards the workspace: cancel the downward half of a
         // centre-origin scale before adding the configured hover lift.
         y: icon._hoverDirection * (icon._attentionLift + icon._launchLift) + icon._hoverDirection
@@ -660,11 +671,19 @@ Item {
         if (magnificationRoot && typeof magnificationRoot.updateNameLabel === "function")
             magnificationRoot.updateNameLabel()
     }
+    function updateOwnNameGeometry() {
+        // Run after the visual translation changes. Moving an icon does not
+        // require rescanning ownership for every other icon in the Dock.
+        const label = magnificationRoot ? magnificationRoot.nameLabel : null
+        if (label && label.targetIcon === icon)
+            label.updateGeometry()
+    }
     onDockNameEligibleChanged: updateDockName()
     // Non-Dock hosts retain the existing lazy popup fallback. The shared Dock
     // never constructs this separate surface or uses its dwell timer.
     Loader {
         active: !icon._usesSharedMagnification && icon._hovering && icon.dockNameEligible
+            && !icon._hasWindows && !icon.isRunning
         sourceComponent: DockAppNameTooltip { targetIcon: icon }
     }
 

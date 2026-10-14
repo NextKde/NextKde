@@ -304,6 +304,8 @@ PanelWindow {
 
         DockContainer {
             id: dockContainer
+            launchAnimationVisible: root.visible && hide.revealProgress > 0
+                && dockWrapper.opacity > 0.05
             nameLabelHost: root.contentItem
             nameLabelsEnabled: hide.revealProgress > 0 && dockWrapper.opacity > 0.05
             pointerInputItem: dockHoverRegion

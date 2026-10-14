@@ -239,10 +239,6 @@ Item {
     property point magnificationPointer: Qt.point(-10000, -10000)
     property real hoverProgress: 0
     property point _rowPointer: Qt.point(-10000, -10000)
-    property real _pointerTargetX: -10000
-    property real _previousPointerSample: -10000
-    readonly property bool _pointerSettling: _pointerOverApps
-        && _rowPointer.x !== _pointerTargetX
     // Reach about three neighbours on either side. Use slot pitch rather
     // than artwork size so crowded adaptive layouts retain the same reach.
     readonly property real magnificationRadius:
@@ -316,12 +312,11 @@ Item {
         }
         return states
     }
-    // All consumers read one snapshot. Pointer travel has a subpixel bounded
-    // response at low speed and follows raw input exactly during fast sweeps.
-    signal magnificationFrameUpdated()
+    // All consumers read one snapshot. Pointer travel follows the raw input;
+    // only the entry/exit amplitude needs to settle over subsequent frames.
     property var _hoverLayout: ({ entries: [], byItem: new Map(), total: 0, shift: 0 })
     FrameAnimation {
-        running: container._hoverDirty || container._pointerSettling
+        running: container._hoverDirty
             || container.hoverProgress !== container._hoverTarget
         onTriggered: {
             container._hoverDirty = false
@@ -343,14 +338,8 @@ Item {
                     container._spreadStates, container._hoverLayout, rowPoint.x)
                 // Hold the last application position while leaving for Stack
                 // or the tray, so the exit wave does not chase their controls.
-                if (container._pointerOverApps) {
-                    container._pointerTargetX = rowPoint.x
-                    const x = container.hoverProgress === 0
-                        ? rowPoint.x : Magnification.trackPointer(container._previousPointerSample,
-                            rowPoint.x, frameTime)
-                    container._previousPointerSample = rowPoint.x
-                    container._rowPointer = Qt.point(x, rowPoint.y)
-                }
+                if (container._pointerOverApps)
+                    container._rowPointer = rowPoint
             } else {
                 container._pointerOverApps = false
                 container.magnificationPointer = Qt.point(-10000, -10000)
@@ -369,13 +358,13 @@ Item {
             frame.pointer = hoverPoint
             container._hoverLayout = frame
             container.updateNameLabel()
-            container.magnificationFrameUpdated()
         }
     }
     Connections {
         target: ConfigService
         function onEffectiveHoverScaleChanged() { container._hoverDirty = true }
     }
+    property bool launchAnimationVisible: true
     property bool nameLabelsEnabled: true
     onNameLabelsEnabledChanged: updateNameLabel()
     property Item nameLabelHost: container
