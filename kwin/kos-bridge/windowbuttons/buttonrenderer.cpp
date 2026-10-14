@@ -94,10 +94,18 @@ bool exposedAt(KWin::EffectWindow *window, const QPointF &point)
         if (!above || !above->isVisible()) {
             continue;
         }
-        // Keep hit testing aligned with BridgeEffect::visibleRegionFor.
-        // Skip-switcher shell surfaces may have transparent frames spanning
-        // the desktop; ordinary translucent windows still occlude the panel.
-        if (above->isSkipSwitcher() || above->isDesktop() || above->isDock()
+        if (above->isDesktop()) {
+            continue;
+        }
+        if (KWin::Window *w = above->window()) {
+            if (w->hitTest(point)) {
+                return false;
+            }
+            continue;
+        }
+        // Fallback for windows without a backing KWin::Window: shell surfaces
+        // may have large transparent frames spanning the desktop.
+        if (above->isSkipSwitcher() || above->isDock()
             || above->isOnScreenDisplay() || above->isNotification()) {
             continue;
         }
