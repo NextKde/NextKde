@@ -41,7 +41,9 @@ KWin, NetworkManager, PipeWire, BlueZ, and systemd.
 - **Settings & motion** — configure the bar, dock, launcher, shortcuts, window decoration, and animations.
 
 Calendar, Todo, Weather, and ListenFree are available as
-[optional standalone applications](apps/README.md).
+[optional standalone applications](apps/README.md). The default application
+bundle, including ListenFree, requires Qt 6.10+ and its additional audio dependencies;
+see the [application installation guide](docs/GettingStarted.md#optional-standalone-applications).
 
 ## Get started
 
