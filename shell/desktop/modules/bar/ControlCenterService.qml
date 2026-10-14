@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.platform
+import qs.desktop.modules.notifications
 
 // Shared Control Centre state. The resident platform service owns PipeWire,
 // BlueZ, brightness, session, screenshot and theme integration.
@@ -36,7 +37,7 @@ QtObject {
     property bool bluetoothDevicesRefreshInProgress: false
     property bool bluetoothDeviceChangeInProgress: false
     property string bluetoothChangingAddress: ""
-    property bool doNotDisturbEnabled: false
+    readonly property bool doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled
     property bool screenshotInProgress: false
     property bool sessionActionInProgress: false
     property alias logoutInProgress: service.sessionActionInProgress
@@ -451,7 +452,7 @@ QtObject {
     }
 
     function toggleDoNotDisturb() {
-        doNotDisturbEnabled = !doNotDisturbEnabled
+        NotificationPolicyService.setPreference("doNotDisturbEnabled", !doNotDisturbEnabled)
         return doNotDisturbEnabled
     }
 

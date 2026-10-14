@@ -11,6 +11,7 @@ Item {
     required property string itemsJson
     required property bool expanded
     required property int itemCount
+    property bool showPreview: true
     property color ink: "white"
     property bool dark: true
     property var coordinator: null
@@ -19,7 +20,7 @@ Item {
     property real frozenHeight: 0
     property var painted: ({sourceKey: sourceKey, appName: appName, appIcon: appIcon, desktopEntry: desktopEntry,
         expanded: expanded, count: itemCount})
-    readonly property var memberKeys: JSON.parse(itemsJson).map(item => item.historyKey)
+    readonly property var memberKeys: JSON.parse(itemsJson || "[]").map(item => item.historyKey)
     property var leadingItem: null
     readonly property real latestHeight: leadingItem?.height ?? 112
     readonly property int headerHeight: painted.expanded && painted.count > 1 ? 32 : 0
@@ -27,6 +28,10 @@ Item {
     readonly property real cardsHeight: painted.expanded ? members.contentHeight : latestHeight
     height: exiting ? frozenHeight : headerHeight + cardsHeight + backHeight
     enabled: !exiting
+    activeFocusOnTab: !painted.expanded && painted.count > 1
+    Accessible.name: I18n.tr("%1, %2 notifications").arg(painted.appName).arg(painted.count)
+    Keys.onReturnPressed: toggleRequested(painted.sourceKey, !painted.expanded)
+    Keys.onSpacePressed: toggleRequested(painted.sourceKey, !painted.expanded)
     signal toggleRequested(string source, bool expanded)
     signal removeRequested(int key)
     signal clearRequested(var keys)
@@ -37,8 +42,9 @@ Item {
     }
     ListModel { id: memberModel }
     function reconcileMembers() {
-        if (exiting) return
-        const desired = JSON.parse(itemsJson)
+        if (exiting || !itemsJson) return
+        const all = JSON.parse(itemsJson)
+        const desired = expanded ? all : all.slice(0, 1)
         const selected = new Set(desired.map(item => item.historyKey))
         for (let i = memberModel.count - 1; i >= 0; --i)
             if (!selected.has(memberModel.get(i).historyKey)) memberModel.remove(i)
@@ -54,6 +60,7 @@ Item {
         }
     }
     onItemsJsonChanged: reconcileMembers()
+    onExpandedChanged: reconcileMembers()
     Component.onCompleted: reconcileMembers()
     ListView.onRemove: {
         // Detach display fields from disappearing roles and freeze geometry.
@@ -148,7 +155,7 @@ Item {
                 y: -group.latestHeight + (index + 1) * 6
                 width: group.width - x * 2
                 height: group.latestHeight
-                radius: 13
+                radius: 18
                 color: group.dark ? (index === 0 ? "#42464b" : "#3a3e43")
                     : (index === 0 ? "#d5d6d8" : "#c6c8ca")
                 border.width: 1
@@ -177,6 +184,7 @@ Item {
             onIndexChanged: if (index === 0 && !exiting) group.leadingItem = entryDelegate
             Component.onCompleted: if (index === 0) group.leadingItem = entryDelegate
             Component.onDestruction: if (group.leadingItem === entryDelegate) group.leadingItem = null
+            showPreview: group.showPreview
             appName: group.painted.appName
             appIcon: group.painted.appIcon
             desktopEntry: group.painted.desktopEntry
@@ -186,6 +194,7 @@ Item {
             dark: group.dark
             coordinator: group.coordinator
             groupExiting: group.exiting
+            suppressExitAnimation: !group.expanded
             onRemoveRequested: key => group.removeRequested(key)
         }
     }

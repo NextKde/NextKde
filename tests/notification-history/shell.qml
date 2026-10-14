@@ -17,6 +17,14 @@ Scope {
         NotificationHistoryService.setExpanded("desktop:org.test.one", true)
         push("Same Name", 5, "org.test.one")
         assert(NotificationHistoryService.groups.get(0).expanded, "arrival preserves expansion")
+        function previewCount() {
+            let count = 0
+            for (let i=0; i<NotificationHistoryService.previewGroups.count; ++i)
+                count += NotificationHistoryService.previewGroups.get(i).itemCount
+            return count
+        }
+        assert(previewCount() === 3, "preview contains three notifications, not three full groups")
+        assert(!NotificationHistoryService.previewGroups.get(0).expanded, "preview ignores full-list expansion")
         const replacementKey = items()[0].historyKey
         push("Renamed", 5, "org.test.one.desktop")
         assert(NotificationHistoryService.groups.get(0).itemCount === 4, "replacement does not duplicate")
@@ -43,8 +51,10 @@ Scope {
         for (let i=0; i<60; ++i) push("A", 100 + i)
         assert(NotificationHistoryService.count === 50, "capacity")
         assert(NotificationHistoryService.groups.get(0).itemCount === 50, "group capacity")
+        assert(previewCount() === 3, "capacity never expands preview")
         NotificationHistoryService.clear()
         assert(NotificationHistoryService.groups.count === 0 && NotificationHistoryService.count === 0, "clear")
+        assert(previewCount() === 0, "clear also clears preview")
         push("Same Name", 900, "org.test.one")
         assert(NotificationHistoryService.groups.get(0).expanded, "expanded state lasts through group disappearance")
         console.log("HISTORY_MODEL_TEST_PASS")

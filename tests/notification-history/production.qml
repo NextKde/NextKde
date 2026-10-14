@@ -9,6 +9,7 @@ Scope {
     IpcHandler {
         target: "notifications"
         function dnd(enabled: bool): void { ControlCenterService.doNotDisturbEnabled = enabled }
+        function preference(key: string, value: bool): void { NotificationPolicyService.setPreference(key, value) }
         function block(key: string, blocked: bool): void { NotificationPolicyService.setBlocked(key, blocked) }
         function clear(): void { NotificationHistoryService.clear(); AppNotificationService.clearAll() }
         function stats(): string {
@@ -19,6 +20,7 @@ Scope {
             }
             return JSON.stringify({ready: NotificationPolicyService.ready, rows: rows,
                 sources: NotificationPolicyService.sources, blocked: NotificationPolicyService.blockedKeys,
+                prefs: {bannersEnabled: NotificationPolicyService.bannersEnabled, historyEnabled: NotificationPolicyService.historyEnabled, showPreview: NotificationPolicyService.showPreview, doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled},
                 unread: AppNotificationService.unreadGroups,
                 banners: ScreenLifecycle.testBannerCount, dnd: ControlCenterService.doNotDisturbEnabled})
         }

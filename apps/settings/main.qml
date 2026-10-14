@@ -62,6 +62,8 @@ ApplicationWindow {
         colorGroup: SystemPalette.Active
     }
 
+    readonly property var notificationTheme: theme
+
     QtObject {
         id: theme
 
@@ -232,7 +234,8 @@ ApplicationWindow {
             subtitle: I18n.tr("Stage scheduling"),
             groups: []
         },
-        { subtitle: I18n.tr("Windows and animations"), groups: [] }
+        { subtitle: I18n.tr("Windows and animations"), groups: [] },
+        { subtitle: I18n.tr("Notifications"), groups: [] }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -2284,8 +2287,6 @@ ApplicationWindow {
         readonly property var windowGroupings: ["grouped", "separate"]
         property bool showLauncher: true
         property bool showTrash: true
-        property bool showNotificationBadges: true
-        property bool notificationBadgeUpdatePending: false
         property bool showRevealIndicator: true
         property bool revealIndicatorUpdatePending: false
         property bool stateReady: false
@@ -2341,7 +2342,6 @@ ApplicationWindow {
             windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping)
             showLauncher = state.showLauncher !== false
             showTrash = state.showTrash !== false
-            showNotificationBadges = state.showNotificationBadges !== false
             showRevealIndicator = state.showRevealIndicator !== false
             stateReady = true
             errorText = ""
@@ -2400,13 +2400,6 @@ ApplicationWindow {
             bridge.updateDockWindowGrouping(mode)
         }
 
-        function saveNotificationBadgeVisibility(visible) {
-            if (!bridge || !stateReady || notificationBadgeUpdatePending)
-                return
-            notificationBadgeUpdatePending = true
-            bridge.updateDockNotificationBadgeVisibility(visible)
-        }
-
         function saveRevealIndicatorVisibility(visible) {
             if (!bridge || !stateReady || revealIndicatorUpdatePending)
                 return
@@ -2452,12 +2445,6 @@ ApplicationWindow {
             target: dockPage.bridge
             enabled: dockPage.bridge !== null
             function onDockSnapshotChanged(state) {
-                dockPage.applyState(state)
-                if (dockPage.bridge.lastError)
-                    dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
-            }
-            function onDockNotificationBadgeVisibilityChanged(state) {
-                dockPage.notificationBadgeUpdatePending = false
                 dockPage.applyState(state)
                 if (dockPage.bridge.lastError)
                     dockPage.errorText = I18n.tr(dockPage.bridge.lastError)
@@ -2912,40 +2899,6 @@ ApplicationWindow {
                     }
                 }
 
-                Rectangle { width: parent.width; height: 1; color: theme.separator }
-
-                Item {
-                    width: parent.width
-                    height: 64
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 16
-                        anchors.rightMargin: 16
-                        spacing: 12
-                        SettingIcon { symbol: "●"; tint: "#ff3b30" }
-                        ColumnLayout {
-                            spacing: 1
-                            Text { text: I18n.tr("Show notification badges"); color: theme.primaryText; font.pixelSize: 14 }
-                            Text {
-                                text: I18n.tr("Show notification counts and badges on app icons")
-                                color: theme.secondaryText
-                                font.pixelSize: 11
-                            }
-                        }
-                        Item { Layout.fillWidth: true }
-                        LiquidControls.LiquidGlassSwitch {
-                            objectName: "dock-notification-badges-switch"
-                            checked: dockPage.showNotificationBadges
-                            enabled: dockPage.stateReady && !dockPage.notificationBadgeUpdatePending
-                            accentColor: theme.role("primary", "#0a84ff")
-                            trackColor: theme.divider
-                            Accessible.name: I18n.tr("Show notification badges")
-                            onToggled: function(checked) {
-                                dockPage.saveNotificationBadgeVisibility(checked)
-                            }
-                        }
-                    }
-                }
                 Rectangle { width: parent.width; height: 1; color: theme.separator }
 
                 Item {
@@ -6096,6 +6049,14 @@ ApplicationWindow {
 
                         SidebarEntry {
                             Layout.fillWidth: true
+                            pageIndex: 12
+                            label: I18n.tr("Notifications")
+                            navSymbol: "●"
+                            navTint: "#ff3b30"
+                        }
+
+                        SidebarEntry {
+                            Layout.fillWidth: true
                             pageIndex: 4
                             label: I18n.tr("Launcher")
                             navSymbol: "❖"
@@ -6266,6 +6227,16 @@ ApplicationWindow {
                     // items -- so without it a page the user has left keeps its
                     // whole height as a blank slab between the title and the
                     // page actually being shown.
+                    Loader {
+                        Layout.fillWidth: true
+                        active: window.displayedPage === 12
+                        visible: active
+                        sourceComponent: NotificationsSettingsPage {
+                            theme: window.notificationTheme
+                            bridge: typeof settingsBridge !== "undefined" ? settingsBridge : null
+                        }
+                    }
+
                     Loader {
                         Layout.fillWidth: true
                         objectName: "windowPageLoader"

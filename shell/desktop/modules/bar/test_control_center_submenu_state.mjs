@@ -72,7 +72,7 @@ assert.doesNotMatch(panel, /popupMotion\.progress > 0 && pageMotion\.progress > 
     "navigation never drops the compositor blur region")
 assert.match(card, /scrimOpacity:\s*root\.glassOpacity/,
     "the KWin scrim fades with the card's page factor, not just its content")
-assert.match(placement, /c\.glassOpacity = Qt\.binding\(function\(\)\s*\{\s*return panel\.pageFactor\(c\.pageTag\)\s*\}/,
+assert.match(placement, /c\.glassOpacity = Qt\.binding\(function\(\)\s*\{\s*return panel\.pageFactor\(c\.pageTag\) \* panel\.revealProgress\s*\}/,
     "a card's compositor glass fades with its page so no blurred ghost is left")
 
 // A PopupWindow anchored to the layer-shell Bar cannot take a Wayland popup

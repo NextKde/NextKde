@@ -128,3 +128,58 @@ export function overApps(states, frame, pointer) {
     }
     return pointer >= left && pointer <= right;
 }
+
+// Ballistic flight followed by a short grounded pause. Landing completes even
+// if a window appears mid-flight, so readiness never snaps the icon downward.
+export function launchBounce(phase) {
+    const flight = 0.82;
+    const t = Math.max(0, Math.min(1, phase / flight));
+    return 4 * t * (1 - t);
+}
+
+// A ready window must not clear launch feedback before its first painted
+// frames. This only bounds the visual state; it never delays application launch.
+export function releaseLaunchFeedback(startedAt, now, windowReady, minimumMs, timeoutMs) {
+    const elapsed = Math.max(0, now - startedAt);
+    return elapsed >= timeoutMs || (windowReady && elapsed >= minimumMs);
+}
+
+// The entire possible visual excursion must fit the fixed layer surface,
+// including a launch at hover's peak. Shared by the surface and its input
+// envelope, without changing resting geometry or workspace reservations.
+export function visualHeadroom(iconSize, gap, maxScale, hoverLift, thickness, bounceRatio) {
+    const slot = iconSize + gap * 2;
+    const grow = slot * Math.max(0, maxScale - 1);
+    const lift = slot * Math.max(0, hoverLift);
+    const bounce = iconSize * Math.max(0, bounceRatio);
+    const slack = Math.max(0, (thickness - slot) / 2);
+    return Math.max(0, Math.ceil(grow + lift + bounce - slack)) + 4;
+}
+
+// Continuous ownership only inside contiguous icon runs. Cells meet at the
+// painted center midpoint; rigid/divider/spacer slots terminate each run.
+// Eligibility never changes the cell geometry or absorbs an excluded neighbor.
+export function nameOwner(states, frame, pointer) {
+    if (!Number.isFinite(pointer)) return null;
+    const entries = states.map(state => {
+        const painted = frame.byItem.get(state.item);
+        return { state, center: state.cx + (painted?.dx ?? 0),
+            half: painted?.half ?? state.half };
+    });
+    for (const entry of entries) {
+        if (!entry.state.growable && pointer >= entry.center - entry.half
+                && pointer <= entry.center + entry.half) return null;
+    }
+    for (let i = 0; i < entries.length; ++i) {
+        const current = entries[i];
+        if (!current.state.growable) continue;
+        const previous = entries[i - 1], next = entries[i + 1];
+        const left = previous?.state.growable
+            ? (previous.center + current.center) / 2 : current.center - current.half;
+        const right = next?.state.growable
+            ? (current.center + next.center) / 2 : current.center + current.half;
+        if (pointer >= left && (pointer < right || (!next?.state.growable && pointer <= right)))
+            return current.state.item;
+    }
+    return null;
+}

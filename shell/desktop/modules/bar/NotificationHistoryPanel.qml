@@ -13,62 +13,29 @@ import "../../../Kos/Ui"
 AnimatedPopupWindow {
     id: panel
 
-    property bool historyEmptyReady: true
-    // ListView removal signals arrive during polish. Hide the empty state
-    // before deleting data, then reveal after those exits have settled.
-    function prepareHistoryRemoval() {
-        historyEmptyReady = false
-        emptySettlement.restart()
-    }
-    Timer {
-        id: emptySettlement
-        interval: 300
-        onTriggered: panel.historyEmptyReady = true
-    }
-    property int historyExitCount: 0
-    property var historyClearDelays: ({})
-    property bool manageApplications: false
-    function beginHistoryExit() { historyExitCount++ }
-    function endHistoryExit() { historyExitCount = Math.max(0, historyExitCount - 1) }
-    function historyGroupVisible(item) {
-        return historyList.visible && panel.visible
-            && item.y + item.height > historyList.contentY
-            && item.y < historyList.contentY + historyList.height
-    }
-    function historyExitDelay(source) { return historyClearDelays[source] || 0 }
-    function clearHistory() {
-        const delays = ({})
-        let visibleIndex = 0
-        for (let i = 0; i < historyList.count; ++i) {
-            const item = historyList.itemAtIndex(i)
-            if (item && historyGroupVisible(item))
-                delays[item.sourceKey] = Math.min(120, visibleIndex++ * 30)
-        }
-        historyClearDelays = delays
-        // Delete the clicked snapshot now. Animation completion never mutates
-        // the service, so an arrival/replacement during an exit survives.
-        prepareHistoryRemoval()
-        NotificationHistoryService.removeKeys(NotificationHistoryService.allKeys())
-        AppNotificationService.clearAll()
-    }
     property Item anchorItem: null
     property bool dockHosted: false
     property string dockEdge: "bottom"
-    implicitWidth: 340
-    implicitHeight: 390
+    readonly property real availableHeight: Math.max(1, (targetScreen?.height ?? 900) - 110)
+    implicitWidth: Math.min(336, Math.max(1, (targetScreen?.width ?? 1920) - 24))
+    implicitHeight: Math.min(576, availableHeight)
+    mask: interactive ? historyInput : emptyHistoryInput
     color: "transparent"
     grabFocus: interactive
+    contentItem.scale: 1
     motionOrigin: !dockHosted ? Item.Top
         : dockEdge === "left" ? Item.Left
         : dockEdge === "right" ? Item.Right : Item.Bottom
+    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
+
     anchor {
-        item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
             : panel.dockEdge === "left" ? Edges.Right
             : panel.dockEdge === "right" ? Edges.Left : Edges.Top
         gravity: !panel.dockHosted ? Edges.Bottom
             : panel.dockEdge === "left" ? Edges.Right
             : panel.dockEdge === "right" ? Edges.Left : Edges.Top
+        adjustment: PopupAdjustment.Slide
         margins.top: panel.dockHosted
             && panel.dockEdge === "bottom" ? -8 : 0
         margins.bottom: panel.dockHosted ? 0 : -8
@@ -81,20 +48,14 @@ AnimatedPopupWindow {
     readonly property var targetScreen: ScreenLifecycle.activeScreen
 
     // The surface owns both its outline and compositor blur region.
-    readonly property int blurRadius: 19
-    onRequestedOpenChanged: {
-        if (requestedOpen && dockHosted)
-            DockModelService.openDockPopup(panel)
-    }
     onVisibleChanged: {
         if (!visible)
             DockModelService.releaseDockPopup(panel)
     }
     Component.onDestruction: DockModelService.releaseDockPopup(panel)
     BackgroundEffect.blurRegion: (panel.visible && panel.revealProgress > 0
-        && (AppearanceConfigService.effectiveBarBlur > 0.005
-            || AppearanceConfigService.effectiveBarLiquid > 0.005))
-        ? panelSurface.blurRegion : null
+        && AppearanceTokens.surface.usesKwinBlur)
+        ? historyPane.blurRegion : null
 
     function toggle(item) {
         anchorItem = item
@@ -168,202 +129,51 @@ AnimatedPopupWindow {
         onActivated: panel.close()
     }
 
-    LiquidGlassPanel {
-        id: panelSurface
-        anchors.fill: parent
-        radius: panel.blurRadius
-        cornerExponent: AppearanceTokens.shape.cornerExponent
-        baseColor: ThemeService.backgroundColor
-        surfaceOpacity: 1.0
-        ambientPrimary: WallpaperColorSource.primary
-        ambientSecondary: WallpaperColorSource.secondary
-        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-        material: "thick"
-        adaptiveDarkScrim: true
-        scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: "transparent"
+    Region { id: emptyHistoryInput }
+    Item { id: popupCapture; width: panel.width; height: panel.height }
+    Item {
+        id: inputArea
+        width: panel.width
+        y: Math.max(0, deckCanvas.y - deckViewport.contentY)
+        height: Math.max(0, Math.min(deckViewport.height,
+            deckCanvas.y - deckViewport.contentY + deckCanvas.height) - y)
     }
-    GlassText {
-        id: title
-        anchors { left: parent.left; top: parent.top; margins: 16 }
-        text: panel.manageApplications ? I18n.tr("App notifications") : I18n.tr("Notification History")
-        color: panelSurface.foregroundColor
-        font { pixelSize: 15; weight: Font.Bold }
-    }
-    GlassText {
-        anchors { right: parent.right; verticalCenter: title.verticalCenter; rightMargin: 16 }
-        visible: !panel.manageApplications
-        text: I18n.tr("Clear")
-        color: panelSurface.foregroundColor
-        opacity: NotificationHistoryService.count > 0 ? 0.8 : 0.3
-        font.pixelSize: 12
-        MouseArea {
-            anchors.fill: parent; anchors.margins: -6
-            enabled: NotificationHistoryService.count > 0
-            cursorShape: Qt.PointingHandCursor
-            onClicked: {
-                panel.clearHistory()
-            }
-        }
+    RoundedBlurRegion { id: historyInput; item: inputArea; radius: 0 }
+    Flickable {
+        id: deckViewport
+        width: panel.width; height: panel.height
+        contentWidth: panel.width; contentHeight: Math.max(height, deckCanvas.height)
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.AutoFlickIfNeeded
+        interactive: contentHeight > height + 1 || contentWidth > width + 1
+        clip: true
+        KosKineticScroll { flickable: deckViewport; horizontal: true }
     }
     Item {
-        id: notificationSettings
-        anchors { left: parent.left; right: parent.right; top: title.bottom; margins: 16; topMargin: 12 }
-        height: 68
-        GlassText {
-            text: I18n.tr("Do Not Disturb")
-            color: panelSurface.foregroundColor
-            font.pixelSize: 13
-            anchors { left: parent.left; top: parent.top; topMargin: 4 }
-        }
-        Rectangle {
-            width: 36; height: 22; radius: 11
-            anchors { right: parent.right; top: parent.top }
-            color: ControlCenterService.doNotDisturbEnabled ? "#0a84ff" : Qt.rgba(0.5, 0.5, 0.5, 0.35)
-            Rectangle {
-                width: 18; height: 18; radius: 9; y: 2
-                x: ControlCenterService.doNotDisturbEnabled ? 16 : 2
-                color: "white"
-                Behavior on x { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-            }
-            MouseArea {
-                anchors.fill: parent; anchors.margins: -5
-                cursorShape: Qt.PointingHandCursor
-                onClicked: ControlCenterService.toggleDoNotDisturb()
-            }
-        }
-        GlassText {
-            anchors { left: parent.left; top: parent.top; topMargin: 27 }
-            text: I18n.tr("Mutes banners; notifications stay in history")
-            color: panelSurface.foregroundColor
-            opacity: 0.55
-            font.pixelSize: 10
-        }
-        GlassText {
-            anchors { left: parent.left; bottom: parent.bottom }
-            text: panel.manageApplications ? I18n.tr("‹ Back to Notification History") : I18n.tr("Manage app notifications ›")
-            color: panelSurface.foregroundColor
-            opacity: 0.85
-            font.pixelSize: 11
-            MouseArea {
-                anchors.fill: parent; anchors.margins: -5
-                cursorShape: Qt.PointingHandCursor
-                onClicked: panel.manageApplications = !panel.manageApplications
-            }
+        id: deckCanvas
+        parent: deckViewport.contentItem
+        width: panel.width; height: historyPane.height + 16
+        y: panel.dockHosted && panel.dockEdge === "bottom" ? Math.max(0, deckViewport.height - height) : 0
+        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * panel.revealProgress
+        transformOrigin: panel.motionOrigin
+        NotificationHistoryPane {
+            id: historyPane
+            x: 20; y: 8; width: Math.max(1, parent.width - 40)
+            maximumHeight: Math.min(560, Math.max(208, panel.availableHeight - 16))
+            height: desiredHeight
+            captureAnchor: popupCapture
+            outerViewport: deckViewport
+            active: panel.requestedOpen
+            glassOpacity: panel.revealProgress
+            backdropScale: deckCanvas.scale
         }
     }
-    ListView {
-        id: applicationsList
-        visible: panel.manageApplications
-        anchors { left: parent.left; right: parent.right; top: notificationSettings.bottom; bottom: parent.bottom; margins: 16; topMargin: 12 }
-        clip: true
-        spacing: 6
-        model: NotificationPolicyService.sources
-        delegate: Item {
-            required property var modelData
-            width: applicationsList.width
-            height: 54
-            NotificationSourceIcon {
-                anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                width: 24; height: 24
-                appIcon: modelData.appIcon
-                desktopEntry: modelData.desktopEntry
-                ink: panelSurface.foregroundColor
-            }
-            Column {
-                anchors { left: parent.left; right: allowToggle.left; verticalCenter: parent.verticalCenter; leftMargin: 32; rightMargin: 8 }
-                spacing: 3
-                GlassText {
-                    width: parent.width
-                    text: modelData.appName
-                    textFormat: Text.PlainText
-                    color: panelSurface.foregroundColor
-                    elide: Text.ElideRight
-                    font.pixelSize: 12
-                }
-                GlassText {
-                    width: parent.width
-                    text: modelData.desktopEntry || I18n.tr("Identified by app name")
-                    textFormat: Text.PlainText
-                    color: panelSurface.foregroundColor
-                    opacity: 0.5
-                    elide: Text.ElideRight
-                    font.pixelSize: 9
-                }
-            }
-            Rectangle {
-                id: allowToggle
-                readonly property bool blocked: NotificationPolicyService.isKeyBlocked(modelData.key)
-                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                width: 58; height: 26; radius: 13
-                color: blocked ? Qt.rgba(0.5, 0.5, 0.5, 0.2) : Qt.rgba(0.04, 0.52, 1, 0.55)
-                GlassText {
-                    anchors.centerIn: parent
-                    text: allowToggle.blocked ? I18n.tr("Blocked") : I18n.tr("Allow")
-                    color: panelSurface.foregroundColor
-                    font.pixelSize: 11
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    enabled: NotificationPolicyService.ready
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: NotificationPolicyService.setBlocked(modelData.key, !allowToggle.blocked)
-                }
-            }
+    onRequestedOpenChanged: {
+        if (requestedOpen) {
+            deckViewport.contentX = 0
+            deckViewport.contentY = 0
+            historyPane.reset()
+            if (dockHosted) DockModelService.openDockPopup(panel)
         }
-        KosKineticScroll { flickable: applicationsList }
-        GlassText {
-            anchors.centerIn: parent
-            visible: applicationsList.count === 0
-            text: I18n.tr("Apps appear here once they send notifications")
-            color: panelSurface.foregroundColor
-            opacity: 0.5
-            font.pixelSize: 12
-        }
-    }
-    GlassText {
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
-        visible: panel.manageApplications && NotificationPolicyService.saveError.length > 0
-        text: NotificationPolicyService.saveError
-        color: "#ff6b61"
-        font.pixelSize: 10
-    }
-    ListView {
-        id: historyList
-        visible: !panel.manageApplications
-        anchors { left: parent.left; right: parent.right; top: notificationSettings.bottom; bottom: parent.bottom; margins: 16; topMargin: 12 }
-        clip: true
-        model: NotificationHistoryService.groups
-        spacing: 12
-        add: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150 } }
-        displaced: Transition { NumberAnimation { property: "y"; duration: 200; easing.type: Easing.OutCubic } }
-        delegate: NotificationHistoryGroup {
-            width: historyList.width
-            ink: panelSurface.foregroundColor
-            dark: ThemeService.isDark
-            coordinator: panel
-            onToggleRequested: (source, expanded) => NotificationHistoryService.setExpanded(source, expanded)
-            onRemoveRequested: key => {
-                panel.historyClearDelays = ({})
-                panel.prepareHistoryRemoval()
-                NotificationHistoryService.remove(key)
-            }
-            onClearRequested: keys => {
-                panel.historyClearDelays = ({})
-                panel.prepareHistoryRemoval()
-                NotificationHistoryService.removeKeys(keys)
-            }
-        }
-        KosKineticScroll { flickable: historyList }
-    }
-    GlassText {
-        anchors.centerIn: historyList
-        visible: opacity > 0
-        text: I18n.tr("No notifications")
-        color: panelSurface.foregroundColor
-        opacity: !panel.manageApplications && NotificationHistoryService.count === 0
-            && panel.historyEmptyReady && panel.historyExitCount === 0 ? 0.5 : 0
-        Behavior on opacity { NumberAnimation { duration: 150 } }
-        font.pixelSize: 14
     }
 }

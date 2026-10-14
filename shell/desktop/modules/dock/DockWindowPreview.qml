@@ -196,8 +196,9 @@ PopupWindow {
         }
     }
 
+    PopupAnchorBinding { popupAnchor: preview.anchor; sourceItem: preview.anchorItem }
+
     anchor {
-        item: preview.anchorItem
         edges: Edges.Top
         gravity: Edges.Top
         margins.top: -6

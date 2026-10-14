@@ -39,9 +39,10 @@ Item {
     readonly property var visibleTrailingCells: trailingCells.filter(
         entry => !AppearanceConfigService.isStatusCellHidden(entry.key))
 
-    property bool controlCenterLoaded: false
+    property Item pendingControlCenterAnchor: null
     readonly property var controlCenter: controlCenterLoader.item
-    readonly property bool controlCenterOpen: controlCenter?.isOpen ?? false
+    readonly property bool controlCenterOpen: pendingControlCenterAnchor !== null
+        || (controlCenter?.isOpen ?? false)
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
         || notificationPanel.requestedOpen
@@ -63,25 +64,21 @@ Item {
     }
 
     function toggleControlCenter(anchorItem) {
-        controlCenterUnloadTimer.stop()
         if (controlCenterOpen) {
             closeControlCenter()
             return
         }
         notificationPanel.close()
-        controlCenterLoaded = true
-        Qt.callLater(function() {
-            if (controlCenterLoaded && controlCenter
-                    && !controlCenter.isOpen)
-                controlCenter.toggle(anchorItem)
-        })
+        if (controlCenter)
+            controlCenter.toggle(anchorItem)
+        else
+            pendingControlCenterAnchor = anchorItem
     }
 
     function closeControlCenter() {
+        pendingControlCenterAnchor = null
         if (controlCenter)
             controlCenter.close()
-        if (controlCenterLoaded)
-            controlCenterUnloadTimer.restart()
     }
 
     // Both panels anchor by cell key, never by rendered index: hiding a cell
@@ -216,16 +213,6 @@ Item {
         }
     }
 
-    Timer {
-        id: controlCenterUnloadTimer
-        interval: 180
-        repeat: false
-        onTriggered: {
-            if (!root.controlCenterOpen)
-                root.controlCenterLoaded = false
-        }
-    }
-
     Row {
         id: statusArea
         anchors.centerIn: parent
@@ -292,7 +279,16 @@ Item {
     }
     Loader {
         id: controlCenterLoader
-        active: root.controlCenterLoaded
+        // Incubate once while idle; reopening must not rebuild the whole panel.
+        active: true
+        asynchronous: true
+        onLoaded: {
+            const anchor = root.pendingControlCenterAnchor
+            if (anchor)
+                item.toggle(anchor)
+            root.pendingControlCenterAnchor = null
+        }
+        onStatusChanged: if (status === Loader.Error) root.pendingControlCenterAnchor = null
         sourceComponent: Component {
             ControlCenterPanel {
                 dockHosted: root.dockHosted
@@ -300,7 +296,6 @@ Item {
                 barRevealProgress: root.barRevealProgress
                 onWifiNetworkSelected: function(network) {
                     networkPanel.showNetworkDialog(network)
-                    controlCenterUnloadTimer.restart()
                 }
             }
         }

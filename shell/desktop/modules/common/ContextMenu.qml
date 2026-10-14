@@ -204,8 +204,9 @@ PopupWindow {
     mask: root.macosPopupMotion && !popupMotion.interactive ? emptyInputRegion : null
     Region { id: emptyInputRegion }
 
+    PopupAnchorBinding { popupAnchor: root.anchor; sourceItem: root.anchorItem }
+
     anchor {
-        item: root.anchorItem
         rect.x: root.centerBelowAnchor && root.anchorItem
             ? root.anchorItem.width / 2 - root.implicitWidth / 2 : 0
         rect.y: (root.centerBelowAnchor || root.centerBelowOffset > 0) ? root.centerBelowOffset : 0
@@ -322,8 +323,7 @@ PopupWindow {
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        // Menu text sits on this surface, so it carries the same balanced
-        // readability scrim as notification cards.
+        // Menu text sits on this surface, so use the balanced readability scrim.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
         scrimLevel: "balanced"
         materialOpacity: revealFrame.morphing ? revealFrame.progress * pageMotion.progress : 1

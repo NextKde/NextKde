@@ -44,6 +44,8 @@ QtObject { property bool doNotDisturbEnabled: false }
 import QtQuick
 QtObject {
     property bool ready: true
+    property bool bannersEnabled: true
+    property bool historyEnabled: true
     property var blockedKeys: []
     function remember(notification) {}
     function isBlocked(notification) { return false }

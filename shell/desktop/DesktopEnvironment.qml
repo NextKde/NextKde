@@ -20,6 +20,30 @@ import qs.desktop.modules.weather
 Item {
     id: shell
 
+    IpcHandler {
+        target: "notification-settings"
+        function snapshot(): string {
+            return JSON.stringify({ready: NotificationPolicyService.ready,
+                sources: NotificationPolicyService.sources, blockedKeys: NotificationPolicyService.blockedKeys,
+                doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled,
+                bannersEnabled: NotificationPolicyService.bannersEnabled,
+                historyEnabled: NotificationPolicyService.historyEnabled,
+                showPreview: NotificationPolicyService.showPreview,
+                showNotificationBadges: ConfigService.showNotificationBadges,
+                saveError: NotificationPolicyService.saveError})
+        }
+        function setPreference(key: string, value: bool): string {
+            if (key === "showNotificationBadges" && NotificationPolicyService.ready)
+                ConfigService.updateNotificationBadgeVisibility(value)
+            else NotificationPolicyService.setPreference(key, value)
+            return snapshot()
+        }
+        function setBlocked(key: string, blocked: bool): string {
+            NotificationPolicyService.setBlocked(key, blocked)
+            return snapshot()
+        }
+    }
+
     // Settings edits the Quickshell-owned image and presentation preferences
     // through a narrow endpoint. Plasma remains a first-run source only.
     IpcHandler {

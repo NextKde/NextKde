@@ -31,6 +31,11 @@ Item {
     // ---- shape ----------------------------------------------------------
 
     property real radius: 0
+    // Radius is painted in item coordinates; compositor shapes use window
+    // coordinates. Hosts that scale the whole surface forward that scale here.
+    property real backdropScale: 1
+    property real backdropRadius: radius
+    property bool maskContent: true
 
     // Corner continuity, not corner size. 2.0 is the circular arc the shell has
     // always drawn; above it the corner sweeps towards the continuous-curvature
@@ -214,8 +219,8 @@ Item {
         id: surfaceRegion
         item: root.captureAnchor && fixedCaptureSupported && !root.tonal ? root.captureAnchor : root.blurAnchor
         shapeItem: root.blurAnchor
-        radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius
-        shapeRadius: root.radius
+        radius: root.captureAnchor && fixedCaptureSupported && !root.tonal ? 0 : root.radius * root.backdropScale
+        shapeRadius: root.backdropRadius * root.backdropScale
         materialOpacity: root.materialOpacity
         revealEnabled: root.compositorRevealEnabled && root.useKwinEffect && !root.tonal
         revealOpened: root.compositorRevealOpened
@@ -296,7 +301,7 @@ Item {
     // edge are one outline rather than two that agree only by convention. That
     // is also why the body above is handed radius 0: children have to render
     // square for a mask to be the only thing rounding them.
-    layer.enabled: root.continuousCorners
+    layer.enabled: root.continuousCorners && root.maskContent
     layer.effect: SquircleMask {
         cornerRadius: root.radius
         cornerExponent: root.cornerExponent

@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
@@ -21,10 +22,9 @@ Item {
     property int cardHeight: 59
     property real cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 19)
     property color cardColor: ThemeService.backgroundColor
-    // Readability scrim for this card's glass: one step above the Dock, which
-    // sits at "subtle". Widgets hosting white content can raise it further
-    // (widgets use "readable") so text holds over a bright backdrop.
-    property string cardScrimLevel: "transparent"
+    // Share the material's default with notifications; embedded widgets may
+    // still override this role without duplicating the default recipe.
+    property alias cardScrimLevel: cardGlass.scrimLevel
     property real cardOpacity: 1.0
     property real cardScale: 1.0
     property real contentOpacity: 1.0
@@ -64,6 +64,7 @@ Item {
     // must drive this separately or the frosted silhouette lingers after the
     // content has already faded out. 1 keeps every non-animated card exact.
     property real glassOpacity: 1.0
+    property real backdropScale: 1
 
     // The item whose x/y are this card's position in the surface. Defaults to
     // the card itself (fine when placed directly in the panel window, as
@@ -73,6 +74,22 @@ Item {
     // RoundedBlurRegion reads item.x/y verbatim, so a zero-positioned card
     // would misplace the blur region to the window origin.
     property Item blurAnchor: root
+    property Item captureAnchor: null
+    property Item clipViewport: null
+    property SceneBounds rootBounds: SceneBounds { item: root }
+    property SceneBounds morphBounds: SceneBounds { item: morphAnchor }
+    property SceneBounds viewportBounds: SceneBounds { item: root.clipViewport }
+    readonly property rect nativeRect: {
+        if (!cardShown) return Qt.rect(0, 0, 0, 0)
+        if (!clipViewport) return _morph
+        const r = rootBounds.rect, m = morphBounds.rect, v = viewportBounds.rect
+        if (r.width <= 0 || r.height <= 0) return Qt.rect(0, 0, 0, 0)
+        const x = Math.max(m.x, v.x), y = Math.max(m.y, v.y)
+        return Qt.rect((x - r.x) * width / r.width, (y - r.y) * height / r.height,
+            Math.max(0, Math.min(m.x + m.width, v.x + v.width) - x) * width / r.width,
+            Math.max(0, Math.min(m.y + m.height, v.y + v.height) - y) * height / r.height)
+    }
+    readonly property bool backdropVisible: cardGlass.visible
     // During a morph the card keeps publishing only the shrink window: the
     // glass and its blur region are clipped to `_morph`, so KWin frosts the
     // capsule-sized rectangle, not the full panel silhouette.
@@ -101,6 +118,12 @@ Item {
         height: root._morph.height
     }
 
+    Item {
+        id: clippedOutline
+        x: root.nativeRect.x; y: root.nativeRect.y
+        width: root.nativeRect.width; height: root.nativeRect.height
+    }
+
     // This card's exact compositor shape, used by the panel to build the
     // single window blur region (the union of all cards).
     readonly property alias blurRegion: cardGlass.blurRegion
@@ -112,10 +135,13 @@ Item {
     // surface instead of publishing a shape nothing would render -- the panel
     // gates its region on the same token, which keeps the declared shape set and
     // the region in step.
-    LiquidGlassPanel {
+    ControlCenterGlass {
         id: cardGlass
         anchors.fill: parent
+        visible: !root.clipViewport || root.nativeRect.width > 0 && root.nativeRect.height > 0
+        captureAnchor: root.captureAnchor
         useKwinEffect: AppearanceTokens.surface.usesKwinBlur
+        backdropScale: root.backdropScale
         fallbackEnabled: root.fallbackEnabled
         // The glass fills this card at local (0,0); its region must land where
         // the card actually sits in the window, so anchor it to the positioned
@@ -123,24 +149,18 @@ Item {
         // root.blurAnchor defaults to this card; a wrapper-embedded card (the
         // desk widgets) overrides it to point at the wrapper that holds the
         // true surface offset.
-        blurAnchor: root.morphRect.width > 0 ? morphAnchor : root.blurAnchor
+        blurAnchor: root.clipViewport ? clippedOutline : root.morphRect.width > 0 ? morphAnchor : root.blurAnchor
         radius: Math.max(1, Math.min(
             Math.round(root.cardRadius),
             Math.floor(Math.min(root.cardWidth, root.cardHeight) / 2)))
-        cornerExponent: 2.0
+        backdropRadius: root.clipViewport ? Math.min(radius, clippedOutline.width / 2, clippedOutline.height / 2) : radius
         baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
-        // Same see-through scrim posture as the Dock: on, at the subtle level.
-        scrimEnabled: AppearanceTokens.surface.usesBackdrop
-        scrimLevel: root.cardScrimLevel
         // Fades the KWin scrim with the page crossfade so the frosted glass
         // does not outlive the QML content during a navigation. A card not in
         // a transition keeps the default 1 and renders exactly as before.
         scrimOpacity: root.glassOpacity
-        ambientPrimary: WallpaperColorSource.primary
-        ambientSecondary: WallpaperColorSource.secondary
-        ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
-        material: "regular"
+        materialOpacity: root.glassOpacity
 
         // Concrete card content (declared by the card instance), above the glass.
         Item {

@@ -20,7 +20,7 @@ Scope {
             notification.tracked = false
             return
         }
-        notification.tracked = !ControlCenterService.doNotDisturbEnabled
+        notification.tracked = !ControlCenterService.doNotDisturbEnabled && NotificationPolicyService.bannersEnabled
         AppNotificationService.recordNotification({
             desktopEntry: notification.desktopEntry || "",
             appName: notification.appName || "",
@@ -28,7 +28,7 @@ Scope {
             body: notification.body || "",
             hints: notification.hints || ({})
         })
-        notifGroupService.pushHistory(notification)
+        if (NotificationPolicyService.historyEnabled) notifGroupService.pushHistory(notification)
     }
     Component {
         id: historyObserver
@@ -62,6 +62,11 @@ Scope {
 
     Connections {
         target: NotificationPolicyService
+        function onBannersEnabledChanged() {
+            if (!NotificationPolicyService.bannersEnabled)
+                for (const notification of notifGroupService._collectNotifications())
+                    notification.tracked = false
+        }
         function onBlockedKeysChanged() {
             for (const notification of notifGroupService._collectNotifications())
                 if (NotificationPolicyService.isBlocked(notification))

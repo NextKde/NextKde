@@ -38,7 +38,7 @@ target_compile_definitions(kos-settings PRIVATE
 )
 
 install(TARGETS kos-settings RUNTIME DESTINATION bin)
-install(FILES main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
+install(FILES NotificationsSettingsPage.qml main.qml ThemeWallpaperTile.qml ServicesSettingsPage.qml WallpaperSettingsPage.qml WallpaperSettingsRow.qml
     WallpaperGalleryTile.qml WallpaperValueMenu.qml WallpaperOptionsDialog.qml
     WallpaperTextButton.qml WallpaperThumbnail.qml WallpaperColorPicker.qml
     DESTINATION share/kos/settings)
@@ -104,7 +104,25 @@ if(BUILD_TESTING)
             LABELS ui TIMEOUT 15)
     endif()
 
+    if(KOS_QMLTESTRUNNER_EXECUTABLE)
+        add_test(NAME kos-settings.notifications
+            COMMAND ${KOS_QMLTESTRUNNER_EXECUTABLE}
+                -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/notifications/tst_notifications.qml)
+        set_tests_properties(kos-settings.notifications PROPERTIES
+            ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1"
+            LABELS ui TIMEOUT 15)
+    endif()
+
     if(KOS_NODE_EXECUTABLE)
+        find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
+        if(KOS_QUICKSHELL_EXECUTABLE)
+            add_test(NAME kos-settings.notifications-bridge
+                COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/notifications/bridge.mjs
+                    $<TARGET_FILE:kos-settings> ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-settings.notifications-bridge PROPERTIES LABELS ui TIMEOUT 20)
+        else()
+            message(STATUS "Skipping kos-settings.notifications-bridge: Quickshell is unavailable")
+        endif()
         add_test(NAME kos-settings.window-install
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/windows/installed.mjs
                 $<TARGET_FILE:kos-settings>)

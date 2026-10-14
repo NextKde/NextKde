@@ -313,11 +313,12 @@ Item {
         }
         return states
     }
-    // Pointer travel is direct; only entry/exit amplitude is animated.
-    // Scale, offsets and glass width consume the same frame snapshot.
+    // All consumers read one snapshot. Pointer travel follows the raw input;
+    // only the entry/exit amplitude needs to settle over subsequent frames.
     property var _hoverLayout: ({ entries: [], byItem: new Map(), total: 0, shift: 0 })
     FrameAnimation {
-        running: container._hoverDirty || container.hoverProgress !== container._hoverTarget
+        running: container._hoverDirty
+            || container.hoverProgress !== container._hoverTarget
         onTriggered: {
             container._hoverDirty = false
             if (!container.pointerInside && container.hoverProgress === 0) {
@@ -325,6 +326,7 @@ Item {
                 container.magnificationPointer = Qt.point(-10000, -10000)
                 if (container._hoverLayout.entries.length > 0)
                     container._hoverLayout = { entries: [], byItem: new Map(), total: 0, shift: 0 }
+                container.nameLabelTarget = null
                 return
             }
             let hoverPoint = null
@@ -356,11 +358,48 @@ Item {
             // for paint, not once on input and again against changed transforms.
             frame.pointer = hoverPoint
             container._hoverLayout = frame
+            container.updateNameLabel()
         }
     }
     Connections {
         target: ConfigService
         function onEffectiveHoverScaleChanged() { container._hoverDirty = true }
+    }
+    property bool launchAnimationVisible: true
+    property bool nameLabelsEnabled: true
+    onNameLabelsEnabledChanged: updateNameLabel()
+    property Item nameLabelHost: container
+    property Item nameLabelTarget: null
+    readonly property alias nameLabel: sharedNameLabel
+    DockNameLabel {
+        id: sharedNameLabel
+        parent: container.nameLabelHost
+        targetIcon: container.nameLabelTarget
+        pointerRoot: container
+        pointerPosition: container.magnificationPointer
+    }
+    // Label ownership bridges spacing, independently of exact click hits and
+    // preview dwell. The normal envelope is bounded by resting + painted slots.
+    function selectNameTarget(states, frame, point, coordinateRoot) {
+        const item = Magnification.nameOwner(states, frame, point.x)
+        if (!item || !item.dockNameEligible || !coordinateRoot) return null
+        const restingTop = item.parent.mapToItem(coordinateRoot, item.x, item.y)
+        const restingBottom = item.parent.mapToItem(coordinateRoot,
+            item.x + item.width, item.y + item.height)
+        const paintedTop = item.mapToItem(coordinateRoot, 0, 0)
+        const paintedBottom = item.mapToItem(coordinateRoot, item.width, item.height)
+        const top = Math.min(restingTop.y, restingBottom.y, paintedTop.y, paintedBottom.y)
+        const bottom = Math.max(restingTop.y, restingBottom.y, paintedTop.y, paintedBottom.y)
+        return point.y >= top && point.y <= bottom ? item : null
+    }
+    function updateNameLabel() {
+        let target = null
+        if (nameLabelsEnabled && pointerInside && !isEditing) {
+            const point = _hoverLayout.pointer
+            if (point) target = selectNameTarget(_spreadStates, _hoverLayout, point, contentRow)
+        }
+        nameLabelTarget = target
+        if (sharedNameLabel) sharedNameLabel.updateGeometry()
     }
     function magnificationFor(item) {
         const entry = _hoverLayout.byItem.get(item)
@@ -409,12 +448,6 @@ Item {
     }
     function hoverFor(item) {
         return hoveredApp === item
-    }
-    DockAppNameTooltip {
-        targetIcon: {
-            const owner = container.hoveredApp
-            return owner && owner._usesSharedMagnification ? owner : null
-        }
     }
     readonly property real hoverSpreadTotal: _hoverLayout.total
     readonly property real hoverGlassShift: fillsAvailableLength ? 0 : _hoverLayout.shift

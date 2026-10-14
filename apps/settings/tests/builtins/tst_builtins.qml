@@ -16,11 +16,14 @@ Item {
         property bool deferSnapshot: false
         signal dockSnapshotChanged(var state)
         signal dockBuiltinVisibilityChanged(var state)
-        signal dockNotificationBadgeVisibilityChanged(var state)
+        signal notificationSnapshotChanged(var state)
         signal dockRevealIndicatorVisibilityChanged(var state)
         function dockSnapshot() { if (!deferSnapshot) dockSnapshotChanged(snapshot) }
         function updateDockBuiltinVisibility(id, visible) { calls = calls.concat([{id, visible}]) }
-        function updateDockNotificationBadgeVisibility(visible) { badgeCalls = badgeCalls.concat([visible]) }
+        function notificationSnapshot() { notificationSnapshotChanged(Object.assign({}, snapshot,
+            {ready:true, sources:[], blockedKeys:[], showNotificationBadges:snapshot.showNotificationBadges !== false})) }
+        function setNotificationPreference(key, value) { if (key === "showNotificationBadges") badgeCalls = badgeCalls.concat([value]) }
+        function setNotificationBlocked(key, value) {}
         function updateDockRevealIndicatorVisibility(visible) { indicatorCalls = indicatorCalls.concat([visible]) }
         function updateDockWindowGrouping(mode) { groupingCalls = groupingCalls.concat([mode]) }
     }
@@ -63,9 +66,9 @@ Item {
         function test_notification_badge_binding() {
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
-            const app = component.createObject(null, {currentPage:3})
+            const app = component.createObject(null, {currentPage:12})
             verify(app !== null)
-            const control = findChild(app.contentItem, "dock-notification-badges-switch")
+            const control = findChild(app.contentItem, "notification-showNotificationBadges-switch")
             verify(control !== null)
             verify(control.checked, "older snapshots keep notification badges enabled")
             const scroll = findChild(app.contentItem, "settings-page-scroll")
@@ -80,17 +83,17 @@ Item {
             bridge.dockSnapshot()
             verify(!control.enabled, "an unrelated snapshot cannot acknowledge the request")
             bridge.snapshot = Object.assign({}, bridge.snapshot, {showNotificationBadges:false})
-            bridge.dockNotificationBadgeVisibilityChanged(bridge.snapshot)
+            bridge.notificationSnapshot()
             verify(!control.checked && control.enabled)
             mouseClick(control)
             compare(bridge.badgeCalls.length, 2)
             compare(bridge.badgeCalls[1], true)
             bridge.lastError = "save failed"
-            bridge.dockNotificationBadgeVisibilityChanged({})
+            bridge.notificationSnapshotChanged({})
             verify(!control.checked && control.enabled, "a failed update keeps the confirmed value")
             bridge.lastError = ""
             bridge.snapshot = Object.assign({}, bridge.snapshot, {showNotificationBadges:true})
-            bridge.dockSnapshot()
+            bridge.notificationSnapshot()
             verify(control.checked, "external snapshots keep the switch binding")
             compare(bridge.badgeCalls.length, 2, "snapshot updates must not write back")
             app.destroy()
