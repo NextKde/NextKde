@@ -167,8 +167,9 @@ jobs:
       - name: Check KWin 6.6 API compatibility
         run: |
           for version in 6.6.0 6.6.5; do
+            # KDE's official mirror avoids Invent's HTTP 403 on hosted runners.
             git clone --quiet --depth 1 --branch "v${version}" \
-              https://invent.kde.org/plasma/kwin.git ".build/kwin-${version}"
+              https://github.com/KDE/kwin.git ".build/kwin-${version}"
             python tools/check-kwin-api.py --build-dir .build/kwin \
               --kwin-headers ".build/kwin-${version}/src"
           done
