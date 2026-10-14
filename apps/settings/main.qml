@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import "../../shared/qml/controls" as LiquidControls
 import "../../shared/qml/foundation" as Foundation
 import "../../shared/qml/colorize/MaterialColorScheme.mjs" as Mcu
@@ -18,6 +19,15 @@ ApplicationWindow {
     visible: true
     title: I18n.tr("KOS settings")
     color: theme.background
+    // Frameless CSD form, only while the KOS decoration is selected
+    // (same kwinrc gate the bridge button panel uses). With any other
+    // decoration the window stays plain SSD and everything below is inert.
+    readonly property bool csd: windowSettings.kosDecorationSelected()
+    // Reserved top strip: bridge panel default geometry is offset(10,6) +
+    // 79x23 panel, so its bottom edge sits 29px from the top; 30 keeps one
+    // pixel of air. Drag/double-click maximize live in this band.
+    readonly property int chromeStrip: csd ? 30 : 0
+    flags: csd ? Qt.Window | Qt.FramelessWindowHint : Qt.Window
 
     property int currentPage: 1
     readonly property int displayedPage: pageMotion.displayedPage === ""
@@ -89,9 +99,13 @@ ApplicationWindow {
         }
         // 窗口底色 + 左侧栏 = 同一块平面，右侧内容区是它上面一块圆角面板。
         // 底色**必须**是 #eff0f1，等于 BreezeLight 的 Window/BackgroundNormal(239,240,241)：
-        // 窗口装饰 kos_decoration 的标题栏取的就是 client->palette().color(QPalette::Window)
+        // 【SSD 模式】窗口装饰 kos_decoration 的标题栏取的就是
+        // client->palette().color(QPalette::Window)
         // （kwin/kos-decoration/kosdecoration.cpp:157），两边同色标题栏才和
         // 内容连成一块无缝的面。**永远不要动这个值**（2026-09-28 改过一次，标题栏立刻裂出色差）。
+        // 【CSD 模式】（csd == true，窗口无边框，顶带即窗口底色）：红绿灯面板由
+        // kos-bridge effect 从标题栏像素取色着色，底色不变即自然融合。
+        // 两种模式共用同一底色，切换装饰器时应用在下次开窗时换形态。
         //   右侧面板 = #e3e5e7，即 Breeze 同组的 Window/BackgroundAlternate(227,229,231)
         // 圆角要看得见只能靠面板比底色深：ΔRGB (12,11,10)、对比度约 1.11:1。
         // （试过 #f2f2f7：ΔRGB 只有 (3,2,6)/1.023:1，肉眼分不出边界。加阴影已被否，
@@ -6182,9 +6196,11 @@ ApplicationWindow {
             // （下面 Flickable 的 30/24）保持不变，所以变大的是面板外的留白。
             readonly property real inset: 20
             x: sidebar.width + inset
-            y: inset
+            // CSD 模式下顶部让出保留带(chromeStrip),内容面板顶到带下缘;
+            // SSD 模式 chromeStrip 为 0,回到原 y=20。
+            y: inset + window.chromeStrip
             width: parent.width - x - inset
-            height: parent.height - inset * 2
+            height: parent.height - y - inset
             radius: 18
             color: theme.contentSurface
 
@@ -6380,5 +6396,23 @@ ApplicationWindow {
                 Foundation.KosKineticScroll { flickable: pageScroll }
             }
         }
+
+        // ── CSD 窗口框(仅 csd 模式生效)────────────────────────────
+        // 顶部保留带:整条可拖拽移动,双击切换最大化。红绿灯面板区域由
+        // kos-bridge 的 KWin 输入过滤器先行拦截,不会落到这个 MouseArea。
+        MouseArea {
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+            }
+            height: window.chromeStrip
+            enabled: window.csd
+            onPressed: window.startSystemMove()
+            onDoubleClicked: window.visibility === Window.Maximized
+                ? window.showNormal() : window.showMaximized()
+        }
+
+        WindowResizeHandles { targetWindow: window }
     }
 }

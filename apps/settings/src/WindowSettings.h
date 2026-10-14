@@ -13,6 +13,9 @@ public:
     QVariantMap state() const;
     QString error() const { return m_error; }
     Q_INVOKABLE void refresh() { emit changed(); }
+    // Same gate the KWin bridge button panel uses: the frameless CSD form is
+    // only offered while the KOS decoration is the selected one.
+    Q_INVOKABLE bool kosDecorationSelected();
     Q_INVOKABLE bool setRadius(int radius);
     Q_INVOKABLE bool setShadow(bool enabled);
     Q_INVOKABLE bool setTakeover(bool enabled);
