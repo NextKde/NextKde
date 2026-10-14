@@ -22,9 +22,9 @@ Item {
     property int cardHeight: 59
     property real cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.large, 19)
     property color cardColor: ThemeService.backgroundColor
-    // Embedded widgets can explicitly request a stronger readability scrim.
-    // The control center and notification deck share the transparent recipe.
-    property string cardScrimLevel: "transparent"
+    // Share the material's default with notifications; embedded widgets may
+    // still override this role without duplicating the default recipe.
+    property alias cardScrimLevel: cardGlass.scrimLevel
     property real cardOpacity: 1.0
     property real cardScale: 1.0
     property real contentOpacity: 1.0
@@ -156,7 +156,6 @@ Item {
         backdropRadius: root.clipViewport ? Math.min(radius, clippedOutline.width / 2, clippedOutline.height / 2) : radius
         baseColor: root.cardColor
         surfaceOpacity: root.cardOpacity
-        scrimLevel: root.cardScrimLevel
         // Fades the KWin scrim with the page crossfade so the frosted glass
         // does not outlive the QML content during a navigation. A card not in
         // a transition keeps the default 1 and renders exactly as before.

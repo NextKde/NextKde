@@ -12,7 +12,8 @@ LiquidGlassPanel {
     materialDepth: 0
     blurOverrideEnabled: false
     scrimEnabled: AppearanceTokens.surface.usesBackdrop
-    scrimLevel: "transparent"
+    // Match the context menu's adaptive readability tint.
+    scrimLevel: "balanced"
     ambientPrimary: WallpaperColorSource.primary
     ambientSecondary: WallpaperColorSource.secondary
     ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
