@@ -322,8 +322,7 @@ PopupWindow {
         ambientSecondary: root.ambientSecondary
         ambientStrength: root.ambientStrength
         surfaceOpacity: root.surfaceOpacity
-        // Menu text sits on this surface, so it carries the same balanced
-        // readability scrim as notification cards.
+        // Menu text sits on this surface, so use the balanced readability scrim.
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
         scrimLevel: "balanced"
         materialOpacity: revealFrame.morphing ? revealFrame.progress * pageMotion.progress : 1

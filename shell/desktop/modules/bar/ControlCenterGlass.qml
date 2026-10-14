@@ -10,10 +10,11 @@ LiquidGlassPanel {
     baseColor: ThemeService.backgroundColor
     material: "regular"
     materialDepth: 0
-    blurOverrideEnabled: false
+    blurOverrideEnabled: true
+    // Invert compositorBlurLevel's perceptual curve: request KWin level 3.
+    blurStrength: Math.pow((3 - 1) / 14, 2 / 3)
     scrimEnabled: AppearanceTokens.surface.usesBackdrop
-    // Match the context menu's adaptive readability tint.
-    scrimLevel: "balanced"
+    scrimLevel: "transparent"
     ambientPrimary: WallpaperColorSource.primary
     ambientSecondary: WallpaperColorSource.secondary
     ambientStrength: 0.35 * AppearanceTokens.glass.ambientMultiplier
