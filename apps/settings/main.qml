@@ -12,9 +12,9 @@ ApplicationWindow {
 
     width: 1100
     height: 720
-    // 最小宽 = 侧栏 230 + 面板 inset 20×2 + 滚动区边距 30×2 + 内容列 700:
+    // 最小宽 = 侧栏 260 + 滚动区边距 30×2 + 内容列 700:
     // 内容列已锁死 700 固定宽,窗口再窄只会截切,这里保证永远放得下。
-    minimumWidth: 1030
+    minimumWidth: 1020
     minimumHeight: 560
     visible: true
     title: I18n.tr("KOS settings")
@@ -5957,12 +5957,13 @@ ApplicationWindow {
             id: sidebar
             x: 0
             y: 0
-            // 302 → 211（缩到 70%，用户要求窄 30%）→ 230（用户要求加宽一点点）。
+            // 302 → 211（缩到 70%，用户要求窄 30%）→ 230（用户要求加宽一点点）
+            // → 260（对齐 macOS 系统设置的侧栏比例，两栏分割下更从容）。
             // 条目最长的标签是 4 个汉字（"接入状态"／"玻璃调试"），14px 字号约
             // 56px；一条 ItemDelegate 占 10(左内) + 18(图标) + 10(间隔) + 文本 +
-            // 10(右内)，再加 ColumnLayout 两侧各 14 的边距 ⇒ 230 下文本仍有约
-            // 150px 可用，不会触发 ElideRight。
-            width: 230
+            // 10(右内)，再加 ColumnLayout 两侧各 24 的边距 ⇒ 260 下文本仍有约
+            // 160px 可用，不会触发 ElideRight。
+            width: 260
             height: parent.height
             radius: 0
             color: theme.sidebar
