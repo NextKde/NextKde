@@ -3147,8 +3147,10 @@ PanelWindow {
                 arrangeByName()
             else if (kind === "resetLayout")
                 resetLayout()
-            else if (kind === "refresh")
-                root.desktopFiles.reload()
+            else if (kind === "poweroff" || kind === "logout")
+                // Routed through the control center so the destructive
+                // entries reuse its shared confirmation dialog.
+                ControlCenterService.requestSessionAction(kind)
         }
 
         // ── Liquid context-menu data + builder ──
@@ -3274,7 +3276,8 @@ PanelWindow {
                     .map(([value, label]) => _ctxCheck(label, "setIconSpacing", value,
                         desktopLayout.iconSpacing === value, "placeholder-dot"))
                 items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "arrange"))
-                items.push(_ctxAct(I18n.tr("Refresh"), "refresh", "view-refresh"))
+                items.push(_ctxAct(I18n.tr("Power Off"), "poweroff", "powerOff"))
+            items.push(_ctxAct(I18n.tr("Log Out"), "logout", "logout"))
             }
             return items
         }

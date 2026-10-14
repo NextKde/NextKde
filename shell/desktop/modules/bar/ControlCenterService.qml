@@ -56,6 +56,12 @@ QtObject {
     property bool nightLightChangeInProgress: false
     signal toggleRequested()
 
+    // Surfaces outside the bar (e.g. the desktop context menu) route their
+    // destructive session entries through here so they reuse the control
+    // center's shared confirmation dialog instead of acting immediately.
+    signal sessionActionRequested(string action)
+    function requestSessionAction(action) { sessionActionRequested(action) }
+
     // Every surface that shows this service's live data (network/bluetooth
     // quick panels, the control centre itself) registers while it is open.
     // The fast poll only runs while someone can see the result; a slow floor

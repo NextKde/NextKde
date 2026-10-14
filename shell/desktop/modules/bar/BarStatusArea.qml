@@ -81,6 +81,26 @@ Item {
             controlCenter.close()
     }
 
+    // Remote session entries (desktop context menu) open the panel anchored
+    // to the control-center cell and drop the user straight into the shared
+    // confirmation dialog, exactly like choosing the entry in the panel.
+    property string pendingSessionAction: ""
+    function presentSessionConfirmation(action) {
+        notificationPanel.close()
+        if (controlCenter) {
+            if (!controlCenter.isOpen)
+                controlCenter.toggle(controlCenterAnchor())
+            controlCenter.runSessionAction(action)
+        } else {
+            pendingSessionAction = action
+            pendingControlCenterAnchor = controlCenterAnchor()
+        }
+    }
+    Connections {
+        target: ControlCenterService
+        function onSessionActionRequested(action) { root.presentSessionConfirmation(action) }
+    }
+
     // Both panels anchor by cell key, never by rendered index: hiding a cell
     // shifts the indices of everything after it, so an index-based lookup would
     // anchor the WiFi popup to the battery glyph once network was hidden.
@@ -287,6 +307,10 @@ Item {
             if (anchor)
                 item.toggle(anchor)
             root.pendingControlCenterAnchor = null
+            if (root.pendingSessionAction !== "") {
+                item.runSessionAction(root.pendingSessionAction)
+                root.pendingSessionAction = ""
+            }
         }
         onStatusChanged: if (status === Loader.Error) root.pendingControlCenterAnchor = null
         sourceComponent: Component {
