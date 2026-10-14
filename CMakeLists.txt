@@ -144,12 +144,12 @@ if(BUILD_TESTING)
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-highlight/run.mjs
                     ${KOS_QMLTESTRUNNER_EXECUTABLE})
-            set_tests_properties(kos-shell.dock-selection-highlight PROPERTIES LABELS ui TIMEOUT 20)
+            set_tests_properties(kos-shell.dock-selection-highlight PROPERTIES LABELS "ui;headless" TIMEOUT 20)
             add_test(NAME kos-shell.desktop-lyrics
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-lyrics/run.mjs
                     ${KOS_QMLTESTRUNNER_EXECUTABLE})
-            set_tests_properties(kos-shell.desktop-lyrics PROPERTIES LABELS ui TIMEOUT 15)
+            set_tests_properties(kos-shell.desktop-lyrics PROPERTIES LABELS "ui;headless" TIMEOUT 15)
             add_test(NAME kos-shell.date-projection
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/date-projection/run.mjs
@@ -506,6 +506,14 @@ if(BUILD_TESTING)
         add_test(NAME kos-app.install-dependencies
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-install/test_dependencies.py)
         set_tests_properties(kos-app.install-dependencies PROPERTIES LABELS data TIMEOUT 10)
+        add_test(NAME kos-shell.translation-catalogs
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/check_catalogs.py)
+        set_tests_properties(kos-shell.translation-catalogs PROPERTIES LABELS logic TIMEOUT 60)
+        add_test(NAME kos-ci.inventory-contract
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/ci/test_inventory.py)
+        set_tests_properties(kos-ci.inventory-contract PROPERTIES LABELS logic TIMEOUT 10)
     endif()
     find_program(KOS_INTERACTION_QMLTEST NAMES qmltestrunner qmltestrunner6
         HINTS /usr/lib/qt6/bin)
@@ -523,25 +531,25 @@ if(BUILD_TESTING)
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_controls.qml)
         set_tests_properties(kos-ui.interaction-controls PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
-            LABELS ui TIMEOUT 20)
+            LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.shared-motion
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_motion.qml)
         set_tests_properties(kos-ui.shared-motion PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
-            LABELS ui TIMEOUT 20)
+            LABELS "ui;headless" TIMEOUT 20)
         add_test(NAME kos-ui.kinetic-scroll
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_scroll.qml)
         set_tests_properties(kos-ui.kinetic-scroll PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
-            LABELS ui TIMEOUT 30)
+            LABELS "ui;headless" TIMEOUT 30)
         add_test(NAME kos-ui.kinetic-input
             COMMAND ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/interaction-controls/tst_kinetic_input.qml)
         set_tests_properties(kos-ui.kinetic-input PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
-            LABELS ui TIMEOUT 20)
+            LABELS "ui;headless" TIMEOUT 20)
     endif()
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL)
         add_test(NAME kos-ui.interaction-runtime
@@ -752,27 +760,27 @@ if(BUILD_TESTING)
     # the trap it guards is invisible otherwise, because a metadata.json whose
     # "X-Plasma-APIVersion" is nested inside "KPlugin" makes the greeter fall
     # back to a KDE default skin without logging anything a locked session can
-    # show. The script exits 0 (skip) when the development headers are missing.
+    # show. Missing development headers fail the check rather than skip it.
     add_test(NAME kos-lockscreen.theme-resolution
         COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/theme-resolution/run.sh")
     # Labelled here rather than in the block above: `if(TARGET ...)` cannot see
     # tests (they are not build targets), and this test is registered only now,
     # so an earlier set_tests_properties would name a test that does not exist
     # yet. Without this line the test carries no label and no layer runs it.
-    set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS ui)
+    set_tests_properties(kos-lockscreen.theme-resolution PROPERTIES LABELS "ui;headless" TIMEOUT 30)
     if(KOS_INTERACTION_QMLTEST)
         add_test(NAME kos-lockscreen.media-selection
             COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/media)
         set_tests_properties(kos-lockscreen.media-selection PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
-            LABELS ui TIMEOUT 15)
+            LABELS "ui;headless" TIMEOUT 15)
         add_test(NAME kos-lockscreen.wake-authentication
             COMMAND dbus-run-session -- ${KOS_INTERACTION_QMLTEST}
                 -input ${CMAKE_CURRENT_SOURCE_DIR}/apps/lockscreen/tests/headless/tst_wake.qml)
         set_tests_properties(kos-lockscreen.wake-authentication PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_DISABLE_DISK_CACHE=1"
-            LABELS ui TIMEOUT 30)
+            LABELS "ui;headless" TIMEOUT 30)
     endif()
 endif()
 

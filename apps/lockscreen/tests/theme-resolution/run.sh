@@ -45,11 +45,11 @@ fi
 
 # shellcheck disable=SC2086
 if ! g++ -fPIC -std=c++17 -O0 -o pkgprobe "$here/pkgprobe.cpp" $cflags $libs 2>compile.log; then
-    echo "skip: cannot build the probe (KF6 development headers missing?)"
+    echo "error: cannot build the probe (KF6 development headers missing?)"
     sed -n '1,5p' compile.log
     echo "      this check needs kpackage + kconfig development packages"
     rm -rf "$work"
-    exit 0
+    exit 1
 fi
 
 echo "checking package '$id' at $package"

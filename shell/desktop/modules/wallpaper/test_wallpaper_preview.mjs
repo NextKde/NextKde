@@ -9,6 +9,7 @@ function fixture() {
         active: false, pending: false, presented: false, available: true,
         image: '', mode: 'image', imageCatalog: [], colorCatalog: [], thumbnailCatalog: {}, selectedImages: [],
         errorMessage: '', direction: 1, readyOutputs: [], transitionSeed: 0,
+        I18n: { tr: source => source },
         intervalMinutes: 15, slideshowPlaying: false,
         Catalog: { themes: [{id:"starfield"}, {id:"blackhole"}, {id:"weather"}],
             theme(id) { return this.themes.find(item => item.id === id) || null; } },

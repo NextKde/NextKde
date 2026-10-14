@@ -9,6 +9,7 @@
 #   logic     pure computation, node, no display
 #   platform  the platform contract test
 #   ui        needs a QML engine; the panel tests also want a compositor
+#   headless  the subset of UI tests that runs offscreen without a compositor
 #
 # The default is `data`: it is the layer that must never crash and it is the
 # only one that runs identically with or without a session. `--all` opts into
@@ -32,10 +33,12 @@ mkdir -p "$TMPDIR" "$GOTMPDIR"
 # one -- .build/tests/services/data-service/go-test-cache -- instead.
 
 run_all=false
+build_only=false
 layers=()
 build_jobs=${CMAKE_BUILD_PARALLEL_LEVEL:-}
 while (( $# > 0 )); do
     case "$1" in
+        --build-only) build_only=true ;;
         --all) run_all=true; layers=(data logic platform ui) ;;
         --layer)
             shift
@@ -49,12 +52,13 @@ while (( $# > 0 )); do
             ;;
         -h|--help)
             cat <<'EOF'
-Usage: ./tools/run-tests.sh [--all] [--layer <name>] [--jobs N]
+Usage: ./tools/run-tests.sh [--all] [--layer <name>] [--jobs N] [--build-only]
 
   (no arguments)   run the data/service layer (default)
   --all            run every layer
-  --layer <name>   run one layer: data, logic, platform, ui
+  --layer <name>   run one layer: data, logic, platform, ui, headless
   --jobs N         parallel build jobs (default: derived from nproc, capped at 12)
+  --build-only     configure and build tests without executing them
 
 Environment:
   KOS_TEST_BUILD_DIR   build directory (default .build/tests)
@@ -91,6 +95,10 @@ cmake -S "$project_dir" -B "$build_dir" -G Ninja \
 
 printf '==> building (--parallel %s)\n' "$build_jobs"
 cmake --build "$build_dir" --parallel "$build_jobs"
+
+if [[ "$build_only" == true ]]; then
+    exit 0
+fi
 
 printf '==> testing label%s: %s\n' \
     "$([[ ${#layers[@]} -gt 1 ]] && echo s)" "$(IFS=', '; echo "${layers[*]}")"

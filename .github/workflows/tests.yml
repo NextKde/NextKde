@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   tests:
-    name: data + platform layers
+    name: data + platform + logic + headless
     runs-on: ubuntu-latest
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
@@ -43,8 +43,8 @@ jobs:
         run: |
           pacman -S --noconfirm --needed \
             cmake ninja gcc \
-            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
-            extra-cmake-modules wayland \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations qt6-5compat \
+            extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu
 
@@ -64,36 +64,60 @@ jobs:
           restore-keys: |
             gocache-${{ runner.os }}-
 
-      # The single entry point shared with local development: it configures with
-      # -DBUILD_TESTING=ON -DKOS_BUILD_KWIN_PLUGINS=OFF, keeps TMPDIR and
-      # GOTMPDIR inside the build tree, and runs `ctest -L data|platform`.
-      #
-      # KOS_BUILD_SPATIAL=ON (not the AUTO default) so a container that failed
-      # to install OpenCV or the ONNX Runtime fails here instead of quietly
-      # dropping the depth engine from the coverage.
-      - name: Run the data and platform layers
+      # Build once, then let each test group run even if another group fails.
+      # Spatial dependencies are mandatory: AUTO could silently omit coverage.
+      - name: Prepare test binaries
+        id: prepare
         env:
           KOS_BUILD_SPATIAL: ON
-        run: ./tools/run-tests.sh --layer data --layer platform
+        run: ./tools/run-tests.sh --build-only
 
-      - name: Run logic and headless Settings regressions
+      - name: Check required test registrations
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: python tools/ci_tests.py inventory
+
+      - name: Run data and platform tests
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
-          ctest --test-dir .build/tests --output-on-failure -L '^logic$'
-          ctest --test-dir .build/tests --output-on-failure -R '^kos-settings\.'
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^(data|platform)$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/data-platform.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/data-platform.xml"
 
-      - name: Summarise which layers ran
+      - name: Run logic tests and translation checks
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^logic$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
+
+      - name: Run offscreen UI regressions
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          mkdir -p .build/tests/test-results
+          ctest --test-dir .build/tests --output-on-failure --no-tests=error \
+            -L '^headless$' \
+            --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
+            --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
+
+      - name: Summarise actual test results
         if: always()
-        run: |
-          {
-            echo "### Test layers"
-            echo
-            echo "| layer | where it runs |"
-            echo "|---|---|"
-            echo "| \`data\` | here, on every run |"
-            echo "| \`platform\` | here, on every run |"
-            echo "| \`logic\` | here, on every run |"
-            echo "| \`ui\` | Settings offscreen here; desktop flows locally with a compositor |"
-          } >> "${GITHUB_STEP_SUMMARY}"
+        run: python tools/ci_tests.py report
+
+      - name: Upload test reports and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            .build/tests/test-results/
+            .build/tests/Testing/Temporary/
+            .build/tests/CMakeFiles/CMakeConfigureLog.yaml
 
   kwin-plugins:
     name: KWin plugins compile

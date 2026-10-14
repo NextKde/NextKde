@@ -94,23 +94,23 @@ for (const mode of ["dark", "light"]) {
 const glassTextSource = read("../../shell/desktop/modules/common/GlassText.qml");
 // GlassText keeps the root type Text so every Text property passes through
 // natively. Readability is now a two-way contract driven by the appearance
-// token: dark appearance keeps white type with a restrained outline, light
-// appearance drops to clean black type with no outline at all, and the chosen
-// ink is the token that decides both branches together.
+// token: dark appearance keeps white type over a soft area backdrop; light
+// appearance uses clean dark type. Neither branch adds a glyph outline.
 assert.match(glassTextSource, /^Text \{/m,
     "glass text stays a Text so callers keep native Text properties");
 assert.match(glassTextSource,
     /color:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*"#ffffff"[\s\S]*"#000000"/,
     "glass text picks black-or-white ink from the appearance token");
-assert.match(glassTextSource,
-    /style:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Text\.Outline[\s\S]*Text\.Normal/,
-    "only the dark-appearance branch pays for an outline");
-assert.match(glassTextSource,
-    /styleColor:[\s\S]*AppearanceTokens\.isDarkTheme[\s\S]*Qt\.rgba\([\s\S]*"transparent"/,
-    "the light-appearance branch draws no outline at all");
-// The outline exists to hold white type over a bright backdrop; if the light
-// branch kept it, black type would gain an invisible halo and the two
-// appearances would stop being mirror images.
+assert.match(glassTextSource, /style:\s*Text\.Normal/,
+    "glass text retains clean glyphs");
+assert.doesNotMatch(glassTextSource, /Text\.(?:Outline|Raised|Sunken)/,
+    "readability must not add a glyph outline or embossing");
+assert.match(glassTextSource, /property bool shadowEnabled:[^\n]*AppearanceTokens\.isDarkTheme/,
+    "only light ink on dark glass requests the area backdrop");
+assert.match(glassTextSource, /sourceComponent:\s*Canvas\s*\{[\s\S]*opacity:\s*strength/,
+    "the area backdrop applies its faint strength during composition");
+assert.match(glassTextSource, /textWidth \+ padX \* 2[\s\S]*textHeight \+ padY \* 2/,
+    "the backdrop covers the text block with padding");
 assert.doesNotMatch(glassTextSource, /inkLuminance/,
     "glass readability no longer depends on a sampled ink luminance");
 
@@ -209,9 +209,14 @@ assert.match(settingsApp,
     "the glass card keeps only the blur row under Material");
 // Both glass-follows-mode rows (the row and its separator) must hide together:
 // hiding only the row leaves a stray rule under the appearance-mode switch.
-const glassFollowsSlice = settingsApp.slice(
-    settingsApp.indexOf('text: "液态玻璃跟随外观模式"') - 900,
-    settingsApp.indexOf('text: "液态玻璃跟随外观模式"'));
+const glassFollowsLabel = settingsApp.indexOf(
+    'text: I18n.tr("Liquid glass follows the appearance mode")');
+assert.ok(glassFollowsLabel > 0, "the translated glass-follows-mode row exists");
+const appearanceCardStart = settingsApp.indexOf(
+    "implicitHeight: displayPage.isMaterialDesign ? 54 : 109");
+assert.ok(appearanceCardStart > 0 && appearanceCardStart < glassFollowsLabel,
+    "the glass-follows-mode row belongs to the appearance card");
+const glassFollowsSlice = settingsApp.slice(appearanceCardStart, glassFollowsLabel);
 assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
     || []).length >= 2,
     "the glass-follows-mode row hides with its separator under Material");

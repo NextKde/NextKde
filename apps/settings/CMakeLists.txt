@@ -150,4 +150,14 @@ if(BUILD_TESTING)
             TIMEOUT 30
         )
     endif()
+    # The notification bridge needs Quickshell; the remaining Settings UI
+    # regressions run with the offscreen backend in a container.
+    get_property(KOS_SETTINGS_TESTS DIRECTORY PROPERTY TESTS)
+    foreach(test IN LISTS KOS_SETTINGS_TESTS)
+        if(NOT test STREQUAL "kos-settings.notifications-bridge"
+                AND NOT test STREQUAL "kos-settings.window-config")
+            set_property(TEST ${test} APPEND PROPERTY LABELS headless)
+        endif()
+    endforeach()
+
 endif()

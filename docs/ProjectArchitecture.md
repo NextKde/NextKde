@@ -160,35 +160,39 @@ their service-owned replacement separately.
 
 ## Testing layers
 
-Tests are grouped by what they need to run, and the grouping is enforced by
-ctest `LABELS` rather than by separate test frameworks. `tools/run-tests.sh` is
-the only entry point; local development and CI invoke the same command so that
-a green result means the same thing in both places.
+Tests use CTest `LABELS` to describe their runtime dependencies.
+`tools/run-tests.sh` configures and builds the suite; CI uses `--build-only`
+then runs each group independently so one failure does not suppress the rest.
+Run desktop integration checks in a virtual machine.
 
 | Label | What it covers | Needs | Runs in CI |
 |---|---|---|---|
-| `data` | `services/*` and the code they own: the Go data service, the PIM store and its D-Bus client, app preference/weather/music cores | nothing beyond a compiler and Go | yes |
-| `platform` | `platform/tests/test_window_placement.mjs` (node) and `test_contract.py` (python): the platform daemon's contract | node, python | yes |
-| `logic` | pure computation across the shell and dock: date bucketing, window-record indexing, appearance config, dock adaptive/autohide | node | Stage geometry/groups/effects/protocol run explicitly; other logic checks are local |
-| `ui` | anything that constructs a QML engine; the panel tests additionally want a compositor | a graphical session | no |
+| `data` | service and application core tests | compiler, Go, optional application dependencies | registered tests; optional suites are not guaranteed |
+| `platform` | daemon startup, isolated D-Bus integration and protocol contracts | node, python, private D-Bus sessions | yes |
+| `logic` | shell computations, source contracts and translation catalogs | node, python, some offscreen QML | yes |
+| `ui` | QML behavior and desktop flows | QML runtime; desktop flows need a compositor | only tests also labelled `headless` |
+| `headless` | Settings, shared controls, lyrics and lockscreen regressions | offscreen Qt, KDE QML modules and private D-Bus sessions | yes |
 
 ```sh
-./tools/run-tests.sh              # data (default)
+# Run these in the test VM:
+./tools/run-tests.sh                    # data (default)
 ./tools/run-tests.sh --layer platform
-./tools/run-tests.sh --all        # every layer, for a desktop machine
+./tools/run-tests.sh --layer headless
+./tools/run-tests.sh --all              # includes compositor-dependent flows
 ```
 
-Two rules follow from the table:
+`.github/ci-tests.json` lists the tests that must register in the CI environment.
+`tools/ci_tests.py inventory` compares that list with CTest discovery after the
+build. Missing dependencies, disabled tests, missing executables and incorrect
+labels fail the check. Newly registered tests with the selected labels also run
+automatically; add mandatory tests to the manifest to guard their registration.
 
-1. **`data` and `platform` must pass on a bare machine.** They are what CI
-   checks, and a failure here is a real regression, not an environment quirk.
-   Anything added to these layers must stay free of display and D-Bus-session
-   dependencies.
-2. **`ui` failures are only meaningful locally.** They cannot run in a
-   container, so a green CI run says nothing about them. Treat a UI-layer
-   failure as a real signal precisely because it is not drowned out by CI
-   noise, and do not "fix" one by loosening the assertion without checking
-   whether the source or the test is stale.
+Each group writes its own JUnit XML and log. `tools/ci_tests.py report` compares
+those results with the discovered inventory, reports passed/failed/skipped/missing
+counts in the Actions summary, and fails for incomplete or skipped coverage.
+Actions uploads the inventory, reports and build diagnostics even after a failure.
+A green run covers these groups, not compositor integration, ListenFree or every
+optional application suite.
 
 The `kos-data-service.go` test needs `GOCACHE` pointed at a warm cache to stay
 fast: compiling the Go standard library cold takes well over a minute, against
