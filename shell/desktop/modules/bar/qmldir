@@ -29,6 +29,7 @@ singleton ControlCenterService 1.0 ControlCenterService.qml
 singleton SysTrayOrderService 1.0 SysTrayOrderService.qml
 singleton SysTrayIdentityService 1.0 SysTrayIdentityService.qml
 ControlCenterCard 1.0 ControlCenterCard.qml
+ControlCenterGlass 1.0 ControlCenterGlass.qml
 ControlCenterSlider 1.0 ControlCenterSlider.qml
 StatusTooltip 1.0 StatusTooltip.qml
 ControlCenterSelection 1.0 ControlCenterSelection.qml
@@ -37,3 +38,7 @@ NotificationHistoryToggle 1.0 NotificationHistoryToggle.qml
 NotificationHistoryGroup 1.0 NotificationHistoryGroup.qml
 NotificationHistoryEntry 1.0 NotificationHistoryEntry.qml
 NotificationSourceIcon 1.0 NotificationSourceIcon.qml
+
+NotificationHistoryPane 1.0 NotificationHistoryPane.qml
+
+NotificationHistoryCard 1.0 NotificationHistoryCard.qml

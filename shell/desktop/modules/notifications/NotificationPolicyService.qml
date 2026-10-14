@@ -12,6 +12,18 @@ QtObject {
     property var sources: []
     property var blockedKeys: []
     property string saveError: ""
+    property bool doNotDisturbEnabled: false
+    property bool bannersEnabled: true
+    property bool historyEnabled: true
+    property bool showPreview: true
+
+    function setPreference(key, value) {
+        if (!ready || ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"].indexOf(key) < 0
+                || typeof value !== "boolean") return false
+        service[key] = value
+        saveTimer.restart()
+        return true
+    }
 
     function sourceKey(notification) { return NotificationIdentity.sourceKey(notification) }
     function isBlocked(notification) { return isKeyBlocked(sourceKey(notification)) }
@@ -43,7 +55,9 @@ QtObject {
     function save() {
         if (!ready) return
         JsonConfigStore.writePath(configPath, JSON.stringify({version: 1, sources: sources,
-            blockedKeys: blockedKeys}, null, 2), function(ok) {
+            blockedKeys: blockedKeys, doNotDisturbEnabled: doNotDisturbEnabled,
+            bannersEnabled: bannersEnabled, historyEnabled: historyEnabled,
+            showPreview: showPreview}, null, 2), function(ok) {
                 service.saveError = ok ? "" : "通知设置保存失败"
             })
     }
@@ -51,6 +65,8 @@ QtObject {
         if (exists && data) {
             try {
                 const parsed = JSON.parse(data)
+                for (const key of ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"])
+                    if (typeof parsed[key] === "boolean") service[key] = parsed[key]
                 if (Array.isArray(parsed.sources)) {
                     const seen = new Set()
                     service.sources = parsed.sources.filter(source => source

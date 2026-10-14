@@ -891,6 +891,23 @@ public:
                   RequestKind::DockBuiltinVisibility);
     }
 
+    Q_INVOKABLE void notificationSnapshot() {
+        callShell(QStringLiteral("notification-settings"), {QStringLiteral("snapshot")},
+                  QStringLiteral("无法读取通知设置"), RequestKind::Notifications);
+    }
+    Q_INVOKABLE void setNotificationPreference(const QString &key, bool value) {
+        callShell(QStringLiteral("notification-settings"),
+                  {QStringLiteral("setPreference"), key,
+                   value ? QStringLiteral("true") : QStringLiteral("false")},
+                  QStringLiteral("通知设置更新失败"), RequestKind::Notifications);
+    }
+    Q_INVOKABLE void setNotificationBlocked(const QString &key, bool blocked) {
+        callShell(QStringLiteral("notification-settings"),
+                  {QStringLiteral("setBlocked"), key,
+                   blocked ? QStringLiteral("true") : QStringLiteral("false")},
+                  QStringLiteral("应用通知设置更新失败"), RequestKind::Notifications);
+    }
+
     Q_INVOKABLE void updateDockNotificationBadgeVisibility(bool visible) {
         callShell(QStringLiteral("dock-settings"),
                   {QStringLiteral("updateNotificationBadgeVisibility"),
@@ -1441,6 +1458,7 @@ signals:
     void sessionChanged();
     void entryChanged();
     void bannerDismissedChanged();
+    void notificationSnapshotChanged(const QVariantMap &snapshot);
     void dockSnapshotChanged(const QVariantMap &snapshot);
     void dockBuiltinVisibilityChanged(const QVariantMap &snapshot);
     void wallpaperSnapshotChanged(const QVariantMap &snapshot);
@@ -1466,6 +1484,7 @@ private:
     // request maps to exactly one signal.
     enum class RequestKind {
         Dock,
+        Notifications,
         DockBuiltinVisibility,
         Wallpaper,
         DockNotificationBadgeVisibility,
@@ -1486,6 +1505,21 @@ private:
         QString fallbackError;
         RequestKind kind;
     };
+
+    QVariantMap notificationSnapshotFromReply(const QString &payload) {
+        QJsonParseError error;
+        const QJsonDocument document = QJsonDocument::fromJson(payload.toUtf8(), &error);
+        const QJsonObject object = document.object();
+        if (error.error != QJsonParseError::NoError || !document.isObject()
+                || !object.value(QStringLiteral("ready")).isBool()
+                || !object.value(QStringLiteral("sources")).isArray()
+                || !object.value(QStringLiteral("blockedKeys")).isArray()) {
+            setLastError(QStringLiteral("桌面环境返回了无效的通知设置"));
+            return {};
+        }
+        setLastError({});
+        return object.toVariantMap();
+    }
 
     QVariantMap snapshotFromReply(const QString &payload) {
         if (payload.isEmpty())
@@ -2270,6 +2304,9 @@ private:
 
     void handleReply(RequestKind kind, const QString &payload) {
         switch (kind) {
+        case RequestKind::Notifications:
+            emit notificationSnapshotChanged(notificationSnapshotFromReply(payload));
+            break;
         case RequestKind::Dock:
             emit dockSnapshotChanged(latestDockState(payload));
             finishDockRequest();
@@ -2365,6 +2402,9 @@ private:
     // signal so it can leave the pending state and show lastError.
     void failKind(RequestKind kind) {
         switch (kind) {
+        case RequestKind::Notifications:
+            emit notificationSnapshotChanged({});
+            break;
         case RequestKind::Dock:
             emit dockSnapshotChanged({});
             finishDockRequest();

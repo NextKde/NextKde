@@ -10,8 +10,10 @@ QtObject {
     property int nextKey: 0
     property ListModel history: ListModel {}
     property ListModel groups: ListModel {}
+    property ListModel previewGroups: ListModel {}
     property var expandedSources: ({})
     readonly property int count: history.count
+    signal historyUpdated()
 
     function push(snapshot) {
         snapshot.sourceKey = NotificationIdentity.sourceKey(snapshot)
@@ -60,14 +62,19 @@ QtObject {
     }
     function clear() { removeKeys(allKeys()) }
     function rebuildRows() {
+        rebuildModel(groups, history.count, false)
+        rebuildModel(previewGroups, Math.min(3, history.count), true)
+        historyUpdated()
+    }
+    function rebuildModel(target, limit, preview) {
         const desired = []
         const bySource = new Map()
-        for (let i = 0; i < history.count; ++i) {
+        for (let i = 0; i < limit; ++i) {
             const row = history.get(i)
             const key = row.sourceKey
             if (!bySource.has(key)) {
                 const group = {sourceKey: key, appName: row.appName || "其他",
-                    appIcon: row.appIcon, desktopEntry: String(row.desktopEntry || ""), expanded: expandedSources[key] === true, items: []}
+                    appIcon: row.appIcon, desktopEntry: String(row.desktopEntry || ""), expanded: !preview && expandedSources[key] === true, items: []}
                 bySource.set(key, group)
                 desired.push(group)
             }
@@ -80,16 +87,16 @@ QtObject {
             appIcon: group.appIcon, desktopEntry: group.desktopEntry, expanded: group.expanded, itemCount: group.items.length,
             itemsJson: JSON.stringify(group.items)}))
         const keys = new Set(rows.map(row => row.sourceKey))
-        for (let i = groups.count - 1; i >= 0; --i)
-            if (!keys.has(groups.get(i).sourceKey)) groups.remove(i)
+        for (let i = target.count - 1; i >= 0; --i)
+            if (!keys.has(target.get(i).sourceKey)) target.remove(i)
         for (let i = 0; i < rows.length; ++i) {
             let existing = -1
-            for (let j = i; j < groups.count; ++j)
-                if (groups.get(j).sourceKey === rows[i].sourceKey) { existing = j; break }
-            if (existing < 0) groups.insert(i, rows[i])
+            for (let j = i; j < target.count; ++j)
+                if (target.get(j).sourceKey === rows[i].sourceKey) { existing = j; break }
+            if (existing < 0) target.insert(i, rows[i])
             else {
-                if (existing !== i) groups.move(existing, i, 1)
-                groups.set(i, rows[i])
+                if (existing !== i) target.move(existing, i, 1)
+                target.set(i, rows[i])
             }
         }
     }

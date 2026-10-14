@@ -21,7 +21,7 @@ import "../../../shared/qml/controls" as LiquidControls
 PopupWindow {
     id: panel
 
-    implicitWidth: panel.controlCenterWidth
+    implicitWidth: Math.min(panel.controlCenterWidth, Math.max(1, (panel.targetScreen?.width ?? 1920) - 24))
     implicitHeight: panel.controlCenterHeight
     color: "transparent"
     grabFocus: popupMotion.interactive
@@ -32,13 +32,12 @@ PopupWindow {
     // transform, so the frosted silhouettes move together instead of drifting
     // as a dozen independent regions.
     contentItem.opacity: popupMotion.progress
-    contentItem.scale: AppearanceTokens.motion.popupStartScale
-        + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+    contentItem.scale: 1
     contentItem.transformOrigin: !panel.dockHosted ? Item.Top
         : panel.dockEdge === "left" ? Item.Left
         : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     contentItem.enabled: popupMotion.interactive
-    mask: popupMotion.interactive ? null : emptyRegion
+    mask: popupMotion.interactive ? panelInputRegion : emptyRegion
     PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
 
     anchor {
@@ -79,7 +78,7 @@ PopupWindow {
     // `requestedOpen` is already true while we wait, so the Bar's own popup
     // inhibitor slides the Bar out first and the window is only created once
     // it has stopped moving.
-    readonly property bool anchorSettled: panel.barRevealProgress > 0.999
+    readonly property bool anchorSettled: panel.dockHosted || panel.barRevealProgress > 0.999
     property string pendingConfirmAction: ""
     property string confirmActionLabel: ""
     property alias logoutConfirmationVisible: panel.sessionModalVisible
@@ -96,7 +95,12 @@ PopupWindow {
     readonly property string outgoingPage: pageMotion.outgoingPage
     readonly property bool hasActiveSubmenu: activeSubmenu !== "" || sessionModalVisible
     readonly property bool dockFacingLayout: dockHosted && dockEdge !== "top"
-    readonly property int mainControlsOffsetY: 0
+    readonly property bool notificationsAboveControls: dockHosted
+    // The controls already have a 20px top inset. When the notification deck
+    // precedes them, consume that inset instead of adding a second section gap.
+    readonly property int historyLayoutAdjustment: notificationsAboveControls ? -20 : 12
+    readonly property real mainControlsOffsetY: notificationsAboveControls && historyShown
+        ? notificationHistory.height + historyLayoutAdjustment : 0
     signal networkRequested()
     signal bluetoothRequested()
     signal wifiNetworkSelected(var network)
@@ -155,9 +159,81 @@ PopupWindow {
     // Keep the main controls compact. The sound page needs its original
     // 420px card plus both 20px margins; keep that room through its outgoing
     // transition so neither the card nor its compositor blur is clipped.
-    readonly property int controlCenterHeight: requestedPage === "sound"
+    readonly property int controlAreaHeight: requestedPage === "sound"
         || displayedSubmenu === "sound" || outgoingPage === "sound" ? 460 : 411
-    readonly property int controlCenterWidth: 336
+    // A fixed compositor envelope prevents window/texture reallocations while
+    // the deck unfolds. Empty envelope space is click-through. Compact outputs
+    // scroll the original-size controls instead of shrinking text and buttons.
+    readonly property real availableHeight: Math.max(1, (targetScreen?.height ?? 900) - 110)
+    readonly property real fitScale: 1
+    readonly property bool historyShown: cardMapped("")
+    readonly property real historyMaximumHeight: Math.min(560,
+        Math.max(208, availableHeight - controlAreaHeight - historyLayoutAdjustment))
+    readonly property real historyHeight: historyShown ? notificationHistory.desiredHeight : 0
+    readonly property real naturalContentHeight: controlAreaHeight
+        + (historyShown ? notificationHistory.height + historyLayoutAdjustment : 0)
+    readonly property int controlCenterHeight: Math.min(availableHeight, 460 + 560 + 12)
+    readonly property int controlCenterWidth: Math.max(296, Math.min(336, (targetScreen?.width ?? 1920) - 24))
+    readonly property real controlsWidth: controlCenterWidth - 40
+    readonly property real connectivityWidth: Math.round((controlsWidth - 8) * 137 / 288)
+    readonly property real mediaWidth: controlsWidth - connectivityWidth - 8
+    readonly property real quickControlWidth: (controlsWidth - 36) / 5
+    readonly property real halfControlWidth: (controlsWidth - 8) / 2
+    readonly property real canvasOffsetY: panelCanvas.y
+    Item {
+        id: popupCapture
+        width: panel.width
+        height: panel.height
+    }
+    Item {
+        id: inputArea
+        width: panel.width
+        y: Math.max(0, panelCanvas.y - controlViewport.contentY)
+        height: Math.max(0, Math.min(controlViewport.height,
+            panelCanvas.y - controlViewport.contentY + panel.naturalContentHeight) - y)
+    }
+    RoundedBlurRegion { id: panelInputRegion; item: inputArea; radius: 0 }
+    Flickable {
+        id: controlViewport
+        objectName: "control-center-viewport"
+        width: panel.width
+        height: panel.height
+        contentWidth: panel.controlCenterWidth
+        contentHeight: Math.max(height, panel.naturalContentHeight)
+        interactive: contentHeight > height + 1 || contentWidth > width + 1
+        flickableDirection: Flickable.AutoFlickIfNeeded
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+        ScrollBar.vertical: ScrollBar { policy: controlViewport.contentHeight > controlViewport.height + 1 ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff; width: 3 }
+        KosKineticScroll { flickable: controlViewport; horizontal: true }
+    }
+    Item {
+        id: panelCanvas
+        parent: controlViewport.contentItem
+        width: panel.controlCenterWidth
+        height: panel.naturalContentHeight
+        y: panel.dockFacingLayout ? Math.max(0, controlViewport.height - height) : 0
+        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+        transformOrigin: !panel.dockHosted ? Item.Top
+            : panel.dockEdge === "left" ? Item.Left : panel.dockEdge === "right" ? Item.Right : Item.Bottom
+    }
+    NotificationHistoryPane {
+        id: notificationHistory
+        parent: panelCanvas
+        x: 20
+        y: panel.notificationsAboveControls ? 0 : panel.controlAreaHeight
+        width: panel.controlsWidth
+        maximumHeight: panel.historyMaximumHeight
+        height: panel.historyHeight
+        captureAnchor: popupCapture
+        outerViewport: controlViewport
+        visible: panel.historyShown
+        opacity: panel.pageFactor("")
+        glassOpacity: panel.pageFactor("") * panel.revealProgress
+        backdropScale: panelCanvas.scale
+        active: panel.isOpen && visible && !panel.hasActiveSubmenu
+        enabled: popupMotion.interactive && pageMotion.interactive
+    }
     readonly property real effectiveBlur: dockHosted
         ? AppearanceConfigService.effectiveDockBlur
         : AppearanceConfigService.effectiveBarBlur
@@ -176,9 +252,16 @@ PopupWindow {
         readonly property bool open: popupMotion.requestedOpen
         property var cardAnchor: panel.anchorItem
         function openAll() {
+            const opening = !popupMotion.requestedOpen
             if (!popupMotion.mapped)
                 pageMotion.reset(panel.requestedPage)
             popupMotion.open()
+            panel.positionViewportForOpen()
+            // Paint cached values first, including after a deferred Bar reveal.
+            if (opening) Qt.callLater(function() {
+                if (popupMotion.requestedOpen)
+                    ControlCenterService.refresh()
+            })
         }
         function closeAll(closingModal) { popupMotion.close() }
     }
@@ -236,14 +319,14 @@ PopupWindow {
     // rect rather than a flat fade: the submenu card morphs onto the Wi-Fi
     // pill (or the brightness/sound slider) it was opened from.
     readonly property var submenuSourceRects: ({
-        "wifi":       Qt.rect(336 - 179 - 137, 20  + mainControlsOffsetY, 137, 59),
-        "bluetooth":  Qt.rect(336 - 179 - 137, 87  + mainControlsOffsetY, 137, 59),
-        "brightness": Qt.rect(336 - 20  - 296, 269 + mainControlsOffsetY, 296, 57),
-        "sound":      Qt.rect(336 - 20  - 296, 334 + mainControlsOffsetY, 296, 57),
+        "wifi":       Qt.rect(20, 20 + mainControlsOffsetY, connectivityWidth, 59),
+        "bluetooth":  Qt.rect(20, 87 + mainControlsOffsetY, connectivityWidth, 59),
+        "brightness": Qt.rect(20, 269 + mainControlsOffsetY, controlsWidth, 57),
+        "sound":      Qt.rect(20, 334 + mainControlsOffsetY, controlsWidth, 57),
         // Power/session sheet returns to the power-key capsule (slotCard3:
         // offsetRight 142, offsetTop 155, 52x52) so it morphs back into the
         // button it was opened from exactly like the Wi-Fi/BT pills.
-        "session":    Qt.rect(336 - 142 - 52, 155 + mainControlsOffsetY, 52, 52)
+        "session":    Qt.rect(20 + 2 * (quickControlWidth + 9), 155 + mainControlsOffsetY, quickControlWidth, quickControlWidth)
     })
 
     // 0 when a page is at full size, 1 when it has fully collapsed onto its
@@ -265,38 +348,32 @@ PopupWindow {
     // same rule as the submenu card's collapse-into-source.
     readonly property real sessionMorph: pageMorph("session")
 
-    // No panel-wide glass slab: the window blur region is the UNION of every
-    // card's blurRegion, so KWin blurs behind the cards (real frosted glass)
-    // but not over the gaps between them -- hollow and frosted, in one window
-    // with no coordinator.
-    //
-    // Every card that publishes a SurfaceShape has to be in this list, and only
-    // while it is visible. The effect aligns the whole declared shape set with
-    // this region's top-left, so a shape that is declared but missing from the
-    // region -- or the reverse -- slides the glass of *every* card by the
-    // difference. Overlay cards also publish shapes, so include their regions
-    // only while visible to keep the shape and blur sets aligned.
+    // Capture is one stationary window-sized rectangle. The compositor draws
+    // only the declared card outlines, so the gaps remain transparent. Include
+    // every visible declaration in the region union; capture and shape bounds
+    // must describe the same envelope throughout scrolling and navigation.
     Region { id: emptyRegion }
     Region {
         id: cardsBlurRegion
         regions: [
-            wifiCard.visible ? wifiCard.blurRegion : emptyRegion,
-            bluetoothCard.visible ? bluetoothCard.blurRegion : emptyRegion,
-            mediaCard.visible ? mediaCard.blurRegion : emptyRegion,
-            slotCard1.visible ? slotCard1.blurRegion : emptyRegion,
-            slotCard2.visible ? slotCard2.blurRegion : emptyRegion,
-            slotCard3.visible ? slotCard3.blurRegion : emptyRegion,
-            slotCard4.visible ? slotCard4.blurRegion : emptyRegion,
-            slotCard5.visible ? slotCard5.blurRegion : emptyRegion,
-            slotCard6.visible ? slotCard6.blurRegion : emptyRegion,
-            slotCard7.visible ? slotCard7.blurRegion : emptyRegion,
+            wifiCard.visible && wifiCard.backdropVisible ? wifiCard.blurRegion : emptyRegion,
+            bluetoothCard.visible && bluetoothCard.backdropVisible ? bluetoothCard.blurRegion : emptyRegion,
+            mediaCard.visible && mediaCard.backdropVisible ? mediaCard.blurRegion : emptyRegion,
+            slotCard1.visible && slotCard1.backdropVisible ? slotCard1.blurRegion : emptyRegion,
+            slotCard2.visible && slotCard2.backdropVisible ? slotCard2.blurRegion : emptyRegion,
+            slotCard3.visible && slotCard3.backdropVisible ? slotCard3.blurRegion : emptyRegion,
+            slotCard4.visible && slotCard4.backdropVisible ? slotCard4.blurRegion : emptyRegion,
+            slotCard5.visible && slotCard5.backdropVisible ? slotCard5.blurRegion : emptyRegion,
+            slotCard6.visible && slotCard6.backdropVisible ? slotCard6.blurRegion : emptyRegion,
+            slotCard7.visible && slotCard7.backdropVisible ? slotCard7.blurRegion : emptyRegion,
             // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
             // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
             // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
-            stageModeCard.visible ? stageModeCard.blurRegion : emptyRegion,
-            keepAwakeCard.visible ? keepAwakeCard.blurRegion : emptyRegion,
-            sessionCard.visible ? sessionCard.blurRegion : emptyRegion,
-            submenuCard.visible ? submenuCard.blurRegion : emptyRegion
+            stageModeCard.visible && stageModeCard.backdropVisible ? stageModeCard.blurRegion : emptyRegion,
+            keepAwakeCard.visible && keepAwakeCard.backdropVisible ? keepAwakeCard.blurRegion : emptyRegion,
+            sessionCard.visible && sessionCard.backdropVisible ? sessionCard.blurRegion : emptyRegion,
+            submenuCard.visible && submenuCard.backdropVisible ? submenuCard.blurRegion : emptyRegion,
+            notificationHistory.visible ? notificationHistory.blurRegion : emptyRegion
         ]
     }
     // A tonal/non-glass theme draws its own surface and publishes no shapes, so
@@ -315,8 +392,10 @@ PopupWindow {
     // the position so the submenu reflows into place whenever its geometry
     // changes.
     Component.onCompleted: {
-        for (let i = 0; i < panel.data.length; i++) {
-            const c = panel.data[i]
+        const children = []
+        for (let i = 0; i < panel.data.length; i++) children.push(panel.data[i])
+        for (let i = 0; i < children.length; i++) {
+            const c = children[i]
             if (c && c.isControlCenterCard) {
                 // A submenu or session sheet REPLACES the primary cards, it does
                 // not float over them: every coordinator-managed card hides
@@ -328,11 +407,15 @@ PopupWindow {
                         return panel.cardMapped("")
                     })
                 }
+                c.captureAnchor = popupCapture
+                c.clipViewport = controlViewport
+                c.parent = panelCanvas
                 panel.placeCard(c)
             }
         }
     }
     function placeCard(c) {
+        c.backdropScale = Qt.binding(function() { return panelCanvas.scale * c.scale })
         c.x = Qt.binding(function() {
             return panel.controlCenterWidth - c.offsetRight - c.width
         })
@@ -348,7 +431,7 @@ PopupWindow {
         // from the same page factor so the frosted silhouette fades with the
         // card instead of persisting as a blurred ghost after unmap.
         c.glassOpacity = Qt.binding(function() {
-            return panel.pageFactor(c.pageTag)
+            return panel.pageFactor(c.pageTag) * panel.revealProgress
         })
         // Cards that morph through morphRect (the shared submenu card and the
         // session sheet) collapse by geometry, not a uniform Item scale:
@@ -367,9 +450,9 @@ PopupWindow {
                 return 1 - 0.04 * pageMotion.progress
             return 1
         })
-        c.contentOpacity = Qt.binding(function() {
-            return panel.pageFactor(c.pageTag)
-        })
+        // The card itself owns the page fade. A second content fade would
+        // dim text twice as fast as its compositor material.
+        c.contentOpacity = 1
         c.contentOffsetY = Qt.binding(function() {
             // Only the incoming page slides into place. An outgoing page
             // fades exactly where it sits: drifting its content would peel it
@@ -442,16 +525,26 @@ PopupWindow {
         if (panel.isOpen || panel.sessionModalVisible || panel.activeSubmenu !== "") {
             close()
         } else {
+            controlViewport.contentX = 0
+            controlViewport.contentY = 0
+            notificationHistory.reset()
             panel.sessionModalVisible = false
             panel.submenuOpen = false
             panel.activeSubmenu = ""
             panel.pendingConfirmAction = ""
-            ControlCenterService.refresh()
             if (panel.anchorSettled)
                 coordinator.openAll()
             else
                 panel.pendingOpen = true
         }
+    }
+
+    function positionViewportForOpen() {
+        controlViewport.contentX = 0
+        // On a short output keep the dock-facing controls reachable immediately.
+        // Notifications above them remain available by scrolling upward.
+        controlViewport.contentY = panel.notificationsAboveControls
+            ? Math.max(0, controlViewport.contentHeight - controlViewport.height) : 0
     }
 
     // The Bar finished sliding; open the deferred panel now that its anchor
@@ -614,9 +707,9 @@ PopupWindow {
         cardScale: wifiPagePointer.pressed ? 0.97 : wifiPagePointer.containsMouse ? 1.015 : 1
         Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
         offsetTop: 20 + panel.mainControlsOffsetY
-        offsetRight: 179
+        offsetRight: 20 + panel.mediaWidth + 8
         cardRadius: 29.5
-        cardWidth: 137
+        cardWidth: panel.connectivityWidth
         cardHeight: 59
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -757,9 +850,9 @@ PopupWindow {
         cardScale: bluetoothPagePointer.pressed ? 0.97 : bluetoothPagePointer.containsMouse ? 1.015 : 1
         Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
         offsetTop: 87 + panel.mainControlsOffsetY
-        offsetRight: 179
+        offsetRight: 20 + panel.mediaWidth + 8
         cardRadius: 29.5
-        cardWidth: 137
+        cardWidth: panel.connectivityWidth
         cardHeight: 59
         cardOpacity: ControlCenterService.bluetoothAvailable ? 1 : 0.48
         blurStrength: panel.effectiveBlur
@@ -909,7 +1002,7 @@ PopupWindow {
         offsetTop: 20 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 25)
-        cardWidth: 151
+        cardWidth: panel.mediaWidth
         cardHeight: 127
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1006,10 +1099,10 @@ PopupWindow {
         }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
-        offsetRight: 264
+        offsetRight: 20 + 4 * (panel.quickControlWidth + 9)
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-        cardWidth: 52
-        cardHeight: 52
+        cardWidth: panel.quickControlWidth
+        cardHeight: panel.quickControlWidth
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1049,10 +1142,10 @@ PopupWindow {
         }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
-        offsetRight: 203
+        offsetRight: 20 + 3 * (panel.quickControlWidth + 9)
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-        cardWidth: 52
-        cardHeight: 52
+        cardWidth: panel.quickControlWidth
+        cardHeight: panel.quickControlWidth
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1099,10 +1192,10 @@ PopupWindow {
         }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
-        offsetRight: 142
+        offsetRight: 20 + 2 * (panel.quickControlWidth + 9)
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-        cardWidth: 52
-        cardHeight: 52
+        cardWidth: panel.quickControlWidth
+        cardHeight: panel.quickControlWidth
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1149,10 +1242,10 @@ PopupWindow {
         }
         coordinator: coordinator
         offsetTop: 155 + panel.mainControlsOffsetY
-        offsetRight: 81
+        offsetRight: 20 + 1 * (panel.quickControlWidth + 9)
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-        cardWidth: 52
-        cardHeight: 52
+        cardWidth: panel.quickControlWidth
+        cardHeight: panel.quickControlWidth
 
         cardScale: dndPointer.pressed ? 0.91 : (dndPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1200,8 +1293,8 @@ PopupWindow {
         offsetTop: 155 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
-        cardWidth: 52
-        cardHeight: 52
+        cardWidth: panel.quickControlWidth
+        cardHeight: panel.quickControlWidth
 
         cardScale: nightLightPointer.pressed ? 0.91 : (nightLightPointer.containsMouse ? 1.06 : 1.0)
         Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
@@ -1247,9 +1340,9 @@ PopupWindow {
         coordinator: coordinator
         visible: cardShown && coordinator.cardAnchor !== null
         offsetTop: 217 + panel.mainControlsOffsetY
-        offsetRight: 172
+        offsetRight: 20 + panel.halfControlWidth + 8
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 144
+        cardWidth: panel.halfControlWidth
         cardHeight: 44
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1318,7 +1411,7 @@ PopupWindow {
         offsetTop: 217 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 144
+        cardWidth: panel.halfControlWidth
         cardHeight: 44
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1403,7 +1496,7 @@ PopupWindow {
         offsetTop: 269 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 296
+        cardWidth: panel.controlsWidth
         cardHeight: 57
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1478,7 +1571,7 @@ PopupWindow {
         offsetTop: 334 + panel.mainControlsOffsetY
         offsetRight: 20
         cardRadius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 296
+        cardWidth: panel.controlsWidth
         cardHeight: 57
         blurStrength: panel.effectiveBlur
         liquidStrength: panel.effectiveLiquid
@@ -1627,7 +1720,7 @@ PopupWindow {
         // Same slot as the Wi-Fi/Bluetooth submenu, so the session list is one
         // more page of the Control Center instead of a panel of its own.
         offsetTop: panel.dockFacingLayout
-            ? panel.controlCenterHeight - 20 - sessionCard.cardHeight
+            ? panel.controlCenterHeight - panel.canvasOffsetY - 20 - sessionCard.cardHeight
             : 20
         offsetRight: 20
         // Roundness interpolates toward the power-key capsule while the sheet
@@ -1641,7 +1734,7 @@ PopupWindow {
         readonly property real _sourceRadius:
             AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
         cardRadius: _baseRadius + (_sourceRadius - _baseRadius) * panel.sessionMorph
-        cardWidth: 296
+        cardWidth: panel.controlsWidth
         cardHeight: 340
         pageTag: "session"
         // Stays mapped while the sheet is the outgoing side of a crossfade, so
@@ -2041,7 +2134,7 @@ PopupWindow {
         // submenus instead keep their lower edge beside the systray/control
         // area, regardless of the selected submenu's individual height.
         offsetTop: panel.dockFacingLayout
-            ? panel.controlCenterHeight - 20 - submenuCard.cardHeight
+            ? panel.controlCenterHeight - panel.canvasOffsetY - 20 - submenuCard.cardHeight
             : 20
         offsetRight: 20
         // Roundness interpolates toward the source capsule while the card
@@ -2055,7 +2148,7 @@ PopupWindow {
         readonly property real _sourceRadius:
             panel.submenuShownPage === "wifi" || panel.submenuShownPage === "bluetooth"
                 ? 29.5 : AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 19)
-        cardWidth: 296
+        cardWidth: panel.controlsWidth
         // Driven by the page the card is actually rendering (incoming or
         // outgoing), so a fade-out keeps its height and a fade-in grows to
         // the new page's height with a smooth Behavior instead of a jump.

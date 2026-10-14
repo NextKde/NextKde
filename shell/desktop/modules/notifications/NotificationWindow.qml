@@ -163,11 +163,11 @@ PanelWindow {
             }
             // Display fields: use live notification, fall back to snapshot
             // when the group is dying (notification null but card visible).
-            readonly property string displaySummary: card.notification
+            readonly property string displaySummary: !NotificationPolicyService.showPreview ? "收到一条通知" : card.notification
                 ? (card.notification.summary.length > 0
                     ? card.notification.summary : card.notification.appName)
                 : card._lastSummary
-            readonly property string displayBody: card.notification
+            readonly property string displayBody: !NotificationPolicyService.showPreview ? "" : card.notification
                 ? card.notification.body : card._lastBody
             readonly property string displayAppName: card.notification
                 ? card.notification.appName : card._lastAppName
@@ -501,7 +501,7 @@ PanelWindow {
                                 rightMargin: 6
                                 verticalCenter: parent.verticalCenter
                             }
-                            text: modelData.summary.length > 0
+                            text: !NotificationPolicyService.showPreview ? "收到一条通知" : modelData.summary.length > 0
                                 ? modelData.summary
                                 : (modelData.appName || "")
                             color: card.foregroundColor

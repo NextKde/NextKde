@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 // This delegate owns its exit. No ListView remove transition or height
 // animation competes with delayRemove; neighbours move after its release.
@@ -8,6 +9,7 @@ Item {
     required property string summary
     required property string body
     required property real timestamp
+    property bool showPreview: true
     property string appName: ""
     property string appIcon: ""
     property string desktopEntry: ""
@@ -17,6 +19,7 @@ Item {
     property bool dark: true
     property var coordinator: null
     property bool groupExiting: false
+    property bool suppressExitAnimation: false
     property bool exiting: false
     property bool registeredExit: false
     property real frozenHeight: 0
@@ -33,11 +36,11 @@ Item {
             desktopEntry: desktopEntry, additionalCount: additionalCount}
         frozenHeight = height
         exiting = true
-        if (coordinator && !groupExiting) {
+        if (coordinator && !groupExiting && !suppressExitAnimation) {
             coordinator.beginHistoryExit()
             registeredExit = true
         }
-        if (!groupExiting) {
+        if (!groupExiting && !suppressExitAnimation) {
             ListView.delayRemove = true
             exitMotion.start()
         }
@@ -58,8 +61,8 @@ Item {
     }
     Rectangle {
         anchors.fill: parent
-        radius: 13
-        color: entry.dark ? Qt.rgba(0.27, 0.29, 0.32, 0.88) : Qt.rgba(0.94, 0.94, 0.95, 0.9)
+        radius: 18
+        color: entry.dark ? Qt.rgba(0.27, 0.29, 0.32, 0.38) : Qt.rgba(0.94, 0.94, 0.95, 0.38)
         border.width: 1
         border.color: entry.dark ? Qt.rgba(1, 1, 1, 0.09) : Qt.rgba(0, 0, 0, 0.07)
     }
@@ -109,7 +112,7 @@ Item {
         spacing: 4
         Text {
             width: parent.width
-            text: entry.painted.summary || "通知"
+            text: entry.showPreview ? entry.painted.summary || "通知" : "收到一条通知"
             textFormat: Text.PlainText
             color: entry.ink
             elide: Text.ElideRight
@@ -119,7 +122,7 @@ Item {
         }
         Text {
             width: parent.width
-            visible: text.length > 0
+            visible: entry.showPreview && text.length > 0
             text: entry.painted.body
             textFormat: Text.PlainText
             color: entry.ink
@@ -140,18 +143,26 @@ Item {
         opacity: 0.6
         font.pixelSize: 11
     }
-    Text {
-        anchors { right: parent.right; top: parent.top; rightMargin: 10; topMargin: 9 }
-        text: "×"
-        color: entry.ink
-        opacity: removeMouse.containsMouse ? 1 : 0.5
-        font.pixelSize: 18
-        MouseArea {
-            id: removeMouse
-            anchors.fill: parent; anchors.margins: -6
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: entry.removeRequested(entry.painted.key)
+    AbstractButton {
+        id: removeButton
+        objectName: "notification-remove-button"
+        anchors { right: parent.right; top: parent.top; rightMargin: 5; topMargin: 5 }
+        width: 28; height: 28
+        activeFocusOnTab: true
+        Accessible.name: "移除通知"
+        background: Rectangle {
+            radius: 14
+            color: removeButton.down ? Qt.rgba(0.5, 0.5, 0.5, 0.3)
+                : removeButton.hovered || removeButton.activeFocus ? Qt.rgba(0.5, 0.5, 0.5, 0.18) : "transparent"
         }
+        contentItem: Text {
+            text: "×"
+            color: entry.ink
+            opacity: removeButton.hovered || removeButton.activeFocus ? 1 : 0.5
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.pixelSize: 18
+        }
+        onClicked: entry.removeRequested(entry.painted.key)
     }
 }
