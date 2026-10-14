@@ -4879,7 +4879,6 @@ ApplicationWindow {
             Layout.bottomMargin: 12
         }
 
-        Text {
         Rectangle {
             Layout.fillWidth: true
             implicitHeight: 64
@@ -4928,6 +4927,8 @@ ApplicationWindow {
                 }
             }
         }
+
+        Text {
             Layout.fillWidth: true
             Layout.leftMargin: 13
             Layout.rightMargin: 13
