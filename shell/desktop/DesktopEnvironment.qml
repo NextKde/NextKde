@@ -404,6 +404,30 @@ Item {
     // Shell-wide appearance controls used by the standalone Settings app.
     // Blur/liquid values are synchronized only with the custom Glass effect,
     // never KDE's stock blur effect. shellStyle selects semantic shape tokens.
+    // Activate-or-launch endpoint for remote surfaces (the Settings app's
+    // KDE settings link): a running window is raised via the same identity
+    // machinery the Dock uses, a stopped app is launched. Unlike the Dock's
+    // click flow, an already-focused app is never minimized here.
+    IpcHandler {
+        target: "app-launch"
+
+        function open(id: string): string {
+            const target = String(id || "").trim()
+            if (!target) return "failed"
+            const identity = AppIdentityService.resolve(target)
+            const windows = WindowService.windowsForApp(identity.desktopId)
+            if (windows.length > 0) {
+                const mru = windows.reduce((a, b) =>
+                    WindowService.lastActivatedAtOf(a.windowId)
+                        >= WindowService.lastActivatedAtOf(b.windowId) ? a : b)
+                WindowService.activateGroup(
+                    windows.map(function(w) { return w.windowId }), mru.windowId)
+                return "ok"
+            }
+            return AppActionService.launch(identity) ? "ok" : "failed"
+        }
+    }
+
     IpcHandler {
         target: "appearance-settings"
 

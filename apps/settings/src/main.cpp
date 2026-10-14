@@ -156,11 +156,16 @@ class SettingsBridge final : public QObject {
 
 public:
 
-    // Open KDE's own settings. systemsettings registers a KDBusService unique
-    // name, so launching while it runs forwards to the existing instance and
-    // raises its window -- one call covers both "open" and "activate".
+    // Open KDE's own settings, or raise the running window. Activation of a
+    // foreign Wayland window cannot be done from this process, so the request
+    // routes through the Shell's identity machinery (the same path the Dock
+    // uses): a running window is raised, a stopped app is launched.
     Q_INVOKABLE void launchSystemSettings() {
-        QProcess::startDetached(QStringLiteral("systemsettings"), QStringList());
+        callShell(QStringLiteral("app-launch"),
+                  {QStringLiteral("open"),
+                   QStringLiteral("org.kde.systemsettings.desktop")},
+                  QStringLiteral("Unable to open KDE system settings"),
+                  RequestKind::OpenApp);
     }
 
     explicit SettingsBridge(QObject *parent = nullptr) : QObject(parent) {
@@ -1515,6 +1520,7 @@ private:
         StageConfig,
         StageSidebar,
         I18nSnapshot,
+        OpenApp,
     };
 
     struct DockRequest {
