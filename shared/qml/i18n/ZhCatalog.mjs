@@ -168,6 +168,7 @@ export const catalog = {
     "Log Out": "注销",
     "Restart": "重新启动",
     "Power Off": "关机",
+    "Power": "电源",
     "Power off now?": "确定要关机吗？",
     "Restart now?": "确定要重启吗？",
     "Log out now?": "确定要注销吗？",
