@@ -59,15 +59,16 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
 
 ## The tint
 
-For client-side decorated windows, `windowbuttons/titlebarmetrics.cpp` takes
-a band of the composited frame at the panel's own rows, across the window's
-whole width, and takes the **median luma**:
+For client-side decorated windows, `windowbuttons/titlebarmetrics.cpp` samples
+the title bar background color to seamlessly blend the panel into the window chrome:
 
-- **A median, not a mean.** The caption and the application's controls sit
-  inside that band and are far higher contrast than the bar behind them. A
-  mean would be dragged around by however much of them happens to be there,
-  and by how bright they are; the median is the background as long as the
-  background is the majority, which it is.
+- **Local neighborhood priority.** The area immediately adjacent to the panel
+  (within 160 px) is sampled first, ensuring the panel tint matches the local
+  toolbar / tab bar background even on windows with split headers, sidebars, or
+  gradients.
+- **A median, not a mean.** Across the sampled region, pixels clustering around
+  the median luma are averaged to obtain the exact background RGB tone while
+  rejecting glyphs, icons, and antialiased edges.
 - The **panel's own columns and the caption's middle third are excluded** —
   the first because it is about to be covered, the second because it is
   glyphs rather than background.
@@ -75,6 +76,8 @@ whole width, and takes the **median luma**:
   whatever is stacked above, and tinting from another window would be worse
   than not tinting at all. A partly covered window is still tinted from the
   part of its bar that is visible.
+- On server-side decorated windows using KOS decoration, the panel uses the
+  exact `QPalette::Window` color of the window frame.
 
 ## Configuration
 
@@ -107,6 +110,7 @@ adjustment at once).
     },
     "apps": {
         "firefox": { "background": "dark" },
+        "google-chrome": { "background": "#202124" },
         "org.gnome.TextEditor": { "showButtons": false }
     },
     "rules": [
@@ -128,7 +132,7 @@ adjustment at once).
 | `panelPadding` | number | Vertical padding between the panel edge and the lights |
 | `panelPaddingX` | number | Horizontal padding; omit it to reuse `panelPadding` |
 | `interceptMargin` | number | Logical pixels around the panel where the pointer is taken by it as well (default 5). Raise it for an application whose own controls still highlight around the panel's edge; `0` takes the panel only |
-| `background` | `auto` / `dark` / `light` | Panel tint; `auto` follows the title bar's own pixels |
+| `background` | `auto` / `dark` / `light` / `#hex` | Panel tint; `auto` follows the title bar's own pixels (exact RGB) or window palette, `dark`/`light` uses fixed theme tones, or specify an explicit hex color (e.g. `"#202124"`) |
 | `drawOnDecoratedWindows` | `auto` / `always` / `never` | How far the panel goes on windows KWin decorates itself. `auto` means "when the decoration in use is ours" — see below |
 
 The panel is exactly the `buttonSize` / `buttonSpacing` layout grown by the

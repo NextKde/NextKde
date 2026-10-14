@@ -7,6 +7,7 @@
 #include <opengl/glframebuffer.h>
 
 #include <QByteArray>
+#include <QColor>
 #include <QRect>
 #include <QSize>
 
@@ -58,22 +59,26 @@ bool readPixels(const KWin::RenderTarget &renderTarget, const QRect &rect,
         return false;
     }
 
+    GLint prevReadFbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
+
     if (auto *fbo = renderTarget.framebuffer()) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->handle());
     }
 
     out.resize(r.width() * r.height() * 4);
-    // No y-flip. KWin renders the scene into its render targets y-down -- row 0
-    // of the target is the top row of the output -- and glReadPixels' row
-    // argument is that same row index. The usual "OpenGL's origin is
-    // bottom-left" rule belongs to client textures and to the default
-    // framebuffer, and applying it here is not a harmless slip: it mirrors the
-    // band about the middle of the target, so the tint gets read from whatever
-    // happens to sit at the mirrored position -- usually the desktop below the
-    // window, which is why panels came out dark on light title bars.
-    glReadPixels(r.x(), r.y(), r.width(), r.height(), GL_RGBA, GL_UNSIGNED_BYTE,
+    // In OpenGL framebuffers, the origin (0, 0) is at the bottom-left corner,
+    // whereas KWin render target coordinates place (0, 0) at the top-left corner.
+    // To read the rectangle r from the top-left coordinate system, the bottom-left
+    // Y coordinate in OpenGL must be glY = targetSize.height() - (r.y() + r.height()).
+    // Without this flip, glReadPixels reads from the mirrored vertical position
+    // (reading the bottom of the window/screen instead of the top title bar).
+    const int glY = targetSize.height() - (r.y() + r.height());
+    glReadPixels(r.x(), glY, r.width(), r.height(), GL_RGBA, GL_UNSIGNED_BYTE,
                  out.data());
     *readRect = r;
+
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
     return true;
 }
 
@@ -84,7 +89,8 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
                         KWin::EffectWindow *window,
                         const KWin::Region &deviceClip,
                         const QRectF &panelRect,
-                        bool *dark)
+                        bool *dark,
+                        QColor *color)
 {
     if (!window || !dark || panelRect.height() < 2.0) {
         return false;
@@ -140,11 +146,35 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
     const int panelTo = panelFrom + panelDevice.width();
     const int third = readTarget.width() / 3;
 
-    std::vector<int> samples;
-    samples.reserve(size_t(readTarget.width()) * size_t(readTarget.height()));
+    struct PixelSample {
+        uchar r, g, b;
+        int luma;
+    };
+
+    // We collect two sets of samples:
+    // 1. localSamples: from the strip immediately adjacent to the panel.
+    //    For a right-aligned panel (e.g. Chrome / Electron), the area to its left
+    //    has the exact local background of the controls area.
+    // 2. generalSamples: across the rest of the window's title bar rows.
+    std::vector<PixelSample> generalSamples;
+    std::vector<PixelSample> localSamples;
+    generalSamples.reserve(size_t(readTarget.width()) * size_t(readTarget.height()));
+    localSamples.reserve(size_t(readTarget.height()) * 160);
+
+    const bool panelOnRight = panelFrom > readTarget.width() / 2;
+    // Local sampling bounds (in readTarget coordinates):
+    const int localLeft = panelOnRight
+        ? std::max(0, panelFrom - 160)
+        : std::max(0, panelFrom - 8);
+    const int localRight = panelOnRight
+        ? std::min(readTarget.width(), panelTo + 8)
+        : std::min(readTarget.width(), panelTo + 160);
+
     for (int y = 0; y < readTarget.height(); ++y) {
+        // glReadPixels stores rows bottom-up. Flip the row index so y=0 accesses
+        // the top row of the title bar band.
         const uchar *row = reinterpret_cast<const uchar *>(pixels.constData())
-            + size_t(y) * size_t(readTarget.width()) * 4;
+            + size_t(readTarget.height() - 1 - y) * size_t(readTarget.width()) * 4;
         const int deviceY = readDevice.y() + y;
         for (int x = 0; x < readTarget.width(); ++x) {
             const uchar *p = row + size_t(x) * 4;
@@ -154,25 +184,67 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
             if (x >= panelFrom && x < panelTo) {
                 continue;
             }
-            if (third > 4 && x >= third && x < 2 * third) {
-                continue;
-            }
             // Pixels outside the visible region belong to whatever window is
             // stacked above, not to this title bar. Reading past them would
             // tint the panel from a different window.
             if (!deviceClip.contains(QPoint(readDevice.x() + x, deviceY))) {
                 continue;
             }
-            samples.push_back(lumaOf(p));
+
+            const PixelSample sample{p[0], p[1], p[2], lumaOf(p)};
+
+            if (x >= localLeft && x <= localRight) {
+                localSamples.push_back(sample);
+            }
+
+            if (third > 4 && x >= third && x < 2 * third) {
+                continue;
+            }
+            generalSamples.push_back(sample);
         }
     }
-    if (int(samples.size()) < MinSamples) {
+
+    const auto &chosenSamples = (int(localSamples.size()) >= MinSamples)
+        ? localSamples : generalSamples;
+
+    if (int(chosenSamples.size()) < MinSamples) {
         return false;
     }
 
-    const size_t middle = samples.size() / 2;
-    std::nth_element(samples.begin(), samples.begin() + middle, samples.end());
-    *dark = samples[middle] < DarkThreshold;
+    std::vector<PixelSample> sorted = chosenSamples;
+    const size_t middle = sorted.size() / 2;
+    std::nth_element(sorted.begin(), sorted.begin() + middle, sorted.end(),
+                     [](const PixelSample &a, const PixelSample &b) {
+                         return a.luma < b.luma;
+                     });
+
+    const int medianLuma = sorted[middle].luma;
+    *dark = medianLuma < DarkThreshold;
+
+    if (color) {
+        // Average the pixels clustering within +/- 3 luma of the median to filter
+        // out glyph anti-aliasing edges or subtle GPU dither.
+        quint64 sumR = 0;
+        quint64 sumG = 0;
+        quint64 sumB = 0;
+        quint64 count = 0;
+        for (const auto &s : chosenSamples) {
+            if (std::abs(s.luma - medianLuma) <= 3) {
+                sumR += s.r;
+                sumG += s.g;
+                sumB += s.b;
+                ++count;
+            }
+        }
+        if (count > 0) {
+            *color = QColor(static_cast<int>(sumR / count),
+                            static_cast<int>(sumG / count),
+                            static_cast<int>(sumB / count));
+        } else {
+            *color = QColor(sorted[middle].r, sorted[middle].g, sorted[middle].b);
+        }
+    }
+
     return true;
 }
 

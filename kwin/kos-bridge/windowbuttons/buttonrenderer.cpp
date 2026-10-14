@@ -70,6 +70,13 @@ bool sameSize(const QSizeF &a, const QSizeF &b)
         && std::abs(a.height() - b.height()) <= SizeTolerance;
 }
 
+bool sameColor(const QColor &a, const QColor &b)
+{
+    return std::abs(a.red() - b.red()) <= 2
+        && std::abs(a.green() - b.green()) <= 2
+        && std::abs(a.blue() - b.blue()) <= 2;
+}
+
 // Whether `point` (global logical) is on a part of `window` that no window
 // above it covers.
 //
@@ -355,29 +362,36 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
     // underneath before that is covered. Until the read succeeds nothing is
     // drawn: a guessed tint is exactly the misalignment this replaced.
     bool dark = false;
+    QColor panelColor;
     switch (config.background) {
     case PanelBackground::Dark:
         dark = true;
+        panelColor = QColor(28, 28, 32);
         break;
     case PanelBackground::Light:
         dark = false;
+        panelColor = QColor(242, 242, 245);
+        break;
+    case PanelBackground::Custom:
+        panelColor = config.customBackground;
+        dark = ((54 * panelColor.red() + 183 * panelColor.green()
+                 + 19 * panelColor.blue()) >> 8) < 128;
         break;
     case PanelBackground::Auto:
-        // The KOS decoration paints this strip from the window palette itself.
-        // Reuse that exact source instead of synchronously reading the rendered
-        // title bar back from the GPU. Client-side decorations still need the
-        // pixel sampler because their title-bar color is not exposed to KWin.
-        if (config.kosDecorationSelected && window->hasDecoration()
-            && window->window()) {
-            const QColor color = window->window()->palette().color(QPalette::Window);
-            const int luma = (54 * color.red() + 183 * color.green()
-                              + 19 * color.blue()) >> 8;
-            dark = luma < 128;
-        } else if (!tintFor(renderTarget, viewport, window, local, deviceRegion,
-                            &dark)) {
-            // No panel this frame, so no click should land on one either.
-            m_hits.remove(window);
-            return;
+        if (!tintFor(renderTarget, viewport, window, local, deviceRegion,
+                     &dark, &panelColor)) {
+            // Fallback while the title bar has not been sampled yet
+            if (config.kosDecorationSelected && window->hasDecoration()
+                && window->window()) {
+                panelColor = window->window()->palette().color(QPalette::Window);
+                const int luma = (54 * panelColor.red() + 183 * panelColor.green()
+                                  + 19 * panelColor.blue()) >> 8;
+                dark = luma < 128;
+            } else {
+                // No panel this frame, so no click should land on one either.
+                m_hits.remove(window);
+                return;
+            }
         }
         break;
     }
@@ -482,8 +496,9 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         const KWin::Window *w = window->window();
         const bool maximized =
             w && w->maximizeMode() == KWin::MaximizeFull;
-        if (KWin::GLTexture *tex = panelTexture(panelSize, active, dark, geometry,
-                                                hovered, adjusting, maximized)) {
+        if (KWin::GLTexture *tex = panelTexture(panelSize, active, dark, panelColor,
+                                                geometry, hovered, adjusting,
+                                                maximized)) {
             blit(viewport, clip, logicalRect, tex);
         }
     }
@@ -595,19 +610,10 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
                               KWin::EffectWindow *window,
                               const QRectF &panel,
                               const KWin::Region &deviceRegion,
-                              bool *dark)
+                              bool *dark,
+                              QColor *color)
 {
-    // A cached tint still draws on an inactive window, but only the active
-    // window is allowed to read pixels or keep a sampling timer alive.
-    if (!KWin::effects || KWin::effects->activeWindow() != window) {
-        const auto cached = m_cache.constFind(window);
-        if (cached == m_cache.constEnd() || !cached->known) {
-            return false;
-        }
-        *dark = cached->dark;
-        return true;
-    }
-
+    const bool isActive = (KWin::effects && KWin::effects->activeWindow() == window);
     const QSizeF windowSize = window->frameGeometry().size();
     const Clock::time_point now = Clock::now();
 
@@ -623,10 +629,21 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
     it->windowSize = windowSize;
     it->panel = panel;
 
+    // A cached tint still draws on an inactive window without querying the GPU.
+    // If the window has never been sampled yet, allow it to sample once below.
+    if (!isActive && it->known) {
+        *dark = it->dark;
+        if (color) {
+            *color = it->color;
+        }
+        return true;
+    }
+
     const auto interval = it->warmupReads < WarmupReads
         ? WarmupInterval : RecheckInterval;
     if (it->lastRead == Clock::time_point{} || now - it->lastRead >= interval) {
-        bool sampled = false;
+        bool sampledDark = false;
+        QColor sampledColor;
         // Count attempts, including unreadable bars. An obscured window cannot
         // keep triggering the fast sampling phase indefinitely.
         it->lastRead = now;
@@ -634,38 +651,56 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
             ++it->warmupReads;
         }
         if (sampleTitlebarTint(renderTarget, viewport, window, deviceRegion,
-                               panel, &sampled)) {
+                               panel, &sampledDark, &sampledColor)) {
             if (!it->known) {
                 // Show the first usable tint immediately. Later readings can
                 // still correct it after the title bar has settled.
                 it->known = true;
-                it->dark = sampled;
+                it->dark = sampledDark;
+                it->color = sampledColor;
                 it->pending = true;
-                it->pendingDark = sampled;
+                it->pendingDark = sampledDark;
+                it->pendingColor = sampledColor;
                 it->pendingSince = now;
-            } else if (it->pending && sampled == it->pendingDark
+            } else if (it->pending && sampledDark == it->pendingDark
+                       && sameColor(sampledColor, it->pendingColor)
                        && now - it->pendingSince >= ConfirmTime) {
-                it->dark = sampled;
+                const bool changed = (it->dark != sampledDark || !sameColor(it->color, sampledColor));
+                it->dark = sampledDark;
+                it->color = sampledColor;
                 it->pending = false;
-            } else if (it->pending && sampled != it->pendingDark) {
+                if (changed) {
+                    repaintRect(QRectF(window->frameGeometry().topLeft() + it->panel.topLeft(), it->panel.size()));
+                }
+            } else if (it->pending && (sampledDark != it->pendingDark
+                       || !sameColor(sampledColor, it->pendingColor))) {
                 // A conflicting reading resets confirmation. If it matches
                 // the displayed tint there is no change left to confirm.
-                it->pending = sampled != it->dark;
-                it->pendingDark = sampled;
+                it->pending = (sampledDark != it->dark
+                               || !sameColor(sampledColor, it->color));
+                it->pendingDark = sampledDark;
+                it->pendingColor = sampledColor;
                 it->pendingSince = now;
-            } else if (!it->pending && sampled != it->dark) {
+            } else if (!it->pending && (sampledDark != it->dark
+                       || !sameColor(sampledColor, it->color))) {
                 it->pending = true;
-                it->pendingDark = sampled;
+                it->pendingDark = sampledDark;
+                it->pendingColor = sampledColor;
                 it->pendingSince = now;
             }
         }
     }
 
-    scheduleSample(window);
+    if (isActive) {
+        scheduleSample(window);
+    }
     if (!it->known) {
         return false;
     }
     *dark = it->dark;
+    if (color) {
+        *color = it->color;
+    }
     return true;
 }
 
@@ -831,7 +866,7 @@ bool ButtonRenderer::adjusting(KWin::EffectWindow *window) const
 }
 
 KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool active,
-                                               bool dark,
+                                               bool dark, const QColor &panelColor,
                                                const PanelGeometry &geometry,
                                                Action hovered, bool adjusting,
                                                bool maximized)
@@ -841,12 +876,14 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
     // flag is part of it for the same reason: it is not a separate texture, it
     // is the same panel with the other restore glyph on its green dot, and a
     // window that has just been maximized must not be served the one it had
-    // before.
-    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11")
+    // before. The panel color is included so distinct title bar colors receive
+    // their own textures.
+    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11_%12")
                             .arg(qRound(panelSize.width()))
                             .arg(qRound(panelSize.height()))
                             .arg(active ? 1 : 0)
                             .arg(dark ? 1 : 0)
+                            .arg(panelColor.rgba(), 0, 16)
                             .arg(geometry.buttonSize)
                             .arg(geometry.buttonSpacing)
                             .arg(static_cast<int>(hovered))
@@ -859,8 +896,9 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
                             .arg(maximized ? 1 : 0);
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
-        return cacheTexture(key, buildPanel(panelSize, active, dark, geometry,
-                                            hovered, adjusting, maximized));
+        return cacheTexture(key, buildPanel(panelSize, active, dark, panelColor,
+                                            geometry, hovered, adjusting,
+                                            maximized));
     }
     return it->second.get();
 }
@@ -1058,6 +1096,7 @@ void ButtonRenderer::setTileMenuHovered(const QPointF &logicalPos)
 }
 
 QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dark,
+                                   const QColor &panelColor,
                                    const PanelGeometry &geometry, Action hovered,
                                    bool adjusting, bool maximized) const
 {
@@ -1072,12 +1111,11 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dar
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.scale(Supersample, Supersample);
 
-    // Opaque rounded panel. This is what covers the application's own window
-    // controls rather than merely floating above them.
-    const QColor panel = dark ? QColor(28, 28, 32)
-                              : QColor(242, 242, 245);
+    // Opaque rounded panel matching the title bar background.
+    // This is what covers the application's own window controls rather than
+    // merely floating above them.
     painter.setPen(Qt::NoPen);
-    painter.setBrush(panel);
+    painter.setBrush(panelColor);
     painter.drawRoundedRect(QRectF(0, 0, w, h), h / 2.0, h / 2.0);
 
     if (adjusting) {

@@ -75,10 +75,22 @@ AppFieldMask applyFields(AppConfig &config, const QJsonObject &object)
         const QString background = object["background"].toString();
         if (background == QLatin1String("dark")) {
             config.background = PanelBackground::Dark;
+            config.customBackground = QColor();
         } else if (background == QLatin1String("light")) {
             config.background = PanelBackground::Light;
-        } else {
+            config.customBackground = QColor();
+        } else if (background == QLatin1String("auto")) {
             config.background = PanelBackground::Auto;
+            config.customBackground = QColor();
+        } else {
+            const QColor custom(background);
+            if (custom.isValid()) {
+                config.background = PanelBackground::Custom;
+                config.customBackground = custom;
+            } else {
+                config.background = PanelBackground::Auto;
+                config.customBackground = QColor();
+            }
         }
         fields |= AppFieldBackground;
     }
@@ -293,6 +305,7 @@ void ButtonConfig::mergeInto(AppConfig &base, const AppConfig &overlay,
     }
     if (fields & AppFieldBackground) {
         base.background = overlay.background;
+        base.customBackground = overlay.customBackground;
     }
     if (fields & AppFieldDecoratedWindows) {
         base.decoratedWindows = overlay.decoratedWindows;

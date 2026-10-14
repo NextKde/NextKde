@@ -10,6 +10,7 @@
 //
 // Built with -DKOS_BRIDGE_BUILD_TESTS=ON, and run through ctest.
 
+#include <QColor>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDebug>
@@ -733,7 +734,8 @@ void testResolution()
         },
         "apps": {
             "firefox": { "background": "dark" },
-            "code": { "panelPadding": 6 }
+            "code": { "panelPadding": 6 },
+            "chrome": { "background": "#202124" }
         },
         "rules": [
             { "match": { "titleRegex": "^Picture-in-Picture" },
@@ -763,6 +765,9 @@ void testResolution()
     CHECK(near(code.geometry.panelPadding, 6));
     CHECK(near(code.geometry.buttonSize, 14));
     CHECK(code.background == PanelBackground::Auto);
+    const AppConfig chrome = config.getAppConfig(query(QStringLiteral("google-chrome chrome")));
+    CHECK(chrome.background == PanelBackground::Custom);
+    CHECK(chrome.customBackground == QColor("#202124"));
 
     // 3. The hand-written rules, by the first that matches.
     const AppConfig dialog =

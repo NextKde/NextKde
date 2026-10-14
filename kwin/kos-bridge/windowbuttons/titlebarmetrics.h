@@ -40,6 +40,7 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
                         KWin::EffectWindow *window,
                         const KWin::Region &deviceClip,
                         const QRectF &panelRect,
-                        bool *dark);
+                        bool *dark,
+                        QColor *color = nullptr);
 
 } // namespace KOS

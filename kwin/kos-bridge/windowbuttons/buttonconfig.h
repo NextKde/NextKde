@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
@@ -19,6 +20,7 @@ enum class PanelBackground {
     Auto,  // follow the window's own title bar pixels
     Dark,
     Light,
+    Custom, // explicit hex / RGB color configured by user
 };
 
 // Whether the panel is drawn over windows KWin decorates itself.
@@ -68,6 +70,7 @@ struct AppConfig {
     // stop that, and it is per application because the controls are.
     qreal interceptMargin = 5.0;
     PanelBackground background = PanelBackground::Auto;
+    QColor customBackground;
     // What was configured. Merged key by key like every other field.
     DecoratedWindows decoratedWindows = DecoratedWindows::Auto;
     // The above resolved against the decoration KWin is configured to use. Set

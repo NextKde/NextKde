@@ -118,7 +118,7 @@ if(KOS_BRIDGE_BUILD_TESTS)
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp
     )
-    target_link_libraries(rules_test PRIVATE Qt6::Core KF6::ConfigCore)
+    target_link_libraries(rules_test PRIVATE Qt6::Core Qt6::Gui KF6::ConfigCore)
     add_test(NAME rules_test COMMAND rules_test)
 
     # Real production appearance manager and KWin scene Items, without a
