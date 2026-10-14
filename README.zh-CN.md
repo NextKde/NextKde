@@ -40,10 +40,10 @@ Arch 常用基础包：
 
 ```sh
 sudo pacman -S --needed \
-  git quickshell cmake ninja gcc go curl patchelf qt6-base qt6-declarative qt6-tools qt6-translations \
-  qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland kio \
-  kwindowsystem kiconthemes kglobalaccel \
-  extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
+  git quickshell cmake ninja gcc qt6-base qt6-declarative \
+  qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland \
+  go curl extra-cmake-modules wayland kwindowsystem kiconthemes kglobalaccel \
+  kio patchelf kwin kconfig ki18n kguiaddons kcmutils \
   kcoreaddons kdecoration gettext libxcb vulkan-headers
 ```
 
@@ -63,23 +63,26 @@ sudo pacman -S --needed \
 景深/空间壁纸（depth 引擎、`kos-ai-worker`、`Kos.Spatial3D`）需要 OpenCV 与
 ONNX Runtime，是否构建由 `KOS_BUILD_SPATIAL` 决定：
 
-| 取值 | 行为 |
-|---|---|
-| `AUTO`（默认） | 本机已装好这两个依赖就构建，缺了就跳过并打印一行提示；**不会**自动安装或下载 |
-| `ON` | 强制构建，缺依赖时 configure 直接失败（打包与 CI 用这个） |
-| `OFF` | 完全不查找、不构建 |
+| 取值 | 直接运行 CMake | 通过 `kosctl install` 安装（Arch / Debian 系） |
+|---|---|---|
+| `AUTO`（默认） | 已有 OpenCV 和 ONNX Runtime 就构建，否则跳过 | 自动依赖安装包含 OpenCV；检测到 OpenCV 后准备固定版本的 ONNX SDK，准备失败可跳过景深引擎 |
+| `ON` | 强制构建，缺依赖时配置失败 | 安装 OpenCV，并要求 ONNX SDK 准备成功 |
+| `OFF` | 不查找依赖、不构建空间组件 | 不安装空间组件依赖，也不准备 ONNX SDK |
 
-所以不需要景深壁纸的机器不必安装 OpenCV：
+x86_64 上，`kosctl` 会在缺少缓存时下载 SDK；其他架构需要先安装 ONNX Runtime
+开发头文件和库。Nix 构建由 Nix 包定义提供依赖。
+
+不需要景深壁纸时，显式关闭它：
 
 ```sh
 KOS_BUILD_SPATIAL=OFF ./tools/kosctl install
 ```
 
-想长期固定这个选择，把它写进 shell 配置（例如 `export KOS_BUILD_SPATIAL=OFF`），
-或者在 `AUTO` 下干脆不安装 OpenCV —— 两种情况都不会再要求那套依赖。
+想长期固定这个选择，把 `export KOS_BUILD_SPATIAL=OFF` 写进 shell 配置。
+仅卸载 OpenCV 不能阻止默认安装器再次安装它。
 
-深度模型本身不随仓库或安装包分发：第一次在「服务与组件」里开启空间壁纸时才下载到
-用户缓存，`kosctl install` 只负责编译引擎本身。
+深度模型与 SDK 是两类资源：模型不随安装包分发，在「服务与组件」首次开启空间壁纸时
+才下载到用户缓存；核心安装可能下载的是用于编译的 ONNX Runtime SDK。
 
 其中 `extra-cmake-modules` 是 KWin 插件 CMake 配置的直接依赖；`vulkan-headers`
 是 KWin 导出的 `Vulkan::Vulkan` 编译接口所需依赖。Arch 的 `kwin` 包不会自动安装
@@ -105,8 +108,8 @@ bash tools/install-debian13.sh --all --start   # 连独立应用与锁屏一起�
 `~/.config/plasma-*-appletsrc`，它们都属于你自己的 `HOME`。因此 `KOS_PREFIX`
 默认是 `$HOME/.local`，脚本会拒绝指向 HOME 之外的前缀。
 
-构建期 `kosctl` 会用 curl 从 GitHub 拉取 pin 死的 ONNX Runtime SDK
-（`KOS_BUILD_SPATIAL=off` 时跳过）。国内网络下脚本会自动探测本地代理，
+构建期 `kosctl` 在启用空间组件且检测到 OpenCV（或强制构建）时，会用 curl 从 GitHub
+下载固定版本的 ONNX Runtime SDK；`KOS_BUILD_SPATIAL=OFF` 跳过此步骤。国内网络下脚本会自动探测本地代理，
 并且只把它传给 git 与构建过程 —— apt 保持直连，走国内镜像更快。
 
 与 Arch 的主要差异，也是 Debian 上最容易卡住的地方：
@@ -131,23 +134,15 @@ bash tools/install-debian13.sh --all --start   # 连独立应用与锁屏一起�
 
 ```sh
 sudo apt install \
-  git cmake ninja-build g++ golang-go curl patchelf pkg-config \
-  extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev \
-  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev \
-  qt6-image-formats-plugins qt6-5compat-dev libqt6svg6 \
-  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
-  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
-  qml6-module-qtqml-models qml6-module-qtqml-workerscript \
-  qml6-module-qt5compat-graphicaleffects libopencv-dev \
-  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
-  libkf6kio-dev libkf6calendarcore-dev \
-  kwin-dev libdrm-dev libgbm-dev libepoxy-dev \
-  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev \
-  libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
-  gettext libvulkan-dev zlib1g-dev libxkbcommon-x11-dev \
-  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
-  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
-  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  git cmake ninja-build g++ golang-go curl patchelf \
+  pkg-config extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev qt6-base-dev qt6-declarative-dev \
+  qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev qt6-image-formats-plugins \
+  qt6-5compat-dev libqt6svg6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-window \
+  qml6-module-qtquick-effects qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qt5compat-graphicaleffects libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev kwin-dev libdrm-dev libgbm-dev libepoxy-dev libxkbcommon-x11-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
   libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
 ```
 
@@ -179,22 +174,16 @@ sudo apt install quickshell
 
 ```sh
 sudo apt install \
-  git cmake ninja-build g++ golang-go \
-  qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-wayland-dev libqt6svg6 \
-  qt6-wayland qt6-image-formats-plugins qml6-module-qt5compat-graphicaleffects \
-  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
-  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
-  qml6-module-qtqml-models qml6-module-qtqml-workerscript libopencv-dev curl patchelf \
-  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
-  extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
-  libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \
-  libkdecorations3-dev gettext libvulkan-dev libplasma-dev \
-  libkf6kio-dev libkf6calendarcore-dev \
-  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
-  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
-  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
-  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
-  libxcb-util-dev libxkbcommon-x11-dev
+  git cmake ninja-build g++ golang-go curl patchelf \
+  pkg-config extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev qt6-base-dev qt6-declarative-dev \
+  qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev qt6-image-formats-plugins \
+  qt6-5compat-dev libqt6svg6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-window \
+  qml6-module-qtquick-effects qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qt5compat-graphicaleffects libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev kwin-dev libdrm-dev libgbm-dev libepoxy-dev libxkbcommon-x11-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
 ```
 
 运行时集成（可选，与上文 Arch 清单对应）：
@@ -217,10 +206,12 @@ sudo apt install \
 `qml6-module-qtquick-dialogs` 与 `libqt6sql6-sqlite` 是 QuickDialogs2 和
 数据服务的运行时依赖。
 
-Calendar、Todo、Weather 和 Music 是独立的可选应用，不由默认的 `kosctl install`
-构建；它们需要额外的 Qt/KF6、GStreamer、TagLib 或 Go 依赖。安装前请阅读
-[apps/README.zh-CN.md](apps/README.zh-CN.md) 及各应用目录的说明，再运行
-`./tools/kosctl install apps`（或 `./tools/install-apps.sh`）。
+Calendar、Todo、Weather 和 ListenFree 是独立的可选应用，不由默认的
+`kosctl install` 构建。默认应用安装需要 Qt 6.10+、兼容的 KF6、Go 1.26+ 和额外音频依赖。
+安装前请阅读 [apps/README.zh-CN.md](apps/README.zh-CN.md) 与
+[ListenFree Linux 构建说明](apps/listenfree/packaging/linux/README.md)，然后运行
+`./tools/kosctl install apps`（或 `./tools/install-apps.sh`）；安装器检查依赖并准备私有 SDK。
+旧版本地 Music 仅由 `music-dev` 单独构建，在默认应用安装器中关闭。
 
 其他发行版请安装对应软件包。Quickshell 的安装方式见
 [官方文档](https://quickshell.org/docs/)。
@@ -387,43 +378,41 @@ KOS 前的值（plasmashell 在下次登录时重新加载原来的 shell）；�
 若检测到旧版 kosctl 装过的 SDDM 主题，卸载时会提示手动删除的命令（见上文
 「SDDM 登录界面：暂时不提供」一节）。
 
-#### 对于NixOS，我们更推荐使用基于 Flake 的安装方法
+### NixOS 声明式安装
 
-以下是针对 NixOS 的安装步骤：
+1. 在系统 `flake.nix` 的 `inputs` 下添加：
 
-1. 在当前系统配置的 Flake.nix 下添加 kos 的输入源
-
-```Nix
+```nix
 nextkde = {
-         # github 源：KOS Desktop Shell
-         url = "git+https://github.com/SuceV587/NextKde.git";
-         inputs.nixpkgs.follows = "nixpkgs";
+  url = "git+https://github.com/SuceV587/NextKde.git";
+  inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
-2. 更新 kos 的 Flake 输入
+2. 在 `nixpkgs.lib.nixosSystem` 中设置 `specialArgs = { inherit inputs; };`，
+   将 `inputs` 传给 NixOS 模块，再在系统配置中导入模块并启用：
 
-```Nix
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.nextkde.nixosModules.kos ];
+  services.kos = {
+    enable = true;
+    weather.enable = true; # 可选独立天气应用
+  };
+}
+```
+
+3. 配置完成后更新输入并重建。把 `your-host` 替换为你在
+   `nixosConfigurations` 下定义的主机名称：
+
+```sh
 nix flake update nextkde
+sudo nixos-rebuild switch --flake .#your-host
 ```
 
-3. 重新构建
-
-```Nix
-sudo nixos-rebuild switch --flake .#hosts
-```
-
-4. 使用方法
-
-```Nix
-    services.kos = {
-        enable = true;
-        # 如需禁用直接改为 `enable = false;` 即可
-        weather.enable = true;
-        # 可选的独立天气应用；Shell 天气服务始终随核心提供
-    };
-
-```
+将 `services.kos.enable` 改为 `false` 并重建即可禁用声明式服务。
+其他安装方式见 [NixOS 指南](docs/nixos-quickstart.md)。
 
 ## 主要功能
 
@@ -442,13 +431,19 @@ sudo nixos-rebuild switch --flake .#hosts
 仓库还提供日历、待办、天气和 ListenFree 独立 Qt Quick 应用。它们默认不随 Shell
 构建；使用 `apps-dev` / `apps-release` 预设可统一构建，也可使用
 `calendar-dev`、`todo-dev`、`weather-dev` 或 `listenfree-dev` 单独构建。
-旧版本地 Music 仅由 `music-dev` 单独构建：
+默认应用预设包含 ListenFree，先安装兼容的 Qt 6.10+、KF6、Go 1.26+ 及音频依赖，再准备
+私有 SDK。已有兼容 SDK 时可跳过准备步骤，并将下面的路径换成你的 SDK 路径。
+具体依赖见 [ListenFree Linux 构建说明](apps/listenfree/packaging/linux/README.md)。
+构建默认应用组合：
 
 ```sh
-cmake --preset apps-dev
+./tools/prepare-listenfree-sdk.sh
+cmake --preset apps-dev -DKOS_LISTENFREE_SDK="$PWD/.build/listenfree-sdk"
 cmake --build --preset apps-dev
 ctest --preset apps-dev
 ```
+
+旧版本地 Music 仅由 `music-dev` 单独构建。
 
 用户级安装与服务注册可运行 `./tools/install-apps.sh`。依赖和模块说明见
 [apps/README.md](apps/README.md)。天气应用与 Shell 共用 `kos-data-service` 的缓存和

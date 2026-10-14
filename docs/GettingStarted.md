@@ -17,9 +17,10 @@ On Arch:
 
 ```sh
 sudo pacman -S --needed \
-  git quickshell cmake ninja gcc go qt6-base qt6-declarative qt6-tools qt6-translations \
-  kwindowsystem kiconthemes kglobalaccel \
-  extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
+  git quickshell cmake ninja gcc qt6-base qt6-declarative \
+  qt6-tools qt6-translations qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland \
+  go curl extra-cmake-modules wayland kwindowsystem kiconthemes kglobalaccel \
+  kio patchelf kwin kconfig ki18n kguiaddons kcmutils \
   kcoreaddons kdecoration gettext libxcb vulkan-headers
 ```
 
@@ -65,8 +66,9 @@ lands in `~/.config/quickshell/kos`, the services are systemd *user* units, and 
 takeover edits `~/.config/plasma-*-appletsrc` — all of them belong to your own `HOME`. So
 `KOS_PREFIX` defaults to `$HOME/.local`, and the script refuses a prefix outside `HOME`.
 
-During the build `kosctl` fetches a pinned ONNX Runtime SDK from GitHub with curl (skipped
-when `KOS_BUILD_SPATIAL=off`). On networks that cannot reach GitHub directly, the script
+During the build, `kosctl` fetches a pinned ONNX Runtime SDK from GitHub with curl
+when spatial support is enabled and OpenCV is available (or spatial support is forced).
+`KOS_BUILD_SPATIAL=OFF` skips it. On networks that cannot reach GitHub directly, the script
 detects a local proxy and hands it to git and the build only — apt stays direct, which is
 faster against a domestic mirror.
 
@@ -94,23 +96,15 @@ Manual install, equivalent to what the script does:
 
 ```sh
 sudo apt install \
-  git cmake ninja-build g++ golang-go curl patchelf pkg-config \
-  extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev \
-  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev \
-  qt6-image-formats-plugins qt6-5compat-dev libqt6svg6 \
-  qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
-  qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \
-  qml6-module-qtqml-models qml6-module-qtqml-workerscript \
-  qml6-module-qt5compat-graphicaleffects libopencv-dev \
-  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
-  libkf6kio-dev libkf6calendarcore-dev \
-  kwin-dev libdrm-dev libgbm-dev libepoxy-dev \
-  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev \
-  libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
-  gettext libvulkan-dev zlib1g-dev libxkbcommon-x11-dev \
-  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
-  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
-  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  git cmake ninja-build g++ golang-go curl patchelf \
+  pkg-config extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev qt6-base-dev qt6-declarative-dev \
+  qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev qt6-image-formats-plugins \
+  qt6-5compat-dev libqt6svg6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-window \
+  qml6-module-qtquick-effects qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qt5compat-graphicaleffects libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev kwin-dev libdrm-dev libgbm-dev libepoxy-dev libxkbcommon-x11-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
   libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
 ```
 
@@ -144,18 +138,16 @@ Core and KWin plugin build dependencies:
 
 ```sh
 sudo apt install \
-  git cmake ninja-build g++ golang-go \
-  qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n \
-  libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
-  extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
-  libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \
-  libkdecorations3-dev gettext libvulkan-dev libplasma-dev \
-  libkf6kio-dev libkf6calendarcore-dev \
-  libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
-  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev \
-  libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
-  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev \
-  libxcb-util-dev libxkbcommon-x11-dev
+  git cmake ninja-build g++ golang-go curl patchelf \
+  pkg-config extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev qt6-base-dev qt6-declarative-dev \
+  qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev qt6-image-formats-plugins \
+  qt6-5compat-dev libqt6svg6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs qml6-module-qtquick-window \
+  qml6-module-qtquick-effects qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qt5compat-graphicaleffects libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
+  libkf6kio-dev libkf6calendarcore-dev kwin-dev libdrm-dev libgbm-dev libepoxy-dev libxkbcommon-x11-dev \
+  libkf6config-dev libkf6i18n-dev libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev libkdecorations3-dev libplasma-dev \
+  gettext libvulkan-dev zlib1g-dev libxcb1-dev libxcb-composite0-dev libxcb-randr0-dev libxcb-res0-dev \
+  libxcb-shm0-dev libxcb-sync-dev libxcb-xfixes0-dev libxcb-damage0-dev libxcb-render0-dev libxcb-shape0-dev libxcb-cursor-dev \
+  libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-image0-dev libxcb-util-dev
 ```
 
 Optional runtime integrations (mirroring the Arch list above):
@@ -181,10 +173,47 @@ exported headers (composite, randr, res, shm, sync) are not pulled in by
 and `libqt6sql6-sqlite` are runtime dependencies of QuickDialogs2 and the
 data service.
 
-Calendar, Todo, Weather, and Music are separate optional applications and are
-not built by `kosctl install`. They have additional Qt/KF6, GStreamer, TagLib,
-or Go dependencies; read [apps/README.md](../apps/README.md) and each app's own
-documentation before running `./tools/install-apps.sh`.
+### Spatial wallpapers (optional)
+
+`KOS_BUILD_SPATIAL` controls the depth engine and Qt Quick 3D wallpaper plugin:
+
+| Mode | Direct CMake configuration | `kosctl install` on Arch / Debian-family systems |
+| :--- | :--- | :--- |
+| `AUTO` (default) | Builds when OpenCV and ONNX Runtime are available; otherwise skips. | Includes OpenCV in dependency installation and prepares a pinned ONNX SDK when OpenCV is available. SDK preparation failure allows AUTO to skip the depth engine. |
+| `ON` | Requires both dependencies; configuration fails if they are missing. | Installs the required OpenCV package and requires ONNX SDK preparation to succeed. |
+| `OFF` | Skips dependency discovery and the spatial components. | Omits the spatial dependency packages and SDK preparation. |
+
+On x86_64, `kosctl` downloads and caches the SDK if it is not already cached.
+Other architectures require installed ONNX Runtime development headers and libraries.
+Nix builds obtain their dependencies from the Nix package definitions.
+The depth models are separate: they download to the user cache when spatial
+wallpapers are first enabled in Settings, not during the core install.
+
+To install without spatial wallpapers:
+
+```sh
+KOS_BUILD_SPATIAL=OFF ./tools/kosctl install
+```
+
+Export `KOS_BUILD_SPATIAL=OFF` in your shell configuration to keep that choice
+for later installs. Merely removing OpenCV does not keep it out of the default
+`kosctl install`, which may install it again.
+
+### Optional standalone applications
+
+Calendar, Todo, Weather, and ListenFree are not built by the core
+`kosctl install`. The default application bundle requires Qt 6.10+, compatible
+KF6 libraries, Go 1.26+, and the audio dependencies documented in
+[apps/README.md](../apps/README.md) and the
+[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
+
+```sh
+./tools/kosctl install apps
+```
+
+This invokes `tools/install-apps.sh`, checks dependencies, and prepares the
+private ListenFree SDK. The legacy local Music app remains available through
+`music-dev`; it is disabled in the default application installer.
 
 Install equivalent packages on other distributions. See the
 [Quickshell documentation](https://quickshell.org/docs/) for Quickshell.
@@ -351,38 +380,39 @@ If an SDDM theme installed by an older kosctl is detected, uninstall prints the
 command to delete it by hand (see "SDDM login screen: not available for now"
 above).
 
-#### On NixOS we recommend the flake-based install
+### NixOS: declarative installation
 
-1. Add the KOS input to your system flake:
+1. Add the input under `inputs` in your system `flake.nix`:
 
-```Nix
+```nix
 nextkde = {
-         # GitHub source: KOS Desktop Shell
-         url = "git+https://github.com/SuceV587/NextKde.git";
-         inputs.nixpkgs.follows = "nixpkgs";
+  url = "git+https://github.com/SuceV587/NextKde.git";
+  inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
-2. Update the KOS flake input:
+2. Pass `inputs` to your NixOS modules with
+   `specialArgs = { inherit inputs; };` in your `nixpkgs.lib.nixosSystem` call.
+   Then import the KOS module and enable it in your NixOS configuration:
 
-```Nix
+```nix
+{ inputs, ... }:
+{
+  imports = [ inputs.nextkde.nixosModules.kos ];
+  services.kos = {
+    enable = true;
+    weather.enable = true; # Optional standalone Weather app
+  };
+}
+```
+
+3. Update the input and rebuild **after** adding the module and options.
+   Replace `your-host` with your `nixosConfigurations` attribute:
+
+```sh
 nix flake update nextkde
+sudo nixos-rebuild switch --flake .#your-host
 ```
 
-3. Rebuild:
-
-```Nix
-sudo nixos-rebuild switch --flake .#hosts
-```
-
-4. Usage:
-
-```Nix
-    services.kos = {
-        enable = true;
-        # set to `enable = false;` to disable
-        weather.enable = true;
-        # Optional standalone Weather app; Shell weather remains part of core
-    };
-```
-
+Set `services.kos.enable = false;` and rebuild to disable the declarative
+services. See the [NixOS guide](nixos-quickstart.md) for other installation modes.

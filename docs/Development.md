@@ -100,13 +100,21 @@ The repository also includes independent Qt Quick applications for Calendar,
 Todo, Weather, and ListenFree. They are not built with the Shell by default.
 Use `apps-dev` or `apps-release` to build them together, or the `calendar-dev`,
 `todo-dev`, `weather-dev`, and `listenfree-dev` presets for one application.
-The legacy local Music application uses the separate `music-dev` preset:
+The default application presets include ListenFree and require Qt 6.10+,
+compatible KF6 libraries, Go 1.26+, and the audio dependencies in the
+[ListenFree Linux build guide](../apps/listenfree/packaging/linux/README.md).
+Prepare the private SDK before configuring the application bundle. With an
+existing compatible SDK, skip preparation and substitute its path below.
+Build the default bundle:
 
 ```sh
-cmake --preset apps-dev
+./tools/prepare-listenfree-sdk.sh
+cmake --preset apps-dev -DKOS_LISTENFREE_SDK="$PWD/.build/listenfree-sdk"
 cmake --build --preset apps-dev
 ctest --preset apps-dev
 ```
+
+The legacy local Music application uses the separate `music-dev` preset.
 
 Run `./tools/install-apps.sh` for a per-user install and service registration.
 See [apps/README.md](../apps/README.md) for dependencies and module details. Weather
