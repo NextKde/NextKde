@@ -66,16 +66,18 @@ endif()
 if(BUILD_TESTING)
     find_program(KOS_NODE_EXECUTABLE NAMES node)
     if(KOS_NODE_EXECUTABLE)
+        # Group Dock logic by module responsibility; node:test retains named
+        # scenarios inside each suite and continues after an individual failure.
+        foreach(suite model policy motion)
+            add_test(NAME kos-dock.${suite}
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/${suite}.test.mjs)
+            set_tests_properties(kos-dock.${suite} PROPERTIES LABELS logic TIMEOUT 30)
+        endforeach()
         add_test(NAME kos-shell.language
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/localization/widget-language.mjs)
         set_tests_properties(kos-shell.language PROPERTIES LABELS logic TIMEOUT 10)
-        foreach(test timed_lyrics unpin_identity)
-            add_test(NAME kos-shell.${test}
-                COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_${test}.mjs)
-            set_tests_properties(kos-shell.${test} PROPERTIES LABELS logic TIMEOUT 10)
-        endforeach()
         add_test(NAME kos-shell.clipboard-placement
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/test_geometry.mjs)
@@ -142,12 +144,12 @@ if(BUILD_TESTING)
         if(KOS_QMLTESTRUNNER_EXECUTABLE)
             add_test(NAME kos-shell.dock-selection-highlight
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-highlight/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs highlight
                     ${KOS_QMLTESTRUNNER_EXECUTABLE})
             set_tests_properties(kos-shell.dock-selection-highlight PROPERTIES LABELS "ui;headless" TIMEOUT 20)
             add_test(NAME kos-shell.desktop-lyrics
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-lyrics/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs lyrics
                     ${KOS_QMLTESTRUNNER_EXECUTABLE})
             set_tests_properties(kos-shell.desktop-lyrics PROPERTIES LABELS "ui;headless" TIMEOUT 15)
             add_test(NAME kos-shell.date-projection
@@ -157,26 +159,6 @@ if(BUILD_TESTING)
             )
             set_tests_properties(kos-shell.date-projection PROPERTIES TIMEOUT 15)
         endif()
-        add_test(NAME kos-shell.window-placement-updates
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_placement_updates.mjs
-        )
-        set_tests_properties(kos-shell.window-placement-updates PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.window-record-index
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_record_index.mjs
-        )
-        set_tests_properties(kos-shell.window-record-index PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.window-transport-fallback
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_window_transport_fallback.mjs
-        )
-        set_tests_properties(kos-shell.window-transport-fallback PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.wallpaper-color-source
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_wallpaper_color_source.mjs
-        )
-        set_tests_properties(kos-shell.wallpaper-color-source PROPERTIES TIMEOUT 10)
         add_test(NAME kos-shell.wallpaper-slideshow
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_wallpaper_slideshow.mjs
@@ -203,27 +185,6 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/wallpaper/test_theme_wallpaper_state.mjs)
         set_tests_properties(kos-shell.theme-wallpaper-state PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.process-identity
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_process_identity.mjs
-        )
-        set_tests_properties(kos-shell.process-identity PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.dock-reveal-geometry
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/test_geometry.mjs)
-        set_tests_properties(kos-shell.dock-reveal-geometry PROPERTIES LABELS logic TIMEOUT 10)
-        add_test(NAME kos-shell.dock-magnification-response
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-magnification/test_response.mjs
-        )
-        set_tests_properties(kos-shell.dock-magnification-response PROPERTIES LABELS logic TIMEOUT 10)
-        foreach(DOCK_FEEDBACK_CHECK bounce headroom name_owner readiness)
-            add_test(NAME kos-shell.dock-launch-${DOCK_FEEDBACK_CHECK}
-                COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-launch-feedback/test_${DOCK_FEEDBACK_CHECK}.mjs)
-            set_tests_properties(kos-shell.dock-launch-${DOCK_FEEDBACK_CHECK}
-                PROPERTIES LABELS logic TIMEOUT 10)
-        endforeach()
         add_test(NAME kos-shell.stage-geometry
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_geometry.mjs
@@ -242,17 +203,16 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/stage/test_stage_protocol.mjs)
         set_tests_properties(kos-shell.stage-protocol PROPERTIES TIMEOUT 10)
-
         find_program(KOS_QUICKSHELL_EXECUTABLE NAMES quickshell)
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.dock-surface
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-surface/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs surface
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-surface PROPERTIES LABELS ui TIMEOUT 10)
             add_test(NAME kos-shell.dock-reveal-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs reveal
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-reveal-runtime PROPERTIES LABELS ui TIMEOUT 25
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
@@ -263,7 +223,7 @@ if(BUILD_TESTING)
             set_tests_properties(kos-deskcenter.density-runtime PROPERTIES LABELS ui TIMEOUT 15)
             add_test(NAME kos-shell.dock-builtins
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-builtins/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs builtins
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-builtins PROPERTIES
                 LABELS ui TIMEOUT 25
@@ -280,12 +240,12 @@ if(BUILD_TESTING)
                 ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
             add_test(NAME kos-shell.dock-startup
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-startup/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs startup
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-startup PROPERTIES LABELS ui TIMEOUT 60)
             add_test(NAME kos-shell.dock-reveal-indicator
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-reveal-indicator/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs reveal-indicator
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.dock-reveal-indicator PROPERTIES
                 LABELS ui TIMEOUT 25
@@ -371,13 +331,13 @@ if(BUILD_TESTING)
             # what makes the cursor jitter at the slot edge.
             add_test(NAME kos-shell.dock-hover-hit
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-hover-hit/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs hover-hit
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.dock-hover-hit PROPERTIES TIMEOUT 20)
             add_test(NAME kos-shell.dock-magnification-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock-magnification/run.mjs
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs magnification
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.dock-magnification-runtime PROPERTIES TIMEOUT 20)
@@ -419,13 +379,11 @@ if(BUILD_TESTING)
                 TIMEOUT 180
             )
         endif()
-
         add_test(NAME kos-ui.page-cache-policy
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shared/qml/test_page_cache_policy.mjs
         )
         set_tests_properties(kos-ui.page-cache-policy PROPERTIES TIMEOUT 10)
-
         # These two were passing but were never added to the suite, so nothing
         # ran them: the settings app's Material palette resolution and the
         # traditional colour scheme contract. Pure node, no display needed --
@@ -440,7 +398,6 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/traditional-color/test_traditional_color.mjs
         )
         set_tests_properties(kos-ui.traditional-color PROPERTIES TIMEOUT 10)
-
         # These four were written and passing but never added to the suite, so
         # nothing ran them. They cover the Dock's adaptive layout and auto-hide
         # math, the appearance configuration migration, and the platform
@@ -450,25 +407,6 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_appearance_config.mjs
         )
         set_tests_properties(kos-shell.appearance-config PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.dock-adaptive
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_adaptive.mjs
-        )
-        set_tests_properties(kos-shell.dock-adaptive PROPERTIES TIMEOUT 10)
-        # Payload arrays cross the QML signal boundary as QV4 sequences on
-        # Qt 6.12: indexable with a length, but Array.isArray() false. Guards
-        # that trusted Array.isArray silently emptied the Dock's window and
-        # virtual-desktop models; this covers the coercion they now use.
-        add_test(NAME kos-shell.payload-array
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_payload_array.mjs
-        )
-        set_tests_properties(kos-shell.payload-array PROPERTIES TIMEOUT 10)
-        add_test(NAME kos-shell.dock-autohide
-            COMMAND ${KOS_NODE_EXECUTABLE}
-                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/dock/test_autohide.mjs
-        )
-        set_tests_properties(kos-shell.dock-autohide PROPERTIES TIMEOUT 10)
         add_test(NAME kos-deskcenter.desktop-outputs
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_outputs.mjs
@@ -493,7 +431,6 @@ if(BUILD_TESTING)
         )
         set_tests_properties(kos-platform.jsonl-client PROPERTIES TIMEOUT 10)
     endif()
-
     # The platform contract test is dependency-free Python with its own
     # __main__ entry point, so a plain interpreter is all it needs. It is the
     # only check that keeps shared/contracts/platform.v1.md, ShortcutsService's
@@ -575,7 +512,6 @@ if(BUILD_TESTING)
         )
         set_tests_properties(kos-platform.contracts PROPERTIES TIMEOUT 10)
     endif()
-
     # Labels group the suite so a caller can run one layer without the others.
     # `tools/run-tests.sh` and CI both drive `ctest -L`, so a test only has to
     # be listed once, here, to join a layer:
@@ -598,19 +534,15 @@ if(BUILD_TESTING)
         set_tests_properties(kos-deskcenter.widget-layout kos-shell.date-buckets
             kos-shell.squircle kos-shell.tray-attention-match
             kos-shell.notification-count-match kos-shell.control-center-submenu-state
-            kos-shell.window-placement-updates
-            kos-shell.visibility-policy kos-shell.window-transport-fallback
+            kos-shell.visibility-policy
             kos-shell.wallpaper-slideshow kos-shell.wallpaper-handoff
             kos-shell.wallpaper-transitions kos-shell.wallpaper-preview
             kos-shell.theme-wallpaper-policy
             kos-shell.theme-wallpaper-state
-            kos-shell.window-record-index kos-shell.wallpaper-color-source
-            kos-shell.process-identity
             kos-shell.stage-geometry kos-shell.stage-groups kos-shell.stage-effects kos-shell.stage-protocol
-            kos-shell.appearance-config kos-shell.dock-adaptive
-            kos-shell.dock-autohide kos-deskcenter.desktop-outputs
+            kos-shell.appearance-config
+            kos-deskcenter.desktop-outputs
             kos-shell.screen-selection
-            kos-shell.payload-array
             kos-ui.visual-contract kos-ui.color-scheme
             kos-ui.page-cache-policy kos-ui.settings-material
             kos-ui.traditional-color

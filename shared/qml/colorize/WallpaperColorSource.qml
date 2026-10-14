@@ -145,8 +145,8 @@ QtObject {
     }
 
     // Parse the two Plasma keys this service needs. Pure, so the fixture can
-    // feed it synthetic configs (see tests/traditional-color/shell.qml and the
-    // dock's test_wallpaper_color_source.mjs).
+    // feed it synthetic configs (see tests/traditional-color/shell.qml and
+    // tests/dock/policy.test.mjs).
     //
     // Two things keep the blocks apart, and both are load-bearing.
     //

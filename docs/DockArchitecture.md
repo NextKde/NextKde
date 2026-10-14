@@ -62,8 +62,8 @@ handoff protection remains intact. Stack wheel events accumulate physical
 notches or touchpad pixels and merge once per frame instead of dropping events
 during a fixed cooldown. Pure text popups have empty pointer input regions.
 
-`tests/dock-magnification/test_response.mjs` checks response equivalence at
-30–240 Hz, reversal and settlement. `tests/dock-magnification/run.mjs` exercises
+`tests/dock/motion.test.mjs` checks response equivalence at
+30–240 Hz, reversal and settlement. `tests/dock/runtime.mjs magnification` exercises
 the shipping QML on all three edges, alongside the existing `dock-hover-hit`
 regression test. These are offscreen behavior checks, not GPU frame-rate
 benchmarks.
@@ -80,7 +80,7 @@ pointer handlers, blur, offscreen layer or continuously running animation.
 
 Urgent tasks retain their existing colored background; editing/dragging
 suppresses the glass highlight. Material and Windows presets keep the legacy
-selection plates. `tests/dock-highlight/run.mjs` tests state transitions and
+selection plates. `tests/dock/runtime.mjs highlight` tests state transitions and
 light/dark rendering values; the magnification runtime fixture also verifies
 that the actual DockIcon wires these states without stacking legacy plates.
 
@@ -140,11 +140,10 @@ geometry, without rescanning the entire Dock for each bouncing icon.
 `DockWindow` reserves both combined hover/launch excursion and separate name
 paint headroom before interaction starts. Name-only headroom is excluded from
 its hover/input region and never changes workspace reservations.
-`tests/dock-launch-feedback/run.mjs` checks readiness, asynchronous failure,
+`tests/dock/runtime.mjs launch-feedback` checks readiness, asynchronous failure,
 timeout, reduced motion, hidden-Dock suspension, 130 ms landing and label
-geometry on all three edges;
-`test_bounce.mjs` covers the bounded flight curve;
-`test_headroom.mjs` checks real thin surface and input budgets for adaptive sizes
+geometry on all three edges. `tests/dock/motion.test.mjs` covers the bounded
+flight curve and checks real thin surface and input budgets for adaptive sizes
 and scales 1–3, including name-only pass-through space.
 `sweep_wayland.py` drives 1800 px/s synthetic icon/name sweeps on actual thin
 Wayland layer surfaces without moving the mouse or intercepting input. It
@@ -577,7 +576,7 @@ Components:
   invisible edge target and reads no services. `DockRevealGeometry.mjs` owns
   the target geometry; the window supplies its static full-reveal Dock
   rectangle in surface-local logical coordinates.
-- `DockAutoHideMath.mjs` + `test_autohide.mjs` — pure, unit-tested geometry
+- `DockAutoHideMath.mjs` + `tests/dock/policy.test.mjs` — pure, unit-tested geometry
   and policy functions (`visibleDockRect`, eligibility filtering, conflict
   hysteresis). Geometry and policy must not be scattered into QML bindings.
 - All show-mode timing/easing constants live in `DockAnimation.qml`.
@@ -702,3 +701,36 @@ position every 500 ms only while playing with timed lyrics actually enabled
 (MPRIS position is lazy; the poll is skipped entirely for live lyrics and
 untimed text), and chooses the current/next timed line.
 Seeking recomputes the index; pauses stop polling. Untimed lyrics remain text.
+
+
+## Test organization
+
+All Dock tests live in `tests/dock/`. Group related checks in these suites
+instead of adding a new directory or runner for each regression:
+
+- `model.test.mjs`: process identity, unpinning, window indexing/updates,
+  transport fallback, QML payload arrays and lyric parsing.
+- `policy.test.mjs`: adaptive layout, auto-hide policy and wallpaper colors.
+- `motion.test.mjs`: launch feedback, magnification response/layout and reveal
+  geometry. Named Node test cases preserve individual failure diagnostics.
+- `runtime.mjs`: one entry point selecting an isolated QML scenario. Each case
+  keeps its own scratch configuration and cleanup; QML scenes remain separate.
+- `fixtures/`: shared QML service and renderer doubles for runtime scenes.
+- `sweep.qml` and `sweep_wayland.py`: the compositor-dependent label/frame probe.
+
+Run checks in the test VM, for example:
+
+```sh
+node tests/dock/model.test.mjs
+node tests/dock/policy.test.mjs
+node tests/dock/motion.test.mjs
+node tests/dock/runtime.mjs highlight /usr/lib/qt6/bin/qmltestrunner
+node tests/dock/runtime.mjs magnification quickshell
+node tests/dock/runtime.mjs lyrics /usr/lib/qt6/bin/qmltestrunner
+```
+
+CTest registers the three logic suites as `kos-dock.model`, `kos-dock.policy`
+and `kos-dock.motion`; existing runtime test names and dependency gates remain.
+The launch-feedback scene and Wayland sweep can also be selected manually in
+that VM. Test counts refer to suites after consolidation, rather than one CTest
+entry per small file.

@@ -642,9 +642,7 @@ qmllint -I shared/qml -I shell -I . \
 node tests/color-scheme/test_color_scheme.mjs
 node tests/traditional-color/test_traditional_color.mjs
 node tests/traditional-color/run.mjs
-node shell/desktop/modules/dock/test_wallpaper_color_source.mjs
-node shell/desktop/modules/dock/test_adaptive.mjs
-node shell/desktop/modules/dock/test_autohide.mjs
+node tests/dock/policy.test.mjs
 # 无显示环境下编译 QML 模块需把 TMPDIR 指到大分区，/tmp 常为小容量 tmpfs
 TMPDIR=$PWD/.build/tmp cmake --build .build/apps-dev --target kos_ui
 # 源码运行链路（不设任何环境变量；无显示时用 offscreen 平台）。
