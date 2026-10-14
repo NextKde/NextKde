@@ -371,6 +371,7 @@ ApplicationWindow {
         // Launch-only rows are plain links: no hover wash, no selection
         // state, the click runs the action instead of switching pages.
         property bool launchOnly: false
+        signal launch()
         width: parent ? parent.width : 0
         // Compact rows: 28 (user-picked) pulls the titles tight; the icon (18)
         // sits level with the 14px label.
@@ -417,7 +418,13 @@ ApplicationWindow {
                 elide: Text.ElideRight
             }
         }
-        onClicked: window.currentPage = pageIndex
+        onClicked: {
+            if (launchOnly) {
+                launch()
+                return
+            }
+            window.currentPage = pageIndex
+        }
     }
 
     // One visual contract for every segmented choice in Settings. Individual
@@ -6076,6 +6083,7 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
+                    Layout.bottomMargin: 15
                     color: theme.card
                     radius: 18
                     implicitHeight: navGroup2.implicitHeight + 8
@@ -6154,7 +6162,7 @@ ApplicationWindow {
                             label: I18n.tr("KDE System Settings")
                             navSymbol: "✦"
                             navTint: "#8e8e93"
-                            onClicked: settingsBridge.launchSystemSettings()
+                            onLaunch: settingsBridge.launchSystemSettings()
                         }
                     }
                 }
