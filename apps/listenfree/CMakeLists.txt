@@ -274,7 +274,8 @@ target_link_libraries(listenfree_qmlbridge
     PUBLIC listenfree_application listenfree_database listenfree_library listenfree_online Qt6::Core Qt6::Qml
     PRIVATE listenfree_media
 )
-target_include_directories(listenfree_qmlbridge PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(listenfree_qmlbridge PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../shared/i18n)
 if(LISTENFREE_BUILD_MPV_BACKEND)
     target_compile_definitions(listenfree_qmlbridge PRIVATE LISTENFREE_HAS_MPV=1)
 endif()
@@ -650,3 +651,17 @@ find_package(ICU REQUIRED COMPONENTS uc i18n)
 target_link_libraries(listenfree_portable PUBLIC ICU::uc ICU::i18n)
 
 include(packaging/linux/install.cmake)
+
+if(LISTENFREE_BUILD_TESTS)
+    add_executable(listenfree_language_tests tests/language_tests.cpp)
+    target_link_libraries(listenfree_language_tests PRIVATE listenfree_qmlbridge Qt6::Test)
+    qt_add_resources(listenfree_language_tests language_test_catalog
+        PREFIX "/translations" BASE "music_player_desktop/translations"
+        FILES music_player_desktop/translations/en_US.json)
+    foreach(language zh_CN zh_TW en_US fr_FR ja_JP)
+        add_test(NAME listenfree.language.${language} COMMAND listenfree_language_tests)
+        set_tests_properties(listenfree.language.${language} PROPERTIES
+            ENVIRONMENT "LANG=en_US.UTF-8;LC_ALL=en_US.UTF-8;LANGUAGE=${language}"
+            LABELS data TIMEOUT 10)
+    endforeach()
+endif()

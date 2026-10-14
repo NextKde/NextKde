@@ -37,7 +37,7 @@ Item {
     signal settingChanged(string key, var value)
     signal actionTriggered(string key)
 
-    implicitHeight: 50
+    implicitHeight: Math.max(50, labels.implicitHeight + 20)
 
     function clampAndStep(value) {
         const bounded = Math.max(minimumValue, Math.min(maximumValue, value))
@@ -47,6 +47,7 @@ Item {
     }
 
     Column {
+        id: labels
         anchors.left: parent.left
         anchors.right: editor.left
         anchors.rightMargin: 18
@@ -57,7 +58,7 @@ Item {
             width: parent.width
             text: row.title
             color: row.primaryText
-            elide: Text.ElideRight
+            wrapMode: Text.WordWrap
             font.family: AppTheme.fontFamily
             font.pixelSize: 13
             font.weight: Font.DemiBold
@@ -71,7 +72,7 @@ Item {
             Basic.ToolTip.text: text
             Basic.ToolTip.delay: 500
             color: row.shortcutConflict || (row.recording && row.shortcutService.error.length) ? "#e46d69" : row.secondaryText
-            elide: Text.ElideRight
+            wrapMode: Text.WordWrap
             font.family: AppTheme.fontFamily
             font.pixelSize: 10
         }
@@ -81,7 +82,10 @@ Item {
         id: editor
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: 206
+        width: row.controlType === "toggle" ? 48
+            : row.controlType === "check" ? 28
+            : row.controlType === "info" ? Math.min(140, row.width * 0.28)
+            : Math.min(206, row.width * 0.42)
         height: 32
 
         SettingsSwitch {

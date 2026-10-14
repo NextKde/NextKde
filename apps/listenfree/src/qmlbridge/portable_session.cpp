@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "platform/file_paths.h"
 #include "platform/text_encoding.h"
 #include "qmlbridge/portable_session.h"
@@ -93,7 +94,7 @@ struct CatalogAggregates {
         const auto title = row.value("album").toString();
         const auto albumKey = artist + QChar(0x1f) + title;
         auto& album = albums[albumKey];
-        album["title"] = title.isEmpty() ? QStringLiteral("未知专辑") : title;
+        album["title"] = title.isEmpty() ? QCoreApplication::translate("ListenFree", "未知专辑") : title;
         album["artist"] = artist;
         album["subtitle"] = artist;
         const auto artwork = row.value("artwork").toString();
@@ -104,7 +105,7 @@ struct CatalogAggregates {
         album["cover"] = 0;
         album["count"] = album.value("count").toInt() + 1;
         auto& person = artists[artist];
-        person["name"] = artist.isEmpty() ? QStringLiteral("未知艺术家") : artist;
+        person["name"] = artist.isEmpty() ? QCoreApplication::translate("ListenFree", "未知艺术家") : artist;
         person["title"] = person["name"];
         person["count"] = person.value("count").toInt() + 1;
         person["cover"] = 0;
@@ -127,7 +128,7 @@ struct CatalogAggregates {
             artist["albumCount"] = artist.value("albumCount").toInt() + 1;
         }
         for (auto it = artists.begin(); it != artists.end(); ++it)
-            it.value()["subtitle"] = QStringLiteral("%1 首 · %2 张专辑")
+            it.value()["subtitle"] = QCoreApplication::translate("ListenFree", "%1 首 · %2 张专辑")
                 .arg(it.value().value("count").toInt()).arg(it.value().value("albumCount").toInt());
         artistRows.reserve(artists.size());
         for (const auto& artist : artists) artistRows.append(artist);
@@ -266,14 +267,14 @@ PortableSession::PortableSession(infrastructure::database::Database& database, c
         QTimer::singleShot(0,this,[this,generation]{
             if(generation!=generation_)return;
             if(restoreAvailableOutput())beginCurrent();
-            else fail(QStringLiteral("音频输出不可用，请检查系统输出设备，或在设置中选择其他设备。"),false);
+            else fail(QCoreApplication::translate("ListenFree", "音频输出不可用，请检查系统输出设备，或在设置中选择其他设备。"),false);
         });
     };
     events.onFinished = [this] {
         const auto generation = generation_;
         QTimer::singleShot(0, this, [this, generation] {
             if (generation != generation_) return;
-            if(live()){fail(QStringLiteral("电台连接已中断"));return;}
+            if(live()){fail(QCoreApplication::translate("ListenFree", "电台连接已中断"));return;}
             const auto track = currentTrack();
             const auto expected = player_.duration().count();
             const auto actual = player_.position().count();
@@ -456,7 +457,7 @@ QString PortableSession::mediaFormat() const {
     for(const auto& value:formats)if(codec.contains(value))return value=="PCM"?"WAV":value;
     const auto path=track.value("localPath",track.value("remoteUrl")).toString();
     const auto suffix=QFileInfo(QUrl(path).path()).suffix().toUpper();
-    return suffix.isEmpty()?QStringLiteral("音频"):suffix;
+    return suffix.isEmpty()?QCoreApplication::translate("ListenFree", "音频"):suffix;
 }
 
 void PortableSession::reload() { scheduleReload(false); }
@@ -665,9 +666,9 @@ void PortableSession::fail(const QString& message, bool skipEligible) {
         if(skipEligible && radioRetries_<3) {
             radioRetryScheduled_=true;
             const int delay=1000*(1<<radioRetries_++);const auto gen=generation_;
-            error_=QStringLiteral("直播连接中断，正在重连（%1/3）").arg(radioRetries_);loading_=true;emit changed();
+            error_=QCoreApplication::translate("ListenFree", "直播连接中断，正在重连（%1/3）").arg(radioRetries_);loading_=true;emit changed();
             QTimer::singleShot(delay,this,[this,gen]{if(gen==generation_)beginCurrent();});
-        } else {invalidate();emit notice(message+QStringLiteral("，可点击播放重试"));}
+        } else {invalidate();emit notice(message+QCoreApplication::translate("ListenFree", "，可点击播放重试"));}
         return;
     }
     if(!skipEligible){invalidate();consecutiveErrors_=0;emit notice(message);return;}
@@ -675,7 +676,7 @@ void PortableSession::fail(const QString& message, bool skipEligible) {
     if (skip && ++consecutiveErrors_ < 5 && navigation_.trackCount() > 1) {
         const auto gen = generation_;
         QTimer::singleShot(600, this, [this,gen] { if (gen == generation_) next(); });
-    } else emit notice(message + (consecutiveErrors_ >= 5 ? QStringLiteral("（连续失败，已停止）") : QString{}));
+    } else emit notice(message + (consecutiveErrors_ >= 5 ? QCoreApplication::translate("ListenFree", "（连续失败，已停止）") : QString{}));
 }
 void PortableSession::beginCurrent() {
     // Decoder timing can still describe the previous source until new media
@@ -718,7 +719,7 @@ void PortableSession::startResolved(const QString& url, const QVariantMap& heade
     const QUrl upstream(url);
     const bool needsRemux=live() && (currentTrack().value("radioHls").toBool() || upstream.path().endsWith(".m3u8",Qt::CaseInsensitive) || upstream.path().endsWith(".flv",Qt::CaseInsensitive));
     const auto proxyUrl = needsRemux ? liveRelay_.publish(upstream) : proxy_->publish(upstream, headers);
-    if (proxyUrl.isEmpty()) { fail(QStringLiteral("音源没有返回可播放的 HTTP 地址")); return; }
+    if (proxyUrl.isEmpty()) { fail(QCoreApplication::translate("ListenFree", "音源没有返回可播放的 HTTP 地址")); return; }
     player_.open({toTrack(currentTrack()), proxyUrl.toString().toStdString()});
     player_.play(); emit changed();
 }
@@ -738,7 +739,7 @@ void PortableSession::resolveRadio() {
         const auto data=broadcast?root.value("data").toObject():(entries.isEmpty()?QJsonObject{}:entries.first().toObject());
         const auto url=data.value(broadcast?"playUrl":"url").toString();
         if(reply->error()!=QNetworkReply::NoError || root.value("code").toInt()!=200 || url.isEmpty()) {
-            fail(broadcast?QStringLiteral("这个电台暂时没有可用直播地址"):QStringLiteral("这个节目暂不可播放，可能需要登录或订阅"));return;
+            fail(broadcast?QCoreApplication::translate("ListenFree", "这个电台暂时没有可用直播地址"):QCoreApplication::translate("ListenFree", "这个节目暂不可播放，可能需要登录或订阅"));return;
         }
         radioProgram_=data.value("programName").toString();startResolved(url);emit changed();
     });
@@ -890,7 +891,7 @@ bool PortableSession::appendEndlessTrack() {
 }
 bool PortableSession::openTrack(const QVariantMap& value) {
     radioRetries_=0;
-    if (!enqueueTrack(value)) { fail(QStringLiteral("曲目没有可播放来源")); return false; }
+    if (!enqueueTrack(value)) { fail(QCoreApplication::translate("ListenFree", "曲目没有可播放来源")); return false; }
     const int index=queueIndexFor(value);
     if(index==navigation_.currentIndex()) { play(); return true; }
     return selectQueue(index, true);
@@ -1073,7 +1074,7 @@ void PortableSession::restoreQueue() {
 }
 void PortableSession::shutdown() { if (stopped_) return; stopped_ = true; saveQueue(); invalidate(); pumpEmbeddedLyrics(); }
 void PortableSession::importSource() {
-    const auto path = QFileDialog::getOpenFileName(nullptr, QStringLiteral("导入 LX 音源"), {}, "JavaScript (*.js *.mjs)");
+    const auto path = QFileDialog::getOpenFileName(nullptr, QCoreApplication::translate("ListenFree", "导入 LX 音源"), {}, "JavaScript (*.js *.mjs)");
     if (!path.isEmpty() && !sources_.importLocalFile(path)) emit notice(sources_.lastError());
 }
 void PortableSession::sortTracks(const QString& column, const QString& order) {
@@ -1167,7 +1168,7 @@ void PortableSession::requestSearchPage() {
         }
     }
     if (!reply) reply=online::platformRequest(network_,platform_,operation,term,"hot",searchPage_,30);
-    if (!reply) { searchError_="此平台暂不支持当前分类";emit searchResultsChanged();return; }
+    if (!reply) { searchError_=QCoreApplication::translate("ListenFree", "此平台暂不支持当前分类");emit searchResultsChanged();return; }
     searchReply_=reply;searchBusy_=true;emit searchResultsChanged();
     const auto provider=platform_, category=searchCategory_;
     connect(reply,&QNetworkReply::finished,this,[this,reply,provider,category,directSong] {
@@ -1179,8 +1180,8 @@ void PortableSession::requestSearchPage() {
             searchTotal_=directSong ? static_cast<int>(searchResults_.size()) : online::platformSearchTotal(provider,category,data);
             if (data.isEmpty() || (searchResults_.isEmpty() && searchTotal_!=0 &&
                 (data.value("code").toVariant().toInt()!=0 && data.value("code").toVariant().toInt()!=200)))
-                searchError_="平台暂未返回可用结果，请重试或切换平台";
-        } else searchError_="搜索暂不可用，请重试或切换平台";
+                searchError_=QCoreApplication::translate("ListenFree", "平台暂未返回可用结果，请重试或切换平台");
+        } else searchError_=QCoreApplication::translate("ListenFree", "搜索暂不可用，请重试或切换平台");
         emit searchResultsChanged();
         if (category=="songs" && !searchResults_.isEmpty()) fetchOnlineArtwork(searchResults_.first().toMap());
     });
@@ -1302,7 +1303,7 @@ void PortableSession::fetchLyrics(const QString& rid) {
 }
 void PortableSession::requestComments(const QString& mode, bool more) {
     const auto track=currentTrack(); const auto rid=track.value("rid").toString();
-    if (online::isScriptTrack(track)) { commentsBusy_=false; commentsError_=QStringLiteral("此洛雪音源未提供评论"); emit commentsChanged(); return; }
+    if (online::isScriptTrack(track)) { commentsBusy_=false; commentsError_=QCoreApplication::translate("ListenFree", "此洛雪音源未提供评论"); emit commentsChanged(); return; }
     if (commentsReply_) { auto* old=commentsReply_.data(); commentsReply_.clear(); old->abort(); }
     const auto sort=(mode=="hot" || mode=="popular")?QString("hot"):QString("latest");
     if (!more || commentsMode_!=sort) comments_.clear();
@@ -1312,7 +1313,7 @@ void PortableSession::requestComments(const QString& mode, bool more) {
         const auto key=songKey(track);
         if(commentMatches_.contains(key)) { fetchNeteaseComments(commentMatches_.value(key),entry,sort,more);return; }
         auto* reply=online::platformRequest(network_,"wy","search",track.value("title").toString()+" "+track.value("artist").toString());
-        if(!reply){commentsBusy_=false;commentsError_=QStringLiteral("无法查询网易云歌曲");emit commentsChanged();return;}
+        if(!reply){commentsBusy_=false;commentsError_=QCoreApplication::translate("ListenFree", "无法查询网易云歌曲");emit commentsChanged();return;}
         commentsReply_=reply;
         connect(reply,&QNetworkReply::finished,this,[this,reply,entry,sort,more,track,key] {
             reply->deleteLater();if(commentsReply_!=reply)return;commentsReply_.clear();
@@ -1330,14 +1331,14 @@ void PortableSession::requestComments(const QString& mode, bool more) {
                 const qint64 score=difference+(candidate==artist?0:100000);
                 if(score<best){best=score;matched=row.value("rid").toString();}
             }
-            if(matched.isEmpty()){commentsBusy_=false;commentsError_=QStringLiteral("未找到匹配的网易云歌曲，可检查本地标题和艺术家标签后重试");emit commentsChanged();return;}
+            if(matched.isEmpty()){commentsBusy_=false;commentsError_=QCoreApplication::translate("ListenFree", "未找到匹配的网易云歌曲，可检查本地标题和艺术家标签后重试");emit commentsChanged();return;}
             if(commentMatches_.size()>=128)commentMatches_.clear();
             commentMatches_.insert(key,matched);fetchNeteaseComments(matched,entry,sort,more);
         });return;
     }
     if(track.value("source").toString()=="wy" && !rid.isEmpty()){fetchNeteaseComments(rid,entry,sort,more);return;}
     if(track.value("source").toString()!="kw" || rid.isEmpty()) {
-        commentsBusy_=false;commentsError_=QStringLiteral("此歌曲暂无可用评论接口");emit commentsChanged();return;
+        commentsBusy_=false;commentsError_=QCoreApplication::translate("ListenFree", "此歌曲暂无可用评论接口");emit commentsChanged();return;
     }
     const QString type=sort=="hot"?"get_rec_comment":"get_comment";
     QUrl url("https://ncomment.kuwo.cn/com.s"); QUrlQuery query;
@@ -1351,7 +1352,7 @@ void PortableSession::requestComments(const QString& mode, bool more) {
         if (commentsReply_!=reply || currentTrack().value("entryId").toString()!=entry) return;
         commentsReply_=nullptr; commentsBusy_=false;
         const auto root=QJsonDocument::fromJson(bytes).object();
-        if (reply->error()!=QNetworkReply::NoError || root.value("code").toVariant().toString()!="200") commentsError_=QStringLiteral("评论加载失败，点击重试");
+        if (reply->error()!=QNetworkReply::NoError || root.value("code").toVariant().toString()!="200") commentsError_=QCoreApplication::translate("ListenFree", "评论加载失败，点击重试");
         else for (const auto& value:root.value(sort=="hot"?"hot_comments":"comments").toArray()) {
             const auto row=value.toObject();
             comments_.append(QVariantMap{{"id",row.value("id").toVariant()},{"user",row.value("u_name").toString()},
@@ -1374,7 +1375,7 @@ void PortableSession::fetchNeteaseComments(const QString& rid,const QString& ent
         reply->deleteLater();if(commentsReply_!=reply)return;commentsReply_.clear();commentsBusy_=false;
         if(currentTrack().value("entryId").toString()!=entry){emit commentsChanged();return;}
         const auto root=QJsonDocument::fromJson(reply->readAll()).object();
-        if(reply->error()!=QNetworkReply::NoError || root.value("code").toInt()!=200)commentsError_=QStringLiteral("网易云评论加载失败，点击重试");
+        if(reply->error()!=QNetworkReply::NoError || root.value("code").toInt()!=200)commentsError_=QCoreApplication::translate("ListenFree", "网易云评论加载失败，点击重试");
         else {
             QSet<QString> seen;for(const auto& item:comments_)seen.insert(item.toMap().value("id").toString());
             for(const auto& value:root.value(sort=="hot"?"hotComments":"comments").toArray()) {
@@ -1442,7 +1443,7 @@ bool PortableSession::selectOutput(const QString& id) {
         return std::any_of(devices.begin(),devices.end(),[&](const auto& device){return device.id==id.toStdString();});
     }
     const auto wasState=state(); const bool paused=pauseIntent_ || wasState=="Paused";const auto pos=position(); const auto volume=player_.volume();
-    if (!player_.select(id.toStdString())) { emit notice("输出设备不可用"); return false; }
+    if (!player_.select(id.toStdString())) { emit notice(QCoreApplication::translate("ListenFree", "输出设备不可用")); return false; }
     player_.setVolume(volume);
     if (wasState == "Playing" || wasState == "Paused") { resumePosition_=pos; resumePaused_=paused; beginCurrent(); }
     emit devicesChanged(); return true;
@@ -1519,20 +1520,20 @@ QString PortableSession::albumYear(const QString& path) const {
 namespace listenfree::qmlbridge {
 bool PortableSession::showInExplorer(const QVariantMap& track) {
     const QFileInfo file(track.value("localPath").toString());
-    if(!file.isFile()){emit notice(QStringLiteral("本地文件不存在"));return false;}
+    if(!file.isFile()){emit notice(QCoreApplication::translate("ListenFree", "本地文件不存在"));return false;}
     const bool ok=QProcess::startDetached("xdg-open",{file.absolutePath()});
-    if(!ok)emit notice(QStringLiteral("无法打开资源管理器"));
+    if(!ok)emit notice(QCoreApplication::translate("ListenFree", "无法打开资源管理器"));
     return ok;
 }
 bool PortableSession::removeLibraryTrack(const QVariantMap& track,bool trashFile) {
     const auto path=track.value("localPath").toString();
-    if(path.isEmpty()){emit notice(QStringLiteral("此操作仅适用于本地歌曲"));return false;}
+    if(path.isEmpty()){emit notice(QCoreApplication::translate("ListenFree", "此操作仅适用于本地歌曲"));return false;}
     if(trashFile) {
         if(songKey(currentTrack())==songKey(track))stop();
-        if(!QFile::moveToTrash(path)){emit notice(QStringLiteral("无法移入回收站，请检查文件是否被占用"));return false;}
+        if(!QFile::moveToTrash(path)){emit notice(QCoreApplication::translate("ListenFree", "无法移入回收站，请检查文件是否被占用"));return false;}
         const int index=queueIndexFor(track);if(index>=0)removeFromQueue(index);
     }
-    if(!database_.removeLocalTrack(path,!trashFile)){emit notice(QStringLiteral("资料库索引更新失败"));return false;}
+    if(!database_.removeLocalTrack(path,!trashFile)){emit notice(QCoreApplication::translate("ListenFree", "资料库索引更新失败"));return false;}
     reloadCatalogChanges();emit localLibraryChanged();return true;
 }
 QVariantMap PortableSession::readTrackTags(const QVariantMap& track) const {
@@ -1548,7 +1549,7 @@ QVariantMap PortableSession::readTrackTags(const QVariantMap& track) const {
     result["fileSize"]=info.size();result["format"]=info.suffix().toUpper();
     result["modified"]=info.lastModified().toString(Qt::ISODate);
     result["artwork"]=localArtworkUrl(path);
-    if(file.isNull()){result["tagError"]="此格式无法读取可编辑标签";return result;}
+    if(file.isNull()){result["tagError"]=QCoreApplication::translate("ListenFree", "此格式无法读取可编辑标签");return result;}
     if(const auto* audio=file.audioProperties()) {
         result["bitrate"]=audio->bitrate();result["sampleRate"]=audio->sampleRate();result["channels"]=audio->channels();
         result["durationMs"]=audio->lengthInMilliseconds();result["duration"]=timeLabel(audio->lengthInMilliseconds());
@@ -1569,7 +1570,7 @@ QVariantMap PortableSession::readTrackTags(const QVariantMap& track) const {
 }
 bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& values) {
     const auto path=track.value("localPath").toString();
-    if(path.isEmpty() || !QFileInfo(path).isFile()){emit notice(QStringLiteral("本地文件不存在"));return false;}
+    if(path.isEmpty() || !QFileInfo(path).isFile()){emit notice(QCoreApplication::translate("ListenFree", "本地文件不存在"));return false;}
     if(values.contains("lyrics")) {
         const auto previous=readTrackTags(track);
         bool lyricsOnly=true;
@@ -1578,19 +1579,19 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
         if(lyricsOnly)return applyLyricMatch(track,values.value("lyrics").toString());
     }
     if(!embeddedLyricWritePath_.isEmpty() && QFileInfo(path)==QFileInfo(embeddedLyricWritePath_)) {
-        emit notice("正在保存内嵌歌词，请稍后再保存歌曲信息");return false;
+        emit notice(QCoreApplication::translate("ListenFree", "正在保存内嵌歌词，请稍后再保存歌曲信息"));return false;
     }
     QByteArray coverBytes;
     if (values.contains("artwork")) {
         const auto coverPath = values.value("artwork").toUrl().toLocalFile();
         QFile cover(coverPath);
         if (!metadataArtworkFiles_.contains(coverPath) || !cover.open(QIODevice::ReadOnly) || (coverBytes = cover.readAll()).isEmpty()) {
-            emit notice(QStringLiteral("封面草稿已失效，请重新匹配封面")); return false;
+            emit notice(QCoreApplication::translate("ListenFree", "封面草稿已失效，请重新匹配封面")); return false;
         }
     }
     {
         TagLib::FileRef file(QFile::encodeName(path).constData(),false);
-        if(file.isNull()){emit notice(QStringLiteral("无法读取音频标签"));return false;}
+        if(file.isNull()){emit notice(QCoreApplication::translate("ListenFree", "无法读取音频标签"));return false;}
         if (!coverBytes.isEmpty()) {
             TagLib::List<TagLib::VariantMap> pictures;
             pictures.append({{"data", TagLib::ByteVector(coverBytes.constData(), unsigned(coverBytes.size()))},
@@ -1598,7 +1599,7 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
             for (const auto& picture : file.complexProperties("PICTURE"))
                 if (picture["pictureType"].toString() != "Front Cover") pictures.append(picture);
             if (!file.setComplexProperties("PICTURE", pictures)) {
-                emit notice(QStringLiteral("此格式不支持内嵌封面，请取消勾选封面后保存")); return false;
+                emit notice(QCoreApplication::translate("ListenFree", "此格式不支持内嵌封面，请取消勾选封面后保存")); return false;
             }
         }
         auto properties=file.file()->properties();
@@ -1610,9 +1611,9 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
         }
         const auto rejected=file.file()->setProperties(properties);
         for(auto it=rejected.begin();it!=rejected.end();++it) {
-            if(properties.contains(it->first)) {emit notice(QStringLiteral("文件不支持写入标签：")+QString::fromStdString(it->first.to8Bit(true)));return false;}
+            if(properties.contains(it->first)) {emit notice(QCoreApplication::translate("ListenFree", "文件不支持写入标签：")+QString::fromStdString(it->first.to8Bit(true)));return false;}
         }
-        if(!file.save()){emit notice(QStringLiteral("标签保存失败，请检查文件权限或占用"));return false;}
+        if(!file.save()){emit notice(QCoreApplication::translate("ListenFree", "标签保存失败，请检查文件权限或占用"));return false;}
     }
     if(values.contains("lyrics")) {
         const QFileInfo info(path);
@@ -1620,7 +1621,7 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
         if(QFileInfo::exists(sidecar)) {
             QSaveFile output(sidecar);const auto bytes=values.value("lyrics").toString().toUtf8();
             if(!output.open(QIODevice::WriteOnly) || output.write(bytes)!=bytes.size() || !output.commit()) {
-                emit notice("内嵌歌词已写入，但同名 LRC 文件更新失败，请检查文件权限后重试");return false;
+                emit notice(QCoreApplication::translate("ListenFree", "内嵌歌词已写入，但同名 LRC 文件更新失败，请检查文件权限后重试"));return false;
             }
         }
     }
@@ -1631,7 +1632,7 @@ bool PortableSession::saveTrackTags(const QVariantMap& track,const QVariantMap& 
     auto stored=database_.findTrack(domain::TrackId(track.value("trackId").toString().toStdString()));
     if(stored) {
         auto changed=toTrack(updated);changed.id=stored->id;changed.localPath=stored->localPath;
-        if(!database_.upsertTrack(changed)){emit notice(QStringLiteral("标签已保存，但资料库更新失败"));reload();return false;}
+        if(!database_.upsertTrack(changed)){emit notice(QCoreApplication::translate("ListenFree", "标签已保存，但资料库更新失败"));reload();return false;}
     }
     commentMatches_.remove(songKey(track));
     for(auto& row:entries_)if(songKey(row)==songKey(track))for(auto it=updated.begin();it!=updated.end();++it)row[it.key()]=it.value();

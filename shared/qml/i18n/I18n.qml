@@ -47,6 +47,12 @@ QtObject {
         return Qt.formatDateTime(date, pattern, qtLocale())
     }
 
+    // 不含日期语义、只含文案的模式串翻译（如 "yyyy年M月" <-> "MMMM yyyy"）。
+    // 供不能直接用 fmt() 的地方（按 locale 传给 Qt 的调用点）复用。
+    function trPattern(pattern) {
+        return tr(pattern)
+    }
+
     function qtLocale() {
         return Qt.locale(_localeNames[language] || "zh_CN")
     }

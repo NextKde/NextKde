@@ -94,7 +94,7 @@ KosCard {
                 topPadding: 5
                 bottomPadding: 5
                 opacity: inVisibleMonth ? 1 : 0.42
-                Accessible.name: Qt.formatDate(cellDate, Locale.LongFormat)
+                Accessible.name: AppTheme.formatDate(cellDate, Locale.LongFormat)
                 onClicked: root.dateSelected(cellDate)
 
                 contentItem: ColumnLayout {
@@ -136,7 +136,7 @@ KosCard {
                             implicitWidth: 24
                             implicitHeight: 24
                             Accessible.name: qsTr("Add event on %1").arg(
-                                Qt.formatDate(dayButton.cellDate, Locale.LongFormat))
+                                AppTheme.formatDate(dayButton.cellDate, Locale.LongFormat))
                             onClicked: {
                                 root.dateSelected(dayButton.cellDate)
                                 root.createRequested(dayButton.cellDate)

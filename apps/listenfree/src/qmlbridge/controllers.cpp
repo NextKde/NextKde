@@ -1,4 +1,5 @@
 #include "qmlbridge/controllers.h"
+#include "SystemLanguage.h"
 
 #include "application/playback_service.h"
 #include "infrastructure/database/database.h"
@@ -723,6 +724,7 @@ void OnlineController::refreshPlaylist(const QString& id) {
 }
 
 QVariant SettingsController::value(const QString& key, const QVariant& fallback) const {
+    if (key == "ui.language") return Kos::I18n::settingsValue();
     if (repository_) {
         try {
             const auto stored = repository_->get(key.toStdString());
@@ -751,9 +753,11 @@ void LibraryController::endMaintenance() {
 
 bool SettingsController::reloadValues(const QVariantMap& values) {
     applyingBatch_=true;batchRejected_=false;
-    for (auto it=values.begin();it!=values.end();++it) values_.insert(it.key(),it.value());
+    for (auto it=values.begin();it!=values.end();++it)
+        if (it.key() != "ui.language") values_.insert(it.key(),it.value());
     ++revision_; emit settingsChanged();
-    for (auto it=values.begin();it!=values.end();++it) emit valueChanged(it.key(),it.value());
+    for (auto it=values.begin();it!=values.end();++it)
+        if (it.key() != "ui.language") emit valueChanged(it.key(),it.value());
     emit valuesReloaded(values);applyingBatch_=false;return !batchRejected_;
 }
 void SettingsController::forgetScrollPositions() {
@@ -762,6 +766,7 @@ void SettingsController::forgetScrollPositions() {
 }
 
 void SettingsController::setValue(const QString& key, const QVariant& value) {
+    if (key == "ui.language") return; // Derived from the system, including after import/reset.
     if (key.isEmpty() || values_.value(key) == value) return;
     if (repository_) {
         try {

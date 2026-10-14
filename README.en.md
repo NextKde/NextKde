@@ -19,7 +19,7 @@ On Arch:
 
 ```sh
 sudo pacman -S --needed \
-  git quickshell cmake ninja gcc go qt6-base qt6-declarative \
+  git quickshell cmake ninja gcc go qt6-base qt6-declarative qt6-tools qt6-translations \
   kwindowsystem kiconthemes kglobalaccel \
   extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
   kcoreaddons kdecoration gettext libxcb vulkan-headers
@@ -147,7 +147,7 @@ Core and KWin plugin build dependencies:
 ```sh
 sudo apt install \
   git cmake ninja-build g++ golang-go \
-  qt6-base-dev qt6-declarative-dev \
+  qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n \
   libkf6windowsystem-dev libkf6iconthemes-dev libkf6globalaccel-dev \
   extra-cmake-modules kwin-dev libkf6config-dev libkf6i18n-dev \
   libkf6guiaddons-dev libkf6kcmutils-dev libkf6coreaddons-dev \

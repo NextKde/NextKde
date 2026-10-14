@@ -2,6 +2,8 @@
 #include "KosApp/ApplicationQmlReloader.h"
 #include "ApplicationActivation.h"
 #include "ApplicationPreferences.h"
+#include "SystemLanguage.h"
+#include <QTranslator>
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -30,6 +32,16 @@ namespace Kos::App {
 int run(int argc, char *argv[], const Metadata &metadata)
 {
     QGuiApplication application(argc, argv);
+    QLocale::setDefault(Kos::I18n::locale());
+    Kos::I18n::QtCatalogs qtTranslations;
+    QTranslator translator;
+    const QString catalog = Kos::I18n::isChinese()
+        ? QStringLiteral(":/kos/i18n/kos_apps_zh_CN.qm")
+        : QStringLiteral(":/kos/i18n/kos_apps_en_US.qm");
+    if (translator.load(catalog))
+        application.installTranslator(&translator);
+    else
+        qWarning() << "Unable to load KOS translations:" << catalog;
     application.setApplicationName(metadata.applicationName);
     application.setApplicationDisplayName(metadata.displayName);
     application.setApplicationVersion(metadata.version);

@@ -548,7 +548,7 @@ ensure_quickshell() {
 debian_core_build_packages=(
     git cmake ninja-build g++ golang-go curl patchelf pkg-config
     extra-cmake-modules libwayland-dev wayland-protocols libxkbcommon-dev
-    qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
+    qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-svg-dev qt6-wayland-dev
     qt6-image-formats-plugins qt6-5compat-dev libqt6svg6
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts
     qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects

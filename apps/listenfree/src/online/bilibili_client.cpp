@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "bilibili_client.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -24,7 +25,7 @@ QString cover(QString url) { return url.startsWith("//") ? "https:"+url : url; }
 bool validId(const QString& id) { return QRegularExpression("^BV[0-9A-Za-z]{10}$").match(id).hasMatch(); }
 QString apiError(const QJsonObject& root) {
     const int code = root.value("code").toInt(-1);
-    return code == 0 ? QString{} : QStringLiteral("哔哩哔哩暂不可用（%1），请稍后重试或在账号中登录").arg(code);
+    return code == 0 ? QString{} : QCoreApplication::translate("ListenFree", "哔哩哔哩暂不可用（%1），请稍后重试或在账号中登录").arg(code);
 }
 }
 QString bilibiliMixinKey(const QJsonObject& nav) {
@@ -94,7 +95,7 @@ BilibiliClient::Task BilibiliClient::create(QObject* context, Done done) {
     job->context=context ? context : this; job->done=std::move(done); jobs_.insert(job->id,job);
     job->ownerGone=connect(job->context,&QObject::destroyed,this,[this,id=job->id]{cancel(id);});
     job->timer=new QTimer(this); job->timer->setSingleShot(true);
-    connect(job->timer,&QTimer::timeout,this,[this,job]{finish(job,{},QStringLiteral("哔哩哔哩请求超时，请重试"));});
+    connect(job->timer,&QTimer::timeout,this,[this,job]{finish(job,{},QCoreApplication::translate("ListenFree", "哔哩哔哩请求超时，请重试"));});
     job->timer->start(30000); return job;
 }
 bool BilibiliClient::cancel(const QString& id) {
@@ -126,9 +127,9 @@ void BilibiliClient::get(const Task& job, const QUrl& url, std::function<void(QJ
     connect(reply,&QNetworkReply::finished,this,[this,job,reply,done=std::move(done)] {
         reply->deleteLater(); job->replies.removeAll(reply);
         if (!jobs_.contains(job->id)) return;
-        if (reply->error()!=QNetworkReply::NoError) { done({},QStringLiteral("哔哩哔哩连接失败，请重试或检查账号登录状态")); return; }
+        if (reply->error()!=QNetworkReply::NoError) { done({},QCoreApplication::translate("ListenFree", "哔哩哔哩连接失败，请重试或检查账号登录状态")); return; }
         const auto root=QJsonDocument::fromJson(reply->readAll()).object();
-        done(root,root.isEmpty()?QStringLiteral("哔哩哔哩未返回有效数据"):QString{});
+        done(root,root.isEmpty()?QCoreApplication::translate("ListenFree", "哔哩哔哩未返回有效数据"):QString{});
     });
 }
 void BilibiliClient::prepare(const Task& job, std::function<void()> ready) {
@@ -143,7 +144,7 @@ void BilibiliClient::prepare(const Task& job, std::function<void()> ready) {
     if (!mixin_.isEmpty() && QDateTime::currentSecsSinceEpoch()-keyTime_<30) { visitor(); return; }
     get(job,QUrl("https://api.bilibili.com/x/web-interface/nav"),[this,job,visitor](QJsonObject root,QString error) {
         mixin_=bilibiliMixinKey(root); keyTime_=QDateTime::currentSecsSinceEpoch();
-        if (!error.isEmpty() || mixin_.isEmpty()) { finish(job,{},error.isEmpty()?QStringLiteral("哔哩哔哩暂时无法准备请求，请重试"):error); return; }
+        if (!error.isEmpty() || mixin_.isEmpty()) { finish(job,{},error.isEmpty()?QCoreApplication::translate("ListenFree", "哔哩哔哩暂时无法准备请求，请重试"):error); return; }
         visitor();
     });
 }
@@ -171,7 +172,7 @@ QVariantMap BilibiliClient::collectionFromView(const QJsonObject& view) {
     const QString artist=plain(view.value("owner").toObject().value("name").toString());
     return {{"id",bvid},{"bvid",bvid},{"source","bili"},{"kind","playlist"},{"title",plain(view.value("title").toString())},
         {"artist",artist},{"artwork",cover(view.value("pic").toString())},{"description",view.value("desc").toString()},
-        {"subtitle",QStringLiteral("%1 · %2 首").arg(artist).arg(tracks.size())},{"total",tracks.size()},{"tracks",tracks},
+        {"subtitle",QCoreApplication::translate("ListenFree", "%1 · %2 首").arg(artist).arg(tracks.size())},{"total",tracks.size()},{"tracks",tracks},
         {"url","https://www.bilibili.com/video/"+bvid}};
 }
 QString BilibiliClient::search(const QString& query,int page,const QString& category,QObject* context,Done done) {
@@ -202,7 +203,7 @@ void BilibiliClient::searchViews(const Task& job) {
         QVariantMap all{{"songs",songs},{"playlists",playlists},{"pages",job->pages}};
         if(!job->failed)searchCache_.insert(job->cacheKey,new CacheEntry{QDateTime::currentSecsSinceEpoch(),all});
         finish(job,{{"rows",all.value(job->category)},{"pages",job->pages},{"total",job->videos.isEmpty()?0:-1}},
-            job->failed==job->videos.size() && job->failed>0?QStringLiteral("视频详情暂不可用，无法确定分 P，请重试"):QString{}); return;
+            job->failed==job->videos.size() && job->failed>0?QCoreApplication::translate("ListenFree", "视频详情暂不可用，无法确定分 P，请重试"):QString{}); return;
     }
     while(job->active<4 && job->next<job->videos.size()) {
         const int index=job->next++; ++job->active;
@@ -222,11 +223,11 @@ void BilibiliClient::searchViews(const Task& job) {
 QString BilibiliClient::detail(const QString& bvid,QObject* context,Done done) {
     auto job=create(context,std::move(done));
     QTimer::singleShot(0,this,[this,job,bvid] {
-        if(!validId(bvid)){finish(job,{},QStringLiteral("B 站视频编号无效"));return;}
+        if(!validId(bvid)){finish(job,{},QCoreApplication::translate("ListenFree", "B 站视频编号无效"));return;}
         get(job,bilibiliSignedUrl("/x/web-interface/view",{{"bvid",bvid}},{}),[this,job](QJsonObject root,QString error) {
             if(error.isEmpty())error=apiError(root);
             const auto result=collectionFromView(root.value("data").toObject());
-            if(error.isEmpty() && result.value("tracks").toList().isEmpty())error=QStringLiteral("这个视频没有可用分 P");
+            if(error.isEmpty() && result.value("tracks").toList().isEmpty())error=QCoreApplication::translate("ListenFree", "这个视频没有可用分 P");
             finish(job,result,error);
         });
     });return job->id;
@@ -255,21 +256,21 @@ QString BilibiliClient::audio(const QVariantMap& track,const QString& quality,QO
 void BilibiliClient::requestAudio(const Task& job,const QVariantMap& track,const QString& quality) {
     const QString bvid=track.value("bvid",track.value("rid").toString().section('_',0,0)).toString();
     const QString cid=track.value("cid",track.value("rid").toString().section('_',1,1)).toString();
-    if(!validId(bvid)){finish(job,{},QStringLiteral("B 站视频编号无效"));return;}
+    if(!validId(bvid)){finish(job,{},QCoreApplication::translate("ListenFree", "B 站视频编号无效"));return;}
     if(cid.toLongLong()<=0) {
         get(job,bilibiliSignedUrl("/x/web-interface/view",{{"bvid",bvid}},{}),[this,job,track,quality](QJsonObject root,QString error) {
             if(error.isEmpty())error=apiError(root);
             if(!error.isEmpty()){finish(job,{},error);return;}
             const auto view=root.value("data").toObject();QVariantMap selected;
             for(const auto& page:view.value("pages").toArray())if(page.toObject().value("page").toInt()==track.value("page",1).toInt())selected=trackFromPage(view,page.toObject());
-            if(selected.isEmpty()){finish(job,{},QStringLiteral("原分 P 已不存在，请重新打开歌单"));return;}
+            if(selected.isEmpty()){finish(job,{},QCoreApplication::translate("ListenFree", "原分 P 已不存在，请重新打开歌单"));return;}
             requestAudio(job,selected,quality);
         });return;
     }
     get(job,bilibiliSignedUrl("/x/player/wbi/playurl",{{"bvid",bvid},{"cid",cid},{"qn","80"},{"fnval","4048"},{"fnver","0"},{"fourk","1"}},mixin_),[this,job,bvid,quality](QJsonObject root,QString error) {
         if(error.isEmpty())error=apiError(root);
         const auto result=audioFromPlayInfo(root.value("data").toObject(),quality,bvid);
-        if(error.isEmpty() && result.isEmpty())error=QStringLiteral("这个分 P 暂无可播放音频，请检查登录状态或选择其他歌曲");
+        if(error.isEmpty() && result.isEmpty())error=QCoreApplication::translate("ListenFree", "这个分 P 暂无可播放音频，请检查登录状态或选择其他歌曲");
         finish(job,result,error);
     });
 }

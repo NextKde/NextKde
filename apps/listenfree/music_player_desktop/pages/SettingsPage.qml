@@ -593,7 +593,7 @@ Item {
                 primaryText: page.primaryText
                 secondaryText: page.secondaryText
                 rows: [
-                    { title: qsTr("语言"), detail: qsTr("立即切换界面文字，不改变技术键。"), key: page.settingKeys.language, type: "select", options: [{label: qsTr("简体中文"), value: "ZhCn"}, {label: "English", value: "EnUs"}], currentIndex: 0 },
+                    { title: qsTr("语言"), detail: qsTr("跟随系统：中文系统使用中文，其他系统使用英文。"), key: page.settingKeys.language, type: "info", value: qsTr("跟随系统") },
                     { title: qsTr("字体"), detail: qsTr("选择本机安装的字体，立即应用。"), key: page.settingKeys.fontFamily, type: "select", options: page.fontOptions, currentIndex: page.selectedFontIndex() },
                     { title: qsTr("登录时启动"), detail: qsTr("登录桌面后启动 KOS ListenFree。"), key: page.settingKeys.launchAtLogin, type: "toggle", checked: false },
                     { title: qsTr("启动时全屏"), detail: qsTr("仅影响下次启动。"), key: page.settingKeys.startInFullScreen, type: "toggle", checked: false }

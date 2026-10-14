@@ -17,7 +17,7 @@ Arch 常用基础包：
 
 ```sh
 sudo pacman -S --needed \
-  git quickshell cmake ninja gcc go curl patchelf qt6-base qt6-declarative \
+  git quickshell cmake ninja gcc go curl patchelf qt6-base qt6-declarative qt6-tools qt6-translations \
   qt6-quick3d qt6-svg qt6-imageformats qt6-5compat qt6-wayland kio \
   kwindowsystem kiconthemes kglobalaccel \
   extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
@@ -157,7 +157,7 @@ sudo apt install quickshell
 ```sh
 sudo apt install \
   git cmake ninja-build g++ golang-go \
-  qt6-base-dev qt6-declarative-dev qt6-quick3d-dev qt6-wayland-dev libqt6svg6 \
+  qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-l10n-tools qt6-translations-l10n qt6-quick3d-dev qt6-wayland-dev libqt6svg6 \
   qt6-wayland qt6-image-formats-plugins qml6-module-qt5compat-graphicaleffects \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-dialogs qml6-module-qtquick-window qml6-module-qtquick-effects \

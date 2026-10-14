@@ -1,3 +1,4 @@
+#include <QCoreApplication>
 #include "online/lyric_search.h"
 #include "online/lyric_sources.h"
 #include "online/lyric_matching.h"
@@ -48,7 +49,7 @@ void LyricSearch::stop(bool timedOut) {
         provider.reply = nullptr;
         if(!provider.done) {
             provider.done = true;
-            provider.state = timedOut ? "超时" : "已停止";
+            provider.state = timedOut ? QCoreApplication::translate("ListenFree", "超时") : QCoreApplication::translate("ListenFree", "已停止");
             provider.failed |= timedOut;
             provider.pending.clear();
         }
@@ -73,10 +74,10 @@ void LyricSearch::search(const QVariantMap& track, const QString& query, const Q
         provider.cacheKey = id + ':' + contextKey(track_, term);
         if(auto* cached = cache_.object(provider.cacheKey); cached && cached->expires > now) {
             provider.matches = cached->matches;
-            provider.done = true; provider.state = "已缓存";
+            provider.done = true; provider.state = QCoreApplication::translate("ListenFree", "已缓存");
         } else if(retryAfter_.value(id) > now) {
-            provider.done = true; provider.failed = true; provider.state = "稍后重试";
-            provider.detail = QString("来源限流，约 %1 秒后可重试").arg((retryAfter_.value(id)-now+999)/1000);
+            provider.done = true; provider.failed = true; provider.state = QCoreApplication::translate("ListenFree", "稍后重试");
+            provider.detail = QCoreApplication::translate("ListenFree", "来源限流，约 %1 秒后可重试").arg((retryAfter_.value(id)-now+999)/1000);
         }
         providers_.insert(id, provider);
     }
@@ -92,15 +93,15 @@ void LyricSearch::advance(const QString& source) {
         const auto embedded = row.take("lyricsText").toString();
         if(!embedded.isEmpty()) { accept(source, row, embedded); continue; }
         if(const auto* cached = lyricCache_.object(rowKey(row))) { accept(source, row, cached->text); continue; }
-        provider.state = "验证中";
+        provider.state = QCoreApplication::translate("ListenFree", "验证中");
         if(auto* reply = lyricFetchRequest(network_, source, row)) { watchReply(source, reply, row); return; }
     }
     if(provider.matches.size() >= versionsPerSource || !provider.matches.isEmpty()) { finishProvider(source); return; }
     if(provider.nextQuery < provider.queries.size() && !provider.failed) {
         const auto term = provider.queries[provider.nextQuery++];
-        provider.state = provider.nextQuery > 1 ? "放宽搜索" : "搜索中";
+        provider.state = provider.nextQuery > 1 ? QCoreApplication::translate("ListenFree", "放宽搜索") : QCoreApplication::translate("ListenFree", "搜索中");
         if(auto* reply = lyricSearchRequest(network_, source, track_, term)) { watchReply(source, reply); return; }
-        provider.failed = true; provider.detail = "来源暂不支持搜索";
+        provider.failed = true; provider.detail = QCoreApplication::translate("ListenFree", "来源暂不支持搜索");
     }
     finishProvider(source);
 }
@@ -128,10 +129,10 @@ void LyricSearch::watchReply(const QString& source, QNetworkReply* reply, const 
                     seconds = date.isValid() ? QDateTime::currentDateTimeUtc().secsTo(date) : 5;
                 }
                 retryAfter_[source] = QDateTime::currentMSecsSinceEpoch() + qBound(qint64(1), seconds, qint64(86400))*1000;
-                provider.failed = true; provider.detail = "来源请求过于频繁，请稍后重试";
+                provider.failed = true; provider.detail = QCoreApplication::translate("ListenFree", "来源请求过于频繁，请稍后重试");
                 provider.pending.clear();
             } else if(candidate.isEmpty() || status != 404) {
-                provider.detail = reply->property("lyricDeadline").toBool() ? "请求超时" : "网络请求失败";
+                provider.detail = reply->property("lyricDeadline").toBool() ? QCoreApplication::translate("ListenFree", "请求超时") : QCoreApplication::translate("ListenFree", "网络请求失败");
                 // Search failures get one simpler query retry; a broken download
                 // must not generate a burst over the rest of the same provider.
                 if(!candidate.isEmpty()) { provider.failed = true; provider.pending.clear(); }
@@ -169,7 +170,7 @@ void LyricSearch::finishProvider(const QString& source) {
     provider.done = true; provider.pending.clear();
     if(provider.matches.isEmpty() && !provider.detail.isEmpty())provider.failed = true;
     if(!provider.matches.isEmpty() && !provider.failed)provider.detail.clear();
-    provider.state = provider.failed ? "暂不可用" : provider.matches.isEmpty() ? "无匹配" : "已完成";
+    provider.state = provider.failed ? QCoreApplication::translate("ListenFree", "暂不可用") : provider.matches.isEmpty() ? QCoreApplication::translate("ListenFree", "无匹配") : QCoreApplication::translate("ListenFree", "已完成");
     if(!provider.matches.isEmpty() && !provider.failed) {
         int cost = 1;
         for(const auto& match : provider.matches) cost += matchCost(match.row, match.text);
@@ -200,12 +201,12 @@ QVariantList LyricSearch::sources() const {
     return result;
 }
 QString LyricSearch::message() const {
-    if(query_.isEmpty()) return "请输入歌曲或艺术家";
-    if(busy_) return results_.isEmpty() ? "正在搜索与验证，结果会陆续显示" : "已找到可用歌词，可以立即预览和使用；其他来源仍在搜索";
+    if(query_.isEmpty()) return QCoreApplication::translate("ListenFree", "请输入歌曲或艺术家");
+    if(busy_) return results_.isEmpty() ? QCoreApplication::translate("ListenFree", "正在搜索与验证，结果会陆续显示") : QCoreApplication::translate("ListenFree", "已找到可用歌词，可以立即预览和使用；其他来源仍在搜索");
     QStringList failures;
     for(const auto& id : sourceOrder_) if(providers_[id].failed || !providers_[id].detail.isEmpty()) failures.append(lyricSourceName(id));
-    if(!failures.isEmpty()) return failures.join("、") + " 暂不可用，已保留成功结果，可重新搜索";
-    return results_.isEmpty() ? "未找到可用歌词，试试只搜歌名或调整关键词" : QString{};
+    if(!failures.isEmpty()) return failures.join("、") + QCoreApplication::translate("ListenFree", " 暂不可用，已保留成功结果，可重新搜索");
+    return results_.isEmpty() ? QCoreApplication::translate("ListenFree", "未找到可用歌词，试试只搜歌名或调整关键词") : QString{};
 }
 QString LyricSearch::lyrics(int index) const {
     return index >= 0 && index < results_.size() ? texts_.value(rowKey(results_[index].toMap())) : QString{};

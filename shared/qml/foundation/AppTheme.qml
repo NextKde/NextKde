@@ -1,9 +1,19 @@
 pragma Singleton
 
 import QtQuick
+import "../i18n"
 
 QtObject {
     id: theme
+    // Qt.formatDate* uses the C locale; use the selected UI locale explicitly.
+    readonly property var uiLocale: Qt.locale()
+    function formatDate(date, format) {
+        if (uiLocale.name.startsWith("zh") && format === "MMMM yyyy") format = I18n.trPattern("MMMM yyyy")
+        return date.toLocaleDateString(uiLocale, format)
+    }
+    function formatTime(date, format) { return date.toLocaleTimeString(uiLocale, format) }
+    function formatDateTime(date, format) { return date.toLocaleString(uiLocale, format) }
+
 
     // KosApplicationWindow binds these values to the shared C++ preferences
     // object. Controls can stay application-agnostic and still update live.

@@ -48,14 +48,17 @@ Column {
 
     Rectangle {
         width: parent.width
-        height: group.filteredRows.length * 50 + 2
+        height: rowsColumn.implicitHeight + 2
         radius: 14
         color: group.panelColor
         border.width: 1
         border.color: group.darkMode ? "#24ffffff" : "#70ffffff"
 
         Column {
-            anchors.fill: parent
+            id: rowsColumn
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
             anchors.leftMargin: 16
             anchors.rightMargin: 16
             anchors.topMargin: 1

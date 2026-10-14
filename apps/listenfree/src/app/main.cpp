@@ -26,6 +26,7 @@
 #include "qmlbridge/settings_transfer.h"
 #include "qmlbridge/wallpaper_library.h"
 #include "interface_translator.h"
+#include "SystemLanguage.h"
 #include <QApplication>
 #include <QQuickItem>
 #include <QJsonDocument>
@@ -60,6 +61,10 @@ int main(int argc, char* argv[]) {
     if(!qEnvironmentVariableIsSet("QSG_ATLAS_WIDTH"))qputenv("QSG_ATLAS_WIDTH","1024");
     if(!qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT"))qputenv("QSG_ATLAS_HEIGHT","1024");
     QApplication app(argc, argv);
+    QLocale::setDefault(Kos::I18n::locale());
+    Kos::I18n::QtCatalogs qtTranslations;
+    UiTranslator translator;
+    if (!Kos::I18n::isChinese()) app.installTranslator(&translator);
     QQuickWindow::setDefaultAlphaBuffer(true);
     app.setWindowIcon(QIcon(":/qt/qml/ListenFree/Bootstrap/music_player_desktop/assets/icons/nextkde-music.svg"));
     app.setApplicationName("ListenFree");
@@ -206,14 +211,6 @@ int main(int argc, char* argv[]) {
     qmlRegisterType<listenfree::qmlbridge::FilteredTrackModel>("ListenFree.Native", 1, 0, "FilteredTrackModel");
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("backendAccountBrowser", &accountBrowser);
-    UiTranslator translator;
-    const auto applyLanguage=[&] {
-        app.removeTranslator(&translator);
-        if(settingsController.value("ui.language","ZhCn")=="EnUs")app.installTranslator(&translator);
-        engine.retranslate();
-    };
-    applyLanguage();
-    QObject::connect(&settingsController,&listenfree::qmlbridge::SettingsController::valueChanged,&engine,[&](const QString& key,const QVariant&){if(key=="ui.language")applyLanguage();});
     engine.rootContext()->setContextProperty("backendImmersive", &immersive);
     engine.rootContext()->setContextProperty("backendAccounts",&accounts);
     engine.rootContext()->setContextProperty("backendRadioController",&radioController);

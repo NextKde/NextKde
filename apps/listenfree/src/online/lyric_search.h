@@ -1,4 +1,5 @@
 #pragma once
+#include <QCoreApplication>
 #include <QCache>
 #include <QElapsedTimer>
 #include <QNetworkAccessManager>
@@ -38,7 +39,7 @@ private:
         QSet<QString> seen;
         QList<Match> matches;
         QPointer<QNetworkReply> reply;
-        QString state{"搜索中"}, detail, cacheKey;
+        QString state{QCoreApplication::translate("ListenFree", "搜索中")}, detail, cacheKey;
         bool done{}, failed{};
     };
     QNetworkAccessManager& network_;

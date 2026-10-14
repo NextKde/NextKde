@@ -113,7 +113,7 @@ KosApplicationWindow {
             return qsTr("Tomorrow")
         const parsed = new Date(String(isoDate) + "T12:00:00")
         return Number.isNaN(parsed.getTime())
-            ? String(isoDate) : Qt.formatDate(parsed, "dddd")
+            ? String(isoDate) : AppTheme.formatDate(parsed, "dddd")
     }
 
     function upcomingForecast() {
@@ -134,7 +134,7 @@ KosApplicationWindow {
     function updatedText() {
         if (backend.fetchedAt <= 0)
             return qsTr("Never updated")
-        return qsTr("Updated %1").arg(Qt.formatDateTime(
+        return qsTr("Updated %1").arg(AppTheme.formatDateTime(
             new Date(backend.fetchedAt), Locale.ShortFormat))
     }
 
