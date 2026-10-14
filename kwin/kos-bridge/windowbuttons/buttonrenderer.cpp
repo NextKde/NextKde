@@ -301,24 +301,26 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
 
     // The panel is the KOS decoration's window controls: the decoration draws a
     // title bar and a caption and nothing else, so the panel is where a window
-    // wearing it gets its three lights. Which decoration is selected therefore
-    // decides the fate of *server-side* windows only -- other decorations paint
-    // controls of their own, and the panel must not sit on top of them; that is
-    // the hasDecoration() check further down, together with drawOnDecoratedWindows
-    // (resolved from `decoratedWindows` against the selection in ButtonConfig).
+    // wearing it gets its three lights. Selecting a different decoration in
+    // System Settings therefore has to take the panel with it. It is not drawn
+    // anywhere then -- not on a server-side window, where the other decoration
+    // is painting controls of its own, and not on a client-side one either: an
+    // application that draws its own title bar draws its own controls in it,
+    // and a KOS panel in the corner of that is a panel nobody asked for. That
+    // second half is why this is not just a rule about decorated windows.
     //
-    // A *client-side* decorated window is different. It has no other source of
-    // window controls, and this effect cannot know whether the client drew any
-    // of its own, so the panel covers the corner unconditionally. The KOS apps
-    // opt into this deliberately: their frameless form leaves the strip blank
-    // because the panel is its controls, and the form is only chosen while the
-    // KOS decoration is selected -- but a decoration switch takes effect on the
-    // app's next launch, so an already-open frameless window must keep its
-    // panel or it would be left without any controls until then.
+    // `decoratedWindows: "always"` is the exception, and the only way to ask
+    // for the panel without the decoration. It is an explicit choice in the
+    // user's own hand-written file -- the rules this plugin writes never carry
+    // it -- so it is honoured rather than filtered out here.
     //
     // KWin does not tell an effect which decoration is in use, so the flag is
     // read out of kwinrc by the configuration and the redraw for a change comes
     // from its watcher (ButtonConfig::recheckDecoration).
+    if (!config.kosDecorationSelected
+        && config.decoratedWindows != DecoratedWindows::Always) {
+        return;
+    }
 
     // Server-side decorations: KWin paints their controls itself, so the panel
     // would sit on top of Breeze's own buttons. `drawOnDecoratedWindows` is how
