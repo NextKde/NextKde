@@ -4340,7 +4340,7 @@ ApplicationWindow {
         }
 
         function isValidLanguage(lang) {
-            return lang === "zh-CN" || lang === "en"
+            return lang === "zh-CN" || lang === "en" || lang === "auto"
         }
 
         function setLanguage(lang) {
@@ -4370,7 +4370,12 @@ ApplicationWindow {
                 if (state && state.language !== undefined
                         && state.language !== "") {
                     themePage.language = String(state.language)
-                    I18n.language = themePage.language
+                    // "auto" 只作为持久值：生效语言由 shell 解析后同步回来时
+                    // 已经是具体值；这里在本地也解析一份，保证立即生效。
+                    I18n.language = themePage.language === "auto"
+                        ? (Qt.locale().uiLanguages.some(function(tag) {
+                              return /^zh/i.test(String(tag)) }) ? "zh-CN" : "en")
+                        : themePage.language
                 }
             }
         }
@@ -4910,19 +4915,23 @@ ApplicationWindow {
                     }
                 }
                 SettingsNavBar {
-                    Layout.preferredWidth: 172
+                    Layout.preferredWidth: 216
                     Layout.preferredHeight: 30
                     size: "tiny"
                     barHeight: 30
-                    itemWidthOverride: 86
-                    // 语言选项固定显示各自语言的写法，不参与翻译。
+                    itemWidthOverride: 72
+                    // 语言选项固定显示各自语言的写法，不参与翻译；
+                    // 「跟随系统」是模式名，随界面语言翻译。
                     model: [
+                        { id: "auto", label: I18n.tr("Follow system") },
                         { id: "zh-CN", label: "简体中文" },
                         { id: "en", label: "English" }
                     ]
-                    currentIndex: themePage.language === "en" ? 1 : 0
+                    currentIndex: themePage.language === "auto" ? 0
+                        : themePage.language === "en" ? 2 : 1
                     onSelectionChanged: function(index) {
-                        themePage.setLanguage(index === 1 ? "en" : "zh-CN")
+                        themePage.setLanguage(index === 0 ? "auto"
+                            : index === 2 ? "en" : "zh-CN")
                     }
                 }
             }

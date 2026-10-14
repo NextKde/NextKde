@@ -1057,4 +1057,7 @@ export const catalog = {
     "Collapse": "收起",
     "Clear notifications": "清除",
     "Failed to save notification settings": "通知设置保存失败",
+
+    // 跟随系统语言（吸收 PR184 的能力为可选项）
+    "Follow system": "跟随系统",
 }
