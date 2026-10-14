@@ -111,10 +111,13 @@ Item {
                 spacing: 0
 
                 Repeater {
+                    // Fixed two-letter labels: the narrow dock column overflows
+                    // with the localized "Avg/Max temperature" strings, and
+                    // degree abbreviations need no localization.
                     model: [
-                        { label: I18n.tr("Avg temperature"), value: widget.currentC,
+                        { label: "Avg", value: widget.currentC,
                             accent: "#64d2ff" },
-                        { label: I18n.tr("Max temperature"), value: widget.maximum5MinuteC,
+                        { label: "Max", value: widget.maximum5MinuteC,
                             accent: "#ff6b62" }
                     ]
                     delegate: Item {
