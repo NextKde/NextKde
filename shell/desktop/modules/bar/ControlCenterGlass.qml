@@ -11,8 +11,8 @@ LiquidGlassPanel {
     material: "regular"
     materialDepth: 0
     blurOverrideEnabled: true
-    // Invert compositorBlurLevel's perceptual curve: request KWin level 3.
-    blurStrength: Math.pow((3 - 1) / 14, 2 / 3)
+    // The normalized minimum maps to KWin blur level 1.
+    blurStrength: 0
     scrimEnabled: AppearanceTokens.surface.usesBackdrop
     scrimLevel: "transparent"
     ambientPrimary: WallpaperColorSource.primary
