@@ -3279,14 +3279,17 @@ PanelWindow {
                 items.push(_ctxSub(I18n.tr("Icon Spacing"), spacingKids, "arrange"))
                 // Same entries as the control center's session list, routed
             // through it so the destructive ones reuse its confirm dialog.
-            items.push(_ctxSub(I18n.tr("Power"), [
+            // Icon names are BundledIcons registry keys -- the role names the
+            // panel passes get mapped by roleName() there, this menu passes
+            // the mapped keys verbatim.
+            items.push(_ctxSub(I18n.tr("Power Off or Log Out"), [
                 _ctxAct(I18n.tr("Lock Screen"), "lock", "lock"),
-                _ctxAct(I18n.tr("Sleep"), "suspend", "suspend"),
-                _ctxAct(I18n.tr("Switch User"), "switch", "switchUser"),
-                _ctxAct(I18n.tr("Log Out"), "logout", "logout"),
-                _ctxAct(I18n.tr("Restart"), "reboot", "reboot"),
-                _ctxAct(I18n.tr("Power Off"), "poweroff", "powerOff")
-            ], "powerOff"))
+                _ctxAct(I18n.tr("Sleep"), "suspend", "system-suspend"),
+                _ctxAct(I18n.tr("Switch User"), "switch", "system-switch-user"),
+                _ctxAct(I18n.tr("Log Out"), "logout", "system-log-out"),
+                _ctxAct(I18n.tr("Restart"), "reboot", "system-reboot"),
+                _ctxAct(I18n.tr("Power Off"), "poweroff", "power")
+            ], "power"))
             }
             return items
         }
