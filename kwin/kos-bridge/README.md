@@ -4,8 +4,12 @@ A KWin effect that covers the window controls of client-side decorated
 windows with an iPadOS-style rounded panel containing three macOS traffic
 lights, so applications that draw their own title bar get consistent KOS
 chrome. The same panel is drawn over windows KWin decorates itself, where the
-KOS decoration draws a frame and no buttons at all. It is drawn only while the
-KOS decoration is selected — see **Which decoration the panel belongs to**.
+KOS decoration draws a frame and no buttons at all. On **server-side** decorated
+windows it follows the decoration selection — see **Which decoration the panel
+belongs to**. On **client-side** decorated (frameless) windows it is drawn
+unconditionally: such a window has no other source of window controls, and a
+decoration switch takes effect on an app's next launch, so an already-open
+frameless window must keep its panel or it would be left without any controls.
 
 ## How it works
 
@@ -185,14 +189,20 @@ with a warning.
 
 ### Which decoration the panel belongs to
 
-The panel *is* the KOS decoration's window controls, so it is drawn only while
-that decoration is selected in System Settings. `kosctl install` installs the
-decoration and never selects it: the choice is the user's, and until it is made
-the panel is drawn nowhere — `always` in the user's own file is the one
-exception, below. Selecting Breeze, or anything else, takes the panel off every
-window again — the client-side decorated ones included, because an application
-that draws its own title bar draws its own controls in it and a KOS panel in
-the corner of that is a panel nobody asked for.
+For **server-side** decorated windows the panel follows the decoration selected
+in System Settings: `kosctl install` installs the decoration and never selects
+it, the choice is the user's, and while another decoration is chosen the panel
+is not drawn on those windows — the other decoration paints controls of its own.
+`always` in the user's own file is the one exception, below.
+
+**Client-side** decorated windows wear the panel regardless of that selection:
+they have no server controls to fall back on, the panel covers whatever sits in
+the corner, and the KOS apps' frameless form relies on it — its blank strip is
+the panel's home. An app that leaves the frameless form only when the KOS
+decoration is selected (deciding again at each launch, as kos-settings does)
+still ends up with controls in every state: open frameless windows keep the
+panel across a switch, and windows launched after the switch carry the other
+decoration's own title bar.
 
 KWin does not report the decoration to effects, so the configuration reads
 `[org.kde.kdecoration2] library` out of `kwinrc` and watches that file; when it
