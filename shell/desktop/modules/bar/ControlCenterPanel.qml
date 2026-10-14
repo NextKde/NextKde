@@ -39,8 +39,9 @@ PopupWindow {
         : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     contentItem.enabled: popupMotion.interactive
     mask: popupMotion.interactive ? null : emptyRegion
+    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
+
     anchor {
-        item: panel.anchorItem
         edges: !panel.dockHosted ? Edges.Bottom
             : panel.dockEdge === "left" ? Edges.Right
             : panel.dockEdge === "right" ? Edges.Left : Edges.Top

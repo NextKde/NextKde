@@ -120,6 +120,22 @@ if(KOS_BRIDGE_BUILD_TESTS)
     )
     target_link_libraries(rules_test PRIVATE Qt6::Core KF6::ConfigCore)
     add_test(NAME rules_test COMMAND rules_test)
+
+    # Real production appearance manager and KWin scene Items, without a
+    # compositor, Wayland connection, or authentication/session service.
+    add_executable(appearance_lifecycle_test
+        tests/appearance_lifecycle_test.cpp
+        windowappearance/windowappearance.cpp
+        windowappearance/appearanceconfig.cpp
+        windowappearance/sceneshadow.cpp
+        windowappearance/contour.cpp
+    )
+    target_include_directories(appearance_lifecycle_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(appearance_lifecycle_test PRIVATE
+        Qt6::Gui KF6::ConfigCore KWin::kwin KDecoration3::KDecoration)
+    add_test(NAME appearance_lifecycle_test COMMAND appearance_lifecycle_test)
+    set_tests_properties(appearance_lifecycle_test PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;DISPLAY=;WAYLAND_DISPLAY=;GREETD_SOCK=;DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/kos-bridge-test")
 endif()
 
 install(TARGETS kos_bridge
