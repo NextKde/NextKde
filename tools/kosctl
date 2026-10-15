@@ -871,17 +871,28 @@ deploy_artifacts() {
     fi
 
     # --- Settings QML & shared controls ---
+    # Ship every runtime page; a missing local type prevents main.qml loading.
+    # Copy whole subdirectories instead of naming them: apps/settings/pages and
+    # components were added to main.qml's imports but never to this list, so the
+    # window died inside QQmlApplicationEngine on "no such directory" while the
+    # checkout it was built from looked perfectly fine.
+    local settings_src
     if [[ "$nix_artifact" == true ]]; then
-        install -m 0644 "$artifact_root"/share/kos/settings/*.qml \
-            "$prefix/share/kos/settings/"
-        cp -rL --no-preserve=mode "$artifact_root/share/kos/settings/icons" "$prefix/share/kos/settings/"
+        settings_src="$artifact_root/share/kos/settings"
     else
-        # Ship every runtime page; a missing local type prevents main.qml loading.
-        # Only top-level QML belongs here, not the tests/ subdirectory.
-        install -m 0644 "$project_dir"/apps/settings/*.qml \
-            "$prefix/share/kos/settings/"
-        cp -rL --no-preserve=mode "$project_dir/apps/settings/icons" "$prefix/share/kos/settings/"
+        settings_src="$project_dir/apps/settings"
     fi
+    install -m 0644 "$settings_src"/*.qml "$prefix/share/kos/settings/"
+    local settings_sub settings_name
+    for settings_sub in "$settings_src"/*/; do
+        [[ -d "$settings_sub" ]] || continue
+        settings_name=$(basename "$settings_sub")
+        # src/ and tests/ are build-time only; build/ is a local CMake tree.
+        case "$settings_name" in
+            src|tests|build|build-*) continue ;;
+        esac
+        cp -rL --no-preserve=mode "${settings_sub%/}" "$prefix/share/kos/settings/"
+    done
     # The Settings window is a *separate process*, and it resolves its relative
     # imports against its own installed directory, $prefix/share/kos/settings.
     # So every shared/qml subdirectory it can reach has to land in
