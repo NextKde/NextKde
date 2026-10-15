@@ -368,7 +368,24 @@ class Transaction(unittest.TestCase):
   self.manifest()
   with patch.dict(os.environ,{'SUDO_UID':str(uid)}):self.inst.refresh(self.bundle)
   manifest=self.inst.app/'public-display'/str(uid)/'manifest.json'
-  value=json.loads(manifest.read_text());self.assertEqual(value['expiresAt']-value['issuedAt'],86400)
+  value=json.loads(manifest.read_text());self.assertEqual(value['schemaVersion'],2);self.assertEqual(value['expiresAt'],0)
+  with patch.dict(os.environ,{'SUDO_UID':str(uid)}):self.inst.refresh(self.bundle,sync=False)
+  self.assertFalse(manifest.exists())
+ def test_refresh_old_install_requires_upgrade_without_changing_publication(self):
+  resources=REPO/'apps/greeter/companion/resources.py'
+  # Represents an installed consumer without the v2 capability marker.
+  dest=self.bundle/'app/companion/resources.py'
+  dest.write_text(resources.read_text().replace('PERSISTENT_SCHEMA_VERSION = 2\n',''));dest.chmod(0o644)
+  self.manifest();self.inst.install(self.bundle)
+  uid=os.geteuid() or 1000
+  public=self.inst.app/'public-display'/str(uid);public.mkdir(parents=True)
+  manifest=public/'manifest.json';manifest.write_text('previous publication')
+  (self.bundle/'wallpaper.png').write_bytes(b'fixture')
+  (self.bundle/'wallpaper.json').write_text(json.dumps(dict(uid=uid,fit='crop')))
+  self.manifest()
+  with patch.dict(os.environ,{'SUDO_UID':str(uid)}),self.assertRaisesRegex(RuntimeError,'upgrade before --refresh-wallpaper'):
+   self.inst.refresh(self.bundle)
+  self.assertEqual(manifest.read_text(),'previous publication')
   with patch.dict(os.environ,{'SUDO_UID':str(uid)}):self.inst.refresh(self.bundle,sync=False)
   self.assertFalse(manifest.exists())
  def test_readability_keeps_publisher_lock_private(self):

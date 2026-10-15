@@ -47,5 +47,5 @@ Item {
         }
     }
     Timer { interval: 1000; running: !root.frozen; repeat: true; onTriggered: root.reload(); }
-    Timer { id: timeout; interval: 3000; onTriggered: { reader.running = false; root.reset(); } }
+    Timer { id: timeout; interval: 6000; onTriggered: { reader.running = false; root.reset(); } }
 }

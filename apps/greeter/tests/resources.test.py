@@ -7,6 +7,7 @@ import tempfile
 import concurrent.futures
 import time
 import unittest
+from unittest.mock import patch
 from PIL import Image
 
 spec = importlib.util.spec_from_file_location('resources', Path(__file__).parents[1] / 'companion/resources.py')
@@ -32,6 +33,28 @@ class Publication(unittest.TestCase):
         for consent, notice in [(False, r.NOTICE), (True, '')]:
             with self.assertRaises(ValueError):
                 self.store.publish(self.uid, png(), consent=consent, notice=notice)
+        self.assertIsNone(self.store.consume(self.uid))
+    def test_installed_copy_survives_expiry_and_remains_revocable(self):
+        old = self.publish(persistent=True)
+        self.assertEqual((old['schemaVersion'], old['expiresAt']), (2, 0))
+        with patch('time.time', return_value=old['issuedAt'] + 30 * 86400):
+            self.assertEqual(self.store.consume(self.uid)[0], old)
+            replacement = self.publish(persistent=True)
+            self.assertNotEqual(replacement['version'], old['version'])
+            self.assertFalse((self.d / old['version']).exists())
+            self.store.revoke(self.uid)
+            self.assertIsNone(self.store.consume(self.uid))
+
+    def test_temporary_copy_still_expires(self):
+        manifest = self.publish()
+        self.assertEqual(manifest['schemaVersion'], 1)
+        with patch('time.time', return_value=manifest['expiresAt']):
+            self.assertIsNone(self.store.consume(self.uid))
+
+    def test_persistent_manifest_requires_explicit_lifetime_schema(self):
+        manifest = self.publish(persistent=True)
+        manifest['expiresAt'] = manifest['issuedAt'] + 86400
+        (self.d / 'manifest.json').write_text(json.dumps(manifest))
         self.assertIsNone(self.store.consume(self.uid))
     def test_copy_and_permissions(self):
         source = Path(self.tmp.name) / 'source.png'

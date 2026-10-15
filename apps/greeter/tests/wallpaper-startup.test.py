@@ -19,7 +19,7 @@ APP = Path(__file__).resolve().parents[1]
 
 @unittest.skipUnless(shutil.which('qs'), 'Quickshell required')
 class Startup(unittest.TestCase):
-    def run_frontend(self, corrupt=False, blocked=False, single=False):
+    def run_frontend(self, corrupt=False, blocked=False, single=False, delay=1.2):
         with tempfile.TemporaryDirectory(prefix='kos-startup-') as directory:
             app = Path(directory)
             shutil.copytree(APP/'qml', app/'qml')
@@ -37,7 +37,7 @@ class Startup(unittest.TestCase):
             state = dict(uid=1000 if single else -1, source='data:image/png;base64,'+data,
                          fit='crop', version='fixture')
             (app/'companion/wallpaper.py').write_text(
-                'import time\ntime.sleep(1.2)\nprint('+repr(json.dumps(state))+')\n')
+                'import time\ntime.sleep('+str(delay)+')\nprint('+repr(json.dumps(state))+')\n')
             source = (APP/'shell.qml').read_text()
             source = source.rsplit('}', 1)[0] + '''
     Timer { interval: 500; running: true; onTriggered: {
@@ -77,6 +77,8 @@ class Startup(unittest.TestCase):
                 if blocked == 'loader-error':
                     source = source.replace('source: "qml/WallpaperWindows.qml"', 'source: "qml/MissingBackground.qml"')
                     source = source.replace('active: Quickshell.env("QT_QPA_PLATFORM") !== "offscreen"', 'active: true')
+            elif delay > 1.2:
+                source = source.replace('interval: 3000; running: true;', 'interval: 5500; running: true;')
             (app/'shell.qml').write_text(source)
             env = os.environ.copy()
             virtual = os.environ.get('KOS_STARTUP_VIRTUAL_SESSION') == '1'
@@ -124,6 +126,9 @@ class Startup(unittest.TestCase):
 
     def test_delayed_image(self):
         self.run_frontend()
+
+    def test_large_image_read_exceeding_old_three_second_deadline(self):
+        self.run_frontend(single=True, delay=3.4)
 
     def test_loader_error_has_deadline(self):
         self.run_frontend(blocked='loader-error')

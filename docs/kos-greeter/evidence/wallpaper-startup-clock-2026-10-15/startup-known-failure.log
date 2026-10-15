@@ -1,0 +1,65 @@
+......F
+======================================================================
+FAIL: test_virtual_screen_composition (__main__.Startup.test_virtual_screen_composition)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/wwt/Downloads/NextKde/apps/greeter/tests/wallpaper-startup.test.py", line 119, in test_virtual_screen_composition
+    self.assertEqual(code, 0, logs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.1' (uid=1000 pid=9520 comm="kscreen-doctor -j")
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+
+(/usr/lib/xdg-desktop-portal:9523): xdg-desktop-portal-WARNING **: 10:29:26.063: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:9548): Gtk-WARNING **: 10:29:26.073: cannot open display:
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.kde' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.kde'
+
+(/usr/lib/xdg-desktop-portal:9523): xdg-desktop-portal-WARNING **: 10:29:26.127: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+
+(/usr/lib/xdg-desktop-portal:9523): xdg-desktop-portal-WARNING **: 10:29:26.127: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+
+(/usr/lib/xdg-desktop-portal:9523): xdg-desktop-portal-WARNING **: 10:29:26.127: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:9566): Gtk-WARNING **: 10:29:26.137: cannot open display:
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/lib/xdg-desktop-portal:9523): xdg-desktop-portal-WARNING **: 10:29:26.138: Failed to create settings proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.kwallet' requested by ':1.2' (uid=1000 pid=9523 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
+dbus-daemon[9470]: [session uid=1000 pid=9470 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.kwallet'
+F
+======================================================================
+FAIL: test_delayed_image (__main__.Startup.test_delayed_image)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/wwt/Downloads/NextKde/apps/greeter/tests/wallpaper-startup.test.py", line 128, in test_delayed_image
+    self.run_frontend()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/home/wwt/Downloads/NextKde/apps/greeter/tests/wallpaper-startup.test.py", line 94, in run_frontend
+    self.assertIn(marker, logs)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^
+AssertionError: 'PASS first auth visibility' not found in '  INFO: Launching config: "/tmp/kos-startup-cq60_ebo/shell.qml"\n  INFO: Shell ID: "5b1b956c9d6cd5721d2d31f4f2ed4f47" Path ID "5b1b956c9d6cd5721d2d31f4f2ed4f47"\n  INFO: Saving logs to "/run/user/1000/quickshell/by-id/sd729gxmt/log.qslog"\n  INFO: Configuration Loaded\n  INFO qml: PASS auth hidden while image pending\n  INFO qml: PASS real background uses full screen and desktop decode budget\n  WARN scene: @shell.qml[484:-1]: Error: AUTH_DUPLICATES_BACKGROUND\n  INFO qml: KOS_WALLPAPER_WINDOW Virtual-0 true\n  WARN scene: @qml/WallpaperWindows.qml[53:-1]: Error: BACKGROUND_DESKTOP_DPR_MISMATCH\n  INFO qml: KOS_WALLPAPER_FRAME_SUBMITTED Virtual-0\n  INFO qml: PASS account change retains auth visibility\n  INFO qml: KOS_WALLPAPER_DESTROYED\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 3.316s
+
+FAILED (failures=1)
+
+
+----------------------------------------------------------------------
+Ran 7 tests in 36.722s
+
+FAILED (failures=1)
+PASS corrupt-image fallback startup ordering
+PASS delayed-image decode startup ordering
+PASS delayed-image decode startup ordering
+PASS missing-background bounded fallback startup ordering
+PASS missing-background bounded fallback startup ordering
+PASS delayed-image decode startup ordering

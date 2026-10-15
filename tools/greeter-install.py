@@ -301,6 +301,8 @@ class Installer:
             store.revoke(caller)
             print('No current consent/image: previous public copy revoked for your account.')
             return
+        if getattr(resources, 'PERSISTENT_SCHEMA_VERSION', None) != 2:
+            raise RuntimeError('Installed Greeter does not support retained wallpaper copies. Run ./tools/install-greeter.sh to upgrade before --refresh-wallpaper.')
         values = {}
         for relative in ('wallpaper.json','wallpaper.png'):
             raw = read_regular(bundle/relative)
@@ -310,9 +312,9 @@ class Installer:
         meta = json.loads(values['wallpaper.json'])
         if set(meta) != {'uid','fit'} or meta['uid'] != caller or meta['fit'] not in ('crop','fit','stretch','center'):
             raise RuntimeError('Wallpaper consent must belong to the sudo caller')
-        store.publish(caller,values['wallpaper.png'],consent=True,notice=resources.NOTICE,fit=meta['fit'])
+        store.publish(caller,values['wallpaper.png'],consent=True,notice=resources.NOTICE,fit=meta['fit'],persistent=True)
         atomic(self.app/'config/wallpaper.json',json.dumps(dict(schemaVersion=1,defaultUid=caller)).encode())
-        print('Public wallpaper refreshed (24-hour expiry; --refresh-wallpaper renews or revokes from current consent).')
+        print('Public wallpaper refreshed (retained until explicitly replaced or revoked with --refresh-wallpaper).')
 
     @public_umask
     def refresh(self, bundle, sync=True):

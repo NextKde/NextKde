@@ -1,0 +1,15 @@
+KOS_SESSION_PHASE HandoffReferenceStarting 918353084220
+KOS_SESSION_PHASE HandoffReferenceReady 918353111494
+KOS_SESSION_PHASE PlasmaStarting 918353167341
+KOS_SESSION_PHASE HandoffReferenceStarting 918369060976
+KOS_SESSION_PHASE HandoffReferenceReady 918369477490
+KOS_SESSION_PHASE PlasmaStarting 918369535580
+{"KOS_HANDOFF_PATH": "/tmp/tmpcrv_fgjj/runtime/kos-handoff-0b4afb07d8254ad59e3b9401b5e92a0a/handoff.json", "KOS_HANDOFF_SESSION": "0b4afb07d8254ad59e3b9401b5e92a0a", "KOS_HANDOFF_SHA256": "a306f4eaf9e045172c9d5021e9f6e609207806c250dcc6914137d320a9004cc9"}
+KOS_SESSION_PHASE HandoffReferenceStarting 918385082510
+KOS_SESSION_PHASE HandoffReferenceReady 918385375078
+KOS_SESSION_PHASE PlasmaStarting 918385432788
+KOS_SESSION_PHASE HandoffReferenceStarting 918392877308
+KOS_SESSION_PHASE HandoffReferenceReady 918393161860
+KOS_SESSION_PHASE PlasmaStarting 918393217037
+PASS T09: 37 rejection cases; atomic permissions, same-UID isolation, single-use, revoke/replacement, lock, child failure/signal cleanup; elapsed=0.223s
+KOS_HANDOFF default-background

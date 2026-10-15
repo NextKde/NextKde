@@ -25,11 +25,22 @@ class OptimizedReferences(unittest.TestCase):
   self.path=self.store.root/str(self.uid)/self.m['version']/'wallpaper.png'
   self.reader=Reader(self.store.root,self.uid);resources._CANONICAL_DIMENSIONS.clear()
  def tearDown(self):self.tmp.cleanup()
- def test_repeated_consumes_only_encode_once(self):
+ def test_repeated_consumes_never_reencode_public_pixels(self):
   with patch.object(resources,'image_copy',wraps=resources.image_copy) as encode:
    first=self.reader.consume(self.uid);second=self.reader.consume(self.uid)
-   self.assertEqual(first,second);self.assertEqual(encode.call_count,1)
+   self.assertEqual(first,second);self.assertEqual(encode.call_count,0)
   self.assertTrue(all(isinstance(size,tuple) for size in resources._CANONICAL_DIMENSIONS.values()))
+ def test_public_format_rejects_metadata_non_rgb_and_corrupt_pixels(self):
+  from PIL.PngImagePlugin import PngInfo
+  original=self.path.read_bytes()
+  metadata=PngInfo();metadata.add_text('private','must not survive publication')
+  for mode,options in [('RGB',{'pnginfo':metadata}),('RGBA',{}),('L',{})]:
+   out=io.BytesIO();Image.new(mode,(320,200)).save(out,format='PNG',**options)
+   data=out.getvalue()
+   with self.assertRaises(ValueError):resources.canonical_dimensions(data,hashlib.sha256(data).hexdigest())
+  broken=bytearray(original);broken[-8]^=1
+  with self.assertRaises((ValueError,OSError,SyntaxError)):
+   resources.canonical_dimensions(bytes(broken),hashlib.sha256(broken).hexdigest())
  def test_cached_validation_does_not_bypass_permissions_or_hash(self):
   self.assertIsNotNone(self.reader.consume(self.uid))
   self.path.chmod(0o666);self.assertIsNone(self.reader.consume(self.uid))

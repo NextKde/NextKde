@@ -1,0 +1,114 @@
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. Service enablement unchanged.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Identical installation already present; original recovery snapshot preserved.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+No persistent Greeter installation to roll back.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Migrated bounded daemon recovery policy; no service restarted.
+Identical installation already present; original recovery snapshot preserved.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Completed pending upgrade cleanup.
+Updated from local source. Service state unchanged; new app is used on the next login.
+Migrated bounded daemon recovery policy; no service restarted.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+No current consent/image: previous public copy revoked for your account.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Public wallpaper refreshed (retained until explicitly replaced or revoked with --refresh-wallpaper).
+No current consent/image: previous public copy revoked for your account.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous app after interrupted upgrade.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Completed pending upgrade cleanup.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous app after interrupted upgrade.
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous app after interrupted upgrade.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+No current consent/image: previous public copy revoked for your account.
+Completed pending upgrade cleanup.
+Updated from local source. Service state unchanged; new app is used on the next login.
+Installed. Service enablement unchanged.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Completed pending upgrade cleanup.
+Updated from local source. Service state unchanged; new app is used on the next login.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Completed pending upgrade cleanup.
+Updated from local source. Service state unchanged; new app is used on the next login.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Completed pending upgrade cleanup.
+Updated from local source. Service state unchanged; new app is used on the next login.
+Restored previous manager, boot aliases and config; installed Greeter removed.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous app after interrupted upgrade.
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Installed. greetd is the boot default; reboot when ready.
+Rollback: sudo python3 /var/lib/kos-greeter-install/rollback.py --rollback
+Restored previous app after interrupted upgrade.
+..............................................
+----------------------------------------------------------------------
+Ran 46 tests in 0.318s
+
+OK

@@ -33,7 +33,7 @@ def run_case(name, delay=0, lost=False, bad=False, default=False, late=False, fi
         # AppearanceConfigService was replaced by the previous literal replacement.
         service = service.replace('AppearanceConfigService','appearance').replace('Appearanceconfig','appearance')
         service = service.replace('    readonly property string coverPath:', '    readonly property string unusedCoverPath:')
-        service = service.replace('    id: root','    id: root\n    property string coverPath: '+json.dumps(str(app/'cover.qml'))+'\n    property QtObject wallpaper: QtObject { property string mode: "image"; property string fitMode: "crop"; property bool takeoverEnabled: true; property url wallpaperUrl: '+json.dumps(image.as_uri() if not bad else (root/'wrong.png').as_uri())+' }\n    property QtObject config: QtObject { property bool ready: true }\n    property QtObject appearance: QtObject { property bool ready: true; property bool barIntegratedWithDock: false; property bool spatialWallpaperEnabled: false }',1)
+        service = service.replace('    id: root','    id: root\n    property string coverPath: '+json.dumps(str(app/'cover.qml'))+'\n    property QtObject wallpaper: QtObject { signal presentationChangeRequested(); property string mode: "image"; property string fitMode: "crop"; property bool takeoverEnabled: true; property url wallpaperUrl: '+json.dumps(image.as_uri() if not bad else (root/'wrong.png').as_uri())+' }\n    property QtObject config: QtObject { property bool ready: true }\n    property QtObject appearance: QtObject { property bool ready: true; property bool barIntegratedWithDock: false; property bool spatialWallpaperEnabled: false }',1)
         (root/'SessionEntryService.qml').write_text(service)
         (root/'qmldir').write_text('singleton SessionEntryService 1.0 SessionEntryService.qml\n')
         (root/'WallpaperPreviewService.qml').write_text('pragma Singleton\nimport QtQuick\nQtObject { property bool active: false }\n')
@@ -52,7 +52,10 @@ ShellRoot {
    anchors { top: true; bottom: true; left: true; right: true }
    WlrLayershell.layer: WlrLayer.Bottom
    color: "#16283b"
-   Image { id: image; anchors.fill: parent; source: Entry.SessionEntryService.sessionImage; fillMode: Image.PreserveAspectCrop }
+   Image { id: image; anchors.fill: parent; source: Entry.SessionEntryService.sessionImage || Entry.SessionEntryService.wallpaper.wallpaperUrl; fillMode: Image.PreserveAspectCrop }
+   Connections { target: Entry.SessionEntryService
+    function onImageMatchesChanged() { if (Entry.SessionEntryService.imageMatches) image.Window.window.update(); }
+   }
    Rectangle { width: parent.width; height: 30; color: "white"; opacity: Entry.SessionEntryService.progress }
    Connections { target: image.Window.window
     function onFrameSwapped() { if ((Entry.SessionEntryService.defaultBackground || image.status === Image.Ready) && !(LOST && window.screen.name === "Virtual-1")) Entry.SessionEntryService.frame(window.screen.name, image.source.toString(), "crop"); }

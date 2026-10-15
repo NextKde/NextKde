@@ -33,10 +33,25 @@ PanelWindow {
     readonly property bool active: wallpaperLayer.active
 
     Connections {
+        target: SessionEntryService
+        function onImageMatchesChanged() {
+            // Verification may finish after an otherwise idle desktop image
+            // has settled. Submit another frame for the readiness gate.
+            if (SessionEntryService.pending && SessionEntryService.imageMatches)
+                root.contentItem.Window.window.update()
+        }
+    }
+
+    Connections {
         target: root.contentItem.Window.window
         function onFrameSwapped() {
             if (SessionEntryService.pending && SessionEntryService.defaultBackground) {
                 SessionEntryService.frame(root.screen.name, "", "crop"); return;
+            }
+            if (SessionEntryService.pending && wallpaperLayer.active && wallpaperLayer.visualReady
+                && !SpatialWallpaperService.activationPending && wallpaperLayer.opacity >= 0.999) {
+                SessionEntryService.frame(root.screen.name, WallpaperService.wallpaperUrl.toString(), WallpaperService.fitMode);
+                return;
             }
             if (SessionEntryService.pending && ordinaryWallpaper.visible
                 && ordinaryWallpaper.ready && !ordinaryWallpaper.transitioning
@@ -55,6 +70,7 @@ PanelWindow {
         fitMode: SessionEntryService.sessionFit
         transition: "none"
         visible: SessionEntryService.sessionImage !== ""
+        opacity: SessionEntryService.released ? 1 - SessionEntryService.progress : 1
     }
     Connections {
         target: root.contentItem.Window.window
@@ -68,6 +84,7 @@ PanelWindow {
     Rectangle {
         anchors.fill: parent; z: 201; color: "#16283b"
         visible: SessionEntryService.defaultBackground
+        opacity: SessionEntryService.released ? 1 - SessionEntryService.progress : 1
     }
     ThemeWallpaperLayer {
         anchors.fill: parent

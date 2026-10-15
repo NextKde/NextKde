@@ -21,6 +21,7 @@ import warnings
 from PIL import Image
 
 MAX_BYTES = 16 * 1024 * 1024
+PERSISTENT_SCHEMA_VERSION = 2
 MAX_PIXELS = 16_000_000
 NOTICE = '所选图片和头像将在认证前向这台机器的其他使用者展示。'
 
@@ -59,8 +60,21 @@ def canonical_dimensions(data, digest, avatar=False):
     if key in _CANONICAL_DIMENSIONS:
         _CANONICAL_DIMENSIONS.move_to_end(key)
         return list(_CANONICAL_DIMENSIONS[key])
-    clean, size = image_copy(data, avatar)
-    if clean != data: raise ValueError('noncanonical resource')
+    # Publication already strips metadata and encodes RGB PNG under the store
+    # owner's credentials. Consumers validate that bounded format and decode
+    # integrity, rather than recompressing millions of pixels on every start.
+    # Ownership, manifest and content hash remain live checks in _read().
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', Image.DecompressionBombWarning)
+        with Image.open(io.BytesIO(data)) as image:
+            size = list(image.size)
+            if (image.format != 'PNG' or image.mode != 'RGB' or image.info
+                    or image.width * image.height > MAX_PIXELS or max(size) > (512 if avatar else 8192)
+                    or getattr(image, 'n_frames', 1) != 1):
+                raise ValueError('noncanonical resource')
+            image.verify()
+        with Image.open(io.BytesIO(data)) as image:
+            image.load()
     _CANONICAL_DIMENSIONS[key] = tuple(size)
     if len(_CANONICAL_DIMENSIONS) > 128: _CANONICAL_DIMENSIONS.popitem(last=False)
     return size
@@ -124,10 +138,10 @@ class Store:
                     shutil.rmtree(p)
         self._sync(d)
 
-    def publish(self, uid, wallpaper, *, consent, notice, mode='image', fit='crop', avatar=None, ttl=86400, fail=None):
+    def publish(self, uid, wallpaper, *, consent, notice, mode='image', fit='crop', avatar=None, ttl=86400, persistent=False, fail=None):
         if consent is not True or notice != NOTICE:
             raise ValueError('explicit public-display consent required')
-        if mode != 'image' or fit not in ('crop', 'fit', 'stretch', 'center') or type(ttl) is not int or not 1 <= ttl <= 604800:
+        if mode != 'image' or fit not in ('crop', 'fit', 'stretch', 'center') or type(ttl) is not int or not 1 <= ttl <= 604800 or type(persistent) is not bool:
             raise ValueError('display fields')
         images = {'wallpaper': image_copy(wallpaper)}
         if avatar is not None:
@@ -142,7 +156,9 @@ class Store:
                 self._write(tmp / (name + '.png'), data)
                 resources[name] = {'file': name + '.png', 'sha256': hashlib.sha256(data).hexdigest(), 'size': size}
             now = int(time.time())
-            manifest = {'schemaVersion': 1, 'uid': uid, 'version': version, 'issuedAt': now, 'expiresAt': now + ttl,
+            # Installed copies use an explicit versioned lifetime. Temporary
+            # publications retain the bounded v1 expiry contract by default.
+            manifest = {'schemaVersion': PERSISTENT_SCHEMA_VERSION if persistent else 1, 'uid': uid, 'version': version, 'issuedAt': now, 'expiresAt': 0 if persistent else now + ttl,
                         'mode': mode, 'fit': fit, 'crop': [0, 0, 1, 1], 'resources': resources}
             self._sync(tmp)
             if fail == 'before-version':
@@ -188,12 +204,16 @@ class Store:
             m = json.loads(self._file(d / 'manifest.json', 4096))
             if set(m) != {'schemaVersion', 'uid', 'version', 'issuedAt', 'expiresAt', 'mode', 'fit', 'crop', 'resources'}:
                 return None
-            if type(m['schemaVersion']) is not int or m['schemaVersion'] != 1 or type(m['uid']) is not int or m['uid'] != uid:
+            if type(m['schemaVersion']) is not int or m['schemaVersion'] not in (1, 2) or type(m['uid']) is not int or m['uid'] != uid:
                 return None
             if not isinstance(m['version'], str) or not re.fullmatch(r'v-[0-9a-f]{32}', m['version']):
                 return None
             now = time.time()
-            if any(type(m[k]) is not int for k in ('issuedAt', 'expiresAt')) or not m['issuedAt'] <= now < m['expiresAt'] <= m['issuedAt'] + 604800:
+            if any(type(m[k]) is not int for k in ('issuedAt', 'expiresAt')) or not 0 <= m['issuedAt'] <= now:
+                return None
+            if m['schemaVersion'] == 1 and not now < m['expiresAt'] <= m['issuedAt'] + 604800:
+                return None
+            if m['schemaVersion'] == 2 and m['expiresAt'] != 0:
                 return None
             if type(m['crop']) is not list or any(type(v) is not int for v in m['crop']):
                 return None

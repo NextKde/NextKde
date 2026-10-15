@@ -4,6 +4,7 @@ import io
 import json
 import os
 from pathlib import Path
+from unittest.mock import patch
 import sys
 import tempfile
 from PIL import Image
@@ -33,4 +34,9 @@ with tempfile.TemporaryDirectory() as tmp:
         else: store.revoke(1000)
         assert snapshot(root, 1000, os.getuid())['version'] == 'default', mutation
     assert snapshot(root, 1000, os.getuid() + 1)['version'] == 'default'
+    manifest = store.publish(1000, out.getvalue(), consent=True, notice=NOTICE, persistent=True)
+    with patch('time.time', return_value=manifest['issuedAt'] + 30 * 86400):
+        assert snapshot(root, 1000, os.getuid())['version'] == manifest['version']
+        store.revoke(1000)
+        assert snapshot(root, 1000, os.getuid())['version'] == 'default'
 print('PASS T07 read-only hash, unknown fields/version, absent/corrupt/revoked/untrusted resources')

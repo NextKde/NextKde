@@ -19,7 +19,7 @@ The original recovery snapshot and boot selection are preserved on update.
 First install default: selects greetd for the next boot; the desktop stays running.
 --activate-now: switch immediately from a recovery text TTY, ending the desktop.
 --files-only: install app/config but preserve boot service enablement.
---refresh-wallpaper: renew the 24-hour public copy from current consent;
+--refresh-wallpaper: replace the retained public copy from current consent;
                     --no-wallpaper-sync revokes your existing public copy.
 Rollback: ./tools/rollback-installed-greeter.sh (use a text TTY if greetd is running).
 USAGE

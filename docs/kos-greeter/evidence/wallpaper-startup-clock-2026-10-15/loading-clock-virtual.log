@@ -1,0 +1,40 @@
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.portal.Desktop' requested by ':1.1' (uid=1000 pid=18511 comm="qs -p /home/wwt/Downloads/NextKde/.build/greeter-l")
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.impl.portal.PermissionStore' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.PermissionStore'
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.portal.Documents' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Successfully activated service 'org.freedesktop.portal.Documents'
+
+(/usr/lib/xdg-desktop-portal:18514): xdg-desktop-portal-WARNING **: 10:35:43.666: Choosing gtk.portal for org.freedesktop.impl.portal.Lockdown as a last-resort fallback
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:18536): Gtk-WARNING **: 10:35:43.678: cannot open display:
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.kde' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.kde'
+
+(/usr/lib/xdg-desktop-portal:18514): xdg-desktop-portal-WARNING **: 10:35:43.733: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+
+(/usr/lib/xdg-desktop-portal:18514): xdg-desktop-portal-WARNING **: 10:35:43.733: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+
+(/usr/lib/xdg-desktop-portal:18514): xdg-desktop-portal-WARNING **: 10:35:43.733: Failed to load RealtimeKit property: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.gtk' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+
+(xdg-desktop-portal-gtk:18553): Gtk-WARNING **: 10:35:43.744: cannot open display:
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activated service 'org.freedesktop.impl.portal.desktop.gtk' failed: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+
+(/usr/lib/xdg-desktop-portal:18514): xdg-desktop-portal-WARNING **: 10:35:43.745: Failed to create settings proxy: Error calling StartServiceByName for org.freedesktop.impl.portal.desktop.gtk: Process org.freedesktop.impl.portal.desktop.gtk exited with status 1
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Activating service name='org.freedesktop.impl.portal.desktop.kwallet' requested by ':1.2' (uid=1000 pid=18514 comm="/usr/lib/xdg-desktop-portal")
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Successfully activated service 'org.freedesktop.portal.Desktop'
+dbus-daemon[18466]: [session uid=1000 pid=18466 pidfd=5] Successfully activated service 'org.freedesktop.impl.portal.desktop.kwallet'
+  INFO: Launching config: "/home/wwt/Downloads/NextKde/.build/greeter-loading-clock/preview/cover.qml"
+  INFO: Shell ID: "cd99096bc4d9796ff9e5b60b9fdd2c22" Path ID "cd99096bc4d9796ff9e5b60b9fdd2c22"
+  INFO: Saving logs to "/run/user/1000/quickshell/by-id/7aejjgxmt/log.qslog"
+  INFO qml: KOS_COVER ResourceReady Virtual-0 1792031743743
+  INFO qml: KOS_COVER ResourceReady Virtual-0 1792031743755
+  INFO: Configuration Loaded
+  WARN qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.portal.Error.Failed", "Could not register app ID: Connection already associated with an application ID")
+  INFO qml: KOS_COVER FeedReceived 1792031743767
+  INFO qml: KOS_COVER WindowMapped Virtual-0 true 1792031743768
+  INFO qml: KOS_COVER FrameSubmitted Virtual-0 default 1792031743868
+  INFO qml: PASS loading date and clock match login format
+  INFO qml: KOS_COVER OutputRemoved 1792031746044

@@ -51,3 +51,55 @@ ready.WindowService.providerReady=true; ready.essentials.dock=false;
 ready.check(); assert.equal(ready.reveal.running,false,'Dock needs its ready frame');
 ready.essentials.dock=true; ready.check(); assert.equal(ready.reveal.running,true);
 console.log('PASS desktop reveal waits for provider and essential frames');
+const release = service.slice(service.indexOf('    function release('), service.indexOf('    property NumberAnimation'));
+const finished = service.match(/onFinished: \{([\s\S]*?)\n        \}/)[1];
+const staticPresentation = service.match(/readonly property bool staticPresentation: ([^\n]+)/)[1];
+for (const reason of ['RevealStarted', 'Timeout', 'NoCover']) {
+ for (const image of ['', 'data:image/png;base64,fixture']) {
+  const entry = {released:false,discovering:true,pending:true,defaultBackground:image === '',sessionImage:image,
+   imageMatches:!!image,verificationKey:'fixture',frames:{A:true},record(){},animation:{start(){}}};
+  entry.root=entry; vm.createContext(entry); vm.runInContext(clear+release,entry);
+  assert.equal(vm.runInContext(staticPresentation,entry),true);
+  entry.release(reason);
+  assert.equal(entry.pending,false);
+  assert.equal(vm.runInContext(staticPresentation,entry),false,'normal renderers resume during reveal');
+  vm.runInContext(finished,entry);
+  assert.equal(entry.defaultBackground,false,'default cover cannot survive reveal or timeout');
+  assert.equal(entry.sessionImage,'','verified static copy cannot replace the desktop forever');
+ }
+}
+console.log('PASS default and verified entry presentations release after reveal and timeout');
+const verifierResult = service.match(/const result = JSON.parse\(text\);([\s\S]*?)\n                \} catch/)[1];
+for (const mode of ['image', 'theme']) {
+ const verified = {pending:true,WallpaperService:{wallpaperUrl:'/asuka.png',mode},
+  handoff:{hash:'fixture',fit:'crop'},record(){}};
+ verified.root=verified;
+ verified.result={source:'/asuka.png',hash:'fixture',match:true,image:'published-kde-default'};
+ vm.createContext(verified);vm.runInContext(verifierResult,verified);
+ assert.equal(verified.sessionImage,mode === 'image' ? '' : 'published-kde-default');
+ assert.equal(verified.imageMatches,true);
+}
+const frame = service.slice(service.indexOf('    function frame('),service.indexOf('    function verify('));
+const desktop = {pending:true,defaultBackground:false,imageMatches:true,sessionImage:'',
+ WallpaperService:{wallpaperUrl:'/asuka.png',fitMode:'fit'},handoff:{fit:'crop'},frames:{},record(){},check(){}};
+vm.createContext(desktop);vm.runInContext(frame,desktop);
+desktop.frame('A','published-kde-default','crop');assert.equal(desktop.frames.A,undefined);
+desktop.frame('A','/asuka.png','fit');assert.equal(desktop.frames.A,true);
+console.log('PASS stale login copy cannot replace the selected desktop image or fit');
+const windowSource = fs.readFileSync(__dirname + '/../../../shell/desktop/modules/wallpaper/SpatialWallpaperWindow.qml','utf8');
+const swappedBody = windowSource.match(/function onFrameSwapped\(\) \{([\s\S]*?)\n        \}/)[1];
+const swapped = `(function() {${swappedBody}})()`;
+for (const outputs of [['A'], ['A','B']]) {
+ const calls=[];
+ const spatial={root:{screen:{name:'A'}},WallpaperService:{wallpaperUrl:'/asuka.png',fitMode:'fit'},
+  SessionEntryService:{pending:true,defaultBackground:false,frame:(...args)=>calls.push(args)},
+  SpatialWallpaperService:{activationPending:false},ThemeWallpaperService:{active:false},
+  ordinaryWallpaper:{visible:false},wallpaperLayer:{active:true,visualReady:true,opacity:.5}};
+ vm.createContext(spatial);vm.runInContext(swapped,spatial);assert.equal(calls.length,0);
+ spatial.wallpaperLayer.opacity=1;spatial.SpatialWallpaperService.activationPending=true;
+ vm.runInContext(swapped,spatial);assert.equal(calls.length,0);
+ spatial.SpatialWallpaperService.activationPending=false;
+ for (const name of outputs) { spatial.root.screen.name=name;vm.runInContext(swapped,spatial); }
+ assert.deepEqual(calls,outputs.map(name=>[name,'/asuka.png','fit']));
+}
+console.log('PASS settled spatial wallpaper submits current desktop frames on every output');

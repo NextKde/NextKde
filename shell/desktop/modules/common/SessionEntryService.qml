@@ -21,7 +21,9 @@ QtObject {
     property bool imageMatches: false
     property string verifiedSource: ""
     property string sessionImage: ""
-    readonly property bool staticPresentation: defaultBackground || sessionImage !== ""
+    // The entry image only owns presentation until the desktop is released.
+    // Resume normal renderers underneath it during the reveal animation.
+    readonly property bool staticPresentation: !released && (defaultBackground || sessionImage !== "")
     property string sessionFit: "crop"
     property string verificationKey: ""
     readonly property string coverPath: Quickshell.env("KOS_GREETER_APP_DIR")
@@ -32,7 +34,9 @@ QtObject {
     }
     function record(name) { console.info("KOS_ENTRY " + name + " " + Date.now()); }
     function frame(output, source, fit) {
-        if (!pending || (!defaultBackground && (!imageMatches || source !== sessionImage || fit !== handoff.fit))) return;
+        const expectedSource = sessionImage || WallpaperService.wallpaperUrl.toString();
+        const expectedFit = sessionImage ? handoff.fit : WallpaperService.fitMode;
+        if (!pending || (!defaultBackground && (!imageMatches || source !== expectedSource || fit !== expectedFit))) return;
         const first = !frames[output];
         let next = Object.assign({}, frames); next[output] = true; frames = next;
         if (first) record("FrameSubmitted " + handoff.session + " " + output + " " + handoff.hash); check();
@@ -53,7 +57,12 @@ QtObject {
                     const result = JSON.parse(text);
                     if (root.pending && result.source === WallpaperService.wallpaperUrl.toString()
                         && result.hash === root.handoff.hash && result.match) {
-                        root.verifiedSource = result.source; root.sessionImage = result.image; root.sessionFit = root.handoff.fit; root.imageMatches = true;
+                        root.verifiedSource = result.source;
+                        // A published login copy can be older than the saved
+                        // desktop selection. Paint the actual image desktop
+                        // under Cover, never the stale public copy.
+                        root.sessionImage = WallpaperService.mode === "image" ? "" : result.image;
+                        root.sessionFit = root.handoff.fit; root.imageMatches = true;
                         root.record("ResourceMatched");
                     }
                 } catch (_) {}
@@ -82,7 +91,10 @@ QtObject {
     property NumberAnimation animation: NumberAnimation {
         target: root; property: "progress"; to: 1; duration: Quickshell.env("KOS_GREETER_REDUCED_MOTION") === "1" ? 1 : 620
         easing.type: Easing.OutCubic
-        onFinished: root.record("RevealComplete")
+        onFinished: {
+            root.clearPresentation();
+            root.record("RevealComplete");
+        }
     }
     property Timer deadline: Timer { interval: 12000; running: true; onTriggered: root.release("Timeout") }
     property Timer discoveryDeadline: Timer { interval: 12000; running: true; onTriggered: { if (root.discovering) root.release("NoCover"); } }

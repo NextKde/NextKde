@@ -11,6 +11,8 @@ ShellRoot {
     property bool feedReady: false
     property bool revealing: false
     property real coverOpacity: 1
+    property date now: new Date()
+    Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
     readonly property bool reducedMotion: Quickshell.env("KOS_GREETER_REDUCED_MOTION") === "1"
     readonly property int revealDuration: reducedMotion ? 1 : 620
     function requestReveal(payload) {
@@ -29,7 +31,9 @@ ShellRoot {
     function finish(reason) { record(reason); Qt.quit(); }
     // Independent of resource readiness, output count, and Shell availability.
     Timer { interval: 15000; running: true; onTriggered: root.finish("Timeout") }
-    Timer { id: stale; interval: 2000; running: true; onTriggered: { root.state = ({source: "", fit: "crop", version: "default"}); root.feedReady = true; } }
+    // Initial decoding has a larger budget than the steady-state heartbeat.
+    // Otherwise a valid large wallpaper is first mapped as a blue fallback.
+    Timer { id: stale; interval: root.feedReady ? 2000 : 6000; running: true; onTriggered: { root.state = ({source: "", fit: "crop", version: "default"}); root.feedReady = true; } }
     Process {
         id: feed
         command: ["/usr/bin/python3", Quickshell.shellDir + "/companion/cover.py", "--feed"]
@@ -98,6 +102,21 @@ ShellRoot {
                     onDecoded: root.record("ImageDecoded " + window.screen.name + " " + root.state.version)
                     onFrameSubmitted: root.record("FrameSubmitted " + window.screen.name + " " + root.state.version)
                     onFallback: reason => root.record("Fallback " + reason)
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: parent.height * 0.108 - height / 2
+                    text: Qt.formatDate(root.now, "M月d日") + "  " + ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"][root.now.getDay()]
+                    color: "white"; font.pixelSize: Math.max(14, Math.min(28, parent.height * 0.025))
+                    style: Text.Raised; styleColor: "#55000000"
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: parent.height * 0.187 - height / 2
+                    text: Qt.formatTime(root.now, "hh:mm")
+                    color: "#e6ffffff"; font.pixelSize: Math.max(40, Math.min(160, parent.height * 0.145))
+                    font.weight: Font.Medium
+                    style: Text.Raised; styleColor: "#55000000"
                 }
                 Greeter.LoadingSpinner {
                     anchors.horizontalCenter: parent.horizontalCenter
