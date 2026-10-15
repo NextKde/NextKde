@@ -26,6 +26,81 @@ KosApplicationWindow {
     property bool showCompletedTasks: false
     property string statusMessage: ""
 
+    // Apple 26 ("Tahoe") design tokens, verbatim from the shared Sketch
+    // library's document.tokenExport dump — see
+    // tmp/ui-replication/calendar-v2/LEDGER.md §5. Values are the measured /
+    // exported hexes, not theme roles, so the chrome matches the reference
+    // instead of drifting with AppTheme.
+    readonly property QtObject tahoe: QtObject {
+        // Sidebar and content are two flush planes, not floating cards.
+        readonly property color sidebarPlane: "#E4E4E4"
+        readonly property color contentPlane: "#FFFFFF"
+        readonly property int sidebarWidth: 320
+
+        // Glass. Two independent frames agree on one law, so this is measured,
+        // not eyeballed: the body is 0.44 x backdrop + 129. Materials/Liquid
+        // Glass - Over Light Backgrounds puts six pills on a grey ramp
+        // (102,127,152,177,204,229) and reads back 185,186,212,223,219... and
+        // the sidebar toolbar pill here on the #E4E4E4 plane reads 228 at its
+        // dip — all on that line. It is a #E6E6E6 veil at 56%, which means the
+        // glass *compresses* whatever is behind it instead of just adding
+        // white. That is the part a flat opaque gradient cannot do: over the
+        // white content plane it stays a light grey (241) rather than blowing
+        // out, and over a dark backdrop it lifts hard.
+        readonly property color glassVeil: Qt.rgba(0xE6 / 255, 0xE6 / 255,
+                                                   0xE6 / 255, 0.56)
+        // Outermost hairline. Measured 200-210 on a 228 plane, 142 on 177.
+        readonly property color glassEdge: Qt.rgba(0, 0, 0, 0.08)
+        // 1px specular line just inside it: 255 against a 229 body at both the
+        // top and the bottom rim, so the glass catches light on both edges.
+        readonly property color glassRim: Qt.rgba(1, 1, 1, 0.90)
+
+        // Fills/Light 2 Secondary #787880 @16% over the sidebar plane
+        // resolves to the #D2D2D2 the reference measures.
+        readonly property color controlFill: Qt.rgba(0x78 / 255, 0x78 / 255,
+                                                     0x80 / 255, 0.16)
+        // Fills/Light 3 Tertiary #767680 @12% → the measured #D6D6D8.
+        readonly property color selectionFill: Qt.rgba(0x76 / 255, 0x76 / 255,
+                                                       0x80 / 255, 0.12)
+
+        // Labels/Light 1 Primary, 2 Secondary (#3C3C43 @60% → #8A8A8A).
+        readonly property color labelPrimary: "#000000"
+        readonly property color labelSecondary: Qt.rgba(0x3C / 255, 0x3C / 255,
+                                                        0x43 / 255, 0.6)
+        // Separators/Light Non-Opaque (#000000 @12%).
+        readonly property color separator: Qt.rgba(0, 0, 0, 0.12)
+
+        // System Colors/Light 8 Blue, 4 Green, 3 Orange.
+        readonly property color accent: "#0088FF"
+        readonly property color positive: "#34C759"
+        readonly property color warning: "#FF8D28"
+
+        // Sidebar search field: Sidebar/Light/Search, 300x44 on a 320 plane,
+        // fully rounded, filled with Fills/Light 2 over the plane.
+        readonly property color searchFill: "#D2D2D2"
+        readonly property int searchHeight: 44
+        readonly property int searchInsetLeading: 10
+        readonly property int searchInsetTrailing: 11
+
+        // Rows (Items/Level 0 + States/Selected): 44 tall, selection inset 20
+        // from the sidebar edge and 11 from the far side, a 20x20 marker box
+        // 16 inside the selection, label 15 after the marker.
+        readonly property int rowHeight: 44
+        readonly property int rowInsetLeading: 20
+        readonly property int rowInsetTrailing: 11
+        readonly property int rowIconInset: 16
+        readonly property int rowIconSize: 20
+        readonly property int rowTextGap: 15
+        readonly property int rowFontSize: 15
+        readonly property int rowDetailInset: 12
+        readonly property color rowHoverFill: Qt.rgba(0x74 / 255, 0x74 / 255,
+                                                      0x80 / 255, 0.08)
+
+        readonly property int controlHeight: 44
+        readonly property int controlRowHeight: 54
+        readonly property int pillHeight: 44
+    }
+
     readonly property string activeView: ["month", "week", "day"][viewIndex]
     readonly property int localeFirstDayOfWeek:
         Number(Qt.locale().firstDayOfWeek) % 7
@@ -44,70 +119,120 @@ KosApplicationWindow {
         onTriggered: root.now = new Date()
     }
 
-    component SidebarToggle: AbstractButton {
-        id: control
+    // Sidebar row chrome, from Items/Level 0 + States/Selected: the selection
+    // is a capsule inset 20 from the sidebar edge and 11 from the far side, the
+    // marker box is 20x20, the label sits 15 after it, and any trailing detail
+    // is right-aligned 12 inside the capsule.
+    component SidebarRow: AbstractButton {
+        id: row
 
-        property color markerColor: AppTheme.accent
+        property string detail: ""
+        property color markerColor: "transparent"
+        property string markerGlyph: ""
+        property bool markerFilled: false
+        property bool selected: false
+        property bool showSwitch: false
+        property color switchColor: root.tahoe.accent
+        // Child rows in Items/Level 1 sit one icon-width further in.
         property bool nested: false
 
-        checkable: true
+        implicitHeight: root.tahoe.rowHeight
         hoverEnabled: true
-        implicitHeight: nested ? 28 : 32
-        leftPadding: nested ? 26 : 10
-        rightPadding: 8
-        Accessible.role: Accessible.CheckBox
+        Accessible.name: row.text
 
-        contentItem: RowLayout {
-            spacing: 9
+        readonly property real nestInset: row.nested ? 24 : 0
+        readonly property real markerLeft: root.tahoe.rowInsetLeading
+                                           + root.tahoe.rowIconInset
+                                           + row.nestInset
+        readonly property real labelLeft: markerLeft + root.tahoe.rowIconSize
+                                          + root.tahoe.rowTextGap
 
-            Rectangle {
-                Layout.preferredWidth: 11
-                Layout.preferredHeight: 11
-                radius: width / 2
-                color: control.checked ? control.markerColor : "transparent"
-                border.width: control.checked ? 0 : 1
-                border.color: AppTheme.withAlpha(control.markerColor, 0.72)
+        background: Rectangle {
+            x: root.tahoe.rowInsetLeading
+            width: row.width - root.tahoe.rowInsetLeading
+                   - root.tahoe.rowInsetTrailing
+            height: row.height
+            radius: height / 2
+            color: row.selected ? root.tahoe.selectionFill
+                : (row.hovered ? root.tahoe.rowHoverFill : "transparent")
+        }
+
+        contentItem: Item {
+            Item {
+                x: row.markerLeft
+                anchors.verticalCenter: parent.verticalCenter
+                width: root.tahoe.rowIconSize
+                height: root.tahoe.rowIconSize
 
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 3
-                    height: 3
-                    radius: width / 2
-                    color: AppTheme.accentText
-                    visible: control.checked
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: row.markerFilled ? row.markerColor : "transparent"
+                    border.width: row.markerColor.a > 0 && !row.markerFilled ? 2 : 0
+                    border.color: row.markerColor
+                }
+
+                Label {
+                    anchors.centerIn: parent
+                    text: row.markerGlyph
+                    color: row.markerColor
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
                 }
             }
 
             Label {
-                Layout.fillWidth: true
-                text: control.text
-                color: control.enabled ? AppTheme.text : AppTheme.mutedText
-                font.pixelSize: control.nested ? 10 : 11
-                wrapMode: Text.WordWrap
-                verticalAlignment: Text.AlignVCenter
+                anchors.verticalCenter: parent.verticalCenter
+                x: row.labelLeft
+                width: Math.max(0, row.width - row.labelLeft
+                                   - root.tahoe.rowInsetTrailing
+                                   - root.tahoe.rowDetailInset
+                                   - detailLabel.implicitWidth - 8)
+                text: row.text
+                color: row.enabled ? root.tahoe.labelPrimary
+                                   : root.tahoe.labelSecondary
+                font.pixelSize: root.tahoe.rowFontSize
+                elide: Text.ElideRight
             }
 
+            Label {
+                id: detailLabel
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: row.showSwitch ? switchTrack.left : parent.right
+                anchors.rightMargin: row.showSwitch ? 10
+                    : root.tahoe.rowInsetTrailing + root.tahoe.rowDetailInset
+                text: row.detail
+                color: root.tahoe.labelSecondary
+                font.pixelSize: root.tahoe.rowFontSize
+                horizontalAlignment: Text.AlignRight
+            }
+
+            // The kit's own switch spec was not in the frames pulled for this
+            // task, so this is a proportional stand-in (LEDGER.md §4).
             Rectangle {
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 18
+                id: switchTrack
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.right: parent.right
+                anchors.rightMargin: root.tahoe.rowInsetTrailing
+                                     + root.tahoe.rowDetailInset
+                visible: row.showSwitch
+                width: visible ? 42 : 0
+                height: 26
                 radius: height / 2
-                color: control.checked
-                    ? AppTheme.withAlpha(control.markerColor,
-                        AppTheme.dark ? 0.42 : 0.24)
-                    : AppTheme.withAlpha(AppTheme.text,
-                        AppTheme.dark ? 0.18 : 0.10)
-                border.width: 1
-                border.color: control.checked
-                    ? AppTheme.withAlpha(control.markerColor, 0.48)
-                    : AppTheme.border
+                color: row.checked
+                    ? row.switchColor
+                    : Qt.rgba(0x78 / 255, 0x78 / 255, 0x80 / 255, 0.32)
+                opacity: row.enabled ? 1 : 0.48
 
                 Rectangle {
-                    y: 2
-                    x: control.checked ? parent.width - width - 2 : 2
-                    width: 14
-                    height: 14
-                    radius: 7
-                    color: control.checked ? control.markerColor : AppTheme.mutedText
+                    y: 3
+                    x: row.checked ? parent.width - width - 3 : 3
+                    width: 20
+                    height: 20
+                    radius: 10
+                    color: "#FFFFFF"
 
                     Behavior on x {
                         NumberAnimation {
@@ -118,14 +243,222 @@ KosApplicationWindow {
                 }
             }
         }
+    }
 
-        background: Rectangle {
-            radius: AppTheme.smallRadius
-            color: control.down
-                ? AppTheme.buttonPressed
-                : (control.hovered ? AppTheme.cardHover : "transparent")
-            border.width: control.activeFocus ? 1 : 0
-            border.color: AppTheme.withAlpha(AppTheme.accent, 0.56)
+    // Sidebar/Light/Search: a #D2D2D2 capsule with a leading magnifier, the
+    // placeholder at x 47 inside it, and a dictation glyph at the far end. Both
+    // glyphs are hand-drawn (no icon font ships here — LEDGER.md §6).
+    component SidebarSearch: Item {
+        id: field
+
+        property alias text: input.text
+        property string placeholder: qsTr("Search")
+        signal edited(string value)
+
+        implicitHeight: root.tahoe.searchHeight
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.leftMargin: root.tahoe.searchInsetLeading
+            anchors.rightMargin: root.tahoe.searchInsetTrailing
+            radius: height / 2
+            color: root.tahoe.searchFill
+
+            TextInput {
+                id: input
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 47
+                anchors.right: parent.right
+                anchors.rightMargin: 47
+                clip: true
+                color: root.tahoe.labelPrimary
+                font.pixelSize: root.tahoe.rowFontSize
+                selectionColor: root.tahoe.accent
+                onTextEdited: field.edited(text)
+            }
+
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: 47
+                text: field.placeholder
+                visible: input.text.length === 0
+                color: root.tahoe.labelSecondary
+                font.pixelSize: root.tahoe.rowFontSize
+            }
+
+            Item {
+                x: 12
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 20
+
+                Rectangle {
+                    x: 2
+                    y: 1.5
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: "transparent"
+                    border.width: 1.6
+                    border.color: root.tahoe.labelSecondary
+                }
+
+                Rectangle {
+                    x: 12.4
+                    y: 13.4
+                    width: 7
+                    height: 1.6
+                    radius: 0.8
+                    rotation: 45
+                    color: root.tahoe.labelSecondary
+                }
+            }
+
+            Item {
+                anchors.right: parent.right
+                anchors.rightMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 20
+
+                Rectangle {
+                    x: 3
+                    y: 5
+                    width: 14
+                    height: 9
+                    radius: 7
+                    color: "transparent"
+                    border.width: 1.6
+                    border.color: root.tahoe.labelSecondary
+                }
+
+                Rectangle {
+                    x: 2.4
+                    y: 4.4
+                    width: 15.2
+                    height: 4
+                    color: root.tahoe.searchFill
+                }
+
+                Rectangle {
+                    x: 6.5
+                    y: 1
+                    width: 7
+                    height: 12
+                    radius: 3.5
+                    color: root.tahoe.labelSecondary
+                }
+
+                Rectangle {
+                    x: 9.2
+                    y: 13
+                    width: 1.6
+                    height: 4
+                    color: root.tahoe.labelSecondary
+                }
+
+                Rectangle {
+                    x: 6.5
+                    y: 16.4
+                    width: 7
+                    height: 1.6
+                    radius: 0.8
+                    color: root.tahoe.labelSecondary
+                }
+            }
+        }
+    }
+
+    // The glass body, shared by every glass control. Three stacked pieces
+    // because the reference has three: a dark hairline at the very edge, a 1px
+    // white specular line inside it, and the veil between them carrying a
+    // vertical profile that dips near the top and lifts toward the bottom. The
+    // sidebar toolbar pill measures 238 / 228 / 234 / 250 top to bottom on a
+    // 228 plane, with 255 at both rims — so the glass catches light on its top
+    // *and* bottom edge, and the dark end of its gradient never goes below the
+    // plane it sits on.
+    component GlassSurface: Rectangle {
+        id: glass
+
+        radius: height / 2
+        color: root.tahoe.glassVeil
+        border.width: 1
+        border.color: root.tahoe.glassEdge
+
+        // The vertical profile, drawn inside the rim so the edges stay crisp.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: Math.max(0, glass.radius - 1)
+            gradient: Gradient {
+                GradientStop { position: 0.00; color: Qt.rgba(1, 1, 1, 0.410) }
+                GradientStop { position: 0.16; color: Qt.rgba(0, 0, 0, 0.008) }
+                GradientStop { position: 0.40; color: Qt.rgba(1, 1, 1, 0.050) }
+                GradientStop { position: 0.70; color: Qt.rgba(1, 1, 1, 0.150) }
+                GradientStop { position: 0.88; color: Qt.rgba(1, 1, 1, 0.550) }
+                GradientStop { position: 1.00; color: Qt.rgba(1, 1, 1, 1.000) }
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: Math.max(0, glass.radius - 1)
+            color: "transparent"
+            border.width: 1
+            border.color: root.tahoe.glassRim
+        }
+    }
+
+    // Circular glass button from Sidebar/Light/Toolbar. Measures ⌀40 on the
+    // sidebar plane with a faint lighter-than-plane fill and a hairline edge.
+    component GlassButton: AbstractButton {
+        id: control
+
+        property string symbol: ""
+        property string hint: ""
+
+        implicitWidth: root.tahoe.controlHeight
+        implicitHeight: root.tahoe.controlHeight
+        hoverEnabled: true
+        Accessible.name: hint
+        ToolTip.visible: hovered && hint.length > 0
+        ToolTip.text: hint
+
+        contentItem: Label {
+            text: control.symbol
+            color: root.tahoe.labelPrimary
+            font.pixelSize: 16
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        background: GlassSurface {
+            opacity: control.enabled ? 1 : 0.5
+        }
+    }
+
+    // Labeled glass pill from the same toolbar spec: as tall as the circular
+    // buttons beside it (44), fully rounded, horizontal padding 16.
+    component GlassPill: AbstractButton {
+        id: control
+
+        implicitWidth: Math.max(65, contentItem.implicitWidth + 32)
+        implicitHeight: root.tahoe.pillHeight
+        hoverEnabled: true
+
+        contentItem: Label {
+            text: control.text
+            color: root.tahoe.labelPrimary
+            font.pixelSize: root.tahoe.rowFontSize
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        background: GlassSurface {
+            opacity: control.enabled ? 1 : 0.5
         }
     }
 
@@ -447,6 +780,14 @@ KosApplicationWindow {
             + AppTheme.formatDate(end, "MMM d, yyyy")
     }
 
+    // The reference pairs the header title with a count line ("67 Messages,
+    // 12 Unread"); this is the calendar's equivalent. selectedItems is already
+    // bound, so reading it here costs nothing.
+    function headerSubtitle() {
+        const count = root.selectedItems.length
+        return count === 1 ? qsTr("1 item") : qsTr("%1 items").arg(count)
+    }
+
     function showStatus(message) {
         statusMessage = message
         statusTimer.restart()
@@ -543,97 +884,132 @@ KosApplicationWindow {
     Shortcut { sequence: "Ctrl+3"; onActivated: root.viewIndex = 2 }
     Shortcut { sequences: [StandardKey.Find]; onActivated: searchField.forceActiveFocus() }
 
-    RowLayout {
+    // Window framework: two flush planes. The sidebar runs the full height of
+    // the window at its left edge — macOS keeps the window controls over it —
+    // and everything right of it is plain paper. Backgrounds from the shared
+    // library (LEDGER.md §5).
+    Item {
         anchors.fill: parent
-        anchors.margins: 12
-        spacing: 8
 
-        KosSidebar {
+        Rectangle {
+            id: sidebarPlane
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: sidebar.width
+            color: root.tahoe.sidebarPlane
+        }
+
+        Rectangle {
+            anchors.left: sidebarPlane.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            color: root.tahoe.contentPlane
+        }
+
+        // Same collapse contract KosSidebar uses: the body keeps its expanded
+        // geometry while the viewport closes, so filters, scroll position and
+        // focus survive. Flush and square instead of a floating card.
+        Item {
             id: sidebar
             objectName: "applicationSidebar"
-            expanded: root.sidebarExpanded
-            expandedWidth: root.compact ? AppTheme.compactSidebarWidth : AppTheme.sidebarWidth
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: root.sidebarExpanded ? root.tahoe.sidebarWidth : 0
+            clip: true
+            enabled: root.sidebarExpanded
+
+            Behavior on width {
+                NumberAnimation {
+                    duration: AppTheme.motionNormal
+                    easing.type: Easing.InOutCubic
+                }
+            }
 
             ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 4
+                width: root.tahoe.sidebarWidth
+                height: sidebar.height
+                spacing: 0
 
-                RowLayout {
+                // Sidebar control row, from Sidebar/Light/Toolbar/Floating
+                // Window: window controls, one labeled glass pill for the
+                // primary action, then circular glass buttons at the right.
+                Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: root.tahoe.controlRowHeight
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("Calendar")
-                        color: AppTheme.text
-                        font.pixelSize: 20
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
+                    KosWindowControls {
+                        id: windowControls
+                        anchors.left: parent.left
+                        anchors.leftMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        targetWindow: root
                     }
 
-                    KosToolButton {
-                        Layout.preferredWidth: 30
-                        Layout.preferredHeight: 30
-                        text: "+"
-                        flat: true
+                    GlassPill {
+                        id: newEventButton
+                        anchors.left: windowControls.right
+                        anchors.leftMargin: 12
+                        // Both sides anchored: the pill is left-anchored in the
+                        // spec, but "New Event" is longer than the spec's "Edit",
+                        // so pinning the right edge is what keeps it off the
+                        // circular buttons instead of overlapping them.
+                        anchors.right: toolButtons.left
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: qsTr("New Event")
                         enabled: pim.connected && pim.writable
-                        Accessible.name: qsTr("New event")
+                        Accessible.name: text
                         onClicked: eventEditor.openForDate(root.selectedDate)
+                    }
+
+                    Row {
+                        id: toolButtons
+                        anchors.right: parent.right
+                        anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 12
+
+                        GlassButton {
+                            symbol: "◇"
+                            hint: qsTr("Go to today")
+                            onClicked: root.showToday()
+                        }
+
+                        GlassButton {
+                            symbol: "▤"
+                            hint: qsTr("Toggle sidebar")
+                            checked: root.sidebarExpanded
+                            onClicked: root.sidebarExpanded = !root.sidebarExpanded
+                        }
                     }
                 }
 
-                AbstractButton {
+                // macOS puts the window's search field in the sidebar, directly
+                // under the control row (Sidebar/Light/Search: 300x44, r22).
+                SidebarSearch {
+                    id: searchField
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: root.tahoe.searchHeight
+                    Layout.topMargin: 7
+                    placeholder: qsTr("Search")
+                    text: root.searchQuery
+                    onEdited: root.searchQuery = value
+                    Accessible.name: qsTr("Search events and tasks")
+                }
+
+                SidebarRow {
                     id: todayNavigation
 
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    hoverEnabled: true
-                    Accessible.name: qsTr("Go to today")
+                    Layout.preferredHeight: root.tahoe.rowHeight
+                    text: qsTr("Today")
+                    detail: AppTheme.formatDate(root.now, "ddd")
+                    markerColor: root.tahoe.accent
+                    markerFilled: true
                     onClicked: root.showToday()
-
-                    contentItem: RowLayout {
-                        spacing: 9
-
-                        Rectangle {
-                            Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
-                            radius: 7
-                            color: AppTheme.accent
-
-                            Label {
-                                anchors.centerIn: parent
-                                text: String(root.now.getDate())
-                                color: AppTheme.accentText
-                                font.pixelSize: 11
-                                font.weight: Font.DemiBold
-                            }
-                        }
-
-                        Label {
-                            Layout.fillWidth: true
-                            text: qsTr("Today")
-                            color: AppTheme.text
-                            font.pixelSize: 11
-                            font.weight: Font.Medium
-                        }
-
-                        Label {
-                            text: AppTheme.formatDate(root.now, "ddd")
-                            color: AppTheme.mutedText
-                            font.pixelSize: 10
-                        }
-                    }
-
-                    background: Rectangle {
-                        radius: AppTheme.smallRadius
-                        color: todayNavigation.down
-                            ? AppTheme.buttonPressed
-                            : (todayNavigation.hovered
-                                ? AppTheme.cardHover : "transparent")
-                        border.width: todayNavigation.activeFocus ? 1 : 0
-                        border.color: AppTheme.withAlpha(AppTheme.accent, 0.56)
-                    }
                 }
 
                 Rectangle {
@@ -661,10 +1037,10 @@ KosApplicationWindow {
                     Label {
                         Layout.fillWidth: true
                         text: AppTheme.formatDate(root.visibleMonth, "MMMM yyyy")
-                        color: AppTheme.text
+                        color: root.tahoe.labelPrimary
                         horizontalAlignment: Text.AlignHCenter
                         font.weight: Font.DemiBold
-                        font.pixelSize: 11
+                        font.pixelSize: root.tahoe.rowFontSize
                         elide: Text.ElideRight
                     }
 
@@ -697,10 +1073,10 @@ KosApplicationWindow {
                             width: miniCalendar.cellWidth
                             height: miniCalendar.headingHeight
                             text: root.weekdayName(index, Locale.NarrowFormat)
-                            color: AppTheme.mutedText
+                            color: root.tahoe.labelSecondary
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
-                            font.pixelSize: 9
+                            font.pixelSize: 10
                             font.weight: Font.Medium
                         }
                     }
@@ -744,23 +1120,23 @@ KosApplicationWindow {
                                 anchors.centerIn: parent
                                 radius: width / 2
                                 color: miniDay.today
-                                    ? AppTheme.accent
+                                    ? root.tahoe.accent
                                     : (miniDay.selected
-                                        ? AppTheme.withAlpha(AppTheme.accent,
-                                            AppTheme.dark ? 0.28 : 0.14)
+                                        ? root.tahoe.selectionFill
                                         : (miniDay.hovered
-                                            ? AppTheme.cardHover : "transparent"))
+                                            ? root.tahoe.rowHoverFill : "transparent"))
                                 border.width: miniDay.selected && !miniDay.today ? 1 : 0
-                                border.color: AppTheme.withAlpha(AppTheme.accent, 0.52)
+                                border.color: root.tahoe.accent
 
                                 Label {
                                     anchors.centerIn: parent
                                     text: String(miniDay.cellDate.getDate())
                                     color: miniDay.today
-                                        ? AppTheme.accentText
+                                        ? "#FFFFFF"
                                         : (miniDay.selected
-                                            ? AppTheme.accent : AppTheme.text)
-                                    font.pixelSize: 9
+                                            ? root.tahoe.accent
+                                            : root.tahoe.labelPrimary)
+                                    font.pixelSize: 11
                                     font.weight: miniDay.today || miniDay.selected
                                         ? Font.DemiBold : Font.Normal
                                 }
@@ -771,143 +1147,127 @@ KosApplicationWindow {
                     }
                 }
 
-                RowLayout {
+                // Section header per Sidebar/Light/Header: sentence case, the
+                // secondary label colour, text 4 clear of the row capsule.
+                Label {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("CALENDARS")
-                        color: AppTheme.mutedText
-                        font.pixelSize: 9
-                        font.weight: Font.DemiBold
-                        font.letterSpacing: 0.6
-                    }
-
-                    Label {
-                        text: "2"
-                        color: AppTheme.mutedText
-                        font.pixelSize: 9
-                    }
+                    Layout.leftMargin: root.tahoe.rowInsetLeading + 4
+                    Layout.topMargin: 18
+                    Layout.bottomMargin: 4
+                    Layout.preferredHeight: 20
+                    text: qsTr("Calendars")
+                    color: root.tahoe.labelSecondary
+                    font.pixelSize: root.tahoe.rowFontSize
+                    verticalAlignment: Text.AlignVCenter
                 }
 
-                SidebarToggle {
+                SidebarRow {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.tahoe.rowHeight
                     text: qsTr("Events")
-                    markerColor: AppTheme.accent
+                    checkable: true
+                    showSwitch: true
+                    markerFilled: true
+                    markerColor: root.tahoe.accent
+                    switchColor: root.tahoe.accent
+                    Accessible.role: Accessible.CheckBox
                     checked: root.showEvents
                     onToggled: root.showEvents = checked
                 }
 
-                SidebarToggle {
+                SidebarRow {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.tahoe.rowHeight
                     text: qsTr("Scheduled tasks")
-                    markerColor: AppTheme.positive
+                    checkable: true
+                    showSwitch: true
+                    markerFilled: true
+                    markerColor: root.tahoe.positive
+                    switchColor: root.tahoe.positive
+                    Accessible.role: Accessible.CheckBox
                     checked: root.showTasks
                     onToggled: root.showTasks = checked
                 }
 
-                SidebarToggle {
+                SidebarRow {
                     Layout.fillWidth: true
+                    Layout.preferredHeight: root.tahoe.rowHeight
                     text: qsTr("Show completed")
-                    markerColor: AppTheme.warning
+                    checkable: true
+                    showSwitch: true
                     nested: true
+                    markerColor: root.tahoe.warning
+                    switchColor: root.tahoe.warning
                     checked: root.showCompletedTasks
                     enabled: root.showTasks
                     opacity: enabled ? 1 : 0.48
+                    Accessible.role: Accessible.CheckBox
                     onToggled: root.showCompletedTasks = checked
                 }
 
-                RowLayout {
+                Label {
                     Layout.fillWidth: true
-                    Layout.topMargin: 4
-
-                    Label {
-                        Layout.fillWidth: true
-                        text: qsTr("TASK LISTS")
-                        color: AppTheme.mutedText
-                        font.pixelSize: 9
-                        font.weight: Font.DemiBold
-                        font.letterSpacing: 0.6
-                    }
-
-                    Label {
-                        text: String(pim.lists.length)
-                        color: AppTheme.mutedText
-                        font.pixelSize: 9
-                    }
+                    Layout.leftMargin: root.tahoe.rowInsetLeading + 4
+                    Layout.topMargin: 18
+                    Layout.bottomMargin: 4
+                    Layout.preferredHeight: 20
+                    text: qsTr("Task lists")
+                    color: root.tahoe.labelSecondary
+                    font.pixelSize: root.tahoe.rowFontSize
+                    verticalAlignment: Text.AlignVCenter
                 }
 
                 ListView {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight, 72)
-                    Layout.maximumHeight: 72
+                    Layout.preferredHeight: Math.min(contentHeight,
+                                                     root.tahoe.rowHeight * 2)
+                    Layout.maximumHeight: root.tahoe.rowHeight * 2
                     clip: true
                     model: pim.lists
-                    spacing: 1
 
-                    delegate: Rectangle {
+                    delegate: SidebarRow {
                         id: listLegend
 
                         required property var modelData
+
                         width: ListView.view.width
-                        height: 27
-                        radius: AppTheme.smallRadius
-                        color: "transparent"
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 10
-                            anchors.rightMargin: 8
-                            spacing: 9
-
-                            Rectangle {
-                                Layout.preferredWidth: 10
-                                Layout.preferredHeight: 10
-                                radius: width / 2
-                                color: String(root.value(listLegend.modelData,
-                                    "color", AppTheme.accent))
-                            }
-
-                            Label {
-                                Layout.fillWidth: true
-                                text: String(root.value(listLegend.modelData,
-                                    "name", qsTr("List")))
-                                color: AppTheme.text
-                                font.pixelSize: 10
-                                elide: Text.ElideRight
-                            }
-
-                            Label {
-                                text: qsTr("Tasks")
-                                color: AppTheme.mutedText
-                                font.pixelSize: 9
-                            }
-                        }
+                        text: String(root.value(listLegend.modelData, "name",
+                                                qsTr("List")))
+                        detail: qsTr("Tasks")
+                        markerFilled: true
+                        markerColor: String(root.value(listLegend.modelData,
+                            "color", root.tahoe.accent))
                     }
                 }
 
                 Item { Layout.fillHeight: true }
 
                 Rectangle {
+                    id: statusPill
+
+                    readonly property color statusColor: pim.connected
+                        ? root.tahoe.positive : root.tahoe.warning
+
                     Layout.fillWidth: true
                     Layout.preferredHeight: 32
-                    radius: AppTheme.smallRadius
-                    color: AppTheme.withAlpha(
-                        pim.connected ? AppTheme.positive : AppTheme.warning,
-                        AppTheme.dark ? 0.13 : 0.08)
+                    Layout.leftMargin: 10
+                    Layout.rightMargin: root.tahoe.rowInsetTrailing
+                    Layout.bottomMargin: 6
+                    radius: height / 2
+                    color: Qt.rgba(statusPill.statusColor.r, statusPill.statusColor.g,
+                                   statusPill.statusColor.b, 0.14)
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 9
-                        spacing: 7
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        spacing: 8
 
                         Rectangle {
-                            Layout.preferredWidth: 7
-                            Layout.preferredHeight: 7
+                            Layout.preferredWidth: 8
+                            Layout.preferredHeight: 8
                             radius: width / 2
-                            color: pim.connected ? AppTheme.positive : AppTheme.warning
+                            color: statusPill.statusColor
                         }
 
                         Label {
@@ -915,82 +1275,108 @@ KosApplicationWindow {
                             text: pim.connected
                                 ? qsTr("Calendar and Todo are synchronized")
                                 : qsTr("Waiting for the local PIM service")
-                            color: pim.connected ? AppTheme.positive : AppTheme.warning
+                            color: root.tahoe.labelSecondary
                             wrapMode: Text.WordWrap
-                            font.pixelSize: 9
+                            font.pixelSize: 12
                         }
                     }
                 }
             }
         }
 
+        // Content plane: a 52-tall header band on paper, then the view. The
+        // reference keeps the title block at the left of that band and its
+        // controls at the right (LEDGER.md §5).
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.margins: 18
-            spacing: 12
+            anchors.left: sidebarPlane.right
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            spacing: 0
 
-            ColumnLayout {
+            Item {
                 Layout.fillWidth: true
-                spacing: 8
+                Layout.preferredHeight: root.tahoe.controlRowHeight
 
                 RowLayout {
-                    Layout.fillWidth: true
+                    id: headerLeading
+                    anchors.left: parent.left
+                    anchors.leftMargin: 20
+                    anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
 
-                    KosSidebarToggle { targetWindow: root }
-
-                    KosToolButton {
-                        Layout.preferredWidth: 36
-                        text: "‹"
-                        Accessible.name: qsTr("Previous period")
+                    GlassButton {
+                        Layout.alignment: Qt.AlignVCenter
+                        symbol: "‹"
+                        hint: qsTr("Previous period")
                         onClicked: root.shiftView(-1)
                     }
-                    KosToolButton {
-                        Layout.preferredWidth: 36
-                        text: "›"
-                        Accessible.name: qsTr("Next period")
+                    GlassButton {
+                        Layout.alignment: Qt.AlignVCenter
+                        symbol: "›"
+                        hint: qsTr("Next period")
                         onClicked: root.shiftView(1)
                     }
-                    KosButton {
-                        Layout.minimumWidth: implicitWidth
+                    GlassPill {
+                        Layout.alignment: Qt.AlignVCenter
                         text: qsTr("Today")
                         onClicked: root.showToday()
                     }
 
-                    Label {
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: root.compact ? 100 : 142
-                        text: root.headerTitle()
-                        color: AppTheme.text
-                        font.pixelSize: root.compact ? 17 : 22
-                        font.weight: Font.DemiBold
-                        fontSizeMode: Text.HorizontalFit
-                        minimumPixelSize: 13
-                        elide: Text.ElideRight
+                    Column {
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.leftMargin: 10
+                        Layout.minimumWidth: root.compact ? 100 : 180
+                        spacing: 1
+
+                        Label {
+                            text: root.headerTitle()
+                            color: root.tahoe.labelPrimary
+                            font.pixelSize: 15
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            text: root.headerSubtitle()
+                            color: root.tahoe.labelSecondary
+                            font.pixelSize: 12
+                            elide: Text.ElideRight
+                        }
                     }
+                }
+
+                RowLayout {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
 
                     BusyIndicator {
+                        Layout.alignment: Qt.AlignVCenter
                         Layout.preferredWidth: 26
                         Layout.preferredHeight: 26
                         running: pim.busy
                         visible: running
                     }
 
-                    KosToolButton {
-                        text: "⚙"
-                        font.pixelSize: 16
-                        Accessible.name: qsTr("Calendar settings")
-                        ToolTip.visible: hovered
-                        ToolTip.text: Accessible.name
-                        onClicked: settingsDialog.open()
+                    LiquidSegmentedControl {
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.preferredWidth: 196
+                        Layout.preferredHeight: 32
+                        labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
+                        currentIndex: root.viewIndex
+                        backgroundColor: root.tahoe.controlFill
+                        selectionColor: root.tahoe.contentPlane
+                        textColor: root.tahoe.labelPrimary
+                        mutedTextColor: root.tahoe.labelSecondary
+                        onSelectionRequested: index => root.viewIndex = index
                     }
 
-                    KosButton {
+                    GlassButton {
                         id: actionsButton
-                        Layout.preferredWidth: 42
-                        text: "⋯"
-                        Accessible.name: qsTr("Calendar actions")
+                        Layout.alignment: Qt.AlignVCenter
+                        symbol: "⋯"
+                        hint: qsTr("Calendar actions")
                         onClicked: actionsMenu.open()
 
                         Menu {
@@ -1008,44 +1394,31 @@ KosApplicationWindow {
                             }
                         }
                     }
-                    KosWindowControls { targetWindow: root }
+
+                    GlassButton {
+                        symbol: "⚙"
+                        hint: qsTr("Calendar settings")
+                        onClicked: settingsDialog.open()
+                    }
+
+                    GlassButton {
+                        symbol: "▤"
+                        hint: qsTr("Toggle sidebar")
+                        checked: root.sidebarExpanded
+                        onClicked: root.sidebarExpanded = !root.sidebarExpanded
+                    }
                 }
+            }
 
-                RowLayout {
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                Layout.fillHeight: false
+
+                Rectangle {
                     Layout.fillWidth: true
-                    spacing: 8
-
-                    KosTextField {
-                        id: searchField
-                        Layout.fillWidth: true
-                        Layout.minimumWidth: 120
-                        Layout.maximumWidth: 340
-                        placeholderText: qsTr("Search events and tasks")
-                        text: root.searchQuery
-                        onTextEdited: root.searchQuery = text
-                        Accessible.name: qsTr("Search calendar")
-                    }
-
-                    LiquidSegmentedControl {
-                        Layout.preferredWidth: 174
-                        labels: [qsTr("Month"), qsTr("Week"), qsTr("Day")]
-                        currentIndex: root.viewIndex
-                        backgroundColor: AppTheme.withAlpha(AppTheme.text,
-                            AppTheme.dark ? 0.10 : 0.06)
-                        selectionColor: AppTheme.dark
-                            ? AppTheme.cardHover : AppTheme.windowRaised
-                        textColor: AppTheme.text
-                        mutedTextColor: AppTheme.mutedText
-                        onSelectionRequested: index => root.viewIndex = index
-                    }
-
-                    KosButton {
-                        Layout.minimumWidth: implicitWidth
-                        text: qsTr("New event")
-                        highlighted: true
-                        enabled: pim.connected && pim.writable
-                        onClicked: eventEditor.openForDate(root.selectedDate)
-                    }
+                    Layout.preferredHeight: 1
+                    color: root.tahoe.separator
                 }
             }
 
