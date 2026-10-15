@@ -6,6 +6,45 @@ capability (`applications`, `kwin`, `clipboard`, `files`, `network`, `audio`, `b
 `display`, `session`, `theme`, `screenshot`, and `shortcuts`). They are not
 separate helper executables.
 
+## Daemon source modules
+
+`platform/src/daemon/PlatformServer.cpp` owns JSONL framing, version checks,
+connections, event delivery, the reply cache and in-flight request queues. Its
+private feature handlers return `true` after accepting a request (including
+asynchronous replies), and `false` without replying when the operation belongs
+to another handler. The dispatcher alone emits the final `unknown-operation`.
+The wire contract remains [platform.v1](../shared/contracts/platform.v1.md).
+
+| Files under `platform/src/daemon/` | Responsibility |
+| --- | --- |
+| `PlatformServerApplications.cpp`, `PlatformServerFiles.cpp` | KDE application launch and file operations |
+| `PlatformServerWindows.cpp`, `PlatformServerAppMenu.cpp` | KWin commands, input bridge and application menus |
+| `PlatformServerClipboard.cpp`, `PlatformServerClipboardPins.cpp` | Clipboard/history/preview requests and persistent pins |
+| `PlatformServerNetwork.cpp` | Network payload validation, cache keys and worker completion |
+| `PlatformNetworkRead.cpp`, `PlatformNetworkConnect.cpp` | Bounded NetworkManager reads and connection transactions |
+| `PlatformServerAudio.cpp`, `PlatformServerBluetooth.cpp` | Audio and Bluetooth operations |
+| `PlatformServerDisplay.cpp`, `PlatformServerTheme.cpp` | Brightness/night light and desktop appearance |
+| `PlatformServerDesktop.cpp` | Settings launch, notifications, shortcuts, session actions and screenshot tools |
+| `PlatformServerState.cpp`, `PlatformServerWallpaper.cpp` | Shell state storage, wallpaper and optional depth requests |
+| `PlatformServerTray.cpp`, `PlatformServerWatches.cpp` | Tray identity and D-Bus cache invalidation watches |
+| `PlatformDbus.*`, `PlatformPaths.*`, `PlatformProcess.*` | Shared bounded bus calls, path policy and process watchdog/output helpers |
+
+All feature adapters are private member implementations of the same server.
+They do not own additional sockets, caches or thread pools. Socket writes,
+watch subscriptions and cache changes stay on the Qt event loop. Network
+workers receive value arguments and return `NetworkWorkerResult` through the
+implementation-only `PlatformNetworkBackend.h` contract; they open private
+bus connections and never write to client sockets. `PlatformClipboardStorage.h`
+shares only storage/thumbnail helpers between history and pins. Helpers used
+by one module remain in its unnamed namespace.
+
+`PlatformServer.h` retains lifecycle-sensitive state and pool declaration
+order: destruction waits for worker completion before the shared state goes
+away. New operations should extend their feature handler and the public
+protocol document, without adding business logic to the transport dispatcher.
+The startup test pipelines requests through different adapters; media, file,
+keep-awake and protocol tests exercise the built daemon on isolated buses.
+
 ## Runtime boundaries
 
 ```text
