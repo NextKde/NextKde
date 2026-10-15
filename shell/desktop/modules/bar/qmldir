@@ -10,6 +10,9 @@ SystemMenu 1.0 SystemMenu.qml
 BarStatusArea 1.0 BarStatusArea.qml
 StatusAreaEditor 1.0 StatusAreaEditor.qml
 Battery 1.0 Battery.qml
+BatteryPanel 1.0 BatteryPanel.qml
+StatusPanelGlyph 1.0 StatusPanelGlyph.qml
+singleton PowerProfileService 1.0 PowerProfileService.qml
 CpuTemperature 1.0 CpuTemperature.qml
 TemperatureSensorPopups 1.0 TemperatureSensorPopups.qml
 NetworkStatus 1.0 NetworkStatus.qml

@@ -196,3 +196,11 @@ defaults is outside the light/dark toggle contract.
 launcher as `application.launch`. A desktop-file path is resolved and parsed by
 `KService`; optional file arguments are passed as URLs. Launch failure is
 reported through the common response envelope.
+
+### Status panel operations
+
+- `network.applications` (read): returns `{scope: "user-tcp", sockets: [{id, name, pid, rxBytes, txBytes}]}` from `ss -tinpeOH`. Only sockets with visible owners are attributable. Counters are per-socket lifetime TCP payload bytes; clients calculate successive deltas before grouping. Shared sockets count once. Local proxy connections are included; UDP/QUIC, short-lived connections between polls and inaccessible owners are not covered. This is independent of interface totals.
+- `power.profiles` (read): returns `{profiles: ["power-saver", "balanced", "performance"], activeProfile, degraded}` with only profiles advertised by `powerprofilesctl list`. Empty support and unavailable services are shown as unavailable in the UI.
+- `power.profile.set` (write): accepts `{profile}` from those three IDs and delegates to `powerprofilesctl set`; the system authorizes the change. The client rereads the active profile after success and keeps the old selection on failure. No privileged helper or automatic privilege escalation is installed.
+
+Runtime helpers: `ss` (iproute2) for application TCP accounting and `powerprofilesctl` (power-profiles-daemon or a compatible implementation) for power modes. Panels report unavailable states if helpers or services are missing.

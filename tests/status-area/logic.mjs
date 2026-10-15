@@ -23,4 +23,8 @@ assert.equal(append(history, "eth0", 1, Infinity), history);
 assert.equal(append(history, "", 1, 2), history);
 history = append(history, "wlan0", -10, 20);
 assert.deepEqual(history, { device: "wlan0", download: [0], upload: [20] });
+let flat = empty("eth0");
+for (let i = 0; i < 60; i++) flat = append(flat, "eth0", 0, 0);
+assert.equal(append(flat, "eth0", 0, 0), flat, "idle charts keep their full flat arrays");
+assert.notEqual(append(flat, "eth0", 0, 1), flat, "a real rate change must still repaint");
 console.log("Status area: constrained layout, cross-row drag and bounded per-interface history passed");

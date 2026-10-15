@@ -27,3 +27,17 @@ ctest --test-dir .build/status-area -R '^kos-shell.status-area$' -V
 The service emits `trafficSampled` only after completing a valid rate calculation.
 The panel records those events while open, retaining at most 60 samples for the
 current device. Opening it starts a fresh history; disconnecting closes it.
+
+`test_application_traffic.mjs` covers per-socket deltas, connection teardown,
+counter resets, shared sockets and app sorting. `run-power.mjs` uses the same
+isolated Wayland transport and loads `power.qml` to cover mode confirmation,
+external D-Bus changes, stale snapshots, write failures, system rejection,
+checkmark bindings and stable application models. CTest registers these as
+`kos-shell.application-traffic` (`logic`) and `kos-shell.status-panel-power` (`ui`).
+Neither test changes the host power mode.
+
+Battery and traffic popups share the current surface colors and small line
+icons. Battery modes are updated by system signals, not a polling timer.
+Application traffic refreshes only while its panel is open, every two seconds;
+the aggregate rate history records completed service samples at its usual rate.
+The flat full-minute history retains its arrays to avoid idle chart repaints.

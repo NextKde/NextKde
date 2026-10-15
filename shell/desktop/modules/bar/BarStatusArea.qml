@@ -50,7 +50,7 @@ Item {
         || (controlCenter?.isOpen ?? false)
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
-        || notificationPanel.requestedOpen || trafficPanel.requestedOpen
+        || notificationPanel.requestedOpen || trafficPanel.requestedOpen || batteryPanel.requestedOpen
 
     // Report panel visibility into the service singleton so its fast refresh
     // only runs while a panel is actually showing the data. A count (not a
@@ -70,6 +70,7 @@ Item {
 
     function toggleControlCenter(anchorItem) {
         trafficPanel.close()
+        batteryPanel.close()
         if (controlCenterOpen) {
             closeControlCenter()
             return
@@ -144,6 +145,7 @@ Item {
                     if (!networkPanel.requestedOpen)
                         root.closeControlCenter()
                     trafficPanel.close()
+                    batteryPanel.close()
                     networkPanel.toggle(networkStatus)
                 }
             }
@@ -176,6 +178,7 @@ Item {
                     bluetoothPanel.close()
                     networkPanel.close()
                     root.closeControlCenter()
+                    batteryPanel.close()
                     trafficPanel.toggle(traffic)
                 }
             }
@@ -185,7 +188,18 @@ Item {
     Component {
         id: batteryQuickControl
         Item {
+            readonly property alias control: battery
             Battery {
+                id: battery
+                panelOpen: batteryPanel.requestedOpen
+                onPanelToggleRequested: {
+                    notificationPanel.close()
+                    bluetoothPanel.close()
+                    networkPanel.close()
+                    trafficPanel.close()
+                    root.closeControlCenter()
+                    batteryPanel.toggle(battery)
+                }
                 anchors.centerIn: parent
                 iconSize: systemTray.iconSize + 3
                 dockHosted: root.dockHosted
@@ -221,6 +235,7 @@ Item {
                 verticalDock: root.verticalDock
                 onPanelToggleRequested: {
                     trafficPanel.close()
+                    batteryPanel.close()
                     if (!notificationPanel.requestedOpen) {
                         networkPanel.close()
                         bluetoothPanel.close()
@@ -291,6 +306,11 @@ Item {
 
     NotificationHistoryPanel {
         id: notificationPanel
+        dockHosted: root.dockHosted
+        dockEdge: root.dockEdge
+    }
+    BatteryPanel {
+        id: batteryPanel
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
     }

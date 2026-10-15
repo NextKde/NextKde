@@ -65,6 +65,8 @@ JsonlClient {
         "network.refresh": true,
         "network.scan": true,
         "network.traffic": true,
+        "network.applications": true,
+        "power.profiles": true,
         "nightlight.get": true,
         "keepawake.get": true,
         "platform.ping": true,
@@ -82,6 +84,7 @@ JsonlClient {
     // spend several minutes downloading the pinned model or running CPU inference.
     // 0 disables expiry entirely.
     requestTimeoutOverrides: ({
+        "power.profile.set": 15000,
         "bluetooth.connect": 90000,
         "bluetooth.disconnect": 90000,
         "file.copy": 0,

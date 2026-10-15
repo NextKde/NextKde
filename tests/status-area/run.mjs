@@ -9,7 +9,9 @@ import { spawnSync } from "node:child_process";
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 const shell = join(repository, "shell");
 
-const directory = mkdtempSync(join(tmpdir(), "kos-status-area-"));
+// Wayland socket addresses have a 108-byte limit, including the runtime path.
+const scratchRoot = tmpdir().length > 32 ? "/tmp" : tmpdir();
+const directory = mkdtempSync(join(scratchRoot, "kos-status-area-"));
 try {
     copyFileSync(new URL("shell.qml", import.meta.url),
         join(directory, "shell.qml"));

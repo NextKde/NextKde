@@ -1,5 +1,6 @@
 #include "PlatformServer.h"
 #include "Shortcuts.h"
+#include "StatusPanelData.h"
 #include "KeepAwakeLease.h"
 #include "../kwin/KWinBridge.h"
 #include "../wallpaper/PlasmaWallpaperAdapter.h"
@@ -4940,6 +4941,32 @@ bool PlatformServer::handleSystemOperation(QLocalSocket *socket, const QJsonObje
             return true;
         }
         runCommand(socket, request, QStringLiteral("nmcli"), {QStringLiteral("device"), QStringLiteral("disconnect"), device}, {}, 15000);
+        return true;
+    }
+    if (op == QStringLiteral("network.applications")) {
+        runCommand(socket, request, QStringLiteral("ss"),
+            {QStringLiteral("-tinpeOH")},
+            [](const QByteArray &output, int) { return parseApplicationTraffic(output); },
+            3000, QStringLiteral("network.applications"), 500);
+        return true;
+    }
+    if (op == QStringLiteral("power.profiles")) {
+        runCommand(socket, request, QStringLiteral("powerprofilesctl"),
+            {QStringLiteral("list")},
+            [](const QByteArray &output, int) { return parsePowerProfiles(output); },
+            3000);
+        return true;
+    }
+    if (op == QStringLiteral("power.profile.set")) {
+        const QString profile = payload.value(QStringLiteral("profile")).toString();
+        if (profile != QStringLiteral("power-saver") && profile != QStringLiteral("balanced")
+            && profile != QStringLiteral("performance")) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-profile"),
+                QStringLiteral("Unsupported power profile"), false);
+            return true;
+        }
+        runCommand(socket, request, QStringLiteral("powerprofilesctl"),
+            {QStringLiteral("set"), profile}, {}, 10000);
         return true;
     }
     if (op == QStringLiteral("network.traffic")) {
