@@ -47,42 +47,51 @@ int lumaOf(const uchar *p)
     return (54 * p[0] + 183 * p[1] + 19 * p[2]) >> 8;
 }
 
-// Read a rect out of the render target currently bound, in the render target's
-// own coordinates. `readRect` receives the rect actually read, which is `rect`
-// clipped to the target.
-bool readPixels(const KWin::RenderTarget &renderTarget, const QRect &rect,
-                QByteArray &out, QRect *readRect)
+} // namespace
+
+bool readTitlebarPixels(const KWin::RenderTarget &renderTarget, const QRect &rect,
+                        QByteArray &out, QRect *readRect)
 {
-    const QSize targetSize = renderTarget.transformedSize();
-    const QRect r = rect.intersected(QRect(QPoint(0, 0), targetSize));
-    if (r.isEmpty()) {
+    // The caller uses untransformed, top-down viewport coordinates. The FBO
+    // stores the target's content transform, which can include DRM's FlipY
+    // or output rotation. Convert the rectangle before applying GL's Y flip.
+    const QSize bounds = renderTarget.transformedSize();
+    const QRect r = rect.intersected(QRect(QPoint(), bounds));
+    if (r.isEmpty() || !renderTarget.framebuffer()) {
         return false;
     }
+    const auto transform = renderTarget.transform();
+    const QRect bufferRect = transform.map(KWin::Rect(r), bounds);
+    const int glY = renderTarget.size().height() - bufferRect.bottom() - 1;
 
-    GLint prevReadFbo = 0;
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
+    GLint previousReadFbo = 0;
+    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFbo);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, renderTarget.framebuffer()->handle());
+    QByteArray raw(bufferRect.width() * bufferRect.height() * 4, Qt::Uninitialized);
+    glReadPixels(bufferRect.x(), glY, bufferRect.width(), bufferRect.height(),
+                 GL_RGBA, GL_UNSIGNED_BYTE, raw.data());
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, previousReadFbo);
 
-    if (auto *fbo = renderTarget.framebuffer()) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo->handle());
-    }
-
+    // Return every pixel in the caller's original orientation, so panel
+    // exclusion and deviceClip tests use the same coordinates as the pixels.
+    // Map pixel centers: rectangle-edge mappings are off by one when mirrored.
+    const QPointF origin = transform.map(QPointF(r.x() + 0.5, r.y() + 0.5), QSizeF(bounds));
+    const QPointF stepX = transform.map(QPointF(r.x() + 1.5, r.y() + 0.5), QSizeF(bounds)) - origin;
+    const QPointF stepY = transform.map(QPointF(r.x() + 0.5, r.y() + 1.5), QSizeF(bounds)) - origin;
     out.resize(r.width() * r.height() * 4);
-    // In OpenGL framebuffers, the origin (0, 0) is at the bottom-left corner,
-    // whereas KWin render target coordinates place (0, 0) at the top-left corner.
-    // To read the rectangle r from the top-left coordinate system, the bottom-left
-    // Y coordinate in OpenGL must be glY = targetSize.height() - (r.y() + r.height()).
-    // Without this flip, glReadPixels reads from the mirrored vertical position
-    // (reading the bottom of the window/screen instead of the top title bar).
-    const int glY = targetSize.height() - (r.y() + r.height());
-    glReadPixels(r.x(), glY, r.width(), r.height(), GL_RGBA, GL_UNSIGNED_BYTE,
-                 out.data());
+    for (int y = 0; y < r.height(); ++y) {
+        for (int x = 0; x < r.width(); ++x) {
+            const QPointF position = origin + x * stepX + y * stepY;
+            const int rawX = int(position.x()) - bufferRect.x();
+            const int rawY = bufferRect.height() - 1 - (int(position.y()) - bufferRect.y());
+            const qsizetype source = (qsizetype(rawY) * bufferRect.width() + rawX) * 4;
+            const qsizetype destination = (qsizetype(y) * r.width() + x) * 4;
+            std::copy_n(raw.constData() + source, 4, out.data() + destination);
+        }
+    }
     *readRect = r;
-
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
     return true;
 }
-
-} // namespace
 
 bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
                         const KWin::RenderViewport &viewport,
@@ -128,7 +137,7 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
 
     QByteArray pixels;
     QRect readTarget;
-    if (!readPixels(renderTarget, bandTarget, pixels, &readTarget)) {
+    if (!readTitlebarPixels(renderTarget, bandTarget, pixels, &readTarget)) {
         return false;
     }
 
@@ -171,10 +180,9 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
         : std::min(readTarget.width(), panelTo + 160);
 
     for (int y = 0; y < readTarget.height(); ++y) {
-        // glReadPixels stores rows bottom-up. Flip the row index so y=0 accesses
-        // the top row of the title bar band.
+        // readTitlebarPixels returns top-down pixels in viewport coordinates.
         const uchar *row = reinterpret_cast<const uchar *>(pixels.constData())
-            + size_t(readTarget.height() - 1 - y) * size_t(readTarget.width()) * 4;
+            + size_t(y) * size_t(readTarget.width()) * 4;
         const int deviceY = readDevice.y() + y;
         for (int x = 0; x < readTarget.width(); ++x) {
             const uchar *p = row + size_t(x) * 4;

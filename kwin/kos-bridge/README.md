@@ -481,3 +481,24 @@ On 6.6.x, which lacks the base shader resources, Bridge supplies the equivalent
 texture/saturation/modulation stages and uses KWin's own color-management GLSL.
 The continuous-contour stages pass offline GLSL linking for desktop GL and GLES
 against both tested 6.6 versions; GPU execution remains unverified.
+
+### GPU title-bar readback regression test
+
+The title-bar sampler maps through the render target's content transform before
+reading its framebuffer. Readback pixels are normalized to top-down viewport
+coordinates, including flipped and rotated targets, so panel exclusions and
+visibility clipping refer to the correct pixels.
+
+The opt-in GPU test renders coordinate-coded pixels using the installed KWin
+projection matrix and exercises the production readback helper. It covers all
+eight output transforms, 100% and 125% scaling, out-of-bounds clipping, and read
+framebuffer restoration. Run it in an environment with an EGL/OpenGL context:
+
+```sh
+cmake -S kwin/kos-bridge -B .build/titlebar-gpu -G Ninja \
+  -DKOS_BRIDGE_BUILD_GPU_TESTS=ON
+cmake --build .build/titlebar-gpu --target titlebar_pixels_gpu_test
+ctest --test-dir .build/titlebar-gpu -R '^titlebar_pixels_gpu_test$' -V
+```
+
+CTest reports a skipped test (exit 77) when an EGL context is unavailable.

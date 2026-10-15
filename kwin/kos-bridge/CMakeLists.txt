@@ -141,3 +141,16 @@ endif()
 install(TARGETS kos_bridge
     DESTINATION ${KDE_INSTALL_PLUGINDIR}/kwin/effects/plugins
     COMPONENT kwin_plugins)
+
+# Explicit opt-in: this regression test needs a real EGL/OpenGL context.
+option(KOS_BRIDGE_BUILD_GPU_TESTS "Build title-bar GPU readback tests" OFF)
+if(KOS_BRIDGE_BUILD_GPU_TESTS)
+    enable_testing()
+    add_executable(titlebar_pixels_gpu_test
+        tests/titlebar_pixels_gpu_test.cpp
+        windowbuttons/titlebarmetrics.cpp
+    )
+    target_link_libraries(titlebar_pixels_gpu_test PRIVATE Qt6::Gui KWin::kwin)
+    add_test(NAME titlebar_pixels_gpu_test COMMAND titlebar_pixels_gpu_test)
+    set_tests_properties(titlebar_pixels_gpu_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 30)
+endif()
