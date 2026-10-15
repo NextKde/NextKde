@@ -1,3 +1,0 @@
-
-
-verify exit: 0

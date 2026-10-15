@@ -1,5 +1,0 @@
-PASS Gaussian wallpaper sample mean/stddev: [116.58333333333333, 93.16666666666667, 44.666666666666664] [2.2715021950733107, 2.114762923408177, 1.9720265943665183]
-PASS rounded glass render and fallback: blur
-PASS rounded glass render and fallback: software
-PASS rounded glass render and fallback: missing-effect
-PASS glass sample tracks resize and scrolling

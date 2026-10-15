@@ -1,6 +1,0 @@
-b08a8422edd3e48392e984ab6e666416c248c8f98f9e52c75961b46f74405965  apps/greeter/companion/resources.py
-ecc34748b145c80d9489982e2d6076c9e51464191afe1b3d42fd2891d61af936  apps/greeter/tests/resources.test.py
-690e9db20b2472d647fd357bfcfa4a5b2c4eebf758c196bdab5c2970f3dfd445  docs/kos-greeter/contracts/publication.md
-935005fcb966d43eadaea893e050afe46ba2f316279431b3d645bb4b225ddf3a  docs/kos-greeter/evidence/T03/tests.txt
-13a50819146ac0d7bbcf8224cc4e143c91863e20ff5dea94c402d53459ca8a86  docs/kos-greeter/evidence/T03/environment.txt
-6e180672066164669aa674d3ced275bb2de4ee43b8672f74e2e1df66c47866e1  docs/kos-greeter/evidence/T03/final-state.txt

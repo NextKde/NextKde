@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageChops
 assert os.environ.get('KOS_T07_TEST') == '1'
 assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t07-')
 APP = Path(__file__).resolve().parents[1]
-EVIDENCE = APP.parents[1] / 'docs/kos-greeter/evidence/T07'
+EVIDENCE = APP.parents[1] / '.build/greeter-tests/T07'
 EVIDENCE.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)

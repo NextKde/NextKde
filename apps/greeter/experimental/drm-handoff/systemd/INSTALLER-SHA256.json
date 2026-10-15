@@ -1,6 +1,0 @@
-{
-  "tools/install-greeter-handoff.py": "814bd8bef66632108f0c3ad77a8be6322b9a1d343ae4a27fd90928ef50bd8150",
-  "tools/install-greeter-handoff.sh": "82dd06ecbae7ac570250734eb4177232d17c57872978286a1e184037bfe0b654",
-  "tools/test-greeter-handoff-install.py": "8fdb3d0c48bd412c75e295359d1e8d877f20bbd7573f7928c7e942728fb8b21b",
-  "apps/greeter/experimental/drm-handoff/systemd/INSTALL.md": "668a3fdca745255e2cbd394af56acd1aeb0830c2ae26e6ec805eb6f3cf2e56ba"
-}

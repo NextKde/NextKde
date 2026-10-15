@@ -1,5 +1,0 @@
-$ ['sh', '-c', 'test ! -f "$HOME/.config/ksplashrc" || cat "$HOME/.config/ksplashrc"']
-exit=0
-[KSplash]
-Engine=none
-Theme=None

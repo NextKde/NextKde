@@ -1,5 +1,0 @@
-PASS: actual Quickshell + mock IPC: success create_session,post_auth_message_response,start_session
-PASS: actual Quickshell + mock IPC: failure create_session,post_auth_message_response,cancel_session,create_session,post_auth_message_response,start_session
-PASS: actual Quickshell + mock IPC: cancel create_session,cancel_session
-PASS: actual Quickshell + mock IPC: disconnect create_session,post_auth_message_response
-PASS: actual Quickshell + mock IPC: launch-rejected create_session,post_auth_message_response,start_session,cancel_session

@@ -1,9 +1,0 @@
-PASS verified bundle, pinned system dependencies and fixed file allowlist; no installation
-Installed verified files in /opt/kos-handoff ; services unchanged.
-Recovered interrupted upgrade prefix; services unchanged.
-PASS interrupted upgrade recovers previous when active prefix is absent
-Installed verified files in /opt/kos-handoff ; services unchanged.
-Previous files retained at /opt/kos-handoff.previous
-Restored previous prefix ; services unchanged; displaced files retained at /opt/kos-handoff.displaced
-Uninstalled active prefix ; services unchanged; displaced files retained at /opt/kos-handoff.displaced
-PASS fake-root check/install/root permissions/upgrade/rollback/uninstall/hash mismatch/symlink/writable ancestor; no host mutation

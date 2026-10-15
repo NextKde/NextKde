@@ -1,2 +1,0 @@
-  INFO qml: PASS frozen in-flight reload leaves resource version unchanged
-  INFO qml: PASS thaw reloads latest resource

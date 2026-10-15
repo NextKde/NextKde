@@ -113,7 +113,8 @@ ShellRoot {
                 while time.monotonic()-start < 17:
                     text = log.read_text(errors='replace')
                     marker = 'KOS_ENTRY Timeout' if lost or bad else 'KOS_ENTRY RevealComplete'
-                    if marker in text: break
+                    # Desktop and Cover animations finish independently.
+                    if marker in text and (lost or bad or 'KOS_COVER RevealComplete' in text): break
                     if shell.poll() is not None: raise AssertionError(text)
                     time.sleep(.05)
                 else: raise AssertionError(text)

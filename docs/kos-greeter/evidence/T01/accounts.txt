@@ -1,3 +1,0 @@
-$ busctl --system call org.freedesktop.Accounts /org/freedesktop/Accounts org.freedesktop.Accounts ListCachedUsers
-exit=0
-ao 1 "/org/freedesktop/Accounts/User1000"

@@ -13,7 +13,7 @@ sys.path.insert(0, str(APP / 'companion'))
 import display
 
 ROOT = APP.parents[1]
-EVIDENCE = ROOT / 'docs/kos-greeter/evidence/T06'
+EVIDENCE = ROOT / 'apps/greeter/tests/fixtures/outputs'
 
 class Backend:
     def __init__(self):

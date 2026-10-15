@@ -1,5 +1,0 @@
-PASS stdout/stderr/child journal inheritance; original pipes remain empty; identifier=kos-output-test-55a10932d031
-KOS_SESSION_OUTPUT ready vt-cleared=0 430984983051
-parent-stream-marker
-stderr-stream-marker
-child-stream-marker

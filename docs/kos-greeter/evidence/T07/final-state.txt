@@ -1,2 +1,0 @@
-Host display-manager: inactive
-No system configurations or services changed. Virtual tests use independent process groups, sockets and temporary config roots.

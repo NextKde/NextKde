@@ -1,5 +1,0 @@
-$ systemctl show display-manager.service -p Id -p ActiveState -p FragmentPath
-exit=0
-Id=plasmalogin.service
-ActiveState=active
-FragmentPath=/usr/lib/systemd/system/plasmalogin.service

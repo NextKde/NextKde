@@ -34,4 +34,4 @@ T08 最终资源 hash 尚未显式传入 wrapper，因此 T10 只能校验 T09 �
 
 ## 2026-10-12 资源重复工作消除
 
-消费者首次对该内容hash完成严格canonical字节检查之后，可在进程内复用hash/尺寸验证结果；每次仍读取live授权/版本与实际文件bytes并校验权限、SHA256、尺寸，不缓存图片/授权，不绕过撤销。128项上限。source/fit/crop/首帧settled门控保持；不是低清占位策略。新增SocketPeerMatched仅表示可信listener被发现，不等于Wayland响应/可绘制。性能与底层研究见 evidence/handoff-latency-fix/REPORT.md。
+消费者首次对该内容hash完成严格canonical字节检查之后，可在进程内复用hash/尺寸验证结果；每次仍读取live授权/版本与实际文件bytes并校验权限、SHA256、尺寸，不缓存图片/授权，不绕过撤销。128项上限。source/fit/crop/首帧settled门控保持；不是低清占位策略。新增SocketPeerMatched仅表示可信listener被发现，不等于Wayland响应/可绘制。

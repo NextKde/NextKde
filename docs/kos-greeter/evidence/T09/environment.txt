@@ -1,6 +1,0 @@
-Branch: codex/notification-center-stacks
-Base commit: 54512887915152c514b9d08f3a45ca14779e1adc
-Python: 3.14.7
-Kernel: 7.2.9-zen1-1-zen
-Isolated file/subprocess and Quickshell offscreen mock IPC tests; no real greetd/KWin/GPU invoked.
-Quickshell: 0.3.2 (Arch Linux package).

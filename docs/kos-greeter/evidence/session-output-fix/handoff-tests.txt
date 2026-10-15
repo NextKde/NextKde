@@ -1,7 +1,0 @@
-KOS_HANDOFF default-background
-KOS_SESSION_PHASE PlasmaStarting 846537012597
-KOS_SESSION_PHASE PlasmaStarting 846553649790
-{"KOS_HANDOFF_PATH": "/tmp/tmpn3hp2d0e/runtime/kos-handoff-bd02727bdeda4e298a790726b49e9c0a/handoff.json", "KOS_HANDOFF_SESSION": "bd02727bdeda4e298a790726b49e9c0a", "KOS_HANDOFF_SHA256": "da49b7cdffda680b5730f40f34d208e02cff7ab495b3d302c793610d6bb5ccba"}
-KOS_SESSION_PHASE PlasmaStarting 846570067567
-KOS_SESSION_PHASE PlasmaStarting 846586407416
-PASS T09: 37 rejection cases; atomic permissions, same-UID isolation, single-use, revoke/replacement, lock, child failure/signal cleanup; elapsed=0.236s

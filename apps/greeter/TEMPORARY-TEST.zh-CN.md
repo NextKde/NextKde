@@ -52,7 +52,7 @@ sudo python3 /home/wwt/Downloads/NextKde/tools/rollback-greeter.py --status
 sudo journalctl -u kos-greeter-switch.service -u kos-greeter-rollback.service -b --no-pager
 ```
 
-验收记录见 docs/kos-greeter/evidence/temporary-switch/REPORT.md；模拟故障测试不是实际服务切换或恢复通过证据。
+模拟故障测试不代表实际服务切换或恢复通过。
 
 ## T07 壁纸测试
 
@@ -74,7 +74,7 @@ sudo python3 tools/test-greeter.py --start --timeout 600 --wallpaper "/绝对路
 
 未传 `--wallpaper` 时现在默认使用调用账户已授权的 KOS 当前选图，具体自动链路见下节；未经授权的账户仍使用默认背景。回滚删除临时图片和整个 app 副本，不留下持久发布。此参数用于临时预览，不声称完成 T14 的账户公开发布部署或实机验收。
 
-脚本更新的隔离复制、实际 offscreen Quickshell 加载与模拟回滚验证见 `docs/kos-greeter/evidence/temporary-switch/T07-update/REPORT.md`。没有在本次更新中启动真实切换。
+隔离测试不替代真实切换与回滚验收。
 
 ## 自动使用 KOS 当前壁纸
 
@@ -102,7 +102,7 @@ sudo python3 tools/test-greeter.py --revoke-wallpaper
 
 撤销按调用UID隔离，先清 manifest/旧版本，随后以调用者权限禁用选择文件；消费者下一次校验丢弃旧图（通常一秒，读故障最多三秒）。无当前发布也能禁用本账户选择，不清理其他账户副本。显式 `--wallpaper` 预览属于单次管理员公开图片选择，停止该预览使用完整回滚。正常回滚删除整个临时公开目录，不改变你的KOS桌面选图。
 
-自动接入证据与独立复审：`docs/kos-greeter/evidence/temporary-switch/kos-wallpaper/REPORT.md`。
+
 
 ## 壁纸构图与首显修正（2026-10-11）
 

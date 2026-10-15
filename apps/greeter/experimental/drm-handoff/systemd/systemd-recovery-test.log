@@ -1,9 +1,0 @@
-Failed to restore VT, ignoring: Input/output error
-PASS pin, bounded single arm, live retry, free/callback lifetime
-PASS reject non-greeter, inactive VT, invalid target
-PASS expired handoff restores only the old VT and releases GC pin
-PASS successor PID death cancels before the deadline
-PASS same-VT transfer never resets successor, including stale callbacks
-PASS cancellation restore failure preserves recovery marker through session GC
-PASS crash marker recovery, failed-recovery retry, idempotence
-PASS crash recovery preserves live same-VT controller

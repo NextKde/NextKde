@@ -1,3 +1,0 @@
-command: journalctl -u kos-greeter-switch.service -u kos-greeter-rollback.service -b --no-pager -n 80
-exit: 0
--- No entries --

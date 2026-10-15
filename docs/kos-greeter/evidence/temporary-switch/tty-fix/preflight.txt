@@ -1,1 +1,0 @@
-Read-only preflight passed. Original: plasmalogin.service | test VT: 1 | automatic rollback: 600 seconds. No changes made.

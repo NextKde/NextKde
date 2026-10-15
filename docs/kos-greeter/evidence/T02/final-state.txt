@@ -1,3 +1,0 @@
-display-manager: active
-greetd: inactive
-experimental KWin/fixture residual processes: 0

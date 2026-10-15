@@ -28,7 +28,7 @@ wrapper 持有同 UID 的持久 flock inode `kos-desktop-session.lock`，拒绝�
 
 ## 验收范围
 
-见 ../evidence/T09/REPORT.md。A11/A13 的 T09 描述、文件和本地进程子项可独立验收；真实 PAM/双KWin/三阶段画面/scanout/持久安装没有在本卡运行，也不因此重新打开已经关闭的 T02/T06。
+A11/A13 的 T09 描述、文件和本地进程子项可独立验收；真实 PAM/双KWin/三阶段画面/scanout/持久安装没有在本卡运行，也不因此重新打开已经关闭的 T02/T06。
 
 ## 2026-10-12 wrapper关键路径降时
 

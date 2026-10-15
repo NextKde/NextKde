@@ -33,10 +33,8 @@ Quickshell 限制配置根外的相对 QML 导入，因此 `apps/greeter/wallpap
 
 ## 临时测试的 KOS 发布适配
 
-用户授权的当前账户由 tools/test-greeter.py 在切换前用该账户凭据读取 KOS 的 image/fit 与私有展示选择；T03 Store 发布 root管理临时 app/public-display。只有 helper 所在 app 恰为 `/run/kos-greeter-test/app` 时消费其 config/wallpaper.json 指定的公开初始UID；普通安装仍使用固定 `/var/lib/kos/greeter/display`，不接受环境变量/用户描述切换目录。UID=-1 表示初始选择，实际发布UID只来自root校验配置；选其他账户仍按其UID独立消费，不能复用初始账户图像当作另一账户的资源。公开选择撤销/测试回滚使相应副本失效。最新实现证据见 [KOS自动接入](../evidence/temporary-switch/kos-wallpaper/REPORT.md)，此前T07冻结摘要保留为历史版本。
+用户授权的当前账户由 tools/test-greeter.py 在切换前用该账户凭据读取 KOS 的 image/fit 与私有展示选择；T03 Store 发布 root管理临时 app/public-display。只有 helper 所在 app 恰为 `/run/kos-greeter-test/app` 时消费其 config/wallpaper.json 指定的公开初始UID；普通安装仍使用固定 `/var/lib/kos/greeter/display`，不接受环境变量/用户描述切换目录。UID=-1 表示初始选择，实际发布UID只来自root校验配置；选其他账户仍按其UID独立消费，不能复用初始账户图像当作另一账户的资源。公开选择撤销/测试回滚使相应副本失效。
 
 ## 构图与首显修复
 
 真实认证入口仅由 WallpaperWindows 全输出背景层绘图；认证 FloatingWindow 透明，其初始尺寸为 screen 逻辑尺寸，内部 host 仅预载。内部预载 DPR 明确取目标 screen；offscreen 测试与七秒启动兜底仍可在认证窗口绘制。WallpaperSource 初次立即读取，ready 表示已解析当前 UID 的资源或明确回退；以后保持每秒校验。WallpaperHost.resourceSettled 表示空图、Ready、解码错误或三秒超时。首显等待活动屏背景与主预载实例 settled，之后锁存；七秒总门槛兜底避免缺 Loader/就绪事件导致认证永久隐藏。decoded/settled 不代表 compositor presentation 或 scanout。
-
-修复证据见 [构图和首显](../evidence/temporary-switch/wallpaper-startup/REPORT.md)。历史冻结均保留；本增量摘要独立存档。

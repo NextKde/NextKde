@@ -1,3 +1,0 @@
-PASS real virtual KWin + authorizer protocol functions: current PRESENTED/CONFIRM/READY commit
-PASS real virtual KWin + authorizer protocol functions: delayed Prepare rollback
-Real KWin/real helper, explicitly fake bus; physical DRM/PAM not tested

@@ -1,5 +1,0 @@
-PASS virtual KWin: atomic startup scale 1.5 and actual readback
-PASS virtual KWin: priority migration, scale 2, viewport bounds, response retained
-PASS virtual KWin: output disable/removal and restoration, same authentication item
-PASS virtual KWin: ineffective negative-layout request detected, supported fallback, no resubmit
-PASS virtual KWin: small-screen scroll viewport remained mapped

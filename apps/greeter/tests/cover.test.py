@@ -8,7 +8,8 @@ import tempfile
 import time
 
 APP = Path(__file__).resolve().parents[1]
-OUT = Path(os.environ.get('KOS_COVER_EVIDENCE', str(APP.parents[1] / 'docs/kos-greeter/evidence/T10')))
+OUT = Path(os.environ.get('KOS_COVER_EVIDENCE', str(APP.parents[1] / '.build/greeter-tests/T10')))
+OUT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(APP / 'companion'))
 import cover
 

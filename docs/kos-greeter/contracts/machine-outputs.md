@@ -4,7 +4,7 @@
 
 管理员可在 `/etc/kos/greeter/outputs.json` 设置明确的机器覆盖策略，该文件优先于随应用安装的默认配置，须满足下述 schema 和权限校验。缺失或损坏策略降级为无机器覆盖，沿用相同推荐/当前模式规划及有界失败回退。HDR off、VRR never 和主屏优先级归一化仍是首版行为；空覆盖不代表所有显示设置完全不变。物理显示器兼容性仍需独立验收。
 
-[JSON Schema](machine-outputs.schema.json)；本机只读样例与归一化 inventory 在 `../evidence/T06/`。这是独立机器策略，不是用户展示 manifest，也不替代既有 handoff schema。规划实现为 `apps/greeter/companion/outputs.py`；`display.py` 已接入 KScreen 控制、实际读回和有界回退，shell.qml 已接入活动屏与表单迁移。T02 和 T06 已由用户验收关闭；T09 消费同一机器策略，不根据头像修改输出。
+[JSON Schema](machine-outputs.schema.json)；测试样例与归一化 inventory 位于 `apps/greeter/tests/fixtures/outputs/`。这是独立机器策略，不是用户展示 manifest，也不替代既有 handoff schema。规划实现为 `apps/greeter/companion/outputs.py`；`display.py` 已接入 KScreen 控制、实际读回和有界回退，shell.qml 已接入活动屏与表单迁移。T02 和 T06 已由用户验收关闭；T09 消费同一机器策略，不根据头像修改输出。
 
 字段仅允许 schema 声明的字段，版本固定 1，最多 16 输出，输入最多 64 KiB。拒绝未知字段、重复 JSON key、重复 hardwareId+connector、非有限数值、布尔伪整数。位置为全局逻辑坐标（可负），模式尺寸为物理像素，旋转为角度；KScreen rotation=1/2/4/8 需适配为 0/90/180/270，不能直接复制。crop 属于壁纸交接而非显示策略。首版策略 HDR off、VRR never；当前规划器输出意图，不证明当前状态已符合意图。
 

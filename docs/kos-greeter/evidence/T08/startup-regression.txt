@@ -1,6 +1,0 @@
-OK
-PASS corrupt-image fallback startup ordering
-PASS delayed-image decode startup ordering
-PASS missing-background bounded fallback startup ordering
-PASS missing-background bounded fallback startup ordering
-PASS actual virtual KWin 16:10, scale 1.5, background/auth startup gate

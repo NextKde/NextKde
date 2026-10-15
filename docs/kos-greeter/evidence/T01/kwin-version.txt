@@ -1,3 +1,0 @@
-$ kwin_wayland --version
-exit=0
-kwin 6.7.5

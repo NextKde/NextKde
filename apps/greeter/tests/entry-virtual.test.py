@@ -2,7 +2,8 @@
 import os, signal, subprocess, tempfile
 from pathlib import Path
 APP=Path(__file__).resolve().parents[1]
-OUT=Path(os.environ.get('KOS_ENTRY_EVIDENCE', str(APP.parents[1]/'docs/kos-greeter/evidence/T11')))
+OUT=Path(os.environ.get('KOS_ENTRY_EVIDENCE', str(APP.parents[1]/'.build/greeter-tests/T11')))
+OUT.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='kos-t11-') as temp:
     env=dict(os.environ, XDG_CONFIG_HOME=temp+'/config', KOS_T11_EVIDENCE=str(OUT))
     for key in ('DISPLAY','WAYLAND_DISPLAY','GREETD_SOCK','KOS_HANDOFF_PATH','KOS_HANDOFF_SESSION','KOS_HANDOFF_SHA256'): env.pop(key,None)

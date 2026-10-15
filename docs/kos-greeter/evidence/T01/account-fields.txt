@@ -1,8 +1,0 @@
-Command: busctl --system get-property org.freedesktop.Accounts /org/freedesktop/Accounts/User1000 org.freedesktop.Accounts.User <property>
-Uid: t 1000; exit=0
-UserName: present (value redacted); exit=0
-RealName: empty (value redacted); exit=0
-IconFile: present (value redacted); exit=0
-SystemAccount: b false; exit=0
-Locked: b false; exit=0
-Avatar access as greeter: untested; no greeter account/process provisioned.

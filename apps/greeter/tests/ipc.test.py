@@ -206,7 +206,7 @@ def run(case):
         if case == 'cancel-alice':
             assert requests[-2:] == ['cancel_session', 'create_session'], requests
         if os.environ.get('KOS_T08_VIRTUAL') == '1':
-            evidence = Path(os.environ.get('KOS_GREETER_EVIDENCE', str(APP.parents[1] / 'docs/kos-greeter/evidence/T08')))
+            evidence = Path(os.environ.get('KOS_GREETER_EVIDENCE', str(APP.parents[1] / '.build/greeter-tests/T08')))
             evidence.mkdir(parents=True, exist_ok=True)
             (evidence / ('ipc-' + case + '.log')).write_text('\n'.join(line for line in output.splitlines() if 'KOS_GREETER_' in line or 'TEST_RECOVERED' in line) + '\n')
         print('PASS: actual Quickshell + mock IPC:', case, ','.join(requests))

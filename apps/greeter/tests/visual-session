@@ -5,7 +5,7 @@ from pathlib import Path
 assert os.environ.get('KOS_T08_VIRTUAL') == '1'
 assert os.environ['WAYLAND_DISPLAY'].startswith('kos-t08-')
 APP = Path(__file__).resolve().parents[1]
-E = Path(os.environ.get('KOS_GREETER_EVIDENCE', str(APP.parents[1] / 'docs/kos-greeter/evidence/T08')))
+E = Path(os.environ.get('KOS_GREETER_EVIDENCE', str(APP.parents[1] / '.build/greeter-tests/T08')))
 os.environ['KOS_GREETER_EVIDENCE'] = str(E)
 E.mkdir(parents=True, exist_ok=True)
 with tempfile.TemporaryDirectory() as tmp:

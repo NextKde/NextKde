@@ -1,5 +1,0 @@
-  INFO: Launching config: "/home/wwt/Downloads/NextKde/apps/greeter/shell.qml"
-  INFO: Shell ID: "05aedf2480e41c4d401cf7a0660cea7e" Path ID "05aedf2480e41c4d401cf7a0660cea7e"
-  INFO: Saving logs to "/run/user/1000/quickshell/by-id/iud34ekqmt/log.qslog"
-  INFO: Configuration Loaded
-  WARN: This plugin does not support setting window masks

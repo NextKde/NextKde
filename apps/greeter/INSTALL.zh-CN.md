@@ -37,7 +37,7 @@ sudo python3 /home/wwt/Downloads/NextKde/tools/rollback-greeter.py
 
 随应用安装的 `config/outputs.json` 使用空输出覆盖清单，不包含个人 EDID、固定分辨率、240 Hz 或 1.5 倍缩放。默认选择设备报告的受支持推荐模式，推荐不可用时采用受支持当前模式，并保留已有有效缩放、位置和旋转；两者均不可用则报告无可用输出。HDR/VRR 和主屏优先级仍按首版显示策略处理。
 
-需要机器专属模式时，由管理员配置 `/etc/kos/greeter/outputs.json`，格式见 [显示契约](../../docs/kos-greeter/contracts/machine-outputs.md)。该文件优先于应用默认配置，缺失或校验失败时使用通用策略。它是管理员独立配置，不由 Greeter 安装/升级生成，也不在 app 回滚时自动删除。本次已在虚拟机通过显示规划9项及假KScreen控制器10项回归；未执行实际模式切换或物理显示器验收。
+需要机器专属模式时，由管理员配置 `/etc/kos/greeter/outputs.json`，格式见 [显示契约](../../docs/kos-greeter/contracts/machine-outputs.md)。该文件优先于应用默认配置，缺失或校验失败时使用通用策略。它是管理员独立配置，不由 Greeter 安装/升级生成，也不在 app 回滚时自动删除。实际模式切换和物理显示器效果仍需实机验证。
 
 ## 更新已安装版本
 
@@ -102,7 +102,7 @@ greetd daemon 意外退出（包含 exit=0）使用 `Restart=always` 重建，`S
 
 ## 验证边界
 
-打包、语法、文件系统事务及模拟 systemd/logind 故障测试已执行，初次安装独立审查记录见 `../../docs/kos-greeter/reviews/persistent-install.md`；自动更新的35项隔离验证与独立审查见 [更新证据](../../docs/kos-greeter/evidence/automatic-upgrade/REPORT.md)和[更新审查](../../docs/kos-greeter/reviews/automatic-upgrade.md)。未实际安装、重启、测试物理 TTY/PAM 或开机登录；不把模拟测试当作完整 T14/A19 系统集成验收。
+安装事务与模拟 systemd/logind 测试不能替代真实 PAM、TTY 和开机登录验收。
 
 ## 密码框玻璃与 KWallet 自动解锁修复（2026-10-12）
 
@@ -185,4 +185,4 @@ sudo systemctl restart greetd
 
 项目kos_bridge源码同时修复了已删除窗口清理与活窗口卸载恢复。Greeter installer不编译/安装这个C++插件；插件需独立构建更新，不能替换当前已加载的`.so`后热重载。本批仅在 `/tmp/kos-bridge-exit-crash-build` 编译，未安装；登录配置隔离本身可先随Greeter app更新生效。
 
-编译、生产场景Item离线回归与96项Greeter隔离测试通过；实际登录、DRM/VT连续背景和黑帧时长仍未测。证据及测试隔离事故记录见 [修复报告](../../docs/kos-greeter/evidence/exit-crash-fix/REPORT.md)，不能将本批理解为已保证零黑帧。
+实际登录、DRM/VT 连续背景和黑帧时长仍需实机验证，不保证零黑帧。

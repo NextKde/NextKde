@@ -1,1 +1,0 @@
-PASS real --build bundle contains executable Python UI supervisor with matching hash/helper; all Python compile checks pass. No installation.

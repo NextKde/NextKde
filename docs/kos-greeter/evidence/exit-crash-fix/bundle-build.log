@@ -1,8 +1,0 @@
-Command: ['python3', 'tools/greeter-install.py', '--build', '/tmp/nextkde-exit-crash-bundle-2it0yckl/bundle', '--no-wallpaper-sync']
-Exit code: 0
-Built standalone QML/Python app bundle: /tmp/nextkde-exit-crash-bundle-2it0yckl/bundle
-
-
-PASS copied source and manifest SHA256: app/companion/greeter_config.py
-PASS copied source and manifest SHA256: app/bin/kos-greeter-session
-PASS no private wallpaper synchronization; no install/check/service operation executed.

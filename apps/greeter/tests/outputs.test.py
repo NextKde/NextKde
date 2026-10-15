@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[3]
 spec = importlib.util.spec_from_file_location('outputs', ROOT / 'apps/greeter/companion/outputs.py')
 outputs = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(outputs)
-BASE = ROOT / 'docs/kos-greeter/evidence/T06'
+BASE = ROOT / 'apps/greeter/tests/fixtures/outputs'
 
 class Displays(unittest.TestCase):
     def setUp(self):

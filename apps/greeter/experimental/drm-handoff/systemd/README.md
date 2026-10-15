@@ -42,8 +42,8 @@ bwrap --unshare-all --die-with-parent --new-session --ro-bind / / --proc /proc -
 ./run-isolated-tests.sh
 ```
 
-最终 greetd 12 项测试通过；logind 8 组状态/故障测试通过；授权器与入口隔离测试通过。附对应日志和源码摘要。它们验证组件和控制边界，不声称真实 PAM、三层同时运行或物理显示连续性已经验收。独立复审结果由任务证据目录记录。
+最终 greetd 12 项测试通过；logind 8 组状态/故障测试通过；授权器与入口隔离测试通过。日志和源码摘要保存在本地忽略目录。它们验证组件和控制边界，不声称真实 PAM、三层同时运行或物理显示连续性已经验收。独立复审结果只在本地记录，不提交过程材料。
 
-`run-kwin-integration.sh` 用最终真实 VirtualBackend KWin、真实 dbus-run-session 和真实授权器 arm/prepare_and_confirm 函数，验证双输出 PRESENTED → READY → 正常退出保留，以及延迟 Prepare → EXPIRED → Cancel 回滚。bus 为明确的隔离假对象，不接真实 logind；root helper 的 main 进程身份验证不由此测试覆盖。实测日志见 real-kwin-coordinator.log。故障测试与组件单测结合给出协调边界证据，不伪称三层真实守护进程同时通过登录。
+`run-kwin-integration.sh` 用最终真实 VirtualBackend KWin、真实 dbus-run-session 和真实授权器 arm/prepare_and_confirm 函数，验证双输出 PRESENTED → READY → 正常退出保留，以及延迟 Prepare → EXPIRED → Cancel 回滚。bus 为明确的隔离假对象，不接真实 logind；root helper 的 main 进程身份验证不由此测试覆盖。运行日志只保存在本地测试输出中。故障测试与组件单测结合给出协调边界证据，不伪称三层真实守护进程同时通过登录。
 
 复审 P1 修复：取消阶段 vt_restore（含重新打开 VT 重试）失败时保留原子 marker，即使 Session 被 GC 也保留；任何新 ARM 不得覆盖待恢复 marker。成功恢复或现存可信控制器接管后才删除。新增失败取消→GC→新 ARM 拒绝→恢复测试通过。

@@ -1,9 +1,0 @@
-Id=plasmalogin.service
-ActiveState=active
-FragmentPath=/usr/lib/systemd/system/plasmalogin.service
-UnitFileState=enabled
-
-Id=greetd.service
-ActiveState=inactive
-FragmentPath=/usr/lib/systemd/system/greetd.service
-UnitFileState=disabled

@@ -1,3 +1,0 @@
-$ qs --version
-exit=0
-Quickshell 0.3.2 (revision , distributed by Arch Linux)

@@ -1,1 +1,0 @@
-PASS: lifecycle ordering, failure, cancellation barrier, timeout, stale events

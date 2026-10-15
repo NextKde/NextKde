@@ -1,2 +1,0 @@
-Ran 20 tests in 5.630s
-OK
