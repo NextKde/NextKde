@@ -4,7 +4,7 @@ import qs.desktop.modules.bar
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
 
-// Presentational transfer-rate readout for the network tray cell. Sampling
+// Independent transfer-rate status cell. Sampling
 // lives in NetworkService (1 Hz while a device is connected) so the Wi-Fi
 // tooltip can show the same rates; this component only formats the shared
 // snapshot and never performs network-management actions.

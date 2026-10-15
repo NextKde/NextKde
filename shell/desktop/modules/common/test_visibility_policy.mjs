@@ -18,6 +18,13 @@ assert.equal(isKnownDeskCenterWidget("nope"), false, "unknown widget rejected");
 assert.equal(isKnownStatusCell("battery"), true, "battery is a known cell");
 assert.equal(isKnownStatusCell("clock"), false, "a widget id is not a cell id");
 
+// Temperature and traffic are independently editable, separate from Wi-Fi.
+for (const id of ["tray", "temperature", "traffic"]) {
+    assert.equal(isKnownStatusCell(id), true);
+    assert.deepEqual(withVisibility([], id, false, statusCellIds), [id]);
+    assert.deepEqual(withVisibility([id, "network"], id, true, statusCellIds), ["network"]);
+}
+
 // ── normalisation ───────────────────────────────────────────────────────────
 
 // A file written by a newer build, or edited by hand, must not be able to hide

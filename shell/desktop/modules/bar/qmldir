@@ -15,6 +15,7 @@ TemperatureSensorPopups 1.0 TemperatureSensorPopups.qml
 NetworkStatus 1.0 NetworkStatus.qml
 WifiSignalIcon 1.0 WifiSignalIcon.qml
 NetworkTraffic 1.0 NetworkTraffic.qml
+NetworkTrafficPanel 1.0 NetworkTrafficPanel.qml
 NetworkPanel 1.0 NetworkPanel.qml
 BluetoothPanel 1.0 BluetoothPanel.qml
 ControlCenterToggle 1.0 ControlCenterToggle.qml

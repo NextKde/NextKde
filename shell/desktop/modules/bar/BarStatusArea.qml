@@ -21,15 +21,15 @@ Item {
     // DockContainer uses this stable, single-row maximum for its width solver.
     // The visible tray may then fold to two rows without feeding a discrete
     // row-count change back into the Dock height calculation.
-    readonly property real layoutMaximumWidth: cpuSlot.width
-        + systemTray.singleRowImplicitWidth
-        + (cpuSlot.visible ? statusArea.spacing : 0)
+    readonly property real layoutMaximumWidth: systemTray.singleRowImplicitWidth
 
     // The shell-owned cells, paired with the component that renders each one.
     // One table feeds both the rendered components and their reorder keys, so a
     // hidden cell can never desynchronise the two lists. Reading the persisted
     // hidden set here is what makes the Settings switch take effect live.
     readonly property var trailingCells: [
+        { key: "temperature", component: temperatureQuickControl },
+        { key: "traffic", component: trafficQuickControl },
         { key: "network", component: networkQuickControl },
         { key: "battery", component: batteryQuickControl },
         { key: "settings", component: settingsQuickControl },
@@ -37,7 +37,12 @@ Item {
         { key: "controlcenter", component: controlCenterQuickControl }
     ]
     readonly property var visibleTrailingCells: trailingCells.filter(
-        entry => !AppearanceConfigService.isStatusCellHidden(entry.key))
+        entry => !AppearanceConfigService.isStatusCellHidden(entry.key)
+            && (entry.key !== "temperature" || (!root.dockHosted
+                && MetricsService.currentMilliC >= 0
+                && MetricsService.maximum5MinuteMilliC >= 0))
+            && (entry.key !== "traffic" || (!root.dockHosted
+                && NetworkService.available && NetworkService.deviceState === "connected")))
 
     property Item pendingControlCenterAnchor: null
     readonly property var controlCenter: controlCenterLoader.item
@@ -45,7 +50,7 @@ Item {
         || (controlCenter?.isOpen ?? false)
     readonly property bool anyPanelOpen: (networkPanel?.requestedOpen ?? false)
         || (bluetoothPanel?.requestedOpen ?? false) || root.controlCenterOpen
-        || notificationPanel.requestedOpen
+        || notificationPanel.requestedOpen || trafficPanel.requestedOpen
 
     // Report panel visibility into the service singleton so its fast refresh
     // only runs while a panel is actually showing the data. A count (not a
@@ -64,6 +69,7 @@ Item {
     }
 
     function toggleControlCenter(anchorItem) {
+        trafficPanel.close()
         if (controlCenterOpen) {
             closeControlCenter()
             return
@@ -118,45 +124,59 @@ Item {
         id: networkQuickControl
         Item {
             readonly property alias control: networkStatus
-            // The transfer-rate readout lives inside the network cell, left of
-            // the Wi-Fi glyph, so native tray icons never come between them.
-            // Exposing the overflow lets the grid widen this one cell (single
-            // row only); the integrated Dock keeps its cell uniform because
-            // the readout hides there per the cpuSlot visibility rule.
-            readonly property real cellExtraWidth: networkTraffic.visible
-                ? networkTraffic.implicitWidth + networkCell.spacing : 0
-            Row {
-                id: networkCell
+            NetworkStatus {
+                id: networkStatus
                 anchors.centerIn: parent
-                spacing: 6
-                NetworkStatus {
-                    id: networkStatus
-                    anchors.verticalCenter: parent.verticalCenter
-                    // The Wi-Fi glyph is a thin arc fan and the battery glyph is
-                    // a flat capsule; both read visually smaller than the filled
-                    // control-center mark at the same nominal box size, so they
-                    // get a bit more room within the shared tray slot.
-                    iconSize: systemTray.iconSize + 3
-                    dockHosted: root.dockHosted
-                    dockEdge: root.dockEdge
-                    verticalDock: root.verticalDock
-                    sharedPanelOpen: networkPanel.requestedOpen
-                        || bluetoothPanel.requestedOpen || root.controlCenterOpen
-                        || notificationPanel.requestedOpen
-                    onPanelToggleRequested: {
-                        notificationPanel.close()
-                        bluetoothPanel.close()
-                        if (!networkPanel.requestedOpen)
-                            root.closeControlCenter()
-                        networkPanel.toggle(networkStatus)
-                    }
+                // The Wi-Fi glyph is a thin arc fan and the battery glyph is
+                // a flat capsule; both read visually smaller than the filled
+                // control-center mark at the same nominal box size, so they
+                // get a bit more room within the shared tray slot.
+                iconSize: systemTray.iconSize + 3
+                dockHosted: root.dockHosted
+                dockEdge: root.dockEdge
+                verticalDock: root.verticalDock
+                sharedPanelOpen: networkPanel.requestedOpen
+                    || bluetoothPanel.requestedOpen || root.controlCenterOpen
+                    || notificationPanel.requestedOpen
+                onPanelToggleRequested: {
+                    notificationPanel.close()
+                    bluetoothPanel.close()
+                    if (!networkPanel.requestedOpen)
+                        root.closeControlCenter()
+                    trafficPanel.close()
+                    networkPanel.toggle(networkStatus)
                 }
-                NetworkTraffic {
-                    id: networkTraffic
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: !root.dockHosted && NetworkService.available
-                        && NetworkService.deviceState === "connected"
-                    onPanelToggleRequested: networkStatus.panelToggleRequested()
+            }
+        }
+    }
+
+    Component {
+        id: temperatureQuickControl
+        Item {
+            readonly property real cellExtraWidth: Math.max(0,
+                temperature.implicitWidth - systemTray.itemSize)
+            CpuTemperature {
+                id: temperature
+                anchors.centerIn: parent
+            }
+        }
+    }
+
+    Component {
+        id: trafficQuickControl
+        Item {
+            readonly property alias control: traffic
+            readonly property real cellExtraWidth: Math.max(0,
+                traffic.implicitWidth - systemTray.itemSize)
+            NetworkTraffic {
+                id: traffic
+                anchors.centerIn: parent
+                onPanelToggleRequested: {
+                    notificationPanel.close()
+                    bluetoothPanel.close()
+                    networkPanel.close()
+                    root.closeControlCenter()
+                    trafficPanel.toggle(traffic)
                 }
             }
         }
@@ -200,6 +220,7 @@ Item {
                 dockEdge: root.dockEdge
                 verticalDock: root.verticalDock
                 onPanelToggleRequested: {
+                    trafficPanel.close()
                     if (!notificationPanel.requestedOpen) {
                         networkPanel.close()
                         bluetoothPanel.close()
@@ -239,20 +260,6 @@ Item {
         spacing: 10
 
         Item {
-            id: cpuSlot
-            // In integrated mode the permanent Dock carousel temperature page
-            // is the single compact entry. The standalone top Bar keeps this
-            // summary and both views still consume MetricsService.
-            visible: !root.dockHosted
-            width: visible ? cpuTemperature.implicitWidth : 0
-            height: root.height
-            CpuTemperature {
-                id: cpuTemperature
-                anchors.centerIn: parent
-                dockHosted: root.dockHosted
-            }
-        }
-        Item {
             id: traySlot
             width: systemTray.implicitWidth
             height: root.height
@@ -275,7 +282,7 @@ Item {
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
         enabled: root.contextualEditingAvailable
-        onTapped: statusAreaEditor.openFor(root)
+        onTapped: statusAreaEditor.toggle(root)
     }
 
     StatusAreaEditor {
@@ -286,6 +293,9 @@ Item {
         id: notificationPanel
         dockHosted: root.dockHosted
         dockEdge: root.dockEdge
+    }
+    NetworkTrafficPanel {
+        id: trafficPanel
     }
     NetworkPanel {
         id: networkPanel

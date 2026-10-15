@@ -21,13 +21,15 @@ AnimatedPopupWindow {
         AppearanceTokens.isDarkTheme ? "#1c1c1e" : "#ffffff")
     readonly property color accentColor: AppearanceTokens.surface.pick(
         AppearanceTokens.colors.primary, "#0a84ff")
-    readonly property var ids: ["network", "battery", "settings", "notifications", "controlcenter"]
+    readonly property var ids: AppearanceConfigService.statusCellIds
     readonly property var labels: ({
+        tray: I18n.tr("Application Tray"),
+        temperature: I18n.tr("Temperature"), traffic: I18n.tr("Network Traffic"),
         network: I18n.tr("Network"), battery: I18n.tr("Battery"),
         settings: I18n.tr("Settings"), notifications: I18n.tr("Notification History"), controlcenter: I18n.tr("Control Center")
     })
     readonly property var symbols: ({
-        network: "⌁", battery: "▱", settings: "⚙", notifications: "♧", controlcenter: "◉"
+        tray: "▦", temperature: "♨", traffic: "↕", network: "⌁", battery: "▱", settings: "⚙", notifications: "♧", controlcenter: "◉"
     })
     readonly property var cellKeys: ids.map(id => "cell:" + id)
     readonly property var arrangedIds: {
@@ -40,7 +42,8 @@ AnimatedPopupWindow {
         return arranged
     }
 
-    implicitWidth: 424
+    // Size to the complete editable cell list so no card is clipped.
+    implicitWidth: Math.max(cellRow.implicitWidth, headerRow.implicitWidth) + 28
     implicitHeight: 146
     color: "transparent"
     grabFocus: interactive
@@ -52,7 +55,11 @@ AnimatedPopupWindow {
         margins.bottom: 10
     }
 
-    function openFor(item) {
+    function toggle(item) {
+        if (requestedOpen) {
+            hide()
+            return
+        }
         anchorItem = item
         show()
     }
@@ -73,6 +80,7 @@ AnimatedPopupWindow {
             anchors { fill: parent; margins: 14 }
             spacing: 10
             RowLayout {
+                id: headerRow
                 Layout.fillWidth: true
                 Text {
                     text: I18n.tr("Status Area")

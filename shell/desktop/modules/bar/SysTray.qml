@@ -54,6 +54,8 @@ Item {
     // dead or crashed StatusNotifierItems do not allocate phantom slots.
     readonly property var nativeKeys: {
         const _rev = root.trayRevision
+        if (AppearanceConfigService.isStatusCellHidden("tray"))
+            return []
         const keys = []
         for (let i = 0; i < trayRepeater.count; i++) {
             const item = trayRepeater.itemAt(i)
@@ -124,8 +126,8 @@ Item {
         const row = flowIndex % rows
         if (rows === 1) {
             // Variable cell widths: a shell cell may request overflow beyond
-            // its itemSize square (the network cell hosts the traffic
-            // readout), so positions accumulate real slot widths instead of
+            // its itemSize square (temperature and traffic are wide
+            // readouts), so positions accumulate real slot widths instead of
             // assuming a uniform grid.
             let x = 0
             for (let i = 0; i < flowIndex && i < keys.length; i++)
@@ -308,7 +310,7 @@ Item {
                 scale: isDraggedItem ? 1.08 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
-                visible: isValid
+                visible: isValid && !AppearanceConfigService.isStatusCellHidden("tray")
                 x: root.slotOriginIn(root.allKeys, naturalIndex).x
                 y: root.slotOriginIn(root.allKeys, naturalIndex).y
                 width: isValid ? root.itemSize : 0

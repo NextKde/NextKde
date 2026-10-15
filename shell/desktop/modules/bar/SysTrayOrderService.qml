@@ -5,8 +5,8 @@ import Quickshell.Io
 import qs.desktop.modules.platform
 
 // Persists the user's Alt+drag reordering of the tray row — native
-// StatusNotifierItem icons and the shell's own network/battery/settings/
-// control-center cells share one continuous, freely reorderable sequence,
+// StatusNotifierItem icons form a movable group alongside the shell's
+// network, temperature and other system cells in one continuous sequence,
 // keyed by a stable id (see SysTray.qml for the key scheme).
 QtObject {
     id: svc
@@ -27,53 +27,32 @@ QtObject {
     // a key must never be written to the persisted order.
     function isPlaceholderKey(key) { return key.indexOf("tray:#") === 0 }
 
-    // Returns `keys` arranged by the saved preference. Keys the preference
-    // has never seen are new arrivals: a native tray icon takes the leading
-    // slots, so an app launched now shows up at the left edge of the row
-    // rather than behind the shell's own cells, while an unrecognised shell
-    // cell stays at the tail where it is declared.
-    //
-    // Partitioning guarantees third-party tray icons stay strictly to the
-    // left of the shell's own system control cells, with controlcenter as
-    // the fixed trailing anchor at the rightmost edge.
+    // A virtual cell positions the native icons as a single group. Native
+    // keys keep their own saved order and are expanded only in the live tray.
     function arrange(keys) {
-        const liveTrayKeys = (keys || []).filter(k => svc.isTrayKey(k))
-        const liveCellKeys = (keys || []).filter(k => !svc.isTrayKey(k))
-
-        // 1. Arrange native tray keys according to saved preference
-        const knownTray = []
-        const seenTray = ({})
-        for (let i = 0; i < svc.order.length; i++) {
-            const key = svc.order[i]
-            if (svc.isTrayKey(key) && liveTrayKeys.indexOf(key) >= 0 && !seenTray[key]) {
-                knownTray.push(key)
-                seenTray[key] = true
-            }
-        }
-        const unseenTray = liveTrayKeys.filter(k => !seenTray[k])
-        const arrangedTray = unseenTray.concat(knownTray)
-
-        // 2. Arrange shell control cells according to saved preference
-        const knownCell = []
-        const seenCell = ({})
-        for (let i = 0; i < svc.order.length; i++) {
-            const key = svc.order[i]
-            if (!svc.isTrayKey(key) && liveCellKeys.indexOf(key) >= 0 && !seenCell[key]) {
-                knownCell.push(key)
-                seenCell[key] = true
-            }
-        }
-        const unseenCell = liveCellKeys.filter(k => !seenCell[k])
-        const arrangedCell = knownCell.concat(unseenCell)
-
-        // Pin cell:controlcenter as the permanent rightmost trailing anchor
-        const ccIndex = arrangedCell.indexOf("cell:controlcenter")
-        if (ccIndex >= 0 && ccIndex !== arrangedCell.length - 1) {
-            arrangedCell.splice(ccIndex, 1)
-            arrangedCell.push("cell:controlcenter")
-        }
-
-        return arrangedTray.concat(arrangedCell)
+        const live = keys || []
+        const native = live.filter(k => svc.isTrayKey(k))
+        const known = svc.order.filter((k, i, all) => native.indexOf(k) >= 0
+            && all.indexOf(k) === i)
+        const tray = native.filter(k => known.indexOf(k) < 0).concat(known)
+        const cells = live.filter(k => !svc.isTrayKey(k))
+        if (native.length && cells.indexOf("cell:tray") < 0)
+            cells.unshift("cell:tray")
+        const saved = svc.order.filter((k, i, all) => cells.indexOf(k) >= 0
+            && all.indexOf(k) === i)
+        // Old configurations have no group marker: keep their tray leading.
+        if (cells.indexOf("cell:tray") >= 0 && saved.indexOf("cell:tray") < 0)
+            saved.unshift("cell:tray")
+        const result = saved.concat(cells.filter(k => saved.indexOf(k) < 0))
+            .filter(k => k !== "cell:controlcenter")
+        if (cells.indexOf("cell:controlcenter") >= 0)
+            result.push("cell:controlcenter")
+        if (!native.length)
+            return result
+        let expanded = []
+        for (const key of result)
+            expanded = expanded.concat(key === "cell:tray" ? tray : [key])
+        return expanded
     }
 
     // Folds keys the saved order has never seen into it — tray icons at the
@@ -117,26 +96,31 @@ QtObject {
         if (key === "cell:controlcenter")
             return
 
-        const trayCount = arranged.filter(k => svc.isTrayKey(k)).length
-        let minDest = 0
-        let maxDest = arranged.length - 1
-
+        let destination = Math.round(targetIndex)
         if (svc.isTrayKey(key)) {
-            // Tray items can only be reordered within the tray section
-            minDest = 0
-            maxDest = Math.max(0, trayCount - 1)
+            // Alt+drag within the app group must never split that group.
+            const start = arranged.findIndex(k => svc.isTrayKey(k))
+            const count = arranged.filter(k => svc.isTrayKey(k)).length
+            destination = Math.max(start, Math.min(start + count - 1, destination))
         } else {
-            // Shell cells can only be reordered within the cells section
-            minDest = trayCount
-            maxDest = Math.max(minDest, arranged.length - 2)
+            destination = Math.max(0, Math.min(arranged.length - 2, destination))
         }
-
-        const destination = Math.max(minDest, Math.min(maxDest, Math.round(targetIndex)))
         if (sourceIndex === destination)
             return
         const moved = arranged.splice(sourceIndex, 1)[0]
         arranged.splice(destination, 0, moved)
-        svc.order = arranged
+        // Collapse native keys back to their marker for persistence. Keep
+        // absent keys too: editor drags must preserve the app-internal order.
+        const native = arranged.filter(k => svc.isTrayKey(k))
+        const cells = []
+        for (const entry of arranged) {
+            const cell = svc.isTrayKey(entry) ? "cell:tray" : entry
+            if (cells.indexOf(cell) < 0) cells.push(cell)
+        }
+        const absent = svc.order.filter(k => arranged.indexOf(k) < 0
+            && cells.indexOf(k) < 0 && native.indexOf(k) < 0)
+        svc.order = native.concat(cells, absent)
+
         scheduleSave()
     }
 
