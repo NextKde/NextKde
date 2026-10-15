@@ -206,6 +206,80 @@ sudo apt install \
 `qml6-module-qtquick-dialogs` 与 `libqt6sql6-sqlite` 是 QuickDialogs2 和
 数据服务的运行时依赖。
 
+### Fedora 44（社区贡献）
+
+> 社区贡献，并已在 Fedora 44（KDE Plasma 6.7.5 / Qt 6.11.2）上完成验证。
+> 它**不在**官方测试矩阵内（Arch / Debian 13 / Ubuntu 26.04 / NixOS）。
+> `kosctl doctor` 只有 Arch、Debian 系和 NixOS 的包检查分支——**没有 `dnf` 分支**。
+> 在 Fedora 上它只检查所需*命令*是否存在，**不会**报告或安装缺失的 `-devel` 包，
+> 所以你必须手动装齐构建依赖；缺包只会在之后 `kosctl install` 的 CMake 阶段以
+> `Could NOT find …` 的形式暴露。
+
+Quickshell 0.3.x 不在 Fedora 仓库中；启用社区 COPR 并安装
+（该 COPR 为 Fedora 44 x86_64 提供构建）：
+
+```sh
+sudo dnf copr enable errornointernet/quickshell
+sudo dnf install quickshell
+```
+
+核心与 KWin 插件构建依赖：
+
+```sh
+sudo dnf install \
+  git cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
+  extra-cmake-modules \
+  wayland-devel wayland-protocols-devel libxkbcommon-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtquick3d-devel \
+  qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
+  qt6-qtbase-private-devel \
+  kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
+  kf6-kio-devel kf6-kcalendarcore-devel kf6-kconfig-devel kf6-ki18n-devel \
+  kf6-kguiaddons-devel kf6-kcmutils-devel kf6-kcoreaddons-devel \
+  libplasma-devel kdecoration-devel \
+  kwin-devel libdrm-devel mesa-libgbm-devel libepoxy-devel \
+  vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
+```
+
+> **Qt 私有头文件是独立的 `*-private-devel` 包。** NextKde 的原生 KWin 组件
+> （`shell/native/surface-shape`）需要 `Qt6GuiPrivate`，由 `qt6-qtbase-private-devel`
+> 提供。缺它时 `kosctl install` 会在 CMake 配置阶段中止并报
+> `Could NOT find Qt6GuiPrivate ... /usr/lib64/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfig.cmake
+> does NOT exist`。如果之后再看到 `Failed to find required Qt component "QuickPrivate"`，
+> 再装 `qt6-qtdeclarative-private-devel`。Fedora 上所有 `Qt6*Private` 组件都遵循这个
+> `*-private-devel` 命名规律。
+
+可选运行时集成：
+
+```sh
+sudo dnf install \
+  NetworkManager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils spectacle
+```
+
+与 Arch/Debian 包名的主要差异：
+
+- KF6 框架的 `-devel` 包大多保留 `kf6-` 前缀（`kf6-kwindowsystem-devel`、
+  `kf6-kiconthemes-devel` 等），**但** `libplasma` → `libplasma-devel`、
+  `kdecoration` → `kdecoration-devel`——没有 `kf6-libplasma-devel` 或
+  `kf6-kdecoration-devel`。
+- Fedora **没有** `libxcb-*-devel` 拆分包（Debian 的 `libxcb-*-dev` 布局在这里不适用）。
+  所有 xcb 扩展头文件（composite、randr、res、shm、sync、xfixes 等）都由单一的
+  `libxcb-devel` 提供——不要尝试 `libxcb-composite-devel` 之类（`dnf` 会报 `No match`）。
+- `kwin-devel` 在 Fedora 上会顺带带入 libdrm/libgbm/libepoxy/Wayland 的开发文件，
+  上面显式列出仅为清晰。`qt6-qtimageformats` 和 `qt6-qt5compat-devel` 对应 Debian 的
+  `qt6-image-formats-plugins` / `qt6-5compat-dev`。
+
+构建提示：
+
+- 设置 `KOS_BUILD_SPATIAL=OFF`（导出它，或作为安装命令前缀）以跳过约 1 GB 的 ONNX
+  Runtime SDK 下载，并免去 `opencv-devel`。此模式下的
+  `Depth engine skipped: OpenCV or the ONNX Runtime is not installed` 提示属预期，不是错误。
+- configure 阶段反复出现的 `KDEInstallDirs … got its value from CMAKE_INSTALL_*`
+  警告是无害的（GNUInstallDirs 与 KDE 宏的加载顺序问题）——忽略即可。
+- 安装成功后，三个 `kos-*.service` 用户单元会启用，并在下次登录时自动启动；可用
+  `systemctl --user status kos-platform.service kos-data.service kos-shell.service` 校验。
+
 Calendar、Todo、Weather 和 ListenFree 是独立的可选应用，不由默认的
 `kosctl install` 构建。默认应用安装需要 Qt 6.10+、兼容的 KF6、Go 1.26+ 和额外音频依赖。
 安装前请阅读 [apps/README.zh-CN.md](apps/README.zh-CN.md) 与
