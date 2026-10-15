@@ -37,6 +37,7 @@
     "kos-shell.notification-count-match",
     "kos-shell.control-center-submenu-state",
     "kos-shell.visibility-policy",
+    "kos-shell.status-area-state",
     "kos-shell.wallpaper-slideshow",
     "kos-shell.wallpaper-handoff",
     "kos-shell.wallpaper-transitions",

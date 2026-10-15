@@ -48,6 +48,7 @@ QtObject {
     // Live transfer-rate snapshot of the active device, sampled once a second
     // while a device is connected. The tray readout and the Wi-Fi tooltip both
     // consume this; nothing here performs network-management actions.
+    signal trafficSampled(string device, real download, real upload)
     property real downloadBytesPerSecond: 0
     property real uploadBytesPerSecond: 0
     property string _trafficDevice: ""
@@ -152,6 +153,8 @@ QtObject {
             if (_trafficDevice !== device)
                 return
             _trafficSamplePending = false
+            if (deviceName !== device || deviceState !== "connected")
+                return
             const result = response?.ok ? response.result || ({}) : ({})
             const rx = Number(result.rxBytes)
             const tx = Number(result.txBytes)
@@ -161,6 +164,7 @@ QtObject {
                     const seconds = Math.max(0.25, (now - _previousTimestamp) / 1000)
                     downloadBytesPerSecond = (rx - _previousRx) / seconds
                     uploadBytesPerSecond = (tx - _previousTx) / seconds
+                    trafficSampled(device, downloadBytesPerSecond, uploadBytesPerSecond)
                 }
                 _previousRx = rx
                 _previousTx = tx

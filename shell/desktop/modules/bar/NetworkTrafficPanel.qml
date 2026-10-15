@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import "NetworkTrafficHistory.mjs" as TrafficHistory
 
 // A read-only dashboard for the active interface, independent of Wi-Fi setup.
 AnimatedPopupWindow {
@@ -12,9 +13,9 @@ AnimatedPopupWindow {
     property Item anchorItem: null
     readonly property bool connected: NetworkService.available
         && NetworkService.deviceState === "connected"
-    property var downloadHistory: []
-    property var uploadHistory: []
-    property string historyDevice: ""
+    property var history: TrafficHistory.empty()
+    readonly property var downloadHistory: history.download
+    readonly property var uploadHistory: history.upload
     readonly property var targetScreen: ScreenLifecycle.activeScreen
     implicitWidth: 340
     implicitHeight: 340
@@ -36,28 +37,24 @@ AnimatedPopupWindow {
             return
         }
         anchorItem = item
-        downloadHistory = []
-        uploadHistory = []
-        historyDevice = NetworkService.deviceName
-        recordSample()
+        history = TrafficHistory.empty(NetworkService.deviceName)
         show()
     }
     function close() { hide() }
-    function recordSample() {
-        if (historyDevice !== NetworkService.deviceName || !connected) {
-            downloadHistory = []
-            uploadHistory = []
-            historyDevice = NetworkService.deviceName
-        }
-        if (!connected) return
-        downloadHistory = downloadHistory.concat([Math.max(0, NetworkService.downloadBytesPerSecond)]).slice(-60)
-        uploadHistory = uploadHistory.concat([Math.max(0, NetworkService.uploadBytesPerSecond)]).slice(-60)
+    function recordSample(device, download, upload) {
+        if (requestedOpen && connected && device === NetworkService.deviceName)
+            history = TrafficHistory.append(history, device, download, upload)
     }
-    Timer {
-        interval: 1000
-        running: panel.requestedOpen
-        repeat: true
-        onTriggered: panel.recordSample()
+    onConnectedChanged: if (!connected) close()
+    onAnchorItemChanged: if (!anchorItem && requestedOpen) close()
+    Connections {
+        target: NetworkService
+        function onTrafficSampled(device, download, upload) {
+            panel.recordSample(device, download, upload)
+        }
+        function onDeviceNameChanged() {
+            panel.history = TrafficHistory.empty(NetworkService.deviceName)
+        }
     }
     onClosed: if (requestedOpen) close()
     Connections {
@@ -84,6 +81,7 @@ AnimatedPopupWindow {
         onActivated: panel.close()
     }
     PanelWindow {
+        objectName: "traffic-dismissal-catcher"
         screen: panel.targetScreen
         visible: ScreenLifecycle.outputAvailable && panel.targetScreen !== null && panel.requestedOpen
         color: "transparent"
@@ -92,7 +90,7 @@ AnimatedPopupWindow {
         WlrLayershell.namespace: "quickshell-trafficpanel-backdrop"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
-        MouseArea { anchors.fill: parent; onPressed: panel.close() }
+        MouseArea { objectName: "traffic-outside-press"; anchors.fill: parent; onPressed: panel.close() }
     }
     LiquidGlassPanel {
         id: surface
