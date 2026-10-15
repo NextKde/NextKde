@@ -66,6 +66,7 @@ cd NextKde
 | Arch Linux | [Dependencies and setup](docs/GettingStarted.md#1-install-requirements) |
 | Debian 13 | [Installer and manual setup](docs/GettingStarted.md#debian-13-trixie) |
 | Ubuntu 26.04 | [Packages and setup](docs/GettingStarted.md#ubuntu-2604-resolute) |
+| Fedora 44 | [Packages and setup](docs/GettingStarted.md#fedora-44-community-contributed) |
 | NixOS | [Flake quick start](docs/nixos-quickstart.md) |
 
 Read the [installation guide](docs/GettingStarted.md) for desktop takeover,
