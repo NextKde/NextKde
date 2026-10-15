@@ -41,6 +41,14 @@ Item {
             fakeBridge.lastError = ""
             fakeBridge.notificationSnapshotChanged({ready:true, sources:[], blockedKeys:[], saveError:"保存失败"})
             compare(page.errorText, "保存失败")
+            fakeBridge.notificationSnapshotChanged({ready:true, sources:[], blockedKeys:[], hideControlCenterNotifications:false})
+            const toggle = findChild(page, "notification-hideControlCenterNotifications-switch")
+            verify(toggle !== null)
+            compare(toggle.checked, false)
+            toggle.toggled(true)
+            compare(fakeBridge.request, "hideControlCenterNotifications:true")
+            fakeBridge.notificationSnapshotChanged({ready:true, sources:[], blockedKeys:[], hideControlCenterNotifications:true})
+            compare(toggle.checked, true)
             page.appFilter = "邮件"
             compare(page.applications.length, 0)
         }

@@ -1070,6 +1070,8 @@ export const catalog = {
     "Resume": "继续",
     "Start": "开始",
     "Temperature": "温度",
+    "Hide notifications in Control Center": "在控制中心隐藏通知",
+    "Use the separate notification panel; keep notifications out of Control Center": "开启后，通知仅在独立通知面板中展示，控制中心不再显示通知",
     "Network Traffic": "上下行速率",
     "Peak %1": "峰值 %1",
     "Download speed": "下载速率",

@@ -17,9 +17,10 @@ QtObject {
     property bool bannersEnabled: true
     property bool historyEnabled: true
     property bool showPreview: true
+    property bool hideControlCenterNotifications: false
 
     function setPreference(key, value) {
-        if (!ready || ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"].indexOf(key) < 0
+        if (!ready || ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview", "hideControlCenterNotifications"].indexOf(key) < 0
                 || typeof value !== "boolean") return false
         service[key] = value
         saveTimer.restart()
@@ -58,7 +59,8 @@ QtObject {
         JsonConfigStore.writePath(configPath, JSON.stringify({version: 1, sources: sources,
             blockedKeys: blockedKeys, doNotDisturbEnabled: doNotDisturbEnabled,
             bannersEnabled: bannersEnabled, historyEnabled: historyEnabled,
-            showPreview: showPreview}, null, 2), function(ok) {
+            showPreview: showPreview,
+            hideControlCenterNotifications: hideControlCenterNotifications}, null, 2), function(ok) {
                 service.saveError = ok ? "" : I18n.tr("Failed to save notification settings")
             })
     }
@@ -66,7 +68,7 @@ QtObject {
         if (exists && data) {
             try {
                 const parsed = JSON.parse(data)
-                for (const key of ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview"])
+                for (const key of ["doNotDisturbEnabled", "bannersEnabled", "historyEnabled", "showPreview", "hideControlCenterNotifications"])
                     if (typeof parsed[key] === "boolean") service[key] = parsed[key]
                 if (Array.isArray(parsed.sources)) {
                     const seen = new Set()

@@ -70,6 +70,9 @@ if (!process.argv.includes("--session")) {
         copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIdentity.mjs", import.meta.url),
             join(notificationDir, "NotificationIdentity.mjs"));
         await start();
+        assert.equal(stats().prefs.hideControlCenterNotifications, false);
+        ipc("preference", "hideControlCenterNotifications", true);
+        assert.equal(stats().prefs.hideControlCenterNotifications, true);
         const id = notify("Same Name", 0, "first", "old", "org.test.one");
         await waitFor(() => stats().rows.length === 1 && stats().banners === 1);
         const key = stats().rows[0].key;
@@ -125,6 +128,9 @@ if (!process.argv.includes("--session")) {
         await sleep(350);
         await stop();
         await start();
+        assert.equal(stats().prefs.hideControlCenterNotifications, true);
+        ipc("preference", "hideControlCenterNotifications", false);
+        assert.equal(stats().prefs.hideControlCenterNotifications, false);
         assert.equal(stats().prefs.bannersEnabled, false);
         assert.equal(stats().prefs.historyEnabled, false);
         assert.equal(stats().prefs.showPreview, false);

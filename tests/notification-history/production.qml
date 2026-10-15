@@ -20,7 +20,7 @@ Scope {
             }
             return JSON.stringify({ready: NotificationPolicyService.ready, rows: rows,
                 sources: NotificationPolicyService.sources, blocked: NotificationPolicyService.blockedKeys,
-                prefs: {bannersEnabled: NotificationPolicyService.bannersEnabled, historyEnabled: NotificationPolicyService.historyEnabled, showPreview: NotificationPolicyService.showPreview, doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled},
+                prefs: {hideControlCenterNotifications: NotificationPolicyService.hideControlCenterNotifications, bannersEnabled: NotificationPolicyService.bannersEnabled, historyEnabled: NotificationPolicyService.historyEnabled, showPreview: NotificationPolicyService.showPreview, doNotDisturbEnabled: NotificationPolicyService.doNotDisturbEnabled},
                 unread: AppNotificationService.unreadGroups,
                 banners: ScreenLifecycle.testBannerCount, dnd: ControlCenterService.doNotDisturbEnabled})
         }

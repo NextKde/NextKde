@@ -29,6 +29,7 @@ Item {
                 bannersEnabled: NotificationPolicyService.bannersEnabled,
                 historyEnabled: NotificationPolicyService.historyEnabled,
                 showPreview: NotificationPolicyService.showPreview,
+                hideControlCenterNotifications: NotificationPolicyService.hideControlCenterNotifications,
                 showNotificationBadges: ConfigService.showNotificationBadges,
                 saveError: NotificationPolicyService.saveError})
         }

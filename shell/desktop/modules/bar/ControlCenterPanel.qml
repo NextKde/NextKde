@@ -167,7 +167,8 @@ PopupWindow {
     // scroll the original-size controls instead of shrinking text and buttons.
     readonly property real availableHeight: Math.max(1, (targetScreen?.height ?? 900) - 110)
     readonly property real fitScale: 1
-    readonly property bool historyShown: cardMapped("")
+    readonly property bool historyShown: !NotificationPolicyService.hideControlCenterNotifications
+        && cardMapped("")
         && (NotificationHistoryService.count > 0
             || !notificationHistory.historyEmptyReady
             || notificationHistory.historyExitCount > 0)
