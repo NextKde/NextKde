@@ -15,7 +15,9 @@
 #include <optional>
 
 #include "buttonglyph.h"
+#include "buttonconfig.h"
 #include "titlebarmetrics.h"
+#include "titlebartint.h"
 #include "tilemenu.h"
 
 namespace KWin
@@ -201,7 +203,8 @@ private:
                  QColor *color = nullptr);
 
     // Schedule one repaint at the next sampling deadline. The timer is
-    // cancelled with this renderer; inactive or deleted windows are skipped.
+    // cancelled with this renderer. Inactive windows only finish an initial
+    // in-flight read; deleted windows are always skipped.
     void scheduleSample(KWin::EffectWindow *window);
     static void requestSample(KWin::EffectWindow *window, const QRectF &panel);
 
@@ -223,13 +226,12 @@ private:
     // handler has been crashing KWin, and a panel is a small fixed rectangle.
     static void repaintRect(const QRectF &globalRect);
 
+    KWin::GLTexture *backgroundTexture(const QSizeF &panelSize);
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, bool active, bool dark,
-                                  const QColor &panelColor,
                                   const PanelGeometry &geometry, Action hovered,
                                   bool adjusting, bool maximized);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, bool active, bool dark,
-                      const QColor &panelColor,
                       const PanelGeometry &geometry, Action hovered,
                       bool adjusting, bool maximized) const;
 
@@ -241,7 +243,8 @@ private:
     // the tile menu both come through here, so the shader setup, the blend
     // state and its restoration exist once.
     static void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
-                     const QRectF &logicalRect, KWin::GLTexture *texture);
+                     const QRectF &logicalRect, KWin::GLTexture *texture,
+                     const QColor &modulation = Qt::white);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's
@@ -255,23 +258,10 @@ private:
     // clock does.
     using Clock = std::chrono::steady_clock;
 
-    struct CacheEntry {
-        // The tint the panel is drawn with. A window whose title bar has never
-        // been read has no tint and gets no panel for now.
-        bool known = false;
-        bool dark = true;
-        QColor color;
-        // A changed tint takes over only when another reading confirms it
-        // after ConfirmTime.
-        bool pending = false;
-        bool pendingDark = false;
-        QColor pendingColor;
-        Clock::time_point pendingSince{};
-        // Initial reads are close together; later reads are three seconds
-        // apart, including when the application paints continuously.
-        Clock::time_point lastRead{};
-        int warmupReads = 0;
+    struct CacheEntry : TitlebarTintState {
+        std::shared_ptr<TitlebarSampler> sampler = std::make_shared<TitlebarSampler>();
         bool sampleScheduled = false;
+        Clock::time_point sampleDue{};
         quint64 sampleToken = 0;
         // Latest geometry for the timer's repaint. A resize updates these
         // without restarting the fast sampling phase.

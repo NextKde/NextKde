@@ -33,22 +33,9 @@ constexpr int Supersample = 4;
 // Bound textures created by repeated panel size/spacing adjustments. These
 // are GPU uploads kept for reuse, not per-window resources.
 constexpr qsizetype MaxTextureCacheBytes = 16 * 1024 * 1024;
-// How long a reading of the title bar has to hold before it displaces the tint
-// already on screen.
-//
-// Repetition is not evidence when the repeat is 16ms later: a window is at its
-// least representative in the moment it appears -- a splash screen, a loading
-// view, a surface that has not painted at all -- and two readings taken there
-// are the same bad reading twice. Time is what separates that transient from
-// the settled bar an application is left showing, and what keeps a one-frame
-// flash (a tooltip passing over the bar, an animation frame) from flipping the
-// panel.
-constexpr auto ConfirmTime = std::chrono::milliseconds(500);
-// Four early readings let a newly opened title bar finish painting and provide
-// a reading after ConfirmTime. Later reads stay sparse even on busy windows.
-constexpr int WarmupReads = 4;
-constexpr auto WarmupInterval = std::chrono::milliseconds(250);
-constexpr auto RecheckInterval = std::chrono::seconds(3);
+// Poll a queued GPU transfer on a later frame, never block the paint hook.
+constexpr auto ReadbackPollInterval = std::chrono::milliseconds(16);
+constexpr auto ReadbackTimeout = std::chrono::milliseconds(250);
 // Window sizes are compared with this tolerance, in logical pixels. KWin's
 // geometry is fractional -- a restored window reports a width like
 // 1345.9999999999998 -- so comparing exactly re-reads the tint on sub-pixel
@@ -68,13 +55,6 @@ bool sameSize(const QSizeF &a, const QSizeF &b)
 {
     return std::abs(a.width() - b.width()) <= SizeTolerance
         && std::abs(a.height() - b.height()) <= SizeTolerance;
-}
-
-bool sameColor(const QColor &a, const QColor &b)
-{
-    return std::abs(a.red() - b.red()) <= 2
-        && std::abs(a.green() - b.green()) <= 2
-        && std::abs(a.blue() - b.blue()) <= 2;
 }
 
 // Whether `point` (global logical) is on a part of `window` that no window
@@ -504,7 +484,11 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
         const KWin::Window *w = window->window();
         const bool maximized =
             w && w->maximizeMode() == KWin::MaximizeFull;
-        if (KWin::GLTexture *tex = panelTexture(panelSize, active, dark, panelColor,
+        // RGB changes only a uniform, not three supersampled button textures.
+        if (KWin::GLTexture *background = backgroundTexture(panelSize)) {
+            blit(viewport, clip, logicalRect, background, panelColor);
+        }
+        if (KWin::GLTexture *tex = panelTexture(panelSize, active, dark,
                                                 geometry, hovered, adjusting,
                                                 maximized)) {
             blit(viewport, clip, logicalRect, tex);
@@ -528,7 +512,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
 
 void ButtonRenderer::blit(const KWin::RenderViewport &viewport,
                           const KWin::Region &clip, const QRectF &logicalRect,
-                          KWin::GLTexture *texture)
+                          KWin::GLTexture *texture, const QColor &modulation)
 {
     if (!texture || clip.isEmpty()) {
         return;
@@ -550,12 +534,14 @@ void ButtonRenderer::blit(const KWin::RenderViewport &viewport,
     }
 
     auto *shaderManager = KWin::ShaderManager::instance();
-    // NOTE: do not add ShaderTrait::Modulate here. It changes how the texture's
-    // alpha is blended and makes the transparent corners of the panel come out
-    // as opaque dark blocks. Opacity during animations is handled by hiding the
-    // panel while the window is transformed (see BridgeEffect::drawWindow).
-    shaderManager->pushShader(KWin::ShaderTrait::MapTexture);
+    // Explicit premultiplied modulation, including alpha; never inherit an
+    // unset/stale uniform that would make transparent corners render black.
+    shaderManager->pushShader(KWin::ShaderTrait::MapTexture | KWin::ShaderTrait::Modulate);
     KWin::GLShader *shader = shaderManager->getBoundShader();
+    const float alpha = modulation.alphaF();
+    shader->setUniform(KWin::GLShader::Vec4Uniform::ModulationConstant,
+                       QVector4D(modulation.redF() * alpha, modulation.greenF() * alpha,
+                                 modulation.blueF() * alpha, alpha));
     shader->setUniform(KWin::GLShader::IntUniform::TextureWidth, texture->width());
     shader->setUniform(KWin::GLShader::IntUniform::TextureHeight, texture->height());
 
@@ -629,118 +615,75 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
     if (it == m_cache.end()) {
         it = m_cache.insert(window, CacheEntry{});
         it->sampleToken = ++m_nextSampleToken;
-    } else if (!sameSize(it->windowSize, windowSize)) {
-        // Resize can paint every frame. Keep the cadence and the displayed
-        // tint; the next scheduled read will use the new band.
+    } else if (!sameSize(it->windowSize, windowSize)
+               || !sameSize(it->panel.size(), panel.size())
+               || std::abs(it->panel.x() - panel.x()) > SizeTolerance
+               || std::abs(it->panel.y() - panel.y()) > SizeTolerance) {
+        // A completed transfer belongs to the geometry at enqueue time.
+        it->sampler->discard();
         it->pending = false;
     }
     it->windowSize = windowSize;
     it->panel = panel;
 
-    // A cached tint still draws on an inactive window without querying the GPU.
-    // If the window has never been sampled yet, allow it to sample once below.
     if (!isActive && it->known) {
-        *dark = it->dark;
-        if (color) {
-            *color = it->color;
-        }
-        return true;
-    }
-
-    const auto interval = it->warmupReads < WarmupReads
-        ? WarmupInterval : RecheckInterval;
-    if (it->lastRead == Clock::time_point{} || now - it->lastRead >= interval) {
+        it->sampler->discard();
+        it->pending = false;
+    } else {
         bool sampledDark = false;
         QColor sampledColor;
-        // Count attempts, including unreadable bars. An obscured window cannot
-        // keep triggering the fast sampling phase indefinitely.
-        it->lastRead = now;
-        if (it->warmupReads < WarmupReads) {
-            ++it->warmupReads;
-        }
-        if (sampleTitlebarTint(renderTarget, viewport, window, deviceRegion,
-                               panel, &sampledDark, &sampledColor)) {
-            if (!it->known) {
-                // Show the first usable tint immediately. Later readings can
-                // still correct it after the title bar has settled.
-                it->known = true;
-                it->dark = sampledDark;
-                it->color = sampledColor;
-                it->pending = true;
-                it->pendingDark = sampledDark;
-                it->pendingColor = sampledColor;
-                it->pendingSince = now;
-            } else if (it->pending && sampledDark == it->pendingDark
-                       && sameColor(sampledColor, it->pendingColor)
-                       && now - it->pendingSince >= ConfirmTime) {
-                const bool changed = (it->dark != sampledDark || !sameColor(it->color, sampledColor));
-                it->dark = sampledDark;
-                it->color = sampledColor;
-                it->pending = false;
-                if (changed) {
-                    repaintRect(QRectF(window->frameGeometry().topLeft() + it->panel.topLeft(), it->panel.size()));
-                }
-            } else if (it->pending && (sampledDark != it->pendingDark
-                       || !sameColor(sampledColor, it->pendingColor))) {
-                // A conflicting reading resets confirmation. If it matches
-                // the displayed tint there is no change left to confirm.
-                it->pending = (sampledDark != it->dark
-                               || !sameColor(sampledColor, it->color));
-                it->pendingDark = sampledDark;
-                it->pendingColor = sampledColor;
-                it->pendingSince = now;
-            } else if (!it->pending && (sampledDark != it->dark
-                       || !sameColor(sampledColor, it->color))) {
-                it->pending = true;
-                it->pendingDark = sampledDark;
-                it->pendingColor = sampledColor;
-                it->pendingSince = now;
+        if (it->sampler->take(&sampledDark, &sampledColor)) {
+            if (it->accept(sampledDark, sampledColor, now)) {
+                repaintRect(panel.translated(window->frameGeometry().topLeft()));
             }
+        } else if (it->sampler->pending() && now - it->lastRead >= ReadbackTimeout) {
+            // Even a stalled GPU cannot create an unbounded 60 Hz retry loop.
+            it->sampler->discard();
+        }
+        if (!it->sampler->pending()
+            && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
+            // Failed/occluded attempts also consume the cadence budget.
+            it->attempted(now);
+            it->sampler->enqueue(renderTarget, viewport, window, deviceRegion, panel);
         }
     }
 
-    if (isActive) {
-        scheduleSample(window);
-    }
-    if (!it->known) {
-        return false;
-    }
+    if (isActive || it->sampler->pending()) scheduleSample(window);
+    if (!it->known) return false;
     *dark = it->dark;
-    if (color) {
-        *color = it->color;
-    }
+    if (color) *color = it->color;
     return true;
 }
 
 void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
 {
     auto it = m_cache.find(window);
-    if (it == m_cache.end() || it->sampleScheduled) {
-        return;
-    }
-    const auto interval = it->warmupReads < WarmupReads
-        ? WarmupInterval : RecheckInterval;
-    const auto due = it->lastRead + interval;
-    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-        due - Clock::now());
+    if (it == m_cache.end()) return;
+    const auto now = Clock::now();
+    const auto due = it->sampler->pending() ? now + ReadbackPollInterval
+                                          : it->lastRead + it->interval();
+    // A natural paint may queue a read before the idle timer fires. Replace
+    // that timer with the earlier GPU poll; its old callback is token-guarded.
+    if (it->sampleScheduled && it->sampleDue <= due) return;
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(due - now);
     const int delay = std::max(1, int(remaining.count()) + 1);
-    const quint64 token = it->sampleToken;
+    const quint64 token = it->sampleToken = ++m_nextSampleToken;
     it->sampleScheduled = true;
+    it->sampleDue = due;
     QTimer::singleShot(delay, this,
-                       [this, guarded = QPointer<KWin::EffectWindow>(window),
-                        token]() {
-        if (!guarded) {
-            return;
-        }
+                       [this, guarded = QPointer<KWin::EffectWindow>(window), token]() {
+        if (!guarded) return;
         auto entry = m_cache.find(guarded);
-        if (entry == m_cache.end() || entry->sampleToken != token) {
-            return;
-        }
+        if (entry == m_cache.end() || entry->sampleToken != token) return;
         entry->sampleScheduled = false;
-        if (!KWin::effects || KWin::effects->activeWindow() != guarded) {
-            return;
+        if (!KWin::effects) return;
+        if (entry->sampler->pending()) {
+            // Consuming the captured pixels needs only a panel paint, including
+            // the one initial read permitted for an inactive window.
+            repaintRect(entry->panel.translated(guarded->frameGeometry().topLeft()));
+        } else if (KWin::effects->activeWindow() == guarded) {
+            requestSample(guarded, entry->panel);
         }
-        requestSample(guarded, entry->panel);
     });
 }
 
@@ -873,8 +816,29 @@ bool ButtonRenderer::adjusting(KWin::EffectWindow *window) const
     return m_adjusting.contains(window);
 }
 
+KWin::GLTexture *ButtonRenderer::backgroundTexture(const QSizeF &panelSize)
+{
+    const QString key = QStringLiteral("background_%1x%2")
+                            .arg(qRound(panelSize.width() * Supersample))
+                            .arg(qRound(panelSize.height() * Supersample));
+    const auto found = m_textures.find(key);
+    if (found != m_textures.end()) return found->second.get();
+    QImage image(qRound(panelSize.width() * Supersample),
+                 qRound(panelSize.height() * Supersample), QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.scale(Supersample, Supersample);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(Qt::white);
+    painter.drawRoundedRect(QRectF(QPointF(), panelSize), panelSize.height() / 2,
+                            panelSize.height() / 2);
+    painter.end();
+    return cacheTexture(key, std::move(image));
+}
+
 KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool active,
-                                               bool dark, const QColor &panelColor,
+                                               bool dark,
                                                const PanelGeometry &geometry,
                                                Action hovered, bool adjusting,
                                                bool maximized)
@@ -884,14 +848,12 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
     // flag is part of it for the same reason: it is not a separate texture, it
     // is the same panel with the other restore glyph on its green dot, and a
     // window that has just been maximized must not be served the one it had
-    // before. The panel color is included so distinct title bar colors receive
-    // their own textures.
-    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11_%12")
+    // before. RGB is deliberately absent: only the background uniform changes.
+    const QString key = QStringLiteral("%1x%2_%3_%4_%5_%6_%7_%8_%9_%10_%11")
                             .arg(qRound(panelSize.width()))
                             .arg(qRound(panelSize.height()))
                             .arg(active ? 1 : 0)
                             .arg(dark ? 1 : 0)
-                            .arg(panelColor.rgba(), 0, 16)
                             .arg(geometry.buttonSize)
                             .arg(geometry.buttonSpacing)
                             .arg(static_cast<int>(hovered))
@@ -904,7 +866,7 @@ KWin::GLTexture *ButtonRenderer::panelTexture(const QSizeF &panelSize, bool acti
                             .arg(maximized ? 1 : 0);
     auto it = m_textures.find(key);
     if (it == m_textures.end()) {
-        return cacheTexture(key, buildPanel(panelSize, active, dark, panelColor,
+        return cacheTexture(key, buildPanel(panelSize, active, dark,
                                             geometry, hovered, adjusting,
                                             maximized));
     }
@@ -1104,7 +1066,6 @@ void ButtonRenderer::setTileMenuHovered(const QPointF &logicalPos)
 }
 
 QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dark,
-                                   const QColor &panelColor,
                                    const PanelGeometry &geometry, Action hovered,
                                    bool adjusting, bool maximized) const
 {
@@ -1118,13 +1079,6 @@ QImage ButtonRenderer::buildPanel(const QSizeF &panelSize, bool active, bool dar
     QPainter painter(&image);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.scale(Supersample, Supersample);
-
-    // Opaque rounded panel matching the title bar background.
-    // This is what covers the application's own window controls rather than
-    // merely floating above them.
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(panelColor);
-    painter.drawRoundedRect(QRectF(0, 0, w, h), h / 2.0, h / 2.0);
 
     if (adjusting) {
         // The panel is being positioned. A ring says which panel is being

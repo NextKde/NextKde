@@ -17,6 +17,7 @@ include(KDECompilerSettings NO_POLICY_SCOPE)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core DBus Gui Widgets OpenGL Network Xml)
 find_package(KWin REQUIRED COMPONENTS kwineffects)
+find_package(epoxy REQUIRED)
 find_package(KDecoration3 REQUIRED)
 # To read which decoration KWin is configured to use out of kwinrc. Nothing else
 # in the plugin uses KConfig.
@@ -33,6 +34,8 @@ add_library(kos_bridge MODULE
     windowbuttons/panelgeometry.cpp
     windowbuttons/tilemenu.cpp
     windowbuttons/titlebarmetrics.cpp
+    windowbuttons/titlebarreadback.cpp
+    windowbuttons/titlebartint.cpp
     windowbuttons/windowrules.cpp
     windowappearance/contour.cpp
     windowappearance/appearanceconfig.cpp
@@ -121,6 +124,20 @@ if(KOS_BRIDGE_BUILD_TESTS)
     target_link_libraries(rules_test PRIVATE Qt6::Core Qt6::Gui KF6::ConfigCore)
     add_test(NAME rules_test COMMAND rules_test)
 
+    add_executable(titlebar_tint_test tests/titlebar_tint_test.cpp
+        windowbuttons/titlebartint.cpp)
+    target_include_directories(titlebar_tint_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(titlebar_tint_test PRIVATE Qt6::Gui)
+    add_test(NAME titlebar_tint_test COMMAND titlebar_tint_test)
+
+    add_executable(titlebar_readback_test tests/titlebar_readback_test.cpp
+        windowbuttons/titlebarreadback.cpp)
+    target_include_directories(titlebar_readback_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(titlebar_readback_test PRIVATE Qt6::Gui epoxy::epoxy)
+    add_test(NAME titlebar_readback_test COMMAND titlebar_readback_test)
+    set_tests_properties(titlebar_readback_test PROPERTIES
+        SKIP_RETURN_CODE 77 ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
     # Real production appearance manager and KWin scene Items, without a
     # compositor, Wayland connection, or authentication/session service.
     add_executable(appearance_lifecycle_test
@@ -149,6 +166,8 @@ if(KOS_BRIDGE_BUILD_GPU_TESTS)
     add_executable(titlebar_pixels_gpu_test
         tests/titlebar_pixels_gpu_test.cpp
         windowbuttons/titlebarmetrics.cpp
+        windowbuttons/titlebarreadback.cpp
+        windowbuttons/titlebartint.cpp
     )
     target_link_libraries(titlebar_pixels_gpu_test PRIVATE Qt6::Gui KWin::kwin)
     add_test(NAME titlebar_pixels_gpu_test COMMAND titlebar_pixels_gpu_test)

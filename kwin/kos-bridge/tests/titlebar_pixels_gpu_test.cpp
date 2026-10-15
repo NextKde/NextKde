@@ -8,6 +8,7 @@
 #include <opengl/gltexture.h>
 #include <QCoreApplication>
 #include <QByteArray>
+#include <QThread>
 #include <cstdio>
 #include <cstdlib>
 #include <epoxy/egl.h>
@@ -91,7 +92,6 @@ int main(int argc, char **argv)
             const float vertices[] = {x,y, x+w,y, x,y+h, x+w,y, x+w,y+h, x,y+h};
             glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
             glDrawArrays(GL_TRIANGLES, 0, 6);
-            glFinish();
             const QRect interior = viewport.mapToRenderTargetTexture(
                 KWin::RectF(origin + QPointF(8 / scale, 12 / scale), QSizeF(24 / scale, 16 / scale))).toAlignedRect();
             for (const QRect requested : {interior, QRect(-8,-4,32,24), QRect(80,48,32,24), QRect(200,200,8,8)}) {
@@ -99,7 +99,16 @@ int main(int argc, char **argv)
                 QRect actual;
                 // A different read FBO must be restored after the helper.
                 glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-                const bool ok = KOS::readTitlebarPixels(target, requested, pixels, &actual);
+                KOS::TitlebarPixelReadback readback;
+                bool ok = readback.enqueue(target, requested);
+                if (ok) {
+                    actual = readback.rect();
+                    ok = false;
+                    for (int attempt = 0; attempt < 1000 && !ok && readback.pending(); ++attempt) {
+                        ok = readback.take(pixels);
+                        if (!ok) QThread::msleep(1); // test driver only; production never waits
+                    }
+                }
                 const QRect expected = requested.intersected(QRect(QPoint(), deviceSize));
                 GLint restored = -1;
                 glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &restored);

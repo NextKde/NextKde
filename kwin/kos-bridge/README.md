@@ -59,25 +59,57 @@ KOS decoration is selected — see **Which decoration the panel belongs to**.
 
 ## The tint
 
-For client-side decorated windows, `windowbuttons/titlebarmetrics.cpp` samples
-the title bar background color to seamlessly blend the panel into the window chrome:
+`windowbuttons/titlebarmetrics.cpp` samples the title bar's rendered pixels for
+both client-side and server-side decorations:
 
-- **Local neighborhood priority.** The area immediately adjacent to the panel
-  (within 160 px) is sampled first, ensuring the panel tint matches the local
-  toolbar / tab bar background even on windows with split headers, sidebars, or
-  gradients.
-- **A median, not a mean.** Across the sampled region, pixels clustering around
-  the median luma are averaged to obtain the exact background RGB tone while
-  rejecting glyphs, icons, and antialiased edges.
-- The **panel's own columns and the caption's middle third are excluded** —
-  the first because it is about to be covered, the second because it is
-  glyphs rather than background.
-- Pixels outside the window's **visible region are excluded**: they belong to
-  whatever is stacked above, and tinting from another window would be worse
-  than not tinting at all. A partly covered window is still tinted from the
-  part of its bar that is visible.
-- On server-side decorated windows using KOS decoration, the panel uses the
-  exact `QPalette::Window` color of the window frame.
+- **Local neighborhood priority.** Read the strip immediately beside the panel,
+  at most **160 × 64 device pixels** (40 KiB), independent of window width and
+  output scale. Taller bands use their central rows. If the local strip is
+  obscured or unpainted, retry at the opposite end outside the caption's middle
+  third. Never sample the panel's own columns or pixels outside the visible
+  region.
+- **Non-blocking readback.** Transfer into a per-window pixel-pack buffer and
+  inspect its fence on a later paint. Only signalled buffers are mapped; paint
+  hooks never wait on a GPU fence. Preserve the read framebuffer, pixel-pack
+  buffer and pack layout. Preserve the render target's content transform
+  (including DRM FlipY and output rotation), then normalize the completed
+  pixels to top-down viewport coordinates. Failed/occluded reads count against the sampling
+  cadence, and a busy transfer is abandoned after 250 ms rather than keeping a
+  fast retry loop alive indefinitely.
+- **A median, not a mean.** A fixed 256-bin luma histogram averages RGB within
+  ±3 of the median, rejecting transparent pixels, glyphs and antialiased edges
+  without allocating, copying and sorting per-pixel sample vectors.
+- **Prompt confirmation without flicker.** The first usable tint appears
+  immediately. Four warm-up attempts run at 250 ms intervals; the active window
+  is then checked every 750 ms. A changed color returns to the 250 ms cadence
+  and must hold for 500 ms before replacing the displayed color. Near-equal
+  readings (up to two levels per RGB channel) do not change the cached color.
+  Inactive windows get one initial read and otherwise reuse their cached tint.
+- **No texture upload on RGB changes.** A cached white rounded background mask
+  is tinted with a premultiplied shader uniform; buttons, hover rings and
+  adjustment marks live in a separate reusable transparent texture. New RGB
+  values do not churn the panel texture cache. Explicit `dark`, `light` and
+  custom-color settings still bypass sampling.
+- KOS server-side decorations use `QPalette::Window` only as a fallback until
+  the first usable read completes.
+
+Offline regressions (no plugin installation or compositor restart):
+
+```bash
+cmake -S kwin/kos-bridge -B .build/kos-bridge -DKOS_BRIDGE_BUILD_TESTS=ON
+cmake --build .build/kos-bridge --parallel 4
+ctest --test-dir .build/kos-bridge --output-on-failure
+```
+
+`titlebar_tint_test` checks histogram equivalence, bounded sampling geometry,
+noise rejection and confirmation timing. `titlebar_readback_test` exercises the
+real PBO/fence path, row orientation, buffer reuse and GL-state restoration on
+an offscreen context; CTest reports it as skipped if no GL context is available.
+With `-DKOS_BRIDGE_BUILD_GPU_TESTS=ON`, `titlebar_pixels_gpu_test` also covers
+the asynchronous path across all eight output transforms, fractional scale,
+non-zero viewport origins and target clipping (64 cases, no pre-read `glFinish`).
+These tests do not replace checking the installed effect's appearance in a new
+KWin session; do not hot-load a replaced plugin into the running compositor.
 
 ## Configuration
 
