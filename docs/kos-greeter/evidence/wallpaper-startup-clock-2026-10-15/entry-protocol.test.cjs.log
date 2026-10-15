@@ -1,7 +1,0 @@
-PASS T11 stale/duplicate/session/hash/fit/output protocol rejection
-PASS T11 explicit same-image selection releases default presentation
-PASS T12 daily preview releases static presentation after entry
-PASS desktop reveal waits for provider and essential frames
-PASS default and verified entry presentations release after reveal and timeout
-PASS stale login copy cannot replace the selected desktop image or fit
-PASS settled spatial wallpaper submits current desktop frames on every output
