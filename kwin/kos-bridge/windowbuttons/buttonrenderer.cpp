@@ -630,16 +630,9 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
         it->sampler->discard();
         it->pending = false;
     } else {
-        bool sampledDark = false;
-        QColor sampledColor;
-        if (it->sampler->take(&sampledDark, &sampledColor)) {
-            if (it->accept(sampledDark, sampledColor, now)) {
-                repaintRect(panel.translated(window->frameGeometry().topLeft()));
-            }
-        } else if (it->sampler->pending() && now - it->lastRead >= ReadbackTimeout) {
-            // Even a stalled GPU cannot create an unbounded 60 Hz retry loop.
-            it->sampler->discard();
-        }
+        // This paint will use the accepted tint immediately; invalidating its
+        // source here would only force another full-window capture.
+        consumeSample(*it, now);
         if (!it->sampler->pending()
             && (it->lastRead == Clock::time_point{} || now - it->lastRead >= it->interval())) {
             // Failed/occluded attempts also consume the cadence budget.
@@ -653,6 +646,19 @@ bool ButtonRenderer::tintFor(const KWin::RenderTarget &renderTarget,
     *dark = it->dark;
     if (color) *color = it->color;
     return true;
+}
+
+bool ButtonRenderer::consumeSample(CacheEntry &entry, Clock::time_point now)
+{
+    bool sampledDark = false;
+    QColor sampledColor;
+    if (entry.sampler->take(&sampledDark, &sampledColor)) {
+        return entry.accept(sampledDark, sampledColor, now);
+    }
+    if (entry.sampler->pending() && now - entry.lastRead >= ReadbackTimeout) {
+        entry.sampler->discard();
+    }
+    return false;
 }
 
 void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
@@ -677,11 +683,20 @@ void ButtonRenderer::scheduleSample(KWin::EffectWindow *window)
         if (entry == m_cache.end() || entry->sampleToken != token) return;
         entry->sampleScheduled = false;
         if (!KWin::effects) return;
+        const bool active = KWin::effects->activeWindow() == guarded;
         if (entry->sampler->pending()) {
-            // Consuming the captured pixels needs only a panel paint, including
-            // the one initial read permitted for an inactive window.
-            repaintRect(entry->panel.translated(guarded->frameGeometry().topLeft()));
-        } else if (KWin::effects->activeWindow() == guarded) {
+            // Fence polling and mapping need a context, but no scene repaint.
+            // A source repaint invalidates ContinuousClip's whole-window FBO.
+            KWin::effects->makeOpenGLContextCurrent();
+            if ((!active && entry->known)
+                || !sameSize(entry->windowSize, guarded->frameGeometry().size())) {
+                entry->sampler->discard();
+                entry->pending = false;
+            } else if (consumeSample(*entry, Clock::now())) {
+                repaintRect(entry->panel.translated(guarded->frameGeometry().topLeft()));
+            }
+            if (active || entry->sampler->pending()) scheduleSample(guarded);
+        } else if (active) {
             requestSample(guarded, entry->panel);
         }
     });

@@ -202,7 +202,8 @@ private:
                  bool *dark,
                  QColor *color = nullptr);
 
-    // Schedule one repaint at the next sampling deadline. The timer is
+    // Poll in-flight reads without repainting; request a fresh capture at the
+    // next sampling deadline. The timer is
     // cancelled with this renderer. Inactive windows only finish an initial
     // in-flight read; deleted windows are always skipped.
     void scheduleSample(KWin::EffectWindow *window);
@@ -268,6 +269,7 @@ private:
         QSizeF windowSize;
         QRectF panel;
     };
+    static bool consumeSample(CacheEntry &entry, Clock::time_point now);
     QHash<KWin::EffectWindow *, CacheEntry> m_cache;
     quint64 m_nextSampleToken = 0;
 
