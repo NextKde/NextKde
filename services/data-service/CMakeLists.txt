@@ -2,6 +2,14 @@ find_program(KOS_GO_EXECUTABLE NAMES go REQUIRED)
 
 set(kos_data_service_sources
     ${CMAKE_CURRENT_SOURCE_DIR}/main.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/types.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/service.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/persistence.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/subscriptions.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/desktop.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/metrics.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/activity.go
+    ${CMAKE_CURRENT_SOURCE_DIR}/protocol.go
     ${CMAKE_CURRENT_SOURCE_DIR}/weather.go
     ${CMAKE_CURRENT_SOURCE_DIR}/desktop_placement.go
     ${CMAKE_CURRENT_SOURCE_DIR}/go.mod

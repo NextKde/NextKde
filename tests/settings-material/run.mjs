@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { ROLE_NAMES } from "../../shared/qml/colorize/MaterialColorScheme.mjs";
 
 // The settings window is a separate process, so its Material form is put
@@ -16,8 +16,21 @@ import { ROLE_NAMES } from "../../shared/qml/colorize/MaterialColorScheme.mjs";
 // window reported `materialForm` correctly. This file is the tripwire for that
 // class of mistake, and it has to run without Qt.
 
-const settings = readFileSync(
-    new URL("../../apps/settings/main.qml", import.meta.url), "utf8");
+const settingsDirectory = new URL("../../apps/settings/", import.meta.url);
+function qmlSources(directory) {
+    return readdirSync(new URL(directory, settingsDirectory), { withFileTypes: true })
+        .sort((first, second) => first.name.localeCompare(second.name))
+        .flatMap(entry => {
+            const path = directory + entry.name;
+            return entry.isDirectory() ? qmlSources(path + "/")
+                : entry.isFile() && entry.name.endsWith(".qml") ? [path] : [];
+        });
+}
+// Keep the original window's coverage after its inline pages and controls
+// move into files. Check each file separately so unrelated objects cannot
+// satisfy another module's contract by accident.
+const sources = ["main.qml", ...qmlSources("pages/"), ...qmlSources("components/")]
+    .map(path => ({ path, text: readFileSync(new URL(path, settingsDirectory), "utf8") }));
 let checks = 0;
 function check(condition, message) {
     checks += 1;
@@ -29,7 +42,8 @@ function check(condition, message) {
 // ---------------------------------------------------------------------------
 
 const known = new Set(ROLE_NAMES);
-const asked = [...settings.matchAll(/\brole\(\s*"([^"]+)"/g)].map((m) => m[1]);
+const asked = sources.flatMap(({ text }) =>
+    [...text.matchAll(/\brole\(\s*"([^"]+)"/g)].map((m) => m[1]));
 check(asked.length >= 10,
     "the window resolves its palette through role(), asked for "
     + asked.length + " names");
@@ -58,30 +72,31 @@ for (const name of new Set(asked)) {
 // left without an accent is a piece of the other form sitting in the middle of
 // this one.
 const ACCENT_CONTROLS = ["LiquidSlider", "LiquidGlassSwitch"];
-const lines = settings.split("\n");
-
 for (const control of ACCENT_CONTROLS) {
     const opener = "LiquidControls." + control + " {";
     let found = 0;
-    for (let i = 0; i < lines.length; ++i) {
-        if (lines[i].trim() !== opener)
-            continue
-        found += 1;
-        let depth = 0;
-        let accents = 0;
-        for (let j = i; j < lines.length; ++j) {
-            const text = lines[j];
-            if (/^\s*accentColor:/.test(text))
-                accents += 1;
-            depth += (text.match(/\{/g) || []).length
-                - (text.match(/\}/g) || []).length;
-            if (depth === 0 && j >= i) {
-                check(accents === 1,
-                    control + " at line " + (i + 1) + " carries exactly one "
-                    + "accentColor, found " + accents + (accents === 0
-                        ? " -- it would keep the iPadOS blue default"
-                        : " -- QML refuses a property set twice"));
-                break;
+    for (const { path, text: source } of sources) {
+        const lines = source.split("\n");
+        for (let i = 0; i < lines.length; ++i) {
+            if (lines[i].trim() !== opener)
+                continue;
+            found += 1;
+            let depth = 0;
+            let accents = 0;
+            for (let j = i; j < lines.length; ++j) {
+                const text = lines[j];
+                if (/^\s*accentColor:/.test(text))
+                    accents += 1;
+                depth += (text.match(/\{/g) || []).length
+                    - (text.match(/\}/g) || []).length;
+                if (depth === 0 && j >= i) {
+                    check(accents === 1,
+                        control + " in " + path + ":" + (i + 1) + " carries exactly one "
+                        + "accentColor, found " + accents + (accents === 0
+                            ? " -- it would keep the iPadOS blue default"
+                            : " -- QML refuses a property set twice"));
+                    break;
+                }
             }
         }
     }
@@ -92,19 +107,22 @@ for (const control of ACCENT_CONTROLS) {
 // 3. The shared controls are told which form to draw
 // ---------------------------------------------------------------------------
 
-check(/ControlForm\.materialForm\s*=/.test(settings),
-    "the window sets ControlForm.materialForm; without it every shared "
+const display = sources.find(({ path }) => path === "pages/DisplaySettingsPage.qml").text;
+check(/ControlForm\.materialForm\s*=\s*isMaterialDesign\b/.test(display),
+    "the display page sets ControlForm.materialForm from its confirmed style; without it every shared "
     + "control draws the liquid-glass form inside a Material window");
 
 // And it does so from a scope that has the value: `isMaterialDesign` exists on
 // the display page, not on the objects that apply state, so reading it there is
 // a ReferenceError that takes the rest of the function with it.
 {
-    const assignments = [...settings.matchAll(/(\w+)\.materialForm\s*=/g)]
-        .map((m) => m[1]);
-    for (const target of assignments)
-        check(target === "ControlForm",
-            "materialForm is assigned through ControlForm, not " + target);
+    for (const { path, text } of sources) {
+        const assignments = [...text.matchAll(/(\w+)\.materialForm\s*=/g)]
+            .map((m) => m[1]);
+        for (const target of assignments)
+            check(target === "ControlForm",
+                path + ": materialForm is assigned through ControlForm, not " + target);
+    }
 }
 
 console.log("settings Material form: " + checks + " checks passed, "

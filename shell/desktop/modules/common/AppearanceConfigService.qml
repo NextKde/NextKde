@@ -364,7 +364,7 @@ QtObject {
 
     // The writable preset parameters, valued in preset units, bracketed by the
     // range the compositor clamps them into when it writes kwinrc (theme.sync-glass
-    // in platform/src/daemon/PlatformServer.cpp). Two unit systems meet here:
+    // in platform/src/daemon/PlatformServerTheme.cpp). Two unit systems meet here:
     // Refraction is 0..1 and reaches kwinrc as RefractionStrength 0..20 through
     // `round(globalLiquidStrength * Refraction * 20)`; every other entry maps one
     // to one onto the kwinrc key of the same name.

@@ -356,8 +356,30 @@ ColumnLayout {
     function importGalleryFromFolder(folder) {
         if (!bridgeCompatible)
             return
-        bridge.importGalleryFolder(folder)
-        refreshGallery()
+        // -2 = an import is already running (its completion refreshes too);
+        // -1 = the folder does not exist (errorOccurred already reported).
+        const started = bridge.importGalleryFolder(folder)
+        if (started === 0)
+            importingFolder = true
+        else
+            refreshGallery()
+    }
+
+    // Folder copies hash, decode and write off the GUI thread; refresh on
+    // completion instead of right after the call.
+    property bool importingFolder: false
+    Connections {
+        target: page.bridge && page.bridge.galleryImportFinished !== undefined ? page.bridge : null
+        function onGalleryImportFinished(imported) {
+            page.importingFolder = false
+            if (imported === 0)
+                page.errorText = I18n.tr("No supported images in that folder.")
+            page.refreshGallery()
+        }
+        function onGalleryImportProgress(imported) {
+            if (imported % 10 === 0)
+                page.refreshGallery()
+        }
     }
     function removeGalleryImage(path) {
         if (!bridgeCompatible)
@@ -517,9 +539,7 @@ ColumnLayout {
             if (!page.bridgeCompatible)
                 return
             page.galleryCategory = "images"
-            if (page.bridge.importGalleryFolder(selectedFolder.toString()) === 0)
-                page.errorText = I18n.tr("No supported images in that folder.")
-            page.refreshGallery()
+            page.importGalleryFromFolder(selectedFolder.toString())
         }
     }
 

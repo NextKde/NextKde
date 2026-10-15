@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 function read(relativePath) {
@@ -201,26 +201,28 @@ assert.match(settingsDialog, /Accessible\.RadioButton[\s\S]*Accessible\.checked/
 // height has to shrink by exactly the rows it drops -- a height that ignores
 // the hidden rows leaves a blank band where they used to be.
 const settingsApp = read("../../apps/settings/main.qml");
-assert.match(settingsApp,
+const displaySettingsPage = read("../../apps/settings/pages/DisplaySettingsPage.qml");
+const themeSettingsPage = read("../../apps/settings/pages/ThemeSettingsPage.qml");
+assert.match(displaySettingsPage,
     /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*54\s*:\s*109/,
     "the appearance card drops the glass-follows-mode row under Material");
-assert.match(settingsApp,
+assert.match(displaySettingsPage,
     /implicitHeight:\s*displayPage\.isMaterialDesign\s*\?\s*48\s*:\s*145/,
     "the glass card keeps only the blur row under Material");
 // Both glass-follows-mode rows (the row and its separator) must hide together:
 // hiding only the row leaves a stray rule under the appearance-mode switch.
-const glassFollowsLabel = settingsApp.indexOf(
+const glassFollowsLabel = displaySettingsPage.indexOf(
     'text: I18n.tr("Liquid glass follows the appearance mode")');
 assert.ok(glassFollowsLabel > 0, "the translated glass-follows-mode row exists");
-const appearanceCardStart = settingsApp.indexOf(
+const appearanceCardStart = displaySettingsPage.indexOf(
     "implicitHeight: displayPage.isMaterialDesign ? 54 : 109");
 assert.ok(appearanceCardStart > 0 && appearanceCardStart < glassFollowsLabel,
     "the glass-follows-mode row belongs to the appearance card");
-const glassFollowsSlice = settingsApp.slice(appearanceCardStart, glassFollowsLabel);
+const glassFollowsSlice = displaySettingsPage.slice(appearanceCardStart, glassFollowsLabel);
 assert.ok((glassFollowsSlice.match(/visible:\s*!displayPage\.isMaterialDesign/g)
     || []).length >= 2,
     "the glass-follows-mode row hides with its separator under Material");
-assert.match(settingsApp, /function saveGlassFollowsAppearanceMode/,
+assert.match(displaySettingsPage, /function saveGlassFollowsAppearanceMode/,
     "the glass-follows-mode preference stays wired for non-Material styles");
 // The card that hosts the gallery and those controls must measure itself from
 // its contents. A literal height sized for the macOS layout leaves a dead band
@@ -232,12 +234,12 @@ assert.match(settingsApp, /function saveGlassFollowsAppearanceMode/,
 // that into a false failure. What the assertion actually guards is that both
 // terms are *present in the same expression* — the hardcoded height is caught
 // by the `doesNotMatch` below.
-assert.match(settingsApp,
+assert.match(themeSettingsPage,
     /implicitHeight:\s*16\s*\+\s*styleGallery\.height[\s\S]{0,400}?themeMaterialSettings\.implicitHeight/,
     "the theme card derives its height from the gallery and the embedded page");
-assert.match(settingsApp, /Layout\.preferredHeight:\s*implicitHeight/,
+assert.match(themeSettingsPage, /Layout\.preferredHeight:\s*implicitHeight/,
     "the theme card feeds that derived height into the layout");
-assert.doesNotMatch(settingsApp, /Layout\.preferredHeight:\s*550\b/,
+assert.doesNotMatch(themeSettingsPage, /Layout\.preferredHeight:\s*550\b/,
     "the theme card no longer hardcodes the macOS-only height");
 
 // 玻璃文字墨色 is driven by the one option the settings row above already owns
@@ -271,7 +273,7 @@ assert.match(read("../../shell/desktop/modules/bar/NetworkTraffic.qml"),
     /onGlyphInkChanged[\s\S]*?requestPaint\(\)/,
     "the Bar traffic arrow repaints when the ink it strokes with moves");
 for (const [path, description] of [
-    ["../../shell/desktop/modules/bar/ControlCenterPanel.qml", "Control Centre chrome"],
+    ["../../shell/desktop/modules/bar/controlcenter/SubmenuCard.qml", "Control Centre chrome"],
     ["../../shell/desktop/modules/bar/NetworkTraffic.qml", "Bar traffic arrow"],
     ["../../shell/desktop/modules/bar/WifiSignalIcon.qml", "shared Wi-Fi glyph"],
     ["../../shell/desktop/modules/quicksearch/QuickSearchWindow.qml", "Quick Search chrome"],
@@ -294,7 +296,8 @@ assert.match(glassPanel, /readonly property color secondaryForegroundColor:\s*bo
 assert.doesNotMatch(read("../../shell/desktop/modules/common/AppearanceConfigService.qml"),
     /glassInkFollowsAppearanceMode/,
     "the glass ink reuses the existing option instead of adding its own");
-assert.doesNotMatch(settingsApp, /glassInkFollowsAppearanceMode|文字颜色跟随外观/,
+assert.doesNotMatch([settingsApp, displaySettingsPage, themeSettingsPage].join("\n"),
+    /glassInkFollowsAppearanceMode|文字颜色跟随外观/,
     "the appearance card grows no second glass row");
 
 const switchSource = read("./foundation/KosSwitch.qml");
@@ -497,6 +500,15 @@ const barWindow = read("../../shell/desktop/modules/bar/BarWindow.qml");
 const barAutoHide = read("../../shell/desktop/modules/bar/BarAutoHideController.qml");
 const barDateStatus = read("../../shell/desktop/modules/bar/BarDateStatus.qml");
 const controlCenterPanel = read("../../shell/desktop/modules/bar/ControlCenterPanel.qml");
+const controlCenterModuleDirectory = new URL(
+    "../../shell/desktop/modules/bar/controlcenter/", import.meta.url);
+const controlCenterModules = new Map(readdirSync(controlCenterModuleDirectory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(".qml"))
+    .map(entry => [entry.name, readFileSync(new URL(entry.name, controlCenterModuleDirectory), "utf8")]));
+function controlCenterModule(name) {
+    assert.ok(controlCenterModules.has(name), `Control Center module ${name} exists`);
+    return controlCenterModules.get(name);
+}
 const networkStatus = read("../../shell/desktop/modules/bar/NetworkStatus.qml");
 const networkPanel = read("../../shell/desktop/modules/bar/NetworkPanel.qml");
 const wifiSignalIcon = read("../../shell/desktop/modules/bar/WifiSignalIcon.qml");
@@ -513,14 +525,20 @@ assert.match(barDateStatus, /GlassText\s*\{/,
 // readability outline. The session-confirmation dialog is the exception: it is
 // a KosFloatPanel with its own opaque content surface, so its labels read
 // ThemeService/content colours on a solid fill and an outline would be wrong.
-// Slice that dialog out before checking, so the assertion keeps guarding the
-// glass surfaces without forbidding plain Text on the opaque one.
+// Check every glass module independently, exempting only the opaque dialog.
 const sessionConfirmStart = controlCenterPanel.indexOf("id: sessionConfirm");
 assert.ok(sessionConfirmStart > 0,
     "the session confirmation dialog is still present to be exempted");
-const controlCenterGlass = controlCenterPanel.slice(0, sessionConfirmStart);
-assert.doesNotMatch(controlCenterGlass, /^\s*Text\s*\{/m,
-    "control-center labels use bidirectional glass readability outlines");
+assert.match(controlCenterPanel,
+    /ControlParts\.SessionConfirmationDialog\s*\{\s*id:\s*sessionConfirm\b/,
+    "the panel composes the opaque confirmation dialog");
+controlCenterModule("SessionConfirmationDialog.qml");
+for (const [name, source] of [["ControlCenterPanel.qml", controlCenterPanel],
+    ...controlCenterModules]) {
+    if (name !== "SessionConfirmationDialog.qml")
+        assert.doesNotMatch(source, /^\s*Text\s*\{/m,
+            `${name}: control-center labels use bidirectional glass readability outlines`);
+}
 assert.match(globalMenuSource,
     /ContextMenu\s*\{[\s\S]{0,180}baseColor:\s*ThemeService\.backgroundColor[\s\S]{0,120}foregroundColor:\s*ThemeService\.foregroundColor/,
     "application menus follow the stable light/dark material palette");
@@ -535,17 +553,19 @@ assert.match(networkStatus,
 assert.match(networkPanel,
     /id:\s*rowWifiGlyph[\s\S]{0,300}signalStrength:\s*modelData\.signalStrength[\s\S]{0,160}onSignalStrengthChanged:\s*requestPaint\(\)/,
     "each network row repaints its own signal strength rather than the connected network strength");
-for (const marker of ["Card 1: Wi-Fi", "Card 2: Bluetooth"]) {
-    const start = controlCenterPanel.indexOf(marker);
-    const nextCard = controlCenterPanel.indexOf("// ── Card", start + marker.length);
-    const section = controlCenterPanel.slice(start,
-        nextCard < 0 ? controlCenterPanel.length : nextCard);
+for (const [name, owner, intent] of [
+    ["WifiCard", "wifiCard", "networkRequested"],
+    ["BluetoothCard", "bluetoothCard", "bluetoothRequested"]]) {
+    const section = controlCenterModule(name + ".qml");
     assert.match(section,
         /id:\s*(?:wifi|bluetooth)TogglePointer[\s\S]{0,420}onClicked:[\s\S]{0,140}set(?:Wifi|Bluetooth)Enabled/,
-        `${marker} round disc owns its power toggle`);
+        `${name} round disc owns its power toggle`);
     assert.match(section,
-        /leftMargin:\s*49[\s\S]{0,520}onClicked:\s*panel\.(?:network|bluetooth)Requested\(\)/,
-        `${marker} card body opens details without covering the toggle`);
+        new RegExp(`leftMargin:\\s*49[\\s\\S]{0,520}onClicked:\\s*${owner}\\.pageRequested\\(\\)`),
+        `${name} card body requests details without covering the toggle`);
+    assert.match(controlCenterPanel,
+        new RegExp(`ControlParts\\.${name}\\s*\\{[\\s\\S]*?onPageRequested:\\s*panel\\.${intent}\\(\\)`),
+        `${name} detail intent is forwarded by the panel`);
 }
 for (const component of ["NetworkStatus", "Battery", "SettingsButton",
                          "ControlCenterToggle"]) {
@@ -570,11 +590,15 @@ for (const statusSource of [networkStatus, read("../../shell/desktop/modules/bar
 }
 assert.match(controlCenterSlider, /LiquidControls\.LiquidSlider\s*\{/,
     "Control Center sliders share one styled LiquidSlider wrapper");
-assert.ok((controlCenterPanel.match(/ControlCenterSlider\s*\{/g) || []).length >= 4,
+const sliderSources = ["SoundCard.qml", "BrightnessCard.qml", "SoundPage.qml", "BrightnessPage.qml"]
+    .map(controlCenterModule);
+for (const [index, source] of sliderSources.entries())
+    assert.match(source, /ControlCenterSlider\s*\{/,
+        `volume/brightness surface ${index + 1} uses the shared slider`);
+assert.ok(sliderSources.reduce((count, source) =>
+    count + (source.match(/ControlCenterSlider\s*\{/g) || []).length, 0) >= 4,
     "volume and brightness surfaces reuse the Control Center slider style");
-const wifiSubmenuStart = controlCenterPanel.indexOf("id: wifiSubmenuView");
-const bluetoothSubmenuStart = controlCenterPanel.indexOf("id: bluetoothSubmenuView");
-const wifiSubmenu = controlCenterPanel.slice(wifiSubmenuStart, bluetoothSubmenuStart);
+const wifiSubmenu = controlCenterModule("WifiPage.qml");
 assert.doesNotMatch(wifiSubmenu, /glyphColor:[^\n]*#000000/,
     "Wi-Fi list icons never switch to black");
 // The per-card coordinator suppression model is gone: the Control Center is

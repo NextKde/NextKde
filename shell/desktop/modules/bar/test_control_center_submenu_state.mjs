@@ -36,10 +36,8 @@ assert.match(panel, /signal wifiNetworkSelected\(var network\)/,
 assert.match(panel, /panel\.wifiNetworkSelected\(network\)/,
     "unknown secured networks are routed to the credential dialog")
 
-const submenuCard = panel.slice(
-    panel.indexOf("id: submenuCard"),
-    panel.indexOf("// Navigation Header")
-)
+const submenuCard = panel.match(/ControlParts\.SubmenuCard\s*\{[\s\S]*?\n    \}/)?.[0] || ""
+assert.ok(submenuCard, "the panel composes the extracted submenu card")
 assert.match(submenuCard, /cardShown:\s*panel\.submenuShownPage\s*!==\s*""/,
     "the submenu card stays mapped while its page renders on either side of a crossfade")
 assert.match(submenuCard, /pageTag:\s*panel\.submenuShownPage/,

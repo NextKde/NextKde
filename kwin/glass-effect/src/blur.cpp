@@ -285,7 +285,10 @@ BlurEffect::BlurEffect()
             EffectWindow *window = entry.first;
             if (window->surface() == surface) {
                 const int padding = blurExpandSize(window);
-                window->addRepaint(RectF(bounds.adjusted(-padding, -padding, padding, padding)));
+                // Rect, not RectF: KWin 6.6's only EffectWindow overload takes
+                // Rect, and 6.7's RectF overload converts from Rect implicitly
+                // (core/rect.h), so this is the one form both accept.
+                window->addRepaint(Rect(bounds.adjusted(-padding, -padding, padding, padding).toAlignedRect()));
                 break;
             }
         }

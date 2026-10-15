@@ -26,6 +26,32 @@ set(kos_platform_sources
     src/daemon/KWinShortcutConflicts.cpp
     src/daemon/KWinShortcutConflicts.h
     src/daemon/PlatformServer.cpp
+    src/daemon/PlatformDbus.cpp
+    src/daemon/PlatformNetworkConnect.cpp
+    src/daemon/PlatformNetworkRead.cpp
+    src/daemon/PlatformPaths.cpp
+    src/daemon/PlatformProcess.cpp
+    src/daemon/PlatformServerAppMenu.cpp
+    src/daemon/PlatformServerApplications.cpp
+    src/daemon/PlatformServerAudio.cpp
+    src/daemon/PlatformServerBluetooth.cpp
+    src/daemon/PlatformServerClipboard.cpp
+    src/daemon/PlatformServerClipboardPins.cpp
+    src/daemon/PlatformServerDesktop.cpp
+    src/daemon/PlatformServerDisplay.cpp
+    src/daemon/PlatformServerFiles.cpp
+    src/daemon/PlatformServerNetwork.cpp
+    src/daemon/PlatformServerState.cpp
+    src/daemon/PlatformServerTheme.cpp
+    src/daemon/PlatformServerTray.cpp
+    src/daemon/PlatformServerWallpaper.cpp
+    src/daemon/PlatformServerWatches.cpp
+    src/daemon/PlatformServerWindows.cpp
+    src/daemon/PlatformClipboardStorage.h
+    src/daemon/PlatformDbus.h
+    src/daemon/PlatformNetworkBackend.h
+    src/daemon/PlatformPaths.h
+    src/daemon/PlatformProcess.h
     src/daemon/PlatformServer.h
     src/daemon/KeepAwakeLease.cpp
     src/daemon/KeepAwakeLease.h
