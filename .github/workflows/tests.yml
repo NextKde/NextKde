@@ -120,7 +120,7 @@ jobs:
             .build/tests/CMakeFiles/CMakeConfigureLog.yaml
 
   kwin-plugins:
-    name: KWin plugins compile
+    name: KWin plugins compile and offline checks
     runs-on: ubuntu-latest
 
     container: archlinux:base-devel
@@ -145,24 +145,30 @@ jobs:
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
 
-      # Compiling is all this job proves, and that is deliberate. Whether the
-      # plugin then loads, and whether the install path relabels correctly, is
+      # Compilation and offline bridge regressions do not prove whether the
+      # plugin loads, or whether the install path relabels correctly. That is
       # a question about a running compositor and a SELinux policy -- neither
       # of which exists in a container, and both of which have already burned
       # this project once. Those stay a real-machine check.
       #
-      # BUILD_TESTING=OFF keeps the unrelated test binaries out of the build so
-      # a compiler error here is unambiguously a plugin error.
+      # BUILD_TESTING=OFF keeps unrelated test binaries out of the build.
+      # Opt into the bridge's own offline harnesses explicitly.
       - name: Configure
         run: |
           cmake -S . -B .build/kwin -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DKOS_BUILD_KWIN_PLUGINS=ON \
+            -DKOS_BRIDGE_BUILD_TESTS=ON \
+            -DKOS_BRIDGE_BUILD_GPU_TESTS=ON \
             -DKOS_BUILD_PLATFORM=OFF \
             -DBUILD_TESTING=OFF
 
       - name: Build the KWin plugins
         run: cmake --build .build/kwin --parallel "$(nproc)"
+
+      - name: Run offline bridge regressions
+        # The PBO test reports SKIP when the container has no OpenGL context.
+        run: ctest --test-dir .build/kwin/kwin/kos-bridge --output-on-failure
 
       - name: Check KWin 6.6 API compatibility
         run: |
