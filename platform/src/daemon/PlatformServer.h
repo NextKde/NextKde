@@ -19,22 +19,13 @@
 #include <QThreadPool>
 #include <QVariantMap>
 
+#include <functional>
 #include <optional>
 
 namespace KosPlatform {
 
 class KeepAwakeLease;
-using NmSettings = QMap<QString, QVariantMap>;
-
-// One connect request: the settings dict already carries every secret, so the
-// runner treats this as opaque data. The map never lands in a log or an argv
-// -- it goes straight into AddConnection.
-struct NmConnectRequest {
-    QString device;
-    QString savedProfileUuid;
-    NmSettings settings;
-    QString replaceProfileId;
-};
+struct NmConnectRequest;
 
 class PlatformServer final : public QObject {
     Q_OBJECT
@@ -152,10 +143,20 @@ private:
     bool handleClipboard(QLocalSocket *socket, const QJsonObject &request);
     bool handleApplication(QLocalSocket *socket, const QJsonObject &request);
     bool handleFileOperation(QLocalSocket *socket, const QJsonObject &request);
+    // Copy/transfer admission: bounds the m_copyPool queue the way
+    // queueIfInFlight bounds the reply cache, answering busy(retryable) over
+    // the limit. Queued jobs are never cancelled on disconnect.
+    bool admitCopyJob(QLocalSocket *socket, const QJsonObject &request);
+    void releaseCopyJob();
     bool handleKWin(QLocalSocket *socket, const QJsonObject &request);
     bool handleAppMenu(QLocalSocket *socket, const QJsonObject &request);
     bool handleInput(QLocalSocket *socket, const QJsonObject &request);
-    bool handleSystemOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleAudioOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleNetworkOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleBluetoothOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleDisplayOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleThemeOperation(QLocalSocket *socket, const QJsonObject &request);
+    bool handleDesktopOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleTrayOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleStateOperation(QLocalSocket *socket, const QJsonObject &request);
     bool handleWallpaperOperation(QLocalSocket *socket, const QJsonObject &request);
@@ -223,6 +224,11 @@ private:
     // event loop. Declared last so it is destroyed first: ~QThreadPool waits
     // for in-flight copies (bounded file IO) before members go away.
     QThreadPool m_copyPool;
+    // Queued-or-running copy/transfer jobs. The pool's thread cap bounds only
+    // concurrency, so without this counter a slow disk plus a batch-submitting
+    // client grows the queue without bound. Guarded by the socket event loop
+    // like every other member access.
+    int m_copyJobs = 0;
     // Synchronous NM/BlueZ-class D-Bus walks (network.refresh/details) run
     // here off the socket event loop. Declared last so ~QThreadPool waits for
     // in-flight workers (bounded calls) before members go away.

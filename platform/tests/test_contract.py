@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 # The authoritative default shortcut table lives in the Shell's
 # ShortcutsService; it must keep referring to every documented target.
 SHORTCUTS_SERVICE = ROOT / "shell/desktop/modules/shortcuts/ShortcutsService.qml"
+DAEMON = ROOT / "platform/src/daemon"
+
+
+def platform_sources() -> str:
+    return "\n".join(path.read_text() for path in sorted(DAEMON.glob("Platform*.cpp")))
 
 
 def test_shortcuts_service_defaults() -> None:
@@ -53,7 +58,7 @@ def test_literal_shell_operations_have_daemon_handlers() -> None:
         for pattern in request_patterns:
             operations.update(pattern.findall(text))
 
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = platform_sources()
     missing = sorted(
         operation
         for operation in operations
@@ -63,9 +68,8 @@ def test_literal_shell_operations_have_daemon_handlers() -> None:
 
 
 def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerApplications.cpp").read_text()
     handler = source[source.index("bool PlatformServer::handleApplication"):]
-    handler = handler[:handler.index("bool PlatformServer::handleFileOperation")]
     assert 'QStringLiteral("application.launch")' in handler
     assert "KService::serviceByStorageId" in handler
     assert "KIO::ApplicationLauncherJob" in handler
@@ -80,11 +84,11 @@ def test_application_launch_uses_kde_launcher_without_arbitrary_commands() -> No
     main = (ROOT / "platform/src/daemon/main.cpp").read_text()
     assert "app.setQuitOnLastWindowClosed(false)" in main
     assert "QCoreApplication::setQuitLockEnabled(false)" in main
-    assert "PlatformServer::~PlatformServer()" in source
+    assert "PlatformServer::~PlatformServer()" in (DAEMON / "PlatformServer.cpp").read_text()
 
 
 def test_theme_toggle_uses_the_safe_palette_path() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerTheme.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("theme.toggle"))'):]
     assert "QSettings settings" in toggle
     assert 'QStringLiteral("ColorScheme")' in toggle
@@ -97,9 +101,9 @@ def test_theme_toggle_uses_the_safe_palette_path() -> None:
 
 
 def test_nightlight_toggle_only_changes_persistent_master_switch() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerDisplay.cpp").read_text()
     toggle = source[source.index('if (op == QStringLiteral("nightlight.toggle"))'):]
-    toggle = toggle[:toggle.index('if (op == QStringLiteral("shortcuts.apply"))')]
+    toggle = toggle[:toggle.index('if (op == QStringLiteral("display.outputs.get"))')]
     assert 'QStringLiteral("NightColor/Active")' in toggle
     assert 'QStringLiteral("inhibit")' in toggle
     assert 'QStringLiteral("uninhibit")' in toggle
@@ -178,7 +182,7 @@ def test_thumbnail_memory_is_bounded_and_recent_frames_are_reused() -> None:
 
 
 def test_brightness_targets_one_kde_display() -> None:
-    source = (ROOT / "platform/src/daemon/PlatformServer.cpp").read_text()
+    source = (DAEMON / "PlatformServerDisplay.cpp").read_text()
     assert "openScreenBrightness" in source
     assert 'property("DisplaysDBusNames")' in source
     assert 'QStringLiteral("org.kde.ScreenBrightness.Display")' in source
@@ -189,7 +193,6 @@ def test_brightness_targets_one_kde_display() -> None:
     assert "for (const QString &displayId : displayIds)" not in setter
 
     handler = source[source.index('if (op == QStringLiteral("display.brightness.set"))'):]
-    handler = handler[:handler.index('if (op == QStringLiteral("theme.reconfigure"))')]
     assert 'payload.value(QStringLiteral("displayId"))' in handler
     assert "setKdeDisplayBrightness(displayId, value)" in handler
 
