@@ -105,7 +105,15 @@ Item {
         }
     }
     Component.onCompleted: { modelReady = true; reconcileRows() }
-    Connections { target: NotificationHistoryService; function onHistoryUpdated() { pane.reconcileRows() } }
+    Connections {
+        target: NotificationHistoryService
+        function onHistoryUpdated() {
+            if (NotificationHistoryService.count === 0 && (pane.expanded || pane.folding)) {
+                pane.reset()
+            }
+            pane.reconcileRows()
+        }
+    }
     onExpandedChanged: reconcileRows()
     onRevealProgressChanged: if (!expanded && revealProgress <= 0.001) reconcileRows()
 
@@ -141,6 +149,7 @@ Item {
         prepareHistoryRemoval()
         NotificationHistoryService.removeKeys(NotificationHistoryService.allKeys())
         AppNotificationService.clearAll()
+        reset()
     }
     Timer { id: emptySettlement; interval: 340; onTriggered: pane.historyEmptyReady = true }
     Timer { interval: 60000; repeat: true; running: pane.active; onTriggered: pane.clockNow = Date.now() }
@@ -380,12 +389,12 @@ Item {
     Item {
         id: footer
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-        height: NotificationHistoryService.count > 3 || pane.expanded ? 40 : 8
+        height: NotificationHistoryService.count > 0 && (NotificationHistoryService.count > 3 || pane.expanded) ? 40 : 8
         DeckButton {
             id: footerButton
             objectName: "notification-history-expand"
             anchors.centerIn: parent
-            visible: NotificationHistoryService.count > 3 || pane.expanded
+            visible: NotificationHistoryService.count > 0 && (NotificationHistoryService.count > 3 || pane.expanded)
             glassButton: true
             text: pane.expanded ? I18n.tr("Collapse notifications  ⌃") : I18n.tr("More notifications  ·  %1  ⌄").arg(Math.max(0, NotificationHistoryService.count - 3))
             onClicked: pane.requestExpanded(pane.folding || !pane.expanded)
