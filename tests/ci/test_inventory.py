@@ -43,6 +43,11 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual([], report["errors"])
         self.assertIn("new", report["groups"]["logic"])
 
+    def test_logic_test_cannot_also_belong_to_headless(self):
+        self.entries[1]["properties"][0]["value"].append("headless")
+        errors = ci.inventory(self.entries, self.required)["errors"]
+        self.assertIn("Test selected by multiple groups: logic", errors)
+
     def test_complete_and_partial_results(self):
         report = ci.inventory(self.entries, self.required)
         with tempfile.TemporaryDirectory() as temporary:

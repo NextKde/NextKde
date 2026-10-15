@@ -458,6 +458,11 @@ if(BUILD_TESTING)
     find_program(KOS_TEST_KWIN NAMES kwin_wayland)
     find_program(KOS_TEST_DBUS_RUN NAMES dbus-run-session)
     if(KOS_PYTHON_EXECUTABLE AND KOS_INTERACTION_QUICKSHELL AND KOS_TEST_KWIN AND KOS_TEST_DBUS_RUN)
+        add_test(NAME kos-ui.control-center-modules
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/control-center/run.py)
+        set_tests_properties(kos-ui.control-center-modules PROPERTIES
+            ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml"
+            LABELS "ui;headless" TIMEOUT 40 RUN_SERIAL TRUE)
         add_test(NAME kos-ui.clipboard-placement
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/clipboard-placement/run.py)
         set_tests_properties(kos-ui.clipboard-placement PROPERTIES LABELS ui TIMEOUT 40)
