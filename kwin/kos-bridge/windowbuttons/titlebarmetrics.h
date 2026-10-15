@@ -4,6 +4,8 @@
 
 #include "buttonconfig.h"
 
+class QByteArray;
+
 namespace KWin
 {
 class EffectWindow;
@@ -14,6 +16,12 @@ class Region;
 
 namespace KOS
 {
+
+// Read RGBA pixels in untransformed, top-down render-target texture coordinates.
+// The returned rectangle is clipped to transformedSize(); pixel orientation is
+// normalized after the FBO's content transform (including flips and rotations).
+bool readTitlebarPixels(const KWin::RenderTarget &renderTarget, const QRect &rect,
+                        QByteArray &out, QRect *readRect);
 
 // Read the tint of the title bar the panel is about to cover.
 //
@@ -40,6 +48,7 @@ bool sampleTitlebarTint(const KWin::RenderTarget &renderTarget,
                         KWin::EffectWindow *window,
                         const KWin::Region &deviceClip,
                         const QRectF &panelRect,
-                        bool *dark);
+                        bool *dark,
+                        QColor *color = nullptr);
 
 } // namespace KOS

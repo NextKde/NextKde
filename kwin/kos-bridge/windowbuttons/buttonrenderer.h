@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QHash>
 #include <QImage>
 #include <QObject>
@@ -196,7 +197,8 @@ private:
                  KWin::EffectWindow *window,
                  const QRectF &panel,
                  const KWin::Region &deviceRegion,
-                 bool *dark);
+                 bool *dark,
+                 QColor *color = nullptr);
 
     // Schedule one repaint at the next sampling deadline. The timer is
     // cancelled with this renderer; inactive or deleted windows are skipped.
@@ -222,10 +224,12 @@ private:
     static void repaintRect(const QRectF &globalRect);
 
     KWin::GLTexture *panelTexture(const QSizeF &panelSize, bool active, bool dark,
+                                  const QColor &panelColor,
                                   const PanelGeometry &geometry, Action hovered,
                                   bool adjusting, bool maximized);
     KWin::GLTexture *cacheTexture(const QString &key, QImage image);
     QImage buildPanel(const QSizeF &panelSize, bool active, bool dark,
+                      const QColor &panelColor,
                       const PanelGeometry &geometry, Action hovered,
                       bool adjusting, bool maximized) const;
 
@@ -256,10 +260,12 @@ private:
         // been read has no tint and gets no panel for now.
         bool known = false;
         bool dark = true;
+        QColor color;
         // A changed tint takes over only when another reading confirms it
         // after ConfirmTime.
         bool pending = false;
         bool pendingDark = false;
+        QColor pendingColor;
         Clock::time_point pendingSince{};
         // Initial reads are close together; later reads are three seconds
         // apart, including when the application paints continuously.
