@@ -82,6 +82,13 @@ KosApplicationWindow {
             ? Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.30)
             : Qt.rgba(0x76 / 255, 0x76 / 255, 0x80 / 255, 0.12)
 
+        // M04: the mini month's "other selection" disc — the today disc's own
+        // shape (filled circle + white number) in GRAY, not a hollow ring.
+        // Apple systemGray. Leg-independent like todayRed: 142 reads Δ86 below
+        // the 228 light plane and Δ102 above the 40 dark one, so one literal
+        // serves both legs.
+        readonly property color selectionDisc: "#8E8E93"
+
         // Toolbar view segment (R097). The segment sits on the CONTENT plane
         // (white 255), not on the sidebar plane, so it must not reuse the two
         // sidebar fills above. Measured 1:1 off the reference's own
@@ -2236,20 +2243,16 @@ KosApplicationWindow {
                                     color: miniDay.today
                                         ? AppTheme.todayRed
                                         : (miniDay.selected
-                                            ? root.tahoe.selectionFill
+                                            ? root.tahoe.selectionDisc
                                             : (miniDay.hovered
                                                 ? root.tahoe.rowHoverFill : "transparent"))
-                                    border.width: miniDay.selected && !miniDay.today ? 1 : 0
-                                    border.color: root.tahoe.accent
 
                                     Label {
                                         anchors.centerIn: parent
                                         text: String(miniDay.cellDate.getDate())
-                                        color: miniDay.today
+                                        color: miniDay.today || miniDay.selected
                                             ? "#FFFFFF"
-                                            : (miniDay.selected
-                                                ? root.tahoe.accent
-                                                : root.tahoe.labelPrimary)
+                                            : root.tahoe.labelPrimary
                                         font.pixelSize: 11
                                         font.weight: miniDay.today || miniDay.selected
                                             ? Font.DemiBold : Font.Normal
