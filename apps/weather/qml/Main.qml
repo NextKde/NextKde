@@ -1634,6 +1634,16 @@ KosApplicationWindow {
                                             }
                                         }
                                     }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "◐"
+                                        labelText: qsTr("Pressure")
+                                        valueText: {
+                                            const hpa = root.number(backend.current, "pressure", NaN)
+                                            return Number.isFinite(hpa) ? Math.round(hpa) + " hPa" : "—"
+                                        }
+                                    }
                                 }
                             }
                         }
