@@ -840,10 +840,13 @@ KosApplicationWindow {
                         cornerRadius: 15
                         // 阶段三功能层 Liquid Glass：specular 高光与细描边。
                         // 按参考图量得高光强度温和，用 liquidStrength 0.2 缩放。
+                        // 实测：ref-main 搜索胶囊填充 vs 侧栏底 Δ(+24,+29,+38)≈白@0.13-0.15，
+                        // 我方 0.22 时 Δ(+38,+36,+32) 对比 1.5 倍偏强；并与功能层
+                        // 同层玻璃（⚙/↻ 盘、分段胶囊 白@0.14）统一。
                         materialForm: false
                         liquidFinish: true
                         liquidStrength: 0.2
-                        glassColor: Qt.rgba(1, 1, 1, 0.22)
+                        glassColor: Qt.rgba(1, 1, 1, 0.15)
                         outlineColor: Qt.rgba(1, 1, 1, 0.30)
                         textColor: "#ffffff"
                         mutedTextColor: Qt.rgba(1, 1, 1, 0.66)
