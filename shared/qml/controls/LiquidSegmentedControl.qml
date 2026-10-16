@@ -84,7 +84,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: root.materialForm ? height / 2 : height * 0.38
+        radius: root.materialForm ? height / 2 : height * 0.48
         color: root.backgroundColor
         border.width: 1
         border.color: AppTheme.border
