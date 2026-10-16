@@ -60,6 +60,10 @@ KosApplicationWindow {
         const c = root.currentWeatherCode
         return (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95
     }
+    readonly property bool snowySky: {
+        const c = root.currentWeatherCode
+        return (c >= 71 && c <= 77) || c === 85 || c === 86
+    }
     readonly property var dailyRange: {
         let lo = Number.POSITIVE_INFINITY
         let hi = Number.NEGATIVE_INFINITY
@@ -119,6 +123,27 @@ KosApplicationWindow {
             })
         }
         return drops
+    }
+
+    // Snowflakes: fixed-seed PRNG like the stars/rain so the layout is
+    // identical on every launch; slow drift + sideways sway (HIG ambient
+    // loop 2-12s: one flake crossing the screen takes 6-11s).
+    readonly property var snowField: {
+        const random = mulberry32(20261018)
+        const flakes = []
+        for (let index = 0; index < 56; index++) {
+            flakes.push({
+                xRatio: random(),
+                diameter: 2.0 + random() * 3.0,
+                opacity: 0.35 + random() * 0.45,
+                fallMs: 6000 + random() * 5000,
+                swayAmp: 8 + random() * 14,
+                swayMs: 2000 + random() * 2000,
+                phaseMs: random() * 11000,
+                swayPhaseMs: random() * 4000
+            })
+        }
+        return flakes
     }
 
     function skyStopsFor(code, isDay) {
@@ -436,6 +461,67 @@ KosApplicationWindow {
                         to: rainFieldLayer.height + 10
                         duration: modelData.fallMs
                         easing.type: Easing.Linear
+                    }
+                }
+            }
+        }
+    }
+
+    Item {
+        id: snowFieldLayer
+        anchors.fill: parent
+        visible: root.snowySky
+        clip: true
+
+        Repeater {
+            model: root.snowField
+
+            delegate: Rectangle {
+                id: flake
+                required property var modelData
+                readonly property real xBase: snowFieldLayer.width * modelData.xRatio
+
+                x: xBase
+                y: -modelData.diameter - 10
+                width: modelData.diameter
+                height: width
+                radius: width / 2
+                color: "#ffffff"
+                opacity: modelData.opacity
+                Accessible.ignored: true
+
+                SequentialAnimation on y {
+                    running: root.snowySky && !AppTheme.reduceMotion
+                    loops: Animation.Infinite
+
+                    PauseAnimation {
+                        duration: modelData.phaseMs
+                    }
+                    NumberAnimation {
+                        from: -modelData.diameter - 10
+                        to: snowFieldLayer.height + 10
+                        duration: modelData.fallMs
+                        easing.type: Easing.Linear
+                    }
+                }
+                SequentialAnimation on x {
+                    running: root.snowySky && !AppTheme.reduceMotion
+                    loops: Animation.Infinite
+
+                    PauseAnimation {
+                        duration: modelData.swayPhaseMs
+                    }
+                    NumberAnimation {
+                        from: flake.xBase - modelData.swayAmp
+                        to: flake.xBase + modelData.swayAmp
+                        duration: modelData.swayMs
+                        easing.type: Easing.InOutSine
+                    }
+                    NumberAnimation {
+                        from: flake.xBase + modelData.swayAmp
+                        to: flake.xBase - modelData.swayAmp
+                        duration: modelData.swayMs
+                        easing.type: Easing.InOutSine
                     }
                 }
             }
