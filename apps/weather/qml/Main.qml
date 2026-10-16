@@ -1372,12 +1372,113 @@ KosApplicationWindow {
                                             backend.current, "windSpeed", 0)) + " " + root.speedUnit
                                     }
 
-                                    WeatherMetric {
+                                    Rectangle {
+                                        id: directionTile
                                         Layout.fillWidth: true
-                                        symbol: "↗"
-                                        labelText: qsTr("Direction")
-                                        valueText: Math.round(root.number(
-                                            backend.current, "windDirection", 0)) + "°"
+                                        implicitHeight: 66
+                                        radius: AppTheme.smallRadius
+                                        color: Qt.rgba(1, 1, 1, 0.12)
+                                        border.width: 1
+                                        border.color: Qt.rgba(1, 1, 1, 0.20)
+
+                                        property real windDir: root.number(backend.current, "windDirection", 0)
+                                        // arrow points where the wind blows TO (Open-Meteo direction is where it comes FROM)
+                                        property real flowAngle: (directionTile.windDir + 180) % 360
+
+                                        onWindDirChanged: compass.requestPaint()
+                                        onFlowAngleChanged: compass.requestPaint()
+
+                                        HoverHandler { id: directionHover }
+                                        ToolTip.visible: directionHover.hovered
+                                        ToolTip.text: qsTr("Direction")
+                                        Accessible.role: Accessible.StaticText
+                                        Accessible.name: qsTr("Direction") + ": " + Math.round(directionTile.windDir) + "° " + directionTile.cardinal
+
+                                        property string cardinal: {
+                                            var names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+                                            return names[Math.round(directionTile.windDir / 45) % 8]
+                                        }
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            Item {
+                                                Layout.preferredWidth: 46
+                                                Layout.preferredHeight: 46
+
+                                                Canvas {
+                                                    id: compass
+                                                    anchors.fill: parent
+                                                    antialiasing: true
+                                                    contextType: "2d"
+                                                    onPaint: {
+                                                        var ctx = getContext("2d")
+                                                        ctx.reset()
+                                                        var c = 23
+                                                        ctx.strokeStyle = "rgba(255,255,255,0.30)"
+                                                        ctx.lineWidth = 1
+                                                        for (var i = 0; i < 36; i++) {
+                                                            var a = i * Math.PI / 18
+                                                            ctx.beginPath()
+                                                            ctx.moveTo(c + Math.sin(a) * 15, c - Math.cos(a) * 15)
+                                                            ctx.lineTo(c + Math.sin(a) * 19.5, c - Math.cos(a) * 19.5)
+                                                            ctx.stroke()
+                                                        }
+                                                        ctx.fillStyle = "rgba(255,255,255,0.92)"
+                                                        ctx.font = "600 7px sans-serif"
+                                                        ctx.textAlign = "center"
+                                                        ctx.textBaseline = "middle"
+                                                        ctx.fillText("N", c, c - 21.5)
+                                                        ctx.fillText("E", c + 21.5, c)
+                                                        ctx.fillText("S", c, c + 21.5)
+                                                        ctx.fillText("W", c - 21.5, c)
+                                                        ctx.save()
+                                                        ctx.translate(c, c)
+                                                        ctx.rotate(directionTile.flowAngle * Math.PI / 180)
+                                                        ctx.strokeStyle = "#ffffff"
+                                                        ctx.fillStyle = "#ffffff"
+                                                        ctx.lineWidth = 1.6
+                                                        ctx.beginPath()
+                                                        ctx.moveTo(0, -11)
+                                                        ctx.lineTo(0, -19)
+                                                        ctx.stroke()
+                                                        ctx.beginPath()
+                                                        ctx.moveTo(0, -23)      // tip
+                                                        ctx.lineTo(-2.6, -18.4)
+                                                        ctx.lineTo(2.6, -18.4)
+                                                        ctx.closePath()
+                                                        ctx.fill()
+                                                        ctx.restore()
+                                                    }
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 1
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: qsTr("Direction")
+                                                    color: root.skyTextMuted
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+
+                                                Label {
+                                                    Layout.fillWidth: true
+                                                    text: Math.round(directionTile.windDir) + "° " + directionTile.cardinal
+                                                    color: root.skyText
+                                                    font.pixelSize: 15
+                                                    font.weight: Font.DemiBold
+                                                    elide: Text.ElideRight
+                                                    Accessible.ignored: true
+                                                }
+                                            }
+                                        }
                                     }
 
                                     WeatherMetric {
