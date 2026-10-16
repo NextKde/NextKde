@@ -331,6 +331,33 @@ Pane {
                             ? root.weekendField : "transparent"
                     }
 
+                    // A01: the band carries the same column separators as the
+                    // grid, so the two read as one continuous rule. The ref's
+                    // separators run unbroken through the all-day band at its
+                    // hour-line weight (measured 1:1: x=324/406/487 → 244/236/242,
+                    // i.e. ONE line at three subpixel coverages, full coverage
+                    // ≈236 = its own hour-line token). So this reuses gridLine —
+                    // no band-only token. Same idiom as the hourCell below:
+                    // one 1px LEFT edge per column (never a left+right pair, or
+                    // neighbours stack into a 2px band), its LEFT pixel on the
+                    // delegate's x so it lands on the grid's 502/652, and a
+                    // right rim only on the last column.
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        color: root.gridLine
+                    }
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        visible: allDayColumn.index === root.dayCount - 1
+                        color: root.gridLine
+                    }
+
                     ColumnLayout {
                         // R072: hug the rows instead of filling the band. A
                         // ColumnLayout taller than its items does NOT leave the
