@@ -875,9 +875,8 @@ KosApplicationWindow {
 
                             background: Rectangle {
                                 radius: 12
-                                border.width: 1
-                                border.color: savedLocation.highlighted
-                                    ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.18)
+                                // ref-main sidebar cards have no stroke (selected or not) — sampled Mumbai/Chicago/Cupertino edges
+                                border.width: 0
                                 gradient: Gradient {
                                     GradientStop {
                                         position: 0.0; color: savedLocation.cardStops[0]
