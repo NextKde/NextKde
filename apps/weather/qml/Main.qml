@@ -402,11 +402,10 @@ KosApplicationWindow {
             anchors.margins: 10
             spacing: 9
 
-            Rectangle {
+            // ref-main SUNSET/UV 卡 glyph 直接放卡面上无盒子（4x 实测），白方块底系旧发明，TASK 阶段三 A 禁"半透明白方块"
+            Item {
                 Layout.preferredWidth: 32
                 Layout.preferredHeight: 32
-                radius: 10
-                color: Qt.rgba(1, 1, 1, 0.20) // keep +0.04 above tile fill
 
                 Label {
                     anchors.centerIn: parent
