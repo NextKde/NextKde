@@ -1845,6 +1845,16 @@ KosApplicationWindow {
                                             }
                                         }
                                     }
+
+                                    WeatherMetric {
+                                        Layout.fillWidth: true
+                                        symbol: "≈"
+                                        labelText: qsTr("Feels Like")
+                                        valueText: {
+                                            const feels = root.number(backend.current, "apparentTemperature", NaN)
+                                            return Number.isFinite(feels) ? Math.round(feels) + "°" : "—"
+                                        }
+                                    }
                                 }
                             }
                         }
