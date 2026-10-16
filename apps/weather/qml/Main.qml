@@ -293,6 +293,7 @@ KosApplicationWindow {
 
                 KosTextField {
                     id: locationField
+                    Layout.topMargin: 36
                     Layout.fillWidth: true
                     Layout.preferredHeight: 30
                     cornerRadius: 15
@@ -1034,12 +1035,23 @@ KosApplicationWindow {
         anchors.left: parent.left
         anchors.margins: 10
         width: root.sidebarExpanded ? sidebar.expandedWidth : AppTheme.controlHeight
-        height: AppTheme.controlHeight
+        height: 44
         z: 10
         KosSidebarToggle {
             targetWindow: root
             anchors.right: parent.right
+            anchors.rightMargin: root.sidebarExpanded ? 4 : 0
             anchors.verticalCenter: parent.verticalCenter
+            implicitWidth: root.sidebarExpanded ? 40 : AppTheme.controlHeight
+            implicitHeight: implicitWidth
+            glyphColor: "#ffffff"
+            glyphPaneColor: Qt.rgba(1, 1, 1, 0.95)
+            background: Rectangle {
+                radius: width / 2
+                color: Qt.rgba(1, 1, 1, 0.14)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.20)
+            }
         }
     }
 }
