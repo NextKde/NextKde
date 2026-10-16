@@ -22,9 +22,10 @@ No registry, dependency container or second IPC protocol is introduced.
   appearance state to the root. They do not issue backend writes. Nested display
   sections forward observations through the theme page; pages never mutate the
   application window directly.
-- StageAdvancedSettings takes `stageSnapshot` and emits
-  `settingRequested(key, value)`. FgSchedSettingsPage translates the request into
-  the existing bridge call. The snapshot remains authoritative until a reply.
+- FgSchedSettingsPage owns the whole stage-manager surface: the master switch
+  and the three style presets. A preset is a complete feel bundle written key by
+  key through `stageSet(key, value)`; the snapshot stays authoritative until a
+  reply, and no preset highlights while the live values match none of them.
 - ResourceSchedulingSettings takes `snapshot`, `memStatus`, `runningApps` and
   `bridge`, and emits `refreshRequested()`. Polling and snapshot subscriptions
   remain in FgSchedSettingsPage, so destroying the Loader also stops polling.

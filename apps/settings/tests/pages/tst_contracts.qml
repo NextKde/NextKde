@@ -60,7 +60,7 @@ Item {
                     "DisplaySettingsPage", "GlassDebugPage", "WidgetAppearanceSection",
                     "IconAppearanceSection", "WindowAnimationSettingsPage", "ThemeSettingsPage",
                     "BarSettingsPage", "ShortcutsSettingsPage", "LauncherSettingsPage",
-                    "StageAdvancedSettings", "ResourceSchedulingSettings"]
+                    "ResourceSchedulingSettings"]
                 .map(name => ({tag: name, name: name}))
         }
         function test_isolated_load(data) {
@@ -111,26 +111,6 @@ Item {
                 }
                 previous = loader
             }
-        }
-        function test_stage_request_does_not_mutate_snapshot() {
-            const page = makePage("StageAdvancedSettings")
-            settingSpy.target = page
-            page.stageSnapshot = {cardRadius: 14}
-            const row = findChild(page, "stage-card-radius-row")
-            verify(row !== null)
-            const slider = findChild(row, "stage-value-slider")
-            verify(slider !== null)
-            slider.previewChanged(20 / 24)
-            compare(settingSpy.count, 0, "preview must not write settings")
-            compare(row.current, 14)
-            slider.commitRequested(20 / 24)
-            compare(settingSpy.count, 1)
-            compare(settingSpy.signalArguments[0][0], "cardRadius")
-            compare(settingSpy.signalArguments[0][1], 20)
-            compare(page.stageSnapshot.cardRadius, 14)
-            compare(row.current, 14, "wait for backend confirmation")
-            page.stageSnapshot = {cardRadius: 20}
-            compare(row.current, 20, "confirmed snapshot updates the control")
         }
     }
 }
