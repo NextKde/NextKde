@@ -171,30 +171,30 @@ KosWorkspaceDialog {
 
     onAccepted: saveRequested(editingId, eventPayload())
 
-    contentItem: ScrollView {
+    contentItem: Flickable {
         id: editorScroll
-        contentWidth: availableWidth
-        ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         clip: true
-        // Non-interactive form (see task editor): removes the outer drag
-        // filter that steals presses aimed at the scrolled notes; the form
-        // scrolls by wheel + scrollbar.
+        // Non-interactive form (see task editor): the outer drag filter is
+        // the last press competitor for the notes area; dragging the form is
+        // not needed — it scrolls by wheel only. Explicit Flickable (not
+        // ScrollView) because `interactive` is a real Flickable property and
+        // ScrollView has none.
         interactive: false
+        contentWidth: width
+        contentHeight: formLayout.implicitHeight
+        boundsBehavior: Flickable.StopAtBounds
 
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
             onWheel: function(wheel) {
-                const flickable = editorScroll.contentItem
-                if (!flickable)
-                    return
-                const max = Math.max(0, flickable.contentHeight
+                const max = Math.max(0, editorScroll.contentHeight
                                          - editorScroll.height)
                 const step = wheel.pixelDelta.y !== 0
                     ? wheel.pixelDelta.y
                     : wheel.angleDelta.y / 2
-                flickable.contentY = Math.max(0, Math.min(
-                    max, flickable.contentY - step))
+                editorScroll.contentY = Math.max(0, Math.min(
+                    max, editorScroll.contentY - step))
                 wheel.accepted = true
             }
         }
@@ -202,7 +202,8 @@ KosWorkspaceDialog {
         // P02: aligned label-left rows with one field height; compact 380
         // editor keeps every existing field, just visually tamed.
         ColumnLayout {
-            width: editorScroll.availableWidth
+            id: formLayout
+            width: editorScroll.width
             spacing: 10
 
             Label {
