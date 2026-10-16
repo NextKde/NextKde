@@ -21,6 +21,35 @@ KosApplicationWindow {
         Boolean(value(backend.current, "isDay", true)))
     readonly property color skyText: "#ffffff"
     readonly property color skyTextMuted: Qt.rgba(1, 1, 1, 0.66)
+
+    // Liquid Glass circular button background (stage 3, style A) for the
+    // sky top bar. `selected` shows the tinted glass disc, unselected stays
+    // transparent until hover; `subtle` is the always-on action-button glass
+    // (same family as KosSidebarToggle: fill white@0.14 + border white@0.22).
+    component GlassCircleBg: Rectangle {
+        property bool selected: false
+        property bool pressed: false
+        property bool hovered: false
+        property bool subtle: false
+        readonly property bool filled: selected || pressed || hovered || subtle
+        radius: width / 2
+        color: subtle ? Qt.rgba(1, 1, 1, 0.14)
+            : (selected ? Qt.rgba(1, 1, 1, 0.27)
+               : ((hovered || pressed) ? Qt.rgba(1, 1, 1, 0.14) : "transparent"))
+        border.width: filled ? 1 : 0
+        border.color: subtle ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.30)
+        Rectangle {
+            // specular top sheen, clipped to the circle
+            visible: parent.filled
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: width / 2
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
+                GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
+            }
+        }
+    }
     readonly property bool nightClearSky:
         !Boolean(value(backend.current, "isDay", true))
         && (number(backend.current, "weatherCode", -1) === 0
@@ -613,10 +642,20 @@ KosApplicationWindow {
                     ButtonGroup { id: unitsGroup }
 
                     KosToolButton {
+                        id: settingsButton
                         text: "⚙"
                         font.pixelSize: 16
                         Layout.preferredWidth: 34
                         Layout.alignment: Qt.AlignVCenter
+                        background: GlassCircleBg { subtle: true }
+                        contentItem: Label {
+                            text: settingsButton.text
+                            font: settingsButton.font
+                            color: settingsButton.enabled
+                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                         Accessible.name: qsTr("Weather settings")
                         ToolTip.visible: hovered
                         ToolTip.text: Accessible.name
@@ -624,10 +663,20 @@ KosApplicationWindow {
                     }
 
                     KosToolButton {
+                        id: refreshButton
                         text: "↻"
                         font.pixelSize: 18
                         Layout.preferredWidth: 34
                         enabled: backend.connected && !backend.loading
+                        background: GlassCircleBg { subtle: true }
+                        contentItem: Label {
+                            text: refreshButton.text
+                            font: refreshButton.font
+                            color: refreshButton.enabled
+                                ? "white" : Qt.rgba(1, 1, 1, 0.38)
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                         Accessible.name: qsTr("Refresh weather forecast")
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Refresh weather forecast")
@@ -644,9 +693,25 @@ KosApplicationWindow {
                     Item { Layout.fillWidth: true }
 
                     KosButton {
+                        id: metricButton
                         text: "°C"
                         checkable: true
-                        Layout.preferredWidth: 46
+                        leftPadding: 0
+                        rightPadding: 0
+                        Layout.preferredWidth: AppTheme.controlHeight
+                        background: GlassCircleBg {
+                            selected: metricButton.checked
+                            pressed: metricButton.down
+                            hovered: metricButton.hovered
+                        }
+                        contentItem: Label {
+                            text: metricButton.text
+                            font: metricButton.font
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
                         ButtonGroup.group: unitsGroup
                         checked: backend.units === "metric"
                         Accessible.role: Accessible.RadioButton
@@ -656,9 +721,25 @@ KosApplicationWindow {
                     }
 
                     KosButton {
+                        id: imperialButton
                         text: "°F"
                         checkable: true
-                        Layout.preferredWidth: 46
+                        leftPadding: 0
+                        rightPadding: 0
+                        Layout.preferredWidth: AppTheme.controlHeight
+                        background: GlassCircleBg {
+                            selected: imperialButton.checked
+                            pressed: imperialButton.down
+                            hovered: imperialButton.hovered
+                        }
+                        contentItem: Label {
+                            text: imperialButton.text
+                            font: imperialButton.font
+                            color: "white"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
                         ButtonGroup.group: unitsGroup
                         checked: backend.units === "imperial"
                         Accessible.role: Accessible.RadioButton
