@@ -1505,6 +1505,7 @@ KosApplicationWindow {
                                 text: root.value(backend.airQuality, "category", "")
                                 visible: text.length > 0
                                 color: root.skyText
+                                Layout.topMargin: -12 // ref-main 实测数字底→rating cap 顶 ink gap 7px×1.46≈10，改前 22px（spacing 10 + 两行字体行高 padding），-12 只抵消行高 padding
                                 font.pixelSize: 13
                             }
 
