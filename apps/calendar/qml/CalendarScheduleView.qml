@@ -364,15 +364,22 @@ Pane {
                         Layout.fillWidth: false
                         Layout.preferredHeight: root.hourHeight
 
+                        // T03: hour labels 10-11px, right-aligned 7px from the
+                        // grid's left edge (parent.right IS the gutter/day
+                        // boundary, i.e. the grid line). The vertical offset is
+                        // derived from implicitHeight because this font's line
+                        // box is ~1.47em — a hardcoded -7 only centres font 9.
+                        // Stays anchored, so it cannot inflate the 40px row.
                         Label {
                             anchors.top: parent.top
-                            anchors.topMargin: -7
-                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.topMargin: -Math.round(implicitHeight / 2)
+                            anchors.right: parent.right
+                            anchors.rightMargin: 7
                             text: hourCell.rowIndex < 10
                                 ? "0" + hourCell.rowIndex + ":00"
                                 : hourCell.rowIndex + ":00"
                             color: AppTheme.mutedText
-                            font.pixelSize: 9
+                            font.pixelSize: 11
                             visible: hourCell.columnIndex === 0
                         }
 
