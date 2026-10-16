@@ -1347,24 +1347,28 @@ KosApplicationWindow {
 
                         Row {
                             Layout.alignment: Qt.AlignHCenter
-                            spacing: -25 // 三轮实拍校准：-31 时 ° 与 3 顶曲线相交 ~2px，-25 目标间隙 ~4px（参考 ~3px@0.69x）
+                            // 第 52 轮：按参考图实测缩放。ref-main（814x498 整窗）hero 数字字高 33px = 窗高 6.6%；
+                            // tile-hero 切片数字 66px，按其比例折算 iPad 窗高亦 ≈6-6.6%。旧 160px 出自
+                            // 80px/498 的单位错配测量，导致实测字高 115px = 窗高 15.8%（超标 2.4 倍）。
+                            // 70px × 0.72（Plex Thin 字高/pixelSize 实测比）≈ 50px = 727 窗高的 6.9%，落入参考邻域。
+                            spacing: -11 // 随字号按 70/160 缩放（旧 -25），目标 ° 与数字间隙 ~3-4px
                             Label {
                                 id: heroTempDigits
                                 text: Math.round(root.number(backend.current, "temperature", 0))
                                 Accessible.name: text + "°"
                                 color: root.skyText
                                 font.family: "IBM Plex Sans"
-                                font.pixelSize: 160
+                                font.pixelSize: 70
                                 font.weight: Font.Thin
                             }
                             Label {
                                 text: "°"
                                 color: root.skyText
                                 font.family: "IBM Plex Sans"
-                                font.pixelSize: 100
+                                font.pixelSize: 44 // 保持旧 100/160=0.625 比例：70×0.625≈44
                                 font.weight: Font.Thin
-                                // 下移 19px 使 ° 顶部与数字顶部对齐（Plex 字形度量）
-                                y: 19
+                                // 下移 8px（旧 19 按 70/160 缩放）使 ° 顶部与数字顶部对齐（Plex 字形度量）
+                                y: 8
                                 Accessible.ignored: true
                             }
                         }
