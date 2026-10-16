@@ -628,9 +628,19 @@ Pane {
                                         radius: 5
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
-                                        border.width: 1
-                                        border.color: AppTheme.withAlpha(
-                                            root.itemColor(modelData), 0.34)
+                                        // R078: NO border. The ref's chip is fill-only, and its
+                                        // edges only ever go LIGHTER than the fill, never darker.
+                                        // Measured 1:1 on refs/macos-calendar.png at three
+                                        // independent edges: Wed blue chip top 255 → 242 (rule) →
+                                        // 249 → (230,242,254) AA → (222,237,254) fill; Wed blue
+                                        // chip bottom fill → (224,235,248) AA → 242 (rule) → red
+                                        // chip AA (253,242,241); Tue blue chip top 255 → 249 →
+                                        // 236 (hour line) → (239,246,255) AA → fill. A 1px ring
+                                        // at any alpha would land here as a row darker AND more
+                                        // saturated than the fill — none of the three has one.
+                                        // The left edge cannot prove this (it abuts the column
+                                        // rule at x=406 and R077 red a 1px border there); a top
+                                        // or bottom edge can, which is why both were read.
                                         opacity: root.itemCompleted(modelData) ? 0.5 : 1
 
                                         // R077: the calendar-colour bar. Full saturation, no
