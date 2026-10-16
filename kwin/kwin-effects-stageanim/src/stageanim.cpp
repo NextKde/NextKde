@@ -907,6 +907,10 @@ void StageAnimEffect::postPaintScreen()
     auto animationIt = m_animations.begin();
     while (animationIt != m_animations.end()) {
         if ((*animationIt).timeLine.done()) {
+            qCWarning(STAGEANIM_LOG) << "anim done-erase"
+                << animationIt.key()->caption()
+                << "elapsed" << qint64((*animationIt).timeLine.elapsed().count())
+                << "dur" << qint64((*animationIt).timeLine.duration().count());
             unredirect(animationIt.key());
             animationIt = m_animations.erase(animationIt);
         } else {
@@ -965,6 +969,7 @@ void StageAnimEffect::slotWindowDeleted(EffectWindow *w)
 void StageAnimEffect::slotWindowMinimized(EffectWindow *w)
 {
     if (effects->activeFullScreenEffect()) {
+        qCWarning(STAGEANIM_LOG) << "slot-min SKIP fullscreen-effect" << w->caption();
         return;
     }
 
@@ -979,12 +984,28 @@ void StageAnimEffect::slotWindowMinimized(EffectWindow *w)
     StageAnimAnimation &animation = m_animations[w];
     resolveTarget(w, animation, snap.targets);
 
-    if (animation.timeLine.running()) {
+    // 时间线健康判定（v90）：只有"真在途"（running ∧ 值∈[0,1] ∧ 未 done）
+    // 才走翻转续播；其余（含上次完成但未及清理的残留条目）一律整条重建。
+    // 根因：KWin TimeLine 的 done 一旦置位没有复位路径——setDirection 仅在
+    // sourceRedirectMode==Relaxed 时清 done（默认 Strict）、setDuration 只
+    // 在命中 elapsed==duration 时置位；残留完成条目被"续播"时新动画会被
+    // 一帧打死（done 残留 → postPaintScreen 立即 erase＝收放无动画）。实机
+    // 复现：unload/load 后第一次收放正常、之后全部消失。
+    const qreal v = animation.timeLine.value();
+    const bool healthy = animation.timeLine.running()
+        && !animation.timeLine.done() && v >= 0.0 && v <= 1.0;
+    qCWarning(STAGEANIM_LOG) << "slot-min" << w->caption() << "healthy" << healthy
+        << "elapsed" << qint64(animation.timeLine.elapsed().count())
+        << "dur" << qint64(animation.timeLine.duration().count())
+        << "value" << v << "done" << animation.timeLine.done();
+    if (healthy) {
         animation.timeLine.toggleDirection();
     } else {
         animation.visibleRef = EffectWindowVisibleRef(w, EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+        // 整条替换为全新时间线：不在地雷时间线上 setDirection/setDuration
+        //（两者都不会把 done 清回 false，见上）
+        animation.timeLine = TimeLine(m_duration);
         animation.timeLine.setDirection(TimeLine::Forward);
-        animation.timeLine.setDuration(m_duration);
         animation.timeLine.setEasingCurve(QEasingCurve::Linear);
     }
 
@@ -995,6 +1016,7 @@ void StageAnimEffect::slotWindowMinimized(EffectWindow *w)
 void StageAnimEffect::slotWindowUnminimized(EffectWindow *w)
 {
     if (effects->activeFullScreenEffect()) {
+        qCWarning(STAGEANIM_LOG) << "slot-unmin SKIP fullscreen-effect" << w->caption();
         return;
     }
 
@@ -1008,12 +1030,22 @@ void StageAnimEffect::slotWindowUnminimized(EffectWindow *w)
     StageAnimAnimation &animation = m_animations[w];
     resolveTarget(w, animation, snap.targets);
 
-    if (animation.timeLine.running()) {
+    // 时间线健康判定：同 slotWindowMinimized（v90 根因注释）
+    const qreal v = animation.timeLine.value();
+    const bool healthy = animation.timeLine.running()
+        && !animation.timeLine.done() && v >= 0.0 && v <= 1.0;
+    qCWarning(STAGEANIM_LOG) << "slot-unmin" << w->caption() << "healthy" << healthy
+        << "elapsed" << qint64(animation.timeLine.elapsed().count())
+        << "dur" << qint64(animation.timeLine.duration().count())
+        << "value" << v << "done" << animation.timeLine.done();
+    if (healthy) {
         animation.timeLine.toggleDirection();
     } else {
         animation.visibleRef = EffectWindowVisibleRef(w, EffectWindow::PAINT_DISABLED_BY_MINIMIZE);
+        // 整条替换：新 Backward 时间线（elapsed=0 起步、value()=1−0=1 =
+        // 卡片态起点，完整"从卡片展开"动画）
+        animation.timeLine = TimeLine(m_duration);
         animation.timeLine.setDirection(TimeLine::Backward);
-        animation.timeLine.setDuration(m_duration);
         animation.timeLine.setEasingCurve(QEasingCurve::Linear);
     }
 
@@ -1061,7 +1093,7 @@ struct CardMeta
     QString iconsJson;          // 组内窗口图标排（file:/icon: URL 数组）
     qreal iconSize = 40;   // 图标排图标边长（payload，v88：原硬编码 24）
     int iconSlots = 4;     // 图标排并列上限（payload，v88：原仅按宽度封顶）
-    qreal engagingTilt = 0;     // 交棒保持倾角（adaptive=tiltAngle 非 0）
+    qreal engagingTilt = 0;     // 交棒保持倾角（= 卡片静置角，发布端同源）
     std::chrono::milliseconds tiltMs{250};
     std::chrono::milliseconds enterMs{240};
     std::chrono::milliseconds animMs{420};
@@ -1583,8 +1615,8 @@ void StageAnimEffect::reloadLiveCards()
                 card.scaleFrom = card.curScale;
                 card.scaleTo = 1.0;
                 card.tiltFrom = card.curTiltDeg;
-                // 交棒保持倾角（老语义：scroll=deckRestTilt / adaptive=
-                // tiltAngle——与窗口飞行起始姿态对齐，不压平到 0）
+                // 交棒保持倾角（发布端 engagingTilt = 卡片静置倾角，两模式
+                // 同源——与窗口飞行起始姿态对齐，不压平到 0）
                 card.tiltTo = card.engagingTilt;
                 card.hoverTl = TimeLine(std::chrono::milliseconds(180));
                 card.hoverAnimating = true;

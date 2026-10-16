@@ -510,10 +510,12 @@ PanelWindow {
     // 走此包装：activateGroup 会同步发 activationRequested → 回灌
     // activateWithSwap 把刚激活/正要还原的窗又收编一遍（v82 P0——
     // _engagingDispatch 原本只护 engage 派发路径，这些直调全裸奔）
+    // forceAnim=true：卡侧语义的"从卡位展开"——目标窗其实已在桌面
+    //（快照滞后）时由桥注入真翻转补出展开动画，否则窗口瞬现
     function _activateGroupGuarded(ids, focusId) {
         _engagingDispatch = true
         try {
-            WindowService.activateGroup(ids, focusId)
+            WindowService.activateGroup(ids, focusId, true)
         } finally {
             _engagingDispatch = false
         }
@@ -619,6 +621,58 @@ PanelWindow {
     // 缩略图失败重试：截图授权空档（kosctl install→start 间隙、守护重启）
     // 里失败的请求不会自愈，卡会永远停在图标占位符。开着侧栏时周期补拍
     // 没图的代表窗（成功即停——decorateGroups 每轮重选代表）。
+    //
+    // ⚠️ v91 放宽"最小化代表窗不重拍"守卫：该守卫源自早期 KWin"最小化
+    // 窗口截到黑帧"的实测；KWin 6.7 上实测收编中/最小化的窗口能截到正常
+    // 内容（本机 journal 采样的缩略图逐张校验亮度 0.30–0.81，无黑帧）。
+    // 不放宽则"收编那一刻截图失败"的卡＝永久占位符（今日实例：平台授权
+    // 失效 13 分钟内被收编的两张卡，图补回来也无人绑定）。放宽后的安全网：
+    //   ① 成功即停——有图就跳过，黑图不会被反复重拍；
+    //   ② 失败封顶 + 时间窗衰减——同一窗 30s 内连续失败 4 次后暂停重试
+    //      （授权持续失效等"永远拍不出"的情形不做无限重试），窗口重新
+    //      出图（thumbnailReady）或时间窗过期后自动恢复重试。
+    // ⚠️ 「有图」的正确含义是"URL 存在且没被 Image 判死"：URL 指向的 PNG
+    // 被平台替换删除后读盘失败的卡会被 WindowService 清账（thumbnailLoadFailed
+    // → 立刻补拍），这里再对"读盘失败封顶"的窗口跳过补拍（防文件在而不
+    // 可解码时的补拍风暴；同样 30s 窗口衰减后自愈）。
+    property var _thumbFailures: ({})       // handleId -> { count, at }
+    readonly property int _thumbRetryCap: 4
+    readonly property int _thumbFailureWindowMs: 30000
+    function _thumbFailureCount(handleId) {
+        const e = root._thumbFailures[handleId]
+        if (!e)
+            return 0
+        return (Date.now() - e.at < root._thumbFailureWindowMs) ? e.count : 0
+    }
+    // 补拍是否被安全网封顶（两路计数任一超 cap：截图失败走 _thumbFailures，
+    // 图读不出来走 WindowService 的读盘失败计数）。_queueAllThumbnails 与
+    // _thumbRetryTimer 两条补拍路径必须同门——否则「清 URL → syncCards →
+    // 再入队」会绕过封顶形成补拍风暴
+    function _thumbRetryBlocked(handleId) {
+        return root._thumbFailureCount(handleId) >= root._thumbRetryCap
+            || WindowService.thumbnailLoadFailureCount(handleId)
+                >= WindowService.thumbnailLoadFailureCap
+    }
+    property Connections _thumbReceipts: Connections {
+        target: WindowService
+        function onThumbnailReady(handleId) {
+            if (root._thumbFailures[handleId] === undefined)
+                return
+            const f = Object.assign({}, root._thumbFailures)
+            delete f[handleId]
+            root._thumbFailures = f
+        }
+        function onThumbnailFailed(handleId, message) {
+            const alive = root._thumbFailureCount(handleId)
+            const f = Object.assign({}, root._thumbFailures)
+            f[handleId] = { count: alive + 1, at: Date.now() }
+            root._thumbFailures = f
+            if (alive + 1 === root._thumbRetryCap)
+                console.warn("[StageSidebar] thumbnail retry paused id="
+                    + handleId + " after " + (alive + 1)
+                    + " failures: " + message)
+        }
+    }
     property Timer _thumbRetryTimer: Timer {
         interval: 1500
         running: root.open
@@ -629,13 +683,12 @@ PanelWindow {
                 const g = groups[i]
                 if (!g.targetId)
                     continue
-                // 最小化代表窗截到黑帧（_queueAllThumbnails 同款守卫）：
-                // 对它重试会把黑帧灌进缩略图缓存，占位符恶化成永久黑块
+                if (!WindowService.thumbnailNeedsRefresh(g.targetId))
+                    continue    // 成功即停：URL 在位且没被 Image 判死就不重拍
                 const rep = WindowService.windowById(g.targetId)
-                if (rep?.toplevel?.minimized)
-                    continue
-                if (!WindowService.thumbnailUrl(g.targetId))
-                    WindowService.requestThumbnail(g.targetId)
+                if (!rep?.handleId || root._thumbRetryBlocked(rep.handleId))
+                    continue    // 失败封顶：暂停无谓重试
+                WindowService.requestThumbnail(g.targetId)
             }
         }
     }
@@ -756,6 +809,15 @@ PanelWindow {
             root._deskUndoWatch = null
             if (!w)
                 return
+            // 落地核对：undo 后迟到的最小化可能从未落地（批次被后续
+            // 操作取消/窗口已被旁路还原）——此刻不能再"还原"：activateGroup
+            // 会给无辜窗口抢焦点，卡侧的展开注入更会对"从未离开桌面的窗"
+            // 播一遍错误的"从卡片长出"动画。只处理真的被收进卡的窗口。
+            if (!_anyMinimized(w.ids)) {
+                console.info("[StageSidebar] desk undo: nothing landed,"
+                    + " skip restore (" + w.ids.length + " window(s))")
+                return
+            }
             const cur = WindowService.activeWindowId
             if (cur !== "" && w.ids.indexOf(cur) < 0) {
                 _markEngagingByIds(w.ids)
@@ -2162,8 +2224,8 @@ PanelWindow {
         // margin（1656），卡片拉成 1632 宽，倾斜透视在大宽度上产生极端
         // 剪切（"切右侧时卡片被拉长"的真因，2026-09-30 实锤）
         x: (root.rightSide
-               ? parent.width - root.panelW - StageGeo.CARD_OVERFLOW_MARGIN
-               : StageGeo.CARD_OVERFLOW_MARGIN)
+               ? parent.width - root.panelW - root._stripInset
+               : root._stripInset)
             // 抽屉滑移：收起时滑向常驻侧屏缘（左条向左/右条向右），
             // 发布姿态经 mapToItem 自动跟随
             + (root.rightSide ? root._retractPx : -root._retractPx)
@@ -2352,6 +2414,8 @@ PanelWindow {
                     perspectiveYOff: slot.planeYOff
                     // 活体流判定源：窗口侧聚焦键（与布局同源，无头调试可触达）
                     focusKey: root.hoveredKey
+                    // 卡面自愈：卡面此刻是否会被渲染（决定"空脸先渲"是否会发生）
+                    faceExposed: root.open && !root.drawerRetracted
                     onHovered: function(over) { root._cardHover(slot.appKey, over) }
                     // 对账就地换主（行移动/字段更新不重建 delegate）时，
                     // containsMouse 不变 → 没有 enter/leave 事件——悬停追踪
@@ -2361,6 +2425,7 @@ PanelWindow {
                             root._cardHover(slot.appKey, true)
                     }
                     onEngageClicked: root.engageCard(slot)
+                    onFaceRecreateRequested: root.resetCardFace(slot.appKey)
                     onDragStarted: function(sceneX, sceneY) {
                         root._beginCardDrag(slot, slot.index, sceneX, sceneY)
                     }
@@ -2497,6 +2562,13 @@ PanelWindow {
     // 内容列宽（卡宽可调后不再是常量；PANEL_WIDTH 仅作几何兼容旧值）
     readonly property real panelW:
         StageConfigService.cardWidth + StageGeo.CARD_WIDTH_INSET
+    // 卡片列原点在面板窗内的 x：卡片左/右缘距屏缘 = stripMargin（设置页
+    // 「距离屏幕边缘」），列内缩进 CARD_X_INSET 与之相抵——默认
+    // stripMargin 32 时列原点 = 20（= 原 CARD_OVERFLOW_MARGIN 定值，
+    // 全屏浮层化后它只作列贴缘偏移，已被本参数取代）。单一事实来源：
+    // cards.x / 抽屉滑出距离 / 侵占判定 / kwinrc 回退矩形都从它推。
+    readonly property real _stripInset:
+        StageConfigService.stripMargin - StageGeo.CARD_X_INSET
     // 无头测试覆盖（debugFullscreen verb）：null＝按真实记录判定
     property var _fullscreenOverride: null
     // 当前桌面有可见全屏窗＝需要让位
@@ -2519,7 +2591,10 @@ PanelWindow {
     }
     property bool _drawerPeek: false   // 收起态贴缘悬停＝拉出（可交互）
     property real _retractPx: 0        // 0=展开；收起时动画到 _retractFull
-    readonly property real _retractFull: root.panelW + StageGeo.GLOW_PAD * 2
+    // 滑出距离：列原点偏移 + 列宽 + 两侧辉光余量（stripMargin 调大时列
+    // 离屏缘更远，滑出距离必须同步加长，否则收起态卡片仍露在屏上）
+    readonly property real _retractFull:
+        root._stripInset + root.panelW + StageGeo.GLOW_PAD * 2
     readonly property bool drawerRetracted:
         (root.desktopFullscreen || root._stripYield || AppLauncherService.open)
         && !root._drawerPeek
@@ -2595,9 +2670,11 @@ PanelWindow {
     readonly property real _stripOverlapRaw: {
         WindowService.placementRevision
         const recs = WindowService.records || []
-        const sx1 = root.rightSide ? root.width - root.panelW
-            - StageGeo.CARD_OVERFLOW_MARGIN
-            : StageGeo.CARD_OVERFLOW_MARGIN
+        // 判定基准 = 列基础 x（不含抽屉滑移——收起让位判定本身不需要
+        // 跟踪滑出过程）；stripMargin 改动后侵占阈值随列位置同步
+        const sx1 = root.rightSide
+            ? root.width - root.panelW - root._stripInset
+            : root._stripInset
         const sx2 = sx1 + root.panelW
         const sy1 = ConfigService.barHeight
         const sy2 = root.height - ConfigService.baseHeight
@@ -2724,8 +2801,15 @@ PanelWindow {
             slots.push({ app: s.appKey, y: Math.round(s.y),
                 scale: Math.round(s.slotScale * 100) / 100, z: s.z,
                 x: Math.round(s.x),
+                hot: s.cardItem ? s.cardItem.isHovered : false,
+                cardScale: s.cardItem
+                    ? Math.round(s.cardItem.scale * 100) / 100 : -1,
                 live: root._liveActiveIds[s.appKey] === true,
-                painted: s.cardItem ? s.cardItem.livePainted : false })
+                painted: s.cardItem ? s.cardItem.livePainted : false,
+                // 预览图读数：URL 尾段（含平台 serial）+ Image 状态
+                // （-1 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）
+                thumb: s.cardItem ? s.cardItem.thumbPreviewUrl : "",
+                thumbStatus: s.cardItem ? s.cardItem.thumbPreviewStatus : -2 })
         }
         // 可见窗记录探针：让位检测吃的正是这份数据，卡住时先看
         // 目标窗到底进没进 records（bridge includeWindow 过滤与否）
@@ -2742,6 +2826,10 @@ PanelWindow {
         }
         return JSON.stringify({ open: root.open, visible: root.visible,
             chromeOwned: root.liveChromeOwned,
+            hoverPos: [Math.round(drawerEdgeHover.point.position.x),
+                Math.round(drawerEdgeHover.point.position.y)],
+            rootHovered: drawerEdgeHover.hovered,
+            edgeHot: root._drawerEdgeHot,
             drawer: root.drawerRetracted, retractPx: root._retractPx,
             cardsX: Math.round(cards.x), panelW: root.panelW,
             overlap: Math.round(root._stripOverlap * 100) / 100,
@@ -2965,6 +3053,51 @@ PanelWindow {
     // 窗高变化必然带动 cards 高度 → cards.onHeightChanged 已覆盖，同帧
     // 两轮 layoutCards + 两轮 geometryRepublish 是纯浪费
 
+    // ── 卡面重置（"空脸先渲"自愈的宿主侧）──
+    // 命中 appKey 的卡这一趟从模型移除，120ms 后按现成缩略图重建：新 delegate
+    // 的层纹理首次渲染就带着图（隔离会话实测恢复；旧 delegate 的层纹理此后
+    // 不会刷新）。防重入：同键在途忽略；重建后卡创建时 URL 已在表里 → 不再触发。
+    property var _faceResetKeys: ({})
+    property var _faceResetDeferred: ({})   // 拖拽/交棒中被推迟的重置
+    property Timer _faceResetTimer: Timer {
+        interval: 120
+        onTriggered: {
+            root._faceResetKeys = ({})
+            root.syncCards()
+        }
+    }
+    function resetCardFace(appKey) {
+        if (appKey === "")
+            return
+        // 拖拽/交棒中的卡不能重建（delegate 销毁＝拖拽中断/交棒动画炸）——
+        // 推迟到拖拽结束（onDragKeyChanged）再补
+        if (root.dragKey === appKey || root._mergeAnimPending
+                && String(root._mergeAnimPending.to || "") === appKey) {
+            const d = Object.assign({}, root._faceResetDeferred)
+            d[appKey] = true
+            root._faceResetDeferred = d
+            return
+        }
+        if (root._faceResetKeys[appKey])
+            return
+        const next = Object.assign({}, root._faceResetKeys)
+        next[appKey] = true
+        root._faceResetKeys = next
+        root.syncCards()               // 这一趟移除该卡
+        root._faceResetTimer.restart() // 下一趟重建（enterInstant 落位，无入场动画）
+        console.info("[StageSidebar] face reset (empty-face exposure) " + appKey)
+    }
+    onDragKeyChanged: {
+        if (root.dragKey !== "")
+            return
+        const pending = Object.keys(root._faceResetDeferred)
+        if (pending.length === 0)
+            return
+        root._faceResetDeferred = ({})
+        for (const key of pending)
+            root.resetCardFace(key)
+    }
+
     // ── 缩略图请求节奏（照抄 Overview：80ms 一拍、每拍 ≤3 张） ──
     property var _thumbRequestQueue: []
 
@@ -2983,20 +3116,22 @@ PanelWindow {
 
     // 缩略图是"收编快照"语义（同 macOS）：只在卡片出现/切换主角时拍新图，
     // 不做周期刷新——周期换图正是侧栏周期闪烁的根源。每组只拍代表窗口。
+    // ⚠️ v91：最小化守卫同 _thumbRetryTimer 一并放宽（KWin 6.7 实测最小化
+    // 窗口可截内容）——卡建立/换主角时即可补拍，不必等重试拍；失败封顶
+    // 沿用 _thumbFailureCount（防请求风暴）。
     function _queueAllThumbnails() {
         const seen = ({})
         const queue = []
         const groups = root.sideGroups
         for (let i = 0; i < groups.length; i++) {
-            // 最小化窗口截到黑帧：绝不请求，用既有快照或占位符
             const rep = WindowService.windowById(groups[i].targetId)
-            if (rep?.toplevel?.minimized)
-                continue
+            if (rep?.handleId && root._thumbRetryBlocked(rep.handleId))
+                continue    // 失败封顶：暂停无谓重试
             const id = groups[i].targetId
             // 已有快照的不再请求：本函数每次 syncCards 都跑（任何 revision
             // 变化），无图过滤＝重拍风暴（注释承诺的"只在出现/换主角时拍"
             // 由此成立）；无图/失败重试由 _thumbRetryTimer 专职
-            if (!seen[id] && !WindowService.thumbnailUrl(id)) {
+            if (!seen[id] && WindowService.thumbnailNeedsRefresh(id)) {
                 seen[id] = true
                 queue.push(id)
             }
@@ -3217,8 +3352,11 @@ PanelWindow {
         // desired 按顺序表排序——点击换位（applySwapOrder）由此落到可见
         // 模型上（历史 bug：排序只在发布路径，卡片从未真换过位，窗口飞向
         // 被点槽位而卡片留在 records 顺序位 = 用户看到的"飞错位置再滑动"）
-        const desired = StageGroups.buildModelRows(
+        const desiredRaw = StageGroups.buildModelRows(
             StageGroups.sortByOrder(root._groupOrder, root.sideGroups))
+        // 卡面重置：命中键这一趟不进 desired（delegate 被真实 plan 路径移除），
+        // 下一趟（_faceResetTimer）恢复 = 重建，层纹理首渲即带内容
+        const desired = desiredRaw.filter(row => !root._faceResetKeys[row.appKey])
         // 组顺序表对账：剪除已消失 + 补全新组（只 prune 会退化成空表，
         // 见 stage-groups.mjs 的 mergeOrder 注释）
         const liveKeys = desired.map(d => d.appKey)
@@ -3314,7 +3452,9 @@ PanelWindow {
     // 滚动/拖拽变化时由 layoutCards 尾部刷新；无卡=零高全穿透。
     Item {
         id: stripHitRegion
-        x: StageGeo.CARD_OVERFLOW_MARGIN   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
+        x: root.rightSide   // layoutCards 尾部由 _updateHitRegionExtent 按侧校正
+            ? root.width - root.panelW - root._stripInset
+            : root._stripInset
         y: 0
         width: root.panelW
         height: 0
@@ -3323,27 +3463,40 @@ PanelWindow {
 
     // 抽屉边缘探出热区（收起态启用——全屏/侵占让位同权）：贴常驻侧屏缘
     // 12px 全高，悬停 120ms 拉出；离开 700ms 收回（mask 收起态正好只放
-    // 行这条）。peek 期间热区扩成整条卡列——指针从缘条移到卡上
-    // containsMouse 保持 true，不会在交互中途把抽屉收走（NoButton 不
-    // 挡卡片的点击/悬停，hover 事件本就并行分发不互斥）。
-    MouseArea {
-        id: drawerEdge
-        x: root.rightSide ? root.width - width : 0
-        y: 0
-        width: root._drawerPeek
+    // 行这条）。peek 期间热区扩成整条卡列——指针从缘条移到卡上热区保持
+    // 命中，不会在交互中途把抽屉收走。
+    // ⚠️ 检测必须挂根层 HoverHandler，不能做成置顶 MouseArea：Qt 悬停
+    // 只投给"最上层命中项+祖先"，NoButton MouseArea 置顶同样独占——旧
+    // 实现在 peek 期间把热区扩成整条卡列，恰好压住全部卡片热区＝让位/
+    // 全屏收起后贴缘拉出，卡上悬停动画全死（点击仍灵：NoButton 不吃按
+    // 键事件，按键落到卡片上——"卡能点但悬停没反应"）。根层是所有卡片
+    // 的祖先，与顶层卡片热区并行收悬停互不遮挡；命中改按热区几何手工
+    // 判定（offscreen 实测：置顶 NoButton MouseArea / Item+HoverHandler
+    // 均会抢走兄弟 containsMouse，祖先 HoverHandler + 顶层 MouseArea 则
+    // 两者同时为真；point.position 绑定随移动逐帧刷新，几何判定可用）。
+    HoverHandler {
+        id: drawerEdgeHover
+        blocking: false
+    }
+    function _drawerEdgeHotAt(px: real): bool {
+        const w = root._drawerPeek
             ? root.panelW + StageGeo.GLOW_PAD * 2 : 12
-        height: root.height
-        hoverEnabled: true
-        acceptedButtons: Qt.NoButton
-        enabled: root.drawerRetracted || root._drawerPeek
-        onContainsMouseChanged: {
-            if (containsMouse) {
-                root._drawerUnpeekTimer.stop()
-                root._drawerPeekTimer.restart()
-            } else {
-                root._drawerPeekTimer.stop()
-                root._drawerUnpeekTimer.restart()
-            }
+        const x0 = root.rightSide ? root.width - w : 0
+        return px >= x0 && px <= x0 + w
+    }
+    // 武装条件与旧 MouseArea 的 enabled 一致（仅收起/peek 期间）；hovered
+    // 已隐含"指针在窗内"（mask 之外不投递），旧热区全高故 y 向无需判
+    readonly property bool _drawerEdgeHot:
+        (root.drawerRetracted || root._drawerPeek)
+        && drawerEdgeHover.hovered
+        && root._drawerEdgeHotAt(drawerEdgeHover.point.position.x)
+    on_DrawerEdgeHotChanged: {
+        if (root._drawerEdgeHot) {
+            root._drawerUnpeekTimer.stop()
+            root._drawerPeekTimer.restart()
+        } else {
+            root._drawerPeekTimer.stop()
+            root._drawerUnpeekTimer.restart()
         }
     }
     // mask 只罩卡条是给点击穿透用的；拖拽中几何扩成全窗（见

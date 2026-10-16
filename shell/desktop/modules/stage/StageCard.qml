@@ -167,6 +167,31 @@ Item {
     property bool previewActive: true
     // 关闭钮悬停态（根层热区 containsMouse；铭牌在特效侧据此画红钮）
     readonly property bool closeHot: closeHit.containsMouse
+
+    // ── 卡面"空脸先渲"自愈（2026-10-11 实测）──
+    // Qt 的 QQuickItemLayer 在这条路径上会把卡面纹理做死在"空"的状态：卡面
+    // 在**没有缩略图**的时候被曝光渲染过一次，之后缩略图到位（Image Ready、
+    // paintedWidth 正常、数据链全绿）层纹理也不会再刷新——卡面整块空白，
+    // 直到 delegate 重建（点卡换主/重开侧栏/收编新建）才恢复。隔离会话确定性
+    // 复现：卡列展开时重启壳（截图 + cardItem.grabToImage 双存证）。
+    // 自愈：无图期间被曝光过 → 缩略图首次就绪时请宿主把这张卡重建一次
+    // （真实 sync 路径移除+重建，层纹理首渲即带内容，实测恢复）。收起状态
+    // 下卡面被剔除渲染、不会中招，故不重建（避免无谓的 delegate churn）。
+    signal faceRecreateRequested()
+    // 宿主注入：卡面此刻会不会被渲染（抽屉展开且侧栏开着）
+    property bool faceExposed: false
+    property bool _faceEmptyExposed: false
+    function _noteFaceExposure() {
+        if (faceExposed && thumbCard.thumbUrl === "")
+            _faceEmptyExposed = true
+    }
+    onFaceExposedChanged: _noteFaceExposure()
+    // 无头读数（stage-sidebar debugGeom 消费）：当前预览图 URL 与 Image
+    // 状态（-1 = 无 URL / 0 Null / 1 Ready / 2 Loading / 3 Error）——
+    // "卡没图"类排障一眼区分"没拍"还是"拍了读不出来"
+    readonly property string thumbPreviewUrl: thumbCard.thumbUrl
+    readonly property int thumbPreviewStatus: thumbCard.thumbUrl === ""
+        ? -1 : preview.status
     // 活体卡发布参数（StageSidebarWindow.publishLiveCards 消费）：
     // 卡面矩形 + 透视参数。**发布动画中的实时值**（card.scale / tiltCur
     // 都带 Behavior，悬停/入场期间逐帧变化）——旧版发终态值，特效按自己的
@@ -206,10 +231,11 @@ Item {
             ? parent.slotScale : 1.0
         // ⚠️ mapToItem 实测（plate 是 plane 的子项，坐标手工加会偏 (74,115)）
         const pp = plate.mapToItem(null, 0, 0)
-        const restTilt = scrollMode
-            ? StageConfigService.deckRestTilt : 0
-        const hoverT = scrollMode ? 0
-            : StageConfigService.tiltAngle
+        // 静止/悬停双旋钮解耦（与 tiltCur 同源）：静止姿态 = 静置倾斜角
+        //（两模式统一，adaptive 完整显示也有静置姿态）；悬停终态 =
+        // 悬停倾斜角（特效 cursorPos 自驱悬停引擎的终点）
+        const restTilt = StageConfigService.deckRestTilt
+        const hoverT = StageConfigService.tiltAngle
         const title = card.count > 1
             ? (card.appName || card.title || I18n.tr("App")) + " ×" + card.count
             : (card.appName || card.title || I18n.tr("App"))
@@ -227,10 +253,9 @@ Item {
             z: parent && parent.z !== undefined ? parent.z : 0,
             hoverScale: StageConfigService.hoverScale,
             hoverTilt: card.rightSide ? -hoverT : hoverT,
-            // engaging 交棒保持倾角（scroll=deckRestTilt / adaptive=tiltAngle，
-            // 老语义：交棒时卡不压平到 0）
-            engagingTilt: (card.rightSide ? -1 : 1)
-                * (scrollMode ? restTilt : hoverT),
+            // engaging 交棒保持静置角（与 kwinrc TiltAngle 投影同源：
+            // 展开窗口动画的起摆姿态；交棒时卡不压平）
+            engagingTilt: (card.rightSide ? -1 : 1) * restTilt,
             hoverMs: StageConfigService.cardEnterDuration + 40,
             tiltMs: StageConfigService.tiltAnimDuration,
             enterMs: StageConfigService.cardEnterDuration,
@@ -270,7 +295,10 @@ Item {
     // 右/下生长——绕中心缩放会让四边同缩，压在边条上的指针被"缩出去"→
     // 悬停丢失（kill 循环的一环）。外扩区域内的指针不可能被挤出。
     transformOrigin: Item.TopLeft
-    Component.onCompleted: shown = true
+    Component.onCompleted: {
+        shown = true
+        _noteFaceExposure()
+    }
     Behavior on x { NumberAnimation { duration: StageConfigService.cardEnterDuration; easing.type: Easing.OutCubic } }
     // ⚠️ 无 Behavior on y：y 由窗口侧 layoutCards 经 slot（anchors 垂直
     // 居中）管理，这里没有 y 属性可动画；拖拽跟手走 slot.y 直赋
@@ -290,20 +318,24 @@ Item {
     // delegate 上的定时器会在派发窗口内随 delegate 销毁而丢派发），
     // 卡片淡出动画由 engaging 驱动的 opacity/tilt Behavior 承担。
 
-    // ── 倾角状态机（角度交给着色器做真透视）：scroll = 静置统一倾角
-    // （deckRestTilt，可调到 45°）、悬停聚焦放平便于阅读、交棒保持倾角
-    //（kwinrc TiltAngle 同源投影给展开窗口动画）；adaptive = 平铺、
-    // 悬停/点击才倾斜（tiltAngle）。
+    // ── 倾角状态机（角度交给着色器做真透视）：悬停/静止双旋钮解耦 ──
+    // 静止 = 静置倾斜角（deckRestTilt，两模式统一——adaptive 完整显示
+    // 也有静置姿态）；悬停 = 悬停倾斜角（tiltAngle，0 = 悬停放平阅读）；
+    // 交棒（engaging）保持静置角——kwinrc TiltAngle 同源投影给展开窗口
+    // 动画，卡片淡出姿态与窗口起摆姿态零跳变。
+    // ⚠️ 悬停倾斜下 plane 内的关闭钮被透视投影挪位，热区对齐改走
+    // _closeProj（见 closeHit）；"按钮角区瞄准摆平"已废除——活体模式下
+    // 卡面由特效直绘，QML 的摆平从没生效过（两侧不一致的既存缺陷），
+    // 统一由热区跟随解决。
     // ⚠️ schema 键 deckRestTilt/deckSidePeek 是牌堆时代遗名（持久化配置
-    // 不能改名），现役语义都属 scroll 模式。
-    readonly property bool scrollMode: StageConfigService.layoutMode === "scroll"
+    // 不能改名）：deckRestTilt 现役语义 = 双模式的静置倾角；
+    // deckSidePeek 仍属 scroll 模式。
     property real tiltCur: dragging ? 0
-        : (scrollMode
-            ? ((isHovered && !engaging) ? 0
-                : StageConfigService.deckRestTilt)
-            : ((engaging || (isHovered && !buttonAim))
+        : (engaging
+            ? StageConfigService.deckRestTilt
+            : (isHovered
                 ? StageConfigService.tiltAngle
-                : 0))
+                : StageConfigService.deckRestTilt))
     Behavior on tiltCur {
         NumberAnimation {
             duration: card.engaging ? 180 : StageConfigService.tiltAnimDuration
@@ -318,17 +350,36 @@ Item {
     // 时指针移上拆分钮 = isHovered 翻 false → hovered(false) → 窗口侧
     // 清 hoveredKey 整列回基础槽位 = 卡在静止指针底下移位 → 悬停失而
     // 复得 → 布局弹回 = 抖动 + tilt/scale 来回翻转（"拆分钮点不到"）。
-    // 瞄准态：指针进入按钮角区（自适应模式的悬停倾斜会把视觉钮转离
-    // 固定热区——点击落空）。进入角区即摆平卡片（tilt→0），视觉钮回到
-    // 未倾斜位＝与热区重合，点击必中。合成进 isHovered：瞄准时卡不缩回。
-    readonly property bool buttonAim: buttonAimHover.containsMouse
-        || closeHit.containsMouse || splitHit.containsMouse
+    // 按钮角区合成进 isHovered：指针在角区（按钮间的空隙）时卡不缩回。
     readonly property bool isHovered: cardMouse.containsMouse
         || closeHit.containsMouse
         || splitHit.containsMouse
         || iconRowHover.containsMouse
         || buttonAimHover.containsMouse
     onIsHoveredChanged: card.hovered(card.isHovered)
+
+    // ── 关闭钮热区的透视跟随（悬停倾斜的点击对齐）──
+    // 关闭钮视觉在 plane 内、随真透视投影（倾斜卡面上的钮被挪位），而
+    // 热区是轴对齐固定矩形——不跟随的话悬停倾斜（tiltAngle>0）下指针点
+    // "看到的钮"会落在热区外、被整卡 MouseArea 接走（点关闭反被展开）。
+    // 按与 stage_tilt.frag 同源的针孔公式把热区中心从平面位投到视觉位
+    //（tiltProject 孪生；Δ = 投影后 − 平面位）。角用 tiltCur 绑定：
+    // 拖拽摆平/悬停补间都自动连续跟随（含 Behavior），两模式一致。
+    // 拆分芯片/图标排是"正视覆盖层"（用户定稿不随倾斜）——热区与芯片
+    // 都在固定位，天然对齐，不动。
+    readonly property var _closeProj: {
+        // 热区中心平面位（相对卡中心）：宽 24 锚右上 6/6 + 卡头 18 中心
+        const hu = card.width / 2 - 18
+        const hv = 18 - card.height / 2
+        const rad = (card.rightSide ? -1 : 1) * card.tiltCur * Math.PI / 180
+        const s = Math.sin(rad), c = Math.cos(rad)
+        const k = StageGeo.TILT_FOCAL / (StageGeo.TILT_FOCAL + hu * s)
+        return {
+            dx: hu * c * k - hu,
+            dy: (hv + card.perspectiveYOff) * k
+                - card.perspectiveYOff - hv,
+        }
+    }
 
     // 合并完成的可拆分提示：merged 原地翻真（首次拖卡合并就是这条路径）
     // 时拆分钮自动亮一小会儿——拆分钮平时只在悬停时显现，合并完指针不在
@@ -663,16 +714,22 @@ Item {
                 // 活体流就绪时让位（避免双绘）；流断开自动回来兜底。
                 // 优先显示占空比断开前定格的活体帧（最小化窗口无人交互，
                 // 内容不再变化，定格帧即最新），否则收编快照
-                visible: !liveStream.visible
-                    && !!(thumbCard.liveGrabUrl !== ""
-                        ? thumbCard.liveGrabUrl : parent.thumbUrl)
+                //
+                // ⚠️ 顺序即正确性：URL 判定排在 liveStream.visible 之前。
+                // QML 的 && 短路不会为未求值的操作数建立依赖，而
+                // PipeWireSourceItem.visible 在卡刚创建那一拍可能还没走到
+                // 自己的绑定、读到 QQuickItem 默认的 visible=true——旧写法
+                // `!liveStream.visible && !!url` 一旦在这一拍短路，URL 依赖
+                // 就永远不会建立（绑定冻结在 false）；先判 URL 则 URL 变化
+                // 必然触发重算，liveStream.visible 在其后才被读取。
+                readonly property string displayUrl: thumbCard.liveGrabUrl !== ""
+                    ? thumbCard.liveGrabUrl : parent.thumbUrl
+                visible: displayUrl !== "" && !liveStream.visible
                 // 合成器活体卡直绘时让出卡面（opacity：plane 内 visible
                 // 改动被吞，opacity 链有效——快照退路在任何让位失败时
                 // 自动恢复，特效不在=livePainted=false=快照照常画）
                 opacity: card.livePainted ? 0.0 : 1.0
-                source: card.previewActive && !card.effectOwnedChrome
-                    ? (thumbCard.liveGrabUrl !== ""
-                        ? thumbCard.liveGrabUrl : parent.thumbUrl) : ""
+                source: card.previewActive && !card.effectOwnedChrome ? displayUrl : ""
                 // 同步解码 + 禁缓存：实时换帧时不留异步空白间隙（闪烁根源）
                 asynchronous: false
                 cache: false
@@ -680,6 +737,22 @@ Item {
                     Math.round(StageConfigService.thumbSize * 0.7))
                 fillMode: Image.PreserveAspectCrop
                 smooth: true
+                // 失效自愈：URL 指向的 PNG 被新一轮拍摄替换/删除后，Image
+                // 会停在 Error 且同一 source 不会重读盘（可见性变化、同串
+                // 重赋值都无效）——上报给 WindowService 清账并补拍，见
+                // thumbnailLoadFailed 注释
+                onStatusChanged: {
+                    if (status === Image.Error) {
+                        card._faceEmptyExposed = true   // 图被删等于回到"无图"态
+                        WindowService.thumbnailLoadFailed(card.targetId,
+                            String(preview.source))
+                    } else if (status === Image.Ready
+                            && card._faceEmptyExposed) {
+                        // 首次出图：空脸先渲过的卡面需要重建才画得出来
+                        card._faceEmptyExposed = false
+                        card.faceRecreateRequested()
+                    }
+                }
             }
 
             // 缩略图未就绪时的占位：只留标题文本居中——应用图标改由左下
@@ -822,19 +895,17 @@ Item {
     // 关闭钮热区必须在卡根层级：视觉树渲染进 visible:false 的透视层
     //（plane，着色器源），层内 MouseArea 不收输入——整卡 cardMouse 把
     // 点击全接走（"关闭按钮点不动"的根因）。plane/plate 与根坐标 1:1
-    // 对齐（plane.x=-16/plate.x=16 抵消），热区与视觉钮重合（外扩 2px
-    // 容差）。
+    // 对齐（plane.x=-16/plate.x=16 抵消）。
+    // x/y 显式定位 = 基准位（右上 6/6）+ _closeProj 透视位移：视觉钮在
+    // 投影位、热区跟到同位（悬停倾斜下不跟随会"点关闭变展开"，见
+    // _closeProj 注释）。
     MouseArea {
         id: closeHit
         z: 1
         width: 24
         height: 24
-        anchors {
-            top: parent.top
-            right: parent.right
-            topMargin: 6
-            rightMargin: 6
-        }
+        x: parent.width - width - 6 + card._closeProj.dx
+        y: 6 + card._closeProj.dy
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: card.closeAllRequested()
@@ -842,7 +913,7 @@ Item {
 
     // 按钮角区热区：覆盖两个按钮的更大区域（NoButton 不截点击；声明在
     // cardMouse 之后=角区内它是 hover 顶层，压住 cardMouse；closeHit/
-    // splitHit z:1 在按钮上仍是最顶层——三态合成见 buttonAim）。
+    // splitHit z:1 在按钮上仍是最顶层——isHovered 合成见上）。
     // ⚠️ 固定锚右上：视觉钮（cardClose/cardSplit）在头部永远位于卡面
     // 右上（头部横贯 plate、关闭钮锚右），不随 side 镜像——镜像到左上
     // 会瞄准错侧（2026-09-30 修正）。

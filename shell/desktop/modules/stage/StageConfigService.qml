@@ -43,6 +43,10 @@ QtObject {
         "cardHeight":   { type: "int", min: 100, max: 220, def: 148 },
         // 卡宽（卡高之外的独立自由度；默认 216 = 原 PANEL_WIDTH−24 定宽）
         "cardWidth":    { type: "int", min: 120, max: 320, def: 216 },
+        // 侧栏距屏幕边缘（px）：卡片列左/右缘到屏缘的净距（默认 32 =
+        // 全屏浮层化前的定值 CARD_OVERFLOW_MARGIN 20 + CARD_X_INSET 12；
+        // 设置页「距离屏幕边缘」，位置在「侧栏位置」之下）
+        "stripMargin":  { type: "int", min: 0, max: 120, def: 32 },
         "cardSpacing":  { type: "int", min: 4, max: 48, def: 16 },
         "centerCards":  { type: "bool", def: true },
         "deckSidePeek": { type: "int", min: 4, max: 60, def: 20 },
@@ -50,6 +54,10 @@ QtObject {
         // ⚠️ 倾角上限 40 = 特效 stageanim 的 std::clamp 钳位（>40° 时
         // depth>focal 顶点镜像炸裂）——schema 越过它就是"设置页可选但
         // 静默被砍"，两处必须同步
+        // 倾角双旋钮（解耦，两模式统一）：deckRestTilt（牌堆遗名）=
+        // **静置倾斜角**——静止/交棒时的卡片倾角，adaptive 完整显示也有
+        // 静置姿态；tiltAngle = **悬停倾斜角**——鼠标悬停时的倾角
+        //（0 = 悬停放平阅读）
         "deckRestTilt": { type: "real", min: 0, max: 40, def: 10 },
         "tiltAngle":    { type: "real", min: 0, max: 40, def: 22 },
         // 玻璃质感（StageCard 卡面：背板/受光/描边/辉光/纵深）
@@ -113,6 +121,9 @@ QtObject {
     property bool showCardTitle: true
     property int cardHeight: 148
     property int cardWidth: 216
+    // 侧栏距屏幕边缘：卡片列贴常驻侧屏缘的净距（列原点偏移 =
+    // stripMargin − CARD_X_INSET，见 StageSidebarWindow._stripInset）
+    property int stripMargin: 32
     property int cardSpacing: 16
     // adaptive 模式：放得下时整列垂直居中；贴满时顶部锚定
     property bool centerCards: true
@@ -120,8 +131,10 @@ QtObject {
     property int deckSidePeek: 20
     // 聚焦时压暗退避卡片（用户觉得不必要，默认关）
     property bool focusDim: false
-    // 静置倾斜：scroll 模式静止时卡片带统一倾角，悬停聚焦放平，交棒保持
-    //（kwinrc TiltAngle 同源投影）；tiltAngle = adaptive 模式的悬停倾角。
+    // 倾角双旋钮（解耦，两模式统一）：deckRestTilt = 静置倾斜角（静止/
+    // 交棒姿态，adaptive 完整显示也有静置倾角）；tiltAngle = 悬停倾斜角
+    //（鼠标悬停时的倾角，0 = 悬停放平）。kwinrc TiltAngle 投影取
+    // deckRestTilt（与卡片交棒姿态同源，见 _pushEffectConfig）。
     //（悬停放大只有一个旋钮 hoverScale——原 deckFocusScale 与其相乘控
     // 同一效果，冲突已删）
     property real deckRestTilt: 10
@@ -300,7 +313,10 @@ QtObject {
     function _pushEffectConfig() {
         if (!_writer)
             return
-        const tilt = layoutMode === "scroll" ? deckRestTilt : tiltAngle
+        // 窗口展开动画的装卡姿态 = 卡片交棒姿态：tiltCur 的 engaging 分支
+        // 两模式统一保持静置角（deckRestTilt），特效 TiltAngle 与之同源，
+        // 卡片淡出与窗口起摆零跳变
+        const tilt = deckRestTilt
         _enqueueWriter(["bash", "-c",
             "kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key AnimationDuration " + animDuration
