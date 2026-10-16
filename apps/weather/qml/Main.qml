@@ -295,6 +295,7 @@ KosApplicationWindow {
                     id: locationField
                     Layout.topMargin: 36
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     Layout.preferredHeight: 30
                     cornerRadius: 15
                     glassColor: Qt.rgba(1, 1, 1, 0.22)
@@ -325,6 +326,8 @@ KosApplicationWindow {
                 ListView {
                     id: searchResults
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    implicitWidth: 0
                     Layout.preferredHeight: visible ? Math.min(contentHeight, 220) : 0
                     visible: backend.searchResults.length > 0
                     clip: true
@@ -368,6 +371,8 @@ KosApplicationWindow {
                 ListView {
                     id: savedLocations
                     Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    implicitWidth: 0
                     Layout.fillHeight: true
                     clip: true
                     spacing: 6
@@ -377,13 +382,6 @@ KosApplicationWindow {
                         id: savedLocation
 
                         required property var modelData
-                        Timer { interval: 100; running: true; onTriggered: console.log("CARDGEO",
-                            "delegate.w=" + savedLocation.width, "x=" + savedLocation.x,
-                            "list.w=" + savedLocations.width,
-                            "list.x=" + savedLocations.x,
-                            "col.w=" + savedLocations.parent.width,
-                            "col.x=" + savedLocations.parent.x,
-                            "sidebar.w=" + sidebar.width) }
                         readonly property var summary: root.value(modelData, "summary", null)
                         readonly property var cardStops: root.skyStopsFor(
                             savedLocation.summary ? savedLocation.summary.weatherCode : 2,
