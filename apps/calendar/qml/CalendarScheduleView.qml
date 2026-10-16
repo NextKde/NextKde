@@ -43,6 +43,10 @@ Pane {
     readonly property real dayColumnWidth: dayCount > 0
         ? (scheduleSpanWidth - gutterWidth) / dayCount : 0
     readonly property real scheduleSpanWidth: width
+    // T01: single source for the hour pitch of the timed grid. The hour-cell
+    // delegate height and the initial scroll offset both derive from this, so
+    // they can no longer drift apart.
+    readonly property int hourHeight: 40
 
     // W03: local marker tokens (today red like the macOS reference, subdued
     // grey for the ordinary selection). Neutral, no shared-theme dependency.
@@ -117,7 +121,7 @@ Pane {
 
     function positionTimeline() {
         if (timelineScroll.contentItem)
-            timelineScroll.contentItem.contentY = usefulStartHour() * 54
+            timelineScroll.contentItem.contentY = usefulStartHour() * root.hourHeight
     }
 
     onFirstDateChanged: autoScrollTimer.restart()
@@ -350,7 +354,7 @@ Pane {
                         Layout.maximumWidth: columnIndex === 0
                             ? root.gutterWidth : root.dayColumnWidth
                         Layout.fillWidth: false
-                        Layout.preferredHeight: 54
+                        Layout.preferredHeight: root.hourHeight
 
                         Label {
                             anchors.top: parent.top
@@ -392,7 +396,10 @@ Pane {
                                         id: timedChip
                                         required property var modelData
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 21
+                                        // T01: two chips plus spacing must fit
+                                        // the 40px cell minus the 3px margins.
+                                        Layout.preferredHeight: Math.round(
+                                            root.hourHeight * 21 / 54)
                                         radius: 5
                                         color: AppTheme.withAlpha(root.itemColor(modelData),
                                             AppTheme.dark ? 0.36 : 0.19)
