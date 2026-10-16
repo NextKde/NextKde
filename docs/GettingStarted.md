@@ -173,6 +173,84 @@ exported headers (composite, randr, res, shm, sync) are not pulled in by
 and `libqt6sql6-sqlite` are runtime dependencies of QuickDialogs2 and the
 data service.
 
+### Fedora 44 (community-contributed)
+
+> Community-contributed and verified on Fedora 44 (KDE Plasma 6.7.5 / Qt 6.11.2).
+> It is **not** part of the official tested matrix (Arch / Debian 13 / Ubuntu 26.04 / NixOS).
+> `kosctl doctor` only has Arch, Debian-family and NixOS package checks — there is **no
+> `dnf` branch**. On Fedora it verifies that the required *commands* exist but does **not**
+> report or install missing `-devel` packages, so you must install the build dependencies by
+> hand; a missing package only surfaces later as a CMake `Could NOT find …` error during
+> `kosctl install`.
+
+Quickshell 0.3.x is not in the Fedora repositories; enable the community COPR and install it
+(the COPR publishes builds for Fedora 44 x86_64):
+
+```sh
+sudo dnf copr enable errornointernet/quickshell
+sudo dnf install quickshell
+```
+
+Core and KWin-plugin build dependencies:
+
+```sh
+sudo dnf install \
+  git cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
+  extra-cmake-modules \
+  wayland-devel wayland-protocols-devel libxkbcommon-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtquick3d-devel \
+  qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
+  qt6-qtbase-private-devel \
+  kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
+  kf6-kio-devel kf6-kcalendarcore-devel kf6-kconfig-devel kf6-ki18n-devel \
+  kf6-kguiaddons-devel kf6-kcmutils-devel kf6-kcoreaddons-devel \
+  libplasma-devel kdecoration-devel \
+  kwin-devel libdrm-devel mesa-libgbm-devel libepoxy-devel \
+  vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
+```
+
+> **Qt private headers are a separate `*-private-devel` package.** NextKde's native KWin
+> components (`shell/native/surface-shape`) need `Qt6GuiPrivate`, provided by
+> `qt6-qtbase-private-devel`. Without it `kosctl install` aborts at CMake configure with
+> `Could NOT find Qt6GuiPrivate ... /usr/lib64/cmake/Qt6GuiPrivate/Qt6GuiPrivateConfig.cmake
+> does NOT exist`. If you later see `Failed to find required Qt component "QuickPrivate"`,
+> also install `qt6-qtdeclarative-private-devel`. Every `Qt6*Private` component follows this
+> `*-private-devel` pattern on Fedora.
+
+Optional runtime integrations:
+
+```sh
+sudo dnf install \
+  NetworkManager wireplumber bluez brightnessctl \
+  wl-clipboard cliphist xdg-utils spectacle
+```
+
+Key naming differences versus Arch/Debian:
+
+- KF6 framework `-devel` packages keep the `kf6-` prefix (`kf6-kwindowsystem-devel`,
+  `kf6-kiconthemes-devel`, …), **except** `libplasma` → `libplasma-devel` and
+  `kdecoration` → `kdecoration-devel` — there is no `kf6-libplasma-devel` or
+  `kf6-kdecoration-devel`.
+- Fedora ships **no** `libxcb-*-devel` split packages (the Debian `libxcb-*-dev` layout does
+  not apply). Every xcb extension header (composite, randr, res, shm, sync, xfixes, …) comes
+  from the single `libxcb-devel` package — do not try `libxcb-composite-devel` etc. (`dnf`
+  reports `No match`).
+- `kwin-devel` pulls in libdrm/libgbm/libepoxy/Wayland development files transitively on
+  Fedora, but they are listed above for clarity. `qt6-qtimageformats` and `qt6-qt5compat-devel`
+  are the equivalents of Debian's `qt6-image-formats-plugins` / `qt6-5compat-dev`.
+
+Build tips:
+
+- Set `KOS_BUILD_SPATIAL=OFF` (export it, or prefix the install command) to skip the ~1 GB
+  ONNX Runtime SDK download and avoid needing `opencv-devel`. The
+  `Depth engine skipped: OpenCV or the ONNX Runtime is not installed` line is expected in this
+  mode, not an error.
+- The repeated `KDEInstallDirs … got its value from CMAKE_INSTALL_*` warnings during configure
+  are harmless (a GNUInstallDirs / KDE macro load-order quirk) — ignore them.
+- After a successful install the three `kos-*.service` units are enabled and start
+  automatically on your next login; verify with
+  `systemctl --user status kos-platform.service kos-data.service kos-shell.service`.
+
 ### Spatial wallpapers (optional)
 
 `KOS_BUILD_SPATIAL` controls the depth engine and Qt Quick 3D wallpaper plugin:
