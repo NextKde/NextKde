@@ -94,7 +94,8 @@
         "windDirection": { "type": "number", "minimum": 0, "maximum": 360 },
         "windGust": { "type": ["number", "null"], "minimum": 0 },
         "uvIndex": { "type": ["number", "null"], "minimum": 0 },
-        "visibility": { "type": ["number", "null"], "minimum": 0 }
+        "visibility": { "type": ["number", "null"], "minimum": 0 },
+        "pressure": { "type": ["number", "null"], "minimum": 0 }
       },
       "additionalProperties": true
     },
