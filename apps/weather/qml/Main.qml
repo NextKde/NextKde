@@ -1104,6 +1104,7 @@ KosApplicationWindow {
             spacing: 16
 
             Flickable {
+                id: mainFlick
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: width
@@ -1118,8 +1119,19 @@ KosApplicationWindow {
                     spacing: 16
 
                     ColumnLayout {
+                        id: heroColumn
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 2
+                        // Stage 3 motion B.3: hero parallax + slight shrink while the main area
+                        // scrolls. Scroll-linked mapping (no timed animation): the hero tracks
+                        // contentY at half speed and scales down gently; reduce-motion pins both.
+                        transform: Translate {
+                            y: AppTheme.reduceMotion ? 0 : Math.max(0, mainFlick.contentY) * 0.5
+                        }
+                        scale: AppTheme.reduceMotion
+                            ? 1.0
+                            : Math.max(1.0 - Math.max(0, mainFlick.contentY) / 240 * 0.12, 0.88)
+                        transformOrigin: Item.Top
 
                         Label {
                             Layout.alignment: Qt.AlignHCenter
