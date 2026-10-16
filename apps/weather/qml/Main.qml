@@ -1138,7 +1138,17 @@ KosApplicationWindow {
                 radius: width / 2
                 color: Qt.rgba(1, 1, 1, 0.14)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.20)
+                border.color: Qt.rgba(1, 1, 1, 0.22)
+                Rectangle {
+                    // specular top sheen, clipped to the circle
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    radius: width / 2
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.28) }
+                        GradientStop { position: 0.22; color: Qt.rgba(1, 1, 1, 0) }
+                    }
+                }
             }
         }
     }
