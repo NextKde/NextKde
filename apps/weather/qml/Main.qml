@@ -1525,7 +1525,8 @@ KosApplicationWindow {
                                 }
 
                                 Rectangle {
-                                    x: Math.max(0, Math.min(1, root.number(backend.airQuality, "usAqi", 0) / 300)) * (parent.width - 9)
+                                    // ref-main Pillow 实测 AQI 40 白点在条 8.33% 处，0–500（EPA AQI 满量程）预测 8.0% 吻合，0–300 预测 13.3% 偏差 10.5px
+                                    x: Math.max(0, Math.min(1, root.number(backend.airQuality, "usAqi", 0) / 500)) * (parent.width - 9)
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 9
                                     height: 9
